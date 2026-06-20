@@ -24,9 +24,10 @@ if !isfile(PROJ)
 end
 
 Pkg.activate(CORE)
-# Slice-1 deps. Random + Test are stdlibs (no download); StaticArrays is already
-# in the depot. JSON3 / YAML / SpecialFunctions land when their slice-1 step does.
-Pkg.add(["StaticArrays", "Random", "Test"])
+# Slice-1 deps. Random / Sockets / Test are stdlibs (no download); StaticArrays,
+# JSON3 and YAML download once into the depot. Keep this list in sync with the
+# steps as they land so a fresh clone resolves in one `setup.jl`.
+Pkg.add(["StaticArrays", "Random", "Sockets", "Test", "JSON3", "YAML"])
 Pkg.precompile()
 
 println("\nSETUP DONE — project at ", CORE)

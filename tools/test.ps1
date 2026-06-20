@@ -1,4 +1,4 @@
-# test.ps1 — run the headless core test suite (the contract enforcer).
+# test.ps1 -- run the headless core test suite (the contract enforcer).
 #   pwsh tools/test.ps1
 $ErrorActionPreference = "Stop"
 $Root  = Split-Path $PSScriptRoot -Parent

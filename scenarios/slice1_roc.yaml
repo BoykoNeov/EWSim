@@ -1,0 +1,37 @@
+# slice1_roc — the architecture-proving scenario (HANDOFF §6, §8).
+# One static radar, one constant-velocity target. Declarative YAML is the single
+# source for run/replay, Monte-Carlo inputs, test fixtures, and the slider list.
+name: slice1_roc
+seed: 42
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  propagation: free_space      # free_space | two_ray   (two_ray lands in slice 2)
+  detection:   analytic        # analytic | monte_carlo  (governs the ROC batch path)
+
+entities:
+  - id: radar1
+    kind: radar
+    pos: [0, 0, 10]
+    radar:
+      pt_w:         1500
+      gain_db:      35
+      freq_hz:      9.4e9
+      bandwidth_hz: 1.0e6
+      noise_fig_db: 3
+      losses_db:    4
+      pfa:          1.0e-6
+      swerling:     1
+      n_pulses:     1
+      revisit_s:    0.1        # detection look / blip cadence (10 Hz); SNR readout is per-tick
+
+  - id: tgt1
+    kind: target
+    pos: [42000, 0, 3000]
+    vel: [-250, 0, 0]
+    target:
+      rcs_m2: 5.0
+
+knobs:                          # client sliders (target+key must resolve to a comp param)
+  - {target: radar1, key: pt_w,   min: 100, max: 5000, label: "Tx power (W)"}
+  - {target: tgt1,   key: rcs_m2, min: 0.1, max: 100,  label: "Target RCS (m²)", log: true}

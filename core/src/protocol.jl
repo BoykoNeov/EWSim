@@ -53,17 +53,24 @@ function _entity_json(e::Entity)
 end
 
 """
-    state_frame(w; telemetry = Dict(), events = w.events) -> Dict
+    state_frame(w; telemetry = w.env[:telemetry], events = w.events) -> Dict
 
 Build the `type = "state"` frame for the current world. `telemetry` is a flat
 `string → number/bool` bag so any client can bind a readout to a key without a
-schema change; `events` are one-shot (sent on the frame they occur, then cleared
-by the server loop).
+schema change; it defaults to whatever subsystems published to `w.env[:telemetry]`
+this tick (the radar writes `"radar1.snr_db"` etc. there), so the wire builder stays
+generic — a new subsystem contributes telemetry without touching this function.
+`events` are one-shot (sent on the frame they occur, then cleared by the server
+loop); each is stamped with the frame time `w.t` here unless it already carries one,
+so an event's time is the frame it ships on (HANDOFF §5).
 """
 function state_frame(w::World;
-                     telemetry::AbstractDict = Dict{String,Any}(),
+                     telemetry::AbstractDict = get(w.env, :telemetry, Dict{String,Any}()),
                      events = w.events)
     ents = [_entity_json(w.entities[id]) for id in sort!(collect(keys(w.entities)))]
+    for e in events
+        get!(e, :t, w.t)
+    end
     return Dict{Symbol,Any}(
         :type      => "state",
         :t         => w.t,

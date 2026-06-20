@@ -16,6 +16,11 @@ using Random
 include("world.jl")
 include("subsystem.jl")
 include("protocol.jl")
+include("rf.jl")
+include("detection.jl")
+include("radar.jl")
+include("scenario.jl")
+include("batch.jl")
 
 # World + types
 export Vec3, Quat, Entity, World, reset!
@@ -23,5 +28,13 @@ export Vec3, Quat, Entity, World, reset!
 export Subsystem, integrate!, build_env!, observe!, decide!, tick!
 # Wire protocol
 export write_frame, read_frame, state_frame
+# RF / link budget
+export RadarParams, snr_freespace, snr_db_freespace, wavelength, db2lin, lin2db
+# Detection
+export detection_threshold, pd_analytic, pd_montecarlo, detect_once
+# Slice-1 subsystems + scenario loader
+export ConstantVelocity, RadarSensor, Knob, Scenario, load_scenario
+# Offline batch sweeps (ROC artifact)
+export run_batch, roc_grid, load_roc
 
 end # module EWSim

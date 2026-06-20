@@ -18,8 +18,12 @@ Pluto plot, and `runtests.jl` is green.
 ## Review gates (cadence: staged)
 1. **Determinism green** — world + tick contract + `test_determinism.jl`.  ✅ DONE
 1b. **Seam proven** — Godot↔Julia socket round-trip, big-endian framing.  ✅ DONE
-2. **Physics green** — `rf.jl` + `detection.jl`, `test_radar_eq` + `test_detection` pass.
-3. **ROC convergence** — `run_batch kind=roc` + Pluto plot shows analytic ≈ MC.
+2. **Physics green** — `rf.jl` + `detection.jl`, `test_radar_eq` + `test_detection` pass.  ✅ DONE
+3. **ROC convergence** — `run_batch kind=roc` + Pluto plot shows analytic ≈ MC.  ✅ DONE
+   **Numbers**: `test_batch.jl` puts MC in the analytic Pd's Wilson 4σ band; real
+   `shared/roc_radar1.bin` is `[3,64,2]` with max |analytic−MC| = 0.0034 (Swerling 1,
+   100k trials). **Plot**: `clients/notebooks/slice1_roc.jl` opened in Pluto — the
+   analytic lines and MC scatter overlap, convergence confirmed.
 
 ## Task checklist (handoff §13)
 - [x] 1. Scaffold `core/` package; deps resolved; Manifest committed.
@@ -28,13 +32,31 @@ Pluto plot, and `runtests.jl` is green.
       + headless Godot `net/seam_test.gd`. Round-trip verified, exit 0. Tests:
       `test_protocol.jl` (byte-exact header, multi-frame, real-TCP loopback).
       Reusable `SimClient.gd` Node deferred to step 7 (Sandbox scene).
-- [ ] 4. `rf.jl` (free-space radar eq) + `detection.jl` (analytic + MC Pd);
+- [x] 4. `rf.jl` (free-space radar eq) + `detection.jl` (analytic + MC Pd);
       `test_radar_eq` (R⁴ scaling, hand-calc SNR) + `test_detection` (analytic Pd
-      inside MC 99% CI) green.
-- [ ] 5. `scenario.jl` + `slice1_roc.yaml` loader; wire radar/target subsystems
-      into the live stream (`snr_db`, `pd`, `detected`, detection events).
-- [ ] 6. `batch.jl` `run_batch kind=roc` → `shared/roc_radar1.bin`; Pluto notebook
-      plots analytic vs MC convergence.
+      within MC sampling-error band) green. SNR convention: noise normalised to 1,
+      so the radar eq's `Pr/N` is the linear SNR detection consumes directly.
+      Marcum-Q via Poisson-mixture (no SpecialFunctions dep). Swerling 0 + 1 only.
+- [x] 5. `scenario.jl` (`load_scenario` → `Scenario`) + `scenarios/slice1_roc.yaml`;
+      concrete subsystems in `radar.jl` (`ConstantVelocity`, `RadarSensor`). Live
+      `snr_db`/`pd` per tick into `w.env[:telemetry]`; detection draw + `:detection`
+      event gated to `revisit_s`, last verdict persisted in radar `comp`; shared
+      `detect_once` single-look sampler. `test_scenario.jl` green (loader + telemetry-
+      vs-closed-form + static-geometry Bernoulli + byte-identical replay). **Scope
+      decision:** the socket run loop (`server.jl`: run modes, command handling,
+      `warmup!`, event-clearing post-emit) is *not* in step 5 — it lands just before
+      step 7's Godot scene. Until then the caller owns `empty!(w.events)` between emits.
+- [x] 6. `batch.jl` `run_batch kind=roc` → `shared/roc_radar1.bin` (+ `.meta.json`
+      sidecar, the headless twin of the §5 socket descriptor) and `load_roc` reader;
+      Pluto `clients/notebooks/slice1_roc.jl` plots analytic vs MC convergence;
+      `tools/run_batch.jl` headless generator. `test_batch.jl` green: analytic plane ==
+      independent closed-form recompute (no transpose), MC plane in the analytic Pd's
+      Wilson 4σ band (convergence-as-regression), descriptor↔file shape/size agree, and
+      a batch leaves `w.rng` untouched (own seeded stream — a sweep never desyncs the
+      live trace). The batch is the *distribution* path (HANDOFF §1/§12): no byte-identity
+      assert, and the cell loop is the seam where Threads/GPU drop in later. The Pluto
+      notebook was opened and renders: analytic lines + MC scatter overlap (its data path
+      reuses the tested `load_roc`, so only the `plot(...)` itself was unproven headlessly).
 - [ ] 7. Minimal Godot `Sandbox.tscn`: radar + moving target + blips + 2 sliders.
 
 ## Context / landmarks
