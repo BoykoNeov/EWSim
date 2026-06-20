@@ -15,10 +15,13 @@ using Random
 
 include("world.jl")
 include("subsystem.jl")
+include("protocol.jl")
 
 # World + types
 export Vec3, Quat, Entity, World, reset!
 # Tick contract
 export Subsystem, integrate!, build_env!, observe!, decide!, tick!
+# Wire protocol
+export write_frame, read_frame, state_frame
 
 end # module EWSim

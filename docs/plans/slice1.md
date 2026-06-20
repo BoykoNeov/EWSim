@@ -17,14 +17,17 @@ Pluto plot, and `runtests.jl` is green.
 
 ## Review gates (cadence: staged)
 1. **Determinism green** — world + tick contract + `test_determinism.jl`.  ✅ DONE
+1b. **Seam proven** — Godot↔Julia socket round-trip, big-endian framing.  ✅ DONE
 2. **Physics green** — `rf.jl` + `detection.jl`, `test_radar_eq` + `test_detection` pass.
 3. **ROC convergence** — `run_batch kind=roc` + Pluto plot shows analytic ≈ MC.
 
 ## Task checklist (handoff §13)
 - [x] 1. Scaffold `core/` package; deps resolved; Manifest committed.
 - [x] 2. `world.jl` + `subsystem.jl` (tick contract) + `test_determinism.jl` green.
-- [ ] 3. `protocol.jl` (4-byte length + JSON) + **echo server** + ~30-line Godot
-      `SimClient.gd` that connects and prints frames. **De-risks the seam first.**
+- [x] 3. `protocol.jl` (4-byte big-endian length + JSON) + `tools/echo_server.jl`
+      + headless Godot `net/seam_test.gd`. Round-trip verified, exit 0. Tests:
+      `test_protocol.jl` (byte-exact header, multi-frame, real-TCP loopback).
+      Reusable `SimClient.gd` Node deferred to step 7 (Sandbox scene).
 - [ ] 4. `rf.jl` (free-space radar eq) + `detection.jl` (analytic + MC Pd);
       `test_radar_eq` (R⁴ scaling, hand-calc SNR) + `test_detection` (analytic Pd
       inside MC 99% CI) green.

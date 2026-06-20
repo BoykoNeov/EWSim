@@ -41,6 +41,11 @@ PowerShell 5.1 mangles double quotes passed to `julia -e`. **Put Julia code in a
 
 ## Current status
 
-Slice 1 (radar → detection → ROC). **Steps 1–2 done & green**: world, tick
-contract, determinism test. Next: protocol + echo server + Godot `SimClient.gd`
-(step 3 — de-risk the socket seam). See `docs/plans/slice1.md`.
+Slice 1 (radar → detection → ROC). **Steps 1–3 done & green**: world + tick
+contract + determinism; wire protocol + Godot↔Julia socket seam proven
+(`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0). Next:
+step 4 — `rf.jl` (free-space radar eq) + `detection.jl` (analytic + MC Pd) with
+`test_radar_eq` + `test_detection`. See `docs/plans/slice1.md`.
+
+Re-run the seam check: start `pwsh tools/julia.ps1 tools/echo_server.jl`, then
+`godot --headless --path clients/godot --script res://net/seam_test.gd`.

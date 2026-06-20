@@ -12,5 +12,6 @@ using Random
 
 @testset "EWSim" begin
     include("test_determinism.jl")
+    include("test_protocol.jl")
     # slice 1 adds: test_radar_eq.jl, test_detection.jl, test_frames.jl
 end
