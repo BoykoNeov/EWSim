@@ -41,7 +41,7 @@ PowerShell 5.1 mangles double quotes passed to `julia -e`. **Put Julia code in a
 
 ## Current status
 
-Slice 1 (radar → detection → ROC). **Steps 1–6 done & green** (172 tests): world +
+Slice 1 (radar → detection → ROC). **Steps 1–6b done & green** (223 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
 (`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0); `rf.jl`
 (free-space radar eq) + `detection.jl` (analytic + MC Pd, Swerling 0/1) with
@@ -64,13 +64,28 @@ sweep never desyncs the live trace — and per HANDOFF §1/§12 it's the *distri
 (no byte-identity assert; the cell loop is the Threads/GPU seam). `test_batch.jl`: analytic
 plane == independent recompute (catches a transpose), MC in the analytic Pd's Wilson 4σ
 band, descriptor↔file agree, `w.rng` untouched by a batch.
-Next: step 7 — minimal Godot `Sandbox.tscn` (radar + moving target + blips + 2 sliders),
-preceded by the deferred socket run loop (`server.jl`). Slice 1 complete after step 7.
-
-The socket run loop (`server.jl`: run modes, command handling, `warmup!`, the accept
-loop that clears `w.events` after each emit) is deliberately deferred — slot it before
-the Godot scene (step 7). Until it exists, the *caller* owns event-clearing between
-emits (the tests do this explicitly). See `docs/plans/slice1.md`.
+Step 6b (deferred prereq for 7): `server.jl` — the interactive socket run loop (HANDOFF §4).
+`Server` wraps a `Scenario`; a `@async` reader task ONLY parses+enqueues commands onto a
+Channel, while the MAIN loop owns **all** World mutation (commands + `tick!`) — single-mutator,
+so no locks and determinism survives. `handle_command!` covers the 8 §5 commands;
+`set_seed`/`reset` compose (the held seed survives reset → clean replay); the `run_batch`
+adapter maps the §5 `snr_db_grid_start/stop` wire spelling to the internal `snr_db_start/stop`
+kwargs (drop it and the bounds silently default) and runs **inline** (slice-1 single-writer
+stance; the Threads/@spawn seam is later). `steps_this_iteration` paces PAUSED/REALTIME/FAST
+with a catch-up cap. `warmup!` pays TTFX on a deepcopy + a tempdir batch, never touching the
+live World or real `shared/`. A connect-time `scenario_frame` (a flagged §5 extension) ships
+the knob list so the client builds sliders from the YAML. `tools/server.jl` is the headless
+entrypoint (`EWSIM_SERVER_*` stdout markers; `julia tools/server.jl [scenario] [port]`).
+`test_server.jl` (51 tests): command dispatch, seed/reset composition, the grid-rename
+mapping, warmup isolation, pacing, and a **real-loopback** test proving handshake + emit +
+one-shot event clear (on a provable-detection fixture, not the 42 km scenario where Pd is
+unknown) + clean EOF teardown. Also smoke-proven end-to-end via `run_server!` on a real port.
+Next: step 7 — minimal Godot `Sandbox.tscn` (radar + moving target + blips + 2 sliders) that
+connects to `tools/server.jl`, reads the `scenario` handshake to build the 2 sliders, renders
+`state` frames as entity nodes + detection blips, and sends `set_param` on slider drag. Slice 1
+complete after step 7.
 
 Re-run the seam check: start `pwsh tools/julia.ps1 tools/echo_server.jl`, then
 `godot --headless --path clients/godot --script res://net/seam_test.gd`.
+Run the real server: `pwsh tools/julia.ps1 --project=core tools/server.jl` (port 8765).
+It serves **one** client then exits (HANDOFF "single client v1") — restart it per session.

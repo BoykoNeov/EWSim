@@ -17,5 +17,6 @@ using Random
     include("test_detection.jl")
     include("test_scenario.jl")
     include("test_batch.jl")
+    include("test_server.jl")
     # slice 1 still to add: test_frames.jl
 end

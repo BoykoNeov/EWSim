@@ -57,7 +57,25 @@ Pluto plot, and `runtests.jl` is green.
       assert, and the cell loop is the seam where Threads/GPU drop in later. The Pluto
       notebook was opened and renders: analytic lines + MC scatter overlap (its data path
       reuses the tested `load_roc`, so only the `plot(...)` itself was unproven headlessly).
+- [x] 6b. **(deferred prereq for 7)** `server.jl` — the interactive socket run loop
+      (HANDOFF §4). `Server` wraps a `Scenario`; a `@async` reader task ONLY parses+enqueues
+      onto a Channel while the MAIN loop owns *all* World mutation (commands + `tick!`) —
+      single-mutator, so no locks and determinism survives. `handle_command!` implements the
+      8 §5 commands; `set_seed`/`reset` compose (held seed survives reset → clean replay);
+      `run_batch` maps the §5 `snr_db_grid_start/stop` wire spelling to the internal kwargs
+      (the one rename that silently defaults the bounds if dropped) and runs inline (slice-1
+      single-writer stance). `steps_this_iteration` paces PAUSED/REALTIME/FAST with a
+      catch-up cap. `warmup!` pays TTFX on a deepcopy + tempdir (never touches the live World
+      or real `shared/`). A connect-time `scenario_frame` (a flagged §5 extension) ships the
+      knob list so the client builds sliders from the YAML. `tools/server.jl` is the headless
+      entrypoint (EWSIM_SERVER_* markers). `test_server.jl` green (51 tests): command
+      dispatch, seed/reset composition, the grid-rename mapping, warmup isolation, pacing,
+      and a real-loopback test proving handshake + emit + **one-shot event clear** (built on a
+      provable-detection fixture, not the 42 km scenario) + clean EOF teardown. Suite: 223
+      tests green. Also smoke-proven end-to-end via `run_server!` on a real port.
 - [ ] 7. Minimal Godot `Sandbox.tscn`: radar + moving target + blips + 2 sliders.
+      Connects to `tools/server.jl`; reads the `scenario` handshake to build the 2 sliders,
+      streams `state` frames → entity nodes + detection blips, sliders send `set_param`.
 
 ## Context / landmarks
 - Tick phases (fixed order, the unit of determinism): `integrate!` → `build_env!`

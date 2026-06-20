@@ -21,6 +21,7 @@ include("detection.jl")
 include("radar.jl")
 include("scenario.jl")
 include("batch.jl")
+include("server.jl")
 
 # World + types
 export Vec3, Quat, Entity, World, reset!
@@ -36,5 +37,7 @@ export detection_threshold, pd_analytic, pd_montecarlo, detect_once
 export ConstantVelocity, RadarSensor, Knob, Scenario, load_scenario
 # Offline batch sweeps (ROC artifact)
 export run_batch, roc_grid, load_roc
+# Interactive socket run loop (the live/driver path)
+export Server, run_server!, RunMode, PAUSED, REALTIME, FAST, scenario_frame
 
 end # module EWSim
