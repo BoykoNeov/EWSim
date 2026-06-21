@@ -68,6 +68,29 @@ end
             Dict(:type => "set_param", :target => "ghost", :key => "x", :value => 1))
     end
 
+    @testset "set_fidelity toggles propagation live (slice-2 extension)" begin
+        srv = EWSim.Server(_detect_scenario(1))
+        w = srv.scn.world
+        @test get(w.fidelity, :propagation, :free_space) === :free_space   # the scenario default
+
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity",
+                                        :key => "propagation", :value => "two_ray"))
+        @test w.fidelity[:propagation] === :two_ray                        # written through
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity",
+                                        :key => "propagation", :value => "free_space"))
+        @test w.fidelity[:propagation] === :free_space                     # toggles back
+
+        # A bad value must be REJECTED before it lands — else it would reach observe! and
+        # throw inside tick!, where the session's outer catch (IO/EOF only) lets it kill the
+        # connection. The reject must also leave the live fidelity untouched.
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "propagation", :value => "telepathy"))
+        @test w.fidelity[:propagation] === :free_space                     # unchanged by the bad cmd
+        # A non-propagation fidelity key is not live-settable in slice 2 (loud, not silent).
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "detection", :value => "monte_carlo"))
+    end
+
     @testset "set_seed + reset compose into a clean seeded replay" begin
         srv = EWSim.Server(load_scenario(_SCEN_SRV); path = _SCEN_SRV)
         # advance, moving the target off its start

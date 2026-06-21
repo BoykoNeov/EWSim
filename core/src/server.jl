@@ -142,6 +142,21 @@ function handle_command!(srv::Server, cmd)
         comp[key] = _coerce_like(get(comp, key, nothing), Float64(cmd[:value]))
         return nothing
 
+    elseif typ === :set_fidelity
+        # Live fidelity toggle — a slice-2 EXTENSION to the §5 table (mirrors the
+        # scenario_frame precedent; §11 Tier A's "protocol doesn't change" holds for
+        # YAML+reload, but *live* toggling needs this one command). VALIDATE here: a bad
+        # value reaching `observe!` would throw inside `tick!`, and the session's outer
+        # catch only swallows IO/EOF — so a tick-time error would kill the connection.
+        # `PROPAGATION_MODES` is radar.jl's single source of truth (no drift).
+        key = Symbol(String(cmd[:key]));  val = Symbol(String(cmd[:value]))
+        key === :propagation ||
+            error("set_fidelity: '$key' is not live-settable (slice 2: propagation)")
+        val in PROPAGATION_MODES ||
+            error("set_fidelity: propagation '$val' unknown ($(join(PROPAGATION_MODES, " | ")))")
+        w.fidelity[key] = val
+        return nothing
+
     elseif typ === :set_seed
         srv.seed = UInt64(Int(cmd[:value]))
         w.rng = Xoshiro(srv.seed)            # reseed the stream in place; clock/entities untouched

@@ -41,7 +41,7 @@ PowerShell 5.1 mangles double quotes passed to `julia -e`. **Put Julia code in a
 
 ## Current status
 
-Slice 2 (propagation fidelity — `two_ray`) — **IN PROGRESS. Step 1 done & green** (247 tests).
+Slice 2 (propagation fidelity — `two_ray`) — **IN PROGRESS. Steps 1–2 done & green** (272 tests).
 Step 1: `rf.jl` two-ray physics behind the `propagation` knob. `two_ray_phase` (Δφ =
 4π·h_r·h_t/(λ·R_g), flat-earth small-grazing path-diff), `two_ray_factor4` (F⁴ =
 (1+ρ²+2ρ·cosΔφ)²; ρ=−1 → 16·sin⁴(Δφ/2), peak +12.04 dB, exact nulls; ρ=0 → 1 ≡ free space),
@@ -56,9 +56,34 @@ MC bands): lobe peak ratio=16, null→0 (explicit `atol` — `≈0` rtol-only al
 trivially/fails), small-grazing R⁻⁸ envelope (−24.08 dB/octave, double slant+ground),
 ρ=0 ≡ free-space exactly, h→0 perpetual-null pin (NOT a throw — a fly-by may cross z=0
 and must not crash the live sim), horizon coeff recomputed at full precision + additive in
-√h, `ground_m>0` guard (the sole Inf/NaN input). **Next: step 2** — `radar.jl` dispatch on
-`get(w.fidelity,:propagation,:free_space)` + horizon gate + `set_fidelity` command (HANDOFF
-§10; slice2.md step 2).
+√h, `ground_m>0` guard (the sole Inf/NaN input).
+Step 2 (gate 2 — knob switches live): `radar.jl` `observe!` dispatches on
+`get(w.fidelity,:propagation,:free_space)` via `_target_snr(prop, rp, radar, tgt) →
+(snr, visible)`. two_ray decomposes geometry — link budget on **slant** `_range`,
+multipath phase + 4/3-Earth horizon on **ground** `_ground_range` — masks a below-horizon
+target to SNR 0 + `visible:false` (the below-horizon **policy** lives in radar.jl, NOT
+rf.jl); clamps `h_r,h_t ≥ 0` (a fly-by below z=0 can't crash `horizon_range`'s sqrt) and
+treats ground→0 (overhead, Δφ→∞) as visible free space. `_snr_db_wire` floors the
+telemetry `snr_db` to `_SNR_DB_FLOOR=-120` so a **null** (F⁴=0, even above the horizon) or
+a mask never ships `-Inf` to JSON (the watch-item, same class as slice-1's `%g`). New
+telemetry key `"<id>.visible"`. **`detect_once` stays UNCONDITIONAL per look** — `_sample_z`
+draws the same randn count regardless of SNR, so free_space/two_ray stay in RNG lockstep
+and toggling fidelity changes only the detection booleans + telemetry, never the draw
+sequence; gating the draw on snr/visible would desync replay. `PROPAGATION_MODES =
+(:free_space,:two_ray)` in radar.jl is the **single source of truth** shared by the
+dispatch's unknown-rung error AND the server's `set_fidelity` validation. `set_fidelity`
+(`handle_command!`, server.jl) is a flagged §5 EXTENSION (mirrors `scenario_frame`):
+`{type:set_fidelity,key:propagation,value:two_ray}` → writes `w.fidelity`, but VALIDATES
+first (key===:propagation, value ∈ PROPAGATION_MODES) — a bad value reaching `observe!`
+would throw inside `tick!`, and the session's IO/EOF-only catch would drop the connection.
+Tests: `test_radar.jl` (6 contracts — default==free_space, two_ray==`snr_two_ray`
+closed-form on a slant≠ground geom, below-horizon mask→floor+visible:false, null JSON
+round-trip stays finite, **draw-stream parity across fidelities**, unknown-rung errors);
+`test_determinism.jl` +mid-run toggle replays bit-identical; `test_server.jl` +`set_fidelity`
+write/reject. **Next: step 3** — `scenarios/slice2_tworay.yaml` (lobe-sweeping / horizon-
+crossing fly-by) + Godot fidelity toggle button (`set_fidelity`) + §12 badge re-render +
+headless verifier (toggle flips telemetry SNR at the same `t`); Pluto coverage diagram a
+stretch (slice2.md step 3).
 
 ---
 

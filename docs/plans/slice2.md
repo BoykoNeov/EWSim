@@ -80,13 +80,27 @@ engineering hybrid, both behind the one `propagation` knob.
       (explicit `atol`), small-grazing R⁻⁸ (−24.08 dB/octave), ρ=0 ≡ free-space exactly,
       h→0 perpetual-null pin (not a throw — a fly-by may cross z=0), 4/3-Earth horizon
       (coeff recomputed at full precision ≈4121.8, additive in √h), `ground_m>0` guard.
-- [ ] 2. `radar.jl`: replace the `:free_space`-only guard with a dispatch on
+- [x] 2. `radar.jl`: replace the `:free_space`-only guard with a dispatch on
       `get(w.fidelity, :propagation, :free_space)`; extract `h_r`/`h_t` (`pos[3]`)
       and ground range; apply the horizon gate (below horizon → finite SNR floor
       **or** a `visible:false` telemetry flag — **never** `-Inf`/`NaN`). Add
       `set_fidelity` to `handle_command!` (`server.jl`); the `scenario` handshake
       already ships `world.fidelity`. Tests: knob switches model, horizon masks,
-      default unchanged, no Inf/NaN on the wire.
+      default unchanged, no Inf/NaN on the wire. **DONE** (272 tests) — `_target_snr`
+      in `radar.jl` dispatches on `PROPAGATION_MODES` (the single source of truth shared
+      with the server validation); two_ray decomposes slant (link budget) vs ground
+      (phase + 4/3-Earth horizon), masks below-horizon to SNR 0 with `visible:false`,
+      clamps heights ≥0 and guards ground→0 (overhead → free space). `_snr_db_wire`
+      floors the telemetry `snr_db` to `_SNR_DB_FLOOR=-120` so a **null** (F⁴=0, even
+      above the horizon) / mask never ships `-Inf`. **`detect_once` stays UNCONDITIONAL
+      per look** (same randn count under either rung → RNG lockstep across fidelities;
+      gating it would desync replay). `set_fidelity` (`server.jl`) validates BEFORE
+      writing `w.fidelity` (a bad value would otherwise throw inside `tick!`, which the
+      session's IO/EOF-only catch turns into a dropped connection). New `test_radar.jl`
+      (6 contracts: default==free_space, two_ray==closed-form on a slant≠ground geom,
+      below-horizon mask, null JSON round-trip, **draw-stream parity across fidelities**,
+      unknown-rung error). `test_determinism.jl` gains a **mid-run toggle replays
+      bit-identical** case; `test_server.jl` gains the `set_fidelity` write/reject test.
 - [ ] 3. `scenarios/slice2_tworay.yaml`: geometry that sweeps several lobes and
       crosses the horizon (e.g. a climbing or descending fly-by) — note the
       existing `slice1_roc.yaml` already lobes under two_ray, so this is for a
