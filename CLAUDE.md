@@ -118,3 +118,7 @@ Watch the sandbox live: start the server, then launch Godot on `clients/godot` (
 server, then `godot --headless --path clients/godot --script res://net/sandbox_verify.gd`
 (exit 0 = pass; it connects as the one client, so the server exits after).
 Next: **slice 2 — propagation fidelity** (`two_ray` behind the `propagation` knob; HANDOFF §10).
+**Planned** in `docs/plans/slice2.md` (3 staged steps: `rf.jl` two-ray physics + closed-form
+`test_propagation.jl` → `radar.jl` propagation dispatch + `set_fidelity` command → Godot fidelity
+toggle, Pluto coverage diagram a stretch). The seam is pre-built: `radar.jl` already guards on the
+`:propagation` knob and the server handshake already ships `world.fidelity` (the §12 badge).
