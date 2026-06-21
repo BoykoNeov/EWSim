@@ -137,3 +137,8 @@ engineering hybrid, both behind the one `propagation` knob.
 - **Name every approximation** in the docstrings (flat-earth small-grazing phase,
   ρ=−1, 4/3-Earth). HANDOFF §1: no hidden approximations — this is the slice whose
   whole point is the named knob.
+- **Step 3 Godot: "target dark past horizon" keys off the `visible` telemetry flag,
+  NOT absence of `:detection` events.** A masked (below-horizon, SNR=0) target still
+  false-alarms at rate `pfa`, so it can occasionally blip a detection even below the
+  horizon — "no recent blip" ≠ "not visible". Step 2 added `"<id>.visible"` for exactly
+  this; the client must read it.
