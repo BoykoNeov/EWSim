@@ -41,8 +41,8 @@ PowerShell 5.1 mangles double quotes passed to `julia -e`. **Put Julia code in a
 
 ## Current status
 
-Slice 2 (propagation fidelity — `two_ray`) — **COMPLETE. Steps 1–3 done & green** (279 tests;
-Pluto coverage diagram a deferred stretch).
+Slice 2 (propagation fidelity — `two_ray`) — **COMPLETE. Steps 1–3 + coverage-diagram stretch
+done & green** (402 tests).
 Step 1: `rf.jl` two-ray physics behind the `propagation` knob. `two_ray_phase` (Δφ =
 4π·h_r·h_t/(λ·R_g), flat-earth small-grazing path-diff), `two_ray_factor4` (F⁴ =
 (1+ρ²+2ρ·cosΔφ)²; ρ=−1 → 16·sin⁴(Δφ/2), peak +12.04 dB, exact nulls; ρ=0 → 1 ≡ free space),
@@ -119,9 +119,32 @@ then launch Godot on `clients/godot` (toggle `prop:` to watch lobing/horizon app
 Re-run the step-3 proof headless: start that server, then `godot --headless --path clients/godot
 --script res://net/slice2_verify.gd` (exit 0 = pass; serves one client then exits). The toggle
 UI test needs NO server: `godot --headless --path clients/godot --script res://net/sandbox_ui_test.gd`.
-**Next: slice 3 — CFAR sandbox** (HANDOFF §10 item 3), or the deferred slice-2 Pluto coverage
-diagram (range×altitude SNR grid showing the lobe structure; `batch.jl` coverage kind +
-closed-form regression, slice2.md step 3 stretch).
+
+Coverage-diagram stretch (the slice's offline lesson, no client/server): `batch.jl`
+`kind=:coverage` sweeps SNR (floored dB) over a ground-range × altitude grid two ways —
+free_space + two_ray (with the 4/3-Earth horizon mask) — into `(n_range, n_alt, 2)`. Pure
+`coverage_grid` (re-derives radar.jl's below-horizon policy for the clean grid; calls the same
+rf.jl primitives + the SAME `_snr_db_wire` floor as the wire, so a null/mask reads
+`_SNR_DB_FLOOR`, never `-Inf` in the artifact); `load_coverage` reader; `_run_coverage` is an
+**additive** `elseif` so the ROC path stays byte-identical. NO RNG (closed form) → can't desync
+a live trace. `test_batch.jl` pins both planes **cell-for-cell against the live `_target_snr`
+oracle** (NOT a hand recompute — that would replicate any slant/ground decomposition slip; the
+oracle is the actual sandbox path, so the diagram provably matches the sandbox AND a transpose
+dies in the same loop) + descriptor↔file, Inf/NaN-free, below-horizon corner floors while
+free_space stays finite (mask is the model not the geometry), `w.rng` untouched, rcs override.
+Generate: `pwsh tools/julia.ps1 --project=core tools/run_coverage.jl` → `shared/coverage_radar1.bin`
+(NOT committed — 3 MB sweep; `.gitignore` stages only the tiny ROC, so regen on a fresh clone).
+View: Pluto `clients/notebooks/slice2_coverage.jl` (free_space vs two_ray heatmaps + analytic
+horizon-curve overlay from the exported `horizon_range(0,1)` + an F⁴=two_ray−free_space panel).
+**Grid default 10–80 km × 0–600 m / 400×480**: a 30 m X-band mast packs ~940 lobes over the
+hemisphere, so high elevation angles (short range × high altitude) alias to moiré — this
+low-elevation window keeps ~2–4 cells/lobe and centres the 100 m target in the lobing band.
+Visually confirmed 2026-06-21 (headless PNG render of the notebook cells: clean lobe fan, dark
+nulls, cyan horizon curve bounding the masked wedge; no headless *visual* test — same gap as
+slice-1 `_draw`, numbers pinned, picture eyeballed).
+
+**Next: slice 3 — CFAR sandbox** (HANDOFF §10 item 3): CFAR detection (adaptive threshold from
+the noise estimate in neighbouring range cells). The slice-2 backlog is now clear.
 
 ---
 

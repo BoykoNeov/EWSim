@@ -37,8 +37,8 @@ export snr_two_ray, snr_db_two_ray, two_ray_phase, two_ray_factor4, horizon_rang
 export detection_threshold, pd_analytic, pd_montecarlo, detect_once
 # Slice-1 subsystems + scenario loader
 export ConstantVelocity, RadarSensor, Knob, Scenario, load_scenario
-# Offline batch sweeps (ROC artifact)
-export run_batch, roc_grid, load_roc
+# Offline batch sweeps (ROC artifact + slice-2 coverage diagram)
+export run_batch, roc_grid, load_roc, coverage_grid, load_coverage
 # Interactive socket run loop (the live/driver path)
 export Server, run_server!, RunMode, PAUSED, REALTIME, FAST, scenario_frame
 

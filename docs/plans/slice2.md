@@ -136,8 +136,30 @@ engineering hybrid, both behind the one `propagation` knob.
       the `visible` flag it keys off is wire-verified by `slice2_verify.gd`. `test_scenario.jl` gains a loader assertion (parses, two_ray
       default, no `propagation` knob, target starts beyond `horizon_range`) so a malformed
       YAML fails as a clear test, not a confusing Godot-launch timeout.
-      **(stretch, deferred)** `batch.jl` coverage-diagram kind (SNR over range×altitude grid)
-      → `shared/*.bin` + Pluto `slice2_coverage.jl`; closed-form regression test.
+      **(stretch — DONE, 402 tests)** `batch.jl` `kind=:coverage`: pure `coverage_grid`
+      sweeps SNR (floored dB) over a ground-range × altitude grid two ways — free_space and
+      two_ray (with the 4/3-Earth horizon mask) — as an `(n_range, n_alt, 2)` array;
+      `load_coverage` reader + `_resolve_target_rcs` (rcs defaults to the sole target).
+      Additive `elseif kind === :coverage` branch (`_run_coverage` helper) so the ROC path
+      stays byte-for-byte the slice-1 code. dB-floored via the SAME `_snr_db_wire` as the wire
+      (a null/mask reads `_SNR_DB_FLOOR`, never `-Inf` — the watch-item carried into the
+      artifact). No RNG at all (closed form), so a coverage run can't desync a live trace.
+      `tools/run_coverage.jl` (headless twin of `run_batch.jl`) → `shared/coverage_radar1.bin`
+      (NOT committed — 3 MB sweep, `.gitignore` stages only the tiny ROC; the notebook says
+      generate-first). `clients/notebooks/slice2_coverage.jl`: free_space vs two_ray SNR-dB
+      heatmaps + the analytic horizon curve overlay (coeff recovered from the exported
+      `horizon_range(0,1)` — no internal constants) + an F⁴ = two_ray−free_space difference
+      panel. **Test = the live `_target_snr` as oracle** (NOT a hand recompute, which would
+      replicate any slant/ground decomposition slip): the all-cells loop proves both planes
+      match the sandbox path AND catches a transpose in one shot; plus descriptor↔file agree,
+      artifact Inf/NaN-free, below-horizon corner floors while free_space stays finite (mask
+      is the model not the geometry), grid non-degenerate, `w.rng` untouched, rcs override.
+      **Grid default = 10–80 km × 0–600 m** (400×480): a 30 m X-band mast packs ~940 lobes
+      over the hemisphere, so short-range/high-altitude aliases into moiré — this low-elevation
+      window keeps ~2–4 cells/lobe and centres the scenario's 100 m target in the lobing band.
+      Visually confirmed (2026-06-21, headless PNG render of the notebook cells): clean lobe
+      fan, dark nulls, cyan horizon curve bounding the masked wedge (no headless *visual* test,
+      same gap as slice-1 `_draw` — the numbers are pinned, the picture is eyeballed).
 
 ## Context / landmarks
 - **The seam is pre-built.** `radar.jl:73-74` is the guard to replace;
