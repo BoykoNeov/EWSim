@@ -105,7 +105,9 @@ green end-to-end (server `WARMING→LISTENING→DONE`, verifier `SBV OK`, real e
 smoke-loaded headless against a live server (`--quit-after`; assert no `SCRIPT ERROR`/`Parse
 Error`/`GDScript backtrace` and that the server reaches `DONE`, i.e. the scene actually connected)
 — that's what caught the `class_name` resolution bug and a `%g` (unsupported in GDScript) format
-bug. `_draw` (the actual pixel rendering) isn't hit headless — the one piece pending a windowed look.
+bug. `_draw` (the actual pixel rendering) isn't hit headless, but it has now been **visually
+confirmed in a windowed run** (2026-06-21): live SNR/Pd readout, the §12 fidelity badge, the
+elevation view (radar triangle + target marker), and the slider→Pd loop all render correctly.
 
 Re-run the seam check: start `pwsh tools/julia.ps1 tools/echo_server.jl`, then
 `godot --headless --path clients/godot --script res://net/seam_test.gd`.
