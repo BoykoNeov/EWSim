@@ -136,7 +136,7 @@ engineering hybrid, both behind the one `propagation` knob.
       the `visible` flag it keys off is wire-verified by `slice2_verify.gd`. `test_scenario.jl` gains a loader assertion (parses, two_ray
       default, no `propagation` knob, target starts beyond `horizon_range`) so a malformed
       YAML fails as a clear test, not a confusing Godot-launch timeout.
-      **(stretch — DONE, 402 tests)** `batch.jl` `kind=:coverage`: pure `coverage_grid`
+      **(stretch — DONE, 420 tests)** `batch.jl` `kind=:coverage`: pure `coverage_grid`
       sweeps SNR (floored dB) over a ground-range × altitude grid two ways — free_space and
       two_ray (with the 4/3-Earth horizon mask) — as an `(n_range, n_alt, 2)` array;
       `load_coverage` reader + `_resolve_target_rcs` (rcs defaults to the sole target).
@@ -153,7 +153,12 @@ engineering hybrid, both behind the one `propagation` knob.
       replicate any slant/ground decomposition slip): the all-cells loop proves both planes
       match the sandbox path AND catches a transpose in one shot; plus descriptor↔file agree,
       artifact Inf/NaN-free, below-horizon corner floors while free_space stays finite (mask
-      is the model not the geometry), grid non-degenerate, `w.rng` untouched, rcs override.
+      is the model not the geometry), grid non-degenerate, `w.rng` untouched, rcs override +
+      ambiguous-multi-target error. **The test grid MUST include a `0 < h_t < ~162 m` row**
+      (the 100 m row, masked beyond ~63.8 km): at `h_t=0` the perpetual two-ray null floors a
+      cell *regardless* of the horizon mask, so an all-high-altitude grid would pass even with
+      the mask deleted — a masked-but-NOT-null cell is what actually guards the policy (proven
+      by disabling the mask → exactly 3 assertions fail; advisor catch).
       **Grid default = 10–80 km × 0–600 m** (400×480): a 30 m X-band mast packs ~940 lobes
       over the hemisphere, so short-range/high-altitude aliases into moiré — this low-elevation
       window keeps ~2–4 cells/lobe and centres the scenario's 100 m target in the lobing band.

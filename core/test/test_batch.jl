@@ -122,11 +122,15 @@ end
     scn = load_scenario(_SCEN_COVERAGE)            # slice2_tworay: radar1 (30 m mast), tgt1 (rcs 5)
 
     # Small grid (like ROC's 2×9) so the all-cells oracle loop is trivially fast. Range
-    # starts > 0 (snr_freespace/snr_two_ray need slant/ground > 0).
-    nr, na = 8, 6
+    # starts > 0 (snr_freespace/snr_two_ray need slant/ground > 0). The altitude grid
+    # MUST include a row in 0 < h_t < ~162 m (here 100 m → exact, since 600/6 = 100): at
+    # h_t=0 the two-ray null floors the cell *regardless* of the horizon mask (perpetual
+    # null), so an all-high-altitude grid would let a missing mask pass unnoticed. The
+    # 100 m row at long range is masked-but-not-null, so it actually exercises the policy.
+    nr, na = 8, 7
     desc = run_batch(scn; kind = :coverage,
                      range_start = 5_000.0, range_stop = 75_000.0, range_count = nr,
-                     alt_start = 0.0, alt_stop = 2_000.0, alt_count = na,
+                     alt_start = 0.0, alt_stop = 600.0, alt_count = na,
                      outdir = dir, name = "cov_test")
 
     radar = scn.world.entities[:radar1]
@@ -179,13 +183,18 @@ end
     end
 
     @testset "below-horizon corner masked to the floor — the MODEL, not the geometry" begin
-        # Lowest altitude (h_t=0 → horizon_range(30,0) ≈ 22.6 km), farthest range (75 km):
-        # ground range is beyond the 4/3-Earth horizon, so two_ray masks to the floor. The
-        # free_space plane (no ground, infinite LOS) stays finite & above the floor at the
-        # SAME cell — the mask is the propagation MODEL, not the geometry (slice2_verify.gd).
-        @test cov.two_ray_db[end, 1]    == EWSim._SNR_DB_FLOOR
-        @test isfinite(cov.free_space_db[end, 1])
-        @test cov.free_space_db[end, 1] > EWSim._SNR_DB_FLOOR
+        # A masked-but-NOT-null cell: h_t = 100 m (horizon_range(30,100) ≈ 63.8 km) at the
+        # farthest range (75 km) is beyond the 4/3-Earth horizon, so two_ray masks it to the
+        # floor — but F⁴ ≠ 0 there (h_t ≠ 0), so WITHOUT the mask it would be a real lobed
+        # value (a +12 dB peak here), not the floor. So this cell genuinely exercises the
+        # horizon policy (an h_t=0 cell would floor anyway via the perpetual null, which
+        # test_propagation already pins). The free_space plane (no ground, infinite LOS)
+        # stays finite at the SAME cell — the mask is the MODEL, not the geometry.
+        j100 = findfirst(==(100.0), cov.alt_grid)
+        @test cov.range_grid[end] > horizon_range(cov.h_r, 100.0)   # the cell IS beyond its horizon
+        @test cov.two_ray_db[end, j100]    == EWSim._SNR_DB_FLOOR
+        @test isfinite(cov.free_space_db[end, j100])
+        @test cov.free_space_db[end, j100] > EWSim._SNR_DB_FLOOR
     end
 
     @testset "the grid is not degenerate (some two_ray cells well above the floor)" begin
@@ -210,6 +219,16 @@ end
                        alt_start = 0.0, alt_stop = 1_000.0, alt_count = 4,
                        outdir = dir, name = "cov_rcs")
         @test d2[:rcs_m2] == 12.5
+    end
+
+    @testset "ambiguous multi-target rcs resolution errors (parity with _resolve_radar)" begin
+        # Two targets and no explicit rcs_m2 → the resolver can't pick one. Test the unit
+        # directly (a 2-target World) rather than a full run_batch, so no radar comp needed.
+        w = World()
+        w.entities[:t1] = Entity(:t1, :target; comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+        w.entities[:t2] = Entity(:t2, :target; comp = Dict{Symbol,Any}(:rcs_m2 => 2.0))
+        scn2 = Scenario("two_targets", w, Subsystem[], Knob[], 1.0e-3, 16)
+        @test_throws ErrorException EWSim._resolve_target_rcs(scn2)
     end
 
     rm(dir; force = true, recursive = true)
