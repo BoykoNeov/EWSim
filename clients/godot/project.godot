@@ -1,5 +1,6 @@
 ; Godot 4.7 project — thin spatial client for EWSim.
-; v1 carries only the headless seam test; the Sandbox scene lands in slice-1 step 7.
+; net/seam_test.gd is the headless socket proof; scenes/Sandbox.tscn is the
+; slice-1 step-7 spatial view (radar + target + blips + sliders).
 
 config_version=5
 
@@ -7,7 +8,7 @@ config_version=5
 
 config/name="EWSim Sandbox"
 config/features=PackedStringArray("4.7")
-run/main_scene=""
+run/main_scene="res://scenes/Sandbox.tscn"
 
 [debug]
 

@@ -1,0 +1,9 @@
+; Slice-1 spatial sandbox (HANDOFF §8, step 7). Intentionally a bare root node —
+; all UI (sliders, readout, badge, buttons) and rendering are built in Sandbox.gd,
+; so there is no hand-authored layout to drift out of sync with the code.
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/Sandbox.gd" id="1_main"]
+
+[node name="Sandbox" type="Node2D"]
+script = ExtResource("1_main")

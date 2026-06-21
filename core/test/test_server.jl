@@ -100,6 +100,10 @@ end
         # the scenario frame carries the YAML knobs so a client can build its sliders
         @test any(k -> k[:key] === :pt_w, resp[:knobs])
         @test any(k -> k[:key] === :rcs_m2 && k[:log] === true, resp[:knobs])
+        # each knob carries its live comp value so a slider opens at the truth, not at `min`
+        @test any(k -> k[:key] === :pt_w && k[:value] == 1500.0, resp[:knobs])
+        # ...and the actual fidelity map, so the client's §12 badge isn't a hardcoded label
+        @test resp[:fidelity][:propagation] === :free_space
     end
 
     @testset "run_batch maps the §5 grid bounds (snr_db_grid_start/stop rename)" begin

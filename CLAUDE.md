@@ -41,7 +41,7 @@ PowerShell 5.1 mangles double quotes passed to `julia -e`. **Put Julia code in a
 
 ## Current status
 
-Slice 1 (radar → detection → ROC). **Steps 1–6b done & green** (223 tests): world +
+Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
 (`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0); `rf.jl`
 (free-space radar eq) + `detection.jl` (analytic + MC Pd, Swerling 0/1) with
@@ -74,18 +74,45 @@ kwargs (drop it and the bounds silently default) and runs **inline** (slice-1 si
 stance; the Threads/@spawn seam is later). `steps_this_iteration` paces PAUSED/REALTIME/FAST
 with a catch-up cap. `warmup!` pays TTFX on a deepcopy + a tempdir batch, never touching the
 live World or real `shared/`. A connect-time `scenario_frame` (a flagged §5 extension) ships
-the knob list so the client builds sliders from the YAML. `tools/server.jl` is the headless
+the knob list (incl. each knob's live `value` so a slider opens at the truth, not at `min`)
+**and** the World's `fidelity` map (so the §12 badge reflects actual fidelity, not a hardcoded
+label), so the client builds sliders + badge from the handshake. `tools/server.jl` is the headless
 entrypoint (`EWSIM_SERVER_*` stdout markers; `julia tools/server.jl [scenario] [port]`).
 `test_server.jl` (51 tests): command dispatch, seed/reset composition, the grid-rename
 mapping, warmup isolation, pacing, and a **real-loopback** test proving handshake + emit +
 one-shot event clear (on a provable-detection fixture, not the 42 km scenario where Pd is
 unknown) + clean EOF teardown. Also smoke-proven end-to-end via `run_server!` on a real port.
-Next: step 7 — minimal Godot `Sandbox.tscn` (radar + moving target + blips + 2 sliders) that
-connects to `tools/server.jl`, reads the `scenario` handshake to build the 2 sliders, renders
-`state` frames as entity nodes + detection blips, and sends `set_param` on slider drag. Slice 1
-complete after step 7.
+Step 7 (slice 1 complete): the Godot spatial sandbox. `clients/godot/net/SimClient.gd` is the
+ONE protocol impl (4-byte BE length + JSON, §5 framing; mirrors `seam_test.gd`) — IO is driven
+by `poll()` so it runs both in a live scene (`_process`) and headless (caller polls). Both the
+scene and the verifier reference it via `preload`, **not** `class_name` (the global class cache
+isn't built on a headless/fresh-clone load, so a bare `SimClient` type reference fails to resolve
+there — a real bug the scene smoke-load below caught). `scenes/
+Sandbox.gd` (+ a trivial `Sandbox.tscn`, all UI built in code) is a **pure client, zero physics**:
+on the `scenario` handshake it builds sliders from the knob list (log knobs → `exp_edit`, opened
+at the handshake `value`) and the §12 fidelity badge, auto-runs realtime, and renders `state`
+frames in a 2-D elevation view (screen-x downrange, screen-y altitude — the two coords that move
+in slice 1) — radar marker, target (green when detected), and a fading ring blip per `detection`
+event; the per-tick SNR/Pd readout stays prominent (at the 42 km cold start Pd≈0, so no blip
+fires for ~a minute — the readout is what shows the view is live). Slider drag → `set_param`.
+`net/sandbox_verify.gd` is the headless step-7 proof (the `seam_test.gd` analog): drives the REAL
+`tools/server.jl` through `SimClient` and asserts the §8 done-criterion as machine checks —
+handshake carries both knobs + values + fidelity, state entities sorted `[radar1, tgt1]` with
+SNR/Pd telemetry, **`set_param` rcs_m2 0.1→100 makes `radar1.pd` rise ~0→0.35** (the slider→
+core→telemetry loop, which IS the deliverable), realtime advances `t`, clean disconnect. Proven
+green end-to-end (server `WARMING→LISTENING→DONE`, verifier `SBV OK`, real exit 0 via the
+`_console.exe` build). The verifier exercises only the protocol layer, so `Sandbox.tscn` is ALSO
+smoke-loaded headless against a live server (`--quit-after`; assert no `SCRIPT ERROR`/`Parse
+Error`/`GDScript backtrace` and that the server reaches `DONE`, i.e. the scene actually connected)
+— that's what caught the `class_name` resolution bug and a `%g` (unsupported in GDScript) format
+bug. `_draw` (the actual pixel rendering) isn't hit headless — the one piece pending a windowed look.
 
 Re-run the seam check: start `pwsh tools/julia.ps1 tools/echo_server.jl`, then
 `godot --headless --path clients/godot --script res://net/seam_test.gd`.
 Run the real server: `pwsh tools/julia.ps1 --project=core tools/server.jl` (port 8765).
 It serves **one** client then exits (HANDOFF "single client v1") — restart it per session.
+Watch the sandbox live: start the server, then launch Godot on `clients/godot` (main scene is
+`Sandbox.tscn`) — or `godot --path clients/godot`. Re-run the step-7 proof headless: start the
+server, then `godot --headless --path clients/godot --script res://net/sandbox_verify.gd`
+(exit 0 = pass; it connects as the one client, so the server exits after).
+Next: **slice 2 — propagation fidelity** (`two_ray` behind the `propagation` knob; HANDOFF §10).

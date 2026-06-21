@@ -82,17 +82,22 @@ end
 
 A small `type = "scenario"` handshake frame, sent on connect and after `load_scenario`,
 so a client can build its sliders from the YAML knob list (min/max/label/log) without a
-second source of truth. NB: this is an EXTENSION to the §5 command table (which defines
-the state stream + the command set but no scenario-info reply) — kept intentionally tiny.
+second source of truth. Also ships the World's `fidelity` map so a client can show the
+"this is a <fidelity> approximation" badge §12 requires in every view — reflecting the
+*actual* fidelity, not a hardcoded label. NB: this is an EXTENSION to the §5 command table
+(which defines the state stream + the command set but no scenario-info reply) — kept tiny.
 """
 function scenario_frame(srv::Server)
     scn = srv.scn
+    # `value` is the knob's CURRENT comp setting (validated to exist at load), so a client's
+    # slider opens at the live value instead of snapping to `min` and lying until first drag.
     knobs = [Dict{Symbol,Any}(:target => k.target, :key => k.key, :min => k.min,
-                              :max => k.max, :label => k.label, :log => k.log)
+                              :max => k.max, :label => k.label, :log => k.log,
+                              :value => scn.world.entities[k.target].comp[k.key])
              for k in scn.knobs]
     return Dict{Symbol,Any}(:type => "scenario", :name => scn.name,
                             :dt_physics => scn.dt_physics, :emit_every => scn.emit_every,
-                            :knobs => knobs)
+                            :fidelity => copy(scn.world.fidelity), :knobs => knobs)
 end
 
 # §5 `run_batch` command → `run_batch` kwargs. The wire spells the grid bounds
