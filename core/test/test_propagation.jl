@@ -58,6 +58,17 @@
         @test EWSim.lin2db(s1 / s2) ≈ 80*log10(2) atol=0.01      # 24.0824 dB
     end
 
+    @testset "budget uses slant range, phase uses ground range (not swappable)" begin
+        # Every other test has slant ≈ ground, so a swap of the two arguments would
+        # pass silently. A high-grazing geometry (slant clearly ≠ ground) pins the
+        # decomposition SNR_two_ray = snr_freespace(slant)·F⁴(Δφ from ground).
+        h_t2, gnd = 1000.0, 2000.0
+        slant = hypot(gnd, h_t2 - h_r)                           # 2231.6 m ≠ 2000 m
+        Δφ = EWSim.two_ray_phase(λ, h_r, h_t2, gnd)
+        @test EWSim.snr_two_ray(rp, σ, slant; h_r=h_r, h_t=h_t2, ground_m=gnd) ≈
+              EWSim.snr_freespace(rp, σ, slant) * EWSim.two_ray_factor4(Δφ) rtol=1e-12
+    end
+
     @testset "ρ = 0 recovers free space exactly (no ground)" begin
         for R in (Rpeak, Rnull, 1.0e5)
             @test EWSim.snr_two_ray(rp, σ, R; h_r=h_r, h_t=h_t, ground_m=R, refl=0.0) ==
