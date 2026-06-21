@@ -12,7 +12,8 @@
 
 using JSON3
 
-const _SCEN = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice1_roc.yaml"))
+const _SCEN  = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice1_roc.yaml"))
+const _SCEN2 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice2_tworay.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -85,6 +86,24 @@ end
         k1, k2 = scn.knobs
         @test k1.target === :radar1 && k1.key === :pt_w && k1.min == 100 && k1.max == 5000
         @test k2.target === :tgt1 && k2.key === :rcs_m2 && k2.log === true
+    end
+
+    @testset "loader parses slice2_tworay.yaml (two_ray showcase)" begin
+        # Cheap insurance: a malformed showcase YAML should fail HERE as a clear test, not
+        # downstream as a confusing server-launch timeout in the Godot slice-2 verifier.
+        scn = load_scenario(_SCEN2)
+        @test scn.name == "slice2_tworay"
+        @test scn.world.fidelity[:propagation] === :two_ray
+        @test haskey(scn.world.entities, :radar1) && haskey(scn.world.entities, :tgt1)
+        @test scn.world.entities[:radar1].kind === :radar
+        @test scn.world.entities[:tgt1].kind   === :target
+        # propagation is a fidelity (toggled by set_fidelity), NOT a comp param — it must
+        # never appear as a slider knob, or a drag would write a bogus comp entry.
+        @test all(k -> k.key !== :propagation, scn.knobs)
+        # the showcase opens with the target BEYOND the 4/3-Earth horizon (the dark start).
+        rad = scn.world.entities[:radar1];  tgt = scn.world.entities[:tgt1]
+        ground0 = hypot(tgt.pos[1] - rad.pos[1], tgt.pos[2] - rad.pos[2])
+        @test ground0 > horizon_range(rad.pos[3], tgt.pos[3])
     end
 
     @testset "n_pulses ≠ 1 is rejected at load (single-pulse slice)" begin

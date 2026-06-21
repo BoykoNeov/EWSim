@@ -101,14 +101,42 @@ engineering hybrid, both behind the one `propagation` knob.
       below-horizon mask, null JSON round-trip, **draw-stream parity across fidelities**,
       unknown-rung error). `test_determinism.jl` gains a **mid-run toggle replays
       bit-identical** case; `test_server.jl` gains the `set_fidelity` write/reject test.
-- [ ] 3. `scenarios/slice2_tworay.yaml`: geometry that sweeps several lobes and
+- [x] 3. `scenarios/slice2_tworay.yaml`: geometry that sweeps several lobes and
       crosses the horizon (e.g. a climbing or descending fly-by) — note the
       existing `slice1_roc.yaml` already lobes under two_ray, so this is for a
       *striking* lesson, not correctness. Godot: a fidelity toggle button sending
       `set_fidelity`, the §12 badge re-rendering, lobing visible as Pd oscillates,
       target going dark past the horizon. Headless verifier asserts the toggle
       loop (free_space→two_ray flips the telemetry SNR for the same `t`).
-      **(stretch)** `batch.jl` coverage-diagram kind (SNR over range×altitude grid)
+      **DONE** (279 tests) — `slice2_tworay.yaml`: a 100 m-altitude target closing at
+      450 m/s from 70 km on a 30 m mast radar (50 kW). The 4/3-Earth horizon is 63.8 km, so
+      the target starts BELOW it (dark, `visible:false`) for ~14 s, then crosses into LOS and
+      sweeps a dramatic string of lobes/nulls (Pd 0↔~1; F⁴ from −62 dB deep nulls to +12 dB
+      peaks) as Δφ sweeps. `propagation` is NOT a knob (it's a fidelity, toggled by the
+      button) — knobs stay pt_w (bracketed 1k–200k around the 50 kW default) + rcs. Godot
+      `Sandbox.gd`: a `prop:` toggle button sends `set_fidelity`; the §12 badge + button
+      re-render from a **local** fidelity copy (the server applies set_fidelity / reset
+      silently — no new handshake — so the client owns the displayed state and resyncs to
+      the scenario default on reset); the target renders dark "(below horizon)" off the
+      `<id>.visible` flag, NOT absence of `:detection` events (the watch-item — a masked
+      target still false-alarms at pfa). `net/slice2_verify.gd` (headless, the
+      `sandbox_verify.gd` analog) drives the real server: handshake fidelity is two_ray; the
+      far target is `visible:false` under two_ray but `visible:true` under free_space (the
+      mask is the model, not the geometry); step to T=28.0 s under two_ray, then **reset
+      (→YAML two_ray) BEFORE set_fidelity free_space** (reset would clobber the toggle),
+      replay to the SAME T — `t` bit-identical, SNR flips 15.10→7.70 dB (**Δ=7.40 dB**, drain
+      to the LAST frame of the step burst, `_inbox.clear()` before the replay). Proven green
+      end-to-end (`S2V OK`, exit 0) + `Sandbox.tscn` smoke-loaded headless (no GDScript
+      errors, server `DONE`). The verifier drives SimClient directly, so the toggle BUTTON
+      path (`_on_prop_pressed`, the badge/button re-render, the reset resync) is covered by a
+      separate headless UI test `net/sandbox_ui_test.gd` (`SUI OK` — builds the toggle-path
+      nodes + a mock client, feeds a fake handshake, asserts the badge flips two_ray→free_space,
+      the `set_fidelity` frame is sent, and reset resyncs to the default). `_draw`'s
+      below-horizon pixel branch isn't run headless (needs a windowed look like slice-1's), but
+      the `visible` flag it keys off is wire-verified by `slice2_verify.gd`. `test_scenario.jl` gains a loader assertion (parses, two_ray
+      default, no `propagation` knob, target starts beyond `horizon_range`) so a malformed
+      YAML fails as a clear test, not a confusing Godot-launch timeout.
+      **(stretch, deferred)** `batch.jl` coverage-diagram kind (SNR over range×altitude grid)
       → `shared/*.bin` + Pluto `slice2_coverage.jl`; closed-form regression test.
 
 ## Context / landmarks

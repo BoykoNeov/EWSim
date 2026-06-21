@@ -1,0 +1,55 @@
+# slice2_tworay — propagation fidelity showcase (HANDOFF §10 item 2, slice 2 step 3).
+#
+# A LOW-altitude target closing on a mast-mounted radar — the classic radar-horizon
+# lesson. Default fidelity is `two_ray`, so out of the box you see BOTH effects the
+# `propagation` knob introduces over `free_space`:
+#
+#   • 4/3-Earth horizon masking — the target starts BEYOND the radar horizon
+#     (ground range > √(2·4/3·R_e)·(√h_r+√h_t) ≈ 63.8 km for h_r=30 m, h_t=100 m),
+#     so it is dark (telemetry `visible:false`) until it crosses into line of sight;
+#   • flat-earth multipath lobing — once visible, the ground-reflected ray
+#     interferes with the direct ray, so SNR (and Pd) oscillate through a string of
+#     lobes and nulls as the target closes and Δφ = 4π·h_r·h_t/(λ·R_g) sweeps.
+#
+# Toggle the `propagation` knob to `free_space` in the client and both vanish: no
+# horizon (target always visible), no lobing (smooth R⁻⁴ Pd). Dialing the knob and
+# watching the coverage change *is* the lesson (HANDOFF §1, §10).
+#
+# This is a *striking* geometry, not a correctness fixture — the closed-form physics
+# is pinned by test_propagation.jl / test_radar.jl; here the point is the visual.
+name: slice2_tworay
+seed: 42
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  propagation: two_ray         # free_space | two_ray   — the slice-2 showcase knob
+  detection:   analytic        # analytic | monte_carlo
+
+entities:
+  - id: radar1
+    kind: radar
+    pos: [0, 0, 30]            # 30 m mast → 4/3-Earth horizon ≈ 4121.8·(√30+√h_t) m
+    radar:
+      pt_w:         50000      # 50 kW peak — boosted vs slice 1 so lobe peaks detect
+      gain_db:      35
+      freq_hz:      9.4e9
+      bandwidth_hz: 1.0e6
+      noise_fig_db: 3
+      losses_db:    4
+      pfa:          1.0e-6
+      swerling:     1
+      n_pulses:     1
+      revisit_s:    0.1        # detection look / blip cadence (10 Hz); SNR readout is per-tick
+
+  - id: tgt1
+    kind: target
+    pos: [70000, 0, 100]      # 100 m altitude, 70 km downrange — starts beyond the horizon
+    vel: [-450, 0, 0]         # closing at 450 m/s
+    target:
+      rcs_m2: 5.0
+
+knobs:                          # client sliders (target+key must resolve to a comp param);
+                                # `propagation` is NOT here — it is a fidelity, toggled by the
+                                # set_fidelity button, not a comp param a slider writes.
+  - {target: radar1, key: pt_w,   min: 1000, max: 200000, label: "Tx power (W)"}
+  - {target: tgt1,   key: rcs_m2, min: 0.1,  max: 100,    label: "Target RCS (m²)", log: true}

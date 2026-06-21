@@ -41,7 +41,8 @@ PowerShell 5.1 mangles double quotes passed to `julia -e`. **Put Julia code in a
 
 ## Current status
 
-Slice 2 (propagation fidelity — `two_ray`) — **IN PROGRESS. Steps 1–2 done & green** (272 tests).
+Slice 2 (propagation fidelity — `two_ray`) — **COMPLETE. Steps 1–3 done & green** (279 tests;
+Pluto coverage diagram a deferred stretch).
 Step 1: `rf.jl` two-ray physics behind the `propagation` knob. `two_ray_phase` (Δφ =
 4π·h_r·h_t/(λ·R_g), flat-earth small-grazing path-diff), `two_ray_factor4` (F⁴ =
 (1+ρ²+2ρ·cosΔφ)²; ρ=−1 → 16·sin⁴(Δφ/2), peak +12.04 dB, exact nulls; ρ=0 → 1 ≡ free space),
@@ -80,10 +81,47 @@ Tests: `test_radar.jl` (6 contracts — default==free_space, two_ray==`snr_two_r
 closed-form on a slant≠ground geom, below-horizon mask→floor+visible:false, null JSON
 round-trip stays finite, **draw-stream parity across fidelities**, unknown-rung errors);
 `test_determinism.jl` +mid-run toggle replays bit-identical; `test_server.jl` +`set_fidelity`
-write/reject. **Next: step 3** — `scenarios/slice2_tworay.yaml` (lobe-sweeping / horizon-
-crossing fly-by) + Godot fidelity toggle button (`set_fidelity`) + §12 badge re-render +
-headless verifier (toggle flips telemetry SNR at the same `t`); Pluto coverage diagram a
-stretch (slice2.md step 3).
+write/reject.
+Step 3 (gate 3 — visible live): `scenarios/slice2_tworay.yaml` — a 100 m-altitude target
+closing at 450 m/s from 70 km on a 30 m-mast 50 kW radar. The 4/3-Earth horizon is 63.8 km,
+so the target opens BELOW it (dark, `visible:false`) for ~14 s, then crosses into LOS and
+sweeps a dramatic lobe/null string (Pd 0↔~1; F⁴ −62 dB nulls → +12 dB peaks) as Δφ sweeps.
+`propagation` is NOT a slider knob (it's a fidelity, toggled by the button) — knobs stay
+`pt_w` (bracketed 1k–200k around the 50 kW default, NOT slice-1's 5k) + `rcs_m2`. Godot
+`Sandbox.gd`: a `prop:` toggle button sends `set_fidelity`; the §12 badge + button label
+re-render from a **local** fidelity copy, because the server applies `set_fidelity`/`reset`
+silently (no new handshake — only `load_scenario` re-handshakes), so the client owns the
+displayed state and resyncs to the scenario default on `reset` (which reloads the YAML →
+two_ray). The target renders dark "(below horizon)" off the `<id>.visible` flag — NOT absence
+of `:detection` events (the watch-item: a masked target still false-alarms at `pfa`, so "no
+blip" ≠ "not visible"). `net/slice2_verify.gd` (headless, the `sandbox_verify.gd` analog)
+drives the real server on this scenario: handshake fidelity is two_ray; the far target is
+`visible:false` under two_ray but `visible:true` under free_space (the mask is the **model**,
+not the geometry); step to T=28.0 s (target ~57 km, within horizon, mid-lobe) under two_ray,
+then **`reset` (→ YAML two_ray) BEFORE `set_fidelity` free_space** (reset would clobber the
+toggle — `_reload!` re-parses fidelity), replay to the SAME T — `t` bit-identical, SNR flips
+**15.10 → 7.70 dB (Δ=7.40)**. Verifier mechanics: drain to the LAST frame of each `step`
+burst (`t ≥ T−½dt`, not the first), `_inbox.clear()` before the replay, assert sign-agnostic
+`|Δ|>2 dB` at a non-floored sample. Proven green end-to-end (`S2V OK`, exit 0) + `Sandbox.tscn`
+smoke-loaded headless (no GDScript errors, server `DONE` ⇒ scene connected — catches parse
+bugs the SimClient-only verifier can't). Because the verifier drives SimClient (not the
+scene), the toggle BUTTON path (`_on_prop_pressed` + badge/button re-render + reset resync)
+has its own headless test `net/sandbox_ui_test.gd` (`SUI OK`: mock client + fake handshake →
+asserts the badge flips two_ray↔free_space, the `set_fidelity` frame ships, reset resyncs to
+default). `_draw`'s below-horizon dark-target PIXEL branch isn't run headless (needs a
+windowed look, like slice-1's dated visual check); the `visible` flag it reads IS wire-verified
+by `slice2_verify.gd`. `test_scenario.jl` gains a slice2 loader assertion
+(parses, two_ray default, no `propagation` knob, target starts beyond `horizon_range`) so a
+malformed YAML fails as a clear test, not a confusing Godot-launch timeout.
+
+Run the slice-2 showcase: `julia --project=core tools/server.jl scenarios/slice2_tworay.yaml`,
+then launch Godot on `clients/godot` (toggle `prop:` to watch lobing/horizon appear & vanish).
+Re-run the step-3 proof headless: start that server, then `godot --headless --path clients/godot
+--script res://net/slice2_verify.gd` (exit 0 = pass; serves one client then exits). The toggle
+UI test needs NO server: `godot --headless --path clients/godot --script res://net/sandbox_ui_test.gd`.
+**Next: slice 3 — CFAR sandbox** (HANDOFF §10 item 3), or the deferred slice-2 Pluto coverage
+diagram (range×altitude SNR grid showing the lobe structure; `batch.jl` coverage kind +
+closed-form regression, slice2.md step 3 stretch).
 
 ---
 

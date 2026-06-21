@@ -41,7 +41,15 @@ var _readout: Label
 var _badge: Label
 var _knob_box: VBoxContainer
 var _play_btn: Button
+var _prop_btn: Button             # propagation fidelity toggle (sends set_fidelity)
 var _running := false
+# Live local copy of the world fidelity map: the §12 badge's source AND the toggle's
+# state. The server applies set_fidelity silently (no handshake reply), and a `reset`
+# reloads the YAML server-side without a new handshake either — so the client owns the
+# displayed fidelity and resyncs itself. _fidelity_default is the scenario default the
+# toggle reverts to on reset.
+var _fidelity := {}
+var _fidelity_default := {}
 
 func _ready() -> void:
 	_font = ThemeDB.fallback_font
@@ -77,6 +85,13 @@ func _build_ui() -> void:
 	reset_btn.text = "Reset"
 	reset_btn.pressed.connect(_on_reset_pressed)
 	row.add_child(reset_btn)
+	# Slice-2 live fidelity toggle: flips the `propagation` rung (free_space ↔ two_ray)
+	# via set_fidelity. Label is filled from the handshake fidelity; "…" until then.
+	_prop_btn = Button.new()
+	_prop_btn.text = "prop: …"
+	_prop_btn.tooltip_text = "Toggle propagation fidelity (set_fidelity): free_space ↔ two_ray"
+	_prop_btn.pressed.connect(_on_prop_pressed)
+	row.add_child(_prop_btn)
 
 	_knob_box = VBoxContainer.new()
 	_knob_box.add_theme_constant_override("separation", 4)
@@ -117,14 +132,38 @@ func _on_frame(obj: Dictionary) -> void:
 func _on_scenario(obj: Dictionary) -> void:
 	_status.text = "running: " + str(obj.get("name", "scenario"))
 	_build_knobs(obj.get("knobs", []))
-	var fid: Dictionary = obj.get("fidelity", {})
-	var parts := PackedStringArray()
-	for k in fid.keys():
-		parts.append("%s: %s" % [k, fid[k]])
-	parts.sort()
-	_badge.text = "approximation — " + (" · ".join(parts) if not parts.is_empty() else "unspecified")
+	# The fidelity map is the badge source and the toggle's state. Keep the scenario
+	# default so a `reset` (which reverts the server to the YAML, with no new handshake)
+	# can resync the client unilaterally.
+	_fidelity = (obj.get("fidelity", {}) as Dictionary).duplicate()
+	_fidelity_default = _fidelity.duplicate()
+	_render_badge()
+	_update_prop_btn()
 	# Server boots PAUSED; start the fly-by so there is something to watch.
 	_set_running(true)
+
+func _render_badge() -> void:
+	# §12: a visible "<fidelity> approximation" badge, built from the live local fidelity
+	# map (never hardcoded), re-rendered whenever the propagation toggle changes it.
+	var parts := PackedStringArray()
+	for k in _fidelity.keys():
+		parts.append("%s: %s" % [k, _fidelity[k]])
+	parts.sort()
+	_badge.text = "approximation — " + (" · ".join(parts) if not parts.is_empty() else "unspecified")
+
+func _update_prop_btn() -> void:
+	_prop_btn.text = "prop: %s" % str(_fidelity.get("propagation", "?"))
+
+func _on_prop_pressed() -> void:
+	# Flip the propagation rung and tell the core (set_fidelity — the slice-2 live toggle).
+	# Update the badge + button locally; the server applies it on the next tick with no
+	# reply, so the client owns the displayed state.
+	var cur := str(_fidelity.get("propagation", "two_ray"))
+	var next := "free_space" if cur == "two_ray" else "two_ray"
+	_fidelity["propagation"] = next
+	_client.send({"type": "set_fidelity", "key": "propagation", "value": next})
+	_render_badge()
+	_update_prop_btn()
 
 func _on_state(obj: Dictionary) -> void:
 	_entities.clear()
@@ -230,6 +269,12 @@ func _set_running(run: bool) -> void:
 func _on_reset_pressed() -> void:
 	_client.send({"type": "reset"})       # reload scenario, held seed re-applied (clean replay)
 	_blips.clear()
+	# `reset` reloads the YAML server-side → propagation reverts to the scenario default,
+	# but the server sends no new handshake. Resync the local fidelity so the badge/button
+	# don't lie about a toggle the reset just undid.
+	_fidelity = _fidelity_default.duplicate()
+	_render_badge()
+	_update_prop_btn()
 	if _running:
 		_client.send({"type": "run", "mode": "realtime", "speed": 1.0})
 
@@ -260,6 +305,12 @@ func _draw() -> void:
 	draw_line(Vector2(0, ground_y), Vector2(vp.x, ground_y), Color(0.25, 0.35, 0.25), 1.0)
 
 	var detected := bool(_telemetry.get(_radar_id + ".detected", false)) if _radar_id != "" else false
+	# §12 watch-item: "below horizon" keys off the `visible` telemetry flag, NOT the
+	# absence of detection events — a masked target still false-alarms at rate pfa and can
+	# blip. Defaults true, so free_space (infinite LOS, `visible` always true) and the
+	# pre-handshake state both render the target normally. Single-target scenario: this is
+	# the radar's best-target flag, which here is tgt1.
+	var visible := bool(_telemetry.get(_radar_id + ".visible", true)) if _radar_id != "" else true
 
 	for id in _entities:
 		var e = _entities[id]
@@ -271,9 +322,18 @@ func _draw() -> void:
 				PackedVector2Array([p + Vector2(0, -10), p + Vector2(-9, 6), p + Vector2(9, 6)]), rcol)
 			draw_string(_font, p + Vector2(12, 4), id, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, rcol)
 		elif e.kind == "target":
-			var tcol := Color(0.4, 1.0, 0.4) if detected else Color(0.75, 0.75, 0.75)
+			# below horizon (no LOS) → dark red; visible+detected → green; visible+miss → grey.
+			var tcol: Color
+			var tag := ""
+			if not visible:
+				tcol = Color(0.45, 0.12, 0.12)
+				tag = " (below horizon)"
+			elif detected:
+				tcol = Color(0.4, 1.0, 0.4)
+			else:
+				tcol = Color(0.75, 0.75, 0.75)
 			draw_circle(p, TARGET_R, tcol)
-			draw_string(_font, p + Vector2(10, -8), id, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, tcol)
+			draw_string(_font, p + Vector2(10, -8), id + tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, tcol)
 
 	# detection blips: expanding rings that fade over BLIP_TTL
 	for b in _blips:
