@@ -69,11 +69,17 @@ engineering hybrid, both behind the one `propagation` knob.
    over a range×altitude grid) showing the lobe structure.
 
 ## Task checklist
-- [ ] 1. `rf.jl`: propagation-factor helper (`Δφ`, `F⁴`), `snr_two_ray(rp, rcs,
+- [x] 1. `rf.jl`: propagation-factor helper (`Δφ`, `F⁴`), `snr_two_ray(rp, rcs,
       slant_m; h_r, h_t, ground_m, refl=-1.0)`, `horizon_range(h_r, h_t)` (4/3-Earth).
       Name every approximation in the docstrings (flat-earth small-grazing phase,
       ρ=−1, 4/3-Earth). `test_propagation.jl` green (the 5 closed-form checks);
-      added to `runtests.jl`.
+      added to `runtests.jl`. **DONE** — `two_ray_phase`/`two_ray_factor4`/`snr_two_ray`/
+      `snr_db_two_ray`/`horizon_range` in `rf.jl` (rf.jl stays pure: NO horizon gating —
+      that's step-2 radar.jl policy; radar.jl calls `snr_two_ray` and must NOT re-apply F⁴).
+      20 closed-form tests green (247 total): lobe peak ratio=16 (+12.04 dB), null→0
+      (explicit `atol`), small-grazing R⁻⁸ (−24.08 dB/octave), ρ=0 ≡ free-space exactly,
+      h→0 perpetual-null pin (not a throw — a fly-by may cross z=0), 4/3-Earth horizon
+      (coeff recomputed at full precision ≈4121.8, additive in √h), `ground_m>0` guard.
 - [ ] 2. `radar.jl`: replace the `:free_space`-only guard with a dispatch on
       `get(w.fidelity, :propagation, :free_space)`; extract `h_r`/`h_t` (`pos[3]`)
       and ground range; apply the horizon gate (below horizon → finite SNR floor

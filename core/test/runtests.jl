@@ -14,6 +14,7 @@ using Random
     include("test_determinism.jl")
     include("test_protocol.jl")
     include("test_radar_eq.jl")
+    include("test_propagation.jl")
     include("test_detection.jl")
     include("test_scenario.jl")
     include("test_batch.jl")

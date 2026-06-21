@@ -41,6 +41,27 @@ PowerShell 5.1 mangles double quotes passed to `julia -e`. **Put Julia code in a
 
 ## Current status
 
+Slice 2 (propagation fidelity — `two_ray`) — **IN PROGRESS. Step 1 done & green** (247 tests).
+Step 1: `rf.jl` two-ray physics behind the `propagation` knob. `two_ray_phase` (Δφ =
+4π·h_r·h_t/(λ·R_g), flat-earth small-grazing path-diff), `two_ray_factor4` (F⁴ =
+(1+ρ²+2ρ·cosΔφ)²; ρ=−1 → 16·sin⁴(Δφ/2), peak +12.04 dB, exact nulls; ρ=0 → 1 ≡ free space),
+`snr_two_ray(rp, rcs, slant_m; h_r, h_t, ground_m, refl=-1.0)` = `snr_freespace(slant)`·F⁴
+(link budget on **slant** range, multipath modulation on **ground** range+heights),
+`snr_db_two_ray`, `horizon_range(h_r, h_t)` (4/3-Earth, √(2·4/3·R_e)·(√h_r+√h_t) ≈
+4121.8·(√h_r+√h_t)). **rf.jl stays pure phenomenology — NO horizon gating here**; the
+below-horizon policy (finite floor / `visible:false`, never −Inf/NaN) is step-2 radar.jl,
+and radar.jl must call `snr_two_ray` (not re-apply F⁴). All three approximations named in
+docstrings (HANDOFF §1). `test_propagation.jl` (20 closed-form tests, deterministic — no
+MC bands): lobe peak ratio=16, null→0 (explicit `atol` — `≈0` rtol-only always passes
+trivially/fails), small-grazing R⁻⁸ envelope (−24.08 dB/octave, double slant+ground),
+ρ=0 ≡ free-space exactly, h→0 perpetual-null pin (NOT a throw — a fly-by may cross z=0
+and must not crash the live sim), horizon coeff recomputed at full precision + additive in
+√h, `ground_m>0` guard (the sole Inf/NaN input). **Next: step 2** — `radar.jl` dispatch on
+`get(w.fidelity,:propagation,:free_space)` + horizon gate + `set_fidelity` command (HANDOFF
+§10; slice2.md step 2).
+
+---
+
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
 (`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0); `rf.jl`
