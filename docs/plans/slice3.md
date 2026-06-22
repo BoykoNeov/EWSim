@@ -167,14 +167,42 @@ threshold at once).
    threshold-curve panels over the profile).
 
 ## Task checklist
-- [ ] 1. `detection.jl`: N-pulse non-coherent integrator. `detection_threshold(pfa,
-      n_pulses)` via Erlang-survival finite sum + root-find inverse (`N_p=1` ==
-      `−log(pfa)`); generalise `_sample_z`/`detect_once`/`pd_montecarlo` to sum `N_p`
-      square-law draws with the slow-vs-fast fluctuation draw pattern; analytic
-      `pd_analytic(snr, pfa; swerling∈0:4, n_pulses)` (finite-sum forms). Extend
-      `test_detection.jl` (threshold round-trip, all 5 Swerling in the MC band, SW2≠SW1
-      / SW4≠SW3 at `N_p>1`, `N_p=1` recovers slice 1). `scenario.jl`: lift the
-      `n_pulses==1` assert to `n_pulses≥1` and store it in `comp`.
+- [x] 1. `detection.jl`: N-pulse non-coherent integrator. **DONE & green (546 tests).**
+      `detection_threshold(pfa, n_pulses=1)` — `N_p=1` returns `−log(pfa)` float-exact;
+      `N_p>1` bisects the strictly-decreasing Erlang survival `Pfa(T)=e^{−T}Σ_{k<N}T^k/k!`.
+      Analytic `pd_analytic(snr, pfa; swerling∈0:4, n_pulses=1)` — five finite/rapidly-
+      truncating forms, all derived from first principles + advisor-checked: **SW0**
+      `Σ_k poisson(k;N·snr)·poisscdf(N−1+k;T)`; **SW1** geometric weights
+      `Σ_k(1−ρ)ρ^k·poisscdf(N−1+k;T)`, ρ=N·snr/(1+N·snr); **SW2** `ErlangSurv(T/(1+snr),N)`;
+      **SW3** NB-r2 weights `Σ_k(1−μ)²(k+1)μ^k·poisscdf(N−1+k;T)`, μ=N·snr/(2+N·snr); **SW4**
+      binomial-mixture-of-Erlangs `Σ_j C(N,j)(s/v)^j(1/v)^{N−j}ErlangSurv(T/v,N+j)`,
+      v=1+snr/2 (from the per-pulse MGF partial fraction). SW0/1/3 share one
+      **saturation-aware** accumulator (once the inner `poisscdf` ≈1, the residual sum is
+      the leftover weight mass — converges in ~T+O(√T) terms regardless of ρ,μ→1, so the
+      slice-1 Poisson-sized cap can't under-truncate the long high-N·SNR tail — advisor
+      catch). `n_pulses=1` routes SW0/1 to the exact slice-1 `pd_swerling0/1`; SW1≡SW2,
+      SW3≡SW4 for a single pulse. `_draw_signal`/`_sample_z`/`detect_once`/`pd_montecarlo`
+      generalised to integrate `N_p` square-law draws with the slow (one shared amplitude:
+      SW0/1/3) vs fast (fresh per pulse: SW2/4) pattern; 4-DOF amplitude `|a|²=(snr/4)·χ²₄`
+      (phase irrelevant under circular noise). **N_p=1 draws are byte-identical to slice 1**
+      — same order (noise then signal), same `sfluc=√(snr/2)` spelling (NOT `√snr·√½`, 1 ULP
+      apart), direct `(sI+nI)²+(sQ+nQ)²` for the single pulse (the accumulator is only used
+      for `N_p>1`, where no golden exists). `test_detection.jl` extended: threshold
+      round-trip (`Pfa→T→Pfa`, `N_p=1`==`−log(pfa)` exact), all 5 Swerling inside the MC
+      Wilson band at `N_p=8` (incl. a 15 dB point that exposes a mis-sized truncation cap),
+      SW2≠SW1 / SW4≠SW3 at `N_p>1`, `N_p=1` collapses 2→1 & 4→3, an **absolute golden**
+      pinning `_sample_z`'s N_p=1 bits (captured from slice-2; `test_determinism` only
+      compares run-to-run so it can't catch a draw-order regression — advisor catch; it
+      caught two real 1-ULP desyncs: the accumulator op-order and `sfluc=√(snr/2)` vs
+      `√snr·√½`), and the **Swerling fluctuation-loss ordering** as an EXTERNAL anchor for
+      SW3/SW4 (steadier wins at high Pd: SW0>SW3>SW1; reverses at low SNR: SW1>SW3>SW0, and
+      likewise SW2>SW4>SW0) — `≈MC` only proves the derivation matches the sampler's own
+      model, so the ordering brackets the new 4-DOF case between the slice-1-anchored SW0/SW1
+      (advisor catch; the model checks out as the textbook `4g·e^{−2g}` Swerling-3 pdf).
+      `scenario.jl`: `n_pulses≥1` (was `==1`), stored in `comp[:n_pulses]`. `radar.jl`
+      threads `n_pulses` through `observe!`'s threshold/`pd_analytic`/`detect_once` (default
+      1 via `get` ⇒ slice-1/2 scenarios byte-identical; makes a loaded `n_pulses` actually
+      fire). `test_scenario.jl` rejection test flipped (n_pulses=3 loads & stores; <1 rejected).
 - [ ] 2. `detection.jl`: CFAR primitives — `cfar_threshold(profile, cut; variant,
       n_train, n_guard, pfa)` (CA/GO/SO/OS noise estimate) + `cfar_alpha(variant,
       n_train, pfa)` scaling, and a vectorised `cfar_scan(profile; …) -> (threshold_curve,

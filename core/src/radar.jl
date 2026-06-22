@@ -41,7 +41,9 @@ end
 The monostatic radar `id` as a tick-contract sensor. Its transmit/receive chain
 and detector config live in the entity's `comp` bag (so a slider writing `comp`
 takes effect live): `:pt_w :gain_db :freq_hz :bandwidth_hz :noise_fig_db
-:losses_db :pfa :swerling`. Per tick `observe!`:
+:losses_db :pfa :swerling :n_pulses`. (`:swerling`/`:n_pulses` set the detector
+statistic — not live sliders, they change the per-look draw count.) Per tick
+`observe!`:
 
   • computes SNR (free-space radar eq) and analytic Pd against every `:target`,
     publishing the strongest target's `snr_db`/`pd`/`detected` to `w.env[:telemetry]`
@@ -129,7 +131,8 @@ function observe!(r::RadarSensor, w::World)
     rp  = _radar_params(radar.comp)
     pfa = Float64(radar.comp[:pfa])
     sw  = Int(radar.comp[:swerling])
-    th  = detection_threshold(pfa)
+    np  = Int(get(radar.comp, :n_pulses, 1))    # non-coherent integration depth (slice 3)
+    th  = detection_threshold(pfa, np)
 
     # Sorted target ids → deterministic RNG draw order across targets (HANDOFF §1).
     target_ids = sort!(Symbol[id for (id, e) in w.entities if e.kind === :target])
@@ -144,7 +147,7 @@ function observe!(r::RadarSensor, w::World)
     for tid in target_ids
         tgt = w.entities[tid]
         snr, vis = _target_snr(prop, rp, radar, tgt)
-        pd  = pd_analytic(snr, pfa; swerling = sw)
+        pd  = pd_analytic(snr, pfa; swerling = sw, n_pulses = np)
         if snr > best_snr
             best_snr = snr
             best_pd  = pd
@@ -156,7 +159,7 @@ function observe!(r::RadarSensor, w::World)
         # snr>0 / visible would skip draws and desync seeded replay (a determinism
         # violation visible only in a trace diff). A masked target (snr=0) simply detects
         # with prob ≈ pfa.
-        if is_look && detect_once(snr, th, w.rng; swerling = sw)
+        if is_look && detect_once(snr, th, w.rng; swerling = sw, n_pulses = np)
             any_detect = true
             # t is stamped by state_frame at emit (events are sent on the frame they
             # occur, HANDOFF §5) — keeps event time == frame time.

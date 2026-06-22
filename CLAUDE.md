@@ -143,8 +143,36 @@ Visually confirmed 2026-06-21 (headless PNG render of the notebook cells: clean 
 nulls, cyan horizon curve bounding the masked wedge; no headless *visual* test — same gap as
 slice-1 `_draw`, numbers pinned, picture eyeballed).
 
-**Next: slice 3 — CFAR sandbox** (HANDOFF §10 item 3): CFAR detection (adaptive threshold from
-the noise estimate in neighbouring range cells). The slice-2 backlog is now clear.
+**Slice 3 — CFAR sandbox (+ pulse integration)** (HANDOFF §10 item 3) — **IN PROGRESS, step 1 of 4
+DONE & green (546 tests).** Planned in `docs/plans/slice3.md` (4 staged steps: pulse integration +
+Swerling 0–4 → CFAR primitives → radar.jl profile/dispatch + `:clutter` + per-key `set_fidelity` →
+Godot range-power view).
+Step 1 (gate 1 — integration + Swerling 0–4 green): `detection.jl` generalised single-pulse →
+**N-pulse non-coherent integration** (z = Σ|xᵢ|², noise-only `Gamma(N_p,1)`). `detection_threshold(
+pfa, n_pulses=1)`: `N_p=1` → `−log(pfa)` **float-exact** (slice-1/2 byte-identity), else bisect the
+monotone Erlang survival `Pfa(T)=e^{−T}Σ_{k<N_p}T^k/k!`. `pd_analytic(snr,pfa; swerling∈0:4,
+n_pulses=1)` — five finite-sum forms (all first-principles-derived, advisor-verified, each reducing
+to slice-1 at N_p=1 and →pfa as snr→0): SW0 Poisson-mixture `Σ poisson(k;N·snr)·poisscdf(N−1+k;T)`,
+SW1 geometric weights (ρ=N·snr/(1+N·snr)), SW2 `ErlangSurv(T/(1+snr),N_p)`, SW3 NB-r2 weights
+(μ=N·snr/(2+N·snr)), SW4 binomial-mixture-of-Erlangs (v=1+snr/2, from the per-pulse MGF partial
+fraction). SW0/1/3 share one **saturation-aware** accumulator — once the inner `poisscdf`≈1 the
+residual is the leftover weight mass, so it converges in ~T+O(√T) terms even as ρ,μ→1 at high N·SNR
+(the slice-1 Poisson-sized cap would under-truncate that tail — advisor catch). The MC sampler
+(`_sample_z`/`detect_once`/`pd_montecarlo`) integrates N_p square-law draws with the slow (one
+shared amplitude: SW0/1/3) vs fast (fresh per pulse: SW2/4) pattern; 4-DOF amplitude
+`|a|²=(snr/4)·χ²₄` (phase irrelevant under circular noise). **N_p=1 draws are byte-identical to
+slice 1** — same draw order (noise then signal), same `sfluc=√(snr/2)` spelling (NOT `√snr·√½`,
+1 ULP apart — the bug the golden caught), direct `(sI+nI)²+(sQ+nQ)²` for the single pulse (the
+accumulator runs only for N_p>1). `test_detection.jl`: threshold round-trip, all 5 Swerling in the
+MC Wilson band at N_p=8 (incl. a 15 dB saturation-exposer), SW2≠SW1 / SW4≠SW3 at N_p>1, N_p=1
+collapses 2→1 & 4→3, an **absolute golden** pinning `_sample_z`'s N_p=1 bits (`test_determinism`
+only compares run-to-run, so it can't catch a draw-order regression — advisor catch; it caught two
+real 1-ULP desyncs), and the **Swerling fluctuation-loss ordering** as an external anchor for the
+otherwise self-validated-only SW3/SW4 (SW0>SW3>SW1 at high Pd, reverses at low SNR — advisor catch).
+`scenario.jl`: `n_pulses≥1` (was `==1`), stored in `comp[:n_pulses]`. `radar.jl` threads `n_pulses`
+through `observe!` (default 1 via `get` ⇒ slice-1/2 byte-identical; a loaded `n_pulses` now fires).
+**Next: slice 3 step 2 — CFAR primitives** (`cfar_threshold`/`cfar_alpha`/`cfar_scan`, CA/GO/SO/OS
++ closed forms at N_p=1; `test_cfar.jl`).
 
 ---
 

@@ -50,9 +50,9 @@ _f64(x) = Float64(x)
 _vec3(v) = Vec3(_f64(v[1]), _f64(v[2]), _f64(v[3]))
 
 # A `radar:` block maps to TWO sinks in one comp bag: the 6 RadarParams fields plus
-# the detector config (pfa, swerling). `n_pulses` has no home in the single-pulse
-# slice-1 detector — assert it rather than silently drop it. `revisit_s` is optional
-# (defaults to look-every-tick) and drives the RadarSensor's scan cadence.
+# the detector config (pfa, swerling, n_pulses). `n_pulses` is the non-coherent
+# integration depth (slice 3); it must be ≥ 1 (1 = the slice-1/2 single-pulse path).
+# `revisit_s` is optional (defaults to look-every-tick) and drives the scan cadence.
 const _RADAR_PARAM_KEYS = (:pt_w, :gain_db, :freq_hz, :bandwidth_hz, :noise_fig_db, :losses_db, :pfa)
 
 function _radar_comp!(comp::Dict{Symbol,Any}, block::AbstractDict)
@@ -62,7 +62,8 @@ function _radar_comp!(comp::Dict{Symbol,Any}, block::AbstractDict)
     end
     comp[:swerling] = Int(get(block, "swerling", 1))
     np = Int(get(block, "n_pulses", 1))
-    np == 1 || error("radar n_pulses=$np: slice 1 is single-pulse only (n_pulses must be 1)")
+    np ≥ 1 || error("radar n_pulses=$np: must be ≥ 1")
+    comp[:n_pulses] = np
     haskey(block, "revisit_s") && (comp[:revisit_s] = _f64(block["revisit_s"]))
     return comp
 end

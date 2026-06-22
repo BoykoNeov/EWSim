@@ -106,18 +106,32 @@ end
         @test ground0 > horizon_range(rad.pos[3], tgt.pos[3])
     end
 
-    @testset "n_pulses ≠ 1 is rejected at load (single-pulse slice)" begin
-        bad = tempname() * ".yaml"
-        write(bad, """
-        name: bad
-        entities:
-          - id: radar1
-            kind: radar
-            pos: [0,0,0]
-            radar: {pt_w: 1, gain_db: 1, freq_hz: 1.0e9, bandwidth_hz: 1.0e6,
-                    noise_fig_db: 0, losses_db: 0, pfa: 1.0e-6, swerling: 1, n_pulses: 3}
-        """)
-        @test_throws ErrorException load_scenario(bad)
+    @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin
+        mk(np) = begin
+            f = tempname() * ".yaml"
+            write(f, """
+            name: np
+            entities:
+              - id: radar1
+                kind: radar
+                pos: [0,0,0]
+                radar: {pt_w: 1, gain_db: 1, freq_hz: 1.0e9, bandwidth_hz: 1.0e6,
+                        noise_fig_db: 0, losses_db: 0, pfa: 1.0e-6, swerling: 1, n_pulses: $np}
+            """)
+            f
+        end
+        good = mk(3)
+        scn  = load_scenario(good)
+        @test scn.world.entities[:radar1].comp[:n_pulses] == 3        # integration depth stored
+        rm(good; force = true)
+
+        # an omitted n_pulses defaults to the single-pulse path (and is still stored).
+        f1 = mk(1); scn1 = load_scenario(f1)
+        @test scn1.world.entities[:radar1].comp[:n_pulses] == 1
+        rm(f1; force = true)
+
+        bad = mk(0)
+        @test_throws ErrorException load_scenario(bad)               # n_pulses < 1 is invalid
         rm(bad; force = true)
     end
 
