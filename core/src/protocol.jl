@@ -60,6 +60,12 @@ Build the `type = "state"` frame for the current world. `telemetry` is a flat
 schema change; it defaults to whatever subsystems published to `w.env[:telemetry]`
 this tick (the radar writes `"radar1.snr_db"` etc. there), so the wire builder stays
 generic — a new subsystem contributes telemetry without touching this function.
+
+NB (slice-3 EXTENSION, flagged like slice-2's `set_fidelity`): a telemetry value may now
+also be an ARRAY of numbers/bools — the CFAR radar ships `"<id>.profile_db"` /
+`".threshold_db"` (per-cell SNR-dB curves) and `".detections"` (per-cell flags) this way.
+JSON3 serializes vectors transparently, so the framing is unchanged; only the documented
+`string → number/bool` contract widens to `string → number/bool/array`.
 `events` are one-shot (sent on the frame they occur, then cleared by the server
 loop); each is stamped with the frame time `w.t` here unless it already carries one,
 so an event's time is the frame it ships on (HANDOFF §5).

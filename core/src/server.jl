@@ -95,9 +95,16 @@ function scenario_frame(srv::Server)
                               :max => k.max, :label => k.label, :log => k.log,
                               :value => scn.world.entities[k.target].comp[k.key])
              for k in scn.knobs]
-    return Dict{Symbol,Any}(:type => "scenario", :name => scn.name,
-                            :dt_physics => scn.dt_physics, :emit_every => scn.emit_every,
-                            :fidelity => copy(scn.world.fidelity), :knobs => knobs)
+    frame = Dict{Symbol,Any}(:type => "scenario", :name => scn.name,
+                             :dt_physics => scn.dt_physics, :emit_every => scn.emit_every,
+                             :fidelity => copy(scn.world.fidelity), :knobs => knobs)
+    # A CFAR scenario ships the STATIC range axis once here (it can't change frame-to-frame),
+    # so the client labels its range-power plot's x-axis from core output without recomputing
+    # any physics (HANDOFF §1). Only the noisy profile/threshold/detections are per-frame
+    # telemetry. `nothing` for a non-CFAR scenario (the keys simply don't appear).
+    info = _cfar_axis_info(scn.world)
+    info === nothing || merge!(frame, info)
+    return frame
 end
 
 # §5 `run_batch` command → `run_batch` kwargs. The wire spells the grid bounds
@@ -148,12 +155,23 @@ function handle_command!(srv::Server, cmd)
         # YAML+reload, but *live* toggling needs this one command). VALIDATE here: a bad
         # value reaching `observe!` would throw inside `tick!`, and the session's outer
         # catch only swallows IO/EOF — so a tick-time error would kill the connection.
-        # `PROPAGATION_MODES` is radar.jl's single source of truth (no drift).
+        # `LIVE_FIDELITY_MODES` is radar.jl's single per-key source of truth (no drift):
+        # the key must be live-settable and the value one of its rungs.
         key = Symbol(String(cmd[:key]));  val = Symbol(String(cmd[:value]))
-        key === :propagation ||
-            error("set_fidelity: '$key' is not live-settable (slice 2: propagation)")
-        val in PROPAGATION_MODES ||
-            error("set_fidelity: propagation '$val' unknown ($(join(PROPAGATION_MODES, " | ")))")
+        modes = get(LIVE_FIDELITY_MODES, key, nothing)
+        modes === nothing &&
+            error("set_fidelity: '$key' is not live-settable " *
+                  "($(join(keys(LIVE_FIDELITY_MODES), " | ")))")
+        val in modes ||
+            error("set_fidelity: $key '$val' unknown ($(join(modes, " | ")))")
+        # Draw-topology guard (slice-3): `set_fidelity` may CHANGE the value of a fidelity
+        # key already present, but must NOT INTRODUCE `:cfar` on a scenario that started
+        # without it — that flips the legacy point path (2·N_p draws/target) to the profile
+        # path (2·N_p·N_cells draws) and would desync a mid-run replay. Changing
+        # `:propagation`'s value is always safe (same draw count either rung).
+        (key === :cfar && !haskey(w.fidelity, :cfar)) &&
+            error("set_fidelity: cannot introduce :cfar mid-run — a non-CFAR scenario draws " *
+                  "a different RNG topology; load a CFAR scenario instead")
         w.fidelity[key] = val
         return nothing
 

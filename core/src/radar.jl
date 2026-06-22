@@ -79,6 +79,20 @@ _ground_range(a::Vec3, b::Vec3) = hypot(a[1] - b[1], a[2] - b[2])
 # `tick!` inside `observe!` (HANDOFF §10, slice2 step 2).
 const PROPAGATION_MODES = (:free_space, :two_ray)
 
+# The CFAR-fidelity rungs the radar dispatch knows. REFERENCES detection.jl's
+# `CFAR_VARIANTS` (the primitives' source of truth) rather than re-listing — the slice-2
+# `PROPAGATION_MODES` drift lesson: one list feeds both the `observe!` dispatch and the
+# server's `set_fidelity` validation, so the wire can't accept a rung `cfar_scan` rejects.
+const CFAR_MODES = CFAR_VARIANTS
+
+# The fidelity keys `set_fidelity` may toggle LIVE, each mapped to its allowed rungs. The
+# single source of truth for server.jl's `set_fidelity` validation — it references the same
+# mode tuples the `observe!` dispatch uses, so a value accepted on the wire can never reach
+# a tick that throws (the slice-2 lesson, generalised to a per-key table). NB: presence of
+# `:cfar` changes the RNG draw topology (point path → profile path), so the server also
+# guards against INTRODUCING it mid-run — see `handle_command!` (server.jl).
+const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES)
+
 # A perfect null (F⁴=0, even above the horizon), an antenna on the reflecting plane
 # (h→0), or a below-horizon mask all drive SNR→0, and `lin2db(0) = -Inf` would poison the
 # JSON state frame (the slice-2 watch-item, same class as the slice-1 %g bug). Floor the
@@ -121,7 +135,31 @@ function _target_snr(prop::Symbol, rp::RadarParams, radar::Entity, tgt::Entity)
     end
 end
 
+"""
+    observe!(r::RadarSensor, w)
+
+The radar's per-tick sense phase. Dispatches on the **detector fidelity**: a scenario
+carrying a `:cfar` fidelity key builds + draws a range-power PROFILE every look
+([`_observe_cfar!`](@ref)); without it, the slice-1/2 per-target POINT detector runs
+([`_observe_point!`](@ref)), byte-identical. The two paths draw a DIFFERENT number of
+randn per look (`2·N_p·N_cells` vs `2·N_p` per target), which is why `:cfar` cannot be
+introduced mid-run (server.jl's `set_fidelity` guard) — the choice is fixed by the
+scenario, not toggled live (only the CFAR *rung* toggles, draw-count-invariant).
+"""
 function observe!(r::RadarSensor, w::World)
+    if haskey(w.fidelity, :cfar)
+        _observe_cfar!(r, w)
+    else
+        _observe_point!(r, w)
+    end
+    return nothing
+end
+
+# The slice-1/2 point detector: per-target SNR → analytic Pd readout + one gated
+# `detect_once` draw per target. UNCHANGED from slice 2 (moved verbatim under the
+# `observe!` dispatch above) — a no-`:cfar` scenario stays byte-identical, which
+# `test_determinism` / `test_radar` pin.
+function _observe_point!(r::RadarSensor, w::World)
     radar = w.entities[r.id]
     # Propagation fidelity is named, not hidden: dispatch on the :propagation knob
     # (default :free_space). `_target_snr` owns the per-rung physics + the below-horizon
@@ -182,5 +220,204 @@ function observe!(r::RadarSensor, w::World)
     tel["$sid.pd"]       = best_pd
     tel["$sid.detected"] = get(radar.comp, :detected, false)
     tel["$sid.visible"]  = best_visible
+    return nothing
+end
+
+# --- CFAR profile path (slice-3 step 3) -----------------------------------------
+#
+# Within a CFAR scenario `observe!` builds a range-power PROFILE every look and draws it,
+# instead of the legacy per-target point detector. The profile is the slice's new core
+# object: a vector of linear-power range cells (each Δr = c/2B wide, from the matched-filter
+# bandwidth — physically honest, HANDOFF §1). The CFAR rung (`w.fidelity[:cfar]`) selects
+# ONLY the thresholding rule ([`cfar_scan`](@ref), pure); the profile DRAW is identical for
+# every rung, so a mid-run rung toggle is bit-identical (the slice-3 determinism trap —
+# test_determinism pins it).
+#
+# Cell model — a NAMED approximation (HANDOFF §1): each cell is a fast-Rayleigh square-law
+# statistic z_i = Σ_{p=1}^{N_p} |x_p|², x_p ~ CN(0, power_i), drawn as 2 randn/pulse/cell.
+# The per-cell linear power is computed DETERMINISTICALLY first — noise floor 1, + clutter
+# (elevated-mean exponential over a band), + each target's `_target_snr` (so the profile
+# composes with `:propagation` → lobing AND the below-horizon mask). Noise/clutter cells
+# stay exponential at N_p=1 (Gamma(N_p,1) integrated), so the CA/OS closed forms hold in the
+# homogeneous interior. The TARGET folds into the same variance (SW2-like fluctuation in the
+# profile) — distinct from the scalar `pd` readout, which stays the analytic Pd at the design
+# `pfa` for the scenario's configured `swerling` (the plan's explicit definition; a reference
+# readout, not the CFAR cell's detection probability — the profile/threshold arrays carry that).
+# The draw count is ALWAYS 2·N_p·N_cells, independent of the rung AND of where the target
+# sits — that invariance is what keeps the RNG stream in lockstep across a live toggle.
+
+const _CFAR_DEFAULT_NTRAIN = 16
+const _CFAR_DEFAULT_NGUARD = 2
+
+# Range-cell width from the matched-filter (noise) bandwidth: Δr = c/(2·B).
+_cfar_dr(rp::RadarParams) = C_LIGHT / (2 * rp.bandwidth_hz)
+
+# Range of cell `ci` (1-based) and its inverse (range → cell index, 0 if off the grid).
+_cell_range(ci::Int, rstart::Float64, dr::Float64) = rstart + (ci - 1) * dr
+function _range_to_cell(R::Float64, rstart::Float64, dr::Float64, ncells::Int)
+    idx = round(Int, (R - rstart) / dr) + 1
+    return (1 ≤ idx ≤ ncells) ? idx : 0
+end
+
+# Draw one fast-Rayleigh range-power profile into `z` from the deterministic `power` vector:
+# 2·N_p randn per cell, cell-by-cell in index order (the RNG draw contract). For power=1
+# (noise) each pulse is |CN(0,1)|² = Exp(1), so z_i ~ Gamma(N_p,1) — the homogeneous floor
+# the CA/OS α calibrates against. This is the ONLY RNG call of a CFAR look; the cell-count
+# (= length(power)) and per-cell draw count are fixed by config, never by geometry, so the
+# stream advances identically across rungs and target positions (the determinism contract).
+function _draw_profile!(z::Vector{Float64}, power::Vector{Float64}, rng::AbstractRNG, n_pulses::Int)
+    @inbounds for i in eachindex(power)
+        σ = sqrt(power[i] / 2)                 # per-quadrature σ of CN(0, power_i)
+        acc = 0.0
+        for _ in 1:n_pulses
+            xI = randn(rng) * σ
+            xQ = randn(rng) * σ
+            acc += xI * xI + xQ * xQ
+        end
+        z[i] = acc
+    end
+    return z
+end
+
+# The static range axis of a CFAR scenario's radar — shipped ONCE in the handshake
+# (`scenario_frame`, server.jl), never per frame (it can't change). `nothing` if the
+# scenario isn't CFAR. Single radar (slice-3 scope); the loader guarantees `n_cells ≥ 1`
+# for a `:cfar` scenario, so this can't `KeyError` at handshake (which runs inside the
+# session's IO/EOF-only try — a throw there would kill the connection before the client
+# ever builds its range-power view).
+function _cfar_axis_info(w::World)
+    haskey(w.fidelity, :cfar) || return nothing
+    radars = sort!(Symbol[id for (id, e) in w.entities if e.kind === :radar])
+    isempty(radars) && return nothing
+    radar  = w.entities[radars[1]]
+    dr     = _cfar_dr(_radar_params(radar.comp))
+    rstart = Float64(get(radar.comp, :range_start_m, 0.0))
+    ncells = Int(radar.comp[:n_cells])
+    axis   = collect(rstart .+ (0:(ncells - 1)) .* dr)
+    return Dict{Symbol,Any}(:radar => radars[1], :dr_m => dr, :n_cells => ncells,
+                            :range_start_m => rstart, :range_axis_m => axis)
+end
+
+"""
+    _observe_cfar!(r::RadarSensor, w)
+
+The CFAR detector: build a range-power profile each look, draw it, and threshold it with
+the active `:cfar` rung. Publishes the slice-1/2 strongest-target scalars (analytic, every
+tick) PLUS the per-cell `profile_db` / `threshold_db` / `detections` arrays, and pushes one
+`:detection` event per detected cell (a target-cell hit carries `:of`; a clutter/noise
+false alarm carries only `:cell` / `:range`). See the module note above for the cell model
+and the determinism contract.
+"""
+function _observe_cfar!(r::RadarSensor, w::World)
+    radar = w.entities[r.id]
+    prop  = get(w.fidelity, :propagation, :free_space)
+    variant = w.fidelity[:cfar]
+    variant in CFAR_MODES ||
+        error("RadarSensor: cfar fidelity :$variant not implemented " *
+              "($(join(CFAR_MODES, " | ")))")
+
+    rp  = _radar_params(radar.comp)
+    pfa = Float64(radar.comp[:pfa])
+    sw  = Int(radar.comp[:swerling])
+    np  = Int(get(radar.comp, :n_pulses, 1))
+
+    # Window knobs are LIVE (set_param sliders), so sanitize at the CONSUMER — a slider
+    # dragged to an odd n_train (or a negative guard) must NEVER throw inside `cfar_scan` →
+    # `tick!` → kill the session (the slice-2 set_fidelity / h≥0 watch-item, generalised:
+    # a live knob can't crash the tick). The loader rejects a malformed AUTHORED value as a
+    # clear load error; this clamps the live drag to the nearest legal window.
+    raw_nt  = Int(get(radar.comp, :n_train, _CFAR_DEFAULT_NTRAIN))
+    raw_ng  = Int(get(radar.comp, :n_guard, _CFAR_DEFAULT_NGUARD))
+    n_train = max(2, 2 * (raw_nt ÷ 2))          # force even ≥ 2 (N/2 training cells per side)
+    n_guard = max(0, raw_ng)
+
+    dr     = _cfar_dr(rp)
+    rstart = Float64(get(radar.comp, :range_start_m, 0.0))
+    ncells = Int(radar.comp[:n_cells])
+
+    # Strongest-target scalars (analytic, NO RNG) — published every tick for the readout,
+    # exactly as the point path does. NB: do NOT early-return on an empty target list — a
+    # clutter-only (or momentarily target-free) CFAR profile must still draw + ship (it is a
+    # core sandbox view). `best_snr = -Inf` then floors cleanly through `_snr_db_wire`.
+    best_snr = -Inf; best_pd = 0.0; best_visible = true; best_cell = 0
+    cell_target = Dict{Int,Symbol}()            # cell → target id, for the event :of tag
+    bumps = Tuple{Int,Float64}[]                # (cell, linear SNR) to add to the profile power
+    target_ids = sort!(Symbol[id for (id, e) in w.entities if e.kind === :target])
+    for tid in target_ids
+        tgt = w.entities[tid]
+        snr, vis = _target_snr(prop, rp, radar, tgt)
+        pd  = pd_analytic(snr, pfa; swerling = sw, n_pulses = np)
+        ci  = _range_to_cell(_range(tgt.pos, radar.pos), rstart, dr, ncells)
+        if ci != 0
+            get!(cell_target, ci, tid)          # first (sorted) target wins a shared cell
+            push!(bumps, (ci, snr))
+        end
+        if snr > best_snr
+            best_snr = snr; best_pd = pd; best_visible = vis; best_cell = ci
+        end
+    end
+
+    is_look = w.t + 1e-12 ≥ get(radar.comp, :next_look_t, 0.0)
+    if is_look
+        # 1. deterministic power profile: noise floor 1 + clutter band(s) + target bumps.
+        power = ones(Float64, ncells)
+        for (_, e) in w.entities
+            e.kind === :clutter || continue
+            # Clutter occupies a RANGE band [R_near, R_near+extent] on the same (slant)
+            # axis the targets use — a hard-edged elevated-mean exponential (named approx).
+            Rc  = _range(e.pos, radar.pos)
+            ext = Float64(get(e.comp, :extent_m, 0.0))
+            cnr = db2lin(Float64(get(e.comp, :cnr_db, 0.0)))
+            @inbounds for ci in 1:ncells
+                Rcell = _cell_range(ci, rstart, dr)
+                (Rc ≤ Rcell ≤ Rc + ext) && (power[ci] += cnr)
+            end
+        end
+        @inbounds for (ci, snr) in bumps
+            power[ci] += snr
+        end
+
+        # 2. draw the noisy profile (the ONLY RNG of the look) + scan (pure, no RNG).
+        z = Vector{Float64}(undef, ncells)
+        _draw_profile!(z, power, w.rng, np)
+        threshold, detections = cfar_scan(z; variant = variant, n_train = n_train,
+                                          n_guard = n_guard, pfa = pfa, n_pulses = np)
+
+        # 3. store the realization — republished as telemetry every tick between looks
+        #    (so the readout never blanks between scans, the slice-1/2 pattern).
+        radar.comp[:profile_z]     = z
+        radar.comp[:threshold_lin] = threshold
+        radar.comp[:detections]    = detections
+        radar.comp[:detected]      = (best_cell != 0) && detections[best_cell]
+
+        # 4. one :detection event per detected cell. A target-cell hit carries :of; a
+        #    clutter/noise false alarm carries only :cell/:range — the clutter-edge spike IS
+        #    false alarms, so the lesson surface is explicit, not implicit (slice-3 plan §5).
+        @inbounds for ci in 1:ncells
+            detections[ci] || continue
+            ev = Dict{Symbol,Any}(:kind => :detection, :by => r.id, :cell => ci,
+                                  :range => _cell_range(ci, rstart, dr))
+            haskey(cell_target, ci) && (ev[:of] = cell_target[ci])
+            push!(w.events, ev)
+        end
+
+        radar.comp[:next_look_t] = get(radar.comp, :next_look_t, 0.0) + r.revisit_s
+    end
+
+    # Telemetry: slice-1/2 scalars (strongest target) + the new per-cell arrays. Arrays are
+    # floored through `_snr_db_wire` so an empty/null cell (lin2db(0) = -Inf) never reaches
+    # the wire (the slice-2 watch-item, now over a whole array). The threshold curve is CORE
+    # output — shipped, never recomputed in the client (HANDOFF §1: physics in the core).
+    tel = get!(() -> Dict{String,Any}(), w.env, :telemetry)
+    sid = String(r.id)
+    tel["$sid.snr_db"]   = _snr_db_wire(best_snr)
+    tel["$sid.pd"]       = best_pd
+    tel["$sid.detected"] = get(radar.comp, :detected, false)
+    tel["$sid.visible"]  = best_visible
+    if haskey(radar.comp, :profile_z)
+        tel["$sid.profile_db"]   = _snr_db_wire.(radar.comp[:profile_z])
+        tel["$sid.threshold_db"] = _snr_db_wire.(radar.comp[:threshold_lin])
+        tel["$sid.detections"]   = radar.comp[:detections]
+    end
     return nothing
 end

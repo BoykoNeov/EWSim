@@ -65,6 +65,14 @@ function _radar_comp!(comp::Dict{Symbol,Any}, block::AbstractDict)
     np ≥ 1 || error("radar n_pulses=$np: must be ≥ 1")
     comp[:n_pulses] = np
     haskey(block, "revisit_s") && (comp[:revisit_s] = _f64(block["revisit_s"]))
+    # Optional CFAR config (slice 3): the STATIC profile geometry (n_cells / range_start_m)
+    # plus the LIVE window sliders (n_train / n_guard). Only read when present, so a slice-1/2
+    # radar block leaves these out of the comp bag entirely (its point path never reads them).
+    # A `:cfar` scenario's required-keys are checked in `load_scenario` (clear load error).
+    haskey(block, "n_cells")       && (comp[:n_cells]       = Int(block["n_cells"]))
+    haskey(block, "range_start_m") && (comp[:range_start_m] = _f64(block["range_start_m"]))
+    haskey(block, "n_train")       && (comp[:n_train]       = Int(block["n_train"]))
+    haskey(block, "n_guard")       && (comp[:n_guard]       = Int(block["n_guard"]))
     return comp
 end
 
@@ -83,8 +91,17 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
         haskey(ent, "target") || error("target entity '$id' has no `target:` block")
         comp[:rcs_m2] = _f64(ent["target"]["rcs_m2"])
         subs = Subsystem[ConstantVelocity(id)]
+    elseif kind === :clutter
+        # A passive range-band clutter source (slice 3): elevated-mean exponential power
+        # over [range, range+extent] of the radar's profile. NO subsystem — it owns no
+        # physics of its own; the radar's CFAR `observe!` reads its `pos`/`extent_m`/`cnr_db`.
+        haskey(ent, "clutter") || error("clutter entity '$id' has no `clutter:` block")
+        cb = ent["clutter"]
+        comp[:extent_m] = _f64(cb["extent_m"])
+        comp[:cnr_db]   = _f64(cb["cnr_db"])
+        subs = Subsystem[]
     else
-        error("unknown entity kind :$kind for '$id' (slice 1 knows :radar, :target)")
+        error("unknown entity kind :$kind for '$id' (knows :radar, :target, :clutter)")
     end
     return e, subs
 end
@@ -147,6 +164,29 @@ function load_scenario(path::AbstractString)
         append!(subs, per_entity[id])
     end
 
+    _validate_cfar(world)
     knobs = _parse_knobs(data, world)
     return Scenario(name, world, subs, knobs, dt_physics, emit_every)
+end
+
+# A `:cfar` scenario must give each radar enough to BUILD the profile + ship the static
+# range axis at handshake. Check at LOAD (the established pattern — like `n_pulses ≥ 1`), so
+# a malformed CFAR scenario fails as a clear load error rather than a `KeyError` inside
+# `_cfar_axis_info` at handshake or inside `observe!` on the first tick — either of which
+# runs in the session's IO/EOF-only try and would silently kill the connection (the slice-2
+# tick-throw watch-item). `n_train` is also checked even here for a clear authoring error;
+# a LIVE odd n_train is separately clamped in `_observe_cfar!` (a slider can't crash a tick).
+function _validate_cfar(world::World)
+    haskey(world.fidelity, :cfar) || return world
+    for (id, e) in world.entities
+        e.kind === :radar || continue
+        (haskey(e.comp, :n_cells) && e.comp[:n_cells] ≥ 1) ||
+            error("radar '$id': a :cfar scenario needs `n_cells ≥ 1` in the radar block")
+        if haskey(e.comp, :n_train)
+            (e.comp[:n_train] ≥ 2 && iseven(e.comp[:n_train])) ||
+                error("radar '$id': n_train must be even ≥ 2 (N/2 training cells per side); " *
+                      "got $(e.comp[:n_train])")
+        end
+    end
+    return world
 end

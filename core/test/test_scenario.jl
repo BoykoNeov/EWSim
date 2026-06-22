@@ -135,6 +135,76 @@ end
         rm(bad; force = true)
     end
 
+    @testset "loader parses a :cfar scenario with a :clutter band (slice 3)" begin
+        f = tempname() * ".yaml"
+        write(f, """
+        name: cfar_t
+        seed: 7
+        fidelity:
+          cfar: ca
+        entities:
+          - id: radar1
+            kind: radar
+            pos: [0, 0, 0]
+            radar: {pt_w: 1.0e4, gain_db: 30, freq_hz: 9.4e9, bandwidth_hz: 1.0e6,
+                    noise_fig_db: 0, losses_db: 0, pfa: 1.0e-3, swerling: 1, n_pulses: 1,
+                    n_cells: 200, range_start_m: 0, n_train: 16, n_guard: 2}
+          - id: clut1
+            kind: clutter
+            pos: [10000, 0, 0]
+            clutter: {extent_m: 3000, cnr_db: 18}
+          - id: tgt1
+            kind: target
+            pos: [20000, 0, 0]
+            target: {rcs_m2: 1.0}
+        """)
+        scn = load_scenario(f)
+        @test scn.world.fidelity[:cfar] === :ca
+        c = scn.world.entities[:clut1]
+        @test c.kind === :clutter
+        @test c.comp[:extent_m] == 3000.0 && c.comp[:cnr_db] == 18.0
+        r = scn.world.entities[:radar1]
+        @test r.comp[:n_cells] == 200 && r.comp[:n_train] == 16 && r.comp[:n_guard] == 2
+        # clutter contributes NO subsystem (the radar reads it) — subs are radar + target movers
+        @test length(scn.subs) == 2
+        @test scn.subs[1] isa RadarSensor && scn.subs[2] isa ConstantVelocity
+        rm(f; force = true)
+
+        # a :cfar scenario MUST give the radar n_cells (else the handshake range-axis / first
+        # observe! would crash inside the session's IO-only try) — caught at LOAD as a clear
+        # error, the n_pulses-validation pattern.
+        f2 = tempname() * ".yaml"
+        write(f2, """
+        name: bad_nocells
+        fidelity: {cfar: ca}
+        entities:
+          - id: radar1
+            kind: radar
+            pos: [0, 0, 0]
+            radar: {pt_w: 1, gain_db: 1, freq_hz: 1.0e9, bandwidth_hz: 1.0e6,
+                    noise_fig_db: 0, losses_db: 0, pfa: 1.0e-3, swerling: 1}
+        """)
+        @test_throws ErrorException load_scenario(f2)
+        rm(f2; force = true)
+
+        # an odd n_train in an AUTHORED CFAR scenario fails at load (a live drag is clamped
+        # instead — that's the consumer-side guard in _observe_cfar!).
+        f3 = tempname() * ".yaml"
+        write(f3, """
+        name: bad_oddtrain
+        fidelity: {cfar: ca}
+        entities:
+          - id: radar1
+            kind: radar
+            pos: [0, 0, 0]
+            radar: {pt_w: 1, gain_db: 1, freq_hz: 1.0e9, bandwidth_hz: 1.0e6,
+                    noise_fig_db: 0, losses_db: 0, pfa: 1.0e-3, swerling: 1,
+                    n_cells: 64, n_train: 15}
+        """)
+        @test_throws ErrorException load_scenario(f3)
+        rm(f3; force = true)
+    end
+
     @testset "live telemetry equals the closed form (moving target)" begin
         scn = load_scenario(_SCEN)
         for _ in 1:10

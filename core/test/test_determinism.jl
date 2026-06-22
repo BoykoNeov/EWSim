@@ -89,4 +89,45 @@ end
         @test rand(copy(wa.rng)) == rand(copy(wb.rng))  # ...and the streams end in lockstep
         @test any(ta) && !all(ta)                       # non-trivial: rng genuinely flips outcomes
     end
+
+    # The slice-3 CFAR analog, and the SHARPER form: a CFAR look draws 2·N_p·N_cells randn
+    # for the profile, and the rung (fixed/ca/…) selects ONLY the pure thresholding rule — so
+    # toggling it must leave the RNG stream untouched (draw-count-invariant) while changing
+    # the detections. The discriminating test runs the SAME seed three ways: toggle twice
+    # (identical), and toggle vs no-toggle (SAME rng end-state — proves the draw count didn't
+    # change — but DIFFERENT detection trace — proves the rung actually mattered). A static
+    # clutter band is what the rung resolves differently (fixed lights it, ca holds it).
+    @testset "a mid-run cfar toggle replays deterministically (draw-count invariant)" begin
+        dr = EWSim.C_LIGHT / (2 * 1.0e6)
+        function cfar_trace(seed; toggle_at = 60, nsteps = 120, do_toggle = true)
+            w = World(seed = seed, fidelity = Dict(:cfar => :fixed))
+            w.entities[:radar1] = Entity(:radar1, :radar; pos = Vec3(0, 0, 0),
+                comp = Dict{Symbol,Any}(:pt_w => 1.0e4, :gain_db => 30.0,
+                    :freq_hz => EWSim.C_LIGHT / 0.03, :bandwidth_hz => 1.0e6,
+                    :noise_fig_db => 0.0, :losses_db => 0.0, :pfa => 1.0e-3, :swerling => 1,
+                    :n_pulses => 1, :n_cells => 200, :range_start_m => 0.0,
+                    :n_train => 16, :n_guard => 2))
+            w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(20_000.0, 0, 0),
+                comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+            w.entities[:clut1] = Entity(:clut1, :clutter; pos = Vec3(8_000.0, 0, 0),
+                comp = Dict{Symbol,Any}(:extent_m => 60 * dr, :cnr_db => 18.0))
+            subs = Subsystem[RadarSensor(:radar1), ConstantVelocity(:tgt1)]
+            counts = Int[]
+            for i in 1:nsteps
+                (do_toggle && i == toggle_at) && (w.fidelity[:cfar] = :ca)   # the live toggle
+                tick!(w, subs, 1.0e-3)
+                push!(counts, count(e -> e[:kind] === :detection, w.events))
+                empty!(w.events)
+            end
+            return w, counts
+        end
+        wa, ta = cfar_trace(20260622; do_toggle = true)
+        wb, tb = cfar_trace(20260622; do_toggle = true)
+        @test ta == tb                                  # same seed + same toggle ⇒ identical
+        @test rand(copy(wa.rng)) == rand(copy(wb.rng))  # ...streams in lockstep
+
+        wn, tn = cfar_trace(20260622; do_toggle = false)        # stays :fixed throughout
+        @test rand(copy(wa.rng)) == rand(copy(wn.rng))  # toggle did NOT change the draw count
+        @test ta != tn                                  # ...but the rung changed the detections
+    end
 end

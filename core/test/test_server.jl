@@ -34,6 +34,21 @@ function _detect_scenario(seed; emit_every = 4, revisit_s = 0.02)
     return Scenario("detect", w, subs, Knob[], 1.0e-3, emit_every)
 end
 
+# An in-memory CFAR scenario (the slice-3 dispatch): :cfar fidelity present, a radar with the
+# profile config (n_cells/n_train/n_guard), one target, one clutter band.
+function _cfar_scenario(seed; emit_every = 4, ncells = 128)
+    w = World(seed = seed, fidelity = Dict(:cfar => :ca))
+    w.entities[:radar1] = Entity(:radar1, :radar; pos = Vec3(0, 0, 0),
+        comp = Dict{Symbol,Any}(:pt_w => 1.0e4, :gain_db => 30.0,
+            :freq_hz => EWSim.C_LIGHT / 0.03, :bandwidth_hz => 1.0e6, :noise_fig_db => 0.0,
+            :losses_db => 0.0, :pfa => 1.0e-3, :swerling => 1, :n_pulses => 1,
+            :n_cells => ncells, :range_start_m => 0.0, :n_train => 16, :n_guard => 2))
+    w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(10_000.0, 0, 0),
+        comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+    subs = Subsystem[RadarSensor(:radar1; revisit_s = 0.0), ConstantVelocity(:tgt1)]
+    return Scenario("cfar", w, subs, Knob[], 1.0e-3, emit_every)
+end
+
 @testset "server" begin
 
     @testset "handle_command! mutates state per the §5 table" begin
@@ -89,6 +104,69 @@ end
         # A non-propagation fidelity key is not live-settable in slice 2 (loud, not silent).
         @test_throws ErrorException EWSim.handle_command!(srv,
             Dict(:type => "set_fidelity", :key => "detection", :value => "monte_carlo"))
+    end
+
+    @testset "set_fidelity generalises to a per-key table + guards introducing :cfar" begin
+        # On a CFAR scenario the cfar rung is live-settable across its modes...
+        srv = EWSim.Server(_cfar_scenario(1))
+        w = srv.scn.world
+        @test w.fidelity[:cfar] === :ca
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "cfar", :value => "go"))
+        @test w.fidelity[:cfar] === :go
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "cfar", :value => "os"))
+        @test w.fidelity[:cfar] === :os
+        # ...a bad rung is REJECTED before it lands (would throw in observe! → kill session),
+        # and leaves the live value untouched.
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "cfar", :value => "bogus"))
+        @test w.fidelity[:cfar] === :os
+        # propagation is still live-settable from the SAME table (no regression).
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "propagation", :value => "two_ray"))
+        @test w.fidelity[:propagation] === :two_ray
+
+        # Draw-topology guard: a scenario WITHOUT :cfar must reject INTRODUCING it (the
+        # point→profile draw-count flip would desync a mid-run replay). Introducing
+        # propagation (same draw count either rung) stays allowed.
+        srv2 = EWSim.Server(_detect_scenario(1))                 # no :cfar key
+        w2 = srv2.scn.world
+        @test !haskey(w2.fidelity, :cfar)
+        @test_throws ErrorException EWSim.handle_command!(srv2,
+            Dict(:type => "set_fidelity", :key => "cfar", :value => "ca"))
+        @test !haskey(w2.fidelity, :cfar)                       # still absent after the reject
+        EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "propagation", :value => "two_ray"))
+        @test w2.fidelity[:propagation] === :two_ray
+    end
+
+    @testset "a live n_train/n_guard slider can't crash the tick (consumer clamp)" begin
+        # set_param is the GENERIC channel (no per-key validation), so a slider dragged to an
+        # odd n_train or a negative guard reaches observe! directly — which must CLAMP it, never
+        # throw into tick! (the slice-2 set_fidelity / h≥0 watch-item, generalised: a live knob
+        # can't kill the session). The loader rejects an odd AUTHORED n_train; this is the
+        # live-drag half of that guard, exercised through the real set_param → tick path.
+        srv = EWSim.Server(_cfar_scenario(3))
+        EWSim.handle_command!(srv, Dict(:type => "set_param", :target => "radar1",
+                                        :key => "n_train", :value => 15))   # odd
+        EWSim.handle_command!(srv, Dict(:type => "set_param", :target => "radar1",
+                                        :key => "n_guard", :value => -1))   # negative
+        @test srv.scn.world.entities[:radar1].comp[:n_train] == 15           # written raw...
+        tick!(srv.scn.world, srv.scn.subs, srv.scn.dt_physics)              # ...tick survives the clamp
+        tel = state_frame(srv.scn.world)[:telemetry]
+        @test all(isfinite, tel["radar1.profile_db"])
+        @test all(isfinite, tel["radar1.threshold_db"])
+    end
+
+    @testset "scenario_frame ships the static CFAR range axis (handshake-once)" begin
+        srv = EWSim.Server(_cfar_scenario(7; ncells = 128))
+        f = EWSim.scenario_frame(srv)
+        @test f[:fidelity][:cfar] === :ca                        # the §12 badge sees the rung
+        @test f[:n_cells] == 128
+        @test f[:dr_m] ≈ EWSim.C_LIGHT / (2 * 1.0e6)             # Δr = c/2B
+        @test length(f[:range_axis_m]) == 128
+        @test f[:range_axis_m][1] == 0.0
+        @test f[:range_axis_m][2] ≈ f[:dr_m]                     # axis steps by Δr
+        # a non-CFAR scenario carries no range axis (keys simply absent)
+        g = EWSim.scenario_frame(EWSim.Server(_detect_scenario(1)))
+        @test !haskey(g, :range_axis_m) && !haskey(g, :n_cells)
     end
 
     @testset "set_seed + reset compose into a clean seeded replay" begin

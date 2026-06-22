@@ -233,21 +233,52 @@ threshold at once).
       array ends + a sub-window-length profile; invalid-arg rejections (N_p>1 for GO/SO/OS, odd N
       for GO/SO halves, odd `n_train`, bad variant). Slice-1/2 byte-identical (append-only — no
       existing `detection.jl` symbol changed; `test_determinism` green).
-- [ ] 3. `radar.jl`: build the range-power profile each look (cells `Δr=c/2B`; noise +
-      `:clutter` band + targets via `_target_snr`, composing with `:propagation`); add
-      `CFAR_MODES = (:fixed,:ca,:go,:so,:os)` as a single-source-of-truth const; dispatch
-      `observe!` on `get(w.fidelity,:cfar,…)` — profile always drawn, rung picks the rule;
-      ship per-frame `profile_db`/`threshold_db`/`detections` telemetry (finite via
-      `_snr_db_wire`) + keep the slice-1/2 scalars for the strongest target; `:detection`
-      events gain a `:cell`/`:range` field (false alarms carry no `:of`). The static
-      `range_axis_m`/`Δr`/`N_cells` go in `scenario_frame` (handshake-once, not per-frame).
-      `scenario.jl`: `:clutter` entity kind. `server.jl`: generalise `set_fidelity` to a
-      per-key mode table (no drift with `CFAR_MODES`) **and reject introducing `:cfar`
-      when the scenario lacks it** (draw-topology guard). Tests: `test_radar.jl` (rung
-      flips detections on a fixed profile, fixed≠ca on a clutter edge, no Inf/NaN),
-      `test_determinism.jl` (mid-run `cfar` toggle bit-identical; a no-`:cfar` scenario
-      still byte-identical to slice 1/2), `test_server.jl` (`set_fidelity :cfar`
-      write/reject, reject-when-absent, + `:propagation` still works).
+- [x] 3. `radar.jl`: range-power profile build + `:cfar` dispatch. **DONE & green (782 tests).**
+      `observe!` now dispatches on `haskey(w.fidelity,:cfar)`: `_observe_point!` is the slice-1/2
+      body moved **verbatim** (a no-`:cfar` scenario stays byte-identical — the slice-1 `_sample_z`
+      golden + the byte-identical frame-trace test still green prove it); `_observe_cfar!` builds
+      the new core object — a range-power profile of `n_cells` cells, `Δr=c/2B`. **Cell model (named
+      approximation):** compute the per-cell linear power DETERMINISTICALLY first (noise floor 1 +
+      `:clutter` band(s) `db2lin(cnr_db)` over `[R, R+extent]` on the slant axis + each target's
+      `_target_snr` — so the profile composes with `:propagation` lobing AND the below-horizon
+      mask), THEN draw each cell as a fast-Rayleigh square-law `z_i=Σ_p|x_p|²`, `x_p~CN(0,power_i)`,
+      via `_draw_profile!` (**2·N_p randn/cell, cell-by-cell** — the ONE RNG call of a look). Noise/
+      clutter cells stay exponential at N_p=1 (CA/OS closed forms hold in the homogeneous interior);
+      the target folds into the variance (SW2-like in the profile) while the scalar `pd` readout
+      stays the analytic Pd-at-design-`pfa` for the configured `swerling` (the plan's explicit
+      definition — a reference readout, not the cell's CFAR detection prob). The **draw count is
+      always 2·N_p·N_cells, independent of rung AND target position** — that invariance is what keeps
+      a mid-run rung toggle bit-identical (`cfar_scan` is pure; the rung only swaps the rule).
+      `const CFAR_MODES = CFAR_VARIANTS` (references detection.jl, no re-list — the `PROPAGATION_MODES`
+      drift lesson); `const LIVE_FIDELITY_MODES = (propagation=…, cfar=…)` is the per-key source of
+      truth the server's `set_fidelity` validates against. **Advisor catches baked in:** (a) `n_train`/
+      `n_guard` are LIVE sliders, so `_observe_cfar!` **clamps at the consumer** (`n_train=max(2,2*(raw÷2))`,
+      `n_guard=max(0,raw)`) — a slider dragged to an odd N can't throw in `cfar_scan`→`tick!`→kill the
+      session (the slice-2 watch-item generalised: a live knob can't crash a tick); (b) NO early-return
+      on an empty target list — a clutter-only profile still draws + ships (a core sandbox view);
+      (c) `n_cells≥1` + even `n_train` validated **at LOAD** (`_validate_cfar`, the n_pulses pattern) so
+      the handshake range-axis / first tick can't `KeyError` inside the session's IO-only try.
+      Telemetry: per-cell `profile_db`/`threshold_db`/`detections` (floored via `_snr_db_wire` — a null
+      cell never ships `-Inf`) **+ the slice-1/2 scalars kept** for the strongest target; `:detection`
+      events gain `:cell`/`:range`, a target hit also carries `:of`, a clutter/noise false alarm carries
+      NONE (the lesson surface, explicit). Static `range_axis_m`/`dr_m`/`n_cells` ship in
+      `scenario_frame` (`_cfar_axis_info`, handshake-once). `scenario.jl`: `:clutter` kind
+      (`comp[:extent_m,:cnr_db]`, no subsystem) + optional `n_cells`/`range_start_m`/`n_train`/`n_guard`
+      read into the radar comp (absent for slice-1/2 radars, keeping their bag clean). `server.jl`:
+      `set_fidelity` → per-key table + **rejects INTRODUCING `:cfar`** when absent (point→profile
+      draw-topology flip would desync replay; changing `:propagation`'s value stays safe).
+      `protocol.jl`: `state_frame` docstring flags the `string→number/bool`→`+array` widening (a named
+      extension, like slice-2's `set_fidelity`). Tests (+62): `test_radar.jl` (well-formed+JSON
+      round-trip arrays, rung-selects-rule-not-draw [rng lockstep, detections differ], **fixed lights
+      the clutter-band INTERIOR while ca holds it** — the interior not the edge, advisor catch — 41 vs 0,
+      clutter-only ships, a `_draw_profile!` **draw golden**, **event schema: `:of`/`:cell`/`:range` with
+      the right index through the full observe path; clutter FA has no `:of`**, unknown rung errors);
+      `test_determinism.jl` (mid-run `cfar` toggle: two same-seed runs identical + toggle-vs-no-toggle
+      same rng end-state but different detections — the sharp draw-count-invariance test);
+      `test_server.jl` (per-key `set_fidelity` cfar write/reject + reject-introducing-`:cfar` +
+      propagation still works, range-axis handshake, **live odd-`n_train` set_param→tick survives the
+      clamp**); `test_scenario.jl` (`:cfar`+`:clutter` loads, missing `n_cells` / odd `n_train` rejected
+      at load). Slice-1/2 byte-identical (720 prior tests green untouched).
 - [ ] 4. `scenarios/slice3_cfar.yaml`: two targets close in range (within ~`N_guard+N_train`
       cells so masking bites) + a `:clutter` band whose edge sits inside the view; default
       rung TBD (likely `:ca`, toggle to `:fixed` to reveal the edge spike). Godot: a
