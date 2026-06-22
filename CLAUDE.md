@@ -144,10 +144,16 @@ nulls, cyan horizon curve bounding the masked wedge; no headless *visual* test �
 slice-1 `_draw`, numbers pinned, picture eyeballed).
 
 **Slice 3 — CFAR sandbox (+ pulse integration)** (HANDOFF §10 item 3) — **Steps 1–4 done & green (798
-tests); wire + UI machine-verified. ONE thing still open: the cfar range-power `_draw` (the human-
-facing pixel path, "the visible payoff") is code-complete + wire-verified but awaits a WINDOWED
-eyeball — it has had zero executions (Godot skips `_draw` headless, and unlike slice-1/2's `_draw` it
-hasn't had a windowed look yet). Pluto CFAR diagram deferred (stretch).** Planned in `docs/plans/slice3.md`
+tests); wire + UI machine-verified AND the cfar range-power `_draw` now VISUALLY CONFIRMED
+(2026-06-22). The "visible payoff" pixel path was the last open item; closed by a captured WINDOWED
+render (the agent CAN render `_draw` from the tool shell — see [[ewsim-godot-headless]]): a throwaway
+shot harness pointed `run/main_scene` at itself, instantiated `Sandbox.tscn` against the live slice3
+server, and saved `get_viewport().get_texture().get_image()` to PNGs under three rungs. Confirmed:
+`ca` masks tgtA (1 marker, threshold "towers" over the close pair) / `os` resolves both (flatter
+threshold, 2 markers) / `fixed` flat threshold → clutter-band false-alarm storm (40 markers); the
+threshold curve is the shipped core output, axes/legend/badge render. (One cosmetic fix landed: the
+dB y-axis labels moved to the RIGHT gutter — they collided with the left slider panel.) Pluto CFAR
+diagram still deferred (stretch).** Planned in `docs/plans/slice3.md`
 (4 staged steps: pulse integration + Swerling 0–4 → CFAR primitives → radar.jl profile/dispatch +
 `:clutter` + per-key `set_fidelity` → Godot range-power view).
 Step 1 (gate 1 — integration + Swerling 0–4 green): `detection.jl` generalised single-pulse →
@@ -288,10 +294,16 @@ headless against BOTH a slice2 (spatial) AND the slice3 (cfar) server (no GDScri
 `DONE` ⇒ the scene connected on each branch — catches CFAR-branch parse bugs the spatial verifiers
 can't). `test_scenario.jl` gains a slice3 loader assertion (parses, `:cfar` default, clutter entity,
 both targets on-grid + within `n_guard+n_train` cells of each other, clutter near-edge in the
-interior, cfar not a knob). The cfar `_draw` PIXEL branch isn't run headless (Godot
-skips `_draw` headless) AND — unlike slice-1/2 `_draw`, eyeballed 2026-06-21 — has had ZERO executions
-so far (not headless, not windowed). Numbers are wire-verified (`slice3_verify.gd`); the picture STILL
-NEEDS a windowed eyeball (`Sandbox.tscn` against the slice3 server) — the one open step of slice 3.
+interior, cfar not a knob). The cfar `_draw` PIXEL branch isn't run headless (Godot skips `_draw`
+headless), so it was **visually confirmed 2026-06-22 via a captured windowed render** of `Sandbox.tscn`
+against the live slice3 server (a throwaway shot harness: temporarily point `run/main_scene` at a
+wrapper scene, instantiate `Sandbox.tscn`, let it connect+render realtime, then
+`get_viewport().get_texture().get_image().save_png` under three rungs — `ca`/`os`/`fixed` — and Read
+the PNGs). The three rungs render the lesson exactly: `ca` 1 marker + threshold towers (tgtA masked),
+`os` 2 markers + flatter threshold (both resolve), `fixed` flat threshold + ~40 clutter-band false
+alarms. Numbers were already wire-verified (`slice3_verify.gd`); the picture is now eyeballed too — no
+open step remains in slice 3. (The capture technique — the agent rendering `_draw` itself, not a human
+— is saved in [[ewsim-godot-headless]].)
 
 Run the slice-3 showcase: `julia --project=core tools/server.jl scenarios/slice3_cfar.yaml`, then
 launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-detects CFAR and shows the range-power

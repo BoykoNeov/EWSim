@@ -70,9 +70,9 @@ var _detections: Array = []       # per-cell bool — cells the active rung flag
 var _cfar_y_hi := 35.0            # top of the dB axis (auto-expands to fit a tall return)
 const CFAR_RUNGS := ["fixed", "ca", "go", "so", "os"]
 const CFAR_Y_LO := -15.0          # bottom of the dB axis (noise floor ≈ 0 dB; deep nulls clamp)
-const PLOT_L := 70.0              # plot rect insets (px) — left leaves room for dB labels,
+const PLOT_L := 70.0              # plot rect insets (px) — left edge clears the first range label,
 const PLOT_T := 120.0             # top clears the UI panel, bottom leaves room for range labels
-const PLOT_R := 28.0
+const PLOT_R := 44.0              # right gutter holds the dB axis labels (left is the UI panel)
 const PLOT_B := 48.0
 
 func _ready() -> void:
@@ -457,14 +457,15 @@ func _draw_cfar() -> void:
 	var rect := _cfar_plot_rect()
 	draw_rect(rect, Color(0.2, 0.25, 0.3), false, 1.0)
 
-	# y grid + dB labels every 10 dB
+	# y grid + dB labels every 10 dB — labels live in the RIGHT gutter; the left edge is the
+	# slider/readout panel (drawing them at x=8 collided with the knob labels, slice-3 fix).
 	var db := ceilf(CFAR_Y_LO / 10.0) * 10.0
 	while db <= _cfar_y_hi:
 		var gy := _cfar_y(db, rect)
 		draw_line(Vector2(rect.position.x, gy), Vector2(rect.end.x, gy), Color(1, 1, 1, 0.06), 1.0)
-		draw_string(_font, Vector2(8, gy + 4), "%d" % int(db), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.5))
+		draw_string(_font, Vector2(rect.end.x + 6, gy + 4), "%d" % int(db), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.5))
 		db += 10.0
-	draw_string(_font, Vector2(8, rect.position.y - 6), "power (dB)", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.55))
+	draw_string(_font, Vector2(rect.end.x + 6, rect.position.y - 6), "dB", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.55))
 
 	# x grid + range labels (km)
 	var nticks := 6

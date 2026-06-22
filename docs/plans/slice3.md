@@ -308,8 +308,15 @@ threshold at once).
       AND the slice3 (cfar) server (no GDScript errors, server `DONE` ⇒ scene connected on each
       branch). `test_scenario.jl` slice3 loader assertion (parses, `:cfar` default, clutter entity,
       targets on-grid + within `n_guard+n_train` cells, clutter near-edge in interior, cfar not a
-      knob). The cfar `_draw` pixel branch isn't run headless (windowed look, same gap as slice-1/2;
-      numbers wire-verified). **(stretch, DEFERRED)** `clients/notebooks/slice3_cfar.jl` (CFAR diagram).
+      knob). The cfar `_draw` pixel branch isn't run headless, so it was **visually confirmed
+      2026-06-22 via a captured windowed render** (a throwaway shot harness: point `run/main_scene` at
+      a wrapper that instantiates `Sandbox.tscn` against the live server, then
+      `get_viewport().get_texture().get_image().save_png` under `ca`/`os`/`fixed` and Read the PNGs).
+      `ca` → 1 marker + threshold towers (tgtA masked); `os` → 2 markers + flatter threshold (both
+      resolve); `fixed` → flat threshold + ~40 clutter-band false alarms. Cosmetic fix in the same
+      pass: the dB y-axis labels moved to the RIGHT gutter (they collided with the left slider panel).
+      No open step remains in slice 3. **(stretch, DEFERRED)** `clients/notebooks/slice3_cfar.jl` (CFAR
+      diagram).
 
 ## Context / landmarks
 - **The seam is partly pre-built.** `set_fidelity` (`server.jl:145`) already exists from
