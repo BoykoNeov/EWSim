@@ -143,10 +143,13 @@ Visually confirmed 2026-06-21 (headless PNG render of the notebook cells: clean 
 nulls, cyan horizon curve bounding the masked wedge; no headless *visual* test — same gap as
 slice-1 `_draw`, numbers pinned, picture eyeballed).
 
-**Slice 3 — CFAR sandbox (+ pulse integration)** (HANDOFF §10 item 3) — **IN PROGRESS, steps 1–3 of 4
-DONE & green (782 tests).** Planned in `docs/plans/slice3.md` (4 staged steps: pulse integration +
-Swerling 0–4 → CFAR primitives → radar.jl profile/dispatch + `:clutter` + per-key `set_fidelity` →
-Godot range-power view).
+**Slice 3 — CFAR sandbox (+ pulse integration)** (HANDOFF §10 item 3) — **Steps 1–4 done & green (798
+tests); wire + UI machine-verified. ONE thing still open: the cfar range-power `_draw` (the human-
+facing pixel path, "the visible payoff") is code-complete + wire-verified but awaits a WINDOWED
+eyeball — it has had zero executions (Godot skips `_draw` headless, and unlike slice-1/2's `_draw` it
+hasn't had a windowed look yet). Pluto CFAR diagram deferred (stretch).** Planned in `docs/plans/slice3.md`
+(4 staged steps: pulse integration + Swerling 0–4 → CFAR primitives → radar.jl profile/dispatch +
+`:clutter` + per-key `set_fidelity` → Godot range-power view).
 Step 1 (gate 1 — integration + Swerling 0–4 green): `detection.jl` generalised single-pulse →
 **N-pulse non-coherent integration** (z = Σ|xᵢ|², noise-only `Gamma(N_p,1)`). `detection_threshold(
 pfa, n_pulses=1)`: `N_p=1` → `−log(pfa)` **float-exact** (slice-1/2 byte-identity), else bisect the
@@ -240,13 +243,66 @@ detections — the sharp draw-count-invariance test); `test_server.jl` (per-key 
 write/reject + reject-introducing + propagation still works; range-axis handshake; **live odd-`n_train`
 set_param→tick survives the clamp**); `test_scenario.jl` (`:cfar`+`:clutter` loads; missing `n_cells`
 / odd `n_train` rejected at load).
-**Next: slice 3 step 4 — `scenarios/slice3_cfar.yaml` (two close targets + a clutter edge) + the
-Godot range-power view** (range×power-dB plot, threshold-curve overlay, detection markers; `cfar:`
-rung toggle button via `set_fidelity`; `N_train`/`N_guard`/`pfa` sliders; §12 badge). Headless
-`net/slice3_verify.gd` (rung flips detections at fixed `t`/draws; the `fixed` clutter-edge spike
-vanishes under GO/OS; CA masking resolves under SO/OS) + a `sandbox_ui_test.gd` analog +
-`Sandbox.tscn` smoke-load + a `test_scenario.jl` slice3 loader assertion. **(stretch)** a Pluto CFAR
-diagram.
+Step 4 (gate 4 — visible live): `scenarios/slice3_cfar.yaml` — a STATIC range-power scene (everything
+on +X, z=0, so slant=ground=cell axis; each look redraws the noise, the geometry holds) built to
+expose all three lessons at once. Radar: 50 kW X-band, B=1 MHz → Δr=149.9 m, n_cells=300 (0–44.8 km),
+pfa=1e-3, n_train=16/n_guard=2, default rung `:ca`. A 20 dB clutter band at 10–16 km (cells 68–108)
++ two close targets at ~25 km: tgtA (victim, 18.2 dB, cell 168) and tgtB (interferer, 31.6 dB, cell
+173 — 5 cells away, inside tgtA's training window). `propagation` is deliberately ABSENT (defaults
+free_space): two_ray nulls would inject zeros into arbitrary cells and muddy the lesson — **one
+lesson per scenario** (two_ray-composition is already pinned by test_radar.jl; advisor catch). Knobs
+are the LIVE CFAR sliders `n_train`/`n_guard`/`pfa` (cfar is a fidelity, toggled by the button, NOT a
+slider). Tuned EMPIRICALLY first with a throwaway probe (advisor: the link-budget SNR decides the
+masking; don't hand-derive) — the numbers are pinned into the verifier as comments.
+
+Godot `Sandbox.gd` is now **adaptive**: the handshake's `range_axis_m` presence flips `_mode`
+spatial→cfar (advisor: a separate scene would mis-open `godot --path` against a CFAR server; one
+adaptive scene avoids the footgun). The two render paths share NO state and never interleave — the
+slice-1/2 spatial view is untouched (its `_draw` → `_draw_spatial`; sandbox_ui_test + the spatial
+smoke-load stay green). The cfar `_draw` plots range×power-dB: the drawn profile, the CFAR threshold
+curve (**CORE output — drawn from the shipped `threshold_db`, α NEVER recomputed in GDScript**, the
+central invariant), and a marker per detected cell. The shared fidelity button becomes the cfar rung
+CYCLER (`fixed→ca→go→so→os→fixed`, `set_fidelity`) — the binary prop toggle's `_on_prop_pressed` is
+swapped for `_on_cfar_pressed` (guarded disconnect so the headless UI test doesn't error); the §12
+badge + button re-render from the local fidelity copy and resync on reset, exactly the slice-2
+pattern. `_update_readout` now **skips Array telemetry** (the profile/threshold/detections arrays
+render in `_draw`, not as text — the watch-item: it would have `float()`-crashed on the arrays).
+
+`net/slice3_verify.gd` (headless, the slice2_verify analog) drives the real server on this scenario:
+the handshake ships the static range axis (`range_axis_m` len n_cells, `dr_m`, `n_cells`) + `cfar:ca`
+default; every state frame carries finite `profile_db`/`threshold_db`/`detections` arrays. The core
+proof — **the rung selects the RULE, not the draw**: the profile draw is rung-invariant and happens
+only on look ticks, so `reset` (held seed 3, t=0) **before** `set_fidelity` replays an IDENTICAL noise
+sequence per rung — a clean controlled experiment. Measured over 80 looks/rung (deterministic, seed
+3): all five rungs reach the SAME final t=4.0 (bit-identical replay); `fixed` lights the clutter band
+(**2993 FA events**) vs `ca`/`go` (**31/7** — tracked, Pfa held); tgtA is **masked under ca (9
+detections)** but **resolves under so/os (61/60)** while the interferer tgtB stays detected
+everywhere (73–79). Drains ALL frames per burst accumulating one-shot `:detection` EVENTS (a target
+hit carries `:of`, a clutter FA carries only `:cell`/`:range` — filtered by `of`/`range`); NOT the
+per-frame detections array, which is republished between looks and would multi-count (advisor catch).
+Proven green end-to-end (`S3V OK`, server `DONE`, exit 0). The toggle/slider UI path (which the
+SimClient-driven verifier can't press) has its own headless `net/slice3_ui_test.gd` (`S3UI OK`: mock
+client + fake cfar handshake → the rung cycler walks `fixed→ca→go→so→os` and wraps, badge/button
+track it, the N_train slider sends `set_param`, reset resyncs to ca). `Sandbox.tscn` smoke-loaded
+headless against BOTH a slice2 (spatial) AND the slice3 (cfar) server (no GDScript errors, server
+`DONE` ⇒ the scene connected on each branch — catches CFAR-branch parse bugs the spatial verifiers
+can't). `test_scenario.jl` gains a slice3 loader assertion (parses, `:cfar` default, clutter entity,
+both targets on-grid + within `n_guard+n_train` cells of each other, clutter near-edge in the
+interior, cfar not a knob). The cfar `_draw` PIXEL branch isn't run headless (Godot
+skips `_draw` headless) AND — unlike slice-1/2 `_draw`, eyeballed 2026-06-21 — has had ZERO executions
+so far (not headless, not windowed). Numbers are wire-verified (`slice3_verify.gd`); the picture STILL
+NEEDS a windowed eyeball (`Sandbox.tscn` against the slice3 server) — the one open step of slice 3.
+
+Run the slice-3 showcase: `julia --project=core tools/server.jl scenarios/slice3_cfar.yaml`, then
+launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-detects CFAR and shows the range-power
+view; cycle the `cfar:` button to watch the threshold curve track the clutter / resolve the masked
+target). Re-run the step-4 proof headless: start that server, then `godot --headless --path
+clients/godot --script res://net/slice3_verify.gd` (exit 0 = pass; serves one client then exits). The
+toggle/slider UI test needs NO server: `godot --headless --path clients/godot --script
+res://net/slice3_ui_test.gd`. **(stretch, deferred)** a Pluto CFAR diagram (Pd/Pfa vs SNR per
+variant, or threshold-curve panels over the profile).
+
+**Next: slice 4 — see HANDOFF §10 for the next showcase (item 4).**
 
 ---
 

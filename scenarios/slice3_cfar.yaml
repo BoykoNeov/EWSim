@@ -1,0 +1,84 @@
+# slice3_cfar — CFAR sandbox showcase (HANDOFF §10 item 3, slice 3 step 4).
+#
+# A STATIC range-power scene built to expose the three CFAR lessons at once. The radar
+# stares down a single axis (everything on +X, z=0, so slant range = downrange = the
+# cell axis); each look redraws the noisy profile, so detections + the threshold curve
+# jitter frame-to-frame while the geometry holds — CFAR's job is to hold Pfa through that
+# jitter. Default rung is `:ca` (cell-averaging); toggle the `cfar` knob through
+# fixed → ca → go → so → os in the client and watch the threshold curve respond:
+#
+#   • CLUTTER EDGE — a 20 dB clutter band sits at 10–16 km. Under `fixed` (a flat
+#     −ln(pfa) threshold, the "before CFAR" baseline) the WHOLE band lights up as false
+#     alarms; `ca` tracks the elevated floor in the band INTERIOR but spikes at the
+#     near EDGE (half its window is still in clean noise → underestimate); `go`
+#     (greatest-of) uses the clutter side of the window → tames the edge spike.
+#   • MASKING — two targets sit close in range at ~25 km: a STRONG interferer and a
+#     MODERATE victim a few cells away. Under `ca` the interferer's power leaks into the
+#     victim's training window → inflated threshold → the victim is MASKED. `so`
+#     (smallest-of) takes the clean half-window → the victim resolves; `os`
+#     (ordered-statistic) rejects the high interferer cell → likewise resolves.
+#
+# propagation is deliberately ABSENT (so it defaults to free_space): two_ray nulls would
+# inject zeros into arbitrary cells and muddy the masking/edge lesson. one lesson per
+# scenario — two_ray-composition is already pinned by test_radar.jl. The CFAR closed-form
+# physics is pinned by test_cfar.jl / test_radar.jl; here the point is the live picture.
+#
+# Δr = c/(2·B) = 149.9 m at B = 1 MHz; n_cells = 300 → the axis spans 0–44.8 km.
+name: slice3_cfar
+seed: 3
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  cfar:      ca               # fixed | ca | go | so | os  — the slice-3 showcase knob
+  detection: analytic         # inert (declared, never dispatched) — out of scope, kept for parity
+
+entities:
+  - id: radar1
+    kind: radar
+    pos: [0, 0, 0]
+    radar:
+      pt_w:         50000      # 50 kW peak
+      gain_db:      35
+      freq_hz:      9.4e9
+      bandwidth_hz: 1.0e6      # → Δr = c/2B = 149.9 m range cells
+      noise_fig_db: 3
+      losses_db:    4
+      pfa:          1.0e-3     # CFAR design Pfa (higher than slice-1/2's 1e-6 so the
+                               # clutter-edge spike / detections are visibly populous)
+      swerling:     1
+      n_pulses:     1
+      revisit_s:    0.05       # 20 Hz looks → a fresh noisy profile every 50 ticks
+      # --- CFAR profile geometry (static) + window (live sliders) ---
+      n_cells:       300
+      range_start_m: 0
+      n_train:       16        # N training cells (N/2 per side)
+      n_guard:       2         # G guard cells per side (protect a spread target)
+
+  # Clutter band: elevated-mean exponential power over [10 km, 16 km] on the slant axis.
+  # Its NEAR edge (10 km) sits in the profile interior — that transition is the CA spike.
+  - id: clut1
+    kind: clutter
+    pos: [10000, 0, 0]
+    clutter:
+      extent_m: 6000           # 10–16 km band
+      cnr_db:   20             # clutter-to-noise ratio (linear ~100× the noise floor)
+
+  # Two targets close in range at ~25 km, well clear of the clutter band. tgtB is the
+  # STRONG interferer; tgtA the MODERATE victim a few cells nearer — masked under CA.
+  - id: tgtA
+    kind: target
+    pos: [25000, 0, 0]
+    target:
+      rcs_m2: 2.0              # moderate — detectable in clean noise, maskable by tgtB
+  - id: tgtB
+    kind: target
+    pos: [25750, 0, 0]         # +750 m ≈ +5 cells → inside tgtA's training window
+    target:
+      rcs_m2: 50.0             # strong interferer (~14 dB above tgtA) — the masker
+
+knobs:                          # client sliders (target+key resolve to a comp param). cfar
+                                # is a fidelity (toggle button), NOT a slider. The window
+                                # knobs ARE live (clamped at the consumer if dragged odd).
+  - {target: radar1, key: n_train, min: 4,    max: 48,    label: "N_train (cells)"}
+  - {target: radar1, key: n_guard, min: 0,    max: 8,     label: "N_guard (cells/side)"}
+  - {target: radar1, key: pfa,     min: 1.0e-6, max: 1.0e-2, label: "Design Pfa", log: true}

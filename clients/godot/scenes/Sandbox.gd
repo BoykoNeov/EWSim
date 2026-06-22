@@ -1,18 +1,23 @@
 extends Node2D
-# Sandbox.gd — the slice-1 spatial client (HANDOFF §8, step 7). Connects to the
-# Julia server (tools/server.jl) via SimClient, builds its sliders from the
-# `scenario` handshake (so the YAML knob list is the single source of truth), and
-# renders the live `state` stream: the radar, the constant-velocity target, and a
-# detection blip per `detection` event. Slider drags send `set_param` — the §5
-# universal knob channel — so moving "Target RCS" or "Tx power" changes Pd live.
+# Sandbox.gd — the EWSim spatial/CFAR client (HANDOFF §8). Connects to the Julia server
+# (tools/server.jl) via SimClient, builds its sliders from the `scenario` handshake (so the
+# YAML knob list is the single source of truth), and renders the live `state` stream. Slider
+# drags send `set_param` — the §5 universal knob channel — so moving a knob changes the
+# physics live.
 #
-# This is a PURE CLIENT: zero physics. It draws what the core says and writes
-# knobs back; everything else (SNR, Pd, the detection draw) is the core's truth.
+# This is a PURE CLIENT: zero physics. It draws what the core says and writes knobs back;
+# everything else (SNR, Pd, the detection draw, the CFAR threshold curve) is the core's truth.
 #
-# View: a 2-D elevation slice — screen-x is downrange (world +X, target closing
-# from the right), screen-y is altitude (world +Z, up). World Y is 0 in slice 1,
-# so this shows the two coordinates that actually move. Meters → pixels with a
-# fixed margin; bounds auto-expand so nothing leaves the frame.
+# TWO render modes, chosen ONCE from the handshake (advisor: the paths share no state and
+# never interleave):
+#   • "spatial" (slice 1/2) — a 2-D elevation slice: screen-x downrange (world +X, target
+#     closing from the right), screen-y altitude (world +Z, up). World Y is 0, so this shows
+#     the two coords that move. Radar + target marker + a detection-blip ring per event.
+#   • "cfar" (slice 3) — a range-power profile plot: x is range (the core's static range
+#     axis from the handshake), y is power in dB. The drawn profile, the CFAR threshold curve
+#     (CORE output, never recomputed here), and a marker per detected cell. The fidelity
+#     button cycles the cfar rung (fixed→ca→go→so→os) instead of the binary prop toggle.
+# A scenario shipping `range_axis_m` in its handshake selects "cfar"; otherwise "spatial".
 
 const HOST := "127.0.0.1"
 const PORT := 8765
@@ -50,6 +55,25 @@ var _running := false
 # toggle reverts to on reset.
 var _fidelity := {}
 var _fidelity_default := {}
+
+# --- CFAR range-power view (slice 3): populated only when the handshake ships a range axis.
+# `_mode` switches the whole render path AND the fidelity-toggle button. The spatial mirror
+# (_entities/_blips) and the cfar mirror (_profile_db/...) are disjoint — only one is live.
+var _mode := "spatial"            # "spatial" (slice 1/2) | "cfar" (slice 3)
+var _cfar_radar := ""             # radar id whose "<id>.profile_db" etc. we render
+var _range_axis: Array = []       # per-cell slant range (m) — handshake, core output
+var _n_cells := 0
+var _dr_m := 0.0
+var _profile_db: Array = []       # per-cell power (dB), the noisy profile — per frame
+var _threshold_db: Array = []     # per-cell CFAR threshold (dB) — CORE output, never recomputed here
+var _detections: Array = []       # per-cell bool — cells the active rung flagged this look
+var _cfar_y_hi := 35.0            # top of the dB axis (auto-expands to fit a tall return)
+const CFAR_RUNGS := ["fixed", "ca", "go", "so", "os"]
+const CFAR_Y_LO := -15.0          # bottom of the dB axis (noise floor ≈ 0 dB; deep nulls clamp)
+const PLOT_L := 70.0              # plot rect insets (px) — left leaves room for dB labels,
+const PLOT_T := 120.0             # top clears the UI panel, bottom leaves room for range labels
+const PLOT_R := 28.0
+const PLOT_B := 48.0
 
 func _ready() -> void:
 	_font = ThemeDB.fallback_font
@@ -137,10 +161,35 @@ func _on_scenario(obj: Dictionary) -> void:
 	# can resync the client unilaterally.
 	_fidelity = (obj.get("fidelity", {}) as Dictionary).duplicate()
 	_fidelity_default = _fidelity.duplicate()
+	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
+	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
+	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
+	# interleave after this.
+	if obj.has("range_axis_m"):
+		_enter_cfar_mode(obj)
+	else:
+		_mode = "spatial"
 	_render_badge()
-	_update_prop_btn()
-	# Server boots PAUSED; start the fly-by so there is something to watch.
+	_update_fid_btn()
+	# Server boots PAUSED; start running so there is something to watch.
 	_set_running(true)
+
+func _enter_cfar_mode(obj: Dictionary) -> void:
+	# Adopt the static range axis + which radar's telemetry arrays to render, then repurpose
+	# the fidelity-toggle button as the CFAR rung cycler. The spatial path's binary prop toggle
+	# (_on_prop_pressed, wired in _build_ui) is swapped for _on_cfar_pressed. The disconnect is
+	# guarded so the headless UI test — which builds the button without _build_ui's connect —
+	# doesn't error.
+	_mode = "cfar"
+	_cfar_radar = str(obj.get("radar", ""))
+	_range_axis = obj.get("range_axis_m", [])
+	_n_cells = int(obj.get("n_cells", _range_axis.size()))
+	_dr_m = float(obj.get("dr_m", 0.0))
+	if _prop_btn.pressed.is_connected(_on_prop_pressed):
+		_prop_btn.pressed.disconnect(_on_prop_pressed)
+	if not _prop_btn.pressed.is_connected(_on_cfar_pressed):
+		_prop_btn.pressed.connect(_on_cfar_pressed)
+	_prop_btn.tooltip_text = "Cycle CFAR rung (set_fidelity): fixed → ca → go → so → os"
 
 func _render_badge() -> void:
 	# §12: a visible "<fidelity> approximation" badge, built from the live local fidelity
@@ -151,8 +200,30 @@ func _render_badge() -> void:
 	parts.sort()
 	_badge.text = "approximation — " + (" · ".join(parts) if not parts.is_empty() else "unspecified")
 
+func _update_fid_btn() -> void:
+	# Mode-aware label for the shared fidelity-toggle button: the cfar rung in the range-power
+	# view, the propagation rung in the spatial view.
+	if _mode == "cfar":
+		_prop_btn.text = "cfar: %s" % str(_fidelity.get("cfar", "?"))
+	else:
+		_update_prop_btn()
+
 func _update_prop_btn() -> void:
 	_prop_btn.text = "prop: %s" % str(_fidelity.get("propagation", "?"))
+
+func _on_cfar_pressed() -> void:
+	# Advance the cfar rung one step round the ring (fixed→ca→go→so→os→fixed) and tell the core
+	# (set_fidelity — the slice-2 live toggle, generalised). The server applies it silently on
+	# the next look (no reply), so the client owns the displayed rung: update badge + button
+	# locally. The rung changes ONLY the thresholding rule, never the draw, so a mid-run cycle
+	# is bit-identical (the slice-3 determinism contract).
+	var cur := str(_fidelity.get("cfar", "ca"))
+	var i := CFAR_RUNGS.find(cur)
+	var next: String = CFAR_RUNGS[(i + 1) % CFAR_RUNGS.size()] if i >= 0 else "ca"
+	_fidelity["cfar"] = next
+	_client.send({"type": "set_fidelity", "key": "cfar", "value": next})
+	_render_badge()
+	_update_fid_btn()
 
 func _on_prop_pressed() -> void:
 	# Flip the propagation rung and tell the core (set_fidelity — the slice-2 live toggle).
@@ -166,6 +237,15 @@ func _on_prop_pressed() -> void:
 	_update_prop_btn()
 
 func _on_state(obj: Dictionary) -> void:
+	_telemetry = obj.get("telemetry", {})
+	if _mode == "cfar":
+		_cfar_on_state()
+	else:
+		_spatial_on_state(obj)
+	_update_readout()
+	queue_redraw()
+
+func _spatial_on_state(obj: Dictionary) -> void:
 	_entities.clear()
 	for e in obj.get("entities", []):
 		var id := str(e.get("id", ""))
@@ -176,9 +256,6 @@ func _on_state(obj: Dictionary) -> void:
 		_x_max = max(_x_max, absf(float(pos[0])) * 1.08)
 		_z_max = max(_z_max, float(pos[2]) * 1.15)
 
-	_telemetry = obj.get("telemetry", {})
-	_update_readout()
-
 	# Drop a blip at the detected target's current screen position. The event
 	# carries `of` (the target id) but no position; the entity's pos this frame is
 	# within emit_every·dt (~16 ms) of when it fired — close enough for a blip.
@@ -188,7 +265,17 @@ func _on_state(obj: Dictionary) -> void:
 			if _entities.has(of):
 				_blips.append({"pos": _world_to_screen(_entities[of].pos), "age": 0.0})
 
-	queue_redraw()
+func _cfar_on_state() -> void:
+	# Pull the per-cell arrays the core shipped (the threshold curve is CORE output — we plot
+	# it, never recompute α here, HANDOFF §1). Auto-expand the dB axis so a tall target/clutter
+	# return stays on screen.
+	_profile_db   = _telemetry.get(_cfar_radar + ".profile_db", [])
+	_threshold_db = _telemetry.get(_cfar_radar + ".threshold_db", [])
+	_detections   = _telemetry.get(_cfar_radar + ".detections", [])
+	for v in _profile_db:
+		_cfar_y_hi = max(_cfar_y_hi, float(v) + 4.0)
+	for v in _threshold_db:
+		_cfar_y_hi = max(_cfar_y_hi, float(v) + 4.0)
 
 func _update_readout() -> void:
 	if _telemetry.is_empty():
@@ -199,6 +286,8 @@ func _update_readout() -> void:
 	var lines := PackedStringArray()
 	for k in keys:
 		var v = _telemetry[k]
+		if v is Array:
+			continue                # CFAR profile/threshold/detections arrays render in _draw, not as text
 		if v is bool:
 			lines.append("%s: %s" % [k, "YES" if v else "no"])
 		else:
@@ -274,7 +363,7 @@ func _on_reset_pressed() -> void:
 	# don't lie about a toggle the reset just undid.
 	_fidelity = _fidelity_default.duplicate()
 	_render_badge()
-	_update_prop_btn()
+	_update_fid_btn()
 	if _running:
 		_client.send({"type": "run", "mode": "realtime", "speed": 1.0})
 
@@ -299,6 +388,12 @@ func _process(dt: float) -> void:
 		queue_redraw()
 
 func _draw() -> void:
+	if _mode == "cfar":
+		_draw_cfar()
+	else:
+		_draw_spatial()
+
+func _draw_spatial() -> void:
 	var vp := get_viewport_rect().size
 	# ground line (altitude 0) for spatial reference
 	var ground_y := (vp.y - MARGIN)
@@ -340,3 +435,74 @@ func _draw() -> void:
 		var a: float = 1.0 - (b.age / BLIP_TTL)
 		var r: float = TARGET_R + 18.0 * (b.age / BLIP_TTL)
 		draw_arc(b.pos, r, 0.0, TAU, 32, Color(1.0, 0.55, 0.2, a), 2.0)
+
+# --- CFAR range-power view (slice 3) ------------------------------------------
+# A plot: x = range (the core's static range axis), y = power in dB. Three layers, all from
+# core output — the drawn profile, the CFAR threshold curve (NEVER recomputed here), and a
+# marker per detected cell. Toggling the cfar rung redraws the threshold and the markers.
+
+func _cfar_plot_rect() -> Rect2:
+	var vp := get_viewport_rect().size
+	return Rect2(PLOT_L, PLOT_T, vp.x - PLOT_L - PLOT_R, vp.y - PLOT_T - PLOT_B)
+
+func _cfar_x(i: int, rect: Rect2) -> float:
+	var n := maxi(1, _n_cells - 1)
+	return rect.position.x + (float(i) / float(n)) * rect.size.x
+
+func _cfar_y(db: float, rect: Rect2) -> float:
+	var t := clampf((db - CFAR_Y_LO) / (_cfar_y_hi - CFAR_Y_LO), 0.0, 1.0)
+	return rect.position.y + (1.0 - t) * rect.size.y
+
+func _draw_cfar() -> void:
+	var rect := _cfar_plot_rect()
+	draw_rect(rect, Color(0.2, 0.25, 0.3), false, 1.0)
+
+	# y grid + dB labels every 10 dB
+	var db := ceilf(CFAR_Y_LO / 10.0) * 10.0
+	while db <= _cfar_y_hi:
+		var gy := _cfar_y(db, rect)
+		draw_line(Vector2(rect.position.x, gy), Vector2(rect.end.x, gy), Color(1, 1, 1, 0.06), 1.0)
+		draw_string(_font, Vector2(8, gy + 4), "%d" % int(db), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.5))
+		db += 10.0
+	draw_string(_font, Vector2(8, rect.position.y - 6), "power (dB)", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.55))
+
+	# x grid + range labels (km)
+	var nticks := 6
+	for ti in range(nticks + 1):
+		var idx := int(round(float(ti) / nticks * maxi(1, _n_cells - 1)))
+		var gx := _cfar_x(idx, rect)
+		draw_line(Vector2(gx, rect.position.y), Vector2(gx, rect.end.y), Color(1, 1, 1, 0.05), 1.0)
+		var rng_km := (float(_range_axis[idx]) / 1000.0) if idx < _range_axis.size() else 0.0
+		draw_string(_font, Vector2(gx - 10, rect.end.y + 16), "%.0f" % rng_km, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.5))
+	draw_string(_font, Vector2(rect.position.x + rect.size.x * 0.5 - 30, rect.end.y + 32), "range (km)", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.55))
+
+	# profile polyline (what the receiver saw this look)
+	if _profile_db.size() >= 2:
+		var pts := PackedVector2Array()
+		for i in _profile_db.size():
+			pts.append(Vector2(_cfar_x(i, rect), _cfar_y(float(_profile_db[i]), rect)))
+		draw_polyline(pts, Color(0.5, 0.8, 1.0), 1.5)
+
+	# threshold polyline (CORE output — the adaptive curve the rung produced)
+	if _threshold_db.size() >= 2:
+		var tpts := PackedVector2Array()
+		for i in _threshold_db.size():
+			tpts.append(Vector2(_cfar_x(i, rect), _cfar_y(float(_threshold_db[i]), rect)))
+		draw_polyline(tpts, Color(1.0, 0.5, 0.3), 1.5)
+
+	# a marker per detected cell (profile crossed the threshold there)
+	for i in _detections.size():
+		if bool(_detections[i]) and i < _profile_db.size():
+			draw_circle(Vector2(_cfar_x(i, rect), _cfar_y(float(_profile_db[i]), rect)), 3.0, Color(0.4, 1.0, 0.4))
+
+	_cfar_legend(rect)
+
+func _cfar_legend(rect: Rect2) -> void:
+	var x := rect.end.x - 150.0
+	var y := rect.position.y + 14.0
+	draw_line(Vector2(x, y), Vector2(x + 18, y), Color(0.5, 0.8, 1.0), 2.0)
+	draw_string(_font, Vector2(x + 24, y + 4), "profile", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.8, 0.9, 1.0))
+	draw_line(Vector2(x, y + 16), Vector2(x + 18, y + 16), Color(1.0, 0.5, 0.3), 2.0)
+	draw_string(_font, Vector2(x + 24, y + 20), "threshold", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.7, 0.5))
+	draw_circle(Vector2(x + 9, y + 32), 3.0, Color(0.4, 1.0, 0.4))
+	draw_string(_font, Vector2(x + 24, y + 36), "detection", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.6, 1.0, 0.6))

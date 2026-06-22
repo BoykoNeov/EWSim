@@ -279,17 +279,37 @@ threshold at once).
       propagation still works, range-axis handshake, **live odd-`n_train` set_param→tick survives the
       clamp**); `test_scenario.jl` (`:cfar`+`:clutter` loads, missing `n_cells` / odd `n_train` rejected
       at load). Slice-1/2 byte-identical (720 prior tests green untouched).
-- [ ] 4. `scenarios/slice3_cfar.yaml`: two targets close in range (within ~`N_guard+N_train`
-      cells so masking bites) + a `:clutter` band whose edge sits inside the view; default
-      rung TBD (likely `:ca`, toggle to `:fixed` to reveal the edge spike). Godot: a
-      range-power profile view (new plot — range×power-dB, threshold curve overlay,
-      detection markers), a `cfar:` rung toggle button (`set_fidelity`), `N_train`/
-      `N_guard`/`pfa` sliders, the §12 badge. `net/slice3_verify.gd` (headless): rung
-      flips detections at fixed `t`/draws; the `fixed` clutter-edge false-alarm spike
-      vanishes under GO/OS; CA masking resolves under SO/OS. UI test `net/sandbox_ui_test.gd`
-      analog for the toggle/slider path. `Sandbox.tscn` smoke-load. `test_scenario.jl`
-      loader assertion (parses, `:cfar` default, clutter entity, targets within the window).
-      **(stretch)** `clients/notebooks/slice3_cfar.jl` (CFAR diagram).
+- [x] 4. `scenarios/slice3_cfar.yaml` + the Godot range-power view. **DONE & green (798 tests).**
+      STATIC scene (all on +X, z=0 → slant=ground=cell axis; each look redraws the noise, the
+      geometry holds): 50 kW X-band, B=1 MHz → Δr=149.9 m, n_cells=300 (0–44.8 km), pfa=1e-3,
+      n_train=16/n_guard=2, default `:ca`. A 20 dB clutter band at 10–16 km (cells 68–108) + two
+      close targets at ~25 km — tgtA (victim, 18.2 dB, cell 168) & tgtB (interferer, 31.6 dB, cell
+      173, 5 cells away → inside tgtA's training window). `propagation` deliberately ABSENT (defaults
+      free_space) — two_ray nulls would muddy the lesson (one lesson per scenario; advisor). Knobs =
+      the LIVE sliders `n_train`/`n_guard`/`pfa` (cfar is a fidelity, toggled by the button). Tuned
+      EMPIRICALLY with a throwaway probe first (advisor: link-budget SNR decides masking; don't
+      hand-derive), numbers pinned into the verifier. Godot `Sandbox.gd` is now ADAPTIVE: handshake
+      `range_axis_m` presence flips `_mode` spatial→cfar (advisor: one scene avoids `godot --path`
+      mis-opening against a CFAR server); the two render paths share NO state (spatial `_draw` →
+      `_draw_spatial`, untouched). cfar `_draw` plots range×power-dB + the threshold curve (**from the
+      shipped `threshold_db`; α NEVER recomputed in GDScript**) + a marker per detected cell; the
+      shared fidelity button becomes the rung cycler (`fixed→ca→go→so→os`, guarded disconnect of
+      `_on_prop_pressed`); `_update_readout` skips Array telemetry (would have crashed on the arrays).
+      `net/slice3_verify.gd`: handshake axis + finite arrays; the rung selects the RULE not the draw —
+      `reset` (seed 3, t=0) BEFORE `set_fidelity` replays an IDENTICAL noise sequence per rung (the
+      draw is rung-invariant, only on look ticks). Over 80 looks/rung (deterministic): all five reach
+      the SAME final t=4.0 (bit-identical); `fixed` lights the clutter band (**2993 FA**) vs `ca`/`go`
+      (**31/7**); tgtA **masked under ca (9)** resolves under **so/os (61/60)**, tgtB never masked
+      (73–79). Drains ALL frames accumulating one-shot `:detection` EVENTS (target hit→`:of`, clutter
+      FA→`:cell`/`:range` only), NOT the republished per-frame array (would multi-count; advisor).
+      `S3V OK`, server `DONE`, exit 0. Toggle/slider UI path: `net/slice3_ui_test.gd` (`S3UI OK`: mock
+      client + fake cfar handshake → rung cycler walks+wraps, badge/button track, N_train slider sends
+      `set_param`, reset resyncs). `Sandbox.tscn` smoke-loaded headless against BOTH a slice2 (spatial)
+      AND the slice3 (cfar) server (no GDScript errors, server `DONE` ⇒ scene connected on each
+      branch). `test_scenario.jl` slice3 loader assertion (parses, `:cfar` default, clutter entity,
+      targets on-grid + within `n_guard+n_train` cells, clutter near-edge in interior, cfar not a
+      knob). The cfar `_draw` pixel branch isn't run headless (windowed look, same gap as slice-1/2;
+      numbers wire-verified). **(stretch, DEFERRED)** `clients/notebooks/slice3_cfar.jl` (CFAR diagram).
 
 ## Context / landmarks
 - **The seam is partly pre-built.** `set_fidelity` (`server.jl:145`) already exists from

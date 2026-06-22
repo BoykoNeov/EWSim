@@ -14,6 +14,7 @@ using JSON3
 
 const _SCEN  = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice1_roc.yaml"))
 const _SCEN2 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice2_tworay.yaml"))
+const _SCEN3 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice3_cfar.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -104,6 +105,50 @@ end
         rad = scn.world.entities[:radar1];  tgt = scn.world.entities[:tgt1]
         ground0 = hypot(tgt.pos[1] - rad.pos[1], tgt.pos[2] - rad.pos[2])
         @test ground0 > horizon_range(rad.pos[3], tgt.pos[3])
+    end
+
+    @testset "loader parses slice3_cfar.yaml (CFAR showcase)" begin
+        # Cheap insurance, like the slice-2 loader test: a malformed showcase YAML should fail
+        # HERE as a clear test, not downstream as a confusing server-launch timeout in the
+        # Godot slice-3 verifier.
+        scn = load_scenario(_SCEN3)
+        @test scn.name == "slice3_cfar"
+        @test scn.world.fidelity[:cfar] === :ca            # default rung (the toggle reveals the rest)
+
+        r = scn.world.entities[:radar1]
+        @test r.kind === :radar
+        @test r.comp[:n_cells] == 300
+        @test r.comp[:n_train] == 16 && iseven(r.comp[:n_train])
+        @test r.comp[:n_guard] == 2
+        @test r.comp[:range_start_m] == 0.0
+
+        # the clutter band loads as a passive :clutter entity (no subsystem of its own)
+        c = scn.world.entities[:clut1]
+        @test c.kind === :clutter
+        @test c.comp[:extent_m] == 6000.0 && c.comp[:cnr_db] == 20.0
+
+        @test scn.world.entities[:tgtA].kind === :target
+        @test scn.world.entities[:tgtB].kind === :target
+
+        # cfar is a fidelity (toggle button), NOT a slider knob — a drag must never write it.
+        # The live sliders are exactly the CFAR window + design Pfa.
+        @test all(k -> k.key !== :cfar, scn.knobs)
+        @test Set(k.key for k in scn.knobs) == Set([:n_train, :n_guard, :pfa])
+
+        # both targets fall on the profile grid AND within ~N_guard+N_train cells of each other,
+        # so the strong interferer leaks into the victim's training window (the masking geometry).
+        rp     = EWSim._radar_params(r.comp)
+        dr     = EWSim._cfar_dr(rp)
+        rstart = Float64(r.comp[:range_start_m]);  ncells = Int(r.comp[:n_cells])
+        cellA  = EWSim._range_to_cell(EWSim._range(scn.world.entities[:tgtA].pos, r.pos), rstart, dr, ncells)
+        cellB  = EWSim._range_to_cell(EWSim._range(scn.world.entities[:tgtB].pos, r.pos), rstart, dr, ncells)
+        @test cellA != 0 && cellB != 0                     # on the grid (not off the range axis)
+        @test 0 < abs(cellA - cellB) ≤ r.comp[:n_guard] + r.comp[:n_train]
+
+        # the clutter band's near edge sits in the profile interior, so its CA spike is visible
+        # (not buried in the truncated-window cells at the very start of the axis).
+        cedge = EWSim._range_to_cell(EWSim._range(c.pos, r.pos), rstart, dr, ncells)
+        @test cedge != 0 && cedge > r.comp[:n_guard] + r.comp[:n_train] ÷ 2
     end
 
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin
