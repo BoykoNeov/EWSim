@@ -149,9 +149,12 @@ tests); wire + UI machine-verified AND the cfar range-power `_draw` now VISUALLY
 render (the agent CAN render `_draw` from the tool shell — see [[ewsim-godot-headless]]): a throwaway
 shot harness pointed `run/main_scene` at itself, instantiated `Sandbox.tscn` against the live slice3
 server, and saved `get_viewport().get_texture().get_image()` to PNGs under three rungs. Confirmed:
-`ca` masks tgtA (1 marker, threshold "towers" over the close pair) / `os` resolves both (flatter
-threshold, 2 markers) / `fixed` flat threshold → clutter-band false-alarm storm (40 markers); the
-threshold curve is the shipped core output, axes/legend/badge render. (One cosmetic fix landed: the
+`ca` forms threshold "towers" over the close pair → tgtA masked (the strong tgtB is the lone marker)
+/ `os` FLATTENS that threshold over the pair (the unmasking signature) / `fixed` flat threshold →
+clutter-band false-alarm storm (~40 markers); the threshold curve is the shipped core output,
+axes/legend/badge render. (The per-look marker count is noisy — tgtA's statistical resolution under
+so/os is proven by `slice3_verify.gd` (61/60 of 80 looks), NOT by a single frame; the frames prove the
+threshold-SHAPE contrast.) (One cosmetic fix landed: the
 dB y-axis labels moved to the RIGHT gutter — they collided with the left slider panel.) Pluto CFAR
 diagram still deferred (stretch).** Planned in `docs/plans/slice3.md`
 (4 staged steps: pulse integration + Swerling 0–4 → CFAR primitives → radar.jl profile/dispatch +
@@ -299,9 +302,12 @@ headless), so it was **visually confirmed 2026-06-22 via a captured windowed ren
 against the live slice3 server (a throwaway shot harness: temporarily point `run/main_scene` at a
 wrapper scene, instantiate `Sandbox.tscn`, let it connect+render realtime, then
 `get_viewport().get_texture().get_image().save_png` under three rungs — `ca`/`os`/`fixed` — and Read
-the PNGs). The three rungs render the lesson exactly: `ca` 1 marker + threshold towers (tgtA masked),
-`os` 2 markers + flatter threshold (both resolve), `fixed` flat threshold + ~40 clutter-band false
-alarms. Numbers were already wire-verified (`slice3_verify.gd`); the picture is now eyeballed too — no
+the PNGs). The three rungs render the lesson: `ca` threshold towers over the close pair → tgtA masked (tgtB the
+lone marker), `os` threshold FLATTENS over the pair (the unmasking signature), `fixed` flat threshold
++ ~40 clutter-band false alarms. (Single-frame marker counts are noisy; tgtA's resolution under so/os
+is the *statistical* claim, proven by `slice3_verify.gd` (61/60 of 80 looks) — the frames prove the
+threshold-shape contrast.) Numbers were already wire-verified (`slice3_verify.gd`); the picture is now
+eyeballed too — no
 open step remains in slice 3. (The capture technique — the agent rendering `_draw` itself, not a human
 — is saved in [[ewsim-godot-headless]].)
 

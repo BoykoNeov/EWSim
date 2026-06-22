@@ -336,7 +336,17 @@ func _build_knobs(knobs: Array) -> void:
 		)
 
 func _fmt(v: float) -> String:
-	# GDScript's % formatter has no %g — show a whole number cleanly, else 2 dp.
+	# GDScript's % formatter has no %g/%e. A small nonzero value (e.g. the Pfa knob at
+	# 1e-3..1e-6) would round to "0" via either the whole-number branch OR "%.2f" → it'd LIE
+	# about the value the slider is sending. Build a compact mantissa-exponent by hand for
+	# |v| < 0.01; integer-valued knobs (pt_w, rcs_m2, N_train, …) stay on the clean branches.
+	if v == 0.0:
+		return "0"
+	var a := absf(v)
+	if a < 0.01:
+		var ex := int(floor(log(a) / log(10.0)))
+		var mant := v / pow(10.0, ex)
+		return "%.1fe%d" % [mant, ex]
 	if absf(v - roundf(v)) < 0.005:
 		return str(int(roundf(v)))
 	return "%.2f" % v
