@@ -35,6 +35,8 @@ export RadarParams, snr_freespace, snr_db_freespace, wavelength, db2lin, lin2db
 export snr_two_ray, snr_db_two_ray, two_ray_phase, two_ray_factor4, horizon_range
 # Detection
 export detection_threshold, pd_analytic, pd_montecarlo, detect_once
+# CFAR adaptive thresholding (slice 3)
+export cfar_alpha, cfar_threshold, cfar_scan
 # Slice-1 subsystems + scenario loader
 export ConstantVelocity, RadarSensor, Knob, Scenario, load_scenario
 # Offline batch sweeps (ROC artifact + slice-2 coverage diagram)

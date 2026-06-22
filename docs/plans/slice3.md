@@ -203,13 +203,36 @@ threshold at once).
       threads `n_pulses` through `observe!`'s threshold/`pd_analytic`/`detect_once` (default
       1 via `get` ⇒ slice-1/2 scenarios byte-identical; makes a loaded `n_pulses` actually
       fire). `test_scenario.jl` rejection test flipped (n_pulses=3 loads & stores; <1 rejected).
-- [ ] 2. `detection.jl`: CFAR primitives — `cfar_threshold(profile, cut; variant,
-      n_train, n_guard, pfa)` (CA/GO/SO/OS noise estimate) + `cfar_alpha(variant,
-      n_train, pfa)` scaling, and a vectorised `cfar_scan(profile; …) -> (threshold_curve,
-      detections)`. `test_cfar.jl`: CA `α` closed form + `N→∞` loss anchor, OS product
-      form, GO/SO + combined-path MC Pfa-maintenance, the common-α `Pfa_GO ≤ Pfa_CA ≤
-      Pfa_SO` ordering invariant, edge-cell handling (no out-of-bounds at the array ends).
-      All closed forms at `N_p=1`.
+- [x] 2. `detection.jl`: CFAR primitives. **DONE & green (720 tests).** `cfar_alpha(variant,
+      n_train, pfa; n_pulses=1, k=⌈0.75N⌋)` → the threshold multiplier α with `T=α·(noise
+      estimate)`, mean-convention; `cfar_threshold(profile, cut; …)` (single CUT) and the
+      vectorised `cfar_scan(profile; …) -> (threshold, detections)` (LINEAR power, PURE — no
+      RNG, so it can't desync a trace; the profile DRAW is step 3 / radar.jl). Variant set
+      `CFAR_VARIANTS=(:fixed,:ca,:go,:so,:os)` (step-3 `CFAR_MODES` will **reference** this,
+      not re-list — advisor catch on drift, the slice-2 `PROPAGATION_MODES` lesson).
+      **Closed forms (forward `_cfar_pfa`, inverted by `_bisect_alpha` — same idiom as
+      `detection_threshold`, no SpecialFunctions):** CA exponential `(1+α/N)^{−N}` (N_p=1,
+      direct `α=N(pfa^{−1/N}−1)`) AND **gamma N_p>1 exact via the Beta tail** — CUT~Gamma(N_p,1),
+      training sum~Gamma(N·N_p,1), ratio crosses Beta(N_p,N·N_p) at `w=α/(N+α)`; `_beta_surv_int`
+      is the regularized incomplete Beta as a finite binomial sum `Σ_{j<N_p} C(M,j)w^j(1−w)^{M−j}`
+      (advisor: drop my heuristic-α, this is exact and dependency-free, collapses to the N_p=1
+      CA form). OS `∏_{i<k}(N−i)/(N−i+α)` (Rohling); SO `2Σ_{j<M}C(M−1+j,j)(2+α/M)^{−(M+j)}`
+      (M=N/2, from E[e^{−s·min}] over two Gamma(M,1) halves); GO `2(1+α/M)^{−M}−Pfa_SO`
+      (max+min identity). **GO/SO/OS are N_p=1 only** (no finite-sum inverse over Gamma cells —
+      reject N_p>1); the integrated path is **CA-only + MC-validated** (the plan's "N_p>1 by MC").
+      Edge cells shrink the training set & reuse the interior α (Pfa held only in the interior;
+      global-mean fallback if the window fully truncates — never OOB). `test_cfar.jl` (174 tests):
+      CA closed form + round-trip + the `N→∞→−ln(pfa)` monotone CFAR-loss anchor; OS product form
+      vs independent recompute + `k=1` closed value; SO/GO round-trip + the `N=2/M=1` hand value
+      `2/(2+α)`; the **common-α** `Pfa_GO≤Pfa_CA≤Pfa_SO` ordering invariant (NOT per-variant
+      calibrated — would pass by construction; the slice-2 atol-not-rtol≈0 trap); **MC
+      Pfa-maintenance** (CA at N_p∈{1,5}, GO/SO/OS at N_p=1) drawing real Gamma cells through the
+      same estimator + asserting design Pfa in the Wilson 4σ band — this is what validates the
+      SO/GO/Beta *forward* forms (round-trips only prove self-inversion; advisor); the public
+      `cfar_threshold ≈ α·estimate` convention pin; edge cells finite+positive+no-OOB at the
+      array ends + a sub-window-length profile; invalid-arg rejections (N_p>1 for GO/SO/OS, odd N
+      for GO/SO halves, odd `n_train`, bad variant). Slice-1/2 byte-identical (append-only — no
+      existing `detection.jl` symbol changed; `test_determinism` green).
 - [ ] 3. `radar.jl`: build the range-power profile each look (cells `Δr=c/2B`; noise +
       `:clutter` band + targets via `_target_snr`, composing with `:propagation`); add
       `CFAR_MODES = (:fixed,:ca,:go,:so,:os)` as a single-source-of-truth const; dispatch

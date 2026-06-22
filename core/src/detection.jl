@@ -330,3 +330,260 @@ function pd_montecarlo(snr_lin::Real, pfa::Real, rng::AbstractRNG;
     end
     return hits / trials
 end
+
+# --- CFAR adaptive thresholding (slice-3 step 2) --------------------------------
+#
+# A range-power profile is a vector of LINEAR-power range cells (noise-only cells are
+# Gamma(N_p, 1) — Exp(1) at N_p = 1). CFAR sets each cell's detection threshold from the
+# training cells AROUND the cell-under-test (CUT): T = α · (noise estimate), with the
+# variant choosing the estimator and α calibrated so the homogeneous-noise false-alarm
+# rate equals the design Pfa. The threshold CURVE is the core output the client renders
+# (never recomputed in GDScript — HANDOFF §1). Everything here is PURE: no RNG, so a scan
+# can never desync a seeded trace (the profile draw itself lives in radar.jl, slice-3 step 3).
+#
+# Approximations, named (HANDOFF §1):
+#   • 1-D range-only window — training cells are neighbours in RANGE only (no Doppler).
+#   • Closed-form α is exact for EXPONENTIAL cells (N_p = 1) for every variant, and for
+#     GAMMA cells (N_p > 1) only for CA (the exact Beta form below). GO/SO/OS over Gamma
+#     cells have no finite-sum inverse, so they are N_p = 1 only here; the integrated
+#     CA path is the one validated against Monte-Carlo Pfa-maintenance (slice-3 plan,
+#     Decisions — "all closed forms at N_p=1; N_p>1 by MC").
+#   • Edge cells (window truncated at the array ends) shrink the training set and reuse
+#     the interior α; design Pfa is maintained only in the interior (where the full
+#     window fits). The estimator simply averages/orders whatever cells are in bounds —
+#     it never indexes out of bounds (the slice-3 edge watch-item).
+#
+# Convention — the byte-identity contract across `cfar_alpha`, `cfar_threshold` and the
+# MC test (the advisor's bug-magnet): the noise estimate and α are both in the MEAN
+# convention. For CA the estimate is the MEAN of the N training cells and α multiplies
+# that mean; the closed forms below all encode that mean (the factor N). Pairing a
+# sum-estimate with a mean-α (or vice-versa) is off by a factor of N — so the MC test
+# calls the SAME estimator, never a re-spelling.
+
+# The CFAR rungs this library knows. `:fixed` is the non-adaptive baseline (a flat
+# `detection_threshold` laid over the profile — NOT the legacy point detector); the rest
+# are windowed. radar.jl's `CFAR_MODES` (slice-3 step 3) is the wire source of truth and
+# will mirror this set.
+const CFAR_VARIANTS = (:fixed, :ca, :go, :so, :os)
+
+# Default OS rank: the k-th smallest of the N training cells, k ≈ 0.75·N (Rohling).
+_os_default_k(n_train::Int) = clamp(round(Int, 0.75 * n_train), 1, n_train)
+
+# P(Beta(a, b) > w) for integer shapes a, b ≥ 1 — the regularized incomplete Beta tail as
+# a FINITE binomial sum (no SpecialFunctions): Σ_{j=0}^{a−1} C(M,j) w^j (1−w)^{M−j},
+# M = a+b−1. This is the EXACT CA-CFAR Pfa over Gamma(N_p,1) cells: the CUT is Gamma(N_p,1),
+# the training sum is Gamma(N·N_p,1), and their ratio crosses the Beta(N_p, N·N_p) tail at
+# w = α/(N+α). At a = 1 it collapses to (1−w)^b = (1+α/N)^{−N}, the N_p=1 CA form. Terms are
+# built by the C(M,j)/C(M,j−1) = (M−j+1)/j ratio so nothing overflows.
+function _beta_surv_int(w::Float64, a::Int, b::Int)
+    M = a + b - 1
+    om = 1 - w
+    term = om^M                              # j = 0
+    s = term
+    @inbounds for j in 1:(a - 1)
+        term *= (M - j + 1) / j * (w / om)
+        s += term
+    end
+    return s
+end
+
+"""
+    _cfar_pfa(variant, α, n_train; n_pulses = 1, k = ⌈0.75·n_train⌋) -> Float64
+
+Forward homogeneous-noise Pfa(α) for a CFAR variant — the closed form that [`cfar_alpha`]
+(@ref) inverts and the ordering-invariant test pins. Strictly decreasing in α (Pfa(0)=1,
+Pfa(∞)=0). All N_p = 1 except CA, which is exact for all N_p via the Beta tail:
+
+  • CA  exponential (N_p=1):  `(1 + α/N)^(−N)`                       (mean-of-N MGF)
+        gamma (N_p>1):        `BetaSurv(α/(N+α); N_p, N·N_p)`        ([`_beta_surv_int`](@ref))
+  • OS  (N_p=1):              `∏_{i=0}^{k−1} (N−i)/(N−i+α)`          (Rohling product)
+  • SO  (N_p=1, M=N/2):       `2 Σ_{j=0}^{M−1} C(M−1+j,j) (2+α/M)^(−(M+j))`
+  • GO  (N_p=1, M=N/2):       `2 (1+α/M)^(−M) − Pfa_SO`             (E[e^{−s·max}] via max+min)
+"""
+function _cfar_pfa(variant::Symbol, α::Float64, n_train::Int;
+                   n_pulses::Int = 1, k::Int = _os_default_k(n_train))
+    N = n_train
+    if variant === :ca
+        return n_pulses == 1 ? (1 + α / N)^(-N) :
+                               _beta_surv_int(α / (N + α), n_pulses, N * n_pulses)
+    elseif variant === :os
+        n_pulses == 1 || throw(ArgumentError(
+            "OS-CFAR closed form is N_p=1 only (got n_pulses=$n_pulses); the integrated path is MC-validated"))
+        p = 1.0
+        @inbounds for i in 0:(k - 1)
+            p *= (N - i) / (N - i + α)
+        end
+        return p
+    elseif variant === :so || variant === :go
+        n_pulses == 1 || throw(ArgumentError(
+            "$(uppercase(string(variant)))-CFAR closed form is N_p=1 only (got n_pulses=$n_pulses); the integrated path is MC-validated"))
+        iseven(N) || throw(ArgumentError("GO/SO closed form needs an even n_train (two equal halves); got $N"))
+        M  = N ÷ 2
+        b  = 2 + α / M
+        pw = b^(-M)                          # (2+α/M)^(−(M+j)), starting j = 0
+        c  = 1.0                             # C(M−1+j, j), starting j = 0
+        so = 0.0
+        @inbounds for j in 0:(M - 1)
+            so += c * pw
+            c  *= (M + j) / (j + 1)          # C(M+j, j+1)/C(M−1+j, j) = (M+j)/(j+1)
+            pw /= b
+        end
+        pfa_so = 2 * so
+        return variant === :so ? pfa_so : 2 * (1 + α / M)^(-M) - pfa_so
+    else
+        throw(ArgumentError("CFAR variant :$variant has no closed-form Pfa (use :ca, :go, :so or :os)"))
+    end
+end
+
+# Invert a strictly-decreasing Pfa(α) (Pfa(0)=1, Pfa(∞)=0) for the α giving design `pfa`.
+# Same bracket-then-bisect idiom as `detection_threshold` (no SpecialFunctions, no deps).
+function _bisect_alpha(pfa_of_alpha, pfa::Float64)
+    pfa ≥ 1 && return 0.0                     # Pfa = 1 ⇒ no margin needed
+    lo = 0.0
+    hi = 1.0
+    while pfa_of_alpha(hi) > pfa
+        hi *= 2
+        hi > 1e12 && break                    # safety; pfa ≥ 1e-12, N modest ⇒ never hit
+    end
+    for _ in 1:200
+        mid = 0.5 * (lo + hi)
+        if pfa_of_alpha(mid) > pfa
+            lo = mid
+        else
+            hi = mid
+        end
+        (hi - lo) ≤ 1e-12 * max(1.0, hi) && break
+    end
+    return 0.5 * (lo + hi)
+end
+
+"""
+    cfar_alpha(variant, n_train, pfa; n_pulses = 1, k = ⌈0.75·n_train⌋) -> Float64
+
+The CFAR threshold multiplier α such that `T = α · (noise estimate)` holds the design
+false-alarm probability `pfa` in homogeneous noise. `variant ∈ (:ca, :go, :so, :os)`
+(`:fixed` has no window/α — see [`cfar_scan`](@ref)). Inverts the monotone
+[`_cfar_pfa`](@ref):
+
+  • CA, N_p=1: returns the exact `α = N·(pfa^(−1/N) − 1)` directly (the test anchor;
+    `N → ∞` ⇒ `−ln(pfa)`, i.e. the CFAR loss vanishes as the estimate sharpens).
+    CA, N_p>1: bisects the exact Beta form.
+  • OS / SO / GO: bisect their finite-sum Pfa(α). `n_pulses > 1` is rejected for these
+    (no finite-sum inverse over Gamma cells; the integrated path is MC-validated).
+"""
+function cfar_alpha(variant::Symbol, n_train::Integer, pfa::Real;
+                    n_pulses::Integer = 1, k::Integer = _os_default_k(Int(n_train)))
+    N  = Int(n_train)
+    np = Int(n_pulses)
+    p  = Float64(pfa)
+    N ≥ 1  || throw(ArgumentError("n_train must be ≥ 1 (got $N)"))
+    np ≥ 1 || throw(ArgumentError("n_pulses must be ≥ 1 (got $np)"))
+    variant === :ca && np == 1 && return N * (p^(-1 / N) - 1)        # exact closed form
+    return _bisect_alpha(a -> _cfar_pfa(variant, a, N; n_pulses = np, k = Int(k)), p)
+end
+
+# Mean of the whole profile — the fallback noise estimate when a cell's window is fully
+# truncated (profile shorter than the window). Finite and positive (cells are powers > 0);
+# only reached on pathologically short profiles — the interior never uses it.
+_global_mean(profile::AbstractVector{<:Real}) = sum(profile) / length(profile)
+
+# Per-cell noise estimate for a windowed variant. Training cells = the `n_half` on each
+# side of `cut`, skipping `n_guard` guard cells, CLAMPED to the array bounds (edges shrink
+# the set; never out-of-bounds). `buf` (length ≥ n_train) backs the OS order-statistic
+# without a per-cell allocation; CA/GO/SO ignore it.
+function _cfar_estimate(profile::AbstractVector{<:Real}, cut::Int, variant::Symbol,
+                        n_half::Int, n_guard::Int, k::Int, buf::Vector{Float64})
+    L = length(profile)
+    l_lo = max(1, cut - n_guard - n_half); l_hi = min(L, cut - n_guard - 1)
+    r_lo = max(1, cut + n_guard + 1);      r_hi = min(L, cut + n_guard + n_half)
+    sL = 0.0; nL = 0
+    @inbounds for i in l_lo:l_hi
+        sL += profile[i]; nL += 1
+    end
+    sR = 0.0; nR = 0
+    @inbounds for i in r_lo:r_hi
+        sR += profile[i]; nR += 1
+    end
+    ntot = nL + nR
+    if variant === :ca
+        ntot == 0 && return _global_mean(profile)
+        return (sL + sR) / ntot
+    elseif variant === :go || variant === :so
+        nL == 0 && nR == 0 && return _global_mean(profile)
+        nL == 0 && return sR / nR
+        nR == 0 && return sL / nL
+        mL = sL / nL; mR = sR / nR
+        return variant === :go ? max(mL, mR) : min(mL, mR)
+    elseif variant === :os
+        ntot == 0 && return _global_mean(profile)
+        idx = 0
+        @inbounds for i in l_lo:l_hi; idx += 1; buf[idx] = profile[i]; end
+        @inbounds for i in r_lo:r_hi; idx += 1; buf[idx] = profile[i]; end
+        return partialsort!(view(buf, 1:ntot), clamp(k, 1, ntot))
+    else
+        throw(ArgumentError("CFAR variant :$variant not one of $(CFAR_VARIANTS)"))
+    end
+end
+
+"""
+    cfar_threshold(profile, cut; variant=:ca, n_train, n_guard=0, pfa, n_pulses=1, k=…) -> Float64
+
+The adaptive detection threshold (LINEAR power) for the cell-under-test `cut` of a
+range-power `profile`: `α · (noise estimate)` with α from [`cfar_alpha`](@ref) and the
+estimator chosen by `variant`. `:fixed` ignores the window and returns the flat
+`detection_threshold(pfa, n_pulses)`. Pure — no RNG. Windowed variants need an even
+`n_train` (N/2 training cells per side).
+"""
+function cfar_threshold(profile::AbstractVector{<:Real}, cut::Integer;
+                        variant::Symbol = :ca, n_train::Integer, n_guard::Integer = 0,
+                        pfa::Real, n_pulses::Integer = 1,
+                        k::Integer = _os_default_k(Int(n_train)))
+    variant === :fixed && return detection_threshold(pfa, n_pulses)
+    N = Int(n_train)
+    iseven(N) || throw(ArgumentError("n_train must be even (N/2 per side); got $N"))
+    α   = cfar_alpha(variant, N, pfa; n_pulses = n_pulses, k = k)
+    buf = variant === :os ? Vector{Float64}(undef, N) : Float64[]
+    est = _cfar_estimate(profile, Int(cut), variant, N ÷ 2, Int(n_guard), Int(k), buf)
+    return α * est
+end
+
+"""
+    cfar_scan(profile; variant=:ca, n_train, n_guard=0, pfa, n_pulses=1, k=…)
+        -> (threshold, detections)
+
+Run CFAR over an entire range-power `profile` (LINEAR power). Returns the per-cell
+`threshold::Vector{Float64}` curve (the CORE output the client renders — never recomputed
+downstream) and `detections::Vector{Bool}` (`profile[i] > threshold[i]`). PURE — no RNG,
+so a scan can never desync a seeded trace. One α is computed for the full window and
+reused at every cell; edge cells shrink the training set (design Pfa held only in the
+interior — see the module notes). `:fixed` lays a flat `detection_threshold` over the
+profile (the "before CFAR" baseline, NOT the legacy point detector). Windowed variants
+need an even `n_train`.
+"""
+function cfar_scan(profile::AbstractVector{<:Real};
+                   variant::Symbol = :ca, n_train::Integer, n_guard::Integer = 0,
+                   pfa::Real, n_pulses::Integer = 1,
+                   k::Integer = _os_default_k(Int(n_train)))
+    L = length(profile)
+    threshold = Vector{Float64}(undef, L)
+    if variant === :fixed
+        fill!(threshold, detection_threshold(pfa, n_pulses))
+    else
+        variant in CFAR_VARIANTS || throw(ArgumentError("CFAR variant :$variant not one of $(CFAR_VARIANTS)"))
+        N = Int(n_train)
+        iseven(N) || throw(ArgumentError("n_train must be even (N/2 per side); got $N"))
+        nh  = N ÷ 2
+        ng  = Int(n_guard)
+        kk  = Int(k)
+        α   = cfar_alpha(variant, N, pfa; n_pulses = n_pulses, k = kk)
+        buf = variant === :os ? Vector{Float64}(undef, N) : Float64[]
+        @inbounds for cut in 1:L
+            threshold[cut] = α * _cfar_estimate(profile, cut, variant, nh, ng, kk, buf)
+        end
+    end
+    detections = Vector{Bool}(undef, L)
+    @inbounds for i in 1:L
+        detections[i] = profile[i] > threshold[i]
+    end
+    return (threshold, detections)
+end

@@ -143,8 +143,8 @@ Visually confirmed 2026-06-21 (headless PNG render of the notebook cells: clean 
 nulls, cyan horizon curve bounding the masked wedge; no headless *visual* test — same gap as
 slice-1 `_draw`, numbers pinned, picture eyeballed).
 
-**Slice 3 — CFAR sandbox (+ pulse integration)** (HANDOFF §10 item 3) — **IN PROGRESS, step 1 of 4
-DONE & green (546 tests).** Planned in `docs/plans/slice3.md` (4 staged steps: pulse integration +
+**Slice 3 — CFAR sandbox (+ pulse integration)** (HANDOFF §10 item 3) — **IN PROGRESS, steps 1–2 of 4
+DONE & green (720 tests).** Planned in `docs/plans/slice3.md` (4 staged steps: pulse integration +
 Swerling 0–4 → CFAR primitives → radar.jl profile/dispatch + `:clutter` + per-key `set_fidelity` →
 Godot range-power view).
 Step 1 (gate 1 — integration + Swerling 0–4 green): `detection.jl` generalised single-pulse →
@@ -171,8 +171,40 @@ real 1-ULP desyncs), and the **Swerling fluctuation-loss ordering** as an extern
 otherwise self-validated-only SW3/SW4 (SW0>SW3>SW1 at high Pd, reverses at low SNR — advisor catch).
 `scenario.jl`: `n_pulses≥1` (was `==1`), stored in `comp[:n_pulses]`. `radar.jl` threads `n_pulses`
 through `observe!` (default 1 via `get` ⇒ slice-1/2 byte-identical; a loaded `n_pulses` now fires).
-**Next: slice 3 step 2 — CFAR primitives** (`cfar_threshold`/`cfar_alpha`/`cfar_scan`, CA/GO/SO/OS
-+ closed forms at N_p=1; `test_cfar.jl`).
+Step 2 (gate 2 — CFAR primitives green): `detection.jl` CFAR adaptive thresholding (append-only —
+no existing symbol changed, so slice-1/2 stay byte-identical). `cfar_alpha(variant, n_train, pfa;
+n_pulses=1, k=⌈0.75N⌋)` → the multiplier α with `T = α·(noise estimate)` (**mean convention** — the
+estimate is the MEAN of N training cells, pinned across alpha/threshold/MC, the advisor's
+sum-vs-mean bug-magnet); `cfar_threshold(profile, cut; …)` (one CUT) + vectorised `cfar_scan(profile;
+…) → (threshold, detections)` work in **LINEAR power** and are **PURE (no RNG)** — the profile DRAW
+is step-3 radar.jl, so a scan can't desync a trace. `CFAR_VARIANTS=(:fixed,:ca,:go,:so,:os)` (step-3
+`CFAR_MODES` will **reference** this, not re-list — advisor drift catch, the `PROPAGATION_MODES`
+lesson). Closed forms via forward `_cfar_pfa` inverted by `_bisect_alpha` (same idiom as
+`detection_threshold`, **no SpecialFunctions**): CA exponential `(1+α/N)^{−N}` (N_p=1, direct
+`α=N(pfa^{−1/N}−1)`) **and gamma N_p>1 EXACT via the Beta tail** (CUT~Gamma(N_p,1), train
+sum~Gamma(N·N_p,1), ratio crosses Beta(N_p,N·N_p) at `w=α/(N+α)`; `_beta_surv_int` = regularized
+incomplete Beta as a finite binomial sum — **advisor: drop the heuristic-α, this is exact +
+dependency-free**, collapses to the N_p=1 CA form). OS `∏_{i<k}(N−i)/(N−i+α)` (Rohling); SO
+`2Σ_{j<M}C(M−1+j,j)(2+α/M)^{−(M+j)}` (M=N/2, from E[e^{−s·min}] of two Gamma(M,1) halves); GO
+`2(1+α/M)^{−M}−Pfa_SO` (max+min identity). **GO/SO/OS are N_p=1 only** (no finite-sum inverse over
+Gamma cells — N_p>1 rejected); the integrated path is **CA-only + MC-validated** (the plan's "N_p>1
+by MC"). Edge cells shrink the training set & reuse the interior α (Pfa held only in the interior;
+global-mean fallback when the window fully truncates — **never OOB**). Named approximations
+(HANDOFF §1): 1-D range-only window, exact-α-for-exponential-cells, interior-only edge Pfa.
+`test_cfar.jl` (174 tests): CA closed form + round-trip + the `N→∞→−ln(pfa)` monotone CFAR-loss
+anchor; OS product vs independent recompute + `k=1` closed value; SO/GO round-trip + the `N=2/M=1`
+hand value `2/(2+α)`; the **common-α** `Pfa_GO≤Pfa_CA≤Pfa_SO` ordering invariant (NOT per-variant
+calibrated — would pass by construction, the slice-2 atol-not-rtol≈0 trap); **MC Pfa-maintenance**
+(CA at N_p∈{1,5}, GO/SO/OS at N_p=1, fixed seeds → deterministic) drawing real Gamma cells through
+the same estimator + asserting design Pfa in the Wilson 4σ band — **this is what validates the
+SO/GO/Beta forward forms** (round-trips only prove self-inversion — advisor); the public
+`cfar_threshold ≈ α·estimate` convention pin; edge cells finite+positive+no-OOB at the array ends
++ a sub-window profile; invalid-arg rejects (N_p>1 for GO/SO/OS, odd N for GO/SO halves, odd
+`n_train`, bad variant).
+**Next: slice 3 step 3 — radar.jl profile build + `:cfar` dispatch** (`CFAR_MODES` referencing
+`CFAR_VARIANTS`; build the range-power profile each look composing with `:propagation`; `:clutter`
+entity kind; per-key `set_fidelity` table + reject *introducing* `:cfar`; profile/threshold arrays
+as telemetry; mid-run toggle bit-identical).
 
 ---
 
