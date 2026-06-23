@@ -231,17 +231,44 @@ scalar is a fake knob):
       F/L cancel in J/S (vary, unchanged), and the **corrected B_r law** (J/S B_r-invariant
       for SPOT; with `B_j` held FIXED — barrage — JNR B_r-invariant + J/S ∝ B_r; guards the
       inverted "B_r cancels in J/S" assertion), + guards (R_j/B_j/js_margin > 0).
-- [ ] 2. `Jammer <: Subsystem` (`radar.jl`) with `build_env!` → `env[:jamming][radar] =
-      [(jnr, in_beam, bj_hz), …]`; `_observe_point!` reads + computes `SNR_eff`; `jnr_db`/
-      `js_db` telemetry. `scenario.jl`: `:jammer` kind (`comp[:pt_w, :gain_db,
-      :bandwidth_hz]` + `ConstantVelocity`). Gate-2 tests (self-screen burn-through,
-      byte-identity, draw-invariance). Mainlobe only (no antenna model / EP yet).
+- [x] 2. **DONE & green (862 tests).** `Jammer <: Subsystem` (`radar.jl`) — the FIRST
+      `build_env!` subsystem: writes `env[:jamming][radar] = Vector{JamContribution}` where
+      `const JamContribution = @NamedTuple{jnr::Float64, in_beam::Bool, bj_hz::Float64}` (NOT
+      pre-summed — the per-contribution structure is what gate-3 EP conditions on; gate 2 sets
+      `in_beam = true` / mainlobe `gr_db = rp.gain_db`, no antenna model yet). `_observe_point!`
+      reads it via `_radar_jnr(contribs)` (plain additive sum — the gate-3 EP seam), applies
+      `SNR_eff = snr_th/(1+ΣJNR)` per target (jnr_total = 0.0 absent a jammer ⇒ `snr/1.0 ===
+      snr`, slices 1-3 byte-identical), tracks `best_snr_eff` (→ snr_db, pd) AND `best_snr_th`
+      (→ js_db). Telemetry: `snr_db` now carries `SNR_eff`; `jnr_db` + `js_db` ship **ONLY when
+      jamming is present** (a no-jammer frame is unchanged — pinned). `js_db = _snr_db_wire(jnr)
+      − _snr_db_wire(snr_th)` (the dB DIFFERENCE = `lin2db(JNR/S)` above-floor, wire-safe finite
+      if S→0 where the quotient would be +Inf JSON-poison; >0 = jammed, <0 = burn-through).
+      Co-located `R_j = 0` guarded at the consumer (skip), `bandwidth_hz > 0` validated at LOAD
+      (a tick-throw would kill the session — not a live slider). `scenario.jl`: `:jammer` kind
+      (`comp[:pt_w, :gain_db, :bandwidth_hz]` + `[ConstantVelocity, Jammer]` subs). `_observe_cfar!`
+      LEFT UNTOUCHED (jammer+cfar deferred; a jammer in a cfar scenario writes env harmlessly,
+      ignored). `test_jammer.jl` (6 testsets): build_env! populates `env[:jamming]` (record shape
+      + JNR vs rf.jl); SNR_eff == `SNR/(1+JNR)` closed form + jnr_db/js_db; **self-screen
+      burn-through** (js_db flips sign across `burnthrough_range`, +6 dB/octave R² law, ≈0 at
+      R_bt — deterministic, not the random boolean); **draw-stream invariance** (jammer on/off →
+      same rng end-state, different detections, unjammed detects more); **no-jammer frame has NO
+      jnr_db/js_db key**; loader arm (comp + subs + bandwidth≤0 / missing-block rejects). Mainlobe
+      only (no antenna model / EP yet). **NO draw-topology hazard proven** — the byte-identity
+      goldens (`_sample_z`, test_determinism) stayed green through the `_observe_point!` restructure.
 - [ ] 3. Two-level `Gr` in the jammer's `build_env!` (boresight = nearest target);
       `ep` fidelity → `LIVE_FIDELITY_MODES` (no introduce-guard); conditioned EP in
       `_observe_point!`; `set_fidelity :ep` (server.jl, per-key table from slice 3).
       Gate-3 tests (standoff sidelobe, conditioned EP no-ops, mid-run toggle + introduce
       both bit-identical, server write/reject).
 - [ ] 4. `scenarios/slice4_selfscreen.yaml` + `scenarios/slice4_standoff.yaml`; Godot
+      **— SCENARIO TUNING (advisor, gate-2 review):** `burnthrough_range` scales with the link
+      budget, and it is SMALL for modest numbers — the gate-2 fixture (`pt_w=1000, pj_w=100,
+      gj=10, rcs=1`) gives **R_bt ≈ 9 m**, i.e. a 100 W self-screen jammer buries that radar by
+      ~+60 dB at 9 km and burns through only at absurd close range. The gate-2 burn-through TEST
+      is still valid (it pins the scale-invariant J/S∝R² sign-flip + 6 dB/octave, true at any R),
+      but those default numbers are useless for a watch-it-close scenario. Tune `pj_w`/`pt_w`/RCS
+      (empirically, with a throwaway probe — the slice-3 lesson) so **R_bt lands in a realistic
+      closing band (~10–30 km)**, or the on-screen burn-through never fires.
       spatial-view extensions (jammer marker, JNR/J-S readout, EP cycler + badge, jammer
       sliders); `net/slice4_verify.gd` + `net/slice4_ui_test.gd`; `Sandbox.tscn` headless
       smoke-load against a slice-4 server; `test_scenario.jl` slice-4 assertions; windowed

@@ -320,8 +320,8 @@ toggle/slider UI test needs NO server: `godot --headless --path clients/godot --
 res://net/slice3_ui_test.gd`. **(stretch, deferred)** a Pluto CFAR diagram (Pd/Pfa vs SNR per
 variant, or threshold-curve panels over the profile).
 
-**Slice 4 — jamming / EP** (HANDOFF §10 item 4) — **Step 1 (gate 1 — jamming physics) DONE &
-green (833 tests).** Planned FULL in `docs/plans/slice4.md` (4 staged gates: `rf.jl` jamming
+**Slice 4 — jamming / EP** (HANDOFF §10 item 4) — **Steps 1–2 (gates 1–2 — jamming physics +
+self-screen burn-through live) DONE & green (862 tests).** Planned FULL in `docs/plans/slice4.md` (4 staged gates: `rf.jl` jamming
 physics → `Jammer` `build_env!` subsystem + radar `SNR_eff=SNR/(1+JNR)` coupling + self-screening
 burn-through → two-level antenna model + standoff + `ep` fidelity [none/freq_agility/sidelobe_blanking]
 → scenarios + Godot spatial-view extensions + verifier). The jammer will be the **first subsystem to
@@ -349,9 +349,47 @@ J/S ∝ R² self-screen + ∝ R_t⁴ standoff, barrage −10 dB + overlap-satura
 R_bt with atol, <1 inside / >1 outside, √-scaling on js_margin), F/L cancel in J/S, and the **corrected
 B_r law** (J/S B_r-invariant for SPOT; with `B_j` held FIXED — barrage — JNR B_r-invariant + J/S ∝ B_r;
 guards the inverted "B_r cancels in J/S" assertion that bit the plan), + guards.
-Next: **gate 2** — `Jammer <: Subsystem` `build_env!` → `env[:jamming]`, `_observe_point!` reads it
-(`SNR_eff = SNR/(1+ΣJNR)`), `:jammer` loader kind, jnr_db/js_db telemetry; self-screen burn-through,
-no-jammer byte-identity, draw-invariance.
+Step 2 (gate 2 — self-screen burn-through live): `radar.jl` `Jammer <: Subsystem` — the **FIRST
+`build_env!` subsystem** (phase 2 of the tick contract finally fires). It writes per-radar
+contributions into `w.env[:jamming][radar] = Vector{JamContribution}`, where `const
+JamContribution = @NamedTuple{jnr::Float64, in_beam::Bool, bj_hz::Float64}` — NOT a pre-summed
+scalar, because gate-3 EP conditions on the per-contribution `in_beam`/`bj_hz` (a sum would erase
+exactly what EP acts on). Gate 2 is mainlobe-only: `gr_db = rp.gain_db` (the `jam_noise_ratio`
+default), `in_beam = true` placeholder (gate 3 fills it from `antenna_gain`). The §3 coupling done
+right — through `env`, never a direct subsystem call; `env` is rebuilt fresh each tick so a stale
+floor can't leak. `_observe_point!` reads it: `jnr_total = _radar_jnr(contribs)` (plain additive
+sum — **the single seam where gate-3 EP plugs in**), then `SNR_eff = snr_th/(1+jnr_total)` per
+target. Crucially `jnr_total = 0.0` absent a jammer ⇒ `snr_th/1.0 === snr_th` bit-for-bit, so the
+detector sees an identical value and the **draw stream is untouched** — slices 1–3 byte-identical
+(the `_sample_z` golden + `test_determinism` stayed green through the restructure, the real proof).
+**No draw-topology hazard** (slice-2-shaped, not slice-3): `detect_once` stays unconditional, so
+jammer on/off changes detection BOOLEANS, never the draw COUNT. Telemetry: `snr_db` now carries
+`SNR_eff` (≡ thermal SNR when unjammed); `jnr_db` + `js_db` ship **ONLY when this radar sees a
+jammer** (a no-jammer frame is unchanged — pinned). `js_db = _snr_db_wire(jnr) − _snr_db_wire(snr_th)`
+— the dB DIFFERENCE equals `lin2db(JNR/S)` when both are above the floor (log identity) and stays
+**wire-safe finite** if S→0 (a masked/no-target frame), where the quotient `lin2db(JNR/S)` would be
++Inf JSON-poison (the slice-2 null watch-item, here on J/S); >0 = jammed, <0 = burn-through. Guards
+(a live config can't crash a tick): co-located `R_j = 0` skipped at the consumer (gate-4 range
+slider can drive it), `bandwidth_hz > 0` validated at LOAD (a `DomainError` in `build_env!` →
+`tick!` → the session's IO-only catch would silently drop the connection — not a live slider, so
+reject at load). `scenario.jl`: `:jammer` kind (`comp[:pt_w, :gain_db, :bandwidth_hz]` +
+`[ConstantVelocity, Jammer]` subs). `_observe_cfar!` LEFT UNTOUCHED — jammer+cfar is the documented
+deferred composition (a jammer in a cfar scenario writes `env[:jamming]` harmlessly, ignored; do
+NOT ship such a scenario). `test_jammer.jl` (6 testsets, +29): `build_env!` populates `env[:jamming]`
+(record shape + JNR vs the rf.jl closed form); `SNR_eff == SNR/(1+JNR)` + jnr_db/js_db closed forms;
+**self-screen burn-through** — `js_db` flips sign across `burnthrough_range` (+6 dB/octave R² law,
+≈0 dB at R_bt), pinned deterministically NOT on the random boolean; **draw-stream invariance**
+(jammer on/off → same `w.rng` end-state, different detections, unjammed detects more); **no-jammer
+frame has NO jnr_db/js_db key**; the loader arm (comp + subs + bandwidth≤0 / missing-block rejects,
+which the programmatic-world tests would otherwise never exercise). Mainlobe only (no antenna model /
+EP yet).
+Next: **gate 3** — two-level `Gr` in the jammer's `build_env!` (boresight = nearest target → a
+standoff jammer enters a sidelobe, real `in_beam`); the `ep` fidelity (`none/freq_agility/
+sidelobe_blanking`) joins `LIVE_FIDELITY_MODES`; conditioned EP applied in `_radar_jnr` (the seam);
+`set_fidelity :ep` (per-key table, **no introduce-guard** — `:ep` is draw-invariant, the slice-3
+`:cfar`-guard contrast). Gate-3 tests: standoff sidelobe JNR, conditioned EP no-ops (sidelobe_blanking
+no-op on a mainlobe jammer, freq_agility no-op on barrage), mid-run `ep` toggle AND introduce both
+bit-identical, server write/reject.
 
 ---
 

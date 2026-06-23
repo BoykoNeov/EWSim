@@ -39,8 +39,8 @@ export jam_noise_ratio, antenna_gain, burnthrough_range
 export detection_threshold, pd_analytic, pd_montecarlo, detect_once
 # CFAR adaptive thresholding (slice 3)
 export cfar_alpha, cfar_threshold, cfar_scan
-# Slice-1 subsystems + scenario loader
-export ConstantVelocity, RadarSensor, Knob, Scenario, load_scenario
+# Slice-1 subsystems + scenario loader (Jammer is the slice-4 build_env! subsystem)
+export ConstantVelocity, RadarSensor, Jammer, Knob, Scenario, load_scenario
 # Offline batch sweeps (ROC artifact + slice-2 coverage diagram)
 export run_batch, roc_grid, load_roc, coverage_grid, load_coverage
 # Interactive socket run loop (the live/driver path)

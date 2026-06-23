@@ -135,6 +135,75 @@ function _target_snr(prop::Symbol, rp::RadarParams, radar::Entity, tgt::Entity)
     end
 end
 
+# --- Jammer: a build_env! noise-floor source (slice-4 step 2) --------------------
+#
+# The FIRST subsystem to use phase 2 of the tick contract (build_env!, subsystem.jl): a
+# noise jammer doesn't SENSE — it raises the radar's interference floor. It writes its
+# per-radar jammer-to-noise contributions into the derived `w.env[:jamming]` blackboard, and
+# the radar's `observe!` reads them back (SNR_eff = SNR/(1+ΣJNR)). This is the §3
+# cross-subsystem coupling done right: through `env`, never by one subsystem calling another.
+# `env` is rebuilt fresh each tick (tick!), so a stale floor can't leak.
+
+# One jammer's contribution to one radar's interference floor — the `env[:jamming]` record.
+# NOT a pre-summed scalar: the radar needs the per-contribution structure to apply EP
+# CONDITIONALLY (slice-4 gate 3) — `in_beam` (mainlobe vs sidelobe → sidelobe_blanking) and
+# `bj_hz` (jammer bandwidth → freq_agility). Gate 2 is mainlobe-only (no antenna model yet),
+# so `in_beam` is always true; gate 3 fills it from `antenna_gain`. `jnr` is J/N (linear).
+const JamContribution = @NamedTuple{jnr::Float64, in_beam::Bool, bj_hz::Float64}
+
+"""
+    Jammer(id)
+
+The noise jammer `id` as a `build_env!`-only subsystem. Its emitter config lives in the
+entity `comp` bag (`:pt_w :gain_db :bandwidth_hz`), and a `ConstantVelocity` mover (the
+loader pairs one with it) lets it close or hold station. Each tick `build_env!` computes a
+one-way (beacon) JNR ([`jam_noise_ratio`](@ref), rf.jl) at every radar and appends a
+[`JamContribution`](@ref) to `w.env[:jamming][radar_id]`. Gate 2 uses the radar's MAINLOBE
+receive gain for every jammer (self-screening — the two-level antenna model + standoff
+sidelobe land in gate 3); multiple jammers' contributions are additive and order-independent
+(the §3 build_env! contract — the radar SUMS them, so append order is irrelevant).
+"""
+struct Jammer <: Subsystem
+    id::Symbol
+end
+
+function build_env!(j::Jammer, w::World)
+    jammer = w.entities[j.id]
+    pj = Float64(jammer.comp[:pt_w])
+    gj = Float64(jammer.comp[:gain_db])
+    bj = Float64(jammer.comp[:bandwidth_hz])
+    for (rid, radar) in w.entities
+        radar.kind === :radar || continue
+        R_j = _range(jammer.pos, radar.pos)
+        # A jammer co-located with the radar (R_j = 0) would divide-by-zero in the one-way link
+        # budget; skip that contribution (a degenerate, non-physical placement) so build_env! →
+        # tick! can NEVER throw and kill the session (the slice-2/3 "a live config can't crash a
+        # tick" watch-item; the gate-4 range slider can drive R_j, so guard at the consumer).
+        R_j > 0 || continue
+        rp = _radar_params(radar.comp)
+        # Gate 2: MAINLOBE receive gain (gr_db = rp.gain_db, the jam_noise_ratio default) and
+        # in_beam = true — a self-screening jammer rides the radar's boresight. The two-level
+        # antenna pattern (a sidelobe Gr for a standoff jammer, → a real in_beam) is gate 3.
+        jnr = jam_noise_ratio(rp, pj, gj, bj, R_j)
+        jamming = get!(() -> Dict{Symbol,Vector{JamContribution}}(), w.env, :jamming)
+        push!(get!(() -> JamContribution[], jamming, rid), (jnr = jnr, in_beam = true, bj_hz = bj))
+    end
+    return nothing
+end
+
+# Total jammer-to-noise ratio a radar sees from the phase-2 `env[:jamming]` contributions.
+# Gate 2: a plain additive sum (multiple jammers' JNR add at the radar's input). Gate 3 will
+# fold EP in HERE — scaling each contribution conditioned on its `in_beam`/`bj_hz` — so this
+# is the single seam where EP plugs in. Called only when `contribs` exists; absent a jammer
+# the caller short-circuits to 0.0, so SNR_eff = SNR/(1+0) ≡ SNR (slices 1-3 byte-identical).
+function _radar_jnr(contribs::Vector{JamContribution})
+    total = 0.0
+    @inbounds for c in contribs
+        total += c.jnr
+    end
+    return total
+end
+
 """
     observe!(r::RadarSensor, w)
 
@@ -172,32 +241,43 @@ function _observe_point!(r::RadarSensor, w::World)
     np  = Int(get(radar.comp, :n_pulses, 1))    # non-coherent integration depth (slice 3)
     th  = detection_threshold(pfa, np)
 
+    # Jamming (slice 4): a Jammer's `build_env!` (phase 2) may have written this radar's
+    # per-jammer JNR contributions into `w.env[:jamming]`; sum them to the elevated noise floor.
+    # Absent any jammer the key is missing → `jnr_total = 0` → `SNR_eff = SNR/(1+0)` ≡ `SNR`
+    # bit-for-bit, so slices 1-3 stay byte-identical (no draw changes, and the jnr_db/js_db keys
+    # are suppressed below — both pinned by tests). `contribs !== nothing` is the jamming flag.
+    jamming   = get(w.env, :jamming, nothing)
+    contribs  = jamming === nothing ? nothing : get(jamming, r.id, nothing)
+    jnr_total = contribs === nothing ? 0.0 : _radar_jnr(contribs)
+
     # Sorted target ids → deterministic RNG draw order across targets (HANDOFF §1).
     target_ids = sort!(Symbol[id for (id, e) in w.entities if e.kind === :target])
     isempty(target_ids) && return nothing
 
     is_look = w.t + 1e-12 ≥ get(radar.comp, :next_look_t, 0.0)
 
-    best_snr = -Inf
+    best_snr_eff = -Inf      # strongest target's EFFECTIVE (post-jamming) SNR → snr_db + pd
+    best_snr_th  = -Inf      # ...its THERMAL S/N → js_db (J/S = JNR / SNR_thermal)
     best_pd  = 0.0
     best_visible = true
     any_detect = false
     for tid in target_ids
         tgt = w.entities[tid]
-        snr, vis = _target_snr(prop, rp, radar, tgt)
-        pd  = pd_analytic(snr, pfa; swerling = sw, n_pulses = np)
-        if snr > best_snr
-            best_snr = snr
+        snr_th, vis = _target_snr(prop, rp, radar, tgt)
+        # Raise the interference floor N → N+J: SNR_eff = (S/N)/(1+JNR). With no jammer
+        # (jnr_total = 0.0) this is `snr_th / 1.0 === snr_th`, so the detector sees an identical
+        # value and the draw stream is untouched. Jamming changes detection BOOLEANS, never the
+        # draw COUNT (detect_once stays unconditional — same randn count regardless of SNR), so
+        # jammer-on/off replay in RNG lockstep (the slice-1 invariant; draw-invariance test).
+        snr_eff = snr_th / (1 + jnr_total)
+        pd  = pd_analytic(snr_eff, pfa; swerling = sw, n_pulses = np)
+        if snr_eff > best_snr_eff
+            best_snr_eff = snr_eff
+            best_snr_th  = snr_th
             best_pd  = pd
             best_visible = vis
         end
-        # The detection draw is UNCONDITIONAL on every look — `_sample_z` issues the same
-        # randn() calls regardless of SNR, so the RNG stream advances identically across
-        # fidelities (a masked/null target still "costs" its draws). Gating this on
-        # snr>0 / visible would skip draws and desync seeded replay (a determinism
-        # violation visible only in a trace diff). A masked target (snr=0) simply detects
-        # with prob ≈ pfa.
-        if is_look && detect_once(snr, th, w.rng; swerling = sw, n_pulses = np)
+        if is_look && detect_once(snr_eff, th, w.rng; swerling = sw, n_pulses = np)
             any_detect = true
             # t is stamped by state_frame at emit (events are sent on the frame they
             # occur, HANDOFF §5) — keeps event time == frame time.
@@ -210,16 +290,25 @@ function _observe_point!(r::RadarSensor, w::World)
         radar.comp[:next_look_t] = get(radar.comp, :next_look_t, 0.0) + r.revisit_s
     end
 
-    # Continuous readout every tick; `detected` is the last look's verdict (persisted
-    # in comp so it survives ticks between scans). `snr_db` is floored so a two_ray null
-    # / below-horizon mask (SNR→0) never ships -Inf; `visible` carries the horizon verdict
-    # (always true under free_space — infinite LOS).
+    # Continuous readout every tick; `detected` is the last look's verdict (persisted in comp so
+    # it survives ticks between scans). `snr_db` now carries SNR_eff (post-jamming; ≡ thermal SNR
+    # when unjammed), floored so a two_ray null / below-horizon mask (SNR→0) never ships -Inf;
+    # `visible` carries the horizon verdict (always true under free_space — infinite LOS).
     tel = get!(() -> Dict{String,Any}(), w.env, :telemetry)
     sid = String(r.id)
-    tel["$sid.snr_db"]   = _snr_db_wire(best_snr)
+    tel["$sid.snr_db"]   = _snr_db_wire(best_snr_eff)
     tel["$sid.pd"]       = best_pd
     tel["$sid.detected"] = get(radar.comp, :detected, false)
     tel["$sid.visible"]  = best_visible
+    # jnr_db / js_db ship ONLY when this radar actually sees a jammer — so a no-jammer frame is
+    # unchanged (slices 1-3). js_db is the dB DIFFERENCE jnr_db − snr_th_db: exactly
+    # lin2db(JNR/S) when both are above the floor (log identity), and wire-safe (finite,
+    # correct-direction) if S→0 (a masked/no-target frame), where lin2db(JNR/S) would be +Inf →
+    # JSON poison (the slice-2 null watch-item, here on the J/S readout). >0 = jammed, <0 = burn-through.
+    if contribs !== nothing
+        tel["$sid.jnr_db"] = _snr_db_wire(jnr_total)
+        tel["$sid.js_db"]  = _snr_db_wire(jnr_total) - _snr_db_wire(best_snr_th)
+    end
     return nothing
 end
 

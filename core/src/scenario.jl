@@ -100,8 +100,26 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
         comp[:extent_m] = _f64(cb["extent_m"])
         comp[:cnr_db]   = _f64(cb["cnr_db"])
         subs = Subsystem[]
+    elseif kind === :jammer
+        # A noise jammer (slice 4): an ENTITY with a `build_env!`-only [`Jammer`](@ref)
+        # subsystem (it raises the radar's noise floor through `w.env`, never by a direct call)
+        # PLUS a `ConstantVelocity` mover so it can close (self-screen) or hold station
+        # (standoff). Unlike `:clutter` it owns a subsystem of its own.
+        haskey(ent, "jammer") || error("jammer entity '$id' has no `jammer:` block")
+        jb = ent["jammer"]
+        for k in (:pt_w, :gain_db, :bandwidth_hz)
+            haskey(jb, String(k)) || error("jammer '$id' block missing required key '$k'")
+            comp[k] = _f64(jb[String(k)])
+        end
+        # bandwidth_hz must be > 0: a non-positive value would throw a DomainError inside
+        # `jam_noise_ratio` → `build_env!` → `tick!`, and the session's IO/EOF-only catch would
+        # silently drop the connection (the slice-2/3 tick-throw watch-item). It is NOT a live
+        # slider (gate-4 sliders are pt_w / range), so reject it at LOAD as a clear error.
+        comp[:bandwidth_hz] > 0 ||
+            error("jammer '$id': bandwidth_hz must be > 0 (got $(comp[:bandwidth_hz]))")
+        subs = Subsystem[ConstantVelocity(id), Jammer(id)]
     else
-        error("unknown entity kind :$kind for '$id' (knows :radar, :target, :clutter)")
+        error("unknown entity kind :$kind for '$id' (knows :radar, :target, :clutter, :jammer)")
     end
     return e, subs
 end

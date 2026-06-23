@@ -17,6 +17,7 @@ using Random
     include("test_propagation.jl")
     include("test_jamming.jl")
     include("test_radar.jl")
+    include("test_jammer.jl")
     include("test_detection.jl")
     include("test_cfar.jl")
     include("test_scenario.jl")
