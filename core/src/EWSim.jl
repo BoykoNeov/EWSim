@@ -33,6 +33,8 @@ export write_frame, read_frame, state_frame
 export RadarParams, snr_freespace, snr_db_freespace, wavelength, db2lin, lin2db
 # RF / two-ray propagation (slice 2)
 export snr_two_ray, snr_db_two_ray, two_ray_phase, two_ray_factor4, horizon_range
+# RF / jamming + burn-through (slice 4)
+export jam_noise_ratio, antenna_gain, burnthrough_range
 # Detection
 export detection_threshold, pd_analytic, pd_montecarlo, detect_once
 # CFAR adaptive thresholding (slice 3)

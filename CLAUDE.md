@@ -320,7 +320,38 @@ toggle/slider UI test needs NO server: `godot --headless --path clients/godot --
 res://net/slice3_ui_test.gd`. **(stretch, deferred)** a Pluto CFAR diagram (Pd/Pfa vs SNR per
 variant, or threshold-curve panels over the profile).
 
-**Next: slice 4 — see HANDOFF §10 for the next showcase (item 4).**
+**Slice 4 — jamming / EP** (HANDOFF §10 item 4) — **Step 1 (gate 1 — jamming physics) DONE &
+green (833 tests).** Planned FULL in `docs/plans/slice4.md` (4 staged gates: `rf.jl` jamming
+physics → `Jammer` `build_env!` subsystem + radar `SNR_eff=SNR/(1+JNR)` coupling + self-screening
+burn-through → two-level antenna model + standoff + `ep` fidelity [none/freq_agility/sidelobe_blanking]
+→ scenarios + Godot spatial-view extensions + verifier). The jammer will be the **first subsystem to
+use `build_env!`** (phase 2) — the first real cross-subsystem coupling through `w.env` (HANDOFF §3).
+No draw-topology hazard (deterministic SNR modulation, like slice 2 not slice 3); `:ep` is
+introduce-safe (contrast slice-3's `:cfar` guard). DRFM/deceptive jamming, RGPO, PRF-jitter EP
+deferred to §11.
+Step 1 (gate 1 — jamming physics green): `rf.jl` gains the J/S primitives (append-only — no existing
+symbol changed, so slices 1–3 stay byte-identical). `jam_noise_ratio(rp, pj_w, gj_db, bj_hz, R_j;
+gr_db=rp.gain_db)` — the one-way (beacon) JNR = `Pj·Gj·Gr·λ²·overlap / ((4π)²·R_j²·k·T0·B·F·L)`,
+normalized to the SAME thermal denominator as `snr_freespace` (so `J/S = JNR/SNR` cancels k·T0·B·F·L
+and λ²). One-way `(4π)²`/`R_j⁻²` + a SINGLE receive `Gr` (not the monostatic `G²`) is the burn-through
+asymmetry: doubling jammer range costs it 6 dB, the two-way echo 12 dB. `overlap = min(1, B_r/B_j)`
+is barrage dilution. `antenna_gain(rp, θ_rad; beamwidth_rad, sidelobe_db) → dB` is the two-level
+receive pattern (mainlobe `gain_db` for `|θ|≤bw/2` inclusive, else `gain_db−sidelobe_db`) feeding
+`gr_db` — the standoff-vs-self-screen enabler (deferred to gate 3, but the primitive lands now).
+`burnthrough_range(rp, rcs, pj_w, gj_db, bj_hz; gr_db, js_margin=1.0)` is the self-screen `J/S=js_margin`
+closed form via the ORACLE `K_s=snr_freespace(R=1)`, `K_j=jam_noise_ratio(R_j=1)`, `R_bt=√(js_margin·K_s/K_j)`
+(a link-budget slip in either moves R_bt in lockstep). All four approximations named in docstrings
+(one-way free-space J path, barrage `overlap`, two-level pattern, benign common-mode F/L: F/L cancel
+in J/S so the crossover is invariant to them). `test_jamming.jl` (35 closed-form tests, deterministic
+like two_ray — no MC band; runs after `test_propagation.jl`): the −6/−12 dB asymmetry SIDE BY SIDE,
+J/S ∝ R² self-screen + ∝ R_t⁴ standoff, barrage −10 dB + overlap-saturates-at-1, two-level gain
+(inclusive boundary, sign-symmetric, sidelobe JNR = −sidelobe_db), burnthrough round-trip (J/S=1 at
+R_bt with atol, <1 inside / >1 outside, √-scaling on js_margin), F/L cancel in J/S, and the **corrected
+B_r law** (J/S B_r-invariant for SPOT; with `B_j` held FIXED — barrage — JNR B_r-invariant + J/S ∝ B_r;
+guards the inverted "B_r cancels in J/S" assertion that bit the plan), + guards.
+Next: **gate 2** — `Jammer <: Subsystem` `build_env!` → `env[:jamming]`, `_observe_point!` reads it
+(`SNR_eff = SNR/(1+ΣJNR)`), `:jammer` loader kind, jnr_db/js_db telemetry; self-screen burn-through,
+no-jammer byte-identity, draw-invariance.
 
 ---
 
