@@ -130,4 +130,67 @@ end
         @test rand(copy(wa.rng)) == rand(copy(wn.rng))  # toggle did NOT change the draw count
         @test ta != tn                                  # ...but the rung changed the detections
     end
+
+    # The slice-4 contrast: `:ep` carries NO introduce-guard (unlike `:cfar`) because EP only
+    # SCALES a deterministic JNR scalar — no randn draw changes — so it may be both TOGGLED and
+    # INTRODUCED mid-run and still replay bit-identical. The discriminating geometry is a
+    # self-screen SPOT jammer tuned to the burn-through knee (pj_w=1e-3 at 5 km → pd≈0.04 without
+    # agility, ≈0.61 with freq_agility): freq_agility's +10 dB tips ~half the looks across the
+    # threshold, so EP genuinely FLIPS detections — a dead EP (factor stuck at 1) would leave the
+    # trace unchanged and fail the `ta != tn` leg, the slice-3 cfar "not-a-dead-knob" pattern.
+    @testset "a mid-run ep introduce/toggle replays deterministically (draw-count invariant)" begin
+        function ep_trace(seed; toggle_at = 100, nsteps = 200, jam = true,
+                          start_ep = nothing, set_ep = :freq_agility)
+            fid = Dict{Symbol,Symbol}(:propagation => :free_space)
+            start_ep === nothing || (fid[:ep] = start_ep)
+            w = World(seed = seed, fidelity = fid)
+            w.entities[:radar1] = Entity(:radar1, :radar; pos = Vec3(0, 0, 0),
+                comp = Dict{Symbol,Any}(:pt_w => 1000.0, :gain_db => 30.0,
+                    :freq_hz => EWSim.C_LIGHT / 0.03, :bandwidth_hz => 1.0e6,
+                    :noise_fig_db => 0.0, :losses_db => 0.0, :pfa => 1.0e-6, :swerling => 1,
+                    :agile_bw_hz => 1.0e7))
+            w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(5_000.0, 0, 0),
+                comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+            subs = Subsystem[RadarSensor(:radar1), ConstantVelocity(:tgt1)]
+            if jam
+                w.entities[:jam1] = Entity(:jam1, :jammer; pos = Vec3(5_000.0, 0, 0),
+                    comp = Dict{Symbol,Any}(:pt_w => 1.0e-3, :gain_db => 0.0, :bandwidth_hz => 1.0e6))
+                push!(subs, ConstantVelocity(:jam1)); push!(subs, Jammer(:jam1))
+            end
+            hits = Bool[]
+            for i in 1:nsteps
+                (set_ep !== nothing && i == toggle_at) && (w.fidelity[:ep] = set_ep)
+                tick!(w, subs, 1.0e-3)
+                push!(hits, any(e -> e[:kind] === :detection, w.events)); empty!(w.events)
+            end
+            return w, hits
+        end
+
+        # INTRODUCE :ep on a scenario that started WITHOUT it — twice ⇒ identical, and lockstep.
+        wa, ta = ep_trace(20260623; start_ep = nothing)
+        wb, tb = ep_trace(20260623; start_ep = nothing)
+        @test ta == tb
+        @test rand(copy(wa.rng)) == rand(copy(wb.rng))
+        # vs NEVER introducing: SAME rng end-state (introduce changed no draws) but DIFFERENT trace
+        # (EP genuinely flipped detections — the not-a-dead-knob proof).
+        wn, tn = ep_trace(20260623; start_ep = nothing, set_ep = nothing)
+        @test rand(copy(wa.rng)) == rand(copy(wn.rng))
+        @test ta != tn
+        @test any(ta) && !all(ta)                       # non-trivial: rng genuinely flips outcomes
+
+        # TOGGLE the VALUE of a pre-existing :ep key (starts :none) — same determinism, and an
+        # absent :ep key is byte-identical to :ep=:none, so this trace equals the introduce trace.
+        wc, tc = ep_trace(20260623; start_ep = :none)
+        @test tc == ta
+        @test rand(copy(wc.rng)) == rand(copy(wa.rng))
+
+        # The SHARPEST introduce-safe form (advisor): on a JAMMER-FREE world, introducing :ep is a
+        # guaranteed no-op — `contribs === nothing` short-circuits before :ep is ever read — so the
+        # rng end-state AND trace are bit-identical to never touching it. The existing goldens never
+        # set :ep, so this closes the one gap they leave (a slice-1/2/3 scenario can be `:ep`-toggled).
+        wj, tj = ep_trace(20260623; jam = false, start_ep = nothing)                    # introduce
+        wk, tk = ep_trace(20260623; jam = false, start_ep = nothing, set_ep = nothing)  # never
+        @test tj == tk
+        @test rand(copy(wj.rng)) == rand(copy(wk.rng))
+    end
 end

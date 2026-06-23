@@ -85,13 +85,21 @@ const PROPAGATION_MODES = (:free_space, :two_ray)
 # server's `set_fidelity` validation, so the wire can't accept a rung `cfar_scan` rejects.
 const CFAR_MODES = CFAR_VARIANTS
 
+# The EP (electronic-protection) rungs the radar applies against jamming (slice-4 gate 3).
+# A NAMED, CONDITIONED modifier per rung (`_ep_factor`), never a flat fudge — `:none` is the
+# baseline, `:freq_agility` helps only vs a SPOT jammer, `:sidelobe_blanking` only vs a
+# SIDELOBE (standoff) jammer. Single source of truth for the dispatch AND the server table.
+const EP_MODES = (:none, :freq_agility, :sidelobe_blanking)
+
 # The fidelity keys `set_fidelity` may toggle LIVE, each mapped to its allowed rungs. The
 # single source of truth for server.jl's `set_fidelity` validation — it references the same
 # mode tuples the `observe!` dispatch uses, so a value accepted on the wire can never reach
 # a tick that throws (the slice-2 lesson, generalised to a per-key table). NB: presence of
 # `:cfar` changes the RNG draw topology (point path → profile path), so the server also
-# guards against INTRODUCING it mid-run — see `handle_command!` (server.jl).
-const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES)
+# guards against INTRODUCING it mid-run — see `handle_command!` (server.jl). `:ep` carries NO
+# such guard (it only scales a deterministic scalar — no draw-count change — so it is
+# introduce-safe, the sharp contrast to `:cfar`; slice-4 gate 3).
+const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES, ep = EP_MODES)
 
 # A perfect null (F⁴=0, even above the horizon), an antenna on the reflecting plane
 # (h→0), or a below-horizon mask all drive SNR→0, and `lin2db(0) = -Inf` would poison the
@@ -147,9 +155,46 @@ end
 # One jammer's contribution to one radar's interference floor — the `env[:jamming]` record.
 # NOT a pre-summed scalar: the radar needs the per-contribution structure to apply EP
 # CONDITIONALLY (slice-4 gate 3) — `in_beam` (mainlobe vs sidelobe → sidelobe_blanking) and
-# `bj_hz` (jammer bandwidth → freq_agility). Gate 2 is mainlobe-only (no antenna model yet),
-# so `in_beam` is always true; gate 3 fills it from `antenna_gain`. `jnr` is J/N (linear).
+# `bj_hz` (jammer bandwidth → freq_agility). `build_env!` fills `in_beam`/`gr_db` from the
+# two-level `antenna_gain` about the radar's boresight (its nearest target); `jnr` is J/N (linear).
 const JamContribution = @NamedTuple{jnr::Float64, in_beam::Bool, bj_hz::Float64}
+
+# Two-level antenna + EP defaults (slice-4 gate 3). The antenna pattern (beamwidth/sidelobe)
+# and the EP config (agile band / cancel depth) are RADAR comp keys; these defaults make a
+# jammer scene work without them AND — crucially — make `:ep` INTRODUCE-SAFE: a `set_fidelity
+# :ep` may land on ANY scenario, so `_ep_factor` must read these via `get(comp, …, default)`
+# and can never `KeyError` inside a tick (the slice-2/3 "a live config can't crash a tick").
+const _DEFAULT_BEAMWIDTH_RAD = deg2rad(3.0)     # ~3° mainlobe (half-beamwidth 1.5°)
+const _DEFAULT_SIDELOBE_DB   = 30.0             # sidelobe floor 30 dB below the mainlobe peak
+const _DEFAULT_AGILE_BW_HZ   = 1.0e7            # frequency-agility hop band (10 MHz)
+const _DEFAULT_CANCEL_DB     = 30.0             # sidelobe-blanking cancellation depth
+
+# The radar's boresight target (NAMED rule, gate 3): the NEAREST `:target`, ties broken by
+# sorted id (ascending iteration + strict `<` keeps the first). `nothing` if no target — the
+# caller then treats a jammer as in-mainlobe (conservative), so `build_env!` can't throw on a
+# jammer-only scene (the "a live config can't crash a tick" watch-item).
+function _nearest_target(w::World, radar::Entity)
+    best = nothing; bestR = Inf
+    for tid in sort!(Symbol[id for (id, e) in w.entities if e.kind === :target])
+        R = _range(w.entities[tid].pos, radar.pos)
+        if R < bestR
+            bestR = R; best = w.entities[tid]
+        end
+    end
+    return best
+end
+
+# Angle (rad, ∈ [0,π]) of point `p` off the radar→target boresight line, for the two-level
+# antenna pattern. `acos` of the normalized dot of (target−radar) and (p−radar); the cosine is
+# clamped to [-1,1] (float round-off can nudge it past ±1 and NaN the `acos`), and a degenerate
+# zero-length vector (the target sitting ON the radar) returns 0 → treated as on-axis.
+function _boresight_angle(radar_pos::Vec3, tgt_pos::Vec3, p::Vec3)
+    u = tgt_pos - radar_pos
+    v = p - radar_pos
+    nu = sqrt(sum(abs2, u)); nv = sqrt(sum(abs2, v))
+    (nu == 0 || nv == 0) && return 0.0
+    return acos(clamp(sum(u .* v) / (nu * nv), -1.0, 1.0))
+end
 
 """
     Jammer(id)
@@ -158,10 +203,13 @@ The noise jammer `id` as a `build_env!`-only subsystem. Its emitter config lives
 entity `comp` bag (`:pt_w :gain_db :bandwidth_hz`), and a `ConstantVelocity` mover (the
 loader pairs one with it) lets it close or hold station. Each tick `build_env!` computes a
 one-way (beacon) JNR ([`jam_noise_ratio`](@ref), rf.jl) at every radar and appends a
-[`JamContribution`](@ref) to `w.env[:jamming][radar_id]`. Gate 2 uses the radar's MAINLOBE
-receive gain for every jammer (self-screening — the two-level antenna model + standoff
-sidelobe land in gate 3); multiple jammers' contributions are additive and order-independent
-(the §3 build_env! contract — the radar SUMS them, so append order is irrelevant).
+[`JamContribution`](@ref) to `w.env[:jamming][radar_id]`. The radar's RECEIVE gain toward the
+jammer is the two-level antenna pattern ([`antenna_gain`](@ref)) about the radar's boresight
+(its nearest target): a self-screening jammer rides the mainlobe (`θ≈0`, `Gr=G`, `in_beam`),
+a standoff jammer sits in a sidelobe (much smaller `Gr`, `!in_beam`) — the per-contribution
+`in_beam`/`bj_hz` is exactly what the radar's EP (`_ep_factor`) conditions on. Multiple jammers'
+contributions are additive and order-independent (the §3 build_env! contract — the radar SUMS
+them, so append order is irrelevant).
 """
 struct Jammer <: Subsystem
     id::Symbol
@@ -181,25 +229,61 @@ function build_env!(j::Jammer, w::World)
         # tick" watch-item; the gate-4 range slider can drive R_j, so guard at the consumer).
         R_j > 0 || continue
         rp = _radar_params(radar.comp)
-        # Gate 2: MAINLOBE receive gain (gr_db = rp.gain_db, the jam_noise_ratio default) and
-        # in_beam = true — a self-screening jammer rides the radar's boresight. The two-level
-        # antenna pattern (a sidelobe Gr for a standoff jammer, → a real in_beam) is gate 3.
-        jnr = jam_noise_ratio(rp, pj, gj, bj, R_j)
+        # Gate 3: two-level receive gain. The radar boresights its NEAREST target; the jammer's
+        # angle off that line picks the mainlobe Gr (self-screen, θ≈0 → cancels the echo in J/S)
+        # vs the sidelobe floor (standoff, off-axis → uncancelled, weaker — what sidelobe-blanking
+        # attacks). No target → conservative mainlobe (can't throw on a jammer-only scene). The
+        # antenna pattern (beamwidth/sidelobe) is the radar's, read with defaults.
+        bw   = Float64(get(radar.comp, :beamwidth_rad, _DEFAULT_BEAMWIDTH_RAD))
+        sldb = Float64(get(radar.comp, :sidelobe_db,   _DEFAULT_SIDELOBE_DB))
+        tgt  = _nearest_target(w, radar)
+        if tgt === nothing
+            gr_db = rp.gain_db; in_beam = true
+        else
+            θ = _boresight_angle(radar.pos, tgt.pos, jammer.pos)
+            in_beam = θ ≤ bw / 2                 # same inclusive boundary as antenna_gain's step
+            gr_db   = antenna_gain(rp, θ; beamwidth_rad = bw, sidelobe_db = sldb)
+        end
+        jnr = jam_noise_ratio(rp, pj, gj, bj, R_j; gr_db = gr_db)
         jamming = get!(() -> Dict{Symbol,Vector{JamContribution}}(), w.env, :jamming)
-        push!(get!(() -> JamContribution[], jamming, rid), (jnr = jnr, in_beam = true, bj_hz = bj))
+        push!(get!(() -> JamContribution[], jamming, rid), (jnr = jnr, in_beam = in_beam, bj_hz = bj))
     end
     return nothing
 end
 
-# Total jammer-to-noise ratio a radar sees from the phase-2 `env[:jamming]` contributions.
-# Gate 2: a plain additive sum (multiple jammers' JNR add at the radar's input). Gate 3 will
-# fold EP in HERE — scaling each contribution conditioned on its `in_beam`/`bj_hz` — so this
-# is the single seam where EP plugs in. Called only when `contribs` exists; absent a jammer
-# the caller short-circuits to 0.0, so SNR_eff = SNR/(1+0) ≡ SNR (slices 1-3 byte-identical).
-function _radar_jnr(contribs::Vector{JamContribution})
+# EP (electronic protection) factor on ONE jammer's JNR — a NAMED, CONDITIONED modifier, never
+# a flat scalar (a flat fudge would "help" against the wrong jammer; advisor). Conditioned on the
+# per-contribution structure the jammer baked in: `bj_hz` (freq_agility) and `in_beam`
+# (sidelobe_blanking). `:none` → 1.0 EXACTLY (byte-identical to no EP). Reads the radar's EP
+# config (agile band, cancel depth) with DEFAULTS so toggling `:ep` onto any scenario can't crash.
+function _ep_factor(ep::Symbol, c::JamContribution, comp::AbstractDict)
+    ep === :none && return 1.0
+    if ep === :freq_agility
+        # The radar hops over an agile band; a narrow (SPOT) jammer covers only B_j/B_agile of the
+        # hops → big benefit. A BARRAGE jammer (B_j ≥ B_agile) covers them all → min(1,·)=1, a
+        # no-op (the conditioning: agility is useless once the jammer spans the whole hop band).
+        b_agile = Float64(get(comp, :agile_bw_hz, _DEFAULT_AGILE_BW_HZ))
+        return min(1.0, c.bj_hz / b_agile)
+    elseif ep === :sidelobe_blanking
+        # Attenuates a jammer arriving through a SIDELOBE; a MAINLOBE (self-screen) jammer can't be
+        # blanked without blanking the target → no-op (the conditioning). Cancel depth from comp.
+        c.in_beam && return 1.0
+        return db2lin(-Float64(get(comp, :cancel_db, _DEFAULT_CANCEL_DB)))
+    else
+        error("RadarSensor: ep fidelity :$ep not implemented ($(join(EP_MODES, " | ")))")
+    end
+end
+
+# Total jammer-to-noise ratio a radar sees from the phase-2 `env[:jamming]` contributions, after
+# the radar's EP. The additive sum (multiple jammers' JNR add at the radar's input) folds in the
+# per-contribution `_ep_factor` HERE — this is the single seam where EP plugs in, conditioned on
+# each contribution's `in_beam`/`bj_hz`. Called only when `contribs` exists; absent a jammer the
+# caller short-circuits to 0.0, so SNR_eff = SNR/(1+0) ≡ SNR (slices 1-3 byte-identical), and with
+# `ep = :none` every factor is 1.0 so the sum is bit-identical to the bare gate-2 JNR.
+function _radar_jnr(contribs::Vector{JamContribution}, ep::Symbol, comp::AbstractDict)
     total = 0.0
     @inbounds for c in contribs
-        total += c.jnr
+        total += c.jnr * _ep_factor(ep, c, comp)
     end
     return total
 end
@@ -246,9 +330,14 @@ function _observe_point!(r::RadarSensor, w::World)
     # Absent any jammer the key is missing → `jnr_total = 0` → `SNR_eff = SNR/(1+0)` ≡ `SNR`
     # bit-for-bit, so slices 1-3 stay byte-identical (no draw changes, and the jnr_db/js_db keys
     # are suppressed below — both pinned by tests). `contribs !== nothing` is the jamming flag.
+    # EP (slice-4 gate 3) is the radar's countermeasure: the `:ep` fidelity (default `:none`)
+    # CONDITIONALLY scales each jammer's JNR in `_radar_jnr` (the seam). Read only when a jammer
+    # is present — so a no-jammer frame never consults `:ep` (jnr_total = 0.0, byte-identical), and
+    # introducing `:ep` on a jammer-free scenario is a guaranteed no-op (the introduce-safe contract).
     jamming   = get(w.env, :jamming, nothing)
     contribs  = jamming === nothing ? nothing : get(jamming, r.id, nothing)
-    jnr_total = contribs === nothing ? 0.0 : _radar_jnr(contribs)
+    jnr_total = contribs === nothing ? 0.0 :
+                _radar_jnr(contribs, get(w.fidelity, :ep, :none), radar.comp)
 
     # Sorted target ids → deterministic RNG draw order across targets (HANDOFF §1).
     target_ids = sort!(Symbol[id for (id, e) in w.entities if e.kind === :target])

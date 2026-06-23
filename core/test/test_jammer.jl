@@ -6,21 +6,33 @@
 # (jamming changes detection BOOLEANS, never the draw stream). Slice-4 stays "slice-2-shaped":
 # deterministic SNR modulation, no draw-topology hazard (contrast slice-3's :cfar guard).
 
-# A radar at the origin, one target at `tx`, and (optionally) a SELF-SCREENING jammer
-# co-located with the target (same pos AND vel ⇒ R_j = R_target every tick). free_space
+# A radar at the origin, one target at `tx`, and (optionally) a jammer. Default `jpos = nothing`
+# co-locates the jammer with the target (self-screening: same pos AND vel ⇒ R_j = R_target, θ = 0
+# → mainlobe Gr every tick); pass `jpos`/`jvel` to place it OFF-AXIS for a standoff (sidelobe Gr).
+# The radar carries the gate-3 two-level-antenna + EP config (`:beamwidth_rad :sidelobe_db
+# :agile_bw_hz :cancel_db`); `ep` (default `:none`) sets the live EP fidelity. free_space
 # propagation: slice-4 is "one lesson per scenario" — no two_ray lobing on the signal path.
 function _jammer_world(; tx = 30_000.0, vx = 0.0, jam = true, pj_w = 100.0, gj_db = 10.0,
-                         bj_hz = 1.0e6, rcs = 1.0, pfa = 1.0e-6, sw = 1, seed = 1)
-    w = World(seed = seed, fidelity = Dict(:propagation => :free_space))
+                         bj_hz = 1.0e6, rcs = 1.0, pfa = 1.0e-6, sw = 1, seed = 1,
+                         jpos = nothing, jvel = nothing, ep = :none,
+                         beamwidth_rad = deg2rad(3.0), sidelobe_db = 30.0,
+                         agile_bw_hz = 1.0e7, cancel_db = 30.0)
+    fid = Dict{Symbol,Symbol}(:propagation => :free_space)
+    ep === :none || (fid[:ep] = ep)
+    w = World(seed = seed, fidelity = fid)
     w.entities[:radar1] = Entity(:radar1, :radar; pos = Vec3(0, 0, 0),
         comp = Dict{Symbol,Any}(:pt_w => 1000.0, :gain_db => 30.0,
             :freq_hz => EWSim.C_LIGHT / 0.03, :bandwidth_hz => 1.0e6,
-            :noise_fig_db => 0.0, :losses_db => 0.0, :pfa => pfa, :swerling => sw))
+            :noise_fig_db => 0.0, :losses_db => 0.0, :pfa => pfa, :swerling => sw,
+            :beamwidth_rad => beamwidth_rad, :sidelobe_db => sidelobe_db,
+            :agile_bw_hz => agile_bw_hz, :cancel_db => cancel_db))
     w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(tx, 0, 0), vel = Vec3(vx, 0, 0),
         comp = Dict{Symbol,Any}(:rcs_m2 => rcs))
     subs = Subsystem[RadarSensor(:radar1; revisit_s = 0.0), ConstantVelocity(:tgt1)]
     if jam
-        w.entities[:jam1] = Entity(:jam1, :jammer; pos = Vec3(tx, 0, 0), vel = Vec3(vx, 0, 0),
+        jp = jpos === nothing ? Vec3(tx, 0, 0) : jpos
+        jv = jvel === nothing ? Vec3(vx, 0, 0) : jvel
+        w.entities[:jam1] = Entity(:jam1, :jammer; pos = jp, vel = jv,
             comp = Dict{Symbol,Any}(:pt_w => pj_w, :gain_db => gj_db, :bandwidth_hz => bj_hz))
         push!(subs, ConstantVelocity(:jam1))
         push!(subs, Jammer(:jam1))
@@ -113,6 +125,96 @@ _jam_tel(w, subs) = (tick!(w, subs, 1.0e-3); state_frame(w)[:telemetry])
         @test !haskey(tel, "radar1.js_db")
         @test haskey(tel, "radar1.snr_db") && haskey(tel, "radar1.pd") &&
               haskey(tel, "radar1.detected") && haskey(tel, "radar1.visible")
+    end
+
+    # --- gate 3: two-level antenna (standoff sidelobe) + conditioned EP ---------------
+
+    @testset "a standoff jammer enters a SIDELOBE (two-level Gr + real in_beam)" begin
+        # Gate 3: the radar boresights its nearest target (on +X); an OFF-AXIS standoff jammer
+        # sits in a sidelobe, so build_env! uses gr_db = gain_db − sidelobe_db (NOT the mainlobe
+        # gain) and marks in_beam = false. Geometry: target at 30 km on +X, jammer at (28k, 8k)
+        # → ~16° off boresight ≫ 1.5° half-beamwidth. Pin in_beam AND the exact sidelobe JNR.
+        jpos = Vec3(28_000.0, 8_000.0, 0.0)
+        w, subs = _jammer_world(tx = 30_000.0, jpos = jpos)
+        tick!(w, subs, 1.0e-3)
+        c  = w.env[:jamming][:radar1][1]
+        rp = EWSim._radar_params(w.entities[:radar1].comp)
+        R_j = sqrt(sum(abs2, jpos - w.entities[:radar1].pos))
+        @test c.in_beam == false                                           # off-axis → sidelobe
+        # exact sidelobe closed form (receive gain knocked down by sidelobe_db = 30 dB)...
+        @test c.jnr ≈ jam_noise_ratio(rp, 100.0, 10.0, 1.0e6, R_j; gr_db = 30.0 - 30.0) rtol = 1e-12
+        # ...i.e. exactly db2lin(-sidelobe_db) below the MAINLOBE JNR at the same range (≪).
+        jnr_mainlobe = jam_noise_ratio(rp, 100.0, 10.0, 1.0e6, R_j)        # gr_db = gain_db default
+        @test c.jnr ≈ jnr_mainlobe * db2lin(-30.0) rtol = 1e-12
+        @test c.jnr < jnr_mainlobe / 100                                   # sanity: a big drop
+        # a SELF-SCREEN jammer (co-located w/ the target) rides θ ≈ 0 → mainlobe, in_beam = true.
+        ws, ss = _jammer_world(tx = 30_000.0)                              # jpos defaults to target
+        tick!(ws, ss, 1.0e-3)
+        cs = ws.env[:jamming][:radar1][1]
+        @test cs.in_beam == true
+        @test cs.jnr ≈ jam_noise_ratio(rp, 100.0, 10.0, 1.0e6, 30_000.0) rtol = 1e-12  # mainlobe
+    end
+
+    @testset "EP is CONDITIONED: matched reduces J/S, mismatched is an EXACT no-op (2×2)" begin
+        # The slice's second lesson, pinned as a 2×2 so a FLAT fudge can't pass: each EP rung
+        # helps ONLY in its matching condition and is a *bit-exact* no-op otherwise (==, not ≈ —
+        # a flat multiplier would fail the no-op leg, the slice-2/3 "calibrated-to-pass" trap).
+        ss = Vec3(30_000.0, 0, 0)            # self-screen → mainlobe (in_beam)
+        so = Vec3(28_000.0, 8_000.0, 0.0)    # standoff    → sidelobe (!in_beam)
+        # js_db at the configured EP rung (jammer present ⇒ the key always ships).
+        js(; jpos, ep, bj_hz = 1.0e6) =
+            _jam_tel(_jammer_world(tx = 30_000.0, jpos = jpos, ep = ep, bj_hz = bj_hz)...)["radar1.js_db"]
+
+        # sidelobe_blanking: attacks a SIDELOBE jammer (standoff), no-op on a MAINLOBE one.
+        @test js(jpos = so, ep = :sidelobe_blanking) < js(jpos = so, ep = :none)   # matched: reduces J/S
+        @test js(jpos = so, ep = :none) - js(jpos = so, ep = :sidelobe_blanking) ≈ 30.0 atol = 1e-6  # by cancel_db
+        @test js(jpos = ss, ep = :sidelobe_blanking) == js(jpos = ss, ep = :none)  # mismatched: EXACT no-op
+
+        # freq_agility: attacks a SPOT jammer (B_j < B_agile), no-op on BARRAGE (B_j ≥ B_agile).
+        @test js(jpos = ss, ep = :freq_agility) < js(jpos = ss, ep = :none)        # matched: spot reduces
+        @test js(jpos = ss, ep = :none) - js(jpos = ss, ep = :freq_agility) ≈ 10.0 atol = 1e-6  # 10·log10(1e7/1e6)
+        @test js(jpos = ss, ep = :freq_agility, bj_hz = 2.0e7) ==
+              js(jpos = ss, ep = :none,         bj_hz = 2.0e7)                      # mismatched: EXACT no-op
+        # ...and matched EP raises the SNR_eff readout too (J/S↓ ⇒ snr_db↑), the visible lesson.
+        @test _jam_tel(_jammer_world(tx = 30_000.0, jpos = ss, ep = :freq_agility)...)["radar1.snr_db"] >
+              _jam_tel(_jammer_world(tx = 30_000.0, jpos = ss, ep = :none)...)["radar1.snr_db"]
+    end
+
+    @testset "EP defaults: toggling :ep on a radar with NO EP config can't crash the tick" begin
+        # The introduce-safe contract REQUIRES the comp-default fallbacks (`_DEFAULT_CANCEL_DB` /
+        # `_DEFAULT_AGILE_BW_HZ`, and the `_DEFAULT_BEAMWIDTH_RAD`/`_DEFAULT_SIDELOBE_DB` antenna
+        # pattern): a `set_fidelity :ep` may land on ANY scenario, including a radar whose comp
+        # never carried EP/antenna config. Build exactly that radar (none of those keys) with a
+        # present jammer, tick under each MATCHED EP rung, and pin that it (a) doesn't throw —
+        # `_jam_tel` ticks, so a throw fails the test — and (b) applies the DEFAULT depth (same
+        # "a live config can't crash a tick" crash-safety parity every other gate pins).
+        function bare_world(; jpos, ep, bj_hz = 1.0e6)
+            fid = Dict{Symbol,Symbol}(:propagation => :free_space)
+            ep === :none || (fid[:ep] = ep)
+            w = World(seed = 1, fidelity = fid)
+            w.entities[:radar1] = Entity(:radar1, :radar; pos = Vec3(0, 0, 0),
+                comp = Dict{Symbol,Any}(:pt_w => 1000.0, :gain_db => 30.0,
+                    :freq_hz => EWSim.C_LIGHT / 0.03, :bandwidth_hz => 1.0e6,
+                    :noise_fig_db => 0.0, :losses_db => 0.0, :pfa => 1.0e-6, :swerling => 1))
+            w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(30_000.0, 0, 0),
+                comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+            w.entities[:jam1] = Entity(:jam1, :jammer; pos = jpos,
+                comp = Dict{Symbol,Any}(:pt_w => 100.0, :gain_db => 10.0, :bandwidth_hz => bj_hz))
+            subs = Subsystem[RadarSensor(:radar1), ConstantVelocity(:tgt1),
+                             ConstantVelocity(:jam1), Jammer(:jam1)]
+            return w, subs
+        end
+        # sidelobe_blanking on a STANDOFF jammer uses the DEFAULT cancel depth (no :cancel_db, and
+        # the standoff sits in the sidelobe under the DEFAULT beamwidth/sidelobe pattern too).
+        so = Vec3(28_000.0, 8_000.0, 0.0)
+        js_none  = _jam_tel(bare_world(jpos = so, ep = :none)...)["radar1.js_db"]
+        js_blank = _jam_tel(bare_world(jpos = so, ep = :sidelobe_blanking)...)["radar1.js_db"]
+        @test js_none - js_blank ≈ EWSim._DEFAULT_CANCEL_DB atol = 1e-6
+        # freq_agility on a SPOT jammer uses the DEFAULT agile band (no :agile_bw_hz in comp).
+        ss = Vec3(30_000.0, 0, 0)                       # self-screen → mainlobe; spot B_j=1e6
+        js_n2 = _jam_tel(bare_world(jpos = ss, ep = :none)...)["radar1.js_db"]
+        js_a2 = _jam_tel(bare_world(jpos = ss, ep = :freq_agility)...)["radar1.js_db"]
+        @test js_n2 - js_a2 ≈ 10 * log10(EWSim._DEFAULT_AGILE_BW_HZ / 1.0e6) atol = 1e-6
     end
 
     @testset "loader :jammer arm builds comp + [ConstantVelocity, Jammer]; rejects bad bandwidth" begin

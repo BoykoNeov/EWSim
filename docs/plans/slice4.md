@@ -255,11 +255,32 @@ scalar is a fake knob):
       jnr_db/js_db key**; loader arm (comp + subs + bandwidth≤0 / missing-block rejects). Mainlobe
       only (no antenna model / EP yet). **NO draw-topology hazard proven** — the byte-identity
       goldens (`_sample_z`, test_determinism) stayed green through the `_observe_point!` restructure.
-- [ ] 3. Two-level `Gr` in the jammer's `build_env!` (boresight = nearest target);
-      `ep` fidelity → `LIVE_FIDELITY_MODES` (no introduce-guard); conditioned EP in
-      `_observe_point!`; `set_fidelity :ep` (server.jl, per-key table from slice 3).
-      Gate-3 tests (standoff sidelobe, conditioned EP no-ops, mid-run toggle + introduce
-      both bit-identical, server write/reject).
+- [x] 3. **DONE & green (890 tests).** Two-level `Gr` in `build_env!`: the radar boresights its
+      NEAREST target (`_nearest_target`, ties by sorted id; `nothing` → conservative mainlobe so a
+      jammer-only scene can't throw), and the jammer's `_boresight_angle` off that line (acos of
+      the normalized dot, clamped, zero-vector guard) picks `antenna_gain`'s mainlobe Gr (θ≈0 →
+      self-screen, cancels in J/S) vs the sidelobe floor (off-axis → standoff, uncancelled). A
+      self-screen jammer rides θ=0 → mainlobe, so **gate-2 tests stay byte-identical**. `EP_MODES =
+      (:none,:freq_agility,:sidelobe_blanking)` joins `LIVE_FIDELITY_MODES` as `ep = EP_MODES` — and
+      `set_fidelity :ep` works with **NO server change** (the per-key table from slice 3 validates
+      it; the `:cfar` introduce-guard doesn't match `:ep`, so it is **introduce-safe**). EP applied
+      in the `_radar_jnr` seam via `_ep_factor(ep, c, comp)` — a NAMED, **CONDITIONED** modifier
+      (never a flat fudge): `:freq_agility` `JNR ×= min(1, B_j/B_agile)` (big vs SPOT, exact no-op
+      vs BARRAGE `B_j ≥ B_agile`), `:sidelobe_blanking` `JNR ×= db2lin(−cancel_db)` iff `!in_beam`
+      (exact no-op on a MAINLOBE self-screen jammer), `:none` → 1.0 exactly. Antenna/EP config are
+      RADAR comp keys read with **defaults** (`:beamwidth_rad :sidelobe_db :agile_bw_hz :cancel_db`)
+      so toggling `:ep` onto ANY scenario can't `KeyError` a tick (the "a live config can't crash a
+      tick" watch-item — the introduce-safe contract needs the defaults). `_observe_point!` reads
+      `ep` only when a jammer is present, so a no-jammer frame never consults it (byte-identical).
+      Tests: `test_jammer.jl` (standoff enters a sidelobe — `in_beam=false` + exact sidelobe JNR =
+      mainlobe·db2lin(−30); **2×2 EP conditioning** — matched reduces J/S by exactly cancel_db /
+      10·log10(B_agile/B_j), mismatched is a **bit-exact `==` no-op**, NOT calibrated-to-pass; matched
+      EP raises snr_db); `test_determinism.jl` (mid-run `:ep` **introduce AND toggle** both
+      bit-identical, `ta != tn` proves EP **flips detections** not a dead knob — self-screen spot
+      jammer at the burn-through knee where freq_agility's +10 dB tips ~half the looks; **jammer-free
+      introduce → rng end-state unchanged**, the sharpest introduce-safe form); `test_server.jl`
+      (`set_fidelity :ep` write/reject + introduce-allowed, the `:cfar`-guard contrast). **NO
+      draw-topology hazard** — the byte-identity goldens stayed green through the restructure.
 - [ ] 4. `scenarios/slice4_selfscreen.yaml` + `scenarios/slice4_standoff.yaml`; Godot
       **— SCENARIO TUNING (advisor, gate-2 review):** `burnthrough_range` scales with the link
       budget, and it is SMALL for modest numbers — the gate-2 fixture (`pt_w=1000, pj_w=100,

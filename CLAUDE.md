@@ -320,8 +320,9 @@ toggle/slider UI test needs NO server: `godot --headless --path clients/godot --
 res://net/slice3_ui_test.gd`. **(stretch, deferred)** a Pluto CFAR diagram (Pd/Pfa vs SNR per
 variant, or threshold-curve panels over the profile).
 
-**Slice 4 — jamming / EP** (HANDOFF §10 item 4) — **Steps 1–2 (gates 1–2 — jamming physics +
-self-screen burn-through live) DONE & green (862 tests).** Planned FULL in `docs/plans/slice4.md` (4 staged gates: `rf.jl` jamming
+**Slice 4 — jamming / EP** (HANDOFF §10 item 4) — **Steps 1–3 (gates 1–3 — jamming physics +
+self-screen burn-through + two-level antenna/standoff + `ep` fidelity) DONE & green (890 tests).**
+Planned FULL in `docs/plans/slice4.md` (4 staged gates: `rf.jl` jamming
 physics → `Jammer` `build_env!` subsystem + radar `SNR_eff=SNR/(1+JNR)` coupling + self-screening
 burn-through → two-level antenna model + standoff + `ep` fidelity [none/freq_agility/sidelobe_blanking]
 → scenarios + Godot spatial-view extensions + verifier). The jammer will be the **first subsystem to
@@ -383,13 +384,45 @@ NOT ship such a scenario). `test_jammer.jl` (6 testsets, +29): `build_env!` popu
 frame has NO jnr_db/js_db key**; the loader arm (comp + subs + bandwidth≤0 / missing-block rejects,
 which the programmatic-world tests would otherwise never exercise). Mainlobe only (no antenna model /
 EP yet).
-Next: **gate 3** — two-level `Gr` in the jammer's `build_env!` (boresight = nearest target → a
-standoff jammer enters a sidelobe, real `in_beam`); the `ep` fidelity (`none/freq_agility/
-sidelobe_blanking`) joins `LIVE_FIDELITY_MODES`; conditioned EP applied in `_radar_jnr` (the seam);
-`set_fidelity :ep` (per-key table, **no introduce-guard** — `:ep` is draw-invariant, the slice-3
-`:cfar`-guard contrast). Gate-3 tests: standoff sidelobe JNR, conditioned EP no-ops (sidelobe_blanking
-no-op on a mainlobe jammer, freq_agility no-op on barrage), mid-run `ep` toggle AND introduce both
-bit-identical, server write/reject.
+Step 3 (gate 3 — two-level antenna/standoff + `ep` fidelity live): `radar.jl` `build_env!` now uses a
+**two-level receive gain** — the radar boresights its NEAREST target (`_nearest_target`, ties by
+sorted id; `nothing` → conservative mainlobe so a jammer-only scene can't throw), and the jammer's
+`_boresight_angle` off that line (acos of the normalized dot, clamped to [−1,1], zero-vector guard)
+picks `antenna_gain`'s mainlobe Gr (θ≈0 → self-screen, cancels in J/S) vs the sidelobe floor (off-axis
+→ standoff, uncancelled & weaker, what sidelobe-blanking attacks). A self-screen jammer rides θ=0 →
+mainlobe, so **gate-2 self-screen tests stay byte-identical**. `EP_MODES = (:none, :freq_agility,
+:sidelobe_blanking)` joins `LIVE_FIDELITY_MODES` as `ep = EP_MODES`; **`set_fidelity :ep` needs NO
+server change** (the per-key table from slice 3 validates it, and the `:cfar` introduce-guard doesn't
+match `:ep` — so `:ep` is **introduce-safe**, the sharp slice-3 contrast). EP is applied in the
+`_radar_jnr` **seam** via `_ep_factor(ep, c, comp)` — a NAMED, **CONDITIONED** modifier (never a flat
+fudge): `:freq_agility` `JNR ×= min(1, B_j/B_agile)` (big benefit vs a SPOT jammer, **exact no-op vs
+BARRAGE** `B_j ≥ B_agile`), `:sidelobe_blanking` `JNR ×= db2lin(−cancel_db)` iff `!in_beam` (**exact
+no-op on a MAINLOBE** self-screen jammer — can't blank the mainlobe without blanking the target),
+`:none` → 1.0 exactly (byte-identical to no EP). Antenna/EP config are RADAR comp keys read with
+**defaults** (`:beamwidth_rad`=3°, `:sidelobe_db`=30, `:agile_bw_hz`=10 MHz, `:cancel_db`=30) so
+toggling `:ep` onto ANY scenario can't `KeyError` a tick — the introduce-safe contract REQUIRES the
+defaults (the "a live config can't crash a tick" watch-item). `_observe_point!` reads `ep` only when a
+jammer is present (`contribs !== nothing`), so a no-jammer frame never consults it → slices 1-3 stay
+byte-identical. Telemetry: `jnr_db`/`js_db` now reflect the EP-reduced JNR (the lesson is a visible
+number). Tests (+28): `test_jammer.jl` (+2 testsets — standoff enters a sidelobe: `in_beam=false` +
+exact sidelobe JNR = mainlobe·db2lin(−30); **2×2 EP conditioning** — matched reduces J/S by exactly
+`cancel_db` / `10·log10(B_agile/B_j)`, mismatched is a **bit-exact `==` no-op** [not calibrated-to-pass,
+the slice-2/3 trap], matched EP raises `snr_db`); `test_determinism.jl` (mid-run `:ep` **introduce AND
+toggle** both bit-identical, `ta != tn` proves EP **flips detections** [a self-screen spot jammer tuned
+to the burn-through knee — pj_w=1e-3 at 5 km — where freq_agility's +10 dB tips ~half the looks: not a
+dead knob, the slice-3 cfar pattern], **jammer-free introduce → rng end-state unchanged** = the
+sharpest introduce-safe form, closing the gap the goldens leave); `test_server.jl` (`set_fidelity :ep`
+write/reject + introduce-allowed). **NO draw-topology hazard** — the `_sample_z` golden +
+`test_determinism` stayed green through the `_radar_jnr` signature change.
+Next: **gate 4 (visible live)** — `scenarios/slice4_selfscreen.yaml` (closing self-screen jammer through
+burn-through — **R_bt must be tuned to ~10–30 km**, the gate-2 review caught the default ~9 m R_bt) +
+`scenarios/slice4_standoff.yaml` (off-axis standoff jammer → sidelobe/EP lesson, **radial** target
+closure so the jammer stays solidly in the sidelobe — no mainlobe↔sidelobe cliff); `scenario.jl` reads
+the antenna/EP radar comp keys from YAML; Godot spatial-view extensions (jammer marker, JNR/J-S readout,
+`ep` badge + EP-cycler button + jammer power/range sliders); `net/slice4_verify.gd` (burn-through
+crossover + EP toggles) + `net/slice4_ui_test.gd`; `Sandbox.tscn` headless smoke-load against a slice-4
+server; `test_scenario.jl` slice-4 loader assertions; windowed `_draw` visual confirm. (stretch) a Pluto
+burn-through diagram.
 
 ---
 

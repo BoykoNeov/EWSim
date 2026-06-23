@@ -137,6 +137,28 @@ end
         @test w2.fidelity[:propagation] === :two_ray
     end
 
+    @testset "set_fidelity :ep — write/reject + introduce-safe (no :cfar-style guard)" begin
+        # Slice-4 gate 3: `:ep` joins the per-key LIVE_FIDELITY_MODES table. Unlike `:cfar` it
+        # carries NO introduce-guard — EP only scales a deterministic scalar (no draw-count
+        # change), so it is safe to set on ANY scenario, even one that never had an `:ep` key. Use
+        # a plain (non-cfar, non-jammer) scenario to prove exactly that introduce-safety.
+        srv = EWSim.Server(_detect_scenario(1))
+        w = srv.scn.world
+        @test !haskey(w.fidelity, :ep)                          # the scenario default: no EP key
+        # INTRODUCING :ep mid-run is ALLOWED (the sharp contrast to :cfar's introduce-reject)...
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "ep", :value => "freq_agility"))
+        @test w.fidelity[:ep] === :freq_agility
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "ep", :value => "sidelobe_blanking"))
+        @test w.fidelity[:ep] === :sidelobe_blanking            # ...and changing the value too
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "ep", :value => "none"))
+        @test w.fidelity[:ep] === :none
+        # ...a bad rung is REJECTED before it lands (would throw in observe! → kill the session),
+        # leaving the live value untouched.
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "ep", :value => "cloaking"))
+        @test w.fidelity[:ep] === :none                         # unchanged by the bad cmd
+    end
+
     @testset "a live n_train/n_guard slider can't crash the tick (consumer clamp)" begin
         # set_param is the GENERIC channel (no per-key validation), so a slider dragged to an
         # odd n_train or a negative guard reaches observe! directly — which must CLAMP it, never
