@@ -69,6 +69,11 @@ var _threshold_db: Array = []     # per-cell CFAR threshold (dB) — CORE output
 var _detections: Array = []       # per-cell bool — cells the active rung flagged this look
 var _cfar_y_hi := 35.0            # top of the dB axis (auto-expands to fit a tall return)
 const CFAR_RUNGS := ["fixed", "ca", "go", "so", "os"]
+# Which fidelity the shared toggle button drives — decided ONCE from the handshake: "cfar"
+# (slice 3, range_axis present), "ep" (slice 4, an `ep` fidelity), else "propagation" (slice
+# 1/2). The render `_mode` stays "spatial" for slice 4 (no range axis); only the button differs.
+var _fid_kind := "propagation"
+const EP_RUNGS := ["none", "freq_agility", "sidelobe_blanking"]
 const CFAR_Y_LO := -15.0          # bottom of the dB axis (noise floor ≈ 0 dB; deep nulls clamp)
 const PLOT_L := 70.0              # plot rect insets (px) — left edge clears the first range label,
 const PLOT_T := 120.0             # top clears the UI panel, bottom leaves room for range labels
@@ -169,6 +174,7 @@ func _on_scenario(obj: Dictionary) -> void:
 		_enter_cfar_mode(obj)
 	else:
 		_mode = "spatial"
+		_setup_spatial_fid_btn()
 	_render_badge()
 	_update_fid_btn()
 	# Server boots PAUSED; start running so there is something to watch.
@@ -181,6 +187,7 @@ func _enter_cfar_mode(obj: Dictionary) -> void:
 	# guarded so the headless UI test — which builds the button without _build_ui's connect —
 	# doesn't error.
 	_mode = "cfar"
+	_fid_kind = "cfar"
 	_cfar_radar = str(obj.get("radar", ""))
 	_range_axis = obj.get("range_axis_m", [])
 	_n_cells = int(obj.get("n_cells", _range_axis.size()))
@@ -190,6 +197,22 @@ func _enter_cfar_mode(obj: Dictionary) -> void:
 	if not _prop_btn.pressed.is_connected(_on_cfar_pressed):
 		_prop_btn.pressed.connect(_on_cfar_pressed)
 	_prop_btn.tooltip_text = "Cycle CFAR rung (set_fidelity): fixed → ca → go → so → os"
+
+func _setup_spatial_fid_btn() -> void:
+	# Spatial view (slice 1/2/4): the shared button drives `ep` if the scenario carries one
+	# (slice 4 — no `propagation`, so the button is unambiguously the EP cycler, advisor catch),
+	# else `propagation` (slice 1/2, the binary toggle wired in _build_ui). The disconnect is
+	# guarded so the headless UI tests — which build the button without _build_ui's connect —
+	# don't error, exactly like _enter_cfar_mode.
+	if _fidelity.has("ep"):
+		_fid_kind = "ep"
+		if _prop_btn.pressed.is_connected(_on_prop_pressed):
+			_prop_btn.pressed.disconnect(_on_prop_pressed)
+		if not _prop_btn.pressed.is_connected(_on_ep_pressed):
+			_prop_btn.pressed.connect(_on_ep_pressed)
+		_prop_btn.tooltip_text = "Cycle EP (set_fidelity): none → freq_agility → sidelobe_blanking"
+	else:
+		_fid_kind = "propagation"
 
 func _render_badge() -> void:
 	# §12: a visible "<fidelity> approximation" badge, built from the live local fidelity
@@ -201,12 +224,15 @@ func _render_badge() -> void:
 	_badge.text = "approximation — " + (" · ".join(parts) if not parts.is_empty() else "unspecified")
 
 func _update_fid_btn() -> void:
-	# Mode-aware label for the shared fidelity-toggle button: the cfar rung in the range-power
-	# view, the propagation rung in the spatial view.
-	if _mode == "cfar":
-		_prop_btn.text = "cfar: %s" % str(_fidelity.get("cfar", "?"))
-	else:
-		_update_prop_btn()
+	# Kind-aware label for the shared fidelity button: the cfar rung (slice 3), the ep rung
+	# (slice 4), or the propagation rung (slice 1/2) — keyed off `_fid_kind`, decided at handshake.
+	match _fid_kind:
+		"cfar":
+			_prop_btn.text = "cfar: %s" % str(_fidelity.get("cfar", "?"))
+		"ep":
+			_prop_btn.text = "ep: %s" % str(_fidelity.get("ep", "?"))
+		_:
+			_update_prop_btn()
 
 func _update_prop_btn() -> void:
 	_prop_btn.text = "prop: %s" % str(_fidelity.get("propagation", "?"))
@@ -235,6 +261,21 @@ func _on_prop_pressed() -> void:
 	_client.send({"type": "set_fidelity", "key": "propagation", "value": next})
 	_render_badge()
 	_update_prop_btn()
+
+func _on_ep_pressed() -> void:
+	# Advance the EP rung one step round the ring (none→freq_agility→sidelobe_blanking→none) and
+	# tell the core (set_fidelity — the slice-2 live toggle, generalised; `ep` is introduce-safe
+	# so the server accepts it even if the scenario started at :none). EP changes only the
+	# detection BOOLEANS / the jnr_db·js_db readout, never the draw stream — so a mid-run cycle
+	# is bit-identical (slice-4 is slice-2-shaped, not slice-3's draw-flip). The client owns the
+	# displayed rung: update badge + button locally (the server applies it silently, no reply).
+	var cur := str(_fidelity.get("ep", "none"))
+	var i := EP_RUNGS.find(cur)
+	var next: String = EP_RUNGS[(i + 1) % EP_RUNGS.size()] if i >= 0 else "none"
+	_fidelity["ep"] = next
+	_client.send({"type": "set_fidelity", "key": "ep", "value": next})
+	_render_badge()
+	_update_fid_btn()
 
 func _on_state(obj: Dictionary) -> void:
 	_telemetry = obj.get("telemetry", {})
@@ -439,6 +480,18 @@ func _draw_spatial() -> void:
 				tcol = Color(0.75, 0.75, 0.75)
 			draw_circle(p, TARGET_R, tcol)
 			draw_string(_font, p + Vector2(10, -8), id + tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, tcol)
+		elif e.kind == "jammer":
+			# Noise jammer (slice 4): a magenta diamond, with a faint line back to the radar so the
+			# geometry reads — a SELF-SCREEN jammer sits ON the target (line along the boresight →
+			# mainlobe), a STANDOFF jammer sits off-axis/elevated (the line shows the sidelobe angle
+			# the radar receives it through). The J/S·JNR numbers are in the readout (telemetry
+			# keys), so the marker only needs to place the threat in the scene.
+			var jcol := Color(1.0, 0.35, 0.9)
+			if _radar_id != "" and _entities.has(_radar_id):
+				draw_line(_world_to_screen(_entities[_radar_id].pos), p, Color(1.0, 0.35, 0.9, 0.25), 1.0)
+			draw_colored_polygon(PackedVector2Array(
+				[p + Vector2(0, -8), p + Vector2(8, 0), p + Vector2(0, 8), p + Vector2(-8, 0)]), jcol)
+			draw_string(_font, p + Vector2(11, 4), id, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, jcol)
 
 	# detection blips: expanding rings that fade over BLIP_TTL
 	for b in _blips:

@@ -1,0 +1,75 @@
+# slice4_selfscreen — self-screening noise jammer + burn-through (HANDOFF §10 item 4, slice 4 gate 4).
+#
+# A large target (σ=100 m² — a transport/AWACS-class platform) closes head-on, carrying its
+# OWN noise jammer (a SPOT jammer, B_j=1 MHz, co-located on the target). This is the classic
+# SELF-SCREENING geometry and its lesson is BURN-THROUGH:
+#
+#   • The target echo is TWO-WAY (R⁻⁴); the jammer is ONE-WAY (R⁻²). As the engagement closes,
+#     the signal grows faster than the jam, so the effective SNR_eff = SNR/(1+JNR) climbs and
+#     the target eventually "burns through" the jamming. The burn-through range (J/S = 1) is
+#     R_bt ≈ 25 km here; the target stays masked (Pd≈0) well beyond it and lights up as it
+#     closes. Drag the jammer-power slider and watch the crossover move (more power → closer
+#     burn-through; J/S ∝ R², so 4× power halves R_bt).
+#   • Because the jammer rides the target it sits in the radar MAINLOBE (θ≈0 → Gr=G), so its
+#     gain CANCELS in J/S. That is why `sidelobe_blanking` is a NO-OP here (you cannot blank the
+#     mainlobe without blanking the target) while `freq_agility` HELPS a lot: the radar hops over
+#     a 10 MHz band and the 1 MHz spot jammer covers only 1/10 of the hops → JNR ×0.1 (−10 dB),
+#     pushing burn-through out to ~70 km. Cycle the `ep` button (none → freq_agility →
+#     sidelobe_blanking) and watch SNR_eff jump only for freq_agility — the matched EP.
+#
+# Pd_unjammed ≈ 1 across the whole closing run (σ=100, 200 kW), so the jammer is the SOLE cause
+# of masking — you can read jammer-masking directly off the target going dark, not confound it
+# with a range limit. The closed-form J/S physics is pinned by test_jamming.jl / test_jammer.jl;
+# here the point is the visible burn-through + the EP contrast (HANDOFF §1, §10).
+#
+# `propagation` is deliberately ABSENT (defaults free_space): two_ray nulls would inject zeros
+# into the link budget and muddy the burn-through curve — ONE lesson per scenario (the slice-3
+# rule). `ep` is the only fidelity, so the shared client button is unambiguously the ep cycler.
+name: slice4_selfscreen
+seed: 7
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  ep: none                       # none | freq_agility | sidelobe_blanking — the slice-4 EP knob
+
+entities:
+  - id: radar1
+    kind: radar
+    pos: [0, 0, 0]
+    radar:
+      pt_w:         200000       # 200 kW peak — strong enough that Pd_unjammed ≈ 1 (sole masker)
+      gain_db:      35
+      freq_hz:      9.4e9
+      bandwidth_hz: 1.0e6
+      noise_fig_db: 3
+      losses_db:    4
+      pfa:          1.0e-6
+      swerling:     1
+      n_pulses:     1
+      revisit_s:    0.1          # detection look / blip cadence (10 Hz); SNR readout is per-tick
+      beamwidth_deg: 3.0         # two-level antenna: ±1.5° mainlobe …
+      sidelobe_db:   30          # … then a 30 dB sidelobe floor (what sidelobe-blanking attacks)
+      agile_bw_hz:   1.0e7       # frequency-agility hop band (10 MHz) — freq_agility's lever
+      cancel_db:     30          # sidelobe-blanking cancellation depth
+
+  - id: tgt1
+    kind: target
+    pos: [35000, 0, 0]          # 35 km downrange, head-on — starts well beyond R_bt ≈ 25 km
+    vel: [-600, 0, 0]           # closing at 600 m/s
+    target:
+      rcs_m2: 100.0             # large platform (transport/AWACS class) carrying its own jammer
+
+  - id: jam1
+    kind: jammer
+    pos: [35000, 0, 0]          # CO-LOCATED with the target → self-screening (rides the mainlobe)
+    vel: [-600, 0, 0]
+    jammer:
+      pt_w:         8           # 8 W spot noise jammer (slider 1–200 W) — burn-through at ~25 km
+      gain_db:      0           # omni
+      bandwidth_hz: 1.0e6       # SPOT (1 MHz) — matches B_r, and freq_agility can outrun it
+
+knobs:                          # client sliders (target+key must resolve to a comp param);
+                                # `ep` is NOT here — it is a fidelity, cycled by the set_fidelity
+                                # button, not a comp param a slider writes.
+  - {target: jam1, key: pt_w,   min: 1,   max: 200, label: "Jammer power (W)",  log: true}
+  - {target: tgt1, key: rcs_m2, min: 1,   max: 200, label: "Target RCS (m²)",   log: true}

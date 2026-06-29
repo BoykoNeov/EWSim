@@ -15,6 +15,8 @@ using JSON3
 const _SCEN  = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice1_roc.yaml"))
 const _SCEN2 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice2_tworay.yaml"))
 const _SCEN3 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice3_cfar.yaml"))
+const _SCEN4S = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice4_selfscreen.yaml"))
+const _SCEN4O = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice4_standoff.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -149,6 +151,83 @@ end
         # (not buried in the truncated-window cells at the very start of the axis).
         cedge = EWSim._range_to_cell(EWSim._range(c.pos, r.pos), rstart, dr, ncells)
         @test cedge != 0 && cedge > r.comp[:n_guard] + r.comp[:n_train] ÷ 2
+    end
+
+    @testset "loader parses slice4_selfscreen.yaml (self-screen / burn-through)" begin
+        # Cheap insurance like the slice-2/3 loader tests: a malformed showcase fails HERE as a
+        # clear test, not downstream as a confusing server-launch timeout in the Godot verifier.
+        scn = load_scenario(_SCEN4S)
+        @test scn.name == "slice4_selfscreen"
+        @test scn.world.fidelity[:ep] === :none                # default EP rung (cycler reveals rest)
+        # propagation is deliberately ABSENT (advisor: one fidelity → the client button is
+        # unambiguously the ep cycler; radar.jl defaults propagation to free_space internally).
+        @test !haskey(scn.world.fidelity, :propagation)
+
+        r = scn.world.entities[:radar1]
+        @test r.kind === :radar
+        # the two-level antenna + EP keys must be POPULATED from YAML — they are the radar.jl
+        # defaults numerically, so a SILENTLY failed read would still pass every wire test;
+        # haskey is the discriminating check (a missing read leaves the key absent), and the
+        # beamwidth pins the degrees→radians conversion (authored 3°, stored as deg2rad(3)).
+        @test haskey(r.comp, :beamwidth_rad) && r.comp[:beamwidth_rad] ≈ deg2rad(3.0)
+        @test haskey(r.comp, :sidelobe_db)   && r.comp[:sidelobe_db]   == 30.0
+        @test haskey(r.comp, :agile_bw_hz)   && r.comp[:agile_bw_hz]   == 1.0e7
+        @test haskey(r.comp, :cancel_db)     && r.comp[:cancel_db]     == 30.0
+
+        j = scn.world.entities[:jam1]
+        @test j.kind === :jammer
+        @test j.comp[:pt_w] == 8.0 && j.comp[:gain_db] == 0.0
+        @test j.comp[:bandwidth_hz] == 1.0e6                   # SPOT — freq_agility can outrun it
+        # self-screening: the jammer is CO-LOCATED with the target (rides the mainlobe).
+        t = scn.world.entities[:tgt1]
+        @test j.pos == t.pos && j.vel == t.vel
+
+        # the jammer owns a ConstantVelocity mover AND a Jammer subsystem; sorted-id order is
+        # jam1 (CV, Jammer) < radar1 (RadarSensor) < tgt1 (CV) → 4 subsystems total.
+        @test length(scn.subs) == 4
+        @test count(s -> s isa Jammer, scn.subs) == 1
+        @test count(s -> s isa RadarSensor, scn.subs) == 1
+
+        # ep is a fidelity (cycler button), never a slider knob; the live sliders are the
+        # jammer power + target RCS (the burn-through levers).
+        @test all(k -> k.key !== :ep, scn.knobs)
+        @test Set((k.target, k.key) for k in scn.knobs) == Set([(:jam1, :pt_w), (:tgt1, :rcs_m2)])
+
+        # the target opens BEYOND its burn-through range (the dark start, masked by the jammer):
+        # ground range > R_bt (J/S = 1), where R_bt is the rf.jl closed form for this geometry.
+        rp  = EWSim._radar_params(r.comp)
+        Rbt = burnthrough_range(rp, t.comp[:rcs_m2], j.comp[:pt_w], j.comp[:gain_db], j.comp[:bandwidth_hz])
+        R0  = EWSim._range(t.pos, r.pos)
+        @test 1.0e4 ≤ Rbt ≤ 3.0e4                              # R_bt in the tuned 10–30 km window
+        @test R0 > Rbt
+    end
+
+    @testset "loader parses slice4_standoff.yaml (standoff / sidelobe blanking)" begin
+        scn = load_scenario(_SCEN4O)
+        @test scn.name == "slice4_standoff"
+        @test scn.world.fidelity[:ep] === :none
+        @test !haskey(scn.world.fidelity, :propagation)
+
+        r = scn.world.entities[:radar1]
+        @test haskey(r.comp, :beamwidth_rad) && r.comp[:beamwidth_rad] ≈ deg2rad(3.0)
+        @test haskey(r.comp, :cancel_db) && r.comp[:cancel_db] == 30.0
+
+        j = scn.world.entities[:jam1];  t = scn.world.entities[:tgt1]
+        @test j.kind === :jammer
+        @test j.vel == zero(Vec3)                              # standoff: holds station (orbits)
+        # offset in ALTITUDE (z), not cross-range (y): the elevation view collapses y, so a
+        # y-offset would render ON the boresight line and hide the off-axis lesson; z renders
+        # as a visibly elevated marker with an identical 3-D boresight angle (advisor catch).
+        @test j.pos[2] == 0.0 && j.pos[3] > 0.0
+        # the jammer sits firmly in a SIDELOBE: its angle off the radar→target boresight exceeds
+        # the half-beamwidth (so the live antenna model applies the sidelobe Gr, not the mainlobe).
+        θ = EWSim._boresight_angle(r.pos, t.pos, j.pos)
+        @test θ > r.comp[:beamwidth_rad] / 2
+        # BARRAGE jammer (B_j ≥ the agile band) → freq_agility is a no-op here (the 2×2 lesson).
+        @test j.comp[:bandwidth_hz] ≥ r.comp[:agile_bw_hz]
+
+        @test all(k -> k.key !== :ep, scn.knobs)
+        @test Set((k.target, k.key) for k in scn.knobs) == Set([(:jam1, :pt_w)])
     end
 
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin

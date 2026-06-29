@@ -320,8 +320,8 @@ toggle/slider UI test needs NO server: `godot --headless --path clients/godot --
 res://net/slice3_ui_test.gd`. **(stretch, deferred)** a Pluto CFAR diagram (Pd/Pfa vs SNR per
 variant, or threshold-curve panels over the profile).
 
-**Slice 4 — jamming / EP** (HANDOFF §10 item 4) — **Steps 1–3 (gates 1–3 — jamming physics +
-self-screen burn-through + two-level antenna/standoff + `ep` fidelity) DONE & green (890 tests).**
+**Slice 4 — jamming / EP** (HANDOFF §10 item 4) — **COMPLETE. Gates 1–4 done & green (923 tests);
+wire + UI machine-verified AND the spatial jammer-marker `_draw` VISUALLY CONFIRMED (2026-06-23).**
 Planned FULL in `docs/plans/slice4.md` (4 staged gates: `rf.jl` jamming
 physics → `Jammer` `build_env!` subsystem + radar `SNR_eff=SNR/(1+JNR)` coupling + self-screening
 burn-through → two-level antenna model + standoff + `ep` fidelity [none/freq_agility/sidelobe_blanking]
@@ -414,15 +414,61 @@ dead knob, the slice-3 cfar pattern], **jammer-free introduce → rng end-state 
 sharpest introduce-safe form, closing the gap the goldens leave); `test_server.jl` (`set_fidelity :ep`
 write/reject + introduce-allowed). **NO draw-topology hazard** — the `_sample_z` golden +
 `test_determinism` stayed green through the `_radar_jnr` signature change.
-Next: **gate 4 (visible live)** — `scenarios/slice4_selfscreen.yaml` (closing self-screen jammer through
-burn-through — **R_bt must be tuned to ~10–30 km**, the gate-2 review caught the default ~9 m R_bt) +
-`scenarios/slice4_standoff.yaml` (off-axis standoff jammer → sidelobe/EP lesson, **radial** target
-closure so the jammer stays solidly in the sidelobe — no mainlobe↔sidelobe cliff); `scenario.jl` reads
-the antenna/EP radar comp keys from YAML; Godot spatial-view extensions (jammer marker, JNR/J-S readout,
-`ep` badge + EP-cycler button + jammer power/range sliders); `net/slice4_verify.gd` (burn-through
-crossover + EP toggles) + `net/slice4_ui_test.gd`; `Sandbox.tscn` headless smoke-load against a slice-4
-server; `test_scenario.jl` slice-4 loader assertions; windowed `_draw` visual confirm. (stretch) a Pluto
-burn-through diagram.
+Step 4 (gate 4 — visible live): two showcase scenarios, numbers TUNED EMPIRICALLY (throwaway probes —
+the slice-3 lesson) and validated against the LIVE `build_env!→observe!` wire path, NOT a hand-recompute
+(advisor: pin against the oracle). `scenarios/slice4_selfscreen.yaml` — σ=100 platform closing head-on
+with a CO-LOCATED 8 W SPOT jammer on a 200 kW radar; **R_bt ≈ 25 km** (the gate-2-review's required
+10–30 km band; default ~9 m R_bt fixed). Pd_unjammed ≈ 1 across the run so the jammer is the SOLE masker
+(advisor: burn-through is clean only if range-limit isn't a confound) — which means light-up lands at
+~0.22·R_bt, INSIDE R_bt: that's correct physics (at the J/S=1 crossover SNR_eff≈0 dB), so we keep
+Pd_unj≈1 and let the EP toggle + jammer-power knob be the live levers rather than coincide light-up with
+R_bt. `scenarios/slice4_standoff.yaml` — σ=10 fighter closing RADIALLY (fixed bearing → no
+mainlobe↔sidelobe cliff) while a 10 kW BARRAGE (50 MHz) jammer holds station at `[28000, 0, 12000]`: the
+offset is in ALTITUDE (z), NOT cross-range (y), so the elevation view renders it as a visibly elevated
+~23° off-axis marker with an IDENTICAL 3-D boresight angle/sidelobe JNR (advisor: a y-offset collapses
+onto the boresight line in the elevation view). JNR ≈ 33 dB sidelobe, masked across [25,40] km. The 2×2
+EP lesson splits across the two scenarios: self-screen showcases **freq_agility** (spot, matched) with
+sidelobe_blanking a mainlobe no-op; standoff showcases **sidelobe_blanking** (off-axis, matched) with
+freq_agility a barrage no-op. `propagation` is OMITTED from both fidelity maps (advisor: one fidelity →
+the shared client button is unambiguously the ep cycler; radar defaults propagation to free_space).
+`scenario.jl`: `_radar_comp!` reads the OPTIONAL antenna/EP keys — `beamwidth_deg`
+(→`comp[:beamwidth_rad]=deg2rad`), `sidelobe_db`, `agile_bw_hz`, `cancel_db` — when present (radar.jl
+already defaults them, so slice-1/2/3 blocks omit them; introduce-safe). Godot `Sandbox.gd`: a
+`_fid_kind` discriminator (decided at handshake: `cfar`|`ep`|`propagation`) drives the SHARED fidelity
+button; a slice-4 (`ep`, no `range_axis_m`) handshake stays SPATIAL mode but `_setup_spatial_fid_btn`
+wires the button to `_on_ep_pressed` (the none→freq_agility→sidelobe_blanking ring, guarded disconnect
+like `_enter_cfar_mode`). `_draw_spatial` gains a `jammer` arm — a magenta diamond + a faint radar→jammer
+line (mainlobe-on-target vs off-axis-sidelobe geometry); JNR/J-S readout is automatic (telemetry keys).
+`net/slice4_verify.gd` drives the REAL server and covers BOTH scenarios on the wire (advisor: don't leave
+the standoff lesson to smoke-load only): self-screen burn-through (js_db +1.55→−12.43 as the target
+closes, SNR_eff rises), freq_agility +10 dB / sidelobe_blanking bit-identical no-op, **the jammer-power
+knob** (`set_param jam1.pt_w` 8→80 W raises js_db +10 dB → crossover moves; the slice-1 sandbox_verify
+"slider→core→telemetry IS the deliverable" precedent), then `load_scenario` to standoff:
+sidelobe_blanking drops js_db 30 dB (=cancel_db) / freq_agility bit-identical barrage no-op — all numbers
+matched the probe to the dB, no-ops bit-identical to 6 dp (`S4V OK`, exit 0). `net/slice4_ui_test.gd`
+(mock client, no server): slice-4 handshake stays spatial + wires the ep cycler, the ring walks/wraps,
+the jammer slider sends `set_param`, reset resyncs to none (`S4UI OK`). `Sandbox.tscn` smoke-loaded
+headless against BOTH slice-4 servers (no GDScript errors, server `DONE` ⇒ scene connected on each).
+`test_scenario.jl` +2 loader testsets (parse, ep default, propagation ABSENT, antenna/EP keys
+`haskey`-asserted + deg→rad pinned — advisor: the keys EQUAL the defaults numerically so a silently
+failed read would still pass every wire test; haskey is the discriminating check; jammer
+co-located/elevated geometry, sidelobe angle > half-beamwidth, barrage ≥ agile band, R_bt in 10–30 km,
+target beyond R_bt, ep not a knob). The spatial jammer-marker `_draw` PIXEL branch VISUALLY CONFIRMED
+2026-06-23 via the windowed shot harness (the slice-3 technique, [[ewsim-godot-headless]]): the STANDOFF
+scene renders the full lesson — `ep=none` target GREY (masked, js_db +9.2) with the elevated off-axis
+magenta jammer + ~23° line; `ep=sidelobe_blanking` target GREEN + detection blips (jnr_db 33.4→3.4 =
+−30 dB, detected:YES) — and the self-screen co-located jammer is legible (the magenta `jam1` label
+distinguishes it from the `tgt1` circle it rides). **NO draw-topology hazard** held throughout (slices
+1–3 byte-identical; `_sample_z` golden + test_determinism green). No open step remains in slice 4.
+
+Run the slice-4 showcase: `julia --project=core tools/server.jl scenarios/slice4_selfscreen.yaml` (or
+`scenarios/slice4_standoff.yaml`), then launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-uses
+the spatial view; cycle the `ep:` button to watch freq_agility burn through / sidelobe_blanking unmask;
+drag the jammer-power slider to move the crossover). Re-run the gate-4 proof headless: start that server,
+then `godot --headless --path clients/godot --script res://net/slice4_verify.gd` (exit 0 = pass; it
+`load_scenario`s standoff itself, so launch it against the SELFSCREEN server). The UI test needs NO
+server: `godot --headless --path clients/godot --script res://net/slice4_ui_test.gd`. **(stretch,
+deferred)** a Pluto burn-through diagram (`clients/notebooks/slice4_burnthrough.jl`).
 
 ---
 

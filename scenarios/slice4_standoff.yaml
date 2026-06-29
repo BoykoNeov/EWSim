@@ -1,0 +1,74 @@
+# slice4_standoff — off-axis standoff jammer + sidelobe blanking (HANDOFF §10 item 4, slice 4 gate 4).
+#
+# A fighter-class target (σ=10 m²) closes head-on while a dedicated STANDOFF jammer orbits at
+# altitude, off to one side, holding station — a BARRAGE jammer (B_j=50 MHz) parked in the
+# radar's SIDELOBE. This is the standoff geometry and its lesson is SIDELOBE BLANKING (the
+# mirror image of self-screen's burn-through):
+#
+#   • The jammer sits ~23° off the radar→target boresight, so the radar receives it through a
+#     sidelobe (Gr = G − 30 dB), NOT the mainlobe. That sidelobe gain does NOT cancel in J/S
+#     (unlike a self-screen jammer), so the jammer raises the noise floor across the whole
+#     engagement and the target is masked (Pd≈0) over [25, 40] km even as it closes.
+#   • `sidelobe_blanking` is the MATCHED EP: it attenuates anything arriving through a sidelobe
+#     by `cancel_db` = 30 dB → JNR drops 30 dB → the target pops out (Pd→1). Cycle the `ep`
+#     button and watch the target reappear only under sidelobe_blanking. `freq_agility` is a
+#     NO-OP here: the jammer is BARRAGE (B_j = 50 MHz ≥ the 10 MHz agile band), so hopping the
+#     frequency cannot escape it — min(1, B_j/B_agile) = 1. (Self-screen is the reverse: there
+#     freq_agility helps and sidelobe_blanking is the no-op — the 2×2 EP lesson across the two
+#     slice-4 scenarios.)
+#
+# The jammer's offset is in ALTITUDE (z), not cross-range (y): the spatial view is an elevation
+# view (screen-y = altitude), so a z-offset renders as a visibly ELEVATED, off-axis marker; the
+# 3-D boresight angle (and thus the sidelobe gain / JNR) is identical to a y-offset. The target
+# closes RADIALLY (along the boresight) so the jammer holds a constant ~23° sidelobe angle — no
+# mainlobe↔sidelobe cliff mid-run. Pd_unjammed ≈ 1 from 40 km in (σ=10, 200 kW) so the jammer is
+# the SOLE masker. Drag the jammer-power slider: too weak (≤few kW) and the target is never
+# masked; strong and even blanking only partly recovers it at long range.
+#
+# `propagation` ABSENT (free_space) — ONE lesson per scenario (slice-3 rule); `ep` is the only
+# fidelity so the client button is unambiguously the ep cycler. Physics pinned by test_jammer.jl.
+name: slice4_standoff
+seed: 11
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  ep: none                       # none | freq_agility | sidelobe_blanking — the slice-4 EP knob
+
+entities:
+  - id: radar1
+    kind: radar
+    pos: [0, 0, 0]
+    radar:
+      pt_w:         200000
+      gain_db:      35
+      freq_hz:      9.4e9
+      bandwidth_hz: 1.0e6
+      noise_fig_db: 3
+      losses_db:    4
+      pfa:          1.0e-6
+      swerling:     1
+      n_pulses:     1
+      revisit_s:    0.1
+      beamwidth_deg: 3.0         # ±1.5° mainlobe; the jammer at ~23° is firmly in the sidelobe
+      sidelobe_db:   30          # 30 dB sidelobe floor → Gr_jammer = 35 − 30 = 5 dB
+      agile_bw_hz:   1.0e7       # 10 MHz hop band — narrower than the barrage jammer (no-op)
+      cancel_db:     30          # sidelobe-blanking depth — the matched-EP 30 dB JNR drop
+
+  - id: tgt1
+    kind: target
+    pos: [38000, 0, 0]          # 38 km, head-on, closing radially (boresight stays on +x)
+    vel: [-400, 0, 0]
+    target:
+      rcs_m2: 10.0              # fighter-class
+
+  - id: jam1
+    kind: jammer
+    pos: [28000, 0, 12000]      # standoff: R_j ≈ 30.5 km, ~23.2° ABOVE boresight → sidelobe
+    vel: [0, 0, 0]             # holds station (orbits) — does not close with the target
+    jammer:
+      pt_w:         10000       # 10 kW barrage jammer (slider 1–100 kW) — JNR ≈ 33 dB in sidelobe
+      gain_db:      10
+      bandwidth_hz: 5.0e7       # BARRAGE (50 MHz ≥ 10 MHz agile band) → freq_agility is a no-op
+
+knobs:
+  - {target: jam1, key: pt_w, min: 1000, max: 100000, label: "Jammer power (W)", log: true}

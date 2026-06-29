@@ -73,6 +73,17 @@ function _radar_comp!(comp::Dict{Symbol,Any}, block::AbstractDict)
     haskey(block, "range_start_m") && (comp[:range_start_m] = _f64(block["range_start_m"]))
     haskey(block, "n_train")       && (comp[:n_train]       = Int(block["n_train"]))
     haskey(block, "n_guard")       && (comp[:n_guard]       = Int(block["n_guard"]))
+    # Optional two-level antenna + EP config (slice 4): the receive pattern (beamwidth /
+    # sidelobe floor) and the EP parameters (frequency-agility hop band / sidelobe-blanking
+    # cancel depth). Read into the comp bag only when present — `build_env!` / `_ep_factor`
+    # already fall back to the radar.jl defaults via `get(comp, …, default)`, so a slice-1/2/3
+    # radar block omits them entirely AND toggling `:ep` onto any scenario stays crash-safe.
+    # Beamwidth is authored in DEGREES (the natural unit) and stored as RADIANS (the key the
+    # antenna model reads), matching the `comp[:beamwidth_rad]` spelling test_jammer.jl uses.
+    haskey(block, "beamwidth_deg") && (comp[:beamwidth_rad] = deg2rad(_f64(block["beamwidth_deg"])))
+    haskey(block, "sidelobe_db")   && (comp[:sidelobe_db]   = _f64(block["sidelobe_db"]))
+    haskey(block, "agile_bw_hz")   && (comp[:agile_bw_hz]   = _f64(block["agile_bw_hz"]))
+    haskey(block, "cancel_db")     && (comp[:cancel_db]     = _f64(block["cancel_db"]))
     return comp
 end
 
