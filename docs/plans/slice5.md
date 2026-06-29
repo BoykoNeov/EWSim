@@ -78,24 +78,37 @@ post-processing — no extra draws):
   Jacobian row `Hᵢ = [−sin θ̂ᵢ/R̂ᵢ, cos θ̂ᵢ/R̂ᵢ]`, update `Δp = (Hᵀ R⁻¹ H)⁻¹ Hᵀ R⁻¹ r`,
   `R = diag(σᵢ²)`. **Fixed iteration count** (no while-until-converged — keeps it deterministic
   and un-stallable inside a tick; named: "N-step Gauss-Newton, not to convergence"). Removes most
-  of the pseudolinear bias.
+  of the pseudolinear bias. **Divergence fallback (advisor #6):** a fixed iteration *count* bounds
+  the time but not the *result* — a GN step under bad geometry can overshoot to NaN or walk the fix
+  *away* from the data. So guard the step (singular-`HᵀR⁻¹H` det floor, reject a step that produces
+  a non-finite `p̂` or grows the residual norm) and **fall back to the pseudolinear seed** on
+  divergence — never return NaN / never spin. Because `:ml` is *seeded* by the pseudolinear fix, the
+  `:ml` path computes the pseudolinear solution first — deterministic, **no new draws** (the rung
+  switch is still draw-free).
 
 ### 3. The error ellipse + GDOP (`geometry.jl`)
 - **Linearized (CRLB / first-order) position covariance:** `C = (Hᵀ R⁻¹ H)⁻¹` evaluated at the
-  estimate (`H`, `R` as above) — a 2×2 symmetric matrix, **the live ellipse**. Named
-  approximation: exact only for small errors / benign geometry; under bad geometry the *true*
-  fix scatter is non-elliptical (banana-shaped) and the linear ellipse **under-predicts** it —
-  quantified by the offline MC stretch (gate 3, below), the slice-1 analytic-vs-MC convergence
-  reprised in 2-D.
+  estimate (`H`, `R = diag(σᵢ²)` as above) — a 2×2 symmetric matrix that **carries the actual σθ**,
+  **the live ellipse**. Named approximation: exact only for small errors / benign geometry; under
+  bad geometry the *true* fix scatter is non-elliptical (banana-shaped) and the linear ellipse
+  **under-predicts** it — quantified by the offline MC stretch (gate 3, below), the slice-1
+  analytic-vs-MC convergence reprised in 2-D.
 - **`eig2x2(C) → (λ₁ ≥ λ₂, angle)`** — closed-form symmetric 2×2 eigendecomposition (no
   LinearAlgebra): `λ = (a+c)/2 ± √(((a−c)/2)² + b²)`, principal angle `½·atan(2b, a−c)`.
-  **`error_ellipse(C; nsigma=1) → (a, b, ang)`** = `(nsigma·√λ₁, nsigma·√λ₂, angle)`.
-- **`gdop(H, R) = √trace((Hᵀ R⁻¹ H)⁻¹)`** normalized to unit bearing variance — a pure-geometry
-  scalar (the **same** DOP math GPS will reuse, HANDOFF §9): small for orthogonal crossings, →∞
-  as the geometry degenerates (collinear). The ellipse *area* ∝ the geometry factor; `gdop` is
-  the scalar readout of "how good is this geometry right now."
+  **`error_ellipse(C; nsigma=1) → (a, b, ang)`** = `(nsigma·√λ₁, nsigma·√λ₂, angle)`. Because `C`
+  carries σθ, the ellipse axes **scale with σθ** (the live-slider lesson). The principal `angle`
+  is an eigenvector `atan2` → it **wraps** (test it), and under bad geometry it aligns with the LOS
+  (the ellipse elongates *down-range*, not across — advisor #3).
+- **`gdop(H) = √trace((Hᵀ H)⁻¹)`** — computed at **UNIT measurement variance** (σθ ≡ 1), so it is a
+  pure-geometry, dimensionless scalar with `σ_pos = gdop·σθ` (the **same** DOP math GPS will reuse,
+  HANDOFF §9). The range-weighting (far sensors weigh less) is already baked into `H`'s `1/R̂ᵢ`
+  rows; GDOP must **NOT** be the σθ-weighted `√trace((HᵀR⁻¹H)⁻¹)` — that would make a σθ slider
+  wrongly move GDOP (the CFAR mean-vs-sum convention trap on a new surface — advisor #2). **GDOP is
+  geometry only; the ellipse carries σθ.** Small for orthogonal crossings, →∞ (capped finite) as the
+  geometry degenerates (collinear / emitter on the baseline extension). `gdop` is the scalar readout
+  of "how good is this geometry right now," **invariant to the σθ slider** (pin this).
 
-## Decisions taken (pending advisor review before gate-1 code)
+## Decisions taken (advisor-reviewed 2026-06-29 — both flagged decisions confirmed, 6 catches folded in)
 - **Entity/subsystem model — Model A, the phase-4 decomposition (lights `decide!`).** DF sensors
   are `:df_sensor` **entities**, each carrying a **`DFSensor`** subsystem (phase-3 `observe!`):
   it reads the (single) emitter's truth `pos`, computes the true bearing, draws one noisy bearing,
@@ -125,6 +138,20 @@ post-processing — no extra draws):
   geolocation subsystem file and is **referenced** by `LIVE_FIDELITY_MODES` (the `CFAR_MODES`
   lesson — one list, no drift) — which means the geolocation include must precede the
   `LIVE_FIDELITY_MODES` definition (see Context/landmarks).
+- **`geometry.jl` / `estimation.jl` are HANDOFF §9 SHARED LIBS — keep the signatures
+  measurement-agnostic NOW, or rewrite them in slice 6 (advisor #4, cheap-now/expensive-later).**
+  - `geometry.jl` takes a **Jacobian / geometry matrix**, not bearings: `gdop(H)`, `error_ellipse(C)`,
+    `eig2x2(C)` all consume an `H`/`C` and know nothing about angles — so GPS pseudorange DOP reuses
+    them verbatim. (`bearing`/`wrap_angle` are the only angle-specific helpers; they can live here or
+    move to `geolocation.jl` — they are not what GPS reuses.)
+  - `estimation.jl` is a **generic LS + Gauss-Newton scaffold**: a `linear_ls(A, b, W) → (p, cov)`
+    (the 2×2 closed-form normal-equation solve) and a `gauss_newton(p0, residual_fn, jacobian_fn, R;
+    iters) → (p, cov)` that take **callbacks** — NOT bearings-hardcoded. The bearings-specific
+    `A`/`H` construction (the `[sin θ̂, −cos θ̂]` rows, the `wrap`-ed residual) lives in
+    `geolocation.jl` (or a thin `bearings_fix` wrapper) and *calls* the scaffold. GPS trilateration
+    (slice 6) and the seeker filter then reuse the same `gauss_newton` with their own residual/Jacobian.
+    Designing this seam now costs a few extra function boundaries; retrofitting it after bearings is
+    baked in is a rewrite.
 - **MC-scatter-vs-linearized-ellipse is OFFLINE (`batch.jl` + a Pluto stretch), NOT a live rung.**
   An MC covariance would re-draw the bearings `N_mc` times per fix — a draw-topology hazard that
   would make the rung introduce-unsafe and complicate determinism. The **distribution path belongs
@@ -173,18 +200,28 @@ post-processing — no extra draws):
    - `test_geometry.jl` (closed-form, slice-2 style — **explicit `atol`**, never rtol-`≈0`):
      `bearing` signs in all four quadrants + the wrap round-trip (the §1 sign/trifecta anchor);
      `eig2x2` vs a hand-diagonalized matrix (incl. a non-axis-aligned cov → a rotated ellipse
-     angle); `error_ellipse` axes = `nsigma·√λ` on a diagonal cov; `gdop` monotonicity —
-     orthogonal crossing is the **minimum**, collinear sensors → **huge but finite** (the singular
-     guard), and a wider baseline lowers gdop.
+     angle, and `ell_deg` **wrap** at the ±90° boundary); `error_ellipse` axes = `nsigma·√λ` on a
+     diagonal cov; `gdop` monotonicity — orthogonal crossing is the **minimum**, collinear sensors /
+     emitter on the baseline extension → **huge but finite** (the singular guard) with the ellipse
+     **elongated ALONG the LOS** (`ell_deg` points down-range, not across — advisor #3, an
+     orientation pin not just a magnitude pin), and a wider baseline lowers gdop; the **far-sensor
+     1/R² weighting** (a distant sensor contributes less Fisher info — moving one sensor out widens
+     the ellipse, advisor #3); and the **GDOP-is-geometry-only** invariant — `gdop` computed at unit
+     σ is **unchanged** when σθ scales, while `error_ellipse` axes scale **linearly** with σθ
+     (advisor #2, the σθ-slider-must-not-move-GDOP pin, the closed-form half of it).
    - `test_estimation.jl` (closed-form **+** an MC band, the slice-1 detection pattern):
      noise-free bearings → fix == truth **exactly** for *both* estimators (`atol`); a 2-sensor 90°
      crossing → the geometric intersection; the **pseudolinear bias** as an **external anchor**
-     (MC mean of the pseudolinear fix is biased away from truth by a known sign at long range, and
-     **`:ml` strictly reduces ‖bias‖** — NOT a self-calibrated check, the slice-2/3/4
-     "don't-pass-by-construction" rule); the **CRLB-vs-MC** covariance match within a Wilson-style
-     band for **good** geometry (analytic ellipse ≈ MC scatter cov) **and** the named
-     **under-prediction** for **bad** geometry (linear ellipse area < MC scatter area — pinned as a
-     real effect, the honest approximation boundary). Slices 1–4 physics tests stay green untouched.
+     (MC **mean** of the pseudolinear fix is biased away from truth by a known sign at long range —
+     check the **mean offset**, not just the covariance: a biased estimator can have right-shaped
+     scatter around the wrong centre, advisor #1 — and **`:ml` strictly reduces ‖bias‖**, NOT a
+     self-calibrated check, the slice-2/3/4 "don't-pass-by-construction" rule); the **CRLB-vs-MC**
+     covariance match tested against the **`:ml`** (≈unbiased) estimator within a Wilson-style band
+     for **good** geometry (analytic ellipse ≈ ML MC scatter cov — CRLB bounds the *unbiased*
+     estimator, so matching it to the *biased* pseudolinear scatter would be a category error,
+     advisor #1) **and** the named **under-prediction** for **bad** geometry (linear ellipse area <
+     MC scatter area — pinned as a real effect, the honest approximation boundary). Slices 1–4
+     physics tests stay green untouched.
 2. **Live fix + linearized ellipse (the DF subsystems wired, no fidelity toggle yet)** —
    `DFSensor <: Subsystem` (phase-3 `observe!` → `env[:bearings]`); `Geolocator <: Subsystem`
    (phase-4 `decide!` → fix/ellipse/gdop telemetry); `:df_sensor`/`:df_station`/`:emitter` kinds in
@@ -204,9 +241,10 @@ post-processing — no extra draws):
    plan view (sensor markers + bearing rays, emitter truth, fix, **error ellipse**, gdop/err_m
    readout, the `estimator` badge + cycler button + σθ sliders); `net/slice5_verify.gd` (drives the
    real server: the ellipse `a/b` stretches as the emitter closes into bad geometry; `set_param`
-   on a sensor's `sigma_theta_deg` scales the ellipse — the slider→core→telemetry deliverable;
-   **`set_fidelity :estimator` pseudolinear→ml reduces `err_m`** at the worst-geometry sample, and
-   `t` is bit-identical under a held seed); `net/slice5_ui_test.gd` (the estimator cycler + σθ
+   on a sensor's `sigma_theta_deg` scales the ellipse `ell_a`/`ell_b` **while `gdop` stays fixed**
+   (advisor #2 on the wire — GDOP is geometry, the slider is σθ) — the slider→core→telemetry
+   deliverable; **`set_fidelity :estimator` pseudolinear→ml reduces `err_m`** at the worst-geometry
+   sample, and `t` is bit-identical under a held seed); `net/slice5_ui_test.gd` (the estimator cycler + σθ
    slider + badge, mock client, no server); `Sandbox.tscn` smoke-loaded headless against a slice-5
    server; `test_determinism.jl` (mid-run `:estimator` **toggle AND introduce** both bit-identical,
    `fix` differs between rungs proving it is not a dead knob; no-DF-introduce → rng end-state
@@ -222,16 +260,22 @@ post-processing — no extra draws):
    2-D), a closed-form/MC regression test in `test_batch.jl`, **not** a live rung.
 
 ## Task checklist
-- [ ] 1. **Geometry + estimation primitives.** `geometry.jl` (`bearing`, `wrap_angle`, `eig2x2`,
-      `error_ellipse`, `gdop` — all pure, dependency-free closed-form 2×2) + `estimation.jl`
-      (`bearings_fix(sensor_pos, theta, sigma; method, nsigma) → (pos2, cov2)`, pseudolinear seed +
-      N-step Gauss-Newton ML, the singular-geometry covariance cap). Export both. `test_geometry.jl`
-      + `test_estimation.jl` per gate 1 (closed-form signs/wrap/eig/ellipse/gdop + the external
-      pseudolinear-bias anchor + CRLB-vs-MC good-geometry match + bad-geometry under-prediction).
-      Wire both into `runtests.jl` after the rf/detection tests. Slices 1–4 green untouched.
+- [ ] 1. **Geometry + estimation primitives (measurement-agnostic, §9 shared-lib signatures).**
+      `geometry.jl` (`bearing`, `wrap_angle`, `eig2x2`, `error_ellipse(C)`, `gdop(H)` at **unit σ** —
+      all pure, dependency-free closed-form 2×2, `gdop`/`error_ellipse`/`eig2x2` consume an `H`/`C`
+      matrix, NOT angles) + `estimation.jl` (the generic scaffold: `linear_ls(A, b, W) → (p, cov)` +
+      `gauss_newton(p0, residual_fn, jacobian_fn, R; iters) → (p, cov)` with callbacks + the
+      divergence→seed fallback + the singular-det floor; the bearings-specific `A`/`H` rows + the
+      `:pseudolinear`/`:ml` `bearings_fix` wrapper call the scaffold). Export both. `test_geometry.jl`
+      + `test_estimation.jl` per gate 1 (closed-form signs/wrap/eig/ellipse + gdop monotonicity &
+      **σθ-invariance** & ellipse-along-LOS orientation & 1/R² far-sensor weighting; the external
+      pseudolinear-**mean-bias** anchor + **ML**-CRLB-vs-MC good-geometry match + bad-geometry
+      under-prediction). Wire both into `runtests.jl` after the rf/detection tests. Slices 1–4 green
+      untouched.
 - [ ] 2. **DF subsystems wired (phase 4 lit).** `DFSensor`/`Geolocator` (a new `geolocation.jl`,
-      included before `radar.jl`'s `LIVE_FIDELITY_MODES` so `ESTIMATOR_MODES` can be referenced —
-      or `LIVE_FIDELITY_MODES` moves after both; decide in Context). `env[:bearings]` record +
+      included `detection → geometry → estimation → geolocation → radar` so `LIVE_FIDELITY_MODES`
+      can reference `ESTIMATOR_MODES` in place — confirm `geolocation.jl` has no back-dep on
+      `radar.jl` first; fallback = move `LIVE_FIDELITY_MODES` to a post-include registry). `env[:bearings]` record +
       `BearingRecord` named-tuple; the geolocator's `decide!` → fix/ellipse/gdop telemetry (floored
       finite). `:df_sensor`/`:df_station`/`:emitter` kinds in `scenario.jl` `_build_entity` (sensor
       block `sigma_theta_deg`; emitter = `ConstantVelocity`; station = `Geolocator` + optional
@@ -259,10 +303,19 @@ post-processing — no extra draws):
   (`env[:jamming][rid]`) maps to a per-station (or flat) `env[:bearings]` here.
 - **The fidelity table** is `LIVE_FIDELITY_MODES` (`radar.jl:102`), the per-key source of truth the
   server's `set_fidelity` validates (`server.jl:160`). Add `estimator = ESTIMATOR_MODES`. **Include
-  order:** `EWSim.jl:21` includes `radar.jl` (where `LIVE_FIDELITY_MODES` lives) — the new
-  `geolocation.jl` (defining `ESTIMATOR_MODES`) must be `include`d **before** that line, **or**
-  `LIVE_FIDELITY_MODES` moves to a small post-include registry. `:estimator` carries **no**
-  introduce-guard (the `:cfar` guard at `server.jl:172` does not match it — introduce-safe).
+  order (advisor #5 — resolve BEFORE writing code; it is a hard `using EWSim` compile failure
+  otherwise):** the current order is `world → subsystem → protocol → rf → detection → radar →
+  scenario → batch → server` (`EWSim.jl:16-24`). Slot the new files as:
+  `… detection.jl → geometry.jl → estimation.jl → geolocation.jl → radar.jl → …`. Rationale:
+  `geometry.jl`/`estimation.jl` (gate 1) are pure and depend only on `world.jl` + `StaticArrays`;
+  `geolocation.jl` (gate 2, defining `ESTIMATOR_MODES` + `DFSensor`/`Geolocator`) depends on
+  `subsystem.jl` + `world.jl` + `geometry.jl` + `estimation.jl` but **NOT** `radar.jl` (verify: the
+  DF subsystems need world/subsystem/geometry/estimation, never a radar symbol). With
+  `geolocation.jl` *before* `radar.jl`, `LIVE_FIDELITY_MODES` can reference `ESTIMATOR_MODES` and
+  stays put. **Fallback only if a back-dep on `radar.jl` surfaces:** move `LIVE_FIDELITY_MODES` to a
+  tiny post-include registry after both files. Decide (and confirm no back-dep) at gate 2.
+  `:estimator` carries **no** introduce-guard (the `:cfar` guard at `server.jl:172` does not match
+  it — introduce-safe).
 - **The loader** `_build_entity` (`scenario.jl:91`) is the `kind`-dispatch — add `:emitter`
   (≈ `:target`: `ConstantVelocity`, minimal comp), `:df_sensor` (a sensor block + a `DFSensor`
   subsystem — like `:radar` owning `RadarSensor`), `:df_station` (a `Geolocator` subsystem; closest
@@ -304,9 +357,15 @@ post-processing — no extra draws):
   rung. Pin (a) no-DF byte-identity vs the slice-1 golden; (b) the fix differs between rungs while
   the `w.rng` end-state is identical; (c) mid-run `:estimator` toggle **and** introduce both
   bit-identical.
-- **Fixed-iteration ML, never until-convergence.** A `while !converged` loop inside `decide!` could
-  spin (bad geometry → slow/no convergence) and stall the tick non-deterministically. Use a fixed
-  iteration count (named) so a tick is bounded and bit-reproducible.
+- **Fixed-iteration ML, never until-convergence — AND a divergence fallback (advisor #6).** A
+  `while !converged` loop inside `decide!` could spin (bad geometry → slow/no convergence) and stall
+  the tick non-deterministically. Use a fixed iteration count (named) so a tick is bounded and
+  bit-reproducible. But the count bounds *time*, not the *result*: a GN step under bad geometry can
+  overshoot to NaN or walk the fix away from the data. So guard each step (singular-`HᵀR⁻¹H` det
+  floor; reject a step that yields a non-finite `p̂` or grows the residual norm) and **fall back to
+  the pseudolinear seed** on divergence — `:ml` *seeds* from pseudolinear, so the worst case is "no
+  better than pseudolinear," never NaN/spin. The singular-det floor alone (next item) covers the
+  2×2 inverse, **not** GN divergence — they are two distinct guards.
 - **The linearized ellipse is an approximation** — name it; it under-predicts the true scatter under
   bad geometry. The offline MC stretch (gate-3 stretch) quantifies *where*; do **not** silently
   present the linear ellipse as ground truth (HANDOFF §1: no hidden approximations).
