@@ -15,6 +15,8 @@ using Random
     include("test_protocol.jl")
     include("test_radar_eq.jl")
     include("test_propagation.jl")
+    include("test_geometry.jl")
+    include("test_estimation.jl")
     include("test_jamming.jl")
     include("test_radar.jl")
     include("test_jammer.jl")

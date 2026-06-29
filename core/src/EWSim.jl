@@ -18,6 +18,8 @@ include("subsystem.jl")
 include("protocol.jl")
 include("rf.jl")
 include("detection.jl")
+include("geometry.jl")
+include("estimation.jl")
 include("radar.jl")
 include("scenario.jl")
 include("batch.jl")
@@ -39,6 +41,9 @@ export jam_noise_ratio, antenna_gain, burnthrough_range
 export detection_threshold, pd_analytic, pd_montecarlo, detect_once
 # CFAR adaptive thresholding (slice 3)
 export cfar_alpha, cfar_threshold, cfar_scan
+# DF / geolocation shared libs (slice 5): geometry/DOP + estimation scaffold
+export bearing, wrap_angle, eig2x2, error_ellipse, gdop, FINITE_CEIL
+export linear_ls, gauss_newton, bearings_fix, ESTIMATOR_MODES
 # Slice-1 subsystems + scenario loader (Jammer is the slice-4 build_env! subsystem)
 export ConstantVelocity, RadarSensor, Jammer, Knob, Scenario, load_scenario
 # Offline batch sweeps (ROC artifact + slice-2 coverage diagram)

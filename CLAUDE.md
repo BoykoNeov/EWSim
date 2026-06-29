@@ -470,6 +470,66 @@ then `godot --headless --path clients/godot --script res://net/slice4_verify.gd`
 server: `godot --headless --path clients/godot --script res://net/slice4_ui_test.gd`. **(stretch,
 deferred)** a Pluto burn-through diagram (`clients/notebooks/slice4_burnthrough.jl`).
 
+**Slice 5 — DF / geolocation** (bearings-only emitter location + the GDOP error ellipse; HANDOFF §10
+item 5) — **IN PROGRESS. Gate 1 done & green (967 tests).** Planned FULL in `docs/plans/slice5.md`
+(3 staged gates: geometry/estimation primitives → `DFSensor`/`Geolocator` lighting **phase 4 of the
+tick contract** [`decide!`, the natural milestone after slice 4 lit `build_env!`] → `estimator`
+fidelity + scenario + Godot **plan/top-down (x-y)** view + verifier). The lesson is **GDOP**: bearings
+crossing near 90° pin an emitter tightly, grazing crossings stretch the covariance into a long thin
+**error ellipse** down-range; the second lesson is the **estimator fidelity** (the biased closed-form
+`pseudolinear` fix vs the `ml` Gauss-Newton fix walking back toward truth). Scope: single emitter,
+**2-D azimuth-only**, jamming-free (one lesson per scenario). NO draw-topology hazard (deterministic
+given the drawn bearings, like slices 2/4 not slice 3); `:estimator` is introduce-safe.
+Gate 1 (geometry + estimation primitives green — closed-form + analytic-vs-MC): two new HANDOFF §9
+**SHARED LIBS** with deliberately **measurement-agnostic signatures** (GPS-DOP/seeker reuse the
+*signature*, only the inner 2×2 inverse generalises to 4×4 later — advisor §9; eig2x2 stays 2×2-by-
+name). Both pure / no `w.rng`, dependency-free closed-form 2×2 (no LinearAlgebra — the `_range` house
+style). Included `detection.jl → geometry.jl → estimation.jl → radar.jl` (pure, depend only on
+world/StaticArrays). `geometry.jl`: `bearing(from,to)=atan(Δy,Δx)` planar (z ignored), `wrap_angle=
+rem(·,2π,RoundNearest)→[−π,π]` for every angular residual (the §1 sign/wrap trifecta, pinned in 4
+quadrants), `eig2x2(C)` closed-form symmetric eigendecomp, `error_ellipse(C;nsigma)→(a,b,ang)` (axes
+∝ σθ via C), `gdop(H)=√trace((HᵀH)⁻¹)` at **UNIT σ** (geometry-only, units m/rad for AOA, σθ-INVARIANT
+— must NOT be the σθ-weighted form, advisor #2). **The discriminating seam (advisor):** gdop and the
+ellipse consume *two different matrices* — gdop ← H with `1/R̂` rows at unit σ (range-weighted,
+σ-unweighted); ellipse ← `C=(HᵀR⁻¹H)⁻¹`, `R=diag(σ²)` (range AND σ weighted); feed the σ-weighted one
+to gdop and the σθ slider wrongly moves GDOP. Identity `AᵀWA≡HᵀR⁻¹H` ⇒ the pseudolinear `linear_ls`
+cov **is** the ellipse C (no separate Fisher path). Singular geometry → readouts clamp to a NAMED
+exported `FINITE_CEIL=1e9` (isfinite-guard, NOT an absolute det-floor which is scale-fragile —
+advisor); the wire cap (gate 2/3) reuses it. `estimation.jl`: generic `linear_ls(A,b,W)→(p,cov)` (2×2
+normal-eqs, relative det-ridge) + `gauss_newton(p0,resid_fn,jac_fn,R;iters)→(p,cov)` (callback-based,
+**fixed iteration count** not until-convergence + **divergence→seed fallback** [non-finite or
+residual-growing step rejected, keeps last good p] — advisor #6, two distinct guards from the det-
+floor); `bearings_fix(thetas,positions,sigmas;estimator)` is the ONE bearings-specific resident (the
+staged gate needs it at gate 1, before geolocation.jl), builds `[sinθ̂,−cosθ̂]` rows + the wrapped
+residual + calls the scaffold. `:pseudolinear` = the BIASED baseline (noisy θ̂ in the regressor),
+`:ml` = GN seeded at pseudolinear (draw-free rung switch). **Named two-pass weighting** (`Wᵢ=1/(σᵢ²R̂ᵢ²)`,
+R̂ᵢ unknown a priori → σ-only seed pass → R̂ ONCE → one re-weight, same R̂ everywhere; not IRLS — the
+inconsistent-R̂ gotcha). `ESTIMATOR_MODES=(:pseudolinear,:ml)` defined HERE (before radar.jl) so gate-2's
+`LIVE_FIDELITY_MODES` can REFERENCE it with no include-order gymnastics (advisor #5; the CFAR_MODES
+one-list-no-drift discipline). `test_geometry.jl`+`test_estimation.jl` (+44 tests): closed-form signs/
+wrap/eig/ellipse (explicit `atol`); gdop monotonicity (orthogonal crossing = the minimum, wider
+baseline lower), degenerate→huge-but-FINITE (parallel rows → `FINITE_CEIL`, near-collinear finite
+naturally), ellipse elongates ALONG the LOS (advisor #3 — orientation pin), far sensors weigh less
+(1/R²), and the **GDOP-σθ-INVARIANCE vs ellipse-σθ-SCALING** pin (advisor #2) with the exact
+`√(a²+b²)=gdop·σ` decomposition; noise-free fix==truth exactly (both estimators) + 2-sensor 90°
+crossing = the intersection; **pseudolinear bias as a MC MEAN offset with the KNOWN sign** (40 km/±10
+km/1°: meanPL x=38735<40000 = range underestimated/pulled to sensors, ‖bias‖≈1265 m ≈ 34× the MC
+stderr, `:ml` cuts it to ≈98 m — advisor #1, a mean-offset check not a covariance check, ML reduces
+‖bias‖ as an external anchor); **CRLB≈ML MC scatter on GOOD geometry** (area ratio ≈1.008 — matched to
+the ≈unbiased `:ml`, NOT the biased pseudolinear, a category error) **and the named UNDER-prediction on
+BAD geometry** (linear ellipse area < MC scatter area, ≈304× — the honest approximation boundary). All
+MC uses its OWN `Xoshiro` (the slice-1 batch precedent). The MC tests are NOT self-confirming (`Cmc`
+uses only the point estimates; `cov_at`/`jac_rows` are test-local recomputes — independent of the cov
+code under test, advisor-verified no pass-by-construction). Slices 1–4 **byte-identical** (the
+`_sample_z` golden + `test_determinism` green through the include — no shared symbol touched; the plan
+pin). Numbers tuned EMPIRICALLY first with a throwaway probe (the slice-3/4 rule).
+
+Next: **gate 2** — `DFSensor.observe!`→`env[:bearings]` (the §3 coupling across the **observe!→decide!**
+seam, the `Jammer`/`build_env!` template) + `Geolocator.decide!`→fix/ellipse/gdop telemetry (floored
+finite via a metres/deg clamp reusing `FINITE_CEIL`, NOT the dB floor) + `:emitter`/`:df_sensor`/
+`:df_station` kinds in `scenario.jl`. Have `LIVE_FIDELITY_MODES` (radar.jl) **reference** `ESTIMATOR_MODES`
+(now in scope) and do NOT re-declare it in geolocation.jl (advisor's gate-2 note).
+
 ---
 
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
