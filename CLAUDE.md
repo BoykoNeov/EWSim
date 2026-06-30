@@ -632,6 +632,34 @@ res://net/slice5_verify.gd` (exit 0 = pass; serves one client then exits). The U
 `godot --headless --path clients/godot --script res://net/slice5_ui_test.gd`. **(stretch, deferred)**
 offline `batch.jl` `kind=:geoloc_mc` + `clients/notebooks/slice5_gdop.jl` Pluto MC-vs-CRLB overlay.
 
+**Slice 6 — multi-emitter EW** (interleaved pulse trains → PRI-histogram deinterleaver; HANDOFF §10
+item 6) — **PLANNED (advisor-reviewed 2026-06-30, lesson de-risked), not yet started.** The
+phase-contract **capstone**: lights `build_env!` + `observe!` + `decide!` in ONE pipeline (emitters
+publish params → ESM receiver intercepts/measures the interleaved TOA stream [the one draw site] →
+deinterleaver recovers each PRI + groups pulses). Lesson: the **difference histogram** raising peaks
+at the true PRIs out of pulse-density soup; fidelity knob `deinterleaver = (:cdif, :sdif)` — CDIF's
+**phantom subharmonic** (a stable PRI=T train piles cumulative diff-counts at 2T, 3T → a radar that
+isn't there) vs SDIF's **subharmonic check** rejecting it. **Structural, not noise-driven** (appears
+on perfectly-stable emitters → deterministic core, no draw-topology hazard; introduce-safe like
+`:estimator`/`:ep`). **De-risked with a throwaway probe BEFORE the plan** (advisor): on 3 stable
+`[1300,1700,2300] µs` emitters, **CDIF declares 4 PRIs (phantom 2590≈2×1300), SDIF declares 3** —
+`n_pri` flips 4→3, the not-a-dead-knob scalar. The two rungs **share one cumulative-histogram +
+threshold + sequence-search pipeline; the subharmonic check is the SOLE differentiator** (the faithful
+sequential/adaptive-threshold SDIF returned n=0 in the probe and is a named future refinement, with
+Nelson's PRI-transform). Scope: **generic parametric emitters only**, stable PRI core (jitter/intercept
+degradation sliders), single ESM, no radar/jam/DF in-scenario; defer staggered/sliding PRI, emitter PRI
+random-walk (jitter modeled receiver-side), TDOA geolocation (R/c offset OMITTED — inert for PRI). New
+`deinterleave.jl` (pure §9-style lib, defines `DEINTERLEAVER_MODES`, before radar.jl) + `esm.jl`
+(`PulseEmitter`/`ESMReceiver`/`Deinterleaver`, after radar.jl like geolocation.jl); `:pulse_emitter`/
+`:esm` kinds (NB `:emitter` is slice-5 DF — no collision); array telemetry `histogram`/`threshold` +
+static `pri_axis_us` handshake (CFAR precedent); new Godot **ESM/PRI view** (TOA raster + difference
+histogram, off the handshake `:deinterleaver` fidelity). **Units µs↔SI-seconds** is the §1 trifecta
+here. Exact receiver draw order pinned (jitter `randn` THEN intercept `rand`, both unconditional,
+spurious last; `2·n_candidate+n_spurious` fixed). `assoc_pct` direction (cdif<sdif) UNPROVEN — probe at
+gate 1 before pinning; `n_pri` is the load-bearing flip. **Planned FULL in `docs/plans/slice6.md`** (3
+staged gates: `deinterleave.jl` primitives + closed-form subharmonic-trap pin → the ESM 3-phase pipeline
+wired → `deinterleaver` fidelity + scenario + Godot ESM view + verifier). Next: **gate 1**.
+
 ---
 
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
