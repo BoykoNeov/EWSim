@@ -471,7 +471,7 @@ server: `godot --headless --path clients/godot --script res://net/slice4_ui_test
 deferred)** a Pluto burn-through diagram (`clients/notebooks/slice4_burnthrough.jl`).
 
 **Slice 5 — DF / geolocation** (bearings-only emitter location + the GDOP error ellipse; HANDOFF §10
-item 5) — **IN PROGRESS. Gate 1 done & green (967 tests).** Planned FULL in `docs/plans/slice5.md`
+item 5) — **IN PROGRESS. Gates 1–2 done & green (1015 tests).** Planned FULL in `docs/plans/slice5.md`
 (3 staged gates: geometry/estimation primitives → `DFSensor`/`Geolocator` lighting **phase 4 of the
 tick contract** [`decide!`, the natural milestone after slice 4 lit `build_env!`] → `estimator`
 fidelity + scenario + Godot **plan/top-down (x-y)** view + verifier). The lesson is **GDOP**: bearings
@@ -524,11 +524,60 @@ code under test, advisor-verified no pass-by-construction). Slices 1–4 **byte-
 `_sample_z` golden + `test_determinism` green through the include — no shared symbol touched; the plan
 pin). Numbers tuned EMPIRICALLY first with a throwaway probe (the slice-3/4 rule).
 
-Next: **gate 2** — `DFSensor.observe!`→`env[:bearings]` (the §3 coupling across the **observe!→decide!**
-seam, the `Jammer`/`build_env!` template) + `Geolocator.decide!`→fix/ellipse/gdop telemetry (floored
-finite via a metres/deg clamp reusing `FINITE_CEIL`, NOT the dB floor) + `:emitter`/`:df_sensor`/
-`:df_station` kinds in `scenario.jl`. Have `LIVE_FIDELITY_MODES` (radar.jl) **reference** `ESTIMATOR_MODES`
-(now in scope) and do NOT re-declare it in geolocation.jl (advisor's gate-2 note).
+Gate 2 (DF subsystems wired — phase 4 lit, green): `geolocation.jl` — the `DFSensor`/`Geolocator` pair,
+the FIRST use of `decide!` (phase 4 of the tick contract). **Include order corrected (advisor):** the
+plan's "geolocation BEFORE radar" rationale was STALE — it existed so `LIVE_FIDELITY_MODES` could see
+`ESTIMATOR_MODES`, but gate 1 already moved that const into `estimation.jl`. So `geolocation.jl` is
+included `… radar.jl → geolocation.jl → scenario.jl` (AFTER radar), letting it reuse `_range`
+DIRECTLY instead of inlining distance; verified radar.jl has NO back-dep on geolocation (its only
+cross-ref, `LIVE_FIDELITY_MODES → ESTIMATOR_MODES`, is satisfied by estimation.jl). `const
+BearingRecord = @NamedTuple{theta::Float64, pos::Vec3, sigma::Float64}` (INTERNAL, like
+`JamContribution`). `DFSensor.observe!` (phase 3): bearings the nearest `:emitter` (`_nearest_emitter`,
+sorted-id tie, the `_nearest_target` mirror), draws ONE randn/look (`wrap_angle(θ_true + σ·randn)`),
+appends to `w.env[:bearings]` + publishes `<id>.bearing_deg` (rad2deg — NOT radians under a `_deg`
+key). `Geolocator.decide!` (phase 4): reads ALL `env[:bearings]`, fix+cov via `bearings_fix` dispatching
+on `get(w.fidelity, :estimator, :pseudolinear)`, ellipse via `error_ellipse(cov)`, and — the advisor's
+**second catch** — **GDOP from emitter TRUTH, not the noisy fix**: the gdop `H` rows `[−sinθ/R̂, cosθ/R̂]`
+are built about the TRUE emitter so GDOP is σθ-invariant AND jitter-free (a fix-derived GDOP would
+drift every tick and move when the σθ slider re-rolls the noise — failing the gate-3 wire asserts). So
+the split is exact: **ellipse C ← bearings_fix (measured θ̂, scales ∝σθ); GDOP ← truth (σ-free)**.
+Telemetry `<station>.fix_x/.fix_y/.err_m/.gdop/.ell_a/.ell_b/.ell_deg` all clamped finite (`_finite`
+for the non-negative readouts, a signed `_finite_coord` for fix_x/fix_y, ceiling `FINITE_CEIL` — a
+singular geometry ships huge-but-finite, never Inf/NaN, never throws the tick). `LIVE_FIDELITY_MODES`
+(radar.jl) now **references** `ESTIMATOR_MODES` (`estimator = ESTIMATOR_MODES`) — so `set_fidelity
+:estimator` validates with NO server change (introduce-safe, the `:cfar` guard doesn't match it), the
+slice-4 `:ep` contract. **Scope note (advisor):** the core fidelity plumbing (the table entry + the
+Geolocator's `:estimator` dispatch) landed in gate 2 — EARLIER than slice5.md's gate-3 text — per
+CLAUDE.md's "Next: gate 2" guidance; it's introduce-safe with no draw hazard, and the Geolocator
+actually consumes the key (no latent validate-but-ignore). `scenario.jl`: `:emitter` (≈target, CV
+mover, no rcs), `:df_sensor` (`sigma_theta_deg`→`comp[:sigma_theta_rad]=deg2rad`, σθ>0 rejected at LOAD
+— the jammer `bandwidth_hz` precedent; a live drag is clamped at the consumer `_SIGMA_THETA_FLOOR`),
+`:df_station` (`Geolocator` + optional `geolocator: nsigma`); `_validate_geoloc` asserts ≥2 sensors +
+exactly 1 emitter + ≥1 station at LOAD (triggered by DF-entity presence, so a non-DF scenario is
+untouched). `test_geolocation.jl` (+43, the test_jammer analog): DFSensor record shape + EXACT-draw
+reconstruction (off a fresh `Xoshiro`); Geolocator fix == `bearings_fix` (both rungs); FINITE telemetry
+under a near-collinear geometry (no throw); the **GDOP+ellipse STRETCH** over range (deterministic,
+truth-based); **GDOP σθ-INVARIANT (`==`) while the ellipse scales ∝σθ** (advisor #2 on the wire — the
+ell-scaling leg uses TINY σ so the realized geometry is σ-free and `cov∝σ²` holds cleanly; a large-σ
+single realization isn't monotone — the bug the first test run caught); the **draw-free rung switch**
+(pseudolinear vs ml → SAME rng end-state, DIFFERENT fix, ml lowers mean err_m — the biased 40km/±10km/1°
+geometry, not a dead knob); no-DF world writes no bearings/DF telemetry; loader arms + rejects.
+`test_determinism.jl` +a DF scenario (same-seed bit-identical fix trace via `reinterpret`; rung switch
+rng-lockstep but fix differs). Slices 1–4 **byte-identical** (geolocation adds NO code to the radar
+path; the `_sample_z` golden + all prior testsets green through the include).
+
+Next: **gate 3** — `scenarios/slice5_geoloc.yaml` (3 sensors + an emitter flying good→bad geometry;
+`sigma_theta_deg` sliders; numbers tuned EMPIRICALLY + oracle-pinned). Godot `Sandbox.gd` NEW **plan /
+top-down (x-y) view** (`_fid_kind → geoloc` off the handshake `fidelity[:estimator]`; `_draw_plan`:
+sensor markers + bearing rays, emitter truth, fix point, error ellipse, gdop/err_m readout; the shared
+fidelity button becomes the estimator cycler `pseudolinear↔ml`, guarded-disconnect). `net/slice5_verify.gd`
+(real server: ellipse a/b stretches as the emitter closes; `set_param sigma_theta_deg` scales `ell_a`/
+`ell_b` while `gdop` stays FIXED — advisor #2 on the wire; `set_fidelity :estimator` reduces `err_m` at
+the worst-geometry sample; `t` bit-identical under a held seed) + `net/slice5_ui_test.gd` + `Sandbox.tscn`
+smoke-load. `test_server.jl` (`set_fidelity :estimator` write/reject + introduce-allowed),
+`test_scenario.jl` (slice-5 loader assertions), `test_determinism.jl` (mid-run `:estimator` toggle AND
+introduce bit-identical). `_draw_plan` visually confirmed via the shot harness ([[ewsim-godot-headless]]).
+**(stretch)** offline `batch.jl` `kind=:geoloc_mc` + `slice5_gdop.jl` Pluto MC-vs-CRLB overlay.
 
 ---
 

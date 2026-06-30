@@ -272,16 +272,22 @@ post-processing — no extra draws):
       pseudolinear-**mean-bias** anchor + **ML**-CRLB-vs-MC good-geometry match + bad-geometry
       under-prediction). Wire both into `runtests.jl` after the rf/detection tests. Slices 1–4 green
       untouched.
-- [ ] 2. **DF subsystems wired (phase 4 lit).** `DFSensor`/`Geolocator` (a new `geolocation.jl`,
-      included `detection → geometry → estimation → geolocation → radar` so `LIVE_FIDELITY_MODES`
-      can reference `ESTIMATOR_MODES` in place — confirm `geolocation.jl` has no back-dep on
-      `radar.jl` first; fallback = move `LIVE_FIDELITY_MODES` to a post-include registry). `env[:bearings]` record +
-      `BearingRecord` named-tuple; the geolocator's `decide!` → fix/ellipse/gdop telemetry (floored
-      finite). `:df_sensor`/`:df_station`/`:emitter` kinds in `scenario.jl` `_build_entity` (sensor
-      block `sigma_theta_deg`; emitter = `ConstantVelocity`; station = `Geolocator` + optional
-      `geolocator:` block, e.g. `nsigma`). `test_geolocation.jl` per gate 2 (env populated, fix
-      matches `bearings_fix`, finite telemetry incl. near-singular, draw-stream invariance + no-DF
-      byte-identity, GDOP/ellipse stretch). `test_determinism.jl` + a DF scenario bit-identical.
+- [x] 2. **DF subsystems wired (phase 4 lit).** ✅ DONE & green (1015 tests). `DFSensor`/`Geolocator`
+      in a new `geolocation.jl`. **Include order corrected (advisor):** the "before radar" rationale
+      was stale (gate 1 already moved `ESTIMATOR_MODES` into `estimation.jl`), so the include is
+      `… radar.jl → geolocation.jl → scenario.jl` (AFTER radar) — letting it reuse `_range` directly;
+      radar.jl confirmed to have NO back-dep on geolocation. `BearingRecord` named-tuple (internal,
+      like `JamContribution`); the geolocator's `decide!` → fix/ellipse/gdop telemetry (floored finite,
+      `_finite`/`_finite_coord`). **GDOP from emitter TRUTH, not the noisy fix (advisor):** keeps GDOP
+      σθ-invariant + jitter-free; ellipse C stays from `bearings_fix` (measured θ̂, σ-scaled).
+      `:df_sensor`/`:df_station`/`:emitter` kinds in `_build_entity` (sensor `sigma_theta_deg`>0 at
+      LOAD; emitter = `ConstantVelocity`; station = `Geolocator` + optional `geolocator: nsigma`);
+      `_validate_geoloc` (≥2 sensors + 1 emitter + station). `LIVE_FIDELITY_MODES` now references
+      `ESTIMATOR_MODES` + the Geolocator dispatches `get(w.fidelity, :estimator, :pseudolinear)` — the
+      core fidelity plumbing landed early (gate 2), introduce-safe, the Geolocator consumes the key.
+      `test_geolocation.jl` (+43: env populated/exact-draw, fix matches `bearings_fix`, finite telemetry
+      incl. near-singular, GDOP/ellipse stretch, GDOP-σθ-invariance vs ellipse-σθ-scaling, draw-free rung
+      switch, no-DF byte-identity, loader arms). `test_determinism.jl` + a DF scenario bit-identical.
 - [ ] 3. **`estimator` fidelity + scenario + Godot plan view + verifier.** `ESTIMATOR_MODES`
       referenced by `LIVE_FIDELITY_MODES`; `_observe`/`decide!` dispatch on `w.fidelity[:estimator]`
       (default `:pseudolinear`). `scenarios/slice5_geoloc.yaml` (empirically tuned, oracle-pinned).

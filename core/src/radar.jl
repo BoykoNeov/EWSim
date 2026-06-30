@@ -98,8 +98,13 @@ const EP_MODES = (:none, :freq_agility, :sidelobe_blanking)
 # `:cfar` changes the RNG draw topology (point path → profile path), so the server also
 # guards against INTRODUCING it mid-run — see `handle_command!` (server.jl). `:ep` carries NO
 # such guard (it only scales a deterministic scalar — no draw-count change — so it is
-# introduce-safe, the sharp contrast to `:cfar`; slice-4 gate 3).
-const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES, ep = EP_MODES)
+# introduce-safe, the sharp contrast to `:cfar`; slice-4 gate 3). `:estimator` (slice-5 DF;
+# rungs `ESTIMATOR_MODES` from estimation.jl, in scope here) is likewise introduce-safe — a
+# DFSensor draws exactly one randn/look regardless of rung, so the Geolocator's rung selects
+# only deterministic post-processing (no draw-count change; landed in gate 2 — the core
+# fidelity plumbing precedes the gate-3 client toggle/scenario).
+const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES,
+                             ep = EP_MODES, estimator = ESTIMATOR_MODES)
 
 # A perfect null (F⁴=0, even above the horizon), an antenna on the reflecting plane
 # (h→0), or a below-horizon mask all drive SNR→0, and `lin2db(0) = -Inf` would poison the

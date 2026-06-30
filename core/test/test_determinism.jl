@@ -193,4 +193,63 @@ end
         @test tj == tk
         @test rand(copy(wj.rng)) == rand(copy(wk.rng))
     end
+
+    # Slice 5: the DF/geolocation pair lights phase 4 (decide!). Each DFSensor draws exactly
+    # one randn/look (the bearing noise) and the Geolocator's fix is closed-form — so a DF
+    # scenario is deterministic given the drawn bearings (the slice-2/4 shape, no draw-topology
+    # hazard). Pin a same-seed bit-identical fix trace, AND the draw-free rung switch: same seed,
+    # :pseudolinear vs :ml → SAME rng end-state (the rung adds no draw) but DIFFERENT fixes (ml
+    # debiases — not a dead knob, on the biased 40 km / ±10 km / 1° geometry).
+    @testset "a DF scenario replays bit-identically (phase-4 decide!)" begin
+        function df_trace(seed; estimator = :pseudolinear, nsteps = 100,
+                          start_est = estimator, toggle_at = 0, toggle_to = nothing)
+            fid = Dict{Symbol,Symbol}()
+            start_est === nothing || (fid[:estimator] = start_est)   # nothing → INTRODUCE later
+            w = World(seed = seed, fidelity = fid)
+            w.entities[:emit1] = Entity(:emit1, :emitter; pos = Vec3(40_000.0, 0, 0),
+                                        vel = Vec3(-150.0, 0, 0))
+            w.entities[:dfs1] = Entity(:dfs1, :df_sensor; pos = Vec3(0.0, -10_000.0, 0),
+                comp = Dict{Symbol,Any}(:sigma_theta_rad => deg2rad(1.0)))
+            w.entities[:dfs2] = Entity(:dfs2, :df_sensor; pos = Vec3(0.0, 10_000.0, 0),
+                comp = Dict{Symbol,Any}(:sigma_theta_rad => deg2rad(1.0)))
+            w.entities[:stn1] = Entity(:stn1, :df_station; pos = Vec3(0.0, 0, 0))
+            subs = Subsystem[]
+            for id in sort!(collect(keys(w.entities)))
+                e = w.entities[id]
+                e.kind === :emitter    && push!(subs, ConstantVelocity(id))
+                e.kind === :df_sensor  && (push!(subs, ConstantVelocity(id)); push!(subs, DFSensor(id)))
+                e.kind === :df_station && (push!(subs, ConstantVelocity(id)); push!(subs, Geolocator(id)))
+            end
+            fixes = Float64[]
+            for i in 1:nsteps
+                (toggle_to !== nothing && i == toggle_at) && (w.fidelity[:estimator] = toggle_to)
+                tick!(w, subs, 1.0e-3)
+                tel = w.env[:telemetry]
+                push!(fixes, tel["stn1.fix_x"]); push!(fixes, tel["stn1.fix_y"])
+            end
+            return w, fixes
+        end
+        wa, fa = df_trace(99); wb, fb = df_trace(99)
+        @test fa == fb
+        @test reinterpret(UInt64, fa) == reinterpret(UInt64, fb)   # bit-identity incl sign of zero
+        wp, fp = df_trace(99; estimator = :pseudolinear)
+        wm, fm = df_trace(99; estimator = :ml)
+        @test rand(copy(wp.rng)) == rand(copy(wm.rng))             # draw count rung-invariant
+        @test fp != fm                                             # ...but the fix differs (ml debiases)
+
+        # The fidelity plumbing went live in gate 2 (`LIVE_FIDELITY_MODES[:estimator]` + the Geolocator
+        # dispatch), so pin the live-toggle determinism on a SINGLE world here too (the `:ep` contract):
+        # `:estimator` is draw-free, so toggling OR introducing it mid-run replays bit-identical, and a
+        # toggle-vs-never run shares the rng end-state (no draw change) while the fix differs (live knob).
+        wt1, ft1 = df_trace(99; start_est = :pseudolinear, toggle_at = 50, toggle_to = :ml)
+        wt2, ft2 = df_trace(99; start_est = :pseudolinear, toggle_at = 50, toggle_to = :ml)
+        @test ft1 == ft2 && reinterpret(UInt64, ft1) == reinterpret(UInt64, ft2)   # same-seed toggle bit-identical
+        wn, fn = df_trace(99; start_est = :pseudolinear)                            # never toggled
+        @test rand(copy(wt1.rng)) == rand(copy(wn.rng))           # toggle changed NO draws
+        @test ft1 != fn                                          # ...but the rung flip changed the fix
+        # INTRODUCE :estimator onto a world that started WITHOUT the key → still bit-identical, twice.
+        wi1, fi1 = df_trace(99; start_est = nothing, toggle_at = 50, toggle_to = :ml)
+        wi2, fi2 = df_trace(99; start_est = nothing, toggle_at = 50, toggle_to = :ml)
+        @test reinterpret(UInt64, fi1) == reinterpret(UInt64, fi2)
+    end
 end

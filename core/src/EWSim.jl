@@ -21,6 +21,7 @@ include("detection.jl")
 include("geometry.jl")
 include("estimation.jl")
 include("radar.jl")
+include("geolocation.jl")
 include("scenario.jl")
 include("batch.jl")
 include("server.jl")
@@ -44,8 +45,9 @@ export cfar_alpha, cfar_threshold, cfar_scan
 # DF / geolocation shared libs (slice 5): geometry/DOP + estimation scaffold
 export bearing, wrap_angle, eig2x2, error_ellipse, gdop, FINITE_CEIL
 export linear_ls, gauss_newton, bearings_fix, ESTIMATOR_MODES
-# Slice-1 subsystems + scenario loader (Jammer is the slice-4 build_env! subsystem)
-export ConstantVelocity, RadarSensor, Jammer, Knob, Scenario, load_scenario
+# Slice-1 subsystems + scenario loader (Jammer is the slice-4 build_env! subsystem;
+# DFSensor/Geolocator are the slice-5 observe!→decide! DF pair that light phase 4)
+export ConstantVelocity, RadarSensor, Jammer, DFSensor, Geolocator, Knob, Scenario, load_scenario
 # Offline batch sweeps (ROC artifact + slice-2 coverage diagram)
 export run_batch, roc_grid, load_roc, coverage_grid, load_coverage
 # Interactive socket run loop (the live/driver path)

@@ -129,8 +129,36 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
         comp[:bandwidth_hz] > 0 ||
             error("jammer '$id': bandwidth_hz must be > 0 (got $(comp[:bandwidth_hz]))")
         subs = Subsystem[ConstantVelocity(id), Jammer(id)]
+    elseif kind === :emitter
+        # An RF emitter (slice 5): the DF target. A `ConstantVelocity` mover lets it fly the
+        # good→bad-geometry path that sweeps GDOP. It owns no sensor of its own — the DF
+        # sensors bear IT. Minimal comp (no rcs: DF works off the bearing, not a radar echo).
+        subs = Subsystem[ConstantVelocity(id)]
+    elseif kind === :df_sensor
+        # A bearings-only DF sensor (slice 5): a `df_sensor:` block carries `sigma_theta_deg`
+        # (authored in DEGREES, stored as RADIANS — the key `DFSensor.observe!` reads), plus a
+        # `ConstantVelocity` mover (usually static, vel = 0) for uniformity. The sensor draws
+        # one noisy bearing/look in phase 3 → `env[:bearings]`.
+        haskey(ent, "df_sensor") || error("df_sensor entity '$id' has no `df_sensor:` block")
+        sb = ent["df_sensor"]
+        haskey(sb, "sigma_theta_deg") ||
+            error("df_sensor '$id' block missing required key 'sigma_theta_deg'")
+        σdeg = _f64(sb["sigma_theta_deg"])
+        # σθ ≤ 0 → infinite weights (1/σ²) → NaN fix. NOT a live slider's value (a live drag is
+        # clamped at the consumer, `_SIGMA_THETA_FLOOR`); reject a bad AUTHORED value at LOAD as
+        # a clear error (the jammer `bandwidth_hz > 0` precedent).
+        σdeg > 0 || error("df_sensor '$id': sigma_theta_deg must be > 0 (got $σdeg)")
+        comp[:sigma_theta_rad] = deg2rad(σdeg)
+        subs = Subsystem[ConstantVelocity(id), DFSensor(id)]
+    elseif kind === :df_station
+        # The C2 / fusion node (slice 5): a phase-4 `Geolocator` crossing all bearings into a
+        # fix + error ellipse + GDOP. An optional `geolocator:` block sets `nsigma` (the error-
+        # ellipse confidence scale, default 1-σ). A `ConstantVelocity` mover for uniformity.
+        nsig = haskey(ent, "geolocator") ? _f64(get(ent["geolocator"], "nsigma", 1.0)) : 1.0
+        subs = Subsystem[ConstantVelocity(id), Geolocator(id; nsigma = nsig)]
     else
-        error("unknown entity kind :$kind for '$id' (knows :radar, :target, :clutter, :jammer)")
+        error("unknown entity kind :$kind for '$id' " *
+              "(knows :radar, :target, :clutter, :jammer, :emitter, :df_sensor, :df_station)")
     end
     return e, subs
 end
@@ -194,6 +222,7 @@ function load_scenario(path::AbstractString)
     end
 
     _validate_cfar(world)
+    _validate_geoloc(world)
     knobs = _parse_knobs(data, world)
     return Scenario(name, world, subs, knobs, dt_physics, emit_every)
 end
@@ -217,5 +246,29 @@ function _validate_cfar(world::World)
                       "got $(e.comp[:n_train])")
         end
     end
+    return world
+end
+
+# A DF/geolocation scenario needs a crossable geometry: ≥ 2 DF sensors (two LOPs to cross),
+# exactly ONE emitter (single-emitter scope — multi-emitter association is §10 item 6), and a
+# fusion station. Validate at LOAD (the `_validate_cfar` pattern) so a malformed DF scenario
+# fails as a clear load error rather than a silent no-fix (a lone sensor → the Geolocator's
+# `< 2` guard quietly publishes nothing) or a `KeyError` inside a tick. Triggered by the
+# presence of ANY DF/emitter entity (a DF scenario sets no required fidelity key — `:estimator`
+# defaults `:pseudolinear`), so a pure slice-1/4 scenario is untouched.
+function _validate_geoloc(world::World)
+    n_sensor = 0; n_station = 0; n_emitter = 0
+    for (_, e) in world.entities
+        e.kind === :df_sensor  && (n_sensor  += 1)
+        e.kind === :df_station && (n_station += 1)
+        e.kind === :emitter    && (n_emitter += 1)
+    end
+    (n_sensor == 0 && n_station == 0 && n_emitter == 0) && return world   # not a DF scenario
+    n_sensor ≥ 2 ||
+        error("a DF/geolocation scenario needs ≥ 2 :df_sensor entities (got $n_sensor)")
+    n_emitter == 1 ||
+        error("a DF/geolocation scenario needs exactly one :emitter (got $n_emitter)")
+    n_station ≥ 1 ||
+        error("a DF/geolocation scenario needs ≥ 1 :df_station (got $n_station)")
     return world
 end
