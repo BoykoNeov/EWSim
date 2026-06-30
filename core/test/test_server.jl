@@ -49,6 +49,28 @@ function _cfar_scenario(seed; emit_every = 4, ncells = 128)
     return Scenario("cfar", w, subs, Knob[], 1.0e-3, emit_every)
 end
 
+# An in-memory DF/geolocation scenario (the slice-5 dispatch): :estimator fidelity present, one
+# emitter + 3 sensors on a y-baseline + a fusion station (the phase-4 Geolocator). Subsystems in
+# sorted-id order (the loader's RNG-order contract).
+function _geoloc_scenario(seed; emit_every = 4)
+    w = World(seed = seed, fidelity = Dict(:estimator => :pseudolinear))
+    w.entities[:emit1] = Entity(:emit1, :emitter; pos = Vec3(40_000.0, 0, 0), vel = Vec3(-150.0, 0, 0))
+    for (i, y) in enumerate((-15_000.0, 0.0, 15_000.0))
+        sid = Symbol("dfs", i)
+        w.entities[sid] = Entity(sid, :df_sensor; pos = Vec3(0.0, y, 0),
+            comp = Dict{Symbol,Any}(:sigma_theta_deg => 2.0))
+    end
+    w.entities[:stn1] = Entity(:stn1, :df_station; pos = Vec3(0.0, 0, 0))
+    subs = Subsystem[]
+    for id in sort!(collect(keys(w.entities)))
+        e = w.entities[id]
+        e.kind === :emitter    && push!(subs, ConstantVelocity(id))
+        e.kind === :df_sensor  && (push!(subs, ConstantVelocity(id)); push!(subs, DFSensor(id)))
+        e.kind === :df_station && (push!(subs, ConstantVelocity(id)); push!(subs, Geolocator(id)))
+    end
+    return Scenario("geoloc", w, subs, Knob[], 1.0e-3, emit_every)
+end
+
 @testset "server" begin
 
     @testset "handle_command! mutates state per the §5 table" begin
@@ -159,6 +181,35 @@ end
         @test w.fidelity[:ep] === :none                         # unchanged by the bad cmd
     end
 
+    @testset "set_fidelity :estimator — write/reject + introduce-safe (slice-5 DF)" begin
+        # Slice-5 gate 3: `:estimator` joins the per-key LIVE_FIDELITY_MODES table (referencing
+        # ESTIMATOR_MODES). Like `:ep` and unlike `:cfar` it carries NO introduce-guard — each
+        # DFSensor draws exactly one randn/look regardless of rung, so the rung selects only the
+        # Geolocator's deterministic post-processing (no draw-count change) — introduce-safe.
+        srv = EWSim.Server(_geoloc_scenario(1))
+        w = srv.scn.world
+        @test w.fidelity[:estimator] === :pseudolinear          # the scenario default rung
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "estimator", :value => "ml"))
+        @test w.fidelity[:estimator] === :ml
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "estimator", :value => "pseudolinear"))
+        @test w.fidelity[:estimator] === :pseudolinear
+        # ...a bad rung is REJECTED before it lands (would throw in decide! → kill the session),
+        # leaving the live value untouched.
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "estimator", :value => "kalman"))
+        @test w.fidelity[:estimator] === :pseudolinear
+
+        # INTRODUCING :estimator on a scenario WITHOUT it is ALLOWED (the sharp contrast to :cfar's
+        # introduce-reject) — a non-DF world simply has no Geolocator to consume it, so it's a
+        # harmless write (the slice-4 :ep introduce-safety, on a new key). Use a plain radar
+        # scenario to prove exactly that.
+        srv2 = EWSim.Server(_detect_scenario(1))
+        w2 = srv2.scn.world
+        @test !haskey(w2.fidelity, :estimator)
+        EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "estimator", :value => "ml"))
+        @test w2.fidelity[:estimator] === :ml
+    end
+
     @testset "a live n_train/n_guard slider can't crash the tick (consumer clamp)" begin
         # set_param is the GENERIC channel (no per-key validation), so a slider dragged to an
         # odd n_train or a negative guard reaches observe! directly — which must CLAMP it, never
@@ -254,6 +305,20 @@ end
         @test srv.scn.world.t == t0                                # clock not advanced
         @test srv.scn.world.entities[:tgt1].pos == pos0           # entity not moved
         @test rand(copy(srv.scn.world.rng)) == rand(Xoshiro(5))    # live rng never drawn from
+    end
+
+    @testset "warmup! tolerates a radar-free scenario (slice-5 DF, no ROC batch)" begin
+        # The ROC-batch warm resolves a radar; a DF scenario has NONE, so warmup! must skip it
+        # rather than throw (an unguarded run_batch would kill the server before it ever listened).
+        # The tick!+state_frame warm still runs (it warms the phase-4 decide!/Geolocator path) and
+        # must leave the live World pristine, exactly like the radar case.
+        srv = EWSim.Server(_geoloc_scenario(5))
+        t0   = srv.scn.world.t
+        pos0 = srv.scn.world.entities[:emit1].pos
+        EWSim.warmup!(srv)                                          # must NOT throw (no radar)
+        @test srv.scn.world.t == t0
+        @test srv.scn.world.entities[:emit1].pos == pos0
+        @test rand(copy(srv.scn.world.rng)) == rand(Xoshiro(5))    # live rng untouched
     end
 
     @testset "steps_this_iteration paces by mode" begin

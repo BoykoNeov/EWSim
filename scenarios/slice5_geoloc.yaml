@@ -1,0 +1,80 @@
+# slice5_geoloc — bearings-only DF / geolocation + the GDOP error ellipse (HANDOFF §10 item 5,
+# slice 5 gate 3). The slice that lights PHASE 4 of the tick contract (`decide!`): three passive
+# DF sensors each draw a noisy bearing to a single RF emitter (phase 3), and a C2 fusion station
+# crosses those bearings into a position fix + a linearized error ellipse + a GDOP readout
+# (phase 4). 2-D azimuth-only, in the x-y (plan / top-down) plane — hence the client's NEW plan
+# view, distinct from the slice-1/2/4 elevation (x-z) view.
+#
+# TWO lessons, both swept live:
+#   • GDOP / the error ellipse. The emitter flies +x (away, down-range) so it crosses from GOOD
+#     geometry (early: abeam the ±20 km baseline, the three bearings cross near-orthogonally →
+#     a round, tight ellipse, low GDOP) into BAD geometry (late: far down-range, the bearings
+#     graze nearly parallel → the ellipse elongates ALONG the line-of-sight into a long thin
+#     cigar pointed down-range, GDOP climbs). Watching that ellipse stretch + rotate IS the
+#     lesson (the same DOP math GPS reuses, HANDOFF §9). Drag a sensor's `sigma_theta_deg`
+#     slider: the ellipse SCALES with σθ (cov ∝ σθ²) while GDOP — pure geometry at unit σ —
+#     stays put (the σθ-slider-must-not-move-GDOP pin).
+#   • The estimator fidelity (the §12 badge / cycler button). `pseudolinear` is the closed-form
+#     BIASED baseline — it puts the noisy measured bearing inside the regressor, so at long range
+#     / poor geometry the fix collapses badly toward the sensor array (here the fix lands ~53 km
+#     off a 55 km emitter). `ml` (iterated Gauss-Newton, seeded at pseudolinear) walks the fix
+#     back out toward truth (~7 km error — an 8× improvement). Cycle `estimator` and watch the
+#     fix snap toward the emitter, most dramatically at the worst geometry.
+#
+# Single emitter (named scope — multi-emitter deinterleaving is §10 item 6), jamming-free (one
+# lesson per scenario, the slice-3 rule). No radar/jammer → the DF path never touches the
+# radar/jammer RNG and slices 1–4 stay byte-identical. Numbers TUNED EMPIRICALLY (a throwaway
+# probe) and oracle-pinned in net/slice5_verify.gd + test_scenario.jl (the slice-3/4 rule).
+#
+# Geometry (seed 5): sensors on a y-baseline at x=0 (dfs1/dfs2/dfs3 at y=−20/0/+20 km); the
+# station co-located with the central sensor (the C2 node). Emitter starts at (15 km, 5 km),
+# flies +x at 1 km/s. Verifier samples: t=8 s → x=23 km (GOOD, gdop≈37 k, a/b≈1.85); t=40 s →
+# x=55 km (BAD, gdop≈127 k, a/b≈3.6, pseudolinear err≈53 km vs ml≈7 km).
+name: slice5_geoloc
+seed: 5
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  estimator: pseudolinear        # pseudolinear | ml — the slice-5 DF estimator knob (cycler button).
+                                 # Its PRESENCE in the handshake flips the client into the plan view.
+
+entities:
+  - id: emit1
+    kind: emitter
+    pos: [15000, 5000, 0]        # starts abeam the baseline (good geometry), z ignored (planar DF)
+    vel: [1000, 0, 0]            # flies +x (down-range) → sweeps good→bad geometry over the run
+
+  - id: dfs1
+    kind: df_sensor
+    pos: [0, -20000, 0]          # south end of the ±20 km cross-range baseline
+    vel: [0, 0, 0]               # static sensor
+    df_sensor:
+      sigma_theta_deg: 2.0       # per-sensor 1-σ bearing accuracy (DEGREES — the live slider unit)
+
+  - id: dfs2
+    kind: df_sensor
+    pos: [0, 0, 0]               # baseline centre (the station rides here)
+    vel: [0, 0, 0]
+    df_sensor:
+      sigma_theta_deg: 2.0
+
+  - id: dfs3
+    kind: df_sensor
+    pos: [0, 20000, 0]           # north end of the baseline
+    vel: [0, 0, 0]
+    df_sensor:
+      sigma_theta_deg: 2.0
+
+  - id: stn1
+    kind: df_station
+    pos: [0, 0, 0]               # C2 / fusion node (co-located with dfs2); pos is cosmetic —
+    geolocator:                  # the fix uses sensor + emitter geometry, not the station pos
+      nsigma: 1.0                # 1-σ error ellipse
+
+# The live sliders are the three sensors' bearing accuracy (σθ → ellipse SIZE, the interactive
+# lesson). `estimator` is a fidelity (the cycler button), never a slider. The emitter's GDOP
+# sweep is driven by its MOTION, not a knob (knobs address comp, never pos — the frozen contract).
+knobs:
+  - {target: dfs1, key: sigma_theta_deg, min: 0.1, max: 5.0, label: "dfs1 σθ (deg)"}
+  - {target: dfs2, key: sigma_theta_deg, min: 0.1, max: 5.0, label: "dfs2 σθ (deg)"}
+  - {target: dfs3, key: sigma_theta_deg, min: 0.1, max: 5.0, label: "dfs3 σθ (deg)"}

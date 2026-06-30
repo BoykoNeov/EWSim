@@ -136,9 +136,11 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
         subs = Subsystem[ConstantVelocity(id)]
     elseif kind === :df_sensor
         # A bearings-only DF sensor (slice 5): a `df_sensor:` block carries `sigma_theta_deg`
-        # (authored in DEGREES, stored as RADIANS — the key `DFSensor.observe!` reads), plus a
-        # `ConstantVelocity` mover (usually static, vel = 0) for uniformity. The sensor draws
-        # one noisy bearing/look in phase 3 → `env[:bearings]`.
+        # (authored AND stored in DEGREES — `comp[:sigma_theta_deg]`, the key `DFSensor.observe!`
+        # reads and converts to radians at the consumer). DEGREES is the comp key (NOT radians)
+        # precisely because σθ is a LIVE slider (gate 3): a `set_param sigma_theta_deg` must write
+        # the same key the consumer reads, and the slider/readout stay in the authored unit. Plus
+        # a `ConstantVelocity` mover (usually static, vel = 0). One noisy bearing/look in phase 3.
         haskey(ent, "df_sensor") || error("df_sensor entity '$id' has no `df_sensor:` block")
         sb = ent["df_sensor"]
         haskey(sb, "sigma_theta_deg") ||
@@ -148,7 +150,7 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
         # clamped at the consumer, `_SIGMA_THETA_FLOOR`); reject a bad AUTHORED value at LOAD as
         # a clear error (the jammer `bandwidth_hz > 0` precedent).
         σdeg > 0 || error("df_sensor '$id': sigma_theta_deg must be > 0 (got $σdeg)")
-        comp[:sigma_theta_rad] = deg2rad(σdeg)
+        comp[:sigma_theta_deg] = σdeg
         subs = Subsystem[ConstantVelocity(id), DFSensor(id)]
     elseif kind === :df_station
         # The C2 / fusion node (slice 5): a phase-4 `Geolocator` crossing all bearings into a

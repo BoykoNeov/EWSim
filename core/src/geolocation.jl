@@ -65,7 +65,9 @@ end
 The DF sensor `id` as a phase-3 `observe!` subsystem. Each tick it bearings the nearest
 `:emitter` (single-emitter scope, sorted-id tie-break): the true planar azimuth
 [`bearing`](@ref)`(sensor, emitter)` plus one Gaussian draw `N(0, σθ)` (the sensor's
-`comp[:sigma_theta_rad]`), wrapped to (−π, π]. It appends a [`BearingRecord`](@ref) to
+`comp[:sigma_theta_deg]`, authored AND stored in DEGREES — the LIVE slider unit, slice 5
+gate 3 — and converted to radians here at the consumer), wrapped to (−π, π]. It appends a
+[`BearingRecord`](@ref) to
 `w.env[:bearings]` (the §3 coupling — the Geolocator reads it back in phase 4) and
 publishes `<id>.bearing_deg`.
 
@@ -82,7 +84,7 @@ function observe!(s::DFSensor, w::World)
     sensor  = w.entities[s.id]
     emitter = _nearest_emitter(w, sensor.pos)
     emitter === nothing && return nothing            # no emitter → nothing to bear (guard)
-    σ       = max(Float64(sensor.comp[:sigma_theta_rad]), _SIGMA_THETA_FLOOR)
+    σ       = max(deg2rad(Float64(sensor.comp[:sigma_theta_deg])), _SIGMA_THETA_FLOOR)
     θ_true  = bearing(sensor.pos, emitter.pos)
     θ_hat   = wrap_angle(θ_true + σ * randn(w.rng))  # the ONE draw of a look
     bearings = get!(() -> BearingRecord[], w.env, :bearings)

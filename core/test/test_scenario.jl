@@ -17,6 +17,7 @@ const _SCEN2 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice2_twor
 const _SCEN3 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice3_cfar.yaml"))
 const _SCEN4S = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice4_selfscreen.yaml"))
 const _SCEN4O = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice4_standoff.yaml"))
+const _SCEN5 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice5_geoloc.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -228,6 +229,57 @@ end
 
         @test all(k -> k.key !== :ep, scn.knobs)
         @test Set((k.target, k.key) for k in scn.knobs) == Set([(:jam1, :pt_w)])
+    end
+
+    @testset "loader parses slice5_geoloc.yaml (DF / geolocation, plan view)" begin
+        # Cheap insurance like the slice-2/3/4 loader tests: a malformed showcase fails HERE as a
+        # clear test, not downstream as a confusing server-launch timeout in the Godot verifier.
+        scn = load_scenario(_SCEN5)
+        @test scn.name == "slice5_geoloc"
+        @test scn.world.fidelity[:estimator] === :pseudolinear   # default estimator (cycler reveals :ml)
+        # NO radar/jammer/cfar physics — a DF scenario is jamming-free + radar-free (the slice-3
+        # one-lesson rule), so the DF path never touches the radar/jammer RNG (slices 1-4 byte-id).
+        @test !haskey(scn.world.fidelity, :propagation)
+        @test !haskey(scn.world.fidelity, :cfar)
+        @test !haskey(scn.world.fidelity, :ep)
+        @test !any(e -> e.kind in (:radar, :jammer, :target, :clutter), values(scn.world.entities))
+
+        # one emitter (a CV mover, no rcs — DF works off the bearing, not a radar echo).
+        em = scn.world.entities[:emit1]
+        @test em.kind === :emitter
+        @test !haskey(em.comp, :rcs_m2)
+        @test em.vel[1] > 0 && em.vel[2] == 0      # flies +x (down-range) → sweeps good→bad geometry
+
+        # exactly three DF sensors on the x=0 cross-range baseline, σθ stored RAW in DEGREES (the
+        # LIVE slider unit — haskey is the discriminating check; a `set_param sigma_theta_deg` must
+        # write the same key the consumer reads, so the comp key is :sigma_theta_deg NOT _rad).
+        sensors = sort!([id for (id, e) in scn.world.entities if e.kind === :df_sensor])
+        @test sensors == [:dfs1, :dfs2, :dfs3]
+        for sid in sensors
+            s = scn.world.entities[sid]
+            @test s.pos[1] == 0.0                  # on the x=0 baseline
+            @test haskey(s.comp, :sigma_theta_deg) && s.comp[:sigma_theta_deg] == 2.0
+            @test !haskey(s.comp, :sigma_theta_rad)
+        end
+        # the baseline spreads in cross-range (y) so the bearings cross — sensors at distinct y.
+        @test length(unique(scn.world.entities[sid].pos[2] for sid in sensors)) == 3
+
+        # one fusion station carrying a Geolocator (phase-4 decide!) at 1-σ.
+        st = scn.world.entities[:stn1]
+        @test st.kind === :df_station
+        gi = findfirst(s -> s isa Geolocator, scn.subs)
+        @test gi !== nothing && scn.subs[gi].nsigma == 1.0
+        @test count(s -> s isa DFSensor, scn.subs) == 3
+
+        # the emitter opens in GOOD geometry (abeam the baseline: down-range x < the baseline
+        # half-span), so it FLIES into bad geometry — the stretch lesson sweeps over the run.
+        baseline_halfspan = maximum(abs(scn.world.entities[sid].pos[2]) for sid in sensors)
+        @test em.pos[1] < baseline_halfspan
+
+        # estimator is a fidelity (the cycler button), never a slider; the live sliders are the
+        # three sensors' σθ (the ellipse-size lesson) — and they address :sigma_theta_deg.
+        @test all(k -> k.key === :sigma_theta_deg, scn.knobs)
+        @test Set(k.target for k in scn.knobs) == Set([:dfs1, :dfs2, :dfs3])
     end
 
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin

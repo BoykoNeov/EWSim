@@ -19,11 +19,10 @@ function _df_world(; emitter_pos = Vec3(40_000.0, 0.0, 0.0), emitter_vel = zero(
     estimator === nothing || (fid[:estimator] = estimator)
     w = World(seed = seed, fidelity = fid)
     w.entities[:emit1] = Entity(:emit1, :emitter; pos = emitter_pos, vel = emitter_vel)
-    σ = deg2rad(sigma_deg)
     for (i, p) in enumerate(sensor_positions)
         sid = Symbol("dfs", i)
         w.entities[sid] = Entity(sid, :df_sensor; pos = p,
-            comp = Dict{Symbol,Any}(:sigma_theta_rad => σ))
+            comp = Dict{Symbol,Any}(:sigma_theta_deg => sigma_deg))
     end
     w.entities[:stn1] = Entity(:stn1, :df_station; pos = Vec3(0.0, 0.0, 0.0))
     subs = Subsystem[]
@@ -197,13 +196,13 @@ end
         @test ee.kind === :emitter
         @test length(es) == 1 && es[1] isa ConstantVelocity
 
-        # :df_sensor — sigma_theta_deg → comp[:sigma_theta_rad] (deg→rad; haskey is the
-        # discriminating check, the slice-4 "keys equal defaults" rule), CV + DFSensor subs.
+        # :df_sensor — sigma_theta_deg stored RAW as comp[:sigma_theta_deg] (DEGREES is the live
+        # slider unit, gate 3; the consumer DFSensor.observe! converts to rad), CV + DFSensor subs.
         se, ss = EWSim._build_entity(:dfs1, :df_sensor,
             Dict("id" => "dfs1", "kind" => "df_sensor", "pos" => [0, 0, 0],
                  "df_sensor" => Dict("sigma_theta_deg" => 2.0)))
         @test se.kind === :df_sensor
-        @test haskey(se.comp, :sigma_theta_rad) && se.comp[:sigma_theta_rad] ≈ deg2rad(2.0)
+        @test haskey(se.comp, :sigma_theta_deg) && se.comp[:sigma_theta_deg] == 2.0
         @test length(ss) == 2 && any(s -> s isa DFSensor, ss) &&
               any(s -> s isa ConstantVelocity, ss)
         # σθ ≤ 0 and a missing block are clear LOAD errors.
@@ -228,11 +227,11 @@ end
         wbad = World()
         wbad.entities[:emit1] = Entity(:emit1, :emitter)
         wbad.entities[:dfs1]  = Entity(:dfs1, :df_sensor;
-            comp = Dict{Symbol,Any}(:sigma_theta_rad => deg2rad(1.0)))
+            comp = Dict{Symbol,Any}(:sigma_theta_deg => 1.0))
         wbad.entities[:stn1]  = Entity(:stn1, :df_station)
         @test_throws ErrorException EWSim._validate_geoloc(wbad)      # only 1 sensor
         wbad.entities[:dfs2] = Entity(:dfs2, :df_sensor;
-            comp = Dict{Symbol,Any}(:sigma_theta_rad => deg2rad(1.0)))
+            comp = Dict{Symbol,Any}(:sigma_theta_deg => 1.0))
         @test EWSim._validate_geoloc(wbad) === wbad                   # now valid (2 sensors)
         # a non-DF world is untouched (the trigger is DF-entity presence).
         @test EWSim._validate_geoloc(World()) isa World

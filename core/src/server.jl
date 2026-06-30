@@ -332,6 +332,12 @@ round-trip + a tiny ROC batch) before a client connects, so the first interactiv
 round-trip never races the compiler (the §12 TTFX watch-item). Operates on a `deepcopy`
 of the World and a `mktempdir` for the batch, so warming NEVER perturbs the live World or
 clobbers the real `shared/roc_radar1.bin`.
+
+The `tick!`+`state_frame` warm covers EVERY scenario's interactive hot path (incl. slice-5's
+phase-4 `decide!`→`Geolocator`→`bearings_fix`). The ROC batch warm is **radar-specific**
+(`run_batch kind=:roc` resolves a radar) — a radar-free DF scenario (slice 5) has none, so
+guard it on a radar's presence rather than crash `warmup!` (which would kill the server before
+it ever listened). A DF scenario never runs a ROC sweep, so skipping it warms nothing it needs.
 """
 function warmup!(srv::Server)
     snap = deepcopy(srv.scn.world)
@@ -339,9 +345,11 @@ function warmup!(srv::Server)
     let io = IOBuffer()
         write_frame(io, state_frame(snap)); seekstart(io); read_frame(io)
     end
-    mktempdir() do dir                            # tiny sweep into a tempdir → real artifact untouched
-        run_batch(srv.scn; kind = :roc, pfa_grid = [1.0e-6], snr_db_count = 2,
-                  trials = 16, outdir = dir, name = "warmup")
+    if any(e -> e.kind === :radar, values(srv.scn.world.entities))
+        mktempdir() do dir                        # tiny sweep into a tempdir → real artifact untouched
+            run_batch(srv.scn; kind = :roc, pfa_grid = [1.0e-6], snr_db_count = 2,
+                      trials = 16, outdir = dir, name = "warmup")
+        end
     end
     return srv
 end

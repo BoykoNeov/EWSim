@@ -17,7 +17,13 @@ extends Node2D
 #     axis from the handshake), y is power in dB. The drawn profile, the CFAR threshold curve
 #     (CORE output, never recomputed here), and a marker per detected cell. The fidelity
 #     button cycles the cfar rung (fixed→ca→go→so→os) instead of the binary prop toggle.
-# A scenario shipping `range_axis_m` in its handshake selects "cfar"; otherwise "spatial".
+#   • "geoloc" (slice 5) — a top-down x-y PLAN view (the elevation x-z view can't show a 2-D
+#     bearing-crossing geometry or a ground-plane ellipse): DF sensor markers + their measured
+#     bearing RAYS (the LOPs), the emitter truth, the C2 station, the position FIX, and the
+#     error ELLIPSE (all core output / telemetry). The fidelity button cycles the estimator
+#     rung (pseudolinear↔ml).
+# A handshake shipping `range_axis_m` selects "cfar"; one whose fidelity carries `estimator`
+# selects "geoloc"; otherwise "spatial".
 
 const HOST := "127.0.0.1"
 const PORT := 8765
@@ -59,7 +65,7 @@ var _fidelity_default := {}
 # --- CFAR range-power view (slice 3): populated only when the handshake ships a range axis.
 # `_mode` switches the whole render path AND the fidelity-toggle button. The spatial mirror
 # (_entities/_blips) and the cfar mirror (_profile_db/...) are disjoint — only one is live.
-var _mode := "spatial"            # "spatial" (slice 1/2) | "cfar" (slice 3)
+var _mode := "spatial"            # "spatial" (slice 1/2/4) | "cfar" (slice 3) | "geoloc" (slice 5)
 var _cfar_radar := ""             # radar id whose "<id>.profile_db" etc. we render
 var _range_axis: Array = []       # per-cell slant range (m) — handshake, core output
 var _n_cells := 0
@@ -74,11 +80,23 @@ const CFAR_RUNGS := ["fixed", "ca", "go", "so", "os"]
 # 1/2). The render `_mode` stays "spatial" for slice 4 (no range axis); only the button differs.
 var _fid_kind := "propagation"
 const EP_RUNGS := ["none", "freq_agility", "sidelobe_blanking"]
+const EST_RUNGS := ["pseudolinear", "ml"]   # slice-5 estimator cycler (the §12 badge button)
 const CFAR_Y_LO := -15.0          # bottom of the dB axis (noise floor ≈ 0 dB; deep nulls clamp)
 const PLOT_L := 70.0              # plot rect insets (px) — left edge clears the first range label,
 const PLOT_T := 120.0             # top clears the UI panel, bottom leaves room for range labels
 const PLOT_R := 44.0              # right gutter holds the dB axis labels (left is the UI panel)
 const PLOT_B := 48.0
+
+# --- geoloc plan view (slice 5): top-down x-y. Populated only when the handshake fidelity carries
+# `estimator`. Sensors/emitter/station ride the normal _entities mirror (drawn from their pos); the
+# fix/ellipse/gdop come from <station>.* telemetry. The world↔plan mapping uses EQUAL aspect (a
+# single px/m scale for both axes) so the error ellipse renders un-distorted; it's recomputed each
+# frame into these members so _world_to_plan can stay a plain helper.
+const PLAN_M := 92.0              # plan-view margin (px) — leaves room for the left UI panel + labels
+var _df_station := ""             # station id whose fix/ellipse telemetry we render
+var _plan_view := Rect2()         # the plot rect (screen px)
+var _plan_b := Rect2()            # the world-space bounding box (m) currently shown
+var _plan_sc := 1.0               # px per metre (equal aspect)
 
 func _ready() -> void:
 	_font = ThemeDB.fallback_font
@@ -172,6 +190,8 @@ func _on_scenario(obj: Dictionary) -> void:
 	# interleave after this.
 	if obj.has("range_axis_m"):
 		_enter_cfar_mode(obj)
+	elif _fidelity.has("estimator"):
+		_enter_geoloc_mode(obj)
 	else:
 		_mode = "spatial"
 		_setup_spatial_fid_btn()
@@ -214,6 +234,20 @@ func _setup_spatial_fid_btn() -> void:
 	else:
 		_fid_kind = "propagation"
 
+func _enter_geoloc_mode(_obj: Dictionary) -> void:
+	# Slice-5 DF: a handshake whose fidelity carries `estimator` (and NO range_axis_m) flips the
+	# client into the top-down PLAN view and repurposes the shared fidelity button as the estimator
+	# cycler. The spatial path's binary prop toggle (_on_prop_pressed, wired in _build_ui) is swapped
+	# for _on_est_pressed; the disconnect is guarded so the headless UI test — which builds the button
+	# without _build_ui's connect — doesn't error, exactly like _enter_cfar_mode / _setup_spatial_fid_btn.
+	_mode = "geoloc"
+	_fid_kind = "geoloc"
+	if _prop_btn.pressed.is_connected(_on_prop_pressed):
+		_prop_btn.pressed.disconnect(_on_prop_pressed)
+	if not _prop_btn.pressed.is_connected(_on_est_pressed):
+		_prop_btn.pressed.connect(_on_est_pressed)
+	_prop_btn.tooltip_text = "Cycle estimator (set_fidelity): pseudolinear ↔ ml"
+
 func _render_badge() -> void:
 	# §12: a visible "<fidelity> approximation" badge, built from the live local fidelity
 	# map (never hardcoded), re-rendered whenever the propagation toggle changes it.
@@ -231,6 +265,8 @@ func _update_fid_btn() -> void:
 			_prop_btn.text = "cfar: %s" % str(_fidelity.get("cfar", "?"))
 		"ep":
 			_prop_btn.text = "ep: %s" % str(_fidelity.get("ep", "?"))
+		"geoloc":
+			_prop_btn.text = "est: %s" % str(_fidelity.get("estimator", "?"))
 		_:
 			_update_prop_btn()
 
@@ -277,14 +313,41 @@ func _on_ep_pressed() -> void:
 	_render_badge()
 	_update_fid_btn()
 
+func _on_est_pressed() -> void:
+	# Advance the estimator rung (pseudolinear↔ml) and tell the core (set_fidelity). `:estimator`
+	# is introduce-safe AND draw-free (each DFSensor draws one randn/look regardless of rung), so a
+	# mid-run cycle is bit-identical (the slice-4 :ep contract, NOT slice-3's draw-flip): only the
+	# Geolocator's post-processing changes — the fix walks toward truth under ml. The client owns the
+	# displayed rung: update badge + button locally (the server applies it silently, no reply).
+	var cur := str(_fidelity.get("estimator", "pseudolinear"))
+	var i := EST_RUNGS.find(cur)
+	var next: String = EST_RUNGS[(i + 1) % EST_RUNGS.size()] if i >= 0 else "pseudolinear"
+	_fidelity["estimator"] = next
+	_client.send({"type": "set_fidelity", "key": "estimator", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
 func _on_state(obj: Dictionary) -> void:
 	_telemetry = obj.get("telemetry", {})
 	if _mode == "cfar":
 		_cfar_on_state()
+	elif _mode == "geoloc":
+		_geoloc_on_state(obj)
 	else:
 		_spatial_on_state(obj)
 	_update_readout()
 	queue_redraw()
+
+func _geoloc_on_state(obj: Dictionary) -> void:
+	# Mirror the entity list (sensors/emitter/station drawn from their pos) and note which station's
+	# fix/ellipse telemetry to render. No blips, no spatial extents — the plan view recomputes its
+	# own world bounds each draw. The fix/ellipse/gdop all arrive as scalar telemetry (no arrays).
+	_entities.clear()
+	for e in obj.get("entities", []):
+		var id := str(e.get("id", ""))
+		_entities[id] = {"kind": str(e.get("kind", "")), "pos": e.get("pos", [0, 0, 0])}
+		if str(e.get("kind", "")) == "df_station" and _df_station == "":
+			_df_station = id
 
 func _spatial_on_state(obj: Dictionary) -> void:
 	_entities.clear()
@@ -441,6 +504,8 @@ func _process(dt: float) -> void:
 func _draw() -> void:
 	if _mode == "cfar":
 		_draw_cfar()
+	elif _mode == "geoloc":
+		_draw_plan()
 	else:
 		_draw_spatial()
 
@@ -570,3 +635,126 @@ func _cfar_legend(rect: Rect2) -> void:
 	draw_string(_font, Vector2(x + 24, y + 20), "threshold", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.7, 0.5))
 	draw_circle(Vector2(x + 9, y + 32), 3.0, Color(0.4, 1.0, 0.4))
 	draw_string(_font, Vector2(x + 24, y + 36), "detection", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.6, 1.0, 0.6))
+
+# --- DF / geolocation plan view (slice 5) -------------------------------------
+# A top-down x-y plan: screen-x = world +x (down-range, to the right), screen-y = world +y (cross-
+# range, UP — standard math orientation). The y-flip lives in _world_to_plan, and EVERY shape (the
+# bearing rays, the error ellipse) is computed in WORLD coords then mapped, so the ellipse rotation
+# (ell_deg, a math-convention CCW angle) and the ray directions render correctly through the flip.
+# EQUAL aspect (one px/m scale for both axes) keeps the ellipse un-distorted. All layers are core
+# output: sensor markers + measured bearing RAYS (the LOPs), the emitter truth, the C2 station, the
+# position FIX, and the error ELLIPSE (fix ± linearized covariance).
+
+func _plan_bounds() -> Rect2:
+	# World-space bbox over the entities + the fix point (so a wildly biased pseudolinear fix stays
+	# on screen), padded, with a floor span so an early tight geometry isn't over-zoomed.
+	var have := false
+	var x0 := 0.0; var x1 := 0.0; var y0 := 0.0; var y1 := 0.0
+	for id in _entities:
+		var p = _entities[id].pos
+		var wx := float(p[0]); var wy := float(p[1])
+		if not have:
+			x0 = wx; x1 = wx; y0 = wy; y1 = wy; have = true
+		else:
+			x0 = minf(x0, wx); x1 = maxf(x1, wx); y0 = minf(y0, wy); y1 = maxf(y1, wy)
+	if _df_station != "" and _telemetry.has(_df_station + ".fix_x"):
+		var fx := float(_telemetry[_df_station + ".fix_x"])
+		var fy := float(_telemetry[_df_station + ".fix_y"])
+		if have:
+			x0 = minf(x0, fx); x1 = maxf(x1, fx); y0 = minf(y0, fy); y1 = maxf(y1, fy)
+	if not have:
+		return Rect2(0.0, -20000.0, 60000.0, 40000.0)
+	var pad := 6000.0
+	x0 -= pad; y0 -= pad; x1 += pad; y1 += pad
+	# floor the span so a degenerate (single-point) bbox doesn't divide-by-zero in the scale
+	if x1 - x0 < 1000.0:
+		x1 = x0 + 1000.0
+	if y1 - y0 < 1000.0:
+		y1 = y0 + 1000.0
+	return Rect2(x0, y0, x1 - x0, y1 - y0)
+
+func _world_to_plan(wx: float, wy: float) -> Vector2:
+	# Map a world (x, y) into the centred, equal-aspect plot rect, flipping y so +y is UP.
+	var cx := _plan_view.position.x + (_plan_view.size.x - _plan_b.size.x * _plan_sc) * 0.5
+	var cy := _plan_view.position.y + (_plan_view.size.y - _plan_b.size.y * _plan_sc) * 0.5
+	var sx := cx + (wx - _plan_b.position.x) * _plan_sc
+	var sy := cy + (_plan_b.size.y - (wy - _plan_b.position.y)) * _plan_sc
+	return Vector2(sx, sy)
+
+func _draw_plan() -> void:
+	var vp := get_viewport_rect().size
+	_plan_view = Rect2(PLAN_M, PLAN_M, vp.x - 2.0 * PLAN_M, vp.y - 2.0 * PLAN_M)
+	_plan_b = _plan_bounds()
+	_plan_sc = minf(_plan_view.size.x / _plan_b.size.x, _plan_view.size.y / _plan_b.size.y)
+	draw_rect(_plan_view, Color(0.2, 0.25, 0.3), false, 1.0)
+
+	# bearing rays first (drawn UNDER the markers): a line from each sensor along its measured
+	# bearing. They cross near the emitter at good geometry and graze near-parallel at bad geometry
+	# (the GDOP lesson). bearing_deg is core telemetry; the ray points toward (cosθ, sinθ) in world.
+	var L := _plan_b.size.x + _plan_b.size.y      # long enough (world m) to cross the whole scene
+	for id in _entities:
+		var e = _entities[id]
+		if e.kind != "df_sensor":
+			continue
+		if not _telemetry.has(id + ".bearing_deg"):
+			continue
+		var th := deg_to_rad(float(_telemetry[id + ".bearing_deg"]))
+		var sx := float(e.pos[0]); var sy := float(e.pos[1])
+		draw_line(_world_to_plan(sx, sy), _world_to_plan(sx + L * cos(th), sy + L * sin(th)),
+			Color(0.45, 0.7, 1.0, 0.45), 1.0)
+
+	# entity markers (sensors = cyan triangles, emitter truth = orange X, station = yellow square)
+	for id in _entities:
+		var e = _entities[id]
+		var p := _world_to_plan(float(e.pos[0]), float(e.pos[1]))
+		if e.kind == "df_sensor":
+			var c := Color(0.5, 0.85, 1.0)
+			draw_colored_polygon(PackedVector2Array(
+				[p + Vector2(0, -8), p + Vector2(-7, 5), p + Vector2(7, 5)]), c)
+			draw_string(_font, p + Vector2(9, 4), id, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, c)
+		elif e.kind == "emitter":
+			var c := Color(1.0, 0.55, 0.2)
+			draw_line(p + Vector2(-7, -7), p + Vector2(7, 7), c, 2.0)
+			draw_line(p + Vector2(-7, 7), p + Vector2(7, -7), c, 2.0)
+			draw_string(_font, p + Vector2(10, 4), id + " (truth)", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, c)
+		elif e.kind == "df_station":
+			var c := Color(1.0, 0.9, 0.4)
+			draw_rect(Rect2(p - Vector2(6, 6), Vector2(12, 12)), c, false, 2.0)
+			draw_string(_font, p + Vector2(9, -6), id, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, c)
+
+	# the fix + error ellipse (core output via telemetry — never recomputed here)
+	if _df_station != "" and _telemetry.has(_df_station + ".fix_x"):
+		var fx := float(_telemetry[_df_station + ".fix_x"])
+		var fy := float(_telemetry[_df_station + ".fix_y"])
+		var a := float(_telemetry.get(_df_station + ".ell_a", 0.0))
+		var b := float(_telemetry.get(_df_station + ".ell_b", 0.0))
+		var ang := deg_to_rad(float(_telemetry.get(_df_station + ".ell_deg", 0.0)))
+		if a > 0.0 and b > 0.0:
+			var pts := PackedVector2Array()
+			var n := 48
+			for i in n + 1:
+				var t := TAU * float(i) / n
+				var ex := a * cos(t); var ey := b * sin(t)            # ellipse-local
+				var wx := fx + ex * cos(ang) - ey * sin(ang)         # rotate into world
+				var wy := fy + ex * sin(ang) + ey * cos(ang)
+				pts.append(_world_to_plan(wx, wy))
+			draw_polyline(pts, Color(0.4, 1.0, 0.5, 0.9), 1.5)
+		var fp := _world_to_plan(fx, fy)                              # the fix marker (green +)
+		var fc := Color(0.4, 1.0, 0.5)
+		draw_line(fp + Vector2(-7, 0), fp + Vector2(7, 0), fc, 2.0)
+		draw_line(fp + Vector2(0, -7), fp + Vector2(0, 7), fc, 2.0)
+		draw_string(_font, fp + Vector2(9, -6), "fix", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, fc)
+
+	_plan_legend(_plan_view)
+
+func _plan_legend(rect: Rect2) -> void:
+	var x := rect.end.x - 150.0
+	var y := rect.position.y + 14.0
+	draw_line(Vector2(x, y), Vector2(x + 18, y), Color(0.45, 0.7, 1.0), 2.0)
+	draw_string(_font, Vector2(x + 24, y + 4), "bearing (LOP)", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.7, 0.85, 1.0))
+	draw_line(Vector2(x, y + 16) + Vector2(-4, -4), Vector2(x, y + 16) + Vector2(4, 4), Color(1.0, 0.55, 0.2), 2.0)
+	draw_line(Vector2(x, y + 16) + Vector2(-4, 4), Vector2(x, y + 16) + Vector2(4, -4), Color(1.0, 0.55, 0.2), 2.0)
+	draw_string(_font, Vector2(x + 24, y + 20), "emitter truth", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.7, 0.45))
+	draw_line(Vector2(x - 5, y + 32), Vector2(x + 5, y + 32), Color(0.4, 1.0, 0.5), 2.0)
+	draw_line(Vector2(x, y + 27), Vector2(x, y + 37), Color(0.4, 1.0, 0.5), 2.0)
+	draw_string(_font, Vector2(x + 24, y + 36), "fix + ellipse", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.6, 1.0, 0.7))

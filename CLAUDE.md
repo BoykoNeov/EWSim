@@ -471,7 +471,8 @@ server: `godot --headless --path clients/godot --script res://net/slice4_ui_test
 deferred)** a Pluto burn-through diagram (`clients/notebooks/slice4_burnthrough.jl`).
 
 **Slice 5 — DF / geolocation** (bearings-only emitter location + the GDOP error ellipse; HANDOFF §10
-item 5) — **IN PROGRESS. Gates 1–2 done & green (1015 tests).** Planned FULL in `docs/plans/slice5.md`
+item 5) — **COMPLETE. Gates 1–3 done & green (1055 tests); wire + UI machine-verified AND the plan-view
+`_draw_plan` VISUALLY CONFIRMED (2026-06-30).** Planned FULL in `docs/plans/slice5.md`
 (3 staged gates: geometry/estimation primitives → `DFSensor`/`Geolocator` lighting **phase 4 of the
 tick contract** [`decide!`, the natural milestone after slice 4 lit `build_env!`] → `estimator`
 fidelity + scenario + Godot **plan/top-down (x-y)** view + verifier). The lesson is **GDOP**: bearings
@@ -566,18 +567,70 @@ geometry, not a dead knob); no-DF world writes no bearings/DF telemetry; loader 
 rng-lockstep but fix differs). Slices 1–4 **byte-identical** (geolocation adds NO code to the radar
 path; the `_sample_z` golden + all prior testsets green through the include).
 
-Next: **gate 3** — `scenarios/slice5_geoloc.yaml` (3 sensors + an emitter flying good→bad geometry;
-`sigma_theta_deg` sliders; numbers tuned EMPIRICALLY + oracle-pinned). Godot `Sandbox.gd` NEW **plan /
-top-down (x-y) view** (`_fid_kind → geoloc` off the handshake `fidelity[:estimator]`; `_draw_plan`:
-sensor markers + bearing rays, emitter truth, fix point, error ellipse, gdop/err_m readout; the shared
-fidelity button becomes the estimator cycler `pseudolinear↔ml`, guarded-disconnect). `net/slice5_verify.gd`
-(real server: ellipse a/b stretches as the emitter closes; `set_param sigma_theta_deg` scales `ell_a`/
-`ell_b` while `gdop` stays FIXED — advisor #2 on the wire; `set_fidelity :estimator` reduces `err_m` at
-the worst-geometry sample; `t` bit-identical under a held seed) + `net/slice5_ui_test.gd` + `Sandbox.tscn`
-smoke-load. `test_server.jl` (`set_fidelity :estimator` write/reject + introduce-allowed),
-`test_scenario.jl` (slice-5 loader assertions), `test_determinism.jl` (mid-run `:estimator` toggle AND
-introduce bit-identical). `_draw_plan` visually confirmed via the shot harness ([[ewsim-godot-headless]]).
-**(stretch)** offline `batch.jl` `kind=:geoloc_mc` + `slice5_gdop.jl` Pluto MC-vs-CRLB overlay.
+Gate 3 (estimator fidelity + scenario + Godot plan view + verifiers — **DONE & green, 1055 tests;
+wire + UI machine-verified AND the plan-view `_draw_plan` VISUALLY CONFIRMED 2026-06-30**). The core
+fidelity plumbing landed in gate 2, so gate 3 = the scenario + client + verifiers + server/scenario
+test arms. **σθ unit blocker (advisor):** gate 2 stored `comp[:sigma_theta_rad]`, but a live
+`set_param sigma_theta_deg` slider must write the SAME key the consumer reads (a knob addressing a
+non-consumed key fails `_parse_knobs`/no-ops the ellipse). So DEGREES is now the comp key end-to-end —
+`comp[:sigma_theta_deg]` (raw), `DFSensor.observe!` does `max(deg2rad(...), _SIGMA_THETA_FLOOR)` at the
+consumer (floor stays in rad); the gate-1/2 fixtures + loader test migrated to `:sigma_theta_deg`.
+`scenarios/slice5_geoloc.yaml` (seed 5): 3 sensors on a ±20 km y-baseline (dfs1/2/3) + a station at
+centre; emitter starts abeam at (15 km, 5 km) and flies +x at 1 km/s (good→bad geometry); 3 σθ
+sliders; default `:pseudolinear`. Tuned EMPIRICALLY (a throwaway probe) + oracle-pinned: GOOD t=8 s
+(x=23 km, gdop≈37 k, a/b≈1.85) vs BAD t=40 s (x=55 km, gdop≈127 k, a/b≈3.63, **pseudolinear err≈53 km
+COLLAPSING toward the sensors** vs **ml≈7 km** — a 7.77× cut). Godot `Sandbox.gd`: a NEW `"geoloc"`
+render mode (top-down x-y PLAN view — the x-z elevation view can't show a 2-D crossing/ground ellipse),
+discriminated at handshake (`_fidelity.has("estimator")` AND no `range_axis_m` → `_enter_geoloc_mode`,
+the slice-3 `range_axis_m`→cfar pattern). `_draw_plan` plots sensor markers + measured bearing RAYS
+(the LOPs), the emitter truth (orange X), the C2 station, the fix (green +), and the error ELLIPSE —
+ALL from telemetry (`<station>.fix_x/.fix_y/.err_m/.gdop/.ell_a/.ell_b/.ell_deg`, `<id>.bearing_deg`),
+computed in WORLD coords then mapped through an EQUAL-aspect `_world_to_plan` (one px/m scale so the
+ellipse isn't distorted; screen +y = world +y UP so the **y-flip renders the ellipse rotation + ray
+directions correctly — advisor #3, the silent-inversion risk**). The shared fidelity button becomes
+the estimator cycler (`pseudolinear↔ml`, `_on_est_pressed`, guarded disconnect like cfar/ep); the
+slice-1/2/4 spatial + slice-3 cfar paths are UNTOUCHED. `_update_readout` already skips arrays (the DF
+telemetry is all scalars — no widening). **`warmup!` fix:** the ROC-batch warm resolves a radar (a DF
+scenario has NONE → it crashed the server before listening), now guarded on radar presence — the
+`tick!`+`state_frame` warm still covers the phase-4 `decide!`/`Geolocator`/`bearings_fix` compile;
+`test_server.jl` pins the radar-free warm. `net/slice5_verify.gd` (drives the real server: gdop+ellipse
+STRETCH good→bad [a/b 1.85→3.63, gdop 37 k→127 k]; `set_fidelity estimator` pseudolinear→ml cuts err_m
+53302→6862 m = 7.77× with **bit-identical t=40.000000** under the held seed; the σθ SLIDER — `set_param
+sigma_theta_deg` on ALL 3 sensors [the ellipse scales ∝σθ only when all sensors scale together] at the
+GOOD sample with TINY σ (0.01°→0.02°, the clean-2× regime that sidesteps the
+[[ewsim-df-ellipse-sigma-monotonicity]] flakiness) → ell_a 5.731→11.464 [2×] while gdop stays
+**37464.2472 == 37464.2472** — advisor #2 on the wire, GDOP geometry-only, ellipse carries σθ). `S5V OK`,
+exit 0. `net/slice5_ui_test.gd` (mock client, no server: handshake enters geoloc/plan mode + wires the
+estimator cycler, the ring walks pseudolinear→ml and wraps, badge/button track, σθ slider sends
+set_param, reset resyncs to pseudolinear — `S5UI OK`). `Sandbox.tscn` smoke-loaded headless against a
+slice-5 server (server `DONE` ⇒ scene connected, no GDScript errors — catches geoloc-branch parse bugs
+the SimClient verifier can't). Tests (+36 over gate 2's 1019): `test_scenario.jl` (slice-5 loader:
+estimator default, NO radar/jammer/cfar/ep fidelity or entities, emitter CV/no-rcs flying +x, 3 sensors
+on the x=0 baseline with σθ stored RAW in degrees [`haskey :sigma_theta_deg` not `_rad` — the
+discriminating check], station+Geolocator nsigma, emitter opens abeam < baseline half-span, estimator
+not a knob + σθ knobs address `:sigma_theta_deg`); `test_server.jl` (`set_fidelity :estimator`
+write/reject + introduce-safe on a non-DF scenario [the `:ep` contract, NOT `:cfar`'s guard]; warmup
+radar-free). `test_determinism.jl` slice-5 coverage was already complete in gate 2 (mid-run `:estimator`
+toggle AND introduce-on-a-DF-world both bit-identical — untouched, only the fixture σθ key migrated;
+the sharpest "introduce `:estimator` on a NON-DF world → rng end-state unchanged" sub-leg is
+safe-by-construction [nothing reads `:estimator` without a `Geolocator`] and pinned at the COMMAND
+level by `test_server.jl`'s introduce-safe arm, so it isn't separately re-asserted here — advisor). The `_draw_plan` PIXEL
+branch (Godot skips `_draw` headless) was VISUALLY CONFIRMED via 3 windowed shots (the shot harness,
+[[ewsim-godot-headless]] — throwaway static-emitter scenarios + a wrapper scene, reverted after): GOOD =
+steep bearing crossings / fix sitting ON the emitter truth / round ellipse; BAD-pseudolinear = grazing
+near-parallel LOPs / fix COLLAPSED to the sensor array (err 53 km) / stretched down-range ellipse;
+BAD-ml = the fix WALKS BACK onto the emitter (err 3.6 km) — the estimator lesson as a picture; the
+y-flip proven correct (the bearing rays converge on the emitter in all three). No open step remains in
+slice 5's required gates.
+
+Run the slice-5 showcase: `julia --project=core tools/server.jl scenarios/slice5_geoloc.yaml`, then
+launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-detects DF and shows the top-down plan
+view; cycle the `est:` button to watch the fix walk back toward truth; drag a σθ slider to scale the
+ellipse; the emitter flies good→bad so the ellipse stretches over the run). Re-run the gate-3 proof
+headless: start that server, then `godot --headless --path clients/godot --script
+res://net/slice5_verify.gd` (exit 0 = pass; serves one client then exits). The UI test needs NO server:
+`godot --headless --path clients/godot --script res://net/slice5_ui_test.gd`. **(stretch, deferred)**
+offline `batch.jl` `kind=:geoloc_mc` + `clients/notebooks/slice5_gdop.jl` Pluto MC-vs-CRLB overlay.
 
 ---
 

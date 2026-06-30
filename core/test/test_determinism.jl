@@ -209,9 +209,9 @@ end
             w.entities[:emit1] = Entity(:emit1, :emitter; pos = Vec3(40_000.0, 0, 0),
                                         vel = Vec3(-150.0, 0, 0))
             w.entities[:dfs1] = Entity(:dfs1, :df_sensor; pos = Vec3(0.0, -10_000.0, 0),
-                comp = Dict{Symbol,Any}(:sigma_theta_rad => deg2rad(1.0)))
+                comp = Dict{Symbol,Any}(:sigma_theta_deg => 1.0))
             w.entities[:dfs2] = Entity(:dfs2, :df_sensor; pos = Vec3(0.0, 10_000.0, 0),
-                comp = Dict{Symbol,Any}(:sigma_theta_rad => deg2rad(1.0)))
+                comp = Dict{Symbol,Any}(:sigma_theta_deg => 1.0))
             w.entities[:stn1] = Entity(:stn1, :df_station; pos = Vec3(0.0, 0, 0))
             subs = Subsystem[]
             for id in sort!(collect(keys(w.entities)))
