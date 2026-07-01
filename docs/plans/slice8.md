@@ -412,7 +412,31 @@ vector math on `StaticArrays` (the `_range`/`_solve_normal` no-`LinearAlgebra` h
       integrator + phase-2 telemetry warmed, live World pristine). Slices 1–7 **byte-identical** (the
       `_sample_z` golden + all prior testsets green through the include). Gate 3 (scenario + Godot
       spatial-view extension + verifiers) is next.
-- [ ] 3. **Scenario + Godot spatial-view extension + verifiers.** `scenarios/slice8_ballistic.yaml`
+- [x] 3. **Scenario + Godot spatial-view extension + verifiers.** DONE & green (1633 tests, +24);
+      wire + UI machine-verified AND `_draw` VISUALLY CONFIRMED 2026-07-01. `scenarios/slice8_ballistic.yaml`
+      (seed 8; 250 m/s @ 45°, mass 10 kg, drag-off + `:rk4` default; probed T≈36.05 s, apex≈1593 m,
+      range≈6373 m; de_frac@8s ≈ −5.5e-14 rk4 / +1.2e-5 euler / −0.79 at cd=0.02). **Carry-over (a)
+      RESOLVED: reset reloads the YAML (discards set_param) + nothing re-derives vel mid-flight, so ONLY
+      `cd_area_m2` is a live slider (launch geometry is load-time static — edit YAML + reconnect); do NOT
+      ship launch sliders.** **Carry-over (b): the verifier samples de_frac MID-FLIGHT (t=8 s), never
+      post-impact (de_frac=−1).** **Advisor gate-3 catches folded in: (1) the euler bow is inherently
+      sub-pixel, so `_update_readout` routes floats through the scientific `_fmt` — de_frac reads
+      "−3.7e-14" vs "1.2e-5" not "0.00"; dt kept 1e-3 (dt≥0.02 stalls REALTIME); (2) missile-mode seeds
+      small elevation-view extents so the arc fills the view; (3) the IMPACT verifier accumulates the
+      one-shot :impact events across the drained burst.** `Sandbox.gd` spatial view EXTENDED (missile
+      marker + trail + impact burst + energy readout; the shared button → `_on_integrator_pressed`
+      rk4↔euler cycler; NO new render mode). `net/slice8_verify.gd` (rk4 parabola ΔE≈0; euler orders above
+      rk4 [magnitude, bit-identical t]; drag slider bleeds E; :impact once + latch — S8V OK). `net/
+      slice8_ui_test.gd` (stays spatial + integrator ring walks/wraps, cd_area slider set_param, reset
+      resyncs — S8UI OK). `Sandbox.tscn` smoke-loaded headless vs the slice-8 server (caught a `%g`/`%e`
+      GDScript format bug). `test_scenario.jl` loader testset (integrator default, no other fidelity/
+      entities, `:missile` NOT `ConstantVelocity`, deg→rad launch pin, cd_area the one knob). `_draw`
+      missile branch VISUALLY CONFIRMED via 3 windowed shots (rk4 mid-flight arc + marker + energy readout;
+      full symmetric parabola + impact burst at 6373 m; drag-shortened asymmetric arc at 1247 m). **(stretch)**
+      `slice8_energy.jl` Pluto E(t) overlay + `:dispersion` MC batch still deferred.
+
+  > _Original gate-3 spec (kept for reference; the checked summary above is what shipped)._
+      `scenarios/slice8_ballistic.yaml`
       (probe-tuned, drag-off + `:rk4` default, launch/drag sliders). **GATE-2 CARRY-OVER FLAGS
       (advisor):** (a) **launch speed/elevation sliders are NOT achievable via reset** — `_reload!`
       reloads from the YAML FILE, discarding any live `set_param` to `comp[:speed]`/

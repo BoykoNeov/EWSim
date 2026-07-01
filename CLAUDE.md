@@ -983,7 +983,8 @@ launch it against the slice7_dop server). The UI test needs NO server: `godot --
 --script res://net/slice7_ui_test.gd`. All 1492 tests: `pwsh tools/test.ps1`.
 
 **Slice 8 — missile (ballistic): the airframe integrator + `frames.jl`** (HANDOFF §10 item 8, the first
-slice of the missile-guidance arc) — **Gate 1 done & green (1562 tests, +70).** Planned FULL in
+slice of the missile-guidance arc) — **COMPLETE. Gates 1–3 done & green (1633 tests); wire + UI
+machine-verified AND the missile spatial-view `_draw` VISUALLY CONFIRMED (2026-07-01).** Planned FULL in
 `docs/plans/slice8.md` (3 gates: pure primitives → the `BallisticMissile` subsystem wired [phase 1, the
 first FORCE-based integrator] → scenario + Godot spatial-view extension + verifiers). The slice pays down
 two infra debts: the Newtonian ODE integrator (forces→accel→vel→pos) and the 3-D `frames.jl` shared lib
@@ -1070,8 +1071,72 @@ RandomWalker world → byte-identical + rng stream untouched); `test_server.jl` 
 write/reject [bad rung rejected before landing] + introduce-safe on a plain radar scenario; `warmup!`
 tolerates a radar-free missile scenario — the ROC batch is skipped, the phase-1 integrator + phase-2 energy
 telemetry are warmed, the live World left pristine). Slices 1–7 **byte-identical** (missile.jl adds no code to
-the radar/detection path; the `_sample_z` golden + all prior testsets green through the include). Gate 3
-(scenario + Godot spatial-view extension + verifiers) is next.
+the radar/detection path; the `_sample_z` golden + all prior testsets green through the include).
+
+Gate 3 (scenario + Godot spatial-view extension + verifiers — **DONE & green, 1633 tests (+24); wire + UI
+machine-verified AND `_draw` VISUALLY CONFIRMED 2026-07-01**). NO `core/src/*.jl` change — the diff is
+`Sandbox.gd` + `test_scenario.jl` + three new files, so slices 1–7 are byte-identical *structurally* (the
+`_sample_z` golden untouched). `scenarios/slice8_ballistic.yaml` (seed 8): a single projectile launched from
+the origin at 250 m/s / 45° in the x-z plane (mass 10 kg, cd_area 0 = DRAG OFF, ρ 1.225), `integrator: rk4`
+default. Numbers PROBED against the live `integrate!→build_env!` wire path (the slice-3..7 rule) + pinned in
+the verifier: drag-off rk4 T≈36.05 s, apex≈1593 m, range≈6373 m; `de_frac`@8s ≈ −5.5e-14 (rk4, machine eps)
+vs ≈ +1.2e-5 (euler, ratio 2.2e8); cd=0.02 → `de_frac` −0.79 / range 1211 m. **The euler lesson rides the ΔE
+READOUT, not the trajectory shape (advisor #1): the parabola bow is INHERENTLY sub-pixel (bowing/apex =
+2·g·dt/v₀z, so any legible arc kills the relative bend, ~1 px here) — so `_update_readout` now routes float
+scalars through the client's scientific `_fmt` (the Pfa-slider widget) so a tiny-but-nonzero `de_frac` reads
+truthfully instead of rounding to "0.00" = a dead button (the rk4 shot CAPTURES `de_frac −3.7e-14`; the euler
+figure ≈ +1.2e-5 is verifier/probe-derived — the shot harness was reverted before an euler capture, but `_fmt`
+renders the same scientific form either way).** The prior slice-1..7 UI tests re-run green after this shared
+`_update_readout` edit (no test asserts `_readout.text`; the change only widens tiny/near-integer formatting). **dt kept at 1e-3 / emit_every 16 (NOT
+coarsened): RK4 is exact for the parabola at ANY dt, and at dt≥0.02 the sub-ms REALTIME `wall_dt` rounds to 0
+steps/iter and playback stalls — so the standard slice-1..7 cadence is kept, `_fmt` alone carries euler.**
+**LAUNCH GEOMETRY IS LOAD-TIME STATIC (gate-2 carry-over (a), VERIFIED at gate 3): `reset`→`_reload!`
+reloads the YAML FILE (discarding any `set_param` to speed/elevation) and nothing re-derives `vel` mid-flight
+(re-launching an airborne body is ill-defined), so ONLY `cd_area_m2` is a working live slider (the drag/
+energy-bleed lever — well-defined mid-flight, the server reads it every step); launch speed/elevation are
+edit-YAML-and-reconnect.** `integrator` is PHYSICS-CHANGING, NOT toggle-bit-identical (there is no RNG; a
+rk4↔euler toggle CHANGES the trajectory — the slice-2 `propagation` shape, the OPPOSITE of slice-5/6/7).
+Godot `Sandbox.gd`: **NO new render mode — the EXISTING spatial/elevation view EXTENDED** (the slice-4
+"stay spatial" precedent). The handshake fidelity carrying `integrator` (and NO range_axis_m / pri_axis_us /
+estimator / raim) is the discriminator: `_setup_spatial_fid_btn` sets `_fid_kind="missile"`, wires the shared
+button to `_on_integrator_pressed` (the rk4↔euler ring, guarded disconnect like cfar/ep/est/deint/raim), and
+seeds SMALL elevation-view extents (the radar defaults 45 km × 5 km only grow → a 6 km arc would render
+cramped; advisor #2) that grow to fit. `_draw_spatial` gains a `_draw_missile` arm: a fading trajectory trail
+(WORLD breadcrumbs mapped each draw so they survive the auto-expanding extents), a nose-oriented marker
+(orientation off the last trail segment), and an orange impact BURST at the `<id>.impacted` ground crossing —
+all telemetry / entity pos. The slice-1..7 render paths are UNTOUCHED (their six UI tests re-run green after the
+shared `_update_readout`/`_fmt` edit — none asserts `_readout.text`).
+`net/slice8_verify.gd` (drives the real server: handshake ships `integrator:rk4` + the cd_area slider + no
+range/pri axis; PARABOLA — rk4 drag-off `de_frac`≈0 at a MID-FLIGHT t=8 s [carry-over (b): sample mid-flight,
+`de_frac=−1` at rest]; EULER — reset + `set_fidelity integrator euler` → `de_frac` jumps orders above rk4 at a
+bit-identical t [MAGNITUDE not sign — euler energy is phase-dependent]; DRAG — reset + `set_param cd_area_m2
+0.02` → `de_frac` clearly negative + arc lower; IMPACT — step PAST T, accumulate the one-shot `:impact` events
+across the drained burst [the slice-6/7 pattern] → exactly ONE + `impacted` latches + speed 0). `S8V OK`,
+exit 0. `net/slice8_ui_test.gd` (mock client, no server: an `integrator` handshake STAYS spatial + wires the
+integrator cycler; the ring walks rk4→euler and wraps; badge/button track; the cd_area slider sends set_param;
+reset resyncs to rk4 — `S8UI OK`). `Sandbox.tscn` smoke-loaded headless against the slice-8 server (server
+`DONE` ⇒ scene connected on the missile branch, no GDScript errors — caught a `%g`/`%e` format bug in the
+verifier the smoke-load class always flags). `test_scenario.jl` +1 loader testset (integrator default rk4, NO
+other fidelity/entities, exactly one `:missile` with `BallisticMissile` and **NOT** `ConstantVelocity` [the
+double-integration discriminating check], launch state deg→rad pinned [`vel_x=vel_z=250·cos45°`, `vel_y=0`],
+raw speed/elevation stored, cd_area the ONE knob, integrator/speed/elevation NOT knobs). The `_draw` missile
+PIXEL branch (Godot skips `_draw` headless) VISUALLY CONFIRMED via 3 windowed shots (the shot harness,
+[[ewsim-godot-headless]] — a throwaway ShotMissile wrapper pointed a positional scene arg at itself against the
+live server, `get_viewport().get_texture().get_image().save_png`, reverted after): **rk4 mid-flight** = the
+climbing arc + nose marker + energy readout (`de_frac −3.7e-14` via `_fmt`, `e_total 312500` constant);
+**rk4 impact** = the full SYMMETRIC parabola + orange burst at range 6373 m (`impacted YES`, `de_frac −1`);
+**drag** = a SHORTENED, ASYMMETRIC arc (steeper descent) impacting at 1247 m (~5× shorter) — the energy-
+dissipation lesson as a picture. No open step remains in slice 8's required gates. **(stretch, deferred)**
+`clients/notebooks/slice8_energy.jl` Pluto E(t) rk4-vs-euler overlay + an offline `batch.jl` `:dispersion`
+Monte-Carlo launch-scatter (the first RNG in the missile arc).
+
+Run the slice-8 showcase: `julia --project=core tools/server.jl scenarios/slice8_ballistic.yaml`, then launch
+Godot on `clients/godot` (the main `Sandbox.tscn` auto-uses the spatial view; cycle the `integrator:` button to
+watch the ΔE readout drift off zero under euler; drag the `cd_area` slider to bleed energy and shorten the arc;
+the missile emits an `:impact` burst and freezes at z=0). Re-run the gate-3 proof headless: start that server,
+then `godot --headless --path clients/godot --script res://net/slice8_verify.gd` (exit 0 = pass; serves one
+client then exits). The UI test needs NO server: `godot --headless --path clients/godot --script
+res://net/slice8_ui_test.gd`. All 1633 tests: `pwsh tools/test.ps1`.
 
 ---
 

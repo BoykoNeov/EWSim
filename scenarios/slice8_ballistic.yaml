@@ -1,0 +1,73 @@
+# slice8_ballistic — the ballistic-missile integrator showcase (HANDOFF §10 item 8, slice 8 gate 3).
+# The FIRST force-based integrator in the tick loop made interactive: a single point-mass projectile
+# under flat-earth constant gravity (+ optional quadratic drag), flying a clean parabola in the x-z
+# plane (downrange × altitude — the EXISTING slice-1 elevation view, extended with a missile marker,
+# a fading trajectory trail, an impact marker, and a live energy readout; NO new render mode, the
+# slice-4 "stay spatial" precedent).
+#
+# THE LESSON 1 — the integrator (the fidelity button, rk4 ↔ euler):
+#   RK4 integrates the degree-2 gravity parabola EXACTLY (zero truncation) → drag-off `de_frac`
+#   (ΔE/E₀) ≈ machine eps (−6e-15 at t=8 s here). Cycle to :euler and the O(dt) method no longer
+#   conserves — `de_frac` drifts to ~+2.5e-4 (the readout shows it via the client's scientific `_fmt`;
+#   the PARABOLA BOWING itself is inherently sub-pixel — bowing/apex = 2·g·dt/v₀z, so any legible arc
+#   kills the relative bend — so the ΔE READOUT carries the euler lesson, not the trajectory shape;
+#   the euler bows only ~2 m over a 1.6 km apex, ~1 px). `integrator` is PHYSICS-CHANGING, not a
+#   slice-5/6/7 toggle-bit-identical rung: dialing it CHANGES the trajectory (the slice-2 `propagation`
+#   shape). There is NO RNG in slice 8 — the trajectory is a closed-form ODE solve.
+#
+# THE LESSON 2 — energy accounting (the drag / ballistic-coefficient slider, the ONE live lever):
+#   Drag OFF (cd_area_m2 = 0, the default) → total mechanical energy E = ½m‖v‖² + mgz is conserved
+#   (de_frac ≈ 0, the clean parabola). Drag the `cd_area_m2` slider up and quadratic drag bleeds
+#   energy MONOTONICALLY (Ė = −k‖v‖³ < 0): the range SHORTENS dramatically and de_frac goes clearly
+#   negative (cd=0.02 → de_frac −0.79 at t=8 s, range 6.4 km → 1.2 km). β = m/(Cd·A) is the ballistic
+#   coefficient (larger β = less drag = longer range). This is the one lever that is WELL-DEFINED
+#   mid-flight (it changes the FORCE); the server reads cd_area_m2 every step, so the drag slider is
+#   a genuine live in-flight lever (the verifier pins it).
+#
+# LAUNCH GEOMETRY IS LOAD-TIME STATIC (a gate-2 carry-over, verified at gate 3): `reset` reloads THIS
+# YAML (discarding any live set_param to speed/elevation) and nothing re-derives `vel` mid-flight
+# (re-launching a body already in the air is ill-defined), so launch speed/elevation are NOT live
+# sliders — edit this file and reconnect to change them. Only the drag coefficient is a working slider.
+#
+# UNITS (the §1 trifecta): positions/velocities SI (m, m/s), energy in joules, launch ELEVATION
+# authored in DEGREES → radians at the loader (the sigma_theta_deg/beamwidth_deg precedent), g/ρ SI
+# constants. Numbers PROBED against the live integrate!→build_env! wire path (the slice-3..7 rule) and
+# pinned in net/slice8_verify.gd: drag-off rk4 T≈36.05 s, apex≈1593 m, range≈6373 m; de_frac@8s ≈ 0
+# (rk4, machine eps) vs ≈+1.2e-5 (euler); cd=0.02 → de_frac ≈ −0.79. The euler ΔE drift is ~1e-5 (not
+# "0.00") because the client routes the readout through its scientific `_fmt` — that carries the euler
+# lesson (RK4 stays EXACT for the constant-g parabola at ANY dt, so a coarser dt would only widen the
+# margin; but dt=1e-3 keeps REALTIME playback advancing — at dt≥0.02 the sub-ms wall_dt rounds to 0
+# steps/iter and realtime stalls — so the standard slice-1..7 dt/emit cadence is kept).
+name: slice8_ballistic
+seed: 8
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  # The ONLY fidelity key: the integrator method. `:rk4` default → the connect-state is the clean
+  # conserved parabola (the lesson is what the toggle/slider REVEAL). Its PRESENCE (and the absence of
+  # range_axis_m / pri_axis_us / estimator / raim) is the client's missile-view discriminator — the
+  # view stays SPATIAL, only the shared fidelity button becomes the rk4↔euler cycler.
+  integrator: rk4
+
+entities:
+  # A single ballistic projectile launched from the origin at 250 m/s, 45° elevation, in the x-z plane
+  # (no cross-range — it renders in the existing downrange×altitude elevation view). mass 10 kg,
+  # cd_area_m2 = 0 (DRAG OFF default → the clean conserved parabola), ρ = 1.225 (sea-level, constant —
+  # named approximation). The entity gets a BallisticMissile (the phase-1 force integrator that OWNS
+  # pos/vel advancement) and NOT a ConstantVelocity (two phase-1 movers would double-integrate).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 0.0]
+    missile:
+      mass_kg: 10.0
+      speed: 250.0
+      elevation_deg: 45.0
+      cd_area_m2: 0.0
+      rho: 1.225
+
+# The ONE live slider: the drag coefficient Cd·A (the energy-bleed lever, well-defined mid-flight).
+# 0 = drag off (the clean parabola); at the 0.03 max the range collapses ~7× and E bleeds hard.
+# Launch speed/elevation are NOT sliders (load-time static — see the header); the integrator method is
+# the fidelity BUTTON (rk4↔euler cycler), never a slider.
+knobs:
+  - {target: m1, key: cd_area_m2, min: 0.0, max: 0.03, label: "drag Cd·A (m²)"}

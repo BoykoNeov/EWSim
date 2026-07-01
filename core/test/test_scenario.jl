@@ -21,6 +21,7 @@ const _SCEN5 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice5_geol
 const _SCEN6 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice6_deinterleave.yaml"))
 const _SCEN7D = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice7_dop.yaml"))
 const _SCEN7R = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice7_raim.yaml"))
+const _SCEN8 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice8_ballistic.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -427,6 +428,61 @@ end
         @test all(k -> k.key ∉ (:iono, :tropo, :clock, :multipath, :noise, :raim), scn.knobs)
         @test count(s -> s isa GpsSatellite, scn.subs) == length(sats)
         @test count(s -> s isa GpsSolver, scn.subs) == 1
+    end
+
+    @testset "loader parses slice8_ballistic.yaml (missile integrator showcase, spatial view)" begin
+        # Cheap insurance like the slice-2..7 loader tests: a malformed showcase fails HERE as a clear
+        # test, not downstream as a confusing server-launch timeout in the Godot verifier.
+        scn = load_scenario(_SCEN8)
+        @test scn.name == "slice8_ballistic"
+        # `integrator` present is the missile-view discriminator (the client STAYS spatial — no new
+        # render mode — and only repurposes the shared fidelity button). Default :rk4 (the clean
+        # conserved parabola on connect; the lesson is what the toggle/slider REVEAL).
+        @test scn.world.fidelity[:integrator] === :rk4
+        # NO other-slice fidelity or entities — single-domain (the one-lesson rule), so slices 1-7 stay
+        # byte-identical (the missile path touches no radar/detection/DF/ESM/GPS RNG stream).
+        @test !haskey(scn.world.fidelity, :propagation)
+        @test !haskey(scn.world.fidelity, :cfar)
+        @test !haskey(scn.world.fidelity, :ep)
+        @test !haskey(scn.world.fidelity, :estimator)
+        @test !haskey(scn.world.fidelity, :deinterleaver)
+        @test !haskey(scn.world.fidelity, :raim)
+        @test !any(e -> e.kind in (:radar, :jammer, :target, :clutter, :emitter, :df_sensor,
+                                   :df_station, :pulse_emitter, :esm, :gps_satellite, :gps_receiver),
+                   values(scn.world.entities))
+
+        # exactly one :missile entity
+        missiles = [id for (id, e) in scn.world.entities if e.kind === :missile]
+        @test length(missiles) == 1
+        m = scn.world.entities[missiles[1]]
+        # The DOUBLE-INTEGRATION guard (the discriminating check): a force-integrated body gets
+        # BallisticMissile (which OWNS pos/vel advancement) and NOT ConstantVelocity — two phase-1
+        # movers would advance pos twice.
+        msubs = scn.subs
+        @test any(s -> s isa BallisticMissile, msubs)
+        @test !any(s -> s isa ConstantVelocity, msubs)
+        @test count(s -> s isa BallisticMissile, msubs) == 1
+
+        # launch state: speed/elevation authored in m/s + DEGREES → the x-z-plane `vel = speed·
+        # [cos,0,sin]` derived at load (deg→rad); the RAW speed/elevation_deg are ALSO stored (a knob
+        # could address them). haskey/value is the discriminating check (the slice-4/6/7 rule — the
+        # derived vel must actually have run, not silently defaulted).
+        @test m.comp[:speed] == 250.0 && m.comp[:elevation_deg] == 45.0
+        @test m.comp[:mass_kg] == 10.0
+        @test m.comp[:cd_area_m2] == 0.0          # drag OFF default (the clean parabola)
+        @test m.comp[:rho] == 1.225
+        expected = 250.0 * cosd(45.0)             # = 250·sin(45°) too (45°)
+        @test isapprox(m.vel[1], expected; atol = 1e-9)
+        @test isapprox(m.vel[3], expected; atol = 1e-9)
+        @test m.vel[2] == 0.0                     # x-z plane only (no cross-range)
+
+        # the ONE live slider is the drag coefficient (addresses the comp key BallisticMissile reads
+        # every step — the one well-defined-mid-flight lever); the integrator is a fidelity (the
+        # cycler button), never a slider; launch geometry is load-time static (not a knob).
+        @test length(scn.knobs) == 1
+        @test scn.knobs[1].target === missiles[1]
+        @test scn.knobs[1].key === :cd_area_m2
+        @test all(k -> k.key ∉ (:integrator, :speed, :elevation_deg), scn.knobs)
     end
 
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin

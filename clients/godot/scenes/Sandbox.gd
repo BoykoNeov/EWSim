@@ -144,6 +144,18 @@ var _gps_toggle_btns := {}        # term(String) -> Button (findable + pressable
 const GPS_ERR_TERMS := ["iono", "tropo", "clock", "multipath", "noise"]   # the five error-term toggles
 const RAIM_RUNGS := ["off", "detect", "exclude"]   # slice-7 raim cycler (the shared fidelity button)
 
+# --- missile spatial view (slice 8): REUSES the slice-1 elevation view (downrange×altitude) — no new
+# render mode (the slice-4 "stay spatial" precedent). The handshake fidelity carrying `integrator`
+# (and NO range_axis_m / pri_axis_us / estimator / raim) is the discriminator: the view stays SPATIAL,
+# only the shared fidelity button becomes the integrator cycler. A missile marker (nose-oriented off
+# the trail), a fading trajectory trail, an impact burst, and the energy readout — all telemetry /
+# entity pos. `integrator` is PHYSICS-CHANGING (a rk4↔euler toggle changes the trajectory, the slice-2
+# `propagation` shape), NOT a slice-5/6/7 draw-free toggle.
+var _missile_id := ""             # missile entity id (for the .impacted flag telemetry)
+var _missile_trail: Array = []    # WORLD [x,y,z] breadcrumbs (mapped through _world_to_screen each draw)
+const INTEGRATOR_RUNGS := ["rk4", "euler"]   # slice-8 integrator cycler (the shared fidelity button)
+const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
+
 func _ready() -> void:
 	_font = ThemeDB.fallback_font
 	_build_ui()
@@ -281,6 +293,22 @@ func _setup_spatial_fid_btn() -> void:
 		if not _prop_btn.pressed.is_connected(_on_ep_pressed):
 			_prop_btn.pressed.connect(_on_ep_pressed)
 		_prop_btn.tooltip_text = "Cycle EP (set_fidelity): none → freq_agility → sidelobe_blanking"
+	elif _fidelity.has("integrator"):
+		# Slice-8 missile: an `integrator` fidelity (no range/pri axis, no estimator/raim) keeps the
+		# SPATIAL elevation view but repurposes the shared button as the integrator cycler. Guarded
+		# disconnect like the other _fid_kind setups so the headless UI test (button built without
+		# _build_ui's connect) doesn't error.
+		_fid_kind = "missile"
+		if _prop_btn.pressed.is_connected(_on_prop_pressed):
+			_prop_btn.pressed.disconnect(_on_prop_pressed)
+		if not _prop_btn.pressed.is_connected(_on_integrator_pressed):
+			_prop_btn.pressed.connect(_on_integrator_pressed)
+		_prop_btn.tooltip_text = "Cycle integrator (set_fidelity): rk4 ↔ euler"
+		# Seed the elevation-view extents small so the ballistic arc FILLS the view: the slice-1 radar
+		# defaults (45 km × 5 km) are for a radar scene and only grow, so a ~6 km × 1.6 km arc would
+		# render cramped in the corner (advisor). They grow to fit as the missile climbs/flies.
+		_x_max = 2000.0
+		_z_max = 1000.0
 	else:
 		_fid_kind = "propagation"
 
@@ -409,6 +437,8 @@ func _update_fid_btn() -> void:
 			_prop_btn.text = "deint: %s" % str(_fidelity.get("deinterleaver", "?"))
 		"gps":
 			_prop_btn.text = "raim: %s" % str(_fidelity.get("raim", "?"))
+		"missile":
+			_prop_btn.text = "integrator: %s" % str(_fidelity.get("integrator", "?"))
 		_:
 			_update_prop_btn()
 
@@ -485,6 +515,22 @@ func _on_deint_pressed() -> void:
 	_render_badge()
 	_update_fid_btn()
 
+func _on_integrator_pressed() -> void:
+	# Advance the integrator rung (rk4↔euler) and tell the core (set_fidelity). UNLIKE every other
+	# fidelity cycler this is PHYSICS-CHANGING, not toggle-bit-identical: there is NO RNG in slice 8,
+	# so a rk4↔euler toggle CHANGES the trajectory going forward (the slice-2 `propagation` shape — the
+	# OPPOSITE of the slice-5/6/7 draw-free toggles). `:integrator` is introduce-safe (absent a missile
+	# nothing reads it). The client owns the displayed rung: update badge + button locally (the server
+	# applies it silently on the next step, no reply). NB launch geometry only changes on reset/reload,
+	# but the integrator method IS well-defined mid-flight (it changes how the SAME state is advanced).
+	var cur := str(_fidelity.get("integrator", "rk4"))
+	var i := INTEGRATOR_RUNGS.find(cur)
+	var next: String = INTEGRATOR_RUNGS[(i + 1) % INTEGRATOR_RUNGS.size()] if i >= 0 else "rk4"
+	_fidelity["integrator"] = next
+	_client.send({"type": "set_fidelity", "key": "integrator", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
 func _on_state(obj: Dictionary) -> void:
 	_telemetry = obj.get("telemetry", {})
 	if _mode == "cfar":
@@ -548,6 +594,15 @@ func _spatial_on_state(obj: Dictionary) -> void:
 		_entities[id] = {"kind": str(e.get("kind", "")), "pos": pos}
 		if str(e.get("kind", "")) == "radar" and _radar_id == "":
 			_radar_id = id
+		# Missile (slice 8): record the breadcrumb trail from the entity world pos (stored in world
+		# coords, mapped to screen each draw so it survives the auto-expanding extents). Skip a repeat
+		# point so the frozen post-impact pos doesn't stack; the cap bounds the list.
+		if str(e.get("kind", "")) == "missile":
+			_missile_id = id
+			if _missile_trail.is_empty() or _missile_trail[-1] != pos:
+				_missile_trail.append(pos)
+				if _missile_trail.size() > MISSILE_TRAIL_MAX:
+					_missile_trail.pop_front()
 		_x_max = max(_x_max, absf(float(pos[0])) * 1.08)
 		_z_max = max(_z_max, float(pos[2]) * 1.15)
 
@@ -586,7 +641,12 @@ func _update_readout() -> void:
 		if v is bool:
 			lines.append("%s: %s" % [k, "YES" if v else "no"])
 		else:
-			lines.append("%s: %.2f" % [k, float(v)])
+			# Route through _fmt (compact + scientific for |v| < 0.01), so a tiny-but-nonzero value
+			# reads truthfully instead of rounding to "0.00": the slice-8 energy-conservation error
+			# de_frac is ~1e-14 (rk4, machine eps) vs ~2.5e-4 (euler) — under a bare "%.2f" BOTH print
+			# "0.00" and dialing the integrator looks like a dead button (advisor). Same widget the
+			# Pfa slider already uses; all other views' scalars render unchanged.
+			lines.append("%s: %s" % [k, _fmt(float(v))])
 	_readout.text = "\n".join(lines)
 
 # --- knobs (sliders built from the handshake; drag → set_param) ---------------
@@ -663,6 +723,7 @@ func _set_running(run: bool) -> void:
 func _on_reset_pressed() -> void:
 	_client.send({"type": "reset"})       # reload scenario, held seed re-applied (clean replay)
 	_blips.clear()
+	_missile_trail.clear()                # start the ballistic trail fresh on the re-launch
 	# `reset` reloads the YAML server-side → propagation reverts to the scenario default,
 	# but the server sends no new handshake. Resync the local fidelity so the badge/button
 	# don't lie about a toggle the reset just undid.
@@ -755,11 +816,51 @@ func _draw_spatial() -> void:
 				[p + Vector2(0, -8), p + Vector2(8, 0), p + Vector2(0, 8), p + Vector2(-8, 0)]), jcol)
 			draw_string(_font, p + Vector2(11, 4), id, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, jcol)
 
+	# missile (slice 8): the fading trajectory trail + a nose-oriented marker + an impact burst,
+	# on top of the elevation view (drawn only in the missile-view branch, so slice-1/2/4 are untouched)
+	if _fid_kind == "missile":
+		_draw_missile()
+
 	# detection blips: expanding rings that fade over BLIP_TTL
 	for b in _blips:
 		var a: float = 1.0 - (b.age / BLIP_TTL)
 		var r: float = TARGET_R + 18.0 * (b.age / BLIP_TTL)
 		draw_arc(b.pos, r, 0.0, TAU, 32, Color(1.0, 0.55, 0.2, a), 2.0)
+
+func _draw_missile() -> void:
+	# The flown arc as a faint polyline (mapped from the stored WORLD breadcrumbs each draw, so it
+	# stays correct under the auto-expanding extents), then a marker at the head. The trajectory
+	# SHAPE is the same clean parabola for rk4 vs euler (the euler bow is sub-pixel) — the integrator
+	# lesson lives in the ΔE readout (de_frac), not the drawn curve; the drag lesson IS visible here
+	# (the arc shortens as Cd·A rises). All from telemetry / entity pos — nothing recomputed.
+	if _missile_trail.size() >= 2:
+		var pts := PackedVector2Array()
+		for wp in _missile_trail:
+			pts.append(_world_to_screen(wp))
+		draw_polyline(pts, Color(1.0, 0.75, 0.3, 0.5), 1.5)
+	if _missile_trail.is_empty():
+		return
+	var head := _world_to_screen(_missile_trail[-1])
+	var impacted := bool(_telemetry.get(_missile_id + ".impacted", false)) if _missile_id != "" else false
+	if impacted:
+		# impact burst: an orange starburst at the ground crossing (the :impact terminal condition)
+		var ic := Color(1.0, 0.5, 0.2)
+		for k in 8:
+			var a := TAU * float(k) / 8.0
+			draw_line(head, head + Vector2(cos(a), sin(a)) * 10.0, ic, 2.0)
+		draw_string(_font, head + Vector2(11, -8), "%s impact" % _missile_id, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ic)
+		return
+	# nose direction from the last trail segment (screen space); a dot if the segment is too short
+	var dir := Vector2(0, -1)
+	if _missile_trail.size() >= 2:
+		var d := head - _world_to_screen(_missile_trail[-2])
+		if d.length() > 0.5:
+			dir = d.normalized()
+	var mc := Color(1.0, 0.85, 0.2)
+	var perp := Vector2(-dir.y, dir.x)
+	draw_colored_polygon(PackedVector2Array([
+		head + dir * 9.0, head - dir * 6.0 + perp * 5.0, head - dir * 6.0 - perp * 5.0]), mc)
+	draw_string(_font, head + Vector2(11, -8), _missile_id, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, mc)
 
 # --- CFAR range-power view (slice 3) ------------------------------------------
 # A plot: x = range (the core's static range axis), y = power in dB. Three layers, all from
