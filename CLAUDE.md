@@ -693,9 +693,50 @@ coincident cross-emitter pulses). Units µs↔SI round-trip + degenerate guards 
 lone-emitter / bad-mode → no throw). `test_deinterleave.jl` (+46) wired into runtests after
 detection/cfar; explicit `atol` throughout (never rtol-`≈0`). Slices 1–5 **byte-identical** (the new
 lib touches no radar/detection path — the `_sample_z` golden + `test_determinism` green through the
-include; nothing references the lib yet). **Next: gate 2** (`PulseEmitter`/`ESMReceiver`/`Deinterleaver`
-in a new `esm.jl` after radar.jl — the phases-2+3+4 pipeline, the one draw site in `observe!`, exact
-draw order per §1; `LIVE_FIDELITY_MODES` references `DEINTERLEAVER_MODES`).
+include; nothing references the lib yet).
+
+Gate 2 (the ESM pipeline wired — phases 2+3+4 lit, the phase-contract CAPSTONE; DONE & green, 1184 tests,
++83): new `esm.jl` (included AFTER radar.jl mirroring geolocation.jl; NO back-dep on radar symbols — R/c
+omitted so `_range` isn't needed; reuses geometry.jl's `_finite` + deinterleave.jl's pure math) lights
+`build_env!` + `observe!` + `decide!` in ONE chain through `w.env`. `PulseEmitter.build_env!` (phase 2)
+publishes its constant-PRI params as an `EmitterParams` record into `env[:emitters]` (RNG-free, sorted-id
+append order). `ESMReceiver.observe!` (phase 3 — **the ONE draw site**) reads `env[:emitters]` and on a
+look-tick (`next_look_t`/`revisit_s` gate) generates the interleaved TOA stream into `env[:toa_stream]`
+(a `ToaStream` record: sorted TOAs + parallel truth ids), republishing between looks (readout never
+blanks). `Deinterleaver.decide!` (phase 4) reads the stream, runs `detect_pris`/`associate` dispatching
+`get(w.fidelity, :deinterleaver, :cdif)`, and publishes telemetry. **Deviation from the plan sketch
+(advisor-endorsed): the dwell is PHASE-REFERENCED `[0, T_dwell)`, NOT the literal `[t, t+T_dwell)`** —
+matches gate-1's `gen_stream`, makes the candidate count a function of STATIC config only (per-look draw
+count truly `w.t`-invariant + the exact-draw test `w.t`-independent), fits "geometry inert / emitters need
+not move"; consequence stated: the stream is structurally identical every look, only the drawn noise
+differs. **Exact §1 draw order pinned bit-for-bit** (the determinism-golden risk — `test_esm.jl`
+reconstructs it MANUALLY off a fresh `Xoshiro`, independent of `_draw_toa_stream`): emitters sorted-id ->
+k-ascending -> per candidate JITTER(`randn`) THEN INTERCEPT(`rand`) both UNCONDITIONAL -> `n_spurious`
+uniform(`rand`) LAST; total `2*n_candidate + n_spurious`, fixed regardless of rung or slider value. The
+phase-4 rung is PURE (no draw) -> **NO draw-topology hazard** anywhere -> `:deinterleaver` is introduce-safe
+AND toggle-bit-identical (the `:ep`/`:estimator` contract, NOT slice-3's `:cfar` guard). `n_true` from the
+`:pulse_emitter` ENTITY count (a `p_intercept`->0 slider can't lower it). Telemetry: fixed-length
+`histogram`/`threshold` arrays (CORE output, `_finite`-clamped, RUNG-INDEPENDENT — the shared cumulative
+pipeline; the rung changes only the PRI markers, a same-bars/different-markers visual) + `n_pri`/`n_true`/
+`assoc_pct` scalars + display-only variable `pri_us`/`toa_us`/`assign` (never asserted on). `LIVE_FIDELITY_MODES`
+REFERENCES `DEINTERLEAVER_MODES` (one-list-no-drift). `scenario.jl`: `:pulse_emitter` (pri/phase/pulse_width
+µs->SI-seconds; **pri>0 rejected at LOAD** to avoid an infinite emit loop — NB distinct from slice-5 DF's
+`:emitter`) + `:esm` (t_dwell/histogram params µs->s with gate-1's proven defaults; live `jitter_us`/
+`p_intercept` sliders, both draw-count-invariant) kinds; `_validate_esm` (≥2 emitters, exactly 1 ESM, the
+bounded-pulse `_ESM_MAX_PULSES=1000` guard) at LOAD, triggered by ESM-entity presence so non-ESM scenarios
+are untouched. `test_esm.jl` (env-populated + record shape; the EXACT-draw golden; clean 144-pulse count +
+truth-stamp; Deinterleaver reproduces the lib; **the headline cdif n_pri=4 / sdif n_pri=3 flip on the
+WIRED stream**; histogram peaks at the true PRIs; the draw-free rung switch [rng lockstep, n_pri differs];
+finite telemetry incl. a degenerate empty dwell [no throw]; no-ESM wire-surface byte-identity; loader arms
++ rejects). `test_determinism.jl` + a slice-6 scenario (same-seed bit-identical TOA-STREAM fingerprint via
+`reinterpret` — sharper than n_pri, advisor; draw-free rung switch; mid-run `:deinterleaver` toggle AND
+introduce bit-identical). Slices 1–5 **byte-identical** (esm.jl touches no radar/detection path; the
+`_sample_z` golden + all prior testsets green through the include). Server handshake (`_esm_axis_info` +
+`scenario_frame` merge + warmup), the scenario YAML, the Godot ESM view, and the verifier are all deferred
+to gate 3. **Next: gate 3** (`deinterleaver` fidelity + `scenarios/slice6_deinterleave.yaml` + Godot ESM
+raster/histogram view + `slice6_verify.gd`/`slice6_ui_test.gd`; `set_fidelity :deinterleaver` cdif->sdif
+flips n_pri 4->3 with bit-identical t; the shot-harness visual confirm of the phantom marker
+appearing/vanishing).
 
 ---
 

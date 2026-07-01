@@ -158,9 +158,58 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
         # ellipse confidence scale, default 1-σ). A `ConstantVelocity` mover for uniformity.
         nsig = haskey(ent, "geolocator") ? _f64(get(ent["geolocator"], "nsigma", 1.0)) : 1.0
         subs = Subsystem[ConstantVelocity(id), Geolocator(id; nsigma = nsig)]
+    elseif kind === :pulse_emitter
+        # A pulse emitter (slice 6): a constant-PRI radar the ESM intercepts. A `pulse_emitter:`
+        # block carries `pri_us`/`phase_us`/`pulse_width_us` — authored in µs (the natural unit),
+        # stored SI SECONDS (the key `PulseEmitter.build_env!` reads — the §1 µs/s trifecta, the
+        # `beamwidth_deg→rad` mirror). Plus a `ConstantVelocity` mover (usually static). Publishes
+        # its params to `env[:emitters]` in phase 2. NB: distinct from slice-5 DF's `:emitter` kind.
+        haskey(ent, "pulse_emitter") || error("pulse_emitter entity '$id' has no `pulse_emitter:` block")
+        pb = ent["pulse_emitter"]
+        for (ck, uk) in ((:pri, "pri_us"), (:phase, "phase_us"), (:pulse_width, "pulse_width_us"))
+            haskey(pb, uk) || error("pulse_emitter '$id' block missing required key '$uk'")
+            comp[ck] = _f64(pb[uk]) * 1.0e-6                    # µs → SI seconds
+        end
+        # PRI ≤ 0 → an infinite emit loop in `_draw_toa_stream` (`phase + k·PRI` never advances)
+        # → a hung tick. Not a live slider; reject a bad AUTHORED value at LOAD (the jammer
+        # `bandwidth_hz > 0` / df `sigma_theta_deg > 0` precedent).
+        comp[:pri] > 0 || error("pulse_emitter '$id': pri_us must be > 0 (got $(pb["pri_us"]))")
+        subs = Subsystem[ConstantVelocity(id), PulseEmitter(id)]
+    elseif kind === :esm
+        # The ESM intercept + fusion platform (slice 6): a `ConstantVelocity` mover + an
+        # `ESMReceiver` (phase-3, the one draw site) + a `Deinterleaver` (phase-4). An `esm:`
+        # block carries the STATIC config (`t_dwell_us`, `n_spurious`, and the histogram /
+        # extraction params, all with sane defaults matching gate-1's proven set) plus the LIVE
+        # sliders `jitter_us` (µs) + `p_intercept`. Static params define the draw count / axis, so
+        # they are load-time only; only jitter/intercept are live (draw-count-invariant). Times
+        # authored in µs, stored SI seconds (the §1 boundary).
+        haskey(ent, "esm") || error("esm entity '$id' has no `esm:` block")
+        eb = ent["esm"]
+        haskey(eb, "t_dwell_us") || error("esm '$id' block missing required key 't_dwell_us'")
+        comp[:t_dwell]     = _f64(eb["t_dwell_us"])         * 1.0e-6
+        comp[:bin_width]   = _f64(get(eb, "bin_us",      20.0))   * 1.0e-6
+        comp[:max_lag]     = _f64(get(eb, "max_lag_us",  3000.0)) * 1.0e-6
+        comp[:seq_tol]     = _f64(get(eb, "seq_tol_us",  30.0))   * 1.0e-6
+        comp[:assoc_tol]   = _f64(get(eb, "assoc_tol_us", 50.0))  * 1.0e-6
+        comp[:levels]      = Int(get(eb, "levels", 15))
+        comp[:min_seq]     = Int(get(eb, "min_seq", 10))
+        comp[:thresh_frac] = _f64(get(eb, "thresh_frac", 0.4))
+        comp[:n_spurious]  = Int(get(eb, "n_spurious", 0))
+        comp[:jitter_us]   = _f64(get(eb, "jitter_us", 0.0))     # LIVE slider (µs)
+        comp[:p_intercept] = _f64(get(eb, "p_intercept", 1.0))   # LIVE slider
+        haskey(eb, "revisit_s") && (comp[:revisit_s] = _f64(eb["revisit_s"]))
+        # Load-time guards (crash-safety: a malformed AUTHORED config must fail as a clear load
+        # error, not a hung/OOB tick inside the session's IO-only catch).
+        comp[:t_dwell]   > 0 || error("esm '$id': t_dwell_us must be > 0 (got $(eb["t_dwell_us"]))")
+        comp[:bin_width] > 0 || error("esm '$id': bin_us must be > 0")
+        comp[:max_lag]   > comp[:bin_width] ||
+            error("esm '$id': max_lag_us must exceed bin_us (need ≥ 1 histogram bin)")
+        comp[:levels]  ≥ 1 || error("esm '$id': levels must be ≥ 1")
+        subs = Subsystem[ConstantVelocity(id), ESMReceiver(id; revisit_s = get(comp, :revisit_s, 0.0)),
+                         Deinterleaver(id)]
     else
-        error("unknown entity kind :$kind for '$id' " *
-              "(knows :radar, :target, :clutter, :jammer, :emitter, :df_sensor, :df_station)")
+        error("unknown entity kind :$kind for '$id' (knows :radar, :target, :clutter, " *
+              ":jammer, :emitter, :df_sensor, :df_station, :pulse_emitter, :esm)")
     end
     return e, subs
 end
@@ -225,6 +274,7 @@ function load_scenario(path::AbstractString)
 
     _validate_cfar(world)
     _validate_geoloc(world)
+    _validate_esm(world)
     knobs = _parse_knobs(data, world)
     return Scenario(name, world, subs, knobs, dt_physics, emit_every)
 end
@@ -272,5 +322,36 @@ function _validate_geoloc(world::World)
         error("a DF/geolocation scenario needs exactly one :emitter (got $n_emitter)")
     n_station ≥ 1 ||
         error("a DF/geolocation scenario needs ≥ 1 :df_station (got $n_station)")
+    return world
+end
+
+# A multi-emitter EW (slice 6) scenario needs a deinterleavable stream: ≥ 2 `:pulse_emitter`
+# (a single train is trivial — the density soup needs ≥ 2 interleaved) and exactly ONE `:esm`
+# (single-receiver scope — multi-receiver TDOA is a future slice). Validate at LOAD (the
+# `_validate_cfar`/`_validate_geoloc` pattern), triggered by ESM-entity presence so a non-ESM
+# scenario is untouched. Also BOUND the per-dwell candidate-pulse count (`_ESM_MAX_PULSES`,
+# esm.jl): `T_dwell / min_PRI` can explode the histogram + wire frame, and a fat frame must be
+# a clear authoring error, not a mystery slowdown (HANDOFF §1: no silent truncation).
+function _validate_esm(world::World)
+    n_emitter = 0; n_esm = 0
+    for (_, e) in world.entities
+        e.kind === :pulse_emitter && (n_emitter += 1)
+        e.kind === :esm           && (n_esm      += 1)
+    end
+    (n_emitter == 0 && n_esm == 0) && return world       # not an ESM scenario
+    n_emitter ≥ 2 ||
+        error("a multi-emitter EW scenario needs ≥ 2 :pulse_emitter entities (got $n_emitter)")
+    n_esm == 1 ||
+        error("a multi-emitter EW scenario needs exactly one :esm (got $n_esm)")
+    esm   = first(e for (_, e) in world.entities if e.kind === :esm)
+    dwell = Float64(esm.comp[:t_dwell])
+    total = 0
+    for (_, e) in world.entities
+        e.kind === :pulse_emitter || continue
+        total += floor(Int, dwell / Float64(e.comp[:pri])) + 1     # candidate count over the dwell
+    end
+    total ≤ _ESM_MAX_PULSES ||
+        error("ESM dwell too long: ~$total candidate pulses over the dwell exceeds the " *
+              "$_ESM_MAX_PULSES bound (shorten t_dwell_us or raise the PRIs)")
     return world
 end

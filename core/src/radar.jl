@@ -103,8 +103,13 @@ const EP_MODES = (:none, :freq_agility, :sidelobe_blanking)
 # DFSensor draws exactly one randn/look regardless of rung, so the Geolocator's rung selects
 # only deterministic post-processing (no draw-count change; landed in gate 2 — the core
 # fidelity plumbing precedes the gate-3 client toggle/scenario).
+# `:deinterleaver` (slice-6 EW; rungs `DEINTERLEAVER_MODES` from deinterleave.jl, in scope
+# here) is likewise introduce-safe — the ESM receiver's TOA draw is rung-invariant (the whole
+# draw lives in phase-3 observe!), so the Deinterleaver's rung selects only phase-4 post-
+# processing (no draw-count change; the `:ep`/`:estimator` contract, NOT slice-3's `:cfar` guard).
 const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES,
-                             ep = EP_MODES, estimator = ESTIMATOR_MODES)
+                             ep = EP_MODES, estimator = ESTIMATOR_MODES,
+                             deinterleaver = DEINTERLEAVER_MODES)
 
 # A perfect null (F⁴=0, even above the horizon), an antenna on the reflecting plane
 # (h→0), or a below-horizon mask all drive SNR→0, and `lin2db(0) = -Inf` would poison the

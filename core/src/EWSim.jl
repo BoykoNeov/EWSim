@@ -22,6 +22,7 @@ include("geometry.jl")
 include("estimation.jl")
 include("deinterleave.jl")
 include("radar.jl")
+include("esm.jl")
 include("geolocation.jl")
 include("scenario.jl")
 include("batch.jl")
@@ -52,6 +53,8 @@ export difference_histogram, detect_pris, associate, assoc_pct, DEINTERLEAVER_MO
 # Slice-1 subsystems + scenario loader (Jammer is the slice-4 build_env! subsystem;
 # DFSensor/Geolocator are the slice-5 observe!→decide! DF pair that light phase 4)
 export ConstantVelocity, RadarSensor, Jammer, DFSensor, Geolocator, Knob, Scenario, load_scenario
+# Multi-emitter EW subsystems (slice 6): the phase-2+3+4 capstone pipeline
+export PulseEmitter, ESMReceiver, Deinterleaver
 # Offline batch sweeps (ROC artifact + slice-2 coverage diagram)
 export run_batch, roc_grid, load_roc, coverage_grid, load_coverage
 # Interactive socket run loop (the live/driver path)

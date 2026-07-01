@@ -252,4 +252,73 @@ end
         wi2, fi2 = df_trace(99; start_est = nothing, toggle_at = 50, toggle_to = :ml)
         @test reinterpret(UInt64, fi1) == reinterpret(UInt64, fi2)
     end
+
+    # Slice 6: the multi-emitter EW pipeline lights phases 2+3+4 in one chain (the capstone).
+    # The ESMReceiver is the ONE draw site (jitter randn + intercept rand per candidate + spurious
+    # rand, all in phase-3 observe!); the Deinterleaver's phase-4 rung is PURE (no draw) — so a
+    # slice-6 scenario is deterministic given the drawn stream (the slice-2/4/5 shape, no draw-
+    # topology hazard). Pin (a) a same-seed bit-identical TOA-STREAM trace (the RNG fingerprint,
+    # sharper than n_pri alone — advisor), (b) the draw-free rung switch: cdif vs sdif → SAME rng
+    # end-state (the rung adds no draw) but DIFFERENT n_pri (4 vs 3 — not a dead knob), and (c) a
+    # mid-run :deinterleaver toggle AND introduce both bit-identical.
+    @testset "a multi-emitter EW scenario replays bit-identically (phases 2+3+4)" begin
+        function esm_trace(seed; start_mode = :cdif, nsteps = 40, toggle_at = 0, toggle_to = nothing,
+                           jitter_us = 3.0, p_intercept = 0.9, n_spurious = 5, revisit_s = 0.005)
+            fid = Dict{Symbol,Symbol}()
+            start_mode === nothing || (fid[:deinterleaver] = start_mode)   # nothing → INTRODUCE later
+            w = World(seed = seed, fidelity = fid)
+            for (i, (pri, ph)) in enumerate(zip([1300.0, 1700.0, 2300.0], [0.0, 300.0, 700.0]))
+                id = Symbol("pe", i)
+                w.entities[id] = Entity(id, :pulse_emitter; pos = Vec3(10_000.0 * i, 0, 0),
+                    comp = Dict{Symbol,Any}(:pri => pri * 1e-6, :phase => ph * 1e-6,
+                                            :pulse_width => 1e-6))
+            end
+            w.entities[:esm1] = Entity(:esm1, :esm; pos = Vec3(0, 0, 0),
+                comp = Dict{Symbol,Any}(:t_dwell => 80_000.0 * 1e-6, :bin_width => 20.0 * 1e-6,
+                    :max_lag => 3000.0 * 1e-6, :seq_tol => 30.0 * 1e-6, :assoc_tol => 50.0 * 1e-6,
+                    :levels => 15, :min_seq => 10, :thresh_frac => 0.4, :n_spurious => n_spurious,
+                    :jitter_us => jitter_us, :p_intercept => p_intercept))
+            subs = Subsystem[]
+            for id in sort!(collect(keys(w.entities)))
+                e = w.entities[id]
+                if e.kind === :pulse_emitter
+                    push!(subs, ConstantVelocity(id)); push!(subs, PulseEmitter(id))
+                elseif e.kind === :esm
+                    push!(subs, ConstantVelocity(id)); push!(subs, ESMReceiver(id; revisit_s = revisit_s))
+                    push!(subs, Deinterleaver(id))
+                end
+            end
+            toas = Float64[]; npri = Int[]
+            for i in 1:nsteps
+                (toggle_to !== nothing && i == toggle_at) && (w.fidelity[:deinterleaver] = toggle_to)
+                tick!(w, subs, 1.0e-3)
+                append!(toas, w.env[:toa_stream].toas)                  # the drawn-stream fingerprint
+                push!(npri, Int(w.env[:telemetry]["esm1.n_pri"]))
+            end
+            return w, toas, npri
+        end
+        wa, ta, na = esm_trace(6); wb, tb, nb = esm_trace(6)
+        @test ta == tb && reinterpret(UInt64, ta) == reinterpret(UInt64, tb)   # bit-identical TOA stream
+        @test na == nb
+
+        # draw-free rung switch: cdif vs sdif share the rng end-state (no draw change) but n_pri differs.
+        wc, tc, nc = esm_trace(6; start_mode = :cdif)
+        ws, ts, ns = esm_trace(6; start_mode = :sdif)
+        @test reinterpret(UInt64, tc) == reinterpret(UInt64, ts)   # same drawn stream (rung is phase-4)
+        @test rand(copy(wc.rng)) == rand(copy(ws.rng))             # ...and rng end-states in lockstep
+        @test nc != ns                                             # ...but the detected count differs (4 vs 3)
+
+        # mid-run TOGGLE the value of a pre-existing key — bit-identical, twice; and same stream as
+        # never-toggling (the rung is draw-free) while n_pri flips at the toggle.
+        wt1, tt1, nt1 = esm_trace(6; start_mode = :cdif, toggle_at = 20, toggle_to = :sdif)
+        wt2, tt2, nt2 = esm_trace(6; start_mode = :cdif, toggle_at = 20, toggle_to = :sdif)
+        @test reinterpret(UInt64, tt1) == reinterpret(UInt64, tt2) && nt1 == nt2
+        @test reinterpret(UInt64, tt1) == reinterpret(UInt64, tc)  # toggle changed NO draws
+        @test nt1 != nc                                            # ...but the rung flip changed n_pri
+        # INTRODUCE :deinterleaver onto a world that started WITHOUT the key → still bit-identical.
+        wi1, ti1, _ = esm_trace(6; start_mode = nothing, toggle_at = 20, toggle_to = :sdif)
+        wi2, ti2, _ = esm_trace(6; start_mode = nothing, toggle_at = 20, toggle_to = :sdif)
+        @test reinterpret(UInt64, ti1) == reinterpret(UInt64, ti2)
+        @test reinterpret(UInt64, ti1) == reinterpret(UInt64, tc)  # introduce added no draws either
+    end
 end

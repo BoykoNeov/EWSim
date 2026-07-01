@@ -338,15 +338,41 @@ Decisions).
       vs sdif=3 on `[1300,1700,2300]`; the 2-emitter sharper case; subharmonic-check in isolation;
       association; units; degenerate guards). Wire into `runtests.jl` after the detection tests.
       Slices 1–5 green untouched.
-- [ ] 2. **The ESM pipeline wired (phases 2+3+4 lit).** `PulseEmitter`/`ESMReceiver`/`Deinterleaver`
-      in a new `esm.jl` (included after `radar.jl`, mirroring `geolocation.jl` — verify no back-dep on
-      radar symbols; R/c is omitted so `_range` isn't needed). `EmitterParams` named-tuple; `env[:emitters]`
-      → `env[:toa_stream]` → telemetry; the one draw site in `observe!` on look-ticks; truth-id stamping;
-      bounded pulse count. `:pulse_emitter`/`:esm` kinds in `_build_entity` + `_validate_esm` (≥2 emitters,
-      1 ESM, stable PRI > 0 at LOAD). `LIVE_FIDELITY_MODES` references `DEINTERLEAVER_MODES`; the
-      `Deinterleaver` dispatches the rung. `test_esm.jl` (env populated/exact-draw/truth-ids, n_pri/assoc
-      match the lib, finite telemetry incl. degenerate, draw-invariance, no-ESM byte-identity, histogram
-      peaks at PRIs, loader arms). `test_determinism.jl` + a slice-6 scenario bit-identical.
+- [x] 2. **The ESM pipeline wired (phases 2+3+4 lit) — DONE & green (1184 tests, +83), 2026-07-01.**
+      `PulseEmitter`/`ESMReceiver`/`Deinterleaver` in a new `esm.jl` (included after `radar.jl`, mirroring
+      `geolocation.jl`; NO back-dep on radar symbols — R/c omitted so `_range` isn't needed; reuses
+      geometry.jl's `_finite` + deinterleave.jl's pure math). `EmitterParams` + `ToaStream` named-tuples;
+      `env[:emitters]` (phase 2) → `env[:toa_stream]` (phase 3, the ONE draw site on look-ticks) →
+      telemetry (phase 4); truth-id stamping; bounded pulse count (`_ESM_MAX_PULSES=1000`). **Deviation
+      from the sketch (advisor-endorsed): the dwell window is PHASE-REFERENCED `[0, T_dwell)`, NOT the
+      literal `[t, t+T_dwell)`** — it matches gate-1's `gen_stream`, makes the candidate count a function
+      of STATIC config only (so the per-look draw count is truly `w.t`-invariant and the exact-draw test is
+      `w.t`-independent), and fits "geometry inert / emitters need not move." Consequence stated: the stream
+      is structurally identical every look, only the drawn noise differs (a deliberately static scene).
+      **Exact §1 draw order pinned bit-for-bit** (the determinism-golden risk surface — `test_esm.jl`
+      reconstructs it MANUALLY off a fresh `Xoshiro`, independent of `_draw_toa_stream`): emitters
+      sorted-id → within an emitter k-ascending → per candidate JITTER(`randn`) THEN INTERCEPT(`rand`) both
+      UNCONDITIONAL → `n_spurious` uniform(`rand`) LAST; total `2·n_candidate + n_spurious`, fixed. The
+      Deinterleaver's phase-4 rung (`get(w.fidelity, :deinterleaver, :cdif)`) is PURE (no draw) — NO
+      draw-topology hazard, so `:deinterleaver` is introduce-safe AND toggle-bit-identical (the
+      `:ep`/`:estimator` contract). `n_true` from the `:pulse_emitter` ENTITY count (not distinct-in-stream
+      — a `p_intercept`→0 slider can't lower it). Telemetry: fixed-length `histogram`/`threshold` arrays
+      (CORE output, `_finite`-clamped, RUNG-INDEPENDENT — the shared cumulative pipeline; the rung changes
+      only the PRI markers) + `n_pri`/`n_true`/`assoc_pct` scalars + display-only variable `pri_us`/`toa_us`/
+      `assign`. `:pulse_emitter` (pri/phase/pulse_width µs→SI-seconds; pri>0 rejected at LOAD to avoid an
+      infinite emit loop) + `:esm` (t_dwell/params µs→s, gate-1's proven defaults; live `jitter_us`/
+      `p_intercept` sliders) kinds in `_build_entity`; `_validate_esm` (≥2 emitters, 1 ESM, bounded-pulse
+      guard) at LOAD. `LIVE_FIDELITY_MODES` REFERENCES `DEINTERLEAVER_MODES` (the one-list-no-drift lesson;
+      introduce-safe, no `:cfar`-style guard). `test_esm.jl` (env-populated + record shape; the EXACT-draw
+      golden; clean-stream 144-pulse count + truth-stamp; Deinterleaver reproduces `detect_pris`/`assoc_pct`;
+      **the headline cdif n_pri=4 / sdif n_pri=3 flip on the WIRED stream**; histogram peaks at the true
+      PRIs; the draw-free rung switch [rng lockstep, n_pri differs]; finite telemetry incl. a degenerate
+      empty dwell [no throw]; no-ESM byte-identity of the wire surface; loader arms + rejects). `test_determinism.jl`
+      + a slice-6 scenario: same-seed bit-identical TOA-STREAM trace (the RNG fingerprint, sharper than
+      n_pri — advisor), draw-free rung switch, mid-run `:deinterleaver` toggle AND introduce bit-identical.
+      Slices 1–5 byte-identical (esm.jl touches no radar/detection path; the `_sample_z` golden +
+      test_determinism green through the include). **Server handshake (`_esm_axis_info`), scenario YAML,
+      Godot ESM view, verifier all deferred to gate 3.** **Next: gate 3.**
 - [ ] 3. **`deinterleaver` fidelity + scenario + Godot ESM view + verifier.** `scenarios/
       slice6_deinterleave.yaml` (the de-risked 3-emitter numbers, default `:cdif`, jitter/intercept
       sliders). Godot `Sandbox.gd` new `"esm"` mode (`_fid_kind → esm` off the handshake; `_draw_esm`
