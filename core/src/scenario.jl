@@ -272,6 +272,27 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             error("missile '$id': cd_area_m2 must be ≥ 0 (got $(comp[:cd_area_m2]))")
         comp[:rho]        ≥ 0 || error("missile '$id': rho must be ≥ 0 (got $(comp[:rho]))")
         subs = Subsystem[BallisticMissile(id)]
+        # Slice 9: a GUIDED missile carries a `guidance:` sub-block (k_guid/kp/ki/kd/tau/a_max). Its
+        # presence adds the `Autopilot` (phase-4 decide!) and reads the gains into comp — the gain
+        # keys are KNOB-ADDRESSABLE (a gate-3 slider must name a real comp key), and the consumer
+        # (Autopilot.decide!) reads them with DEFAULTS too so a bare block / live slider can't
+        # KeyError a tick. A BALLISTIC slice-8 missile has NO `guidance:` block → stays
+        # `[BallisticMissile]` only, byte-identical. The Autopilot target-locks the nearest `:target`
+        # at runtime (single target in slice 9), validated PRESENT at LOAD by `_validate_missile`.
+        if haskey(mb, "guidance")
+            gb = ent["missile"]["guidance"]
+            comp[:k_guid] = _f64(get(gb, "k_guid", 3.0))
+            comp[:kp]     = _f64(get(gb, "kp", 2.0))
+            comp[:ki]     = _f64(get(gb, "ki", 0.0))
+            comp[:kd]     = _f64(get(gb, "kd", 0.0))
+            comp[:tau]    = _f64(get(gb, "tau", 0.3))
+            comp[:a_max]  = _f64(get(gb, "a_max", 3000.0))
+            # Load-time guards for the AUTHORED values (a live tau→0 slider is clamped at the
+            # consumer via `max(tau, _FRAME_EPS)`; a_max is fixed config, not a slider).
+            comp[:tau]   > 0 || error("missile '$id': guidance.tau must be > 0 (got $(comp[:tau]))")
+            comp[:a_max] > 0 || error("missile '$id': guidance.a_max must be > 0 (got $(comp[:a_max]))")
+            push!(subs, Autopilot(id))
+        end
     else
         error("unknown entity kind :$kind for '$id' (knows :radar, :target, :clutter, " *
               ":jammer, :emitter, :df_sensor, :df_station, :pulse_emitter, :esm, " *
@@ -454,12 +475,21 @@ end
 # floor; the double-integration guard (BallisticMissile, NOT ConstantVelocity) is structural in
 # the build arm and pinned by the loader test.
 function _validate_missile(world::World)
-    n_missile = 0
+    n_missile = 0; guided = false; n_target = 0
     for (_, e) in world.entities
         e.kind === :missile && (n_missile += 1)
+        # A GUIDED missile is marked by the guidance comp keys (`:a_max` is set only in the
+        # `guidance:` build arm) — it needs a `:target` to pursue.
+        (e.kind === :missile && haskey(e.comp, :a_max)) && (guided = true)
+        e.kind === :target && (n_target += 1)
     end
     n_missile == 0 && return world                       # not a missile scenario
     n_missile ≥ 1 ||
         error("a missile scenario needs ≥ 1 :missile entity (got $n_missile)")
+    # Slice 9: a guided missile's Autopilot target-locks the nearest `:target` at runtime — so a
+    # guided scenario must ship ≥ 1 (validated at LOAD, the `_validate_gps`/`_validate_esm` pattern,
+    # so a mis-authored guided missile fails as a clear load error, not a runtime no-target coast).
+    (guided && n_target < 1) &&
+        error("a guided missile scenario needs ≥ 1 :target to pursue (got $n_target)")
     return world
 end

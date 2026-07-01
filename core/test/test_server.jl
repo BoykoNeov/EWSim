@@ -140,6 +140,19 @@ function _missile_scenario(seed; emit_every = 4, fidelity = Dict(:integrator => 
     return Scenario("missile", w, subs, Knob[], 1.0e-3, emit_every)
 end
 
+# A GUIDED missile scenario (slice 9): an interceptor with [BallisticMissile, Autopilot] pursuing a
+# crossing :target, under the :autopilot fidelity, with the PID gains in comp (slider-addressable).
+function _guided_scenario(seed; emit_every = 4, fidelity = Dict(:autopilot => :ideal))
+    w = World(seed = seed, fidelity = fidelity)
+    w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 1000.0), vel = Vec3(600.0, 0, 0),
+        comp = Dict{Symbol,Any}(:mass_kg => 100.0, :cd_area_m2 => 0.0, :rho => 1.225,
+            :k_guid => 3.0, :kp => 2.0, :ki => 40.0, :kd => 0.1, :tau => 0.3, :a_max => 3000.0))
+    w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(8000.0, -3000.0, 1000.0),
+        vel = Vec3(0, 300.0, 0), comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+    subs = Subsystem[BallisticMissile(:m1), Autopilot(:m1), ConstantVelocity(:tgt1)]
+    return Scenario("guided", w, subs, Knob[], 1.0e-3, emit_every)
+end
+
 @testset "server" begin
 
     @testset "handle_command! mutates state per the §5 table" begin
@@ -410,6 +423,60 @@ end
         EWSim.warmup!(srv)                                          # must NOT throw (no radar)
         @test srv.scn.world.t == t0
         @test srv.scn.world.entities[:m1].pos == pos0              # deepcopy warm didn't move the live missile
+    end
+
+    @testset "set_fidelity :autopilot — write/reject + introduce-safe (slice-9 guided missile)" begin
+        # Slice-9 gate 2: :autopilot (rungs AUTOPILOT_MODES) joins the per-key LIVE_FIDELITY_MODES
+        # table. Like :integrator/:ep and unlike :cfar it carries NO introduce-guard (absent an
+        # Autopilot subsystem nothing reads it). Also like :integrator it is PHYSICS-CHANGING not
+        # toggle-bit-identical (no RNG) — the trajectory-change is pinned in test_determinism; here
+        # we pin only the wire write/reject + introduce-allowed.
+        srv = EWSim.Server(_guided_scenario(1))
+        w = srv.scn.world
+        @test w.fidelity[:autopilot] === :ideal                    # the scenario default
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "autopilot", :value => "pid"))
+        @test w.fidelity[:autopilot] === :pid
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "autopilot", :value => "ideal"))
+        @test w.fidelity[:autopilot] === :ideal
+        # ...a bad rung is REJECTED before landing (would throw in decide! → kill the session).
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "autopilot", :value => "bang_bang"))
+        # INTRODUCING :autopilot on a scenario WITHOUT it is ALLOWED (the :integrator/:ep contract,
+        # NOT :cfar's introduce-reject) — a non-guided world has no Autopilot to consume it.
+        srv2 = EWSim.Server(_detect_scenario(1))
+        @test !haskey(srv2.scn.world.fidelity, :autopilot)
+        EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "autopilot", :value => "pid"))
+        @test srv2.scn.world.fidelity[:autopilot] === :pid
+    end
+
+    @testset "live PID-gain sliders survive the tick (a diverging gain hits the clamp, not a throw)" begin
+        # The gains (kp/ki/kd/tau/k_guid) are LIVE sliders — a destabilizing value would diverge the
+        # discrete PID, but the a_max clamp threads the bounded plant output back, so the tick can't
+        # throw / NaN the session (the "a live slider can't crash a tick" watch-item, over MANY ticks).
+        srv = EWSim.Server(_guided_scenario(2; fidelity = Dict(:autopilot => :pid)))
+        w = srv.scn.world
+        for (k, v) in (("kp", 5.0e5), ("ki", 1.0e4), ("kd", 1.0e2), ("tau", 1.0e-6), ("k_guid", 1.0e3))
+            EWSim.handle_command!(srv, Dict(:type => "set_param", :target => "m1", :key => k, :value => v))
+        end
+        @test w.entities[:m1].comp[:kp] == 5.0e5                    # slider wrote the consumed comp key
+        ok = true
+        for _ in 1:500
+            tick!(w, srv.scn.subs, srv.scn.dt_physics)             # must NOT throw
+            empty!(w.events)
+            ok &= all(isfinite, w.entities[:m1].pos)
+        end
+        @test ok                                                   # pos stayed finite through the divergence
+    end
+
+    @testset "warmup! tolerates a guided-missile scenario (slice-9, radar-free, phase 1+4)" begin
+        # A guided missile is radar-free, so warmup!'s ROC-batch warm is skipped; the tick!+state_frame
+        # warm still runs — warming the phase-1 integrator + the phase-4 Autopilot decide! + the accel
+        # telemetry. It must NOT throw and must leave the live World pristine.
+        srv = EWSim.Server(_guided_scenario(9))
+        t0 = srv.scn.world.t; pos0 = srv.scn.world.entities[:m1].pos
+        EWSim.warmup!(srv)
+        @test srv.scn.world.t == t0
+        @test srv.scn.world.entities[:m1].pos == pos0
     end
 
     @testset "scenario_frame ships the static ESM/PRI axis (handshake-once)" begin

@@ -119,12 +119,16 @@ const EP_MODES = (:none, :freq_agility, :sidelobe_blanking)
 # guard). BUT UNLIKE those it is PHYSICS-CHANGING, NOT toggle-bit-identical: there is no RNG in
 # slice 8, so "draw-count-invariance" is vacuous, and a rk4↔euler toggle CHANGES the trajectory
 # (the slice-2 `propagation` shape). Introduce-safe ≠ toggle-invariant — keep the two separate.
+# `:autopilot` (slice-9 guided missile; rungs `AUTOPILOT_MODES` from guidance.jl, in scope here)
+# is the SAME shape as `:integrator` — introduce-safe (absent an `Autopilot` subsystem nothing
+# reads it) AND physics-changing (a :ideal↔:pid toggle changes the trajectory, no RNG). Do NOT
+# copy the slice-5/6/7 toggle-invariance language onto it.
 const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES,
                              ep = EP_MODES, estimator = ESTIMATOR_MODES,
                              deinterleaver = DEINTERLEAVER_MODES,
                              iono = GPS_TOGGLE, tropo = GPS_TOGGLE, clock = GPS_TOGGLE,
                              multipath = GPS_TOGGLE, noise = GPS_TOGGLE, raim = RAIM_MODES,
-                             integrator = INTEGRATOR_MODES)
+                             integrator = INTEGRATOR_MODES, autopilot = AUTOPILOT_MODES)
 
 # A perfect null (F⁴=0, even above the horizon), an antenna on the reflecting plane
 # (h→0), or a below-horizon mask all drive SNR→0, and `lin2db(0) = -Inf` would poison the

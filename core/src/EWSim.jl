@@ -78,8 +78,9 @@ export ConstantVelocity, RadarSensor, Jammer, DFSensor, Geolocator, Knob, Scenar
 export PulseEmitter, ESMReceiver, Deinterleaver
 # GPS subsystems (slice 7): the §9 cross-domain reuse pipeline (build_env!→observe!→decide!)
 export GpsSatellite, GpsReceiver, GpsSolver
-# Missile subsystem (slice 8): the first force-based integrator in the tick loop (phase 1)
-export BallisticMissile
+# Missile subsystems: the ballistic airframe (slice 8, phase 1) + the guided Autopilot
+# (slice 9, phase 4 — the missile's first decide!: outer pursuit + inner PID)
+export BallisticMissile, Autopilot
 # Offline batch sweeps (ROC artifact + slice-2 coverage diagram)
 export run_batch, roc_grid, load_roc, coverage_grid, load_coverage
 # Interactive socket run loop (the live/driver path)

@@ -337,10 +337,37 @@ matching the integrator).
       backstop (the designated crash-guard can't itself emit NaN → no NaN in `pos`/state-frame JSON).**
       Byte-identity slices 1–8 (the `_sample_z` golden + `test_determinism` green through the include).
       GATE 1. ✅
-- [ ] **2. Autopilot wired** — `Autopilot <: Subsystem` (`decide!`) + the guarded `BallisticMissile`
-      `:a_ctrl` seam + `LIVE_FIDELITY_MODES += autopilot` + loader (guided missile + target) +
-      telemetry + `test_missile.jl`/`test_determinism.jl`/`test_server.jl` arms. Byte-identity slices
-      1–8. GATE 2.
+- [x] **2. Autopilot wired (DONE & green, 1694 tests, +35).** `Autopilot <: Subsystem` in missile.jl
+      lights the missile's FIRST `decide!` (phase 4). It implements `integrate!` too — but ONLY to
+      stash the tick `dt` into comp (`decide!` has no dt arg; the PID needs it), NOT to move the entity
+      (BallisticMissile owns pos/vel) — so a BALLISTIC slice-8 missile (no Autopilot) gets NO new comp
+      key and stays byte-identical. `decide!`: nearest `:target` (`_nearest_target` reused from radar.jl,
+      truth-fed) → `pursuit_accel` (outer) → `clamp_accel` → `autopilot_step` (inner PID, dispatch
+      `get(w.fidelity,:autopilot,:ideal)`) → writes `comp[:a_ctrl]` (next tick) + `comp[:ap_state]`.
+      **Telemetry phase RESOLVED (the plan's open item): `decide!` runs AFTER the single `empty!(w.env)`
+      (phase 4 > phase 2), so unlike slice-8's energy readout it CAN write `w.env[:telemetry]` directly**
+      — `<id>.a_cmd/.a_ach/.track_gap/.los_range/.range_rate`, all `_finite`-clamped. **The threaded-clamp
+      crash-guard (advisor): under `:pid` the achieved accel is clamped to `a_max` and the CLAMPED value
+      threaded BACK as the plant state, so a diverging discrete PID (any destabilizing gain, not just Kd)
+      is bounded — no Inf→NaN in pos, verified over 1500/500 ticks.** `BallisticMissile.integrate!` gains
+      the guarded `:a_ctrl` term (`haskey`, Vec3 — a ballistic missile takes the exact slice-8 closure).
+      `LIVE_FIDELITY_MODES += autopilot = AUTOPILOT_MODES` (introduce-safe, physics-changing — the
+      `:integrator` shape, NOT slice-5/6/7 toggle-invariance). `scenario.jl`: a `guidance:` sub-block in
+      the `:missile` block → guided (`[BallisticMissile, Autopilot]`, gains k_guid/kp/ki/kd/tau/a_max at
+      knob-addressable comp keys, tau/a_max>0 at LOAD); `_validate_missile` extended (a guided missile
+      needs ≥1 `:target`). **`:ideal→:pid` transient DECISION (advisor): the plant restarts from a_ach=0
+      (state verbatim under :ideal per plan §2) — the "actuator suddenly goes laggy" transient is SHOWN,
+      pinned in the not-a-dead-knob test.** Tests: `test_missile.jl` (+ guided arm: decide! matches the
+      pure kernel; the WIRED loop intercepts under :ideal [miss ~4.8m, track_gap==0]; :pid DIFFERS; the
+      **P-only undershoot on the wire is ORDERED in Kp** [not the exact 1/(1+Kp) — `a_cmd` RAMPS on the
+      wire adding velocity-lag, so the exact closed form stays the pure gate-1 pin; wire ratios 0.59/0.38/
+      0.12 for Kp 0.5/2/8]; **integral closes the gap** [Ki 0→40: gap down]; tick-1 ballistic anchor;
+      diverging-gain-stays-finite over many ticks; loader arms + rejects [no-target, bad tau]);
+      `test_determinism.jl` (+ the THREE claims: replay bit-identical [pos/vel/a_ctrl reinterpret]; mid-run
+      :ideal→:pid CHANGES the flight; introduce :autopilot on a BALLISTIC missile → byte-identical);
+      `test_server.jl` (+ set_fidelity :autopilot write/reject/introduce-safe; the live gain sliders survive
+      500 ticks [diverging gain → clamp, not throw]; warmup! tolerates a guided-missile scenario). Slices
+      1–8 byte-identical (the `_sample_z` golden + all prior testsets green). GATE 2. ✅
 - [ ] **3. Scenario + Godot + verifiers** — `slice9_pursuit.yaml` (a_max never binds) + `_draw_spatial`
       extension + fidelity/slider UI + `slice9_verify.gd` + `slice9_ui_test.gd` + smoke-load +
       `test_scenario.jl` arm + visual confirm. GATE 3 → slice COMPLETE.
@@ -372,6 +399,16 @@ matching the integrator).
   headline = commanded-vs-achieved accel. (Advisor.)
 - **`a_max` must NOT bind in the scenario** — the probe hit ~22 g *and climbing*; leave margin or the
   clamp silently imports slice-10's saturation lesson. Probe + pin peak `|a_cmd|`. (Advisor.)
+- **THE a_max/MISS TENSION (gate-3 top constraint, advisor gate-2).** Gate-2's smoke test showed a
+  P-only run's `settled_cmd` pinned at 3000 = a_max in the ENDGAME and it MISSED — so "a_max never
+  binds" (above) and "a badly-tuned loop MISSES" (Done criterion) FIGHT: a miss degrades the geometry →
+  `|a_cmd|` spikes near closest approach → a_max binds → the miss is partly a saturation artifact
+  (slice-10's lesson, smuggled). The gate-2 TESTS dodge this honestly by measuring `track_gap`
+  MID-FLIGHT (a_cmd≈34 ≪ a_max) — the **headline track_gap lesson is clean regardless of a_max**. For
+  gate 3, DECIDE the demo: (a) if showing the MISS, re-probe the peak `|a_cmd|` over the FULL engagement
+  (the endgame spikes, NOT mid-flight) and set a_max above the worst-rung peak with margin, confirming
+  it clears; OR (b) pick a MODERATELY-bad Kp so the loop degrades visibly via LAG (track_gap) without
+  demanding extreme accel. Pin the full-flight peak `|a_cmd|` PER RUNG as a comment either way.
 - **PID-gain sliders are inert under `:ideal`** — document it (not a bug).
 - **The `Kd` slider only DAMPS when `Ki > 0` (gate-1 finding, advisor).** Derivative-on-error has a
   first-step KICK; at low `Ki` dragging `Kd` shows the kick (peak UP), not damping. So `slice9_pursuit.

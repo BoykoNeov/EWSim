@@ -299,3 +299,174 @@ end
         end
     end
 end
+
+# --- slice 9 gate 2: the guided missile — the Autopilot wired (phase 4, the closed loop) ------
+# The missile's FIRST decide! (outer pursuit + inner PID). Pins: decide! writes comp[:a_ctrl]
+# matching the pure kernel on the realized state; the WIRED closed loop INTERCEPTS under :ideal;
+# the :pid trajectory DIFFERS (the not-a-dead-knob — physics-changing, no RNG); the P-only
+# undershoot is visible in track_gap (the wire ratio tracks 1/(1+Kp) — ORDERED in Kp, the exact
+# closed form is the pure test_guidance pin; a_cmd RAMPS on the wire so the ratio is ~, not =);
+# integral CLOSES the gap; tick-1 is ballistic (a free byte-identity anchor); a diverging gain
+# stays finite (the threaded-clamp crash-guard, MANY ticks — advisor); loader arms + rejects.
+@testset "guided missile — Autopilot wired (phase 4: outer pursuit + inner PID)" begin
+    dt = 1.0e-3
+    norm3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # A crossing engagement (the de-risked probe geometry): interceptor from the origin at z=1000
+    # heading +x @ 600 m/s; a target crossing left→right in +y. a_max is GENEROUS (never binds
+    # mid-flight — the undershoot is measured mid-flight where a_cmd is small).
+    function guided_world(; autopilot = :ideal, k_guid = 3.0, kp = 2.0, ki = 0.0, kd = 0.0,
+                          tau = 0.3, a_max = 3000.0)
+        w = World(seed = 0, fidelity = Dict(:autopilot => autopilot))
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 1000.0), vel = Vec3(600.0, 0, 0),
+            comp = Dict{Symbol,Any}(:mass_kg => 100.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                :k_guid => k_guid, :kp => kp, :ki => ki, :kd => kd, :tau => tau, :a_max => a_max))
+        w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(8000.0, -3000.0, 1000.0),
+            vel = Vec3(0, 300.0, 0), comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+        return w, Subsystem[BallisticMissile(:m1), Autopilot(:m1), ConstantVelocity(:tgt1)]
+    end
+    # Fly to intercept (or n cap); return (miss, hit, last_telemetry).
+    function fly!(w, subs; n = 30000, stop = 5.0)
+        miss = Inf; hit = false; tel = w.env
+        for _ in 1:n
+            tick!(w, subs, dt); empty!(w.events)
+            tel = w.env[:telemetry]
+            miss = min(miss, tel["m1.los_range"])
+            (tel["m1.los_range"] < stop) && (hit = true; break)
+            get(w.entities[:m1].comp, :impacted, false) && break
+        end
+        return miss, hit, tel
+    end
+    # The mid-flight P-only undershoot ratio track_gap/a_cmd (measured where a_cmd is small so the
+    # a_max clamp can't bind — the confound the advisor flagged).
+    function mid_ratio(; kp, ki = 0.0, kd = 0.0, nsteps = 2000)
+        w, subs = guided_world(autopilot = :pid, kp = kp, ki = ki, kd = kd)
+        for _ in 1:nsteps; tick!(w, subs, dt); empty!(w.events); end
+        tel = w.env[:telemetry]
+        return tel["m1.track_gap"] / tel["m1.a_cmd"], tel["m1.track_gap"]
+    end
+
+    @testset "decide! writes comp[:a_ctrl] matching autopilot_step on the realized state" begin
+        w, subs = guided_world(autopilot = :pid, kp = 2.0)
+        tick!(w, subs, dt); empty!(w.events)                 # tick 1: decide! computes the 1st command
+        e = w.entities[:m1]; tgt = w.entities[:tgt1]
+        # reconstruct from the pure kernel on the POST-integrate state decide! used (state = init)
+        a_cmd = clamp_accel(pursuit_accel(e.pos, e.vel, tgt.pos; k_guid = 3.0), 3000.0)
+        a_ach, _ = autopilot_step(:pid, a_cmd, autopilot_init(), dt; kp = 2.0, tau = 0.3)
+        @test e.comp[:a_ctrl] ≈ clamp_accel(a_ach, 3000.0) atol = 1e-12
+        @test e.comp[:a_ctrl] isa Vec3                        # a Vec3 (SVector) — the bit-exact add
+    end
+
+    @testset "the WIRED closed loop intercepts under :ideal (track_gap == 0, a_ach == a_cmd)" begin
+        w, subs = guided_world(autopilot = :ideal, k_guid = 3.0)
+        miss, hit, tel = fly!(w, subs)
+        @test hit && miss < 10.0                              # clean intercept (probe: ~4.8 m)
+        # :ideal is the perfect actuator: achieved ≡ commanded, so the gap is EXACTLY zero.
+        @test tel["m1.track_gap"] == 0.0
+    end
+
+    @testset "the :pid trajectory DIFFERS from :ideal (not-a-dead-knob, physics-changing)" begin
+        wi, si = guided_world(autopilot = :ideal, k_guid = 3.0)
+        wp, sp = guided_world(autopilot = :pid, k_guid = 3.0, kp = 2.0)   # P-only lags
+        for _ in 1:2000
+            tick!(wi, si, dt); empty!(wi.events)
+            tick!(wp, sp, dt); empty!(wp.events)
+        end
+        # the laggy actuator flies a measurably different path (the fidelity is live, not a dead knob)
+        @test norm3(wi.entities[:m1].pos - wp.entities[:m1].pos) > 1.0
+    end
+
+    @testset "P-only undershoot on the wire — ordered in Kp, integral closes the gap" begin
+        # ideal: no gap. P-only: a real gap tracking ~1/(1+Kp) (the exact closed form is the pure
+        # test_guidance pin — a_cmd RAMPS on the wire, adding velocity-lag, so here we pin the
+        # un-calibrated ORDERING, not a fitted value).
+        r05, _ = mid_ratio(kp = 0.5)
+        r2,  _ = mid_ratio(kp = 2.0)
+        r8,  _ = mid_ratio(kp = 8.0)
+        @test r8 < r2 < r05                                   # larger Kp → smaller undershoot
+        @test r8 > 0.0                                        # ...but never zero under P-only
+        # each is in the right ballpark of 1/(1+Kp) (loose — the ramp contaminates the exact value)
+        @test isapprox(r8, 1/9; atol = 0.05) && isapprox(r2, 1/3; atol = 0.06)
+        # integral drives the settled gap DOWN (Ki=0 → Ki=40 at fixed Kp) — the wire closed-form lever
+        _, gap0  = mid_ratio(kp = 2.0, ki = 0.0)
+        _, gap40 = mid_ratio(kp = 2.0, ki = 40.0, kd = 0.1)
+        @test gap40 < gap0
+    end
+
+    @testset "tick 1 is ballistic — the free byte-identity anchor (one-tick decide! delay)" begin
+        # On tick 1, integrate! (phase 1) runs BEFORE decide! (phase 4), so the missile's first step
+        # has no :a_ctrl → pure ballistic (identical to an unguided missile from the same launch).
+        wg, sg = guided_world(autopilot = :pid, kp = 2.0)
+        wb = World(seed = 0, fidelity = Dict(:integrator => :rk4))
+        wb.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 1000.0), vel = Vec3(600.0, 0, 0),
+            comp = Dict{Symbol,Any}(:mass_kg => 100.0, :cd_area_m2 => 0.0, :rho => 1.225))
+        sb = Subsystem[BallisticMissile(:m1)]
+        tick!(wg, sg, dt); empty!(wg.events)
+        tick!(wb, sb, dt); empty!(wb.events)
+        @test wg.entities[:m1].pos == wb.entities[:m1].pos    # bit-identical first step
+        @test wg.entities[:m1].vel == wb.entities[:m1].vel
+        @test haskey(wg.entities[:m1].comp, :a_ctrl)          # ...but the command IS now staged for tick 2
+    end
+
+    @testset "a diverging gain stays finite over MANY ticks — the threaded-clamp crash-guard" begin
+        # A destabilizing gain (huge Kp / tiny τ) makes the discrete PID diverge GEOMETRICALLY over
+        # ticks; the subsystem clamps a_ach to a_max and threads it BACK as state, so the plant is
+        # bounded and pos never NaNs (advisor: step MANY ticks, a single tick always stays finite).
+        w, subs = guided_world(autopilot = :pid, kp = 5.0e5, ki = 1.0e4, kd = 1.0e2, tau = 1.0e-3)
+        ok = true
+        for _ in 1:1500
+            tick!(w, subs, dt); empty!(w.events)
+            tel = w.env[:telemetry]; e = w.entities[:m1]
+            ok &= all(isfinite, e.pos) && all(isfinite, e.vel) &&
+                  isfinite(tel["m1.a_ach"]) && isfinite(tel["m1.track_gap"])
+            ok || break
+        end
+        @test ok                                              # no NaN/Inf in pos or telemetry
+    end
+
+    @testset "loader: a guided :missile gets [BallisticMissile, Autopilot] + needs a :target" begin
+        base = """
+        name: g
+        seed: 9
+        dt_physics: 0.001
+        fidelity: {autopilot: ideal}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 1000.0]
+            missile:
+              mass_kg: 100.0
+              speed: 600.0
+              elevation_deg: 0.0
+              cd_area_m2: 0.0
+              guidance: {k_guid: 3.0, kp: 2.0, ki: 40.0, kd: 0.1, tau: 0.3, a_max: 3000.0}
+          - id: tgt1
+            kind: target
+            pos: [8000.0, -3000.0, 1000.0]
+            vel: [0.0, 300.0, 0.0]
+            target: {rcs_m2: 1.0}
+        """
+        mktempdir() do dir
+            good = joinpath(dir, "good.yaml"); write(good, base)
+            scn = load_scenario(good)
+            m = scn.world.entities[:m1]
+            # a GUIDED missile: BallisticMissile (phase-1 mover) + Autopilot (phase-4 guidance), NOT
+            # ConstantVelocity (the double-integration guard).
+            @test any(s -> s isa BallisticMissile, scn.subs)
+            @test any(s -> s isa Autopilot, scn.subs)
+            @test !any(s -> s isa ConstantVelocity && s.id === :m1, scn.subs)
+            # the gains land at the CONSUMED comp keys (the slider→consumed-key discipline)
+            @test m.comp[:k_guid] == 3.0 && m.comp[:kp] == 2.0 && m.comp[:ki] == 40.0
+            @test m.comp[:kd] == 0.1 && m.comp[:tau] == 0.3 && m.comp[:a_max] == 3000.0
+            @test get(scn.world.fidelity, :autopilot, :ideal) === :ideal
+            # a guided missile with NO :target is rejected at LOAD (the runtime no-target coast guard)
+            notgt = replace(base, r"- id: tgt1[\s\S]*" => "")     # tgt1 is last → strip it to EOF
+            p1 = joinpath(dir, "notgt.yaml"); write(p1, notgt)
+            @test_throws ErrorException load_scenario(p1)
+            # a bad guidance gain (tau ≤ 0) is a clear AUTHORED load error
+            badtau = replace(base, "tau: 0.3" => "tau: 0.0")
+            p2 = joinpath(dir, "badtau.yaml"); write(p2, badtau)
+            @test_throws ErrorException load_scenario(p2)
+        end
+    end
+end

@@ -93,7 +93,18 @@ function integrate!(m::BallisticMissile, w::World, dt::Float64)
     # in build_env!, so the frame never blanks). The latch makes the :impact event one-shot.
     if !get(c, :impacted, false)
         mode = get(w.fidelity, :integrator, :rk4)
-        accel = v -> total_accel(v; rho = rho, cd_area = cd_area, mass = mass)
+        # GUIDANCE SEAM (slice 9): a GUIDED missile carries a control specific force `:a_ctrl`
+        # (a Vec3, written by the Autopilot's phase-4 decide! LAST tick → applied HERE this tick,
+        # the one-tick delay). The `haskey` GUARD makes a BALLISTIC missile (no :a_ctrl) take the
+        # EXACT slice-8 closure — byte-identity BY CONSTRUCTION, not by trusting
+        # `total_accel(v) + zero(Vec3)` (`-0.0 + 0.0 → +0.0` flips a bit the reinterpret
+        # determinism tests catch). `:a_ctrl` is a Vec3 so the SVector+SVector add stays bit-exact.
+        accel = if haskey(c, :a_ctrl)
+            a_ctrl = c[:a_ctrl]::Vec3
+            v -> total_accel(v; rho = rho, cd_area = cd_area, mass = mass) + a_ctrl
+        else
+            v -> total_accel(v; rho = rho, cd_area = cd_area, mass = mass)
+        end
         p′, v′ = integrator_step(mode, accel, e.pos, e.vel, dt)
         if p′[3] ≤ 0.0
             # Ground impact: clamp z=0 within the step (named approx — no sub-step root-find),
@@ -140,5 +151,102 @@ function build_env!(m::BallisticMissile, w::World)
     tel["$sid.e_total_j"] = _finite_coord(etot)
     tel["$sid.de_frac"]   = _finite_coord(de)                 # (E−E₀)/E₀; ≈0 for RK4 drag-off
     tel["$sid.impacted"]  = get(c, :impacted, false)
+    return nothing
+end
+
+# --- the GUIDED missile: the Autopilot subsystem (slice 9, HANDOFF §10 item 9) ----------------
+# The missile's FIRST `decide!` (phase 4 — the phase slice 5 lit for the DF Geolocator): "a missile
+# is integrate! (airframe) + observe! (seeker) + decide! (guidance)" (HANDOFF §3). The Autopilot
+# runs the CASCADE — an OUTER pursuit law (the honest tail-chaser stand-in slice 10 replaces with
+# PN) commanding a lateral accel, closed by an INNER PID autopilot through a first-order airframe
+# lag — and writes `comp[:a_ctrl]` for the NEXT tick's BallisticMissile.integrate! (the guidance
+# seam above). The airframe (impact/energy/attitude) is REUSED verbatim: a guided missile keeps
+# `[BallisticMissile, Autopilot]` (phase-1 mover + phase-4 guidance), NOT a duplicating
+# GuidedMissile. `pursuit_accel`/`autopilot_step` (the pure guidance.jl kernel) are the only physics.
+#
+# DETERMINISM (the slice-8 discipline — do NOT copy the slice-5/6/7 template): there is NO RNG in
+# the missile arc, so "RNG lockstep" is VACUOUS. `:autopilot` is introduce-safe (absent an Autopilot
+# nothing reads it → any slice-1..8 scenario byte-identical) but PHYSICS-CHANGING (a :ideal↔:pid
+# toggle CHANGES the trajectory — the not-a-dead-knob property, the OPPOSITE of slices 5/6/7).
+#
+# NAMED APPROXIMATIONS (HANDOFF §1; the guidance-law ones live in guidance.jl): guidance reads
+# TARGET TRUTH (no seeker — slice 11); the one-tick decide!→integrate! delay (tick 1 is ballistic —
+# a free byte-identity anchor; the 1 ms control lag is negligible at guidance rate).
+struct Autopilot <: Subsystem
+    id::Symbol
+end
+
+# Phase 1: capture the tick `dt` into comp. `decide!` (phase 4) has NO dt argument, but the PID
+# integrates at the tick dt (fixed-step). This is the ONLY reason the Autopilot touches phase 1 —
+# it does NOT move the entity (BallisticMissile owns pos/vel). Keeping the capture HERE (not in
+# BallisticMissile.integrate!) means a BALLISTIC slice-8 missile — which has no Autopilot — gets NO
+# new comp key, so its determinism fingerprints stay byte-identical.
+function integrate!(a::Autopilot, w::World, dt::Float64)
+    w.entities[a.id].comp[:dt_s] = dt
+    return nothing
+end
+
+# Phase 4: the closed guidance loop. Reads the missile + its nearest `:target` (`_nearest_target`,
+# reused from radar.jl — truth-fed, no seeker), computes the OUTER pursuit command, runs the INNER
+# PID (dispatch on `:autopilot`), clamps to `a_max`, and writes `comp[:a_ctrl]` (next tick) + the
+# PID state. The readout goes into `w.env[:telemetry]` HERE — unlike the slice-8 energy readout
+# (which had to move to build_env! because `empty!(w.env)` wipes phase-1 writes), a decide! write
+# is AFTER the single empty! (tick contract), so it survives. The lesson is `track_gap` (commanded
+# vs achieved), where the `1/(1+Kp)` undershoot is directly visible, NOT miss distance (advisor).
+function decide!(a::Autopilot, w::World)
+    e   = w.entities[a.id]
+    c   = e.comp
+    sid = String(a.id)
+    tel = get!(() -> Dict{String,Any}(), w.env, :telemetry)
+    tgt = _nearest_target(w, e)
+
+    # No target (misconfigured — load validates ≥1) or already impacted (engagement over): no
+    # command, coast/frozen. Publish zero/finite telemetry so the readout never blanks.
+    if tgt === nothing || get(c, :impacted, false)
+        tel["$sid.a_cmd"]      = 0.0
+        tel["$sid.a_ach"]      = 0.0
+        tel["$sid.track_gap"]  = 0.0
+        tel["$sid.los_range"]  = _finite(tgt === nothing ? 0.0 : los_range(e.pos, tgt.pos))
+        tel["$sid.range_rate"] = 0.0
+        return nothing
+    end
+
+    mode   = get(w.fidelity, :autopilot, :ideal)
+    k_guid = Float64(get(c, :k_guid, 3.0))
+    kp     = Float64(get(c, :kp, 2.0))
+    ki     = Float64(get(c, :ki, 0.0))
+    kd     = Float64(get(c, :kd, 0.0))
+    tau    = Float64(get(c, :tau, 0.3))
+    a_max  = Float64(get(c, :a_max, 3000.0))
+    dt     = Float64(get(c, :dt_s, 1.0e-3))
+
+    # OUTER pursuit → commanded lateral accel, clamped to a_max (the CRASH-GUARD; the scenario tunes
+    # a_max so it never binds — saturation-as-lesson is slice 10).
+    a_cmd = clamp_accel(pursuit_accel(e.pos, e.vel, tgt.pos; k_guid = k_guid), a_max)
+
+    # INNER PID autopilot → achieved accel (dispatch on the fidelity rung).
+    state = get(c, :ap_state, autopilot_init())::AutopilotState
+    a_ach, state′ = autopilot_step(mode, a_cmd, state, dt; kp = kp, ki = ki, kd = kd, tau = tau)
+    if mode === :pid
+        # BOUND the plant: clamp the achieved accel and thread the CLAMPED value back as the plant
+        # state, so a badly-tuned (diverging) discrete PID can't run a_ach → Inf → NaN in pos
+        # (advisor). `e_int` is left unclamped (it winds up only harmlessly at any real tick count).
+        a_ach  = clamp_accel(a_ach, a_max)
+        state′ = (a_ach = a_ach, e_int = state′.e_int, e_prev = state′.e_prev)
+    end
+    c[:ap_state] = state′
+    # :ideal returns a_ach == a_cmd (already clamped), so a_ctrl == a_cmd (perfect tracking, gap 0);
+    # :pid uses the (already-clamped) plant output.
+    a_ctrl = mode === :pid ? a_ach : clamp_accel(a_ach, a_max)
+    c[:a_ctrl] = a_ctrl
+
+    # Telemetry: the lesson is the tracking GAP (commanded vs achieved), not miss distance.
+    rel_pos = tgt.pos - e.pos
+    rel_vel = tgt.vel - e.vel
+    tel["$sid.a_cmd"]      = _finite(_norm3(a_cmd))
+    tel["$sid.a_ach"]      = _finite(_norm3(a_ctrl))
+    tel["$sid.track_gap"]  = _finite(_norm3(a_cmd - a_ctrl))
+    tel["$sid.los_range"]  = _finite(los_range(e.pos, tgt.pos))
+    tel["$sid.range_rate"] = _finite_coord(range_rate(rel_pos, rel_vel))   # signed (neg = closing)
     return nothing
 end

@@ -457,4 +457,63 @@ end
         @test ti == tn                                              # introduce :integrator = no-op
         @test rand(copy(wi.rng)) == rand(copy(wn.rng))              # ...and the rng stream untouched
     end
+
+    # Slice 9: the missile's FIRST decide! (Autopilot — outer pursuit + inner PID). Still NO RNG (a
+    # deterministic ODE + PID), so — the slice-8 discipline — the THREE-claim framing (NOT the
+    # slice-5/6/7 toggle-invariance): (1) INTRODUCE-safe (introducing :autopilot on a BALLISTIC
+    # missile, which has no Autopilot subsystem, is a no-op → byte-identical); (2) same-config replay
+    # bit-identical (trajectory + the a_ctrl control fingerprint, sharper); (3) a mid-run :ideal↔:pid
+    # toggle CHANGES the trajectory (the not-a-dead-knob — :autopilot is PHYSICS-CHANGING).
+    @testset "a guided missile: replay bit-identical, but the :autopilot toggle CHANGES it" begin
+        function guided_trace(; autopilot = :ideal, nsteps = 1500, toggle_at = 0, toggle_to = nothing,
+                              start_ap = autopilot)
+            fid = Dict{Symbol,Symbol}()
+            start_ap === nothing || (fid[:autopilot] = start_ap)   # nothing → INTRODUCE later
+            w = World(seed = 0, fidelity = fid)
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 1000.0), vel = Vec3(600.0, 0, 0),
+                comp = Dict{Symbol,Any}(:mass_kg => 100.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                    :k_guid => 3.0, :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :a_max => 3000.0))
+            w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(8000.0, -3000.0, 1000.0),
+                vel = Vec3(0, 300.0, 0), comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+            subs = Subsystem[BallisticMissile(:m1), Autopilot(:m1), ConstantVelocity(:tgt1)]
+            trace = Float64[]
+            for i in 1:nsteps
+                (toggle_to !== nothing && i == toggle_at) && (w.fidelity[:autopilot] = toggle_to)
+                tick!(w, subs, 1.0e-3)
+                append!(trace, w.entities[:m1].pos); append!(trace, w.entities[:m1].vel)
+                append!(trace, w.entities[:m1].comp[:a_ctrl])       # the control fingerprint (sharper)
+                empty!(w.events)
+            end
+            return w, trace
+        end
+        # (2) same-config replay bit-identical (pos/vel/a_ctrl fingerprint, reinterpret — sign of zero).
+        _, ta = guided_trace(autopilot = :pid); _, tb = guided_trace(autopilot = :pid)
+        @test ta == tb && reinterpret(UInt64, ta) == reinterpret(UInt64, tb)
+
+        # (3) a mid-run :ideal→:pid toggle CHANGES the trajectory (the not-a-dead-knob; each run is
+        # internally deterministic). Toggle early with plenty of steps left so it diverges unambiguously.
+        _, tk1 = guided_trace(start_ap = :ideal, toggle_at = 200, toggle_to = :pid)
+        _, tk2 = guided_trace(start_ap = :ideal, toggle_at = 200, toggle_to = :pid)
+        @test reinterpret(UInt64, tk1) == reinterpret(UInt64, tk2)
+        _, tnever = guided_trace(autopilot = :ideal)
+        @test tk1 != tnever                                        # the toggle changed the flight
+
+        # (1) INTRODUCE-safe: introducing :autopilot on a BALLISTIC missile (no Autopilot subsystem)
+        # is a no-op — nothing reads the key — so the trace is byte-identical to never touching it.
+        function ballistic_trace(; introduce = false, at = 100, nsteps = 400)
+            w = World(seed = 0, fidelity = Dict(:integrator => :rk4))
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 1000.0), vel = Vec3(300.0, 0, 300.0),
+                comp = Dict{Symbol,Any}(:mass_kg => 100.0, :cd_area_m2 => 0.0, :rho => 1.225))
+            subs = Subsystem[BallisticMissile(:m1)]
+            tr = Float64[]
+            for i in 1:nsteps
+                introduce && i == at && (w.fidelity[:autopilot] = :pid)
+                tick!(w, subs, 1.0e-3)
+                append!(tr, w.entities[:m1].pos)
+                empty!(w.events)
+            end
+            return tr
+        end
+        @test ballistic_trace(introduce = true) == ballistic_trace(introduce = false)
+    end
 end
