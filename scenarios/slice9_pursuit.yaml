@@ -1,0 +1,98 @@
+# slice9_pursuit — the PID-autopilot showcase (HANDOFF §10 item 9, slice 9 gate 3). The missile's
+# FIRST closed control loop made interactive: a single guided interceptor pursuing a single crossing
+# target, in the EXISTING spatial / elevation view (extended with the target marker, a LOS line, the
+# intercept marker, and the a_cmd/a_ach/track_gap readout; NO new render mode — the slice-4/8
+# "stay spatial" precedent). The handshake carries `autopilot` in `fidelity` (and NO range_axis_m /
+# pri_axis_us / estimator / raim) → the client's missile-view discriminator; the shared fidelity
+# button becomes the :ideal↔:pid cycler.
+#
+# THE LESSON 1 — the autopilot (the fidelity button, :ideal ↔ :pid):
+#   :ideal is a PERFECT actuator — achieved accel ≡ commanded, so the interceptor pursues to a clean
+#   hit and the `track_gap` readout sits at 0. Cycle to :pid and a realistic FIRST-ORDER airframe lag
+#   (τ·ȧ = u − a) closed by a PID takes over: under the DEFAULT P-ONLY gains (ki = kd = 0) the achieved
+#   accel UNDERSHOOTS the command by `1/(1+Kp)` (33 % at Kp = 2) — the `track_gap` readout jumps OPEN
+#   and the pursuit degrades. `autopilot` is PHYSICS-CHANGING (a toggle CHANGES the trajectory — the
+#   slice-2/8 shape, NOT a slice-5/6/7 toggle-bit-identical rung); there is NO RNG in the missile arc.
+#
+# THE LESSON 2 — tuning the PID (the gain sliders; INERT under :ideal — the loop is bypassed):
+#   Drag `Kp` up and the P-only undershoot shrinks toward `1/(1+Kp)` (the `track_gap` closes). Drag
+#   `Ki` up and INTEGRAL action drives the steady-state gap to ZERO (the intercept recovers). Drag `Kd`
+#   to damp the ringing an aggressive `Ki` induces. `k_guid` is the pursuit turn-rate gain (a hotter
+#   chase). The LESSON is the commanded-vs-achieved GAP, NOT miss distance (miss conflates guidance and
+#   autopilot; the gap isolates the inner loop — advisor).
+#
+# THE TEE-UP FOR SLICE 10 (a visible readout): pursuit is an HONEST TAIL-CHASER — it points AT the
+# target, never LEADS it — so the commanded `|a_cmd|` GROWS toward intercept (probed: ~21 → 652 m/s²
+# over this engagement). That growing endgame demand is exactly WHY augmented proportional navigation
+# matters (slice 10, which swaps ONLY the outer `pursuit_accel` for PN). Slice 9 surfaces `a_cmd` so
+# the tail-chase is legible; it does NOT yet model g-limit saturation as the lesson.
+#
+# THE ENGAGEMENT IS PLANAR IN x-z (the elevation view's plane, advisor gate-2): the interceptor climbs
+# from z = 3000 m and the target CROSSES IN ALTITUDE (descending in −z), so the pursuit turn is VISIBLE
+# in the downrange×altitude view — a y-crossing would happen in the horizontal plane, invisible here.
+# The missile climbs to ~3.7 km then descends chasing the diving target down to a ~1.3 km intercept — a
+# clean, legible pursuit arc (a level y-cross renders as the missile flying into a stationary dot).
+#
+# a_max = 1500 m/s² (~153 g) is a GENEROUS CRASH-GUARD, NOT the lesson (saturation-as-lesson is slice
+# 10). Probed peak |a_cmd| under :ideal: ≈ 827 m/s² up to closest approach, ≈ 1094 m/s² (112 g) at the
+# post-CPA whip if the sim runs past intercept — BOTH clear a_max with ≥ 1.37× margin, so a_max PROVABLY
+# NEVER BINDS on the clean rung (the connect-state is a_max-free). (A
+# pathological pure-P MISS run spikes |a_cmd| to ~2e5 m/s² in the degenerate endgame and WOULD bind
+# a_max — but that is the badly-tuned exploration, and the pinned LESSON is the MID-FLIGHT `track_gap`,
+# measured where a_cmd ≈ 20 ≪ a_max, so it is clean regardless — advisor: don't demo the miss.)
+#
+# UNITS (the §1 trifecta): positions/velocities SI (m, m/s), accelerations m/s², launch ELEVATION
+# authored in DEGREES → radians at the loader. Numbers PROBED against the live decide!→integrate!→
+# telemetry wire path (the slice-3..8 rule) + pinned in net/slice9_verify.gd: :ideal intercepts at
+# t ≈ 17.0 s (miss ≈ 5.0 m, track_gap ≈ 0); P-only mid-flight (t = 2 s) track_gap/a_cmd ≈ 1/3 (Kp = 2,
+# gap ≈ 6.5); Kp = 8 ↓ to ≈ 1/9; Ki = 40 closes the gap to ≈ 2; |a_cmd| grows ~12 → 827. dt = 1e-3 /
+# emit_every = 16 (the standard cadence — at dt ≥ 0.02 the sub-ms wall_dt rounds to 0 steps/iter and
+# REALTIME stalls; the guidance loop runs at the tick dt).
+name: slice9_pursuit
+seed: 9
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  # The ONLY fidelity key: the autopilot method. `:ideal` default → the connect-state is the clean
+  # perfect-actuator intercept (the lesson is what the toggle/sliders REVEAL). Introduce-safe +
+  # physics-changing (the :integrator shape) — do NOT read slice-5/6/7 toggle-invariance onto it.
+  autopilot: ideal
+
+entities:
+  # The guided interceptor: launched from the origin at z = 3000 m, CLIMBING at 10° elevation at 600 m/s
+  # in the x-z plane (vel ≈ [591, 0, 104] — no cross-range; the engagement stays planar in x-z so the
+  # pursuit is visible in the elevation view). mass 140 kg, DRAG OFF (cd_area_m2 = 0 — one lesson per
+  # scenario; the drag/energy lesson is slice 8). The `guidance:` block makes it GUIDED → the entity gets
+  # [BallisticMissile (phase-1 airframe), Autopilot (phase-4 guidance)], NOT a ConstantVelocity. The
+  # DEFAULT gains are P-ONLY (ki = kd = 0) so the :ideal→:pid toggle opens a DRAMATIC gap the Ki slider
+  # then closes; the gains are live sliders (see knobs), read with defaults at the consumer.
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 600.0
+      elevation_deg: 10.0
+      cd_area_m2: 0.0
+      rho: 1.225
+      guidance: {k_guid: 3.0, kp: 2.0, ki: 0.0, kd: 0.0, tau: 0.3, a_max: 1500.0}
+  # The crossing target: a constant-velocity aircraft ahead at 5.8 km altitude, DESCENDING at 300 m/s
+  # (vel in −z) — it crosses the interceptor's climb IN ALTITUDE (the x-z plane) so the pursuit turn
+  # renders. A plain slice-1 :target (ConstantVelocity mover, rcs for the marker); the Autopilot
+  # target-locks it (the single :target, via _nearest_target).
+  - id: tgt1
+    kind: target
+    pos: [8500.0, 0.0, 5800.0]
+    vel: [0.0, 0.0, -300.0]
+    target: {rcs_m2: 1.0}
+
+# The live PID / guidance sliders (INERT under :ideal — the loop is bypassed; correct, not a bug). All
+# name REAL consumed comp keys (the slider→consumed-key discipline — the slice-5 σθ lesson). The
+# autopilot method is the fidelity BUTTON (:ideal↔:pid cycler), never a slider; a_max is a fixed
+# crash-guard, not exposed.
+knobs:
+  - {target: m1, key: kp,     min: 0.0, max: 10.0, label: "Kp (accel P-gain)"}
+  - {target: m1, key: ki,     min: 0.0, max: 60.0, label: "Ki (accel I-gain)"}
+  - {target: m1, key: kd,     min: 0.0, max: 0.5,  label: "Kd (accel D-gain)"}
+  - {target: m1, key: tau,    min: 0.05, max: 1.0, label: "τ airframe lag (s)"}
+  - {target: m1, key: k_guid, min: 1.0, max: 6.0,  label: "K_guid (turn-rate)"}

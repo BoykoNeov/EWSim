@@ -1138,6 +1138,104 @@ then `godot --headless --path clients/godot --script res://net/slice8_verify.gd`
 client then exits). The UI test needs NO server: `godot --headless --path clients/godot --script
 res://net/slice8_ui_test.gd`. All 1633 tests: `pwsh tools/test.ps1`.
 
+**Slice 9 — missile: the PID autopilot (inner loop) under a pursuit outer law** (HANDOFF §10 item 9, the
+SECOND slice of the missile-guidance arc) — **COMPLETE. Gates 1–3 done & green (1723 tests); wire + UI
+machine-verified AND the guided-missile spatial `_draw` VISUALLY CONFIRMED (2026-07-01).** The missile's
+FIRST closed control loop + its FIRST `decide!` (phase 4 — the phase slice 5 lit for the DF Geolocator):
+"a missile is `integrate!` (airframe) + `observe!` (seeker) + `decide!` (guidance)". A CASCADE — an OUTER
+pursuit law (the honest tail-chaser stand-in slice 10 replaces with PN) commanding a lateral accel, closed
+by an INNER PID autopilot through a first-order airframe lag. **The lesson is the tracking GAP (commanded
+vs achieved accel), NOT miss distance** (miss conflates guidance + autopilot — advisor): dial `autopilot ∈
+(:ideal, :pid)` and watch `track_gap` open/close. Fidelity is PHYSICS-CHANGING (the slice-2/8 shape — a
+toggle CHANGES the trajectory), NOT a slice-5/6/7 toggle-bit-identical rung; there is NO RNG in the missile
+arc. Deferred: proportional navigation + the `:guidance` fidelity (slice 10 — the key is RESERVED, unused),
+g-limit-saturation-AS-LESSON (slice 10; slice 9 keeps a generous a_max crash-guard tuned to never bind),
+noisy seekers (slice 11 — guidance reads TARGET TRUTH), 6-DOF (§11 Tier A — the lag is a lumped scalar).
+Planned FULL in `docs/plans/slice9.md` (3 gates: pure primitives → the Autopilot wired → scenario + client
++ verifiers).
+
+Gate 1 (primitives green — pure, closed-form, SI, RNG-free, no LinearAlgebra): new `guidance.jl` (the
+dynamics.jl/frames.jl analog), included AFTER frames.jl (reuses `los_unit`/`_norm3`/`_dot`) but BEFORE
+radar.jl (so `AUTOPILOT_MODES` precedes `LIVE_FIDELITY_MODES` — the mode-const-before-radar precedent). Two
+SEPARATE pure functions SO slice 10 swaps ONLY the outer one: `pursuit_accel(m_pos, m_vel, t_pos; k_guid)`
+→ a lateral accel ⟂ to heading steering `v` toward the LOS (a tail-chaser — `‖a_cmd‖` GROWS toward
+intercept, the slice-10 tee-up); `autopilot_step(mode, a_cmd, state, dt; kp, ki, kd, tau)` → `(a_ach,
+state′)` — `:ideal` bit-exact passthrough, `:pid` a first-order plant `τ·ȧ = u − a` closed by a PID on the
+accel error `e = a_cmd − a_ach` (derivative-ON-ERROR, `τ→0` guarded). PID state is a Vec3 NamedTuple
+`(a_ach, e_int, e_prev)` (pure — returns fresh state). `clamp_accel(a, a_max)` the crash-guard (zero-safe
+AND non-finite-safe — the designated guard can't itself emit NaN, advisor). `AUTOPILOT_MODES=(:ideal,:pid)`
+the one-list source of truth. `test_guidance.jl` (+26): **the `1/(1+Kp)` steady-state undershoot headline**
+pinned `Kp=2→1/3`, `Kp=8→1/9` to atol (the Euler plant preserves the exact continuous fixed point
+`a*=Kp/(1+Kp)·a_cmd` — confirmed 0.333333/0.111111); integral drives e_ss→0; **derivative damps the
+integral-induced ringing** (the ordering anchor at Ki=40, real 27% overshoot 127→123 — at LOW Ki the naive
+derivative-on-error first-step KICK would dominate, the honest boundary); `:ideal` bit-exact passthrough;
+pursuit ⟂-to-v + LOS-side SIGN + the tail-chase growth; clamp + degenerate guards. Slices 1–8 byte-identical
+(the `_sample_z` golden + `test_determinism` green through the include).
+
+Gate 2 (the Autopilot wired — phase 4, the closed loop; +9 tests over gate 1's tally). `Autopilot <:
+Subsystem` (missile.jl, after radar.jl — NO radar back-dep beyond the reused `_nearest_target`). It
+implements `integrate!` ONLY to stash the tick `dt` into comp (`decide!` has no dt arg; the PID needs it),
+NOT to move the entity — so a BALLISTIC slice-8 missile (no Autopilot) gets NO new comp key and stays
+byte-identical. `decide!`: nearest `:target` (truth-fed) → `pursuit_accel` → `clamp_accel` → `autopilot_step`
+(dispatch `get(w.fidelity,:autopilot,:ideal)`) → writes `comp[:a_ctrl]` (a Vec3, applied NEXT tick's
+`integrate!`) + `comp[:ap_state]`. **Telemetry phase RESOLVED (the plan's open item): `decide!` runs AFTER
+the single `empty!(w.env)` (phase 4 > phase 2), so unlike slice-8's energy readout it writes
+`w.env[:telemetry]` DIRECTLY** — `<id>.a_cmd/.a_ach/.track_gap/.los_range/.range_rate`, all `_finite`-clamped.
+**Threaded-clamp crash-guard (advisor): under `:pid` the achieved accel is clamped to a_max and the CLAMPED
+value threaded BACK as the plant state, so a diverging discrete PID (ANY destabilizing gain — large Kp/Kd or
+small τ, not just Kd — the P-only factor `|1−(1+Kp)dt/τ|`>1) is bounded over MANY ticks — no Inf→NaN in pos.**
+`BallisticMissile.integrate!` gains the guarded `:a_ctrl` term (`haskey`, Vec3 — a ballistic missile takes
+the EXACT slice-8 closure, byte-identity by construction, NOT `+ zero(Vec3)` which flips a −0.0 bit).
+`LIVE_FIDELITY_MODES += autopilot = AUTOPILOT_MODES` (introduce-safe + physics-changing — the `:integrator`
+shape, NOT slice-5/6/7 toggle-invariance). `scenario.jl`: a `guidance:` sub-block in the `:missile` block →
+GUIDED (`[BallisticMissile, Autopilot]`, gains k_guid/kp/ki/kd/tau/a_max at knob-addressable comp keys,
+tau/a_max>0 at LOAD); `_validate_missile` extended (a guided missile needs ≥1 `:target`). **NB `de_frac` is
+now nonzero under guidance (the control specific force does work on the airframe — expected, NOT a slice-8
+energy-conservation regression).** Tests (+35 total gate 2): `test_missile.jl` (decide! matches the pure
+kernel; the WIRED loop intercepts under :ideal [track_gap==0]; :pid DIFFERS; P-only undershoot ORDERED in Kp
+on the wire — the exact `1/(1+Kp)` stays the pure gate-1 pin, `a_cmd` RAMPS on the wire adding velocity-lag;
+integral closes the gap; tick-1 ballistic anchor; diverging-gain-stays-finite; loader arms+rejects);
+`test_determinism.jl` (the THREE claims — replay bit-identical [pos/vel/a_ctrl reinterpret]; mid-run
+:ideal→:pid CHANGES the flight; introduce :autopilot on a BALLISTIC missile → byte-identical);
+`test_server.jl` (set_fidelity :autopilot write/reject/introduce-safe; live gain sliders survive 500 ticks
+[diverging gain → clamp, not throw]; warmup! tolerates a guided-missile scenario). Slices 1–8 byte-identical.
+
+Gate 3 (scenario + Godot spatial-view extension + verifiers — DONE & green, 1723 tests; wire + UI
+machine-verified AND `_draw` VISUALLY CONFIRMED 2026-07-01). `scenarios/slice9_pursuit.yaml`: an interceptor
+CLIMBING from z=3000 at 10° pursuing a target DESCENDING through its path — **the engagement is PLANAR IN x-z
+so the pursuit shows in the elevation view** (a y-crossing happens in the horizontal plane, INVISIBLE there —
+advisor gate-2; the slice-4/8 "stay spatial, no new render mode" precedent). Default `:ideal` (clean
+intercept t≈17.0, miss 4.98); DEFAULT gains P-ONLY (ki=kd=0) so the :ideal→:pid toggle opens a dramatic gap
+the Ki slider closes. **a_max=1500 clears the ideal peak `|a_cmd|` (≈827 to closest-approach, ≈1094 at the
+post-CPA whip) with ≥1.37× margin — PROVABLY never binds on the clean rung** (the miss-run's ~2e5 spike is the
+badly-tuned regime; the pinned lesson is the MID-FLIGHT track_gap, a_max-free — advisor: the a_max/miss
+tension resolved by NOT demoing the miss). Numbers PROBED against the live wire path + reproduced through the
+loader. Godot `Sandbox.gd`: the EXISTING spatial view EXTENDED — `autopilot ∈ fidelity` (no axes) →
+`_fid_kind="autopilot"`, the shared button wired to `_on_autopilot_pressed` (:ideal↔:pid ring); `_draw_spatial`
+gains `_draw_guidance_los` (the missile→target LOS line + an intercept ring) on top of the reused
+`_draw_missile` trail/marker; the a_cmd/a_ach/track_gap readout is all scalars (renders via `_update_readout`).
+The slice-1..8 views UNTOUCHED (ALL their UI tests re-run green: sandbox/slice3/4/5/6/7/8). `net/
+slice9_verify.gd` (drives the real server: :ideal track_gap 0 + intercept [min los 2.31] + |a_cmd| grows
+12→1094; :pid opens the gap [6.50, ratio 0.374≈1/3, bit-identical t]; Kp=8→ratio 0.122≈1/9; Ki=40→gap 0.78 —
+`S9V OK`, exit 0). `net/slice9_ui_test.gd` (mock client: handshake stays spatial + wires the autopilot cycler;
+ring walks ideal→pid + wraps; kp slider → set_param; reset resyncs — `S9UI OK`). `Sandbox.tscn` smoke-loaded
+headless against the slice-9 server (server DONE ⇒ scene connected, no GDScript errors). `test_scenario.jl`
++1 loader arm (autopilot default, NO other fidelity incl. the reserved `:guidance`, [BallisticMissile,
+Autopilot] NOT ConstantVelocity, gains at consumed keys, 5 gain knobs, deg→rad launch). The `_draw` PIXEL
+branch VISUALLY CONFIRMED via 2 windowed shots (the shot harness, [[ewsim-godot-headless]], reverted after):
+**:ideal** = the climbing pursuit arc + nose marker + cyan LOS line to the target + readout `a_ach == a_cmd`
+(77.26, track_gap 0); **:pid** = `a_ach 173 ≪ a_cmd 266` (the P-only undershoot as a picture). No open step
+remains in slice 9's required gates. **(stretch, deferred)** `clients/notebooks/slice9_autopilot.jl` Pluto
+(the commanded-vs-achieved step response) + an offline miss-distance-vs-τ/gain sweep.
+
+Run the slice-9 showcase: `julia --project=core tools/server.jl scenarios/slice9_pursuit.yaml`, then launch
+Godot on `clients/godot` (the main `Sandbox.tscn` auto-uses the spatial view; cycle the `autopilot:` button to
+watch the track_gap readout open under :pid; drag Kp to shrink the undershoot, Ki to close it; the interceptor
+pursues a descending target to a clean intercept). Re-run the gate-3 proof headless: start that server, then
+`godot --headless --path clients/godot --script res://net/slice9_verify.gd` (exit 0 = pass). The UI test needs
+NO server: `godot --headless --path clients/godot --script res://net/slice9_ui_test.gd`. All 1723 tests:
+`pwsh tools/test.ps1`.
+
 ---
 
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +

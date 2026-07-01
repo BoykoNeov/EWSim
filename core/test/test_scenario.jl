@@ -22,6 +22,7 @@ const _SCEN6 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice6_dein
 const _SCEN7D = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice7_dop.yaml"))
 const _SCEN7R = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice7_raim.yaml"))
 const _SCEN8 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice8_ballistic.yaml"))
+const _SCEN9 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice9_pursuit.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -483,6 +484,55 @@ end
         @test scn.knobs[1].target === missiles[1]
         @test scn.knobs[1].key === :cd_area_m2
         @test all(k -> k.key ∉ (:integrator, :speed, :elevation_deg), scn.knobs)
+    end
+
+    @testset "loader parses slice9_pursuit.yaml (guided missile / PID autopilot, spatial view)" begin
+        # Cheap insurance (the slice-2..8 pattern): a malformed showcase fails HERE, not downstream.
+        scn = load_scenario(_SCEN9)
+        @test scn.name == "slice9_pursuit"
+        # `autopilot` present is the missile-view discriminator (the client STAYS spatial, repurposing
+        # the shared fidelity button to the :ideal↔:pid cycler). Default :ideal → the clean intercept
+        # on connect (the lesson is what the toggle/sliders REVEAL).
+        @test scn.world.fidelity[:autopilot] === :ideal
+        # NO other-slice fidelity, and CRITICALLY no `:integrator` and no reserved `:guidance` (slice 10)
+        # — single-lesson (slices 1-8 byte-identical; the guidance path touches no radar/detection RNG).
+        for k in (:propagation, :cfar, :ep, :estimator, :deinterleaver, :raim, :integrator, :guidance)
+            @test !haskey(scn.world.fidelity, k)
+        end
+        @test !any(e -> e.kind in (:radar, :jammer, :clutter, :emitter, :df_sensor, :df_station,
+                                   :pulse_emitter, :esm, :gps_satellite, :gps_receiver),
+                   values(scn.world.entities))
+
+        # exactly one guided :missile + one :target (the pursuit pair)
+        missiles = [id for (id, e) in scn.world.entities if e.kind === :missile]
+        targets  = [id for (id, e) in scn.world.entities if e.kind === :target]
+        @test length(missiles) == 1 && length(targets) == 1
+        m = scn.world.entities[missiles[1]]
+        # a GUIDED missile gets [BallisticMissile (phase-1 airframe), Autopilot (phase-4 guidance)] and
+        # NOT ConstantVelocity — the double-integration guard (the discriminating check).
+        @test any(s -> s isa BallisticMissile, scn.subs)
+        @test any(s -> s isa Autopilot, scn.subs)
+        @test !any(s -> s isa ConstantVelocity && s.id === missiles[1], scn.subs)
+        # launch heading: CLIMBING at 10° at 600 m/s in the x-z plane → vel = 600·[cos10°, 0, sin10°]
+        # (no cross-range in the LAUNCH vector; the engagement stays planar in x-z so the pursuit is
+        # visible in the elevation view). deg→rad pinned; vel[2] == 0 (no y).
+        @test m.comp[:speed] == 600.0 && m.comp[:elevation_deg] == 10.0
+        @test isapprox(m.vel[1], 600.0 * cosd(10.0); atol = 1e-9)
+        @test isapprox(m.vel[3], 600.0 * sind(10.0); atol = 1e-9)
+        @test m.vel[2] == 0.0
+        # the guidance gains land at the CONSUMED comp keys (the slider→consumed-key discipline). The
+        # DEFAULT gains are P-ONLY (ki = kd = 0) so the :ideal→:pid toggle opens a dramatic gap the Ki
+        # slider closes; haskey is the discriminating check (a silently-failed read would still default).
+        for (k, v) in ((:k_guid, 3.0), (:kp, 2.0), (:ki, 0.0), (:kd, 0.0), (:tau, 0.3), (:a_max, 1500.0))
+            @test haskey(m.comp, k) && m.comp[k] == v
+        end
+
+        # the live sliders address the gain comp keys (kp/ki/kd/tau/k_guid); the autopilot method is the
+        # fidelity BUTTON not a knob, and a_max (the crash-guard) / launch geometry are NOT sliders.
+        @test length(scn.knobs) == 5
+        @test Set(k.key for k in scn.knobs) == Set((:kp, :ki, :kd, :tau, :k_guid))
+        @test all(k -> k.target === missiles[1], scn.knobs)
+        @test all(k -> k.key ∉ (:autopilot, :a_max, :speed, :elevation_deg), scn.knobs)
     end
 
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin

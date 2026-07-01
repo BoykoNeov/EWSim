@@ -154,6 +154,7 @@ const RAIM_RUNGS := ["off", "detect", "exclude"]   # slice-7 raim cycler (the sh
 var _missile_id := ""             # missile entity id (for the .impacted flag telemetry)
 var _missile_trail: Array = []    # WORLD [x,y,z] breadcrumbs (mapped through _world_to_screen each draw)
 const INTEGRATOR_RUNGS := ["rk4", "euler"]   # slice-8 integrator cycler (the shared fidelity button)
+const AUTOPILOT_RUNGS := ["ideal", "pid"]    # slice-9 autopilot cycler (the shared fidelity button)
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
 func _ready() -> void:
@@ -309,6 +310,20 @@ func _setup_spatial_fid_btn() -> void:
 		# render cramped in the corner (advisor). They grow to fit as the missile climbs/flies.
 		_x_max = 2000.0
 		_z_max = 1000.0
+	elif _fidelity.has("autopilot"):
+		# Slice-9 guided missile: an `autopilot` fidelity (no range/pri axis, no estimator/raim/integrator)
+		# keeps the SPATIAL elevation view (the engagement is planar in x-z — the interceptor climbs, the
+		# target crosses in altitude — so the pursuit shows) but repurposes the shared button as the
+		# :ideal↔:pid cycler. Same guarded disconnect as the other _fid_kind setups.
+		_fid_kind = "autopilot"
+		if _prop_btn.pressed.is_connected(_on_prop_pressed):
+			_prop_btn.pressed.disconnect(_on_prop_pressed)
+		if not _prop_btn.pressed.is_connected(_on_autopilot_pressed):
+			_prop_btn.pressed.connect(_on_autopilot_pressed)
+		_prop_btn.tooltip_text = "Cycle autopilot (set_fidelity): ideal ↔ pid"
+		# Seed extents to fit the engagement (x ~0..9 km, z ~0..6 km); they only grow, so start close.
+		_x_max = 9500.0
+		_z_max = 6000.0
 	else:
 		_fid_kind = "propagation"
 
@@ -439,6 +454,8 @@ func _update_fid_btn() -> void:
 			_prop_btn.text = "raim: %s" % str(_fidelity.get("raim", "?"))
 		"missile":
 			_prop_btn.text = "integrator: %s" % str(_fidelity.get("integrator", "?"))
+		"autopilot":
+			_prop_btn.text = "autopilot: %s" % str(_fidelity.get("autopilot", "?"))
 		_:
 			_update_prop_btn()
 
@@ -528,6 +545,21 @@ func _on_integrator_pressed() -> void:
 	var next: String = INTEGRATOR_RUNGS[(i + 1) % INTEGRATOR_RUNGS.size()] if i >= 0 else "rk4"
 	_fidelity["integrator"] = next
 	_client.send({"type": "set_fidelity", "key": "integrator", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
+func _on_autopilot_pressed() -> void:
+	# Advance the autopilot rung (ideal↔pid) and tell the core (set_fidelity). Like :integrator this is
+	# PHYSICS-CHANGING, not toggle-bit-identical: there is NO RNG in the missile arc, so an :ideal↔:pid
+	# toggle CHANGES the trajectory going forward (the slice-2 `propagation` shape — the OPPOSITE of the
+	# slice-5/6/7 draw-free toggles). Introduce-safe (absent an Autopilot nothing reads it). The client
+	# owns the displayed rung: badge + button locally (the server applies it silently on the next tick).
+	# NB the PID-gain sliders are INERT under :ideal (the loop is bypassed) — correct, not a bug.
+	var cur := str(_fidelity.get("autopilot", "ideal"))
+	var i := AUTOPILOT_RUNGS.find(cur)
+	var next: String = AUTOPILOT_RUNGS[(i + 1) % AUTOPILOT_RUNGS.size()] if i >= 0 else "ideal"
+	_fidelity["autopilot"] = next
+	_client.send({"type": "set_fidelity", "key": "autopilot", "value": next})
 	_render_badge()
 	_update_fid_btn()
 
@@ -818,8 +850,13 @@ func _draw_spatial() -> void:
 
 	# missile (slice 8): the fading trajectory trail + a nose-oriented marker + an impact burst,
 	# on top of the elevation view (drawn only in the missile-view branch, so slice-1/2/4 are untouched)
-	if _fid_kind == "missile":
+	if _fid_kind == "missile" or _fid_kind == "autopilot":
 		_draw_missile()
+	# guided missile (slice 9): a LOS line missile→target so the pursuit geometry reads (the target
+	# marker is drawn by the generic :target branch above; the a_cmd/a_ach/track_gap readout is the
+	# lesson number, rendered as text by _update_readout — all scalars, no Array-crash).
+	if _fid_kind == "autopilot":
+		_draw_guidance_los()
 
 	# detection blips: expanding rings that fade over BLIP_TTL
 	for b in _blips:
@@ -861,6 +898,23 @@ func _draw_missile() -> void:
 	draw_colored_polygon(PackedVector2Array([
 		head + dir * 9.0, head - dir * 6.0 + perp * 5.0, head - dir * 6.0 - perp * 5.0]), mc)
 	draw_string(_font, head + Vector2(11, -8), _missile_id, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, mc)
+
+func _draw_guidance_los() -> void:
+	# Slice 9: the line-of-sight from the guided missile to its target — the pursuit steers the velocity
+	# toward THIS line (a tail-chaser), so drawing it makes the endgame geometry legible. When the range
+	# closes to an intercept, ring the point. All from entity pos (nothing recomputed).
+	if _missile_id == "" or not _entities.has(_missile_id):
+		return
+	var mp := _world_to_screen(_entities[_missile_id].pos)
+	for id in _entities:
+		if str(_entities[id].kind) != "target":
+			continue
+		var tp := _world_to_screen(_entities[id].pos)
+		draw_line(mp, tp, Color(0.5, 0.9, 1.0, 0.35), 1.0)          # faint LOS line
+		var rng := float(_telemetry.get(_missile_id + ".los_range", 1.0e9))
+		if rng < 60.0:                                              # near intercept → ring it
+			draw_arc(tp, 12.0, 0.0, TAU, 24, Color(1.0, 0.6, 0.2), 2.0)
+		break                                                      # single target in slice 9
 
 # --- CFAR range-power view (slice 3) ------------------------------------------
 # A plot: x = range (the core's static range axis), y = power in dB. Three layers, all from

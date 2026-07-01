@@ -368,9 +368,33 @@ matching the integrator).
       `test_server.jl` (+ set_fidelity :autopilot write/reject/introduce-safe; the live gain sliders survive
       500 ticks [diverging gain → clamp, not throw]; warmup! tolerates a guided-missile scenario). Slices
       1–8 byte-identical (the `_sample_z` golden + all prior testsets green). GATE 2. ✅
-- [ ] **3. Scenario + Godot + verifiers** — `slice9_pursuit.yaml` (a_max never binds) + `_draw_spatial`
-      extension + fidelity/slider UI + `slice9_verify.gd` + `slice9_ui_test.gd` + smoke-load +
-      `test_scenario.jl` arm + visual confirm. GATE 3 → slice COMPLETE.
+- [x] **3. Scenario + Godot + verifiers (DONE & green, 1723 tests; wire + UI machine-verified AND
+      `_draw` VISUALLY CONFIRMED).** `scenarios/slice9_pursuit.yaml`: an interceptor climbing from z=3000
+      at 10° pursuing a target DESCENDING through its path (the engagement is PLANAR IN x-z so the
+      pursuit shows in the elevation view — a y-crossing would be invisible there, advisor gate-2).
+      Default `:ideal` (clean intercept t≈17.0, miss 4.98); DEFAULT gains P-ONLY (ki=kd=0) so the
+      :ideal→:pid toggle opens a dramatic gap the Ki slider closes; a_max=1500 clears the ideal peak
+      |a_cmd| (≈827 to CPA, ≈1094 past-CPA whip) with ≥1.37× margin — **PROVABLY never binds on the clean
+      rung** (the miss-run's ~2e5 spike is the badly-tuned regime, and the pinned lesson is the MID-FLIGHT
+      track_gap, a_max-free — advisor). kp/ki/kd/tau/k_guid sliders; autopilot the fidelity button.
+      Numbers PROBED against the live decide!→integrate!→telemetry path + reproduced through the loader.
+      Godot `Sandbox.gd`: the EXISTING spatial view EXTENDED (no new mode) — `autopilot ∈ fidelity` (no
+      axes) → `_fid_kind="autopilot"`, the shared button wired to `_on_autopilot_pressed` (:ideal↔:pid
+      ring), `_draw_spatial` gains the LOS-line arm (`_draw_guidance_los` — missile→target, ring at
+      intercept) on top of the reused `_draw_missile` trail/marker; the a_cmd/a_ach/track_gap readout is
+      all scalars (renders via `_update_readout`, no Array-crash). The slice-1..8 views UNTOUCHED
+      (slice-8/5/3 UI tests re-run green). `net/slice9_verify.gd` (drives the real server: :ideal
+      track_gap 0 + intercept [min los 2.31] + |a_cmd| grows 12→1094; :pid opens the gap [6.50, ratio
+      0.374≈1/3, bit-identical t]; Kp=8 → ratio 0.122≈1/9; Ki=40 → gap 0.78 — `S9V OK`). `net/
+      slice9_ui_test.gd` (mock client: handshake stays spatial + wires the autopilot cycler; ring walks
+      ideal→pid + wraps; kp slider → set_param; reset resyncs — `S9UI OK`). `Sandbox.tscn` smoke-loaded
+      headless against the slice-9 server (server DONE ⇒ scene connected on the missile branch, no
+      GDScript errors). `test_scenario.jl` +1 loader arm (autopilot default, no other fidelity incl. the
+      reserved `:guidance`, [BallisticMissile, Autopilot] not ConstantVelocity, gains at consumed keys,
+      5 gain knobs, deg→rad launch). `_draw` PIXEL branch VISUALLY CONFIRMED via 2 windowed shots (the
+      shot harness, reverted after): **:ideal** = the climbing pursuit arc + nose marker + cyan LOS line
+      to the target + readout `a_ach == a_cmd` (77.26, track_gap 0); **:pid** = `a_ach 173 ≪ a_cmd 266`
+      (the P-only undershoot as a picture). GATE 3 → slice COMPLETE. ✅
 
 ## Context / landmarks
 - **Slice-8 airframe** (`core/src/missile.jl`, `dynamics.jl`): `BallisticMissile.integrate!`
