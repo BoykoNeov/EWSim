@@ -633,7 +633,7 @@ res://net/slice5_verify.gd` (exit 0 = pass; serves one client then exits). The U
 offline `batch.jl` `kind=:geoloc_mc` + `clients/notebooks/slice5_gdop.jl` Pluto MC-vs-CRLB overlay.
 
 **Slice 6 — multi-emitter EW** (interleaved pulse trains → PRI-histogram deinterleaver; HANDOFF §10
-item 6) — **PLANNED (advisor-reviewed 2026-06-30, lesson de-risked), not yet started.** The
+item 6) — **Gate 1 DONE & green (1101 tests, +46); gates 2–3 planned.** The
 phase-contract **capstone**: lights `build_env!` + `observe!` + `decide!` in ONE pipeline (emitters
 publish params → ESM receiver intercepts/measures the interleaved TOA stream [the one draw site] →
 deinterleaver recovers each PRI + groups pulses). Lesson: the **difference histogram** raising peaks
@@ -658,7 +658,44 @@ here. Exact receiver draw order pinned (jitter `randn` THEN intercept `rand`, bo
 spurious last; `2·n_candidate+n_spurious` fixed). `assoc_pct` direction (cdif<sdif) UNPROVEN — probe at
 gate 1 before pinning; `n_pri` is the load-bearing flip. **Planned FULL in `docs/plans/slice6.md`** (3
 staged gates: `deinterleave.jl` primitives + closed-form subharmonic-trap pin → the ESM 3-phase pipeline
-wired → `deinterleaver` fidelity + scenario + Godot ESM view + verifier). Next: **gate 1**.
+wired → `deinterleaver` fidelity + scenario + Godot ESM view + verifier).
+
+Gate 1 (deinterleave.jl primitives green): the pure §9 lib `deinterleave.jl` (dependency-free, base
+Julia only, SI-seconds in/out — the µs↔s boundary lives at the loader/telemetry) included BEFORE
+radar.jl + exported. `difference_histogram` (cumulative over C levels), `detect_pris` (the cdif/sdif
+extractors — SHARED cumulative histogram + `thresh_frac·peak` threshold + sequence-search, sdif ALONE
+adds the subharmonic check `_is_harmonic`), `associate` (two-sided support: a train member has partners
+at ±τ, fundamental tie-break) + `assoc_pct` (majority-vote purity, `SPURIOUS_ID` never scores), centroid
+PRI refinement. `DEINTERLEAVER_MODES=(:cdif,:sdif)` defined here (the one-list-no-drift source of truth
+gate-2's `LIVE_FIDELITY_MODES` will reference). **Params PRINCIPLED-then-probed (advisor's overfit guard
+— ONE shared param set for BOTH fixtures, never per-fixture):** bin 20 µs; C=15 levels; `thresh_frac=0.4`
+on a WIDE plateau (cdif=4 holds ∀ thresh∈[0.30,0.62]·peak; max in-band spurious peak 15 vs min-kept count
+32 — comfortable, not a knife-edge). **The SEARCH BAND is the binding, subtle constraint (advisor,
+probe-confirmed):** `max_lag` must satisfy `2·min_PRI < max_lag < 2·(second-smallest PRI)` = (2600,3400) µs
+here, so EXACTLY the one phantom (2×min=2600) is in-band and the next harmonic (2×1700=3400) is out.
+`max_lag=3000` sits central (2700–3300 all give cdif=4); 2500→cdif=3 (**DEAD KNOB** — phantom excluded),
+3500→cdif=5 (harmonic forest). It is **NOT "just above the max fundamental"** — that's a coincidence here
+(2×1300≈2300) and FAILS for clustered sets (e.g. [2000,2300,2600]: "just above max"≈2700 excludes 2×2000=4000
+→ dead; needs max_lag∈(4000,4600)). **Gate 3's scenario MUST honour this window.** **Sequence-search is
+INERT on the stable showcase** (probe: `min_seq∈{0,10,30,50}` give the IDENTICAL PRI set — every periodic
+lag recurs, so the threshold, not seq-search, does the discrimination); it stays in the pipeline (the real
+algorithm) and earns its keep on spurious/jittered TOAs in **gate 2**, validated there not here. **Headline pinned
+closed-form (a REAL over-detection, not pass-by-construction): 3-emitter [1300,1700,2300] µs → cdif=4
+(the 3 fundamentals + phantom at 2×1300≈2600) / sdif=3 == n_true — the `n_pri` flip**, PRIs
+centroid-refined to within ½-bin. **Deviation from slice6.md's sketch: the 2-emitter case is cdif=3 /
+sdif=2 (NOT 4/2)** — 3×1300=3900 is outside the principled band that keeps the 3-emitter case clean
+(per-fixture bands = overfit). The subharmonic check pinned in isolation (`_is_harmonic`: 2× with base
+present → reject; the non-harmonic ratios 1.31/1.77 → keep — why those PRIs were chosen) + a lone train
+showing cdif marks the phantom / sdif drops ONLY it. `assoc_pct` **finite + high (>0.8) interleaved,
+==1.0 on a lone train**, direction cdif-vs-sdif NOT pinned (real coincidences on commensurate PRIs cap
+it <1 — the honest boundary; extract-and-remove was WORSE at 0.84 — greedy chaining hops onto
+coincident cross-emitter pulses). Units µs↔SI round-trip + degenerate guards (empty / single-pulse /
+lone-emitter / bad-mode → no throw). `test_deinterleave.jl` (+46) wired into runtests after
+detection/cfar; explicit `atol` throughout (never rtol-`≈0`). Slices 1–5 **byte-identical** (the new
+lib touches no radar/detection path — the `_sample_z` golden + `test_determinism` green through the
+include; nothing references the lib yet). **Next: gate 2** (`PulseEmitter`/`ESMReceiver`/`Deinterleaver`
+in a new `esm.jl` after radar.jl — the phases-2+3+4 pipeline, the one draw site in `observe!`, exact
+draw order per §1; `LIVE_FIDELITY_MODES` references `DEINTERLEAVER_MODES`).
 
 ---
 

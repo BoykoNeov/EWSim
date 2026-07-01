@@ -310,7 +310,28 @@ Decisions).
    diagram — **not** a live rung.
 
 ## Task checklist
-- [ ] 1. **`deinterleave.jl` primitives (pure, SI-seconds, dependency-free).** `difference_histogram`,
+> **Gate 1 DONE & green (1101 tests, +46) — 2026-07-01.** Params PRINCIPLED-then-probed (advisor's
+> overfit guard, ONE shared set for both fixtures): bin 20 µs, C=15 levels, `thresh_frac=0.4` on a
+> WIDE plateau (cdif=4 holds for thresh ∈ [0.30, 0.62]·peak; max in-band spurious peak 15 vs min-kept
+> count 32 — NOT a knife-edge). **The SEARCH BAND is the binding constraint (advisor, probe-confirmed):**
+> `max_lag` must satisfy **`2·min_PRI < max_lag < 2·(second-smallest PRI)`** = (2600,3400) µs here, so
+> EXACTLY the one phantom (2×min=2600) is in-band and the next harmonic (2×1700=3400) is out.
+> `max_lag=3000` sits central (2700–3300→cdif=4); 2500→cdif=3 (DEAD KNOB), 3500→cdif=5 (forest). It is
+> **NOT "just above the max fundamental"** (a coincidence here since 2×1300≈2300; FAILS for a clustered
+> set like [2000,2300,2600] where "just above max"≈2700 excludes 2×2000=4000 → dead — needs (4000,4600)).
+> **Gate 3's scenario MUST honour this window.** **Headline pinned: 3-emitter [1300,1700,2300] µs →
+> cdif=4 (3 fundamentals + phantom at 2×1300≈2600 µs) / sdif=3 — the `n_pri` flip.** PRIs centroid-refined
+> to within a bin (observed <½-bin; largest 7 µs on the bin-edge 1700 µs PRI). **Deviation from the
+> sketch below:** the **2-emitter** case is **cdif=3 / sdif=2** (NOT 4/2) — 3×1300=3900 falls outside the
+> band that keeps the 3-emitter case clean (per-fixture bands would be overfit — advisor); still the
+> phantom lesson. **Sequence-search is INERT on this stable stream** (probe: `min_seq∈{0,10,30,50}` →
+> identical PRIs; the threshold does the discrimination — every periodic lag recurs); it stays in the
+> pipeline and is validated on spurious/jittered TOAs in gate 2, not here. `associate` is **two-sided
+> support** (a train member has partners at ±τ, fundamental tie-break) — `assoc_pct` is **finite + high
+> (>0.8) interleaved, ==1.0 on a lone train**, direction (cdif vs sdif) NOT pinned (real coincidences on
+> commensurate PRIs cap it <1 — the honest boundary; extract-and-remove was WORSE, 0.84). Slices 1–5
+> byte-identical (the new lib touches no radar/detection path). **Next: gate 2.**
+- [x] 1. **`deinterleave.jl` primitives (pure, SI-seconds, dependency-free).** `difference_histogram`,
       `cdif`/`sdif` PRI extraction (cumulative-vs-sequential + the adaptive threshold + the subharmonic
       check), `associate` + `assoc_pct`, centroid PRI refinement; `DEINTERLEAVER_MODES = (:cdif,
       :sdif)`. Export. `test_deinterleave.jl` per gate 1 (the structural subharmonic-trap pin: cdif=4

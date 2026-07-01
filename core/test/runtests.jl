@@ -23,6 +23,7 @@ using Random
     include("test_geolocation.jl")
     include("test_detection.jl")
     include("test_cfar.jl")
+    include("test_deinterleave.jl")
     include("test_scenario.jl")
     include("test_batch.jl")
     include("test_server.jl")

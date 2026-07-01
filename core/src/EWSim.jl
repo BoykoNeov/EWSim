@@ -20,6 +20,7 @@ include("rf.jl")
 include("detection.jl")
 include("geometry.jl")
 include("estimation.jl")
+include("deinterleave.jl")
 include("radar.jl")
 include("geolocation.jl")
 include("scenario.jl")
@@ -45,6 +46,9 @@ export cfar_alpha, cfar_threshold, cfar_scan
 # DF / geolocation shared libs (slice 5): geometry/DOP + estimation scaffold
 export bearing, wrap_angle, eig2x2, error_ellipse, gdop, FINITE_CEIL
 export linear_ls, gauss_newton, bearings_fix, ESTIMATOR_MODES
+# Multi-emitter EW / PRI deinterleaving shared lib (slice 6): difference histogram +
+# cdif/sdif PRI extraction + pulse↔emitter association
+export difference_histogram, detect_pris, associate, assoc_pct, DEINTERLEAVER_MODES, SPURIOUS_ID
 # Slice-1 subsystems + scenario loader (Jammer is the slice-4 build_env! subsystem;
 # DFSensor/Geolocator are the slice-5 observe!→decide! DF pair that light phase 4)
 export ConstantVelocity, RadarSensor, Jammer, DFSensor, Geolocator, Knob, Scenario, load_scenario
