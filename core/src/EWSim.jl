@@ -24,6 +24,7 @@ include("deinterleave.jl")
 include("gnss.jl")
 include("frames.jl")
 include("dynamics.jl")
+include("guidance.jl")
 include("radar.jl")
 include("esm.jl")
 include("geolocation.jl")
@@ -66,6 +67,10 @@ export rotate, rotate_inv, los_unit, los_range, range_rate, los_rate, az_el
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step
 export INTEGRATOR_MODES, G_ACCEL
+# Missile guidance (slice 9): the outer pursuit law + the inner PID autopilot (pure).
+# `AutopilotState` is an INTERNAL state record (the JamContribution/BearingRecord precedent —
+# not exported); `autopilot_init` IS exported (the test constructs the zero state bare).
+export pursuit_accel, autopilot_step, clamp_accel, autopilot_init, AUTOPILOT_MODES
 # Slice-1 subsystems + scenario loader (Jammer is the slice-4 build_env! subsystem;
 # DFSensor/Geolocator are the slice-5 observe!→decide! DF pair that light phase 4)
 export ConstantVelocity, RadarSensor, Jammer, DFSensor, Geolocator, Knob, Scenario, load_scenario

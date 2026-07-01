@@ -309,9 +309,34 @@ matching the integrator).
       is a strong not-a-dead-knob (miss 4.7 vs 228 m); the `1/(1+Kp)` steady-state law + I-drives-to-0;
       the tail-chase `|a_cmd|` growth (21→214). The **guarded `:a_ctrl` seam ran 1633/1633 green** then
       reverted. Advisor-endorsed (cascade required by slice 10; lesson = tracking gap; `a_max` a guard).
-- [ ] **1. Primitives** — `guidance.jl` (`pursuit_accel` / `autopilot_step` / `clamp_accel` /
-      `AUTOPILOT_MODES`) + `test_guidance.jl` (the `1/(1+Kp)` headline, ideal passthrough, pursuit
-      geometry + tail-chase, guards). Byte-identity slices 1–8. GATE 1.
+- [x] **1. Primitives (DONE & green, 1659 tests, +26).** `guidance.jl` (`pursuit_accel` /
+      `autopilot_step` / `clamp_accel` / `autopilot_init` / `AUTOPILOT_MODES` / `AutopilotState`),
+      included AFTER frames.jl (reuses `los_unit`/`_norm3`/`_dot`) but BEFORE radar.jl (so
+      `AUTOPILOT_MODES` precedes `LIVE_FIDELITY_MODES`). PID state is a NamedTuple `(a_ach, e_int,
+      e_prev)` of Vec3s (pure — returns fresh state, never mutates); `autopilot_step` uses
+      derivative-ON-ERROR (matching the probe + plan §2) with a `τ→0` guard (`max(tau, _FRAME_EPS)`
+      so a live slider can't divide-by-zero). `test_guidance.jl` (+26, wired after test_missile.jl):
+      **the `1/(1+Kp)` headline** pinned at `Kp=2 → 1/3`, `Kp=8 → 1/9` to atol 1e-4 (the Euler plant
+      preserves the exact continuous fixed point `a*=Kp/(1+Kp)·a_cmd` — confirmed 0.333333/0.111111);
+      **integral drives e_ss→0** (`Ki=10` → ~1e-14, asserted <1e-6); **derivative damps the
+      integral-induced ringing** — the ordering anchor at `Ki=40` (real ~27% overshoot, peak 127→123
+      with `Kd=0.1`); **at tiny Ki the naive derivative-on-error first-step KICK would dominate** (the
+      honest boundary — anchored where I-ringing is real, NOT at low Ki); **`:ideal` bit-exact
+      passthrough** (`a===a_cmd`, state `===`, gains inert); pursuit ⟂-to-velocity + LOS-side SIGN
+      (+y target → +y turn) + the tail-chase `‖a_cmd‖`-grows-toward-intercept (the slice-10 tee-up as
+      a test); `clamp_accel` caps/preserves-direction/zero-safe; guards (v→0, coincident, huge k_guid
+      finite-then-clamped, single-step huge gains finite, `τ=0` guarded, unknown-rung throws). **NOTE
+      for gate 2 (advisor): the discrete P-only factor is `|1 − (1+Kp)·dt/τ|` → unstable once ANY
+      destabilizing gain crosses threshold (large `Kp ≳ 2τ/dt−1 ≈ 599`, large `Kd`, or small `τ`),
+      NOT specifically `Kd`. Divergence is GEOMETRIC OVER TICKS, so (a) the gate-2 crash test must
+      step MANY ticks after `set_param` (a single post-set tick stays finite — that's why the gate-1
+      single-step guard passed at `kp=1e6`); (b) the subsystem's `a_max` clamp on `a_ctrl` must thread
+      the CLAMPED `a_ach` BACK as state so the plant is bounded each tick (`e`/`u`/`a_ach′` stay finite
+      even at `kd=1e3` — traced; `e_int` still winds up unclamped but harmlessly at any realistic tick
+      count — one-line comment so nobody "fixes" it). `clamp_accel` is now also non-finite-safe as a
+      backstop (the designated crash-guard can't itself emit NaN → no NaN in `pos`/state-frame JSON).**
+      Byte-identity slices 1–8 (the `_sample_z` golden + `test_determinism` green through the include).
+      GATE 1. ✅
 - [ ] **2. Autopilot wired** — `Autopilot <: Subsystem` (`decide!`) + the guarded `BallisticMissile`
       `:a_ctrl` seam + `LIVE_FIDELITY_MODES += autopilot` + loader (guided missile + target) +
       telemetry + `test_missile.jl`/`test_determinism.jl`/`test_server.jl` arms. Byte-identity slices
@@ -348,6 +373,15 @@ matching the integrator).
 - **`a_max` must NOT bind in the scenario** — the probe hit ~22 g *and climbing*; leave margin or the
   clamp silently imports slice-10's saturation lesson. Probe + pin peak `|a_cmd|`. (Advisor.)
 - **PID-gain sliders are inert under `:ideal`** — document it (not a bug).
+- **The `Kd` slider only DAMPS when `Ki > 0` (gate-1 finding, advisor).** Derivative-on-error has a
+  first-step KICK; at low `Ki` dragging `Kd` shows the kick (peak UP), not damping. So `slice9_pursuit.
+  yaml` must default with genuine integral ringing (`Ki` in the ~40 range, probed) for the `Kd` lesson
+  to read correctly — pin the damping at the probed gains. Keep derivative-on-error (matches plan +
+  probe); only reconsider derivative-on-measurement if gate 3 finds the kick makes the live lesson
+  unreadable.
+- **Mid-flight `:ideal→:pid` toggle is a real "actuator suddenly goes laggy" transient** — the plant
+  restarts from `a_ach = 0` while `a_cmd` is already large. Physically defensible; DECIDE whether to
+  show it or smooth it, and pin the behavior in the not-a-dead-knob test. (Advisor.)
 - **Reserve `:guidance` for slice 10** (pursuit vs PN) — own only `:autopilot` now; factor
   `pursuit_accel` / `autopilot_step` separately so slice 10 swaps only the outer fn.
 - **One-tick `decide!→integrate!` delay** — tick 1 is ballistic (a *free* byte-identity anchor); the
