@@ -982,6 +982,58 @@ clients/godot --script res://net/slice7_verify.gd` (exit 0 = pass; it `load_scen
 launch it against the slice7_dop server). The UI test needs NO server: `godot --headless --path clients/godot
 --script res://net/slice7_ui_test.gd`. All 1492 tests: `pwsh tools/test.ps1`.
 
+**Slice 8 — missile (ballistic): the airframe integrator + `frames.jl`** (HANDOFF §10 item 8, the first
+slice of the missile-guidance arc) — **Gate 1 done & green (1562 tests, +70).** Planned FULL in
+`docs/plans/slice8.md` (3 gates: pure primitives → the `BallisticMissile` subsystem wired [phase 1, the
+first FORCE-based integrator] → scenario + Godot spatial-view extension + verifiers). The slice pays down
+two infra debts: the Newtonian ODE integrator (forces→accel→vel→pos) and the 3-D `frames.jl` shared lib
+(slices 9–13 ride it). **Deterministic — NO RNG anywhere** (the trajectory is a closed-form ODE solve), so
+unlike every prior slice there is no draw stream: the `integrator` fidelity is a **physics-changing** knob
+(slice-2 `propagation` shape), NOT a slice-5/6/7 toggle-bit-identical rung — do NOT copy that language.
+
+Gate 1 (pure primitives green — closed-form, SI, RNG-free, no LinearAlgebra): two NEW files, BOTH included
+before `radar.jl` (the mode-const-before-radar rule). **`frames.jl`** — the §9 3-D quaternion/frame/LOS
+kernel (the `geometry.jl`/`estimation.jl`/`gnss.jl` analog): `qmul`/`qconj`/`qinv`/`qnormalize`/
+`quat_from_axis_angle`/`quat_from_two_vectors` (with the **antiparallel + zero-vector guards** an apex v→0
+hits), `rotate`/`rotate_inv` (the inertial↔body pair), `los_unit`/`los_range`/`range_rate`/`los_rate`/
+`az_el`. Reuses gnss.jl's module-level `_norm3` (precompile forbids re-defining it), adds `_dot`/`_cross`;
+`los_range` is named (not bare `range`) to avoid shadowing `Base.range`. Built fully 3-D + tested 3-D now
+(the slices-10–13 investment), scoped tight — **`geometry.jl` NOT refactored** (its 2-D `bearing`/`wrap_angle`
+stay byte-identical; `frames.jl` is the 3-D superset, conceptually shared not code-merged — the slice-7
+"keep the shipped 2×2 path" discipline), proven by the **azimuth == `bearing`** §9 pin. **`dynamics.jl`** —
+the airframe force model + steppers (the plan's "small dynamics.jl" option, **resolving a plan
+contradiction**: `INTEGRATOR_MODES` must precede radar.jl for `LIVE_FIDELITY_MODES` to reference it, but the
+sketch put it in the after-radar `missile.jl`; the split — pure lib before radar, subsystem after — matches
+the deinterleave→esm / gnss→gps convention exactly): `gravity_accel` (flat-earth constant `[0,0,−g]`,
+g=9.80665), `drag_accel` (quadratic, constant ρ, drag off = `cd_area=0` → **EXACTLY zero**), `total_accel`
+(= gravity + drag, a function of v only), pure `rk4_step`/`euler_step`/`integrator_step` (`(accel,p,v,dt)→
+(p',v')` closures), and `INTEGRATOR_MODES=(:rk4,:euler)` the one-list source of truth. **ROADMAP DEVIATION
+NAMED** (advisor #3): HANDOFF §10 sketches `airframe=point_mass|6dof`, but 6-DOF is deferred (§11 Tier A) and
+a one-value fidelity is a dead button, so the slice-8 fidelity is the INTEGRATOR METHOD (RK4 exact vs Euler
+bowing); airframe stays implicitly point_mass. All named approximations (flat-earth constant g, constant ρ,
+point-mass, lumped Cd·A, passive body) in docstrings. `test_frames.jl` (43) + `test_missile.jl` (27), wired
+into `runtests.jl` after `test_estimation.jl`, explicit `atol` throughout: **frames** — quaternion
+round-trips (`rotate_inv(q,rotate(q,v))==v`), 90°-about-ẑ SIGN-checked (x̂→ŷ, ŷ→−x̂), `quat_from_two_vectors`
+aligns a→b + both guards, the **LOS-rate SIGN** on a concrete left→right crossing (ω=+ẑ, value 0.05 — not
+just magnitude, the #1 "missile flies away" bug), `range_rate` sign (negative=closing), the azimuth==`bearing`
+§9 pin; **missile** — drag-off EXACTLY zero, **RK4 gravity-only == analytic parabola** (rtol 1e-11, the
+headline — RK4 integrates the degree-2 solution exactly), **Euler position error EXACTLY `½·g·dt·t`** (the
+error is analytically exact for constant accel, not just leading-order) + O(dt) at FIXED final time (holding
+n fixed instead gives ÷4 and masks the order — the bug the first run caught), **convergence order ÷16 RK4 /
+÷2 Euler** measured in a COARSE-dt STRONG-drag regime (on the pure parabola RK4 truncation is ZERO → only
+roundoff remains, which won't halve — the subtle reason the convergence test can't use gravity-only), energy
+(RK4 drag-off conserves to machine eps [4e-14], drag-on strictly DECREASES [Ė=−k‖v‖³<0]), degenerate guards
+(straight-up v→0 apex, launch at z=0 integrates upward, huge dt — no throw/NaN). **Probe decisions** (a
+throwaway harness, the slice-3..7 rule): Euler drift is dramatically visible (2.1 m z-lag at dt=0.01 over a
+43 s flight); **`:semi_implicit` REJECTED** — two rungs suffice (Euler = the position-error lesson, RK4 = the
+exact reference); Euler drag-off energy drifts UPWARD (~+0.05%, phase-dependent) → PROBED as a comment, NOT
+asserted (the "don't assert what you haven't measured" discipline). Slices 1–7 **byte-identical** (frames/
+dynamics add no code to the radar/detection path; the `_sample_z` golden + `test_determinism` [53] green
+through the include). Gate 2 (the `BallisticMissile` subsystem wired — phase 1, the z=0 impact clamp +
+one-shot `:impact` event, `LIVE_FIDELITY_MODES += integrator`, `:missile` loader kind [gets `[BallisticMissile]`
+NOT `ConstantVelocity` — the double-integration guard]) + gate 3 (scenario + spatial-view extension +
+verifiers) are next.
+
 ---
 
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +

@@ -17,6 +17,8 @@ using Random
     include("test_propagation.jl")
     include("test_geometry.jl")
     include("test_estimation.jl")
+    include("test_frames.jl")
+    include("test_missile.jl")
     include("test_gnss.jl")
     include("test_jamming.jl")
     include("test_radar.jl")
@@ -30,5 +32,4 @@ using Random
     include("test_scenario.jl")
     include("test_batch.jl")
     include("test_server.jl")
-    # slice 1 still to add: test_frames.jl
 end

@@ -22,6 +22,8 @@ include("geometry.jl")
 include("estimation.jl")
 include("deinterleave.jl")
 include("gnss.jl")
+include("frames.jl")
+include("dynamics.jl")
 include("radar.jl")
 include("esm.jl")
 include("geolocation.jl")
@@ -56,6 +58,13 @@ export position_fix, raim_statistic, raim_suspect, raim_solve, GPS_TOGGLE, RAIM_
 # Multi-emitter EW / PRI deinterleaving shared lib (slice 6): difference histogram +
 # cdif/sdif PRI extraction + pulse↔emitter association
 export difference_histogram, detect_pris, associate, assoc_pct, DEINTERLEAVER_MODES, SPURIOUS_ID
+# Missile frame / LOS shared lib (slice 8, §9): quaternion algebra + inertial↔body
+# transforms + the sign-critical LOS kernel (slices 10–13 ride this)
+export qmul, qconj, qinv, qnormalize, quat_from_axis_angle, quat_from_two_vectors
+export rotate, rotate_inv, los_unit, los_range, range_rate, los_rate, az_el
+# Missile airframe dynamics (slice 8): force model + fixed-step integrators
+export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step
+export INTEGRATOR_MODES, G_ACCEL
 # Slice-1 subsystems + scenario loader (Jammer is the slice-4 build_env! subsystem;
 # DFSensor/Geolocator are the slice-5 observe!→decide! DF pair that light phase 4)
 export ConstantVelocity, RadarSensor, Jammer, DFSensor, Geolocator, Knob, Scenario, load_scenario
