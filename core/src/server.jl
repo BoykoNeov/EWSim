@@ -104,6 +104,11 @@ function scenario_frame(srv::Server)
     # telemetry. `nothing` for a non-CFAR scenario (the keys simply don't appear).
     info = _cfar_axis_info(scn.world)
     info === nothing || merge!(frame, info)
+    # A slice-6 ESM scenario ships its STATIC PRI-histogram axes (bin centers + dwell) here
+    # too — handshake-once, the same `_cfar_axis_info` pattern; `pri_axis_us` is the client's
+    # ESM-view discriminator. `nothing` for a non-ESM scenario (keys simply don't appear).
+    einfo = _esm_axis_info(scn.world)
+    einfo === nothing || merge!(frame, einfo)
     return frame
 end
 

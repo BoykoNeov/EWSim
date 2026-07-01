@@ -22,8 +22,13 @@ extends Node2D
 #     bearing RAYS (the LOPs), the emitter truth, the C2 station, the position FIX, and the
 #     error ELLIPSE (all core output / telemetry). The fidelity button cycles the estimator
 #     rung (pseudolinear↔ml).
-# A handshake shipping `range_axis_m` selects "cfar"; one whose fidelity carries `estimator`
-# selects "geoloc"; otherwise "spatial".
+#   • "esm" (slice 6) — a TOA raster + difference-histogram view (none of the above shows a pulse
+#     stream): intercepted pulses colored by recovered emitter, the cumulative difference histogram
+#     (CORE output), the threshold line, and green markers at the detected PRIs (the phantom
+#     subharmonic appears under cdif, vanishes under sdif). The fidelity button cycles the
+#     deinterleaver rung (cdif↔sdif).
+# A handshake shipping `range_axis_m` selects "cfar"; one shipping `pri_axis_us` selects "esm";
+# one whose fidelity carries `estimator` selects "geoloc"; otherwise "spatial".
 
 const HOST := "127.0.0.1"
 const PORT := 8765
@@ -65,7 +70,7 @@ var _fidelity_default := {}
 # --- CFAR range-power view (slice 3): populated only when the handshake ships a range axis.
 # `_mode` switches the whole render path AND the fidelity-toggle button. The spatial mirror
 # (_entities/_blips) and the cfar mirror (_profile_db/...) are disjoint — only one is live.
-var _mode := "spatial"            # "spatial" (slice 1/2/4) | "cfar" (slice 3) | "geoloc" (slice 5)
+var _mode := "spatial"            # "spatial" (1/2/4) | "cfar" (3) | "geoloc" (5) | "esm" (6)
 var _cfar_radar := ""             # radar id whose "<id>.profile_db" etc. we render
 var _range_axis: Array = []       # per-cell slant range (m) — handshake, core output
 var _n_cells := 0
@@ -97,6 +102,23 @@ var _df_station := ""             # station id whose fix/ellipse telemetry we re
 var _plan_view := Rect2()         # the plot rect (screen px)
 var _plan_b := Rect2()            # the world-space bounding box (m) currently shown
 var _plan_sc := 1.0               # px per metre (equal aspect)
+
+# --- ESM / PRI view (slice 6): populated only when the handshake ships pri_axis_us. Two stacked
+# panels — a TOA raster (each intercepted pulse a tick, colored by its assigned emitter — chaos
+# resolving into rows) and the difference HISTOGRAM (bars + the threshold line + green markers at
+# the detected PRIs). ALL from telemetry: the histogram + threshold are CORE output (the client
+# never recomputes the binning/threshold, HANDOFF §1); the rung changes only which PRIs are marked
+# (the phantom subharmonic appears under cdif, vanishes under sdif — same bars, same line).
+var _esm_id := ""                 # esm entity id whose "<id>.histogram" etc. we render
+var _pri_axis: Array = []         # histogram bin centers (µs) — handshake, core output (the τ-axis)
+var _dwell_us := 0.0              # collection dwell (µs) — the raster's time span
+var _esm_hist: Array = []         # cumulative difference histogram (counts) — per frame, CORE output
+var _esm_thresh: Array = []       # detection threshold (flat line) — CORE output, never recomputed
+var _esm_toa: Array = []          # per-pulse TOAs (µs) — the raster x positions (display only)
+var _esm_assign: Array = []       # per-pulse assigned-emitter index (0=unassigned) — raster color
+var _esm_pri: Array = []          # detected PRIs (µs) — the histogram markers (phantom appears/vanishes)
+var _esm_hist_hi := 1.0           # top of the histogram count axis (auto-expands)
+const DEINT_RUNGS := ["cdif", "sdif"]   # slice-6 deinterleaver cycler (the §12 badge button)
 
 func _ready() -> void:
 	_font = ThemeDB.fallback_font
@@ -190,6 +212,8 @@ func _on_scenario(obj: Dictionary) -> void:
 	# interleave after this.
 	if obj.has("range_axis_m"):
 		_enter_cfar_mode(obj)
+	elif obj.has("pri_axis_us"):
+		_enter_esm_mode(obj)
 	elif _fidelity.has("estimator"):
 		_enter_geoloc_mode(obj)
 	else:
@@ -248,6 +272,25 @@ func _enter_geoloc_mode(_obj: Dictionary) -> void:
 		_prop_btn.pressed.connect(_on_est_pressed)
 	_prop_btn.tooltip_text = "Cycle estimator (set_fidelity): pseudolinear ↔ ml"
 
+func _enter_esm_mode(obj: Dictionary) -> void:
+	# Slice-6 multi-emitter EW: a handshake shipping the STATIC PRI-histogram axis (pri_axis_us,
+	# the range_axis_m analog — it can't change frame-to-frame) flips the client into the ESM/PRI
+	# view (a TOA raster + difference histogram — neither the elevation, plan, nor range-power view
+	# shows it) and repurposes the shared fidelity button as the deinterleaver cycler. Adopt the
+	# static axes, then swap the prop toggle (_on_prop_pressed) for _on_deint_pressed — the
+	# disconnect is guarded so the headless UI test (which builds the button without _build_ui's
+	# connect) doesn't error, exactly like _enter_cfar_mode / _enter_geoloc_mode.
+	_mode = "esm"
+	_fid_kind = "esm"
+	_esm_id = str(obj.get("esm", ""))
+	_pri_axis = obj.get("pri_axis_us", [])
+	_dwell_us = float(obj.get("dwell_us", 0.0))
+	if _prop_btn.pressed.is_connected(_on_prop_pressed):
+		_prop_btn.pressed.disconnect(_on_prop_pressed)
+	if not _prop_btn.pressed.is_connected(_on_deint_pressed):
+		_prop_btn.pressed.connect(_on_deint_pressed)
+	_prop_btn.tooltip_text = "Cycle deinterleaver (set_fidelity): cdif ↔ sdif"
+
 func _render_badge() -> void:
 	# §12: a visible "<fidelity> approximation" badge, built from the live local fidelity
 	# map (never hardcoded), re-rendered whenever the propagation toggle changes it.
@@ -267,6 +310,8 @@ func _update_fid_btn() -> void:
 			_prop_btn.text = "ep: %s" % str(_fidelity.get("ep", "?"))
 		"geoloc":
 			_prop_btn.text = "est: %s" % str(_fidelity.get("estimator", "?"))
+		"esm":
+			_prop_btn.text = "deint: %s" % str(_fidelity.get("deinterleaver", "?"))
 		_:
 			_update_prop_btn()
 
@@ -327,16 +372,46 @@ func _on_est_pressed() -> void:
 	_render_badge()
 	_update_fid_btn()
 
+func _on_deint_pressed() -> void:
+	# Advance the deinterleaver rung (cdif↔sdif) and tell the core (set_fidelity). `:deinterleaver`
+	# is introduce-safe AND draw-free (the ESMReceiver draws a fixed count/look regardless of rung —
+	# the whole draw is phase-3), so a mid-run cycle is bit-identical (the slice-4 :ep / slice-5
+	# :estimator contract, NOT slice-3's draw-flip): only the Deinterleaver's phase-4 acceptance
+	# changes — the phantom subharmonic PRI marker appears under cdif and vanishes under sdif (same
+	# histogram bars, same threshold line). The client owns the displayed rung: update badge + button
+	# locally (the server applies it silently, no reply).
+	var cur := str(_fidelity.get("deinterleaver", "cdif"))
+	var i := DEINT_RUNGS.find(cur)
+	var next: String = DEINT_RUNGS[(i + 1) % DEINT_RUNGS.size()] if i >= 0 else "cdif"
+	_fidelity["deinterleaver"] = next
+	_client.send({"type": "set_fidelity", "key": "deinterleaver", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
 func _on_state(obj: Dictionary) -> void:
 	_telemetry = obj.get("telemetry", {})
 	if _mode == "cfar":
 		_cfar_on_state()
 	elif _mode == "geoloc":
 		_geoloc_on_state(obj)
+	elif _mode == "esm":
+		_esm_on_state()
 	else:
 		_spatial_on_state(obj)
 	_update_readout()
 	queue_redraw()
+
+func _esm_on_state() -> void:
+	# Pull the ESM arrays the core shipped (the histogram + threshold are CORE output — we plot them,
+	# never recompute the binning/threshold here, HANDOFF §1). The raster (toa_us/assign) + the
+	# detected PRIs (pri_us) are display-only. Auto-expand the count axis to fit a tall peak.
+	_esm_hist   = _telemetry.get(_esm_id + ".histogram", [])
+	_esm_thresh = _telemetry.get(_esm_id + ".threshold", [])
+	_esm_toa    = _telemetry.get(_esm_id + ".toa_us", [])
+	_esm_assign = _telemetry.get(_esm_id + ".assign", [])
+	_esm_pri    = _telemetry.get(_esm_id + ".pri_us", [])
+	for v in _esm_hist:
+		_esm_hist_hi = max(_esm_hist_hi, float(v) * 1.1)
 
 func _geoloc_on_state(obj: Dictionary) -> void:
 	# Mirror the entity list (sensors/emitter/station drawn from their pos) and note which station's
@@ -506,6 +581,8 @@ func _draw() -> void:
 		_draw_cfar()
 	elif _mode == "geoloc":
 		_draw_plan()
+	elif _mode == "esm":
+		_draw_esm()
 	else:
 		_draw_spatial()
 
@@ -758,3 +835,96 @@ func _plan_legend(rect: Rect2) -> void:
 	draw_line(Vector2(x - 5, y + 32), Vector2(x + 5, y + 32), Color(0.4, 1.0, 0.5), 2.0)
 	draw_line(Vector2(x, y + 27), Vector2(x, y + 37), Color(0.4, 1.0, 0.5), 2.0)
 	draw_string(_font, Vector2(x + 24, y + 36), "fix + ellipse", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.6, 1.0, 0.7))
+
+# --- ESM / PRI view (slice 6) -------------------------------------------------
+# Two stacked panels from core telemetry. TOP: a TOA raster — each intercepted pulse a vertical tick
+# over [0, dwell), colored by its assigned emitter index (interleaved chaos resolving into rows).
+# BOTTOM: the difference HISTOGRAM — bars over the τ-axis (the handshake pri_axis_us), the flat
+# detection threshold (CORE output, NEVER recomputed here — HANDOFF §1), and a green marker per
+# detected PRI. Toggling the deinterleaver rung leaves the bars + threshold untouched and only
+# adds/removes the phantom-subharmonic marker (cdif marks 2×min_PRI; sdif doesn't — same bars, same
+# line, different markers).
+
+func _esm_color(idx: int) -> Color:
+	# assigned emitter index → a distinct hue; 0 (unassigned / spurious) → grey. Built inline
+	# (GDScript const-Color arrays are brittle across versions; the per-pulse cost is negligible).
+	if idx <= 0:
+		return Color(0.55, 0.55, 0.55, 0.7)
+	var pal := [Color(0.4, 0.8, 1.0), Color(1.0, 0.7, 0.3), Color(0.5, 1.0, 0.5),
+		Color(1.0, 0.5, 0.9), Color(0.9, 0.9, 0.4), Color(0.6, 0.7, 1.0)]
+	return pal[(idx - 1) % pal.size()]
+
+func _draw_esm() -> void:
+	var vp := get_viewport_rect().size
+	var full := Rect2(PLOT_L, PLOT_T, vp.x - PLOT_L - PLOT_R, vp.y - PLOT_T - PLOT_B)
+	var gap := 44.0
+	var raster := Rect2(full.position.x, full.position.y, full.size.x, full.size.y * 0.30)
+	var histo := Rect2(full.position.x, raster.end.y + gap, full.size.x, full.end.y - (raster.end.y + gap))
+	_draw_esm_raster(raster)
+	_draw_esm_histogram(histo)
+
+func _draw_esm_raster(rect: Rect2) -> void:
+	draw_rect(rect, Color(0.2, 0.25, 0.3), false, 1.0)
+	draw_string(_font, rect.position + Vector2(2, -6),
+		"TOA raster — intercepted pulses, colored by recovered emitter",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.6))
+	var span: float = _dwell_us if _dwell_us > 0.0 else 1.0
+	for i in _esm_toa.size():
+		var t := float(_esm_toa[i])
+		var x := rect.position.x + clampf(t / span, 0.0, 1.0) * rect.size.x
+		var idx: int = int(_esm_assign[i]) if i < _esm_assign.size() else 0
+		draw_line(Vector2(x, rect.position.y + 5), Vector2(x, rect.end.y - 5), _esm_color(idx), 1.0)
+	# time-axis labels (ms)
+	var nt := 4
+	for ti in range(nt + 1):
+		var frac := float(ti) / nt
+		var gx := rect.position.x + frac * rect.size.x
+		draw_string(_font, Vector2(gx - 8, rect.end.y + 14), "%.0f" % (frac * span / 1000.0),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.45))
+	draw_string(_font, Vector2(rect.position.x + rect.size.x * 0.5 - 26, rect.end.y + 28),
+		"time (ms)", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.5))
+
+func _draw_esm_histogram(rect: Rect2) -> void:
+	draw_rect(rect, Color(0.2, 0.25, 0.3), false, 1.0)
+	draw_string(_font, rect.position + Vector2(2, -6),
+		"difference histogram — peaks at each emitter's PRI (▼ = detected)",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.6))
+	var n := _esm_hist.size()
+	if n == 0:
+		return
+	var hi := maxf(1.0, _esm_hist_hi)
+	# the τ-axis span (µs): last bin center + half a bin = n·bin_us = max_lag. Bars index by cell;
+	# the PRI markers map τ→x by the SAME span, so a marker sits over its bar (see the note).
+	var span_us: float = _pri_axis[n - 1] + (_pri_axis[1] - _pri_axis[0]) * 0.5 if _pri_axis.size() == n else float(n)
+	# bars
+	var bw := rect.size.x / float(n)
+	for i in n:
+		var h := float(_esm_hist[i])
+		if h <= 0.0:
+			continue
+		var bh := (h / hi) * rect.size.y
+		var x := rect.position.x + float(i) * bw
+		draw_rect(Rect2(x, rect.end.y - bh, maxf(1.0, bw - 0.4), bh), Color(0.5, 0.75, 1.0, 0.85))
+	# threshold (flat line, CORE output — never recomputed here)
+	if _esm_thresh.size() == n:
+		var ty := rect.end.y - (float(_esm_thresh[0]) / hi) * rect.size.y
+		draw_line(Vector2(rect.position.x, ty), Vector2(rect.end.x, ty), Color(1.0, 0.5, 0.3), 1.5)
+		draw_string(_font, Vector2(rect.end.x - 60, ty - 4), "threshold",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.7, 0.5))
+	# detected-PRI markers (green ▼ + the value): the phantom subharmonic appears under cdif, gone under sdif
+	for pv in _esm_pri:
+		var tau := float(pv)
+		var x := rect.position.x + clampf(tau / span_us, 0.0, 1.0) * rect.size.x
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(x, rect.position.y + 13), Vector2(x - 5, rect.position.y + 3), Vector2(x + 5, rect.position.y + 3)]),
+			Color(0.4, 1.0, 0.4))
+		draw_string(_font, Vector2(x - 13, rect.position.y + 27), "%.0f" % tau,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.6, 1.0, 0.6))
+	# τ-axis labels (µs)
+	var na := 5
+	for ti in range(na + 1):
+		var gx := rect.position.x + float(ti) / na * rect.size.x
+		draw_string(_font, Vector2(gx - 12, rect.end.y + 14), "%.0f" % (float(ti) / na * span_us),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.45))
+	draw_string(_font, Vector2(rect.position.x + rect.size.x * 0.5 - 22, rect.end.y + 28),
+		"PRI τ (µs)", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.5))

@@ -1,0 +1,103 @@
+# slice6_deinterleave — multi-emitter EW: interleaved pulse trains → PRI-histogram
+# deinterleaver (HANDOFF §10 item 6, slice 6 gate 3). The PHASE-CONTRACT CAPSTONE — one tick
+# lights phase 2 (`PulseEmitter.build_env!` publishes each emitter's PRI params), phase 3
+# (`ESMReceiver.observe!` intercepts + measures the interleaved Time-of-Arrival stream — the
+# ONE draw site), and phase 4 (`Deinterleaver.decide!` recovers each PRI + groups the pulses).
+#
+# THE LESSON (the `:deinterleaver` fidelity / the §12 cycler button):
+#   A single ESM hearing 3 radars sees ONE jumbled TOA stream, not 3 clean trains. The
+#   DIFFERENCE HISTOGRAM (count of pulse-pair time-differences vs lag) raises peaks at each
+#   emitter's PRI out of the density soup — that emergence IS the killer visual.
+#   • :cdif (the BIASED baseline) — a stable train at PRI=T piles cumulative difference-counts
+#     at 2T, 3T… as tall as the fundamental, and a 2T-spaced subsequence DOES exist, so it
+#     declares a PHANTOM emitter at the subharmonic — a radar that isn't there. On these three
+#     PRIs it reports n_pri = 4 (the 3 fundamentals + a phantom at 2×1300 ≈ 2600 µs).
+#   • :sdif (Milojević–Popović) — before accepting a candidate τ, reject it if a sub-multiple
+#     (τ/2, τ/3…) is also a candidate: the fundamental, not its harmonic, is the real PRI. This
+#     single added rule removes the phantom → n_pri = 3 = n_true. Cycle the button and watch the
+#     phantom marker appear (cdif) and vanish (sdif). SAME bars, SAME threshold line, only the
+#     PRI markers move (the shared cumulative pipeline).
+#
+# The phantom trap is STRUCTURAL, not noise-driven — it appears on PERFECTLY STABLE emitters —
+# so (like slices 2/4/5, unlike slice 3) the core scene is deterministic and there is NO
+# draw-topology hazard: `:deinterleaver` is introduce-safe AND toggle-bit-identical.
+#
+# THE SEARCH-BAND CONSTRAINT (the binding, subtle scenario rule — de-risked in gate 1):
+# max_lag must satisfy 2·min_PRI < max_lag < 2·(second-smallest PRI) = (2600, 3400) µs here, so
+# EXACTLY the one phantom (2×1300=2600) is in-band and the next harmonic (2×1700=3400) is out.
+# max_lag_us=3000 sits central. It is NOT "just above the max fundamental" — that's a
+# coincidence here (2×1300≈2300); the window is the rule. bin/levels/thresh are gate-1's proven
+# WIDE-plateau set (bin 20 µs, C=15, thresh 0.4 — cdif=4 holds for thresh ∈ [0.30,0.62]·peak).
+#
+# SCOPE (one lesson per scenario — the slice-3 rule): generic parametric emitters only, STABLE
+# (constant) PRI, a single ESM, NO radar/jammer/DF (so the ESM path never touches those RNG
+# streams and slices 1–5 stay byte-identical). The interactive levers are MEASUREMENT QUALITY
+# (the jitter_us / p_intercept sliders — receiver-side TOA jitter + probability-of-intercept)
+# and the ALGORITHM (the deinterleaver button); the emitters are static (geometry is inert for
+# the PRI lesson — R/c is omitted). Numbers de-risked in gate 1 + oracle-pinned in
+# net/slice6_verify.gd + test_scenario.jl.
+#
+# UNITS (the §1 trifecta, first-class here): PRIs/jitter/dwell authored in µs, stored + computed
+# in SI seconds (the loader converts in, telemetry converts out). A µs/s slip is the signature bug.
+name: slice6_deinterleave
+seed: 6
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  deinterleaver: cdif            # cdif | sdif — the slice-6 PRI-deinterleaver knob (cycler button).
+                                 # DEFAULT cdif so the phantom is visible on connect; toggling to
+                                 # sdif removes it (n_pri 4 → 3). Its presence flips no view by
+                                 # itself — the handshake's pri_axis_us selects the ESM view.
+
+entities:
+  # Three stable, well-separated, NON-HARMONIC pulse emitters — the de-risked [1300,1700,2300] µs
+  # (ratios 1.31 / 1.77, no small-integer commensurability). Distinct start phases so the trains
+  # interleave (not phase-locked). Static (vel 0) — the PRI lesson is geometry-inert. Positions are
+  # cosmetic here (carried for a future TDOA slice); the ESM view is a TOA raster, not a map.
+  - id: pe1
+    kind: pulse_emitter
+    pos: [12000, 0, 0]
+    vel: [0, 0, 0]
+    pulse_emitter: {pri_us: 1300.0, phase_us: 0.0,   pulse_width_us: 1.0}
+  - id: pe2
+    kind: pulse_emitter
+    pos: [18000, 4000, 0]
+    vel: [0, 0, 0]
+    pulse_emitter: {pri_us: 1700.0, phase_us: 300.0, pulse_width_us: 1.0}
+  - id: pe3
+    kind: pulse_emitter
+    pos: [24000, -3000, 0]
+    vel: [0, 0, 0]
+    pulse_emitter: {pri_us: 2300.0, phase_us: 700.0, pulse_width_us: 1.0}
+
+  # The single ESM intercept + fusion platform. STATIC config (t_dwell / bins / levels / thresholds
+  # define the draw count + histogram axis → load-time only, changing them would desync replay) uses
+  # gate-1's proven set; only jitter_us + p_intercept are LIVE sliders (draw-count-invariant). An
+  # 80 ms dwell over ~1.5 ms PRIs → ~144 pulses (well under the _ESM_MAX_PULSES=1000 bound). A 50 ms
+  # revisit redraws the raster/histogram a few times a second (with jitter=0 the redraws are
+  # identical; drag jitter_us and each redraw shows fresh noise).
+  - id: esm1
+    kind: esm
+    pos: [0, 0, 0]
+    vel: [0, 0, 0]
+    esm:
+      t_dwell_us: 80000.0        # 80 ms collection dwell (static — sets the draw count + raster span)
+      max_lag_us: 3000.0         # search band ∈ (2600, 3400): the one phantom (2600) in, next (3400) out
+      bin_us: 20.0               # histogram bin (gate-1 proven)
+      levels: 15                 # cumulative difference levels C (≳ M·few for 3 emitters)
+      thresh_frac: 0.4           # detection threshold = 0.4·peak (mid of the wide [0.30,0.62] plateau)
+      seq_tol_us: 30.0           # sequence-search / subharmonic-check tolerance
+      assoc_tol_us: 50.0         # pulse↔train association tolerance
+      min_seq: 10                # min sequence support for a candidate PRI
+      n_spurious: 0              # clean showcase (STATIC — changing it changes the draw count)
+      jitter_us: 0.0             # LIVE slider: receiver TOA-measurement noise (µs) — blurs the peaks
+      p_intercept: 1.0           # LIVE slider: probability a pulse is intercepted — thins the stream
+      revisit_s: 0.05            # redraw cadence (the ESM's look tick)
+
+# The live sliders are MEASUREMENT QUALITY (the interactive lesson): TOA jitter blurs the histogram
+# peaks; probability-of-intercept thins the stream (fewer pulses → shorter, sparser histogram). The
+# deinterleaver is a FIDELITY (the cycler button), never a slider. The emitters are static — no
+# motion knob (the contrast to slice 5, where emitter motion swept the GDOP lesson).
+knobs:
+  - {target: esm1, key: jitter_us,   min: 0.0, max: 60.0, label: "TOA jitter σ (µs)"}
+  - {target: esm1, key: p_intercept, min: 0.3, max: 1.0,  label: "P(intercept)"}

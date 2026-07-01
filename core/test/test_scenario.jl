@@ -18,6 +18,7 @@ const _SCEN3 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice3_cfar
 const _SCEN4S = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice4_selfscreen.yaml"))
 const _SCEN4O = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice4_standoff.yaml"))
 const _SCEN5 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice5_geoloc.yaml"))
+const _SCEN6 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice6_deinterleave.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -280,6 +281,60 @@ end
         # three sensors' σθ (the ellipse-size lesson) — and they address :sigma_theta_deg.
         @test all(k -> k.key === :sigma_theta_deg, scn.knobs)
         @test Set(k.target for k in scn.knobs) == Set([:dfs1, :dfs2, :dfs3])
+    end
+
+    @testset "loader parses slice6_deinterleave.yaml (multi-emitter EW, ESM view)" begin
+        # Cheap insurance like the slice-2/3/4/5 loader tests: a malformed showcase fails HERE as a
+        # clear test, not downstream as a confusing server-launch timeout in the Godot verifier.
+        scn = load_scenario(_SCEN6)
+        @test scn.name == "slice6_deinterleave"
+        @test scn.world.fidelity[:deinterleaver] === :cdif       # default rung (cycler reveals :sdif)
+        # NO radar/jammer/DF physics — a multi-emitter EW scenario is single-domain (the one-lesson
+        # rule), so the ESM path never touches the radar/jammer/DF RNG (slices 1-5 stay byte-id).
+        @test !haskey(scn.world.fidelity, :propagation)
+        @test !haskey(scn.world.fidelity, :cfar)
+        @test !haskey(scn.world.fidelity, :ep)
+        @test !haskey(scn.world.fidelity, :estimator)
+        @test !any(e -> e.kind in (:radar, :jammer, :target, :clutter, :emitter, :df_sensor,
+                                   :df_station), values(scn.world.entities))
+
+        # exactly three stable, non-harmonic pulse emitters — the de-risked [1300,1700,2300] µs,
+        # stored SI SECONDS (the key PulseEmitter.build_env! reads — the §1 µs→s conversion; haskey
+        # on :pri (not a µs key) is the discriminating check that the conversion actually ran).
+        emitters = sort!([id for (id, e) in scn.world.entities if e.kind === :pulse_emitter])
+        @test emitters == [:pe1, :pe2, :pe3]
+        pris_us = [scn.world.entities[id].comp[:pri] / 1.0e-6 for id in emitters]
+        @test pris_us ≈ [1300.0, 1700.0, 2300.0] atol = 1e-9    # µs → SI seconds round-trip
+        for id in emitters
+            e = scn.world.entities[id]
+            @test haskey(e.comp, :pri) && !haskey(e.comp, :pri_us)  # stored SI seconds, not raw µs
+            @test e.comp[:pri] > 0                                  # a valid emit grid (no infinite loop)
+        end
+
+        # the SEARCH-BAND constraint the lesson rides on: max_lag ∈ (2·min_PRI, 2·second_smallest_PRI)
+        # so EXACTLY the one phantom (2×1300=2600 µs) is in-band and the next harmonic (2×1700=3400)
+        # is out. A scenario that violates this kills the lesson (dead knob or a harmonic forest).
+        esm = first(e for (_, e) in scn.world.entities if e.kind === :esm)
+        sorted_pris = sort(pris_us)
+        max_lag_us = esm.comp[:max_lag] / 1.0e-6
+        @test 2 * sorted_pris[1] < max_lag_us < 2 * sorted_pris[2]
+
+        # exactly one ESM platform with the histogram/extraction params stored SI seconds + the two
+        # LIVE sliders present (µs unit for jitter). The static params are load-time; jitter/intercept
+        # are the interactive levers.
+        @test count(e -> e.kind === :esm, values(scn.world.entities)) == 1
+        @test esm.comp[:t_dwell] ≈ 80_000.0e-6 atol = 1e-12
+        @test esm.comp[:bin_width] ≈ 20.0e-6 atol = 1e-15
+        @test esm.comp[:levels] == 15 && esm.comp[:thresh_frac] == 0.4
+        @test haskey(esm.comp, :jitter_us) && haskey(esm.comp, :p_intercept)
+        @test count(s -> s isa PulseEmitter, scn.subs) == 3
+        @test count(s -> s isa ESMReceiver, scn.subs) == 1
+        @test count(s -> s isa Deinterleaver, scn.subs) == 1
+
+        # deinterleaver is a fidelity (the cycler button), never a slider; the live sliders address
+        # the two MEASUREMENT-QUALITY knobs on the ESM (both on comp keys the consumer reads).
+        @test all(k -> k.target === :esm1, scn.knobs)
+        @test Set(k.key for k in scn.knobs) == Set([:jitter_us, :p_intercept])
     end
 
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin

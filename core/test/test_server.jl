@@ -71,6 +71,34 @@ function _geoloc_scenario(seed; emit_every = 4)
     return Scenario("geoloc", w, subs, Knob[], 1.0e-3, emit_every)
 end
 
+# A slice-6 multi-emitter EW scenario fixture (radar-free, ESM-driven): 3 stable pulse emitters +
+# one ESM carrying gate-1's proven histogram params. Lights phases 2+3+4; no radar (so warmup!'s
+# ROC batch is skipped) and no `:cfar`/`:estimator` — just the `:deinterleaver` fidelity.
+function _esm_scenario(seed; emit_every = 4)
+    w = World(seed = seed, fidelity = Dict(:deinterleaver => :cdif))
+    for (i, (pri, ph)) in enumerate(zip((1300.0, 1700.0, 2300.0), (0.0, 300.0, 700.0)))
+        id = Symbol("pe", i)
+        w.entities[id] = Entity(id, :pulse_emitter; pos = Vec3(10_000.0 * i, 0, 0),
+            comp = Dict{Symbol,Any}(:pri => pri * 1e-6, :phase => ph * 1e-6, :pulse_width => 1e-6))
+    end
+    w.entities[:esm1] = Entity(:esm1, :esm; pos = Vec3(0, 0, 0),
+        comp = Dict{Symbol,Any}(:t_dwell => 80_000.0 * 1e-6, :bin_width => 20.0 * 1e-6,
+            :max_lag => 3000.0 * 1e-6, :seq_tol => 30.0 * 1e-6, :assoc_tol => 50.0 * 1e-6,
+            :levels => 15, :min_seq => 10, :thresh_frac => 0.4, :n_spurious => 0,
+            :jitter_us => 0.0, :p_intercept => 1.0))
+    subs = Subsystem[]
+    for id in sort!(collect(keys(w.entities)))
+        e = w.entities[id]
+        if e.kind === :pulse_emitter
+            push!(subs, ConstantVelocity(id)); push!(subs, PulseEmitter(id))
+        elseif e.kind === :esm
+            push!(subs, ConstantVelocity(id)); push!(subs, ESMReceiver(id; revisit_s = 0.05))
+            push!(subs, Deinterleaver(id))
+        end
+    end
+    return Scenario("esm", w, subs, Knob[], 1.0e-3, emit_every)
+end
+
 @testset "server" begin
 
     @testset "handle_command! mutates state per the §5 table" begin
@@ -208,6 +236,72 @@ end
         @test !haskey(w2.fidelity, :estimator)
         EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "estimator", :value => "ml"))
         @test w2.fidelity[:estimator] === :ml
+    end
+
+    @testset "set_fidelity :deinterleaver — write/reject + introduce-safe (slice-6 EW)" begin
+        # Slice-6 gate 3: `:deinterleaver` joins the per-key LIVE_FIDELITY_MODES table (referencing
+        # DEINTERLEAVER_MODES). Like `:ep`/`:estimator` and unlike `:cfar` it carries NO
+        # introduce-guard — the ESMReceiver draws a fixed count/look regardless of the rung (the
+        # whole draw is phase-3), so the rung selects only the Deinterleaver's phase-4
+        # post-processing (no draw-count change) — introduce-safe AND toggle-bit-identical.
+        srv = EWSim.Server(_esm_scenario(1))
+        w = srv.scn.world
+        @test w.fidelity[:deinterleaver] === :cdif              # the scenario default rung
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "deinterleaver", :value => "sdif"))
+        @test w.fidelity[:deinterleaver] === :sdif
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "deinterleaver", :value => "cdif"))
+        @test w.fidelity[:deinterleaver] === :cdif
+        # ...a bad rung is REJECTED before it lands (would throw in decide! → kill the session),
+        # leaving the live value untouched.
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "deinterleaver", :value => "nelson"))
+        @test w.fidelity[:deinterleaver] === :cdif
+
+        # INTRODUCING :deinterleaver on a scenario WITHOUT it is ALLOWED (the sharp contrast to
+        # :cfar's introduce-reject) — a non-ESM world has no Deinterleaver to consume it, so it's a
+        # harmless write (the :ep/:estimator introduce-safety). Use a plain radar scenario.
+        srv2 = EWSim.Server(_detect_scenario(1))
+        w2 = srv2.scn.world
+        @test !haskey(w2.fidelity, :deinterleaver)
+        EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "deinterleaver", :value => "sdif"))
+        @test w2.fidelity[:deinterleaver] === :sdif
+    end
+
+    @testset "warmup! tolerates an ESM scenario (slice-6, radar-free, phases 2+3+4)" begin
+        # An ESM scenario is radar-free like slice-5 DF, so warmup!'s ROC-batch warm is skipped
+        # (the radar-guard); the tick!+state_frame warm still runs — and here it warms the FULL
+        # phase-2+3+4 capstone (PulseEmitter→ESMReceiver→Deinterleaver) plus the array-telemetry
+        # (histogram/threshold) round-trip. It must NOT throw and must leave the live World pristine.
+        srv = EWSim.Server(_esm_scenario(6))
+        t0   = srv.scn.world.t
+        pos0 = srv.scn.world.entities[:pe1].pos
+        EWSim.warmup!(srv)                                          # must NOT throw (no radar)
+        @test srv.scn.world.t == t0
+        @test srv.scn.world.entities[:pe1].pos == pos0
+        @test rand(copy(srv.scn.world.rng)) == rand(Xoshiro(6))    # live rng untouched
+    end
+
+    @testset "scenario_frame ships the static ESM/PRI axis (handshake-once)" begin
+        # A slice-6 scenario ships its STATIC histogram axes in the handshake (the CFAR range-axis
+        # precedent — they can't change frame-to-frame). `pri_axis_us` is the client's ESM-view
+        # discriminator; its length must equal the shipped histogram length (n_bins) — the
+        # handshake↔telemetry consistency an axis/binning mismatch would break.
+        srv = EWSim.Server(_esm_scenario(1))
+        f = EWSim.scenario_frame(srv)
+        @test f[:fidelity][:deinterleaver] === :cdif             # the §12 badge sees the rung
+        @test f[:esm] === :esm1
+        @test f[:n_bins] == 150                                  # 3000 µs / 20 µs bins
+        @test f[:dwell_us] ≈ 80_000.0
+        @test f[:bin_us] ≈ 20.0
+        @test length(f[:pri_axis_us]) == 150
+        @test f[:pri_axis_us][1] ≈ 10.0                          # first bin center (0.5·bin_us)
+        @test f[:pri_axis_us][end] ≈ 2990.0                      # last bin center
+        @test !haskey(f, :range_axis_m)                          # NOT a CFAR scenario
+        # the shipped histogram (a live tick's telemetry) has EXACTLY n_bins entries — the axis
+        # labels every bar (advisor: catch an axis/binning mismatch the peak check would miss).
+        tick!(srv.scn.world, srv.scn.subs, srv.scn.dt_physics)
+        tel = state_frame(srv.scn.world)[:telemetry]
+        @test length(tel["esm1.histogram"]) == length(f[:pri_axis_us])
     end
 
     @testset "a live n_train/n_guard slider can't crash the tick (consumer clamp)" begin

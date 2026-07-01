@@ -373,16 +373,34 @@ Decisions).
       Slices 1–5 byte-identical (esm.jl touches no radar/detection path; the `_sample_z` golden +
       test_determinism green through the include). **Server handshake (`_esm_axis_info`), scenario YAML,
       Godot ESM view, verifier all deferred to gate 3.** **Next: gate 3.**
-- [ ] 3. **`deinterleaver` fidelity + scenario + Godot ESM view + verifier.** `scenarios/
-      slice6_deinterleave.yaml` (the de-risked 3-emitter numbers, default `:cdif`, jitter/intercept
-      sliders). Godot `Sandbox.gd` new `"esm"` mode (`_fid_kind → esm` off the handshake; `_draw_esm`
-      raster + histogram, all from telemetry; the deinterleaver cycler). `net/slice6_verify.gd` (real
-      server: histogram peaks at PRIs; cdif→sdif flips n_pri 4→3 + raises assoc_pct, bit-identical t;
-      jitter/intercept sliders move the histogram). `net/slice6_ui_test.gd` (mock client). `Sandbox.tscn`
-      smoke-loaded headless against a slice-6 server. Tests: `test_scenario.jl` (slice-6 loader),
-      `test_server.jl` (`set_fidelity :deinterleaver` + warmup ESM-free), `test_determinism.jl`
-      (toggle+introduce). `_draw_esm` visually confirmed via the shot harness (phantom appears/vanishes).
-      **(stretch, deferred)** `kind = :pri_mc` batch + `slice6_pri.jl` Pluto.
+- [x] 3. **`deinterleaver` fidelity + scenario + Godot ESM view + verifier — DONE & green (1238 tests,
+      +54), 2026-07-01.** `_esm_axis_info(w)` (esm.jl, the `_cfar_axis_info` analog) ships the STATIC
+      `pri_axis_us` (bin centers µs, len 150) + `dwell_us`/`bin_us`/`n_bins`/`esm` id at handshake, merged
+      into `scenario_frame` (returns `nothing` for a non-ESM world → slices 1–5 handshakes byte-identical).
+      **`pri_axis_us` presence is the ESM-view discriminator** (advisor: the `range_axis_m`→cfar precedent,
+      cleaner than the plan's `fidelity[:deinterleaver]` text; order-safe by the one-lesson rule).
+      `scenarios/slice6_deinterleave.yaml` (seed 6, de-risked `[1300,1700,2300] µs` static + one ESM,
+      `max_lag_us=3000` in the binding `(2600,3400)` window, default `:cdif`, jitter/intercept sliders);
+      numbers PROBED against the live wire first (n_pri 4/3, assoc 0.9375, peaks 1300/1707/2303/2600 µs).
+      Godot `Sandbox.gd` new `"esm"` mode (`_enter_esm_mode` off `pri_axis_us`; `_draw_esm` = TOA raster
+      colored by assigned emitter + difference histogram + threshold line [CORE output] + green ▼ PRI
+      markers; the deinterleaver cycler `cdif↔sdif` via `_on_deint_pressed`). `net/slice6_verify.gd`
+      (real server: handshake axis; histogram above-threshold peaks at the 3 true PRIs; **cdif→sdif flips
+      n_pri 4→3 bit-identical t**; the SHARPEST form — `histogram`+`threshold` BIT-IDENTICAL across rungs,
+      only `pri_us` markers move; jitter blurs max 51→16 / p_intercept thins sum 687→125 on the FIXED
+      histogram; `assoc_pct` direction NOT asserted [0.9375==0.9375 probe] — `S6V OK`, exit 0).
+      `net/slice6_ui_test.gd` (mock client: esm mode + cycler + slider + reset resync — `S6UI OK`).
+      `Sandbox.tscn` smoke-loaded headless against a slice-6 server (server `DONE` ⇒ scene connected —
+      caught a GDScript `:=`-from-ternary bug in `_draw_esm`). Tests: `test_scenario.jl` (slice-6 loader —
+      PRIs stored SI seconds, the SEARCH-BAND `2·min < max_lag < 2·second` pinned, sliders address
+      jitter/intercept, deinterleaver not a knob); `test_server.jl` (`set_fidelity :deinterleaver`
+      write/reject + introduce-safe on a non-ESM scenario; **warmup! tolerates an ESM scenario**;
+      `scenario_frame` ships the PRI axis with `len(pri_axis_us)==len(histogram)==150`). `test_determinism.jl`
+      slice-6 coverage was already complete in gate 2 (toggle+introduce bit-identical — untouched). `_draw_esm`
+      VISUALLY CONFIRMED via 3 windowed shots (the shot harness, [[ewsim-godot-headless]]): cdif = 4 markers
+      (incl. the 2600 phantom) / sdif = same bars but 3 markers (phantom vanished) / jitter σ=45 µs = a
+      blurred forest. Slices 1–5 byte-identical. **(stretch, deferred)** `kind = :pri_mc` batch +
+      `slice6_pri.jl` Pluto.
 
 ## Context / landmarks
 - **The phase contract is fully exercised here.** `build_env!` (phase 2, `subsystem.jl:13`),

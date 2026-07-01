@@ -266,3 +266,35 @@ function decide!(d::Deinterleaver, w::World)
     tel["$sid.assign"]    = assign                    # variable, display only
     return nothing
 end
+
+# --- ESM static-axis handshake info (the CFAR `_cfar_axis_info` analog) -----------
+
+"""
+    _esm_axis_info(w) -> Union{Dict, Nothing}
+
+The static ESM/PRI axes a slice-6 scenario ships ONCE in the `scenario` handshake (they
+can't change frame-to-frame — the histogram bins + dwell are load-time static). Mirrors
+`_cfar_axis_info`: returns `nothing` for a non-ESM world (the keys simply don't appear), so
+`scenario_frame` merges it only when there is an `:esm` entity. Ships:
+
+  • `pri_axis_us` — the difference-histogram bin CENTERS in µs (`(b−0.5)·bin_width`), the
+    τ-axis the client labels the histogram against (the `range_axis_m` analog — CORE output,
+    the client never recomputes the binning);
+  • `dwell_us` — the collection dwell in µs (the raster's time span);
+  • `bin_us` / `n_bins` — the bin width + count (so the client can size the histogram);
+  • `esm` — the ESM entity id whose `<id>.histogram`/`.threshold`/… telemetry to render.
+
+The presence of `pri_axis_us` in the handshake is the client's ESM-view discriminator (the
+`range_axis_m`→cfar precedent). One ESM per scenario (`_validate_esm`); the first by sorted
+id if somehow more.
+"""
+function _esm_axis_info(w::World)
+    esms = sort!(Symbol[id for (id, e) in w.entities if e.kind === :esm])
+    isempty(esms) && return nothing
+    esm    = w.entities[esms[1]]
+    bw     = Float64(esm.comp[:bin_width]); ml = Float64(esm.comp[:max_lag])
+    n_bins = max(1, floor(Int, ml / bw))
+    axis   = collect(((1:n_bins) .- 0.5) .* bw ./ _US)     # bin centers, µs
+    return Dict{Symbol,Any}(:esm => esms[1], :dwell_us => Float64(esm.comp[:t_dwell]) / _US,
+                            :bin_us => bw / _US, :n_bins => n_bins, :pri_axis_us => axis)
+end

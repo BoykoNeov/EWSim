@@ -633,7 +633,8 @@ res://net/slice5_verify.gd` (exit 0 = pass; serves one client then exits). The U
 offline `batch.jl` `kind=:geoloc_mc` + `clients/notebooks/slice5_gdop.jl` Pluto MC-vs-CRLB overlay.
 
 **Slice 6 — multi-emitter EW** (interleaved pulse trains → PRI-histogram deinterleaver; HANDOFF §10
-item 6) — **Gate 1 DONE & green (1101 tests, +46); gates 2–3 planned.** The
+item 6) — **COMPLETE. Gates 1–3 done & green (1238 tests); wire + UI machine-verified AND the
+ESM raster/histogram `_draw_esm` VISUALLY CONFIRMED (2026-07-01).** The
 phase-contract **capstone**: lights `build_env!` + `observe!` + `decide!` in ONE pipeline (emitters
 publish params → ESM receiver intercepts/measures the interleaved TOA stream [the one draw site] →
 deinterleaver recovers each PRI + groups pulses). Lesson: the **difference histogram** raising peaks
@@ -733,10 +734,69 @@ finite telemetry incl. a degenerate empty dwell [no throw]; no-ESM wire-surface 
 introduce bit-identical). Slices 1–5 **byte-identical** (esm.jl touches no radar/detection path; the
 `_sample_z` golden + all prior testsets green through the include). Server handshake (`_esm_axis_info` +
 `scenario_frame` merge + warmup), the scenario YAML, the Godot ESM view, and the verifier are all deferred
-to gate 3. **Next: gate 3** (`deinterleaver` fidelity + `scenarios/slice6_deinterleave.yaml` + Godot ESM
-raster/histogram view + `slice6_verify.gd`/`slice6_ui_test.gd`; `set_fidelity :deinterleaver` cdif->sdif
-flips n_pri 4->3 with bit-identical t; the shot-harness visual confirm of the phantom marker
-appearing/vanishing).
+to gate 3.
+
+Gate 3 (deinterleaver fidelity + scenario + Godot ESM view + verifiers — **DONE & green, 1238 tests (+54);
+wire + UI machine-verified AND `_draw_esm` VISUALLY CONFIRMED 2026-07-01**). The core fidelity plumbing
+landed in gate 2, so gate 3 = the handshake axis + scenario + client + verifiers + server/scenario test
+arms. `_esm_axis_info(w)` (esm.jl, the `_cfar_axis_info` analog) ships the STATIC ESM axes once at handshake
+— `pri_axis_us` (the difference-histogram bin CENTERS in µs, `(b−0.5)·bin`, len n_bins=150), `dwell_us`,
+`bin_us`/`n_bins`, `esm` id — merged into `scenario_frame` (returns `nothing` for a non-ESM world, so
+slices 1–5 handshakes are unchanged — the byte-identity guard). **`pri_axis_us` presence is the client's
+ESM-view discriminator** (the `range_axis_m`→cfar precedent, advisor-endorsed over the plan's
+`fidelity[:deinterleaver]` text — order-safe: the arms are mutually exclusive by the one-lesson rule).
+`scenarios/slice6_deinterleave.yaml` (seed 6): the de-risked 3 emitters `[1300,1700,2300] µs` (phases
+0/300/700, static) + one ESM (80 ms dwell, gate-1's proven params, `max_lag_us=3000` in the binding
+`(2600,3400)` window so EXACTLY the one phantom is in-band), default `:cdif`, `jitter_us`/`p_intercept`
+sliders; numbers PROBED against the live wire path first (n_pri cdif=4/sdif=3, assoc 0.9375, hist peaks at
+1300/1707/2303/2600 µs, threshold 20.4). Godot `Sandbox.gd`: a NEW `"esm"` render mode (`_enter_esm_mode`
+off the handshake `pri_axis_us`; `_fid_kind="esm"`, the shared fidelity button becomes the deinterleaver
+cycler `cdif↔sdif` via `_on_deint_pressed`, guarded disconnect like cfar/ep/est). `_draw_esm` = two stacked
+panels — a **TOA raster** (each intercepted pulse a tick colored by its assigned-emitter index) + the
+**difference histogram** (bars over the τ-axis + the flat threshold line [CORE output, α never recomputed] +
+green ▼ markers at the detected PRIs), ALL from telemetry. `_update_readout` already skips Array telemetry
+(the histogram/threshold/toa/assign/pri arrays render in `_draw`, not as text — the slice-3 float()-crash
+watch-item, re-confirmed for the esm keys). The slice-1/2/4 spatial + slice-3 cfar + slice-5 geoloc paths
+are UNTOUCHED (their smoke-loads + UI tests stay green — re-run, all pass). `net/slice6_verify.gd` (drives
+the real server: handshake ships `pri_axis_us`/`dwell_us` + cdif default + jitter/intercept knobs + no
+range_axis; the histogram raises above-threshold peaks at the 3 true PRIs; **`set_fidelity deinterleaver`
+cdif→sdif flips n_pri 4→3** with **bit-identical t=0.160000** under the held seed — AND the SHARPEST form
+[advisor]: the `histogram`+`threshold` arrays are BIT-IDENTICAL across rungs, ONLY `pri_us` [4→3 markers]
+changes = "same bars, same line, different markers"; `set_param jitter_us` blurs the peaks [max 51→16],
+`set_param p_intercept` thins the stream [hist sum 687→125] — asserted on the FIXED histogram, never the
+display-only toa/assign arrays). `assoc_pct` DIRECTION not asserted (probe: 0.9375==0.9375 across rungs, the
+plan's "direction unproven" caveat — only finite+[0,1] checked). `S6V OK`, server `DONE`, exit 0.
+`net/slice6_ui_test.gd` (mock client, no server: `pri_axis_us` handshake → esm mode + the deinterleaver
+cycler; the ring walks cdif→sdif and wraps; badge/button track; jitter_us slider sends `set_param`; reset
+resyncs to cdif — `S6UI OK`). `Sandbox.tscn` smoke-loaded headless against a slice-6 server (server `DONE` ⇒
+scene connected on the esm branch, no GDScript errors — caught a GDScript `:=`-from-ternary inference bug in
+`_draw_esm` the verifier can't). Tests (+54 over gate 2's 1184): `test_scenario.jl` (slice-6 loader:
+deinterleaver default, NO radar/jammer/DF fidelity or entities, 3 pulse emitters with PRIs stored SI SECONDS
+[`haskey :pri` not `:pri_us` — the µs→s discriminating check], the SEARCH-BAND `2·min < max_lag < 2·second`
+pinned, one ESM, sliders address `jitter_us`/`p_intercept`, deinterleaver not a knob); `test_server.jl`
+(`set_fidelity :deinterleaver` write/reject + introduce-safe on a non-ESM scenario [the `:ep`/`:estimator`
+contract, NOT `:cfar`'s guard]; **warmup! tolerates an ESM scenario** [radar-free → ROC batch skipped, the
+phase-2+3+4 + array-telemetry warm still runs, live World pristine]; `scenario_frame` ships the static PRI
+axis with `len(pri_axis_us)==len(histogram)==150` — the handshake↔telemetry consistency an axis/binning
+mismatch would break, advisor). `test_determinism.jl` slice-6 coverage was already complete in gate 2
+(mid-run `:deinterleaver` toggle AND introduce both bit-identical, draw-free rung switch — untouched). The
+`_draw_esm` PIXEL branch (Godot skips `_draw` headless) was VISUALLY CONFIRMED via 3 windowed shots (the
+shot harness, [[ewsim-godot-headless]] — a throwaway ShotEsm wrapper pointed `run/main_scene` at itself,
+instantiated `Sandbox.tscn` against the live server, `get_viewport().get_texture().get_image().save_png`,
+reverted after): **cdif** = four ▼ markers (1300/1707/2303 + the phantom 2600) over four above-threshold
+bars, n_pri=4; **sdif** = the SAME four bars + threshold but only THREE markers (the 2600 bar unmarked),
+n_pri=3 — the phantom-vanishes lesson as a picture; **jitter σ=45 µs** = the histogram blurred into a noisy
+forest (~21 spurious peaks, assoc 0.94→0.80) — TOA jitter muddying the algorithm. No open step remains in
+slice 6's required gates.
+
+Run the slice-6 showcase: `julia --project=core tools/server.jl scenarios/slice6_deinterleave.yaml`, then
+launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-detects ESM and shows the raster/histogram
+view; cycle the `deint:` button to watch the phantom PRI marker appear [cdif] and vanish [sdif]; drag the
+TOA-jitter slider to blur the peaks, or P(intercept) to thin the stream). Re-run the gate-3 proof headless:
+start that server, then `godot --headless --path clients/godot --script res://net/slice6_verify.gd` (exit 0
+= pass; serves one client then exits). The UI test needs NO server: `godot --headless --path clients/godot
+--script res://net/slice6_ui_test.gd`. **(stretch, deferred)** offline `batch.jl` `kind=:pri_mc`
+(deinterleave success-rate vs jitter/emitter-density) + `clients/notebooks/slice6_pri.jl` Pluto diagram.
 
 ---
 
