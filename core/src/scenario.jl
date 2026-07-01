@@ -207,9 +207,47 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
         comp[:levels]  ≥ 1 || error("esm '$id': levels must be ≥ 1")
         subs = Subsystem[ConstantVelocity(id), ESMReceiver(id; revisit_s = get(comp, :revisit_s, 0.0)),
                          Deinterleaver(id)]
+    elseif kind === :gps_satellite
+        # A GPS satellite (slice 7): a flat-local fictional far point source (named
+        # approximation — NO ECEF/orbits) the receiver measures a pseudorange to. A
+        # `gps_satellite:` block carries the SATELLITE clock error `clock_err_m` (a per-SV
+        # constant bias, distinct from the receiver clock the solver recovers) + the injected
+        # `fault_bias_m` (the spoof/failure bias — a LIVE slider in the RAIM scene, so it is the
+        # comp key `set_param` addresses). All SI metres (no unit conversion — the §1 boundary is
+        # trivial here). Plus a `ConstantVelocity` mover so it can drift (the DOP sweep).
+        # Publishes its ephemeris to `env[:gps_sats]` in phase 2.
+        gb = get(ent, "gps_satellite", Dict{Any,Any}())
+        comp[:clock_err_m]  = _f64(get(gb, "clock_err_m", 0.0))
+        comp[:fault_bias_m] = _f64(get(gb, "fault_bias_m", 0.0))     # LIVE slider (RAIM scene)
+        subs = Subsystem[ConstantVelocity(id), GpsSatellite(id)]
+    elseif kind === :gps_receiver
+        # The GPS receiver + solver platform (slice 7): a `ConstantVelocity` mover (usually
+        # static) + a `GpsReceiver` (phase-3, THE ONE DRAW SITE) + a `GpsSolver` (phase-4). A
+        # `gps_receiver:` block carries the STATIC config (all draw-count / geometry defining, so
+        # load-time only): `sigma_range_m` (ranging noise σ), `sigma_mp_m` (multipath σ),
+        # `iono_zenith_m`/`tropo_zenith_m` (the deterministic-delay magnitudes), `clock_bias_m`
+        # (the receiver's TRUE c·b the solver recovers — SI metres, printed as ns), the POST-DRAW
+        # `elevation_mask_deg`, and `raim_threshold` (the EMPIRICAL σ-multiple RAIM threshold —
+        # gnss.jl route (iii); NB the plan landmark's `pfa_raim` is stale, gate-1 rejected the
+        # χ²/Pfa route because exclude→odd-DOF needs an erf, so the comp key is `raim_threshold`).
+        # The five error terms are toggled by fidelity, not read here as knobs.
+        rb = get(ent, "gps_receiver", Dict{Any,Any}())
+        comp[:sigma_range_m]      = _f64(get(rb, "sigma_range_m", 3.0))
+        comp[:sigma_mp_m]         = _f64(get(rb, "sigma_mp_m", 1.0))
+        comp[:iono_zenith_m]      = _f64(get(rb, "iono_zenith_m", 5.0))
+        comp[:tropo_zenith_m]     = _f64(get(rb, "tropo_zenith_m", 2.4))
+        comp[:clock_bias_m]       = _f64(get(rb, "clock_bias_m", 0.0))
+        comp[:elevation_mask_deg] = _f64(get(rb, "elevation_mask_deg", 0.0))
+        comp[:raim_threshold]     = _f64(get(rb, "raim_threshold", 5.0))
+        haskey(rb, "revisit_s") && (comp[:revisit_s] = _f64(rb["revisit_s"]))
+        comp[:sigma_range_m] > 0 ||
+            error("gps_receiver '$id': sigma_range_m must be > 0 (got $(comp[:sigma_range_m]))")
+        subs = Subsystem[ConstantVelocity(id), GpsReceiver(id; revisit_s = get(comp, :revisit_s, 0.0)),
+                         GpsSolver(id)]
     else
         error("unknown entity kind :$kind for '$id' (knows :radar, :target, :clutter, " *
-              ":jammer, :emitter, :df_sensor, :df_station, :pulse_emitter, :esm)")
+              ":jammer, :emitter, :df_sensor, :df_station, :pulse_emitter, :esm, " *
+              ":gps_satellite, :gps_receiver)")
     end
     return e, subs
 end
@@ -275,6 +313,7 @@ function load_scenario(path::AbstractString)
     _validate_cfar(world)
     _validate_geoloc(world)
     _validate_esm(world)
+    _validate_gps(world)
     knobs = _parse_knobs(data, world)
     return Scenario(name, world, subs, knobs, dt_physics, emit_every)
 end
@@ -353,5 +392,27 @@ function _validate_esm(world::World)
     total ≤ _ESM_MAX_PULSES ||
         error("ESM dwell too long: ~$total candidate pulses over the dwell exceeds the " *
               "$_ESM_MAX_PULSES bound (shorten t_dwell_us or raise the PRIs)")
+    return world
+end
+
+# A GPS (slice 7) scenario needs a solvable constellation: ≥ 4 `:gps_satellite` (the 4×4
+# trilateration solves for x/y/z + the receiver clock — fewer is rank-deficient) and exactly
+# ONE `:gps_receiver` (single-receiver scope). Validate at LOAD (the `_validate_cfar`/
+# `_validate_geoloc`/`_validate_esm` pattern), triggered by GPS-entity presence so a non-GPS
+# scenario is untouched (a GPS scenario sets no required fidelity key — the error terms default
+# `:off`, `:raim` defaults `:off`). NB the RAIM lesson needs OVER-determination (≥ 5 for a
+# residual DOF); that is the RAIM scene's authoring responsibility (the loader enforces only the
+# ≥ 4 solvability floor — a 4-satellite DOP scene is legal).
+function _validate_gps(world::World)
+    n_sat = 0; n_rx = 0
+    for (_, e) in world.entities
+        e.kind === :gps_satellite && (n_sat += 1)
+        e.kind === :gps_receiver  && (n_rx  += 1)
+    end
+    (n_sat == 0 && n_rx == 0) && return world            # not a GPS scenario
+    n_sat ≥ 4 ||
+        error("a GPS scenario needs ≥ 4 :gps_satellite entities to solve x/y/z/clock (got $n_sat)")
+    n_rx == 1 ||
+        error("a GPS scenario needs exactly one :gps_receiver (got $n_rx)")
     return world
 end

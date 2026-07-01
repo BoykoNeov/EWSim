@@ -430,16 +430,44 @@ draw-topology hazard** (see Decisions).
       round-trip; degenerate guards). Wired into `runtests.jl` after test_estimation. Byte-identity: RNG
       stream + `_sample_z` golden untouched; DF pseudolinear byte-identical; DF `:ml` re-routed through the
       shared Cholesky at N=2 (ULP-equal, determinism intact). Slices 1–6 green.
-- [ ] 2. **The GPS pipeline wired (phases 2+3+4 lit).** `GpsSatellite`/`GpsReceiver`/`GpsSolver`
-      in a new `gps.jl` (after `radar.jl`; no radar back-dep); `SatEphemeris`/`PseudorangeSet`
-      records; `env[:gps_sats]` → `env[:pseudoranges]` → telemetry; the exact §1 draw order
-      (multipath then noise, both unconditional, `2·n_sats` fixed); `:gps_satellite`/
-      `:gps_receiver` kinds + `_validate_gps` in `scenario.jl`; `LIVE_FIDELITY_MODES` references
-      `GPS_TOGGLE`/`RAIM_MODES` (the six keys). `test_gps.jl` (env populated; the exact-draw
-      golden; solver reproduces `gnss.jl`; the six-key fidelity plumbing; draw-stream invariance;
-      finite telemetry + degenerate; no-GPS byte-identity; loader arms+rejects). `test_determinism.jl`
-      + a slice-7 scenario (bit-identical pseudorange trace; draw-free rung switch; toggle AND
-      introduce of each key bit-identical). Slices 1–6 byte-identical.
+- [x] 2. **The GPS pipeline wired (phases 2+3+4 lit).** DONE & green (1448 tests, +140).
+      `GpsSatellite`/`GpsReceiver`/`GpsSolver` in a new `gps.jl` (included AFTER geolocation.jl;
+      no radar back-dep — reuses geometry.jl's `_finite`/`FINITE_CEIL`, geolocation.jl's
+      `_finite_coord`, gnss.jl's pure math). `SatEphemeris`/`PseudorangeSet` records; the §3
+      coupling `env[:gps_sats]` (phase 2) → `env[:pseudoranges]` (phase 3, THE ONE DRAW SITE on
+      look-ticks) → telemetry (phase 4). **Exact §1 draw order** `_draw_pseudoranges`: satellites
+      sorted-id, per satellite MULTIPATH(randn) THEN NOISE(randn) both UNCONDITIONAL → `2·n_sats`
+      fixed regardless of any key/slider (the five error toggles gate the CONTRIBUTION, the
+      elevation mask / RAIM exclusion are POST-DRAW filters — no draw-topology hazard, every key
+      introduce-safe + toggle-bit-identical). `:gps_satellite` (`clock_err_m`/`fault_bias_m`, SI
+      metres — fault_bias_m the RAIM slider key) + `:gps_receiver` (`sigma_range_m`/`sigma_mp_m`/
+      `iono_zenith_m`/`tropo_zenith_m`/`clock_bias_m`/`elevation_mask_deg`/`raim_threshold`) kinds
+      + `_validate_gps` (≥4 sats + exactly 1 receiver at LOAD, GPS-presence-triggered) in
+      `scenario.jl`; unknown-kind list updated. **`raim_threshold` (not the plan landmark's stale
+      `pfa_raim`)** — gate-1 chose the empirical σ-multiple (route iii), so the comp key the
+      slider/solver share is `raim_threshold`. `LIVE_FIDELITY_MODES` (radar.jl) gains the six keys
+      referencing `GPS_TOGGLE`/`RAIM_MODES` (one-list-no-drift; namespaced-by-consumption — only a
+      GpsSolver reads them). GPS DOP is FIX-geometry `Q` (gnss.jl convention, ≈ truth at 20 000 km
+      range, σ-invariant). Solver clamps every scalar finite (`_finite`/`_finite_coord`) — a
+      singular/under-determined geometry (< 4 visible, coplanar, RAIM into < 4) ships `FINITE_CEIL`,
+      never a throw. `test_gps.jl` (+109: env populated + record shape; the EXACT-draw golden
+      reconstructed off a fresh Xoshiro; solver reproduces `raim_solve`/`dop_components` +
+      VDOP>HDOP; the six-key fidelity plumbing [each error toggle enters the budget, raim
+      off/detect/exclude, n_sats_used drops]; **masked-AND-excluded index mapping** — `vis_idx≠1:n`
+      pinned against an independent raim_solve, the advisor bug [`sat_used[k]=res.used[k]` forgetting
+      the map]; wire JSON round-trip; **draw invariance across ALL SIX keys** [rng lockstep];
+      degenerate all-but-one-masked → FINITE_CEIL no throw; no-GPS byte-identity; loader arms +
+      rejects). `test_determinism.jl` + a slice-7 scenario (bit-identical PSEUDORANGE trace via
+      `reinterpret`; draw-free rung switch off↔exclude [n_sats_used 6↔5]; toggle AND introduce of
+      each of the six keys → rng end-state bit-identical [ρ VALUES change with an error toggle, the
+      DRAW COUNT does not — the invariant is the rng state]). `test_server.jl` (six-key
+      `set_fidelity` write/reject + introduce-safe on a non-GPS scenario [the `:ep`/`:estimator`
+      contract]; warmup! tolerates a radar-free GPS scenario). Slices 1–6 byte-identical (gps.jl
+      adds no code to the radar/detection path; the `_sample_z` golden + all prior testsets green).
+      **Next: gate 3** — `set_fidelity` on the six keys (no server change); `slice7_dop.yaml` +
+      `slice7_raim.yaml` probed against the live wire; the Godot GPS/sky view (sky plot + residual
+      bars + DOP readout + five-toggle row + raim cycler + fault slider); `net/slice7_verify.gd` +
+      `net/slice7_ui_test.gd`; `test_scenario.jl` both loaders; `_draw_gps` visually confirmed.
 - [ ] 3. **Fidelity + two scenarios + Godot GPS view + verifiers.** `set_fidelity` on the six keys
       (no server change). `slice7_dop.yaml` (spread constellation + drift + error toggles) +
       `slice7_raim.yaml` (over-determined + faulted satellite + `raim` rung + fault slider),

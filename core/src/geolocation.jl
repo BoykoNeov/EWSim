@@ -37,11 +37,9 @@ const BearingRecord = @NamedTuple{theta::Float64, pos::Vec3, sigma::Float64}
 # can't crash a tick" watch-item. The loader separately rejects an AUTHORED σθ ≤ 0.
 const _SIGMA_THETA_FLOOR = 1.0e-9
 
-# A SIGNED finite clamp for a coordinate readout (fix_x/fix_y may be negative): a singular
-# geometry can blow the 2×2 solve to ±Inf/NaN → JSON poison, so map non-finite to
-# FINITE_CEIL and clamp the magnitude. The non-negative readouts (err_m/gdop/ell_a/ell_b)
-# reuse geometry.jl's `_finite`; this is its signed sibling, same FINITE_CEIL ceiling.
-_finite_coord(x::Real) = isfinite(x) ? clamp(float(x), -FINITE_CEIL, FINITE_CEIL) : FINITE_CEIL
+# `_finite_coord` (the SIGNED finite clamp for fix_x/fix_y) now lives in geometry.jl beside its
+# non-negative sibling `_finite` — the shared lib, so gps.jl (slice 7) reuses it too (moved in
+# slice-7 gate 2). The non-negative readouts (err_m/gdop/ell_a/ell_b) use `_finite`.
 
 # The single emitter nearest `from` (sorted-id tie-break), mirroring radar.jl's
 # `_nearest_target` rule. `nothing` if there is no emitter (a sensor-only scene) — the

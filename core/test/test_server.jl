@@ -99,6 +99,36 @@ function _esm_scenario(seed; emit_every = 4)
     return Scenario("esm", w, subs, Knob[], 1.0e-3, emit_every)
 end
 
+# A slice-7 GPS scenario fixture (radar-free, GPS-driven): 6 satellites (the probed upper-
+# hemisphere spread) + one receiver/solver. Lights phases 2+3+4; no radar (so warmup!'s ROC
+# batch is skipped) and no `:cfar` — the six GPS fidelity keys default off/off.
+function _gps_scenario(seed; emit_every = 4, fidelity = Dict{Symbol,Symbol}())
+    _gsat(az, el; r = 20_000_000.0) = (a = deg2rad(az); e = deg2rad(el);
+        Vec3(r * cos(e) * cos(a), r * cos(e) * sin(a), r * sin(e)))
+    azel = [(0.0, 70.0), (60.0, 35.0), (120.0, 40.0), (180.0, 30.0), (240.0, 45.0), (300.0, 55.0)]
+    w = World(seed = seed, fidelity = fidelity)
+    for (i, (az, el)) in enumerate(azel)
+        id = Symbol("sv", i)
+        w.entities[id] = Entity(id, :gps_satellite; pos = _gsat(az, el),
+            comp = Dict{Symbol,Any}(:clock_err_m => 0.0, :fault_bias_m => 0.0))
+    end
+    w.entities[:rx1] = Entity(:rx1, :gps_receiver; pos = Vec3(1000.0, -500.0, 0.0),
+        comp = Dict{Symbol,Any}(:sigma_range_m => 3.0, :sigma_mp_m => 1.0, :iono_zenith_m => 5.0,
+            :tropo_zenith_m => 2.4, :clock_bias_m => 30.0, :elevation_mask_deg => 0.0,
+            :raim_threshold => 5.0))
+    subs = Subsystem[]
+    for id in sort!(collect(keys(w.entities)))
+        e = w.entities[id]
+        if e.kind === :gps_satellite
+            push!(subs, ConstantVelocity(id)); push!(subs, GpsSatellite(id))
+        elseif e.kind === :gps_receiver
+            push!(subs, ConstantVelocity(id)); push!(subs, GpsReceiver(id; revisit_s = 0.05))
+            push!(subs, GpsSolver(id))
+        end
+    end
+    return Scenario("gps", w, subs, Knob[], 1.0e-3, emit_every)
+end
+
 @testset "server" begin
 
     @testset "handle_command! mutates state per the §5 table" begin
@@ -278,6 +308,55 @@ end
         EWSim.warmup!(srv)                                          # must NOT throw (no radar)
         @test srv.scn.world.t == t0
         @test srv.scn.world.entities[:pe1].pos == pos0
+        @test rand(copy(srv.scn.world.rng)) == rand(Xoshiro(6))    # live rng untouched
+    end
+
+    @testset "set_fidelity: the six GPS keys — write/reject + introduce-safe (slice-7)" begin
+        # Slice-7 gate 2: the six GPS keys (iono/tropo/clock/multipath/noise = GPS_TOGGLE, raim =
+        # RAIM_MODES) join the per-key LIVE_FIDELITY_MODES table. Like :ep/:estimator/:deinterleaver
+        # and unlike :cfar they carry NO introduce-guard — the GpsReceiver draws 2·n_sats/look
+        # regardless of any key (the whole draw is phase-3), so each key selects only a term's
+        # contribution / the phase-4 raim post-processing (no draw-count change) — introduce-safe.
+        srv = EWSim.Server(_gps_scenario(1))
+        w = srv.scn.world
+        for key in ("iono", "tropo", "clock", "multipath", "noise")
+            EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => key, :value => "on"))
+            @test w.fidelity[Symbol(key)] === :on
+            EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => key, :value => "off"))
+            @test w.fidelity[Symbol(key)] === :off
+        end
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "raim", :value => "detect"))
+        @test w.fidelity[:raim] === :detect
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "raim", :value => "exclude"))
+        @test w.fidelity[:raim] === :exclude
+        # ...bad rungs REJECTED before landing (would throw in decide!/observe! → kill the session).
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "raim", :value => "maybe"))
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "noise", :value => "loud"))
+
+        # INTRODUCING a GPS key on a scenario WITHOUT it is ALLOWED (the :ep/:estimator/:deinterleaver
+        # contract, NOT :cfar's introduce-reject) — a non-GPS world has no GpsSolver to consume it.
+        srv2 = EWSim.Server(_detect_scenario(1))
+        w2 = srv2.scn.world
+        @test !haskey(w2.fidelity, :raim)
+        EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "raim", :value => "detect"))
+        @test w2.fidelity[:raim] === :detect
+        EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "iono", :value => "on"))
+        @test w2.fidelity[:iono] === :on
+    end
+
+    @testset "warmup! tolerates a GPS scenario (slice-7, radar-free, phases 2+3+4)" begin
+        # A GPS scenario is radar-free like slice-5/6, so warmup!'s ROC-batch warm is skipped (the
+        # radar-guard); the tick!+state_frame warm still runs — warming the FULL phase-2+3+4 §9
+        # reuse pipeline (GpsSatellite→GpsReceiver→GpsSolver) plus the display-array telemetry
+        # round-trip. It must NOT throw and must leave the live World pristine.
+        srv = EWSim.Server(_gps_scenario(6))
+        t0   = srv.scn.world.t
+        pos0 = srv.scn.world.entities[:sv1].pos
+        EWSim.warmup!(srv)                                          # must NOT throw (no radar)
+        @test srv.scn.world.t == t0
+        @test srv.scn.world.entities[:sv1].pos == pos0
         @test rand(copy(srv.scn.world.rng)) == rand(Xoshiro(6))    # live rng untouched
     end
 

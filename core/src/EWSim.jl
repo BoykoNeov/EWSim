@@ -25,6 +25,7 @@ include("gnss.jl")
 include("radar.jl")
 include("esm.jl")
 include("geolocation.jl")
+include("gps.jl")
 include("scenario.jl")
 include("batch.jl")
 include("server.jl")
@@ -60,6 +61,8 @@ export difference_histogram, detect_pris, associate, assoc_pct, DEINTERLEAVER_MO
 export ConstantVelocity, RadarSensor, Jammer, DFSensor, Geolocator, Knob, Scenario, load_scenario
 # Multi-emitter EW subsystems (slice 6): the phase-2+3+4 capstone pipeline
 export PulseEmitter, ESMReceiver, Deinterleaver
+# GPS subsystems (slice 7): the §9 cross-domain reuse pipeline (build_env!→observe!→decide!)
+export GpsSatellite, GpsReceiver, GpsSolver
 # Offline batch sweeps (ROC artifact + slice-2 coverage diagram)
 export run_batch, roc_grid, load_roc, coverage_grid, load_coverage
 # Interactive socket run loop (the live/driver path)

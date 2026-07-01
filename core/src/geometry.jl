@@ -138,6 +138,13 @@ end
 # Inf/NaN (advisor's output-clamp-over-ridge guidance).
 _finite(x::Real) = isfinite(x) ? min(x, FINITE_CEIL) : FINITE_CEIL
 
+# A SIGNED finite clamp for a coordinate readout that may be negative (a fix_x/fix_y, a GPS
+# residual): a singular solve can blow to ±Inf/NaN → JSON poison, so map non-finite to
+# FINITE_CEIL and clamp the magnitude to [−FINITE_CEIL, FINITE_CEIL]. The signed sibling of
+# `_finite`, kept here in the shared lib so BOTH geolocation.jl (slice 5) and gps.jl (slice 7)
+# draw from it (the §9 shared-lib layering, not a peer subsystem's private helper).
+_finite_coord(x::Real) = isfinite(x) ? clamp(float(x), -FINITE_CEIL, FINITE_CEIL) : FINITE_CEIL
+
 # ---------------------------------------------------------------------------------
 # The N-dimensional shared solver (slice 7 §9 reuse — "extend, don't fork"). GPS
 # (4 unknowns) needs the same normal-equation solve DF (2 unknowns) uses; rather

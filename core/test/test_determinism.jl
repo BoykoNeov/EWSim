@@ -321,4 +321,78 @@ end
         @test reinterpret(UInt64, ti1) == reinterpret(UInt64, ti2)
         @test reinterpret(UInt64, ti1) == reinterpret(UInt64, tc)  # introduce added no draws either
     end
+
+    # Slice 7: the GPS pipeline reuses build_env!→observe!→decide! a THIRD time (the §9 cross-
+    # domain reuse). The GpsReceiver is the ONE draw site (2·n_sats — multipath then noise per
+    # satellite, all in phase-3 observe!); the GpsSolver's phase-4 fix/DOP/RAIM is PURE (no draw)
+    # and the five error toggles gate a CONTRIBUTION, never a draw — so a slice-7 scenario is
+    # deterministic given the drawn pseudoranges (the slice-2/4/5/6 shape, no draw-topology
+    # hazard). Pin (a) a same-seed bit-identical PSEUDORANGE trace (the RNG fingerprint, sharper
+    # than pos_err — the slice-6 advisor lesson), (b) the draw-free rung switch: raim off vs
+    # exclude → SAME rng end-state but DIFFERENT n_sats_used, and (c) mid-run toggle AND introduce
+    # of EACH of the six keys bit-identical.
+    @testset "a GPS scenario replays bit-identically (the §9 reuse pipeline)" begin
+        _gsat(az, el; r = 20_000_000.0) = (a = deg2rad(az); e = deg2rad(el);
+            Vec3(r * cos(e) * cos(a), r * cos(e) * sin(a), r * sin(e)))
+        AZEL = [(0.0, 70.0), (60.0, 35.0), (120.0, 40.0), (180.0, 30.0), (240.0, 45.0), (300.0, 55.0)]
+        function gps_trace(seed; toggle_key = nothing, toggle_val = :on, toggle_at = 0,
+                           start_fid = Dict{Symbol,Symbol}(), nsteps = 30, revisit_s = 0.003)
+            w = World(seed = seed, fidelity = copy(start_fid))
+            for (i, (az, el)) in enumerate(AZEL)
+                id = Symbol("sv", i)
+                w.entities[id] = Entity(id, :gps_satellite; pos = _gsat(az, el),
+                    comp = Dict{Symbol,Any}(:clock_err_m => (i == 2 ? 10.0 : 0.0),
+                                            :fault_bias_m => (i == 3 ? 80.0 : 0.0)))
+            end
+            w.entities[:rx1] = Entity(:rx1, :gps_receiver; pos = Vec3(1000.0, -500.0, 0.0),
+                comp = Dict{Symbol,Any}(:sigma_range_m => 3.0, :sigma_mp_m => 1.5,
+                    :iono_zenith_m => 5.0, :tropo_zenith_m => 2.4, :clock_bias_m => 30.0,
+                    :elevation_mask_deg => 0.0, :raim_threshold => 5.0))
+            subs = Subsystem[]
+            for id in sort!(collect(keys(w.entities)))
+                e = w.entities[id]
+                if e.kind === :gps_satellite
+                    push!(subs, ConstantVelocity(id)); push!(subs, GpsSatellite(id))
+                elseif e.kind === :gps_receiver
+                    push!(subs, ConstantVelocity(id)); push!(subs, GpsReceiver(id; revisit_s = revisit_s))
+                    push!(subs, GpsSolver(id))
+                end
+            end
+            rho = Float64[]; nused = Int[]
+            for i in 1:nsteps
+                (toggle_key !== nothing && i == toggle_at) && (w.fidelity[toggle_key] = toggle_val)
+                tick!(w, subs, 1.0e-3)
+                append!(rho, w.env[:pseudoranges].rho)                  # the drawn ρ fingerprint
+                push!(nused, Int(w.env[:telemetry]["rx1.n_sats_used"]))
+            end
+            return w, rho, nused
+        end
+        # NB the ρ VALUES carry the toggled error-term CONTRIBUTIONS (iono/noise/... add to the
+        # measurement), so a toggle changes ρ while keeping the DRAW COUNT fixed. The invariant to
+        # pin across toggles is therefore the RNG END-STATE (draw-count-invariance), NOT the ρ
+        # stream — a raim toggle leaves ρ identical too (it is pure phase-4), but the five error
+        # toggles change ρ by design. The same-seed replay below pins the ρ stream (no toggle).
+        wa, ra, na = gps_trace(7); wb, rb, nb = gps_trace(7)
+        @test ra == rb && reinterpret(UInt64, ra) == reinterpret(UInt64, rb)   # bit-identical ρ stream
+        @test na == nb
+
+        # draw-free rung switch: raim :off vs :exclude share the rng end-state (no draw change)
+        # but n_sats_used differs (6 vs 5 — the fault is excluded; not a dead knob).
+        wo, ro, no = gps_trace(7; start_fid = Dict(:raim => :off))
+        we, re, ne = gps_trace(7; start_fid = Dict(:raim => :exclude))
+        @test reinterpret(UInt64, ro) == reinterpret(UInt64, re)   # same drawn stream (rung is phase-4)
+        @test rand(copy(wo.rng)) == rand(copy(we.rng))             # ...and rng end-states in lockstep
+        @test no != ne                                             # ...but n_sats_used differs (6 vs 5)
+
+        # mid-run TOGGLE and INTRODUCE of EACH of the six keys → the RNG END-STATE is bit-identical
+        # to never-toggling (the toggle changes NO draw — the whole introduce-safe claim). ρ VALUES
+        # differ for the five error toggles (the contribution enters), so pin the rng state, not ρ.
+        wn, _, _ = gps_trace(7)                                    # baseline (no fidelity keys)
+        rng_base = rand(copy(wn.rng))
+        for key in (:iono, :tropo, :clock, :multipath, :noise, :raim)
+            val = key === :raim ? :exclude : :on
+            wk, _, _ = gps_trace(7; toggle_key = key, toggle_val = val, toggle_at = 15)
+            @test rand(copy(wk.rng)) == rng_base                   # introduce/toggle added no draws
+        end
+    end
 end
