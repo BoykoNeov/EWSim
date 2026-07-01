@@ -1,0 +1,107 @@
+# slice7_raim — GPS RAIM / fault-detection scene (HANDOFF §9 REUSE milestone, §10 item 7, slice 7
+# gate 3). The second GPS lesson (the slice-4 selfscreen+standoff two-scenario precedent): an
+# OVER-DETERMINED constellation, one SPOOFED satellite, the `raim` rung + a fault-bias slider.
+#
+# THE LESSON — RAIM (Receiver Autonomous Integrity Monitoring):
+#   With more than the minimum 4 satellites the fix is over-determined, so the least-squares
+#   RESIDUALS carry a consistency check. A single faulty/spoofed satellite (a biased pseudorange)
+#   cannot be absorbed by the 4 unknowns and leaks into the residual → the RAIM statistic
+#   raim_stat = √(SSE/(n−4)) inflates above a threshold. Three rungs (the shared fidelity cycler
+#   button = the raim cycler):
+#     • raim = :off     — no integrity check; the flag NEVER raises even under the fault (the naïve
+#                         baseline that TRUSTS the spoofed satellite — the lesson's "before").
+#     • raim = :detect  — flag = raim_stat > threshold; the integrity flag RAISES (fault detected).
+#     • raim = :exclude — on alarm, identify the suspect by the LARGEST normalized residual, DROP it
+#                         and RE-SOLVE with n−1 (keeping ≥ 4) → the fix SNAPS BACK toward truth
+#                         (pos_err_m collapses) and n_sats_used drops by 1.
+#
+# THE FAULT SLIDER (the not-a-dead-knob crossover — the slice-4 burn-through / jammer-power precedent):
+#   sv3 carries a `fault_bias_m` (a static spoof/SV-failure bias added to its pseudorange — a live
+#   slider). Ramping it across the detection threshold RAISES the flag at the crossover. Probed
+#   (n=6, threshold=5, noise on, seed 7): fault=0 → stat 1.25 (flag 0) | fault=43 → stat 4.65 (flag
+#   0, just below) | fault=50 → stat 5.60 (flag 1, crossover) | fault=100 (the DEFAULT) → stat 12.4
+#   (flag 1, margin 2.5×) | fault=150 → stat 19.2. Under :exclude the largest-residual ID picks sv3
+#   every time (fault_sat=3); dropping it collapses pos_err_m 205 → 23 m (n_sats_used 6 → 5) — the
+#   snap-back. The fault is DETERMINISTIC (a constant bias, no draw), so the slider is draw-count-safe
+#   and the whole RAIM lesson is introduce-safe + bit-identical under a held seed.
+#
+# The DEFAULT `raim: detect` so the integrity flag is VISIBLE on connect (the default fault=100 is
+# well above threshold). RAIM needs OVER-determination: n=6 (n−4 = 2 residual DOF); :exclude
+# re-solving drops to 5 (still ≥ 4 — never below). NO draw-topology hazard (the fault is a constant,
+# the raim rung is post-draw); `raim` present is the GPS-view discriminator (raim ∈ fidelity → the
+# client sky/DOP/residual view; the range_axis_m→cfar / estimator→geoloc precedent).
+#
+# UNITS (the §1 trifecta): positions/pseudoranges/biases (incl. fault_bias_m) in METRES; the receiver
+# clock unknown carried as c·b METRES internally, shipped as ns. Numbers probed against the LIVE
+# build_env!→observe!→decide! wire path and pinned in net/slice7_verify.gd (the slice-3/4/5/6 rule).
+name: slice7_raim
+seed: 7
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  # A minimal realistic error set (noise ON → a realistic ranging stat; iono/tropo/clock/multipath
+  # OFF so the RAIM lesson isn't muddied by a large error budget — one lesson per scenario). `raim:
+  # detect` DEFAULT so the flag is up on connect (cycle the button → :exclude to snap back, → :off
+  # to see the naïve baseline trust the spoof). All keys introduce-safe + toggle-bit-identical.
+  iono: off
+  tropo: off
+  clock: off
+  multipath: off
+  noise: on
+  raim: detect
+
+entities:
+  # Six flat-local fictional satellites (named approximation — NO ECEF/orbits), a spread
+  # upper-hemisphere constellation (az 0/60/120/180/240/300°, el 30–70°) → over-determined (n=6, so
+  # :exclude drops to 5, still solvable). STATIC (no drift — the RAIM lesson is the fault, not the
+  # geometry; one lesson per scenario). sv3 carries the injected `fault_bias_m` (the spoof) — the
+  # LIVE slider; all others 0. Default fault 100 m → raim_stat 12.4 (flag up on connect).
+  - id: sv1
+    kind: gps_satellite
+    pos: [6840402.9, 0.0, 18793852.4]
+    vel: [0.0, 0.0, 0.0]
+  - id: sv2
+    kind: gps_satellite
+    pos: [8191520.4, 14188129.6, 11471528.7]
+    vel: [0.0, 0.0, 0.0]
+  - id: sv3
+    kind: gps_satellite
+    pos: [-7660444.4, 13268279.0, 12855752.2]
+    vel: [0.0, 0.0, 0.0]
+    gps_satellite: {fault_bias_m: 100.0}      # the SPOOF — a LIVE slider ramps it across threshold
+  - id: sv4
+    kind: gps_satellite
+    pos: [-17320508.1, 0.0, 10000000.0]
+    vel: [0.0, 0.0, 0.0]
+  - id: sv5
+    kind: gps_satellite
+    pos: [-7071067.8, -12247448.7, 14142135.6]
+    vel: [0.0, 0.0, 0.0]
+  - id: sv6
+    kind: gps_satellite
+    pos: [5735764.4, -9934635.3, 16383040.9]
+    vel: [0.0, 0.0, 0.0]
+
+  # The GPS receiver + solver. σ_range = 3 m (sets the RAIM stat's /σ normalization), a 0° mask (all
+  # 6 sats visible → the full over-determined solve), raim_threshold = 5 (the EMPIRICAL σ-multiple —
+  # gnss.jl route (iii); the crossover the fault slider ramps across). True clock bias c·b = 30 m.
+  - id: rx1
+    kind: gps_receiver
+    pos: [1000.0, -500.0, 0.0]
+    vel: [0.0, 0.0, 0.0]
+    gps_receiver:
+      sigma_range_m: 3.0
+      sigma_mp_m: 1.0
+      iono_zenith_m: 5.0
+      tropo_zenith_m: 2.4
+      clock_bias_m: 30.0
+      elevation_mask_deg: 0.0
+      raim_threshold: 5.0
+      revisit_s: 0.05
+
+# The one LIVE slider: the fault bias on the spoofed satellite sv3 (metres). Ramping it across the
+# detection threshold raises the integrity flag at the crossover (probed: flag flips between 43 and
+# 50 m). The raim rung is a FIDELITY (the cycler button), never a slider. σ_range / sat-count / mask
+# are load-time static (the plan's explicit rule).
+knobs:
+  - {target: sv3, key: fault_bias_m, min: 0.0, max: 200.0, label: "fault bias (m)"}

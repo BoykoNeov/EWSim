@@ -1,0 +1,117 @@
+# slice7_dop — GPS DOP / error-budget scene (HANDOFF §9 REUSE milestone, §10 item 7, slice 7
+# gate 3). The §9 payoff wired: the SAME `gauss_newton` scaffold that fixed a DF emitter (slice 5,
+# N=2) trilaterates a GPS receiver here (N=4 — x, y, z, and the receiver clock bias c·b), and the
+# SAME `(HᵀH)⁻¹` DOP math that drew a DF error ellipse computes GPS dilution-of-precision.
+#
+# THE LESSON 1 — DOP (dilution of precision):
+#   Every pseudorange has the SAME ranging accuracy (σ_range), yet the position error is set by the
+#   GEOMETRY, not the ranging: a constellation SPREAD across the sky pins the fix (DOP ≈ 1–3), a
+#   CLUSTERED one smears it (DOP large). σ_pos ≈ PDOP·σ_range. The satellites DRIFT (sv2 + sv4 climb
+#   toward zenith over ~8 s → the spread collapses → GDOP breathes 3.0 → 4.7), so the DOP readout
+#   sweeps good→bad on its own (the slice-5 emitter-motion precedent for making a geometry lesson
+#   visible). Because the sats sit far OVERHEAD (one-sided vertical info) VDOP > HDOP on this layout
+#   (a property of the placement, probed — NOT a universal). DOP is UNIT-variance geometry, so it is
+#   σ-INVARIANT (the slice-5 σθ-trap on the GPS surface) — the σ enters only at the σ_pos readout.
+#
+# THE LESSON 2 — the error budget (the five error-term toggles, the NEW button ROW):
+#   iono / tropo / clock / multipath / noise each toggle independently (fidelity keys, not sliders).
+#   Toggling one adds/removes its contribution to pos_err_m — the error budget made visible. The
+#   TRAP (advisor): a COMMON-MODE range bias is absorbed by the clock unknown c·b, not position. So
+#   iono/tropo (elevation-scaled 1/sin(el)) corrupt pos_err only via their elevation-DIFFERENTIAL
+#   part (a lot lands in clock_bias_ns), and the per-SV `clock` errors corrupt position only because
+#   they DIFFER (distinct per-SV values here — a common value would be absorbed). Probed effects on
+#   pos_err_m (draw-held, so each Δ is the pure deterministic term): each of iono/tropo/clock visibly
+#   moves pos_err. On the LIVE wire path (t=0.1 s, 2 looks) the default (iono+tropo+noise) gives
+#   pos_err ≈ 11.1 m; toggling `clock` ON from the default shifts it 11.1 → 43.6 m (Δ +32.4) — the
+#   clean not-a-dead-knob the verifier pins (clock is the biggest lever: distinct per-SV → position).
+#
+# The scene is DETERMINISTIC given the drawn pseudoranges (fix/DOP are closed-form) — like slices
+# 2/4/5/6, unlike slice 3, there is NO draw-topology hazard: every GPS fidelity key is introduce-safe
+# AND toggle-bit-identical (the GpsReceiver draws 2·n_sats unconditionally; a toggle gates a term's
+# CONTRIBUTION, never the DRAW). `raim` is present (= off) — it is the GPS-view discriminator at the
+# handshake (raim ∈ fidelity → the client's sky/DOP view; the range_axis_m→cfar / estimator→geoloc
+# precedent). No fault here (all fault_bias_m = 0) — that is the slice7_raim.yaml lesson.
+#
+# UNITS (the §1 trifecta): positions/pseudoranges/biases in METRES; the receiver clock unknown is
+# carried as c·b in METRES internally, shipped as ns (clock_bias_ns). A metres/seconds slip on the
+# clock term (a factor of c ≈ 3e8) is this slice's signature bug. Numbers probed against the LIVE
+# build_env!→observe!→decide! wire path (the slice-3/4/5/6 rule) and pinned in net/slice7_verify.gd.
+name: slice7_dop
+seed: 7
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  # The five error-term toggles (the NEW button ROW) + the raim rung. Default a REALISTIC subset
+  # (iono+tropo+noise ON) so the fix has a visible error and toggling each term teaches its
+  # contribution. `raim: off` — no integrity check here (no fault); its PRESENCE is the GPS-view
+  # discriminator. Each key is introduce-safe + toggle-bit-identical (no draw-topology hazard).
+  iono: on
+  tropo: on
+  clock: off
+  multipath: off
+  noise: on
+  raim: off
+
+entities:
+  # Six flat-local fictional satellites (named approximation — NO ECEF/WGS84/orbit propagation; far
+  # point sources at ~20 000 km in the sim's SI inertial frame). Spread across the upper hemisphere
+  # (az 0/55/125/190/250/310°, el 25–75°) → a good constellation (GDOP ≈ 3.0, VDOP > HDOP). Each
+  # carries a DISTINCT per-SV `clock_err_m` (the satellite clock error — distinct so the `clock`
+  # toggle corrupts POSITION, not a common-mode absorbed by the receiver clock). sv2 + sv4 carry a
+  # drift `vel` (climbing toward zenith) so the spread collapses and GDOP sweeps 3.0 → 4.7 over ~8 s
+  # (the DOP-breathes lesson; probed to keep all 6 above the mask / non-coplanar across the window).
+  - id: sv1
+    kind: gps_satellite
+    pos: [5176380.9, 0.0, 19318516.5]
+    vel: [0.0, 0.0, 0.0]
+    gps_satellite: {clock_err_m: 12.0}
+  - id: sv2
+    kind: gps_satellite
+    pos: [9934635.3, 14188129.6, 10000000.0]
+    vel: [-400000.0, -600000.0, 700000.0]
+    gps_satellite: {clock_err_m: -8.0}
+  - id: sv3
+    kind: gps_satellite
+    pos: [-8111595.8, 11584559.3, 14142135.6]
+    vel: [0.0, 0.0, 0.0]
+    gps_satellite: {clock_err_m: 5.0}
+  - id: sv4
+    kind: gps_satellite
+    pos: [-17850778.7, -3147573.9, 8452365.2]
+    vel: [550000.0, -300000.0, 800000.0]
+    gps_satellite: {clock_err_m: -15.0}
+  - id: sv5
+    kind: gps_satellite
+    pos: [-4396926.2, -12080455.5, 15320888.9]
+    vel: [0.0, 0.0, 0.0]
+    gps_satellite: {clock_err_m: 9.0}
+  - id: sv6
+    kind: gps_satellite
+    pos: [10530815.7, -12550137.4, 11471528.7]
+    vel: [0.0, 0.0, 0.0]
+    gps_satellite: {clock_err_m: -3.0}
+
+  # The single GPS receiver + solver platform (co-located GpsReceiver phase-3 draw + GpsSolver
+  # phase-4 fix). STATIC config (all draw-count / geometry defining → load-time only): σ_range = 3 m
+  # ranging noise, σ_mp = 1 m multipath, the deterministic iono/tropo zenith magnitudes, the TRUE
+  # receiver clock bias c·b = 30 m (≈ 100 ns, the value the solver recovers), a 5° elevation mask
+  # (inert here — all sats stay well above it), and raim_threshold (unused, raim off). revisit 0.05 s.
+  - id: rx1
+    kind: gps_receiver
+    pos: [1000.0, -500.0, 0.0]
+    vel: [0.0, 0.0, 0.0]
+    gps_receiver:
+      sigma_range_m: 3.0
+      sigma_mp_m: 1.0
+      iono_zenith_m: 5.0
+      tropo_zenith_m: 2.4
+      clock_bias_m: 30.0
+      elevation_mask_deg: 5.0
+      raim_threshold: 5.0
+      revisit_s: 0.05
+
+# NO sliders: the interactive levers are the five error-term TOGGLES (the fidelity button row) and
+# the constellation DRIFT (automatic, sweeping DOP). σ_range/σ_mp/sat-count/mask are load-time static
+# (draw-count / geometry defining — the plan's explicit "no live geometry/σ slider" rule). The fault
+# (slider) + raim rung are the slice7_raim.yaml lesson.
+knobs: []

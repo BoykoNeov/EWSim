@@ -799,7 +799,8 @@ start that server, then `godot --headless --path clients/godot --script res://ne
 (deinterleave success-rate vs jitter/emitter-density) + `clients/notebooks/slice6_pri.jl` Pluto diagram.
 
 **Slice 7 — GPS (pseudoranges → trilateration → DOP + RAIM)** (HANDOFF §9 REUSE milestone / §10 item 7)
-— **Gates 1–2 done & green (1448 tests).** The slice that cashes in §9 ("why the suite is one project"):
+— **COMPLETE. Gates 1–3 done & green (1492 tests); wire + UI machine-verified AND the GPS sky/residual
+`_draw_gps` VISUALLY CONFIRMED (2026-07-01).** The slice that cashes in §9 ("why the suite is one project"):
 lights NO new tick phase — it REUSES the `build_env!→observe!→decide!` shape a third time — its novelty
 is CROSS-DOMAIN CODE REUSE (the same `geometry.jl`/`estimation.jl` that fixed a DF emitter now
 trilaterate a GPS receiver, generalized 2→4: x,y,z + the receiver clock bias `c·b`). Lesson 1 = **DOP**
@@ -921,13 +922,65 @@ the phase-2+3+4 §9 pipeline + display-array round-trip). Slices 1–6 byte-iden
 the radar/detection path; the `_sample_z` golden + all prior testsets green through the include). Server
 handshake (no `_gps_axis_info` — the satellites MOVE, so unlike CFAR's `range_axis_m` / ESM's `pri_axis_us`
 there is no static axis; the gate-3 GPS-view discriminator is `raim ∈ fidelity`), the scenario YAMLs, the
-Godot GPS/sky view, and the verifier are all deferred to gate 3. **Next: gate 3** — `set_fidelity` on the
-six keys (no server change); `slice7_dop.yaml` + `slice7_raim.yaml` probed against the live wire; the Godot
-GPS view (sky plot + residual bars + DOP readout + five-toggle button row + raim cycler + fault slider);
-`net/slice7_verify.gd` + `net/slice7_ui_test.gd`; `Sandbox.tscn` smoke-load both; `test_scenario.jl` both
-loaders; `_draw_gps` visually confirmed via the shot harness.
+Godot GPS/sky view, and the verifier are all deferred to gate 3.
 
-Run the slice-7 gate-2 tests: `pwsh tools/test.ps1` (all 1448 green). No client/scenario yet (gate 3).
+Gate 3 (two scenarios + Godot GPS view + verifiers — **DONE & green, 1492 tests (+44); wire + UI
+machine-verified AND `_draw_gps` VISUALLY CONFIRMED 2026-07-01**). The core fidelity plumbing + the
+`test_server.jl` GPS arms (six-key `set_fidelity` write/reject + introduce-safe + GPS-free warmup) landed in
+**gate 2**, so gate 3 = the scenarios + client + verifiers + loader tests — **NO `core/src/*.jl` change**, so
+slices 1–6 are byte-identical *structurally* (the diff is `Sandbox.gd` + `test_scenario.jl` + four new files
+only; the `_sample_z` golden untouched — stronger than "tests still pass"). `scenarios/slice7_dop.yaml` (6-sat
+upper-hemisphere spread, DISTINCT per-SV clock errors, sv2+sv4 drift climbing to zenith → GDOP sweeps 3.05→4.57
+over ~8 s; iono+tropo+noise default; **raim:off present = the GPS-view discriminator**, the range_axis_m→cfar /
+estimator→geoloc precedent) + `scenarios/slice7_raim.yaml` (6 sats, sv3 faulted 100 m, raim:detect default so
+the flag is up on connect, fault_bias_m slider). **Numbers PROBED against the LIVE
+build_env!→observe!→decide! wire path** (the slice-3/4/5/6 rule) + reproduced through the loader. **The
+advisor's error-budget trap baked in:** a common-mode range bias is absorbed by the receiver clock `c·b`, so
+DISTINCT per-SV clock errors (the `clock` toggle moves pos_err 11.1→43.6) + elevation-DIFFERENTIAL iono/tropo
+are what corrupt POSITION (a lot else lands in `clock_bias_ns`) — the verifier toggles `clock` (the biggest
+lever; each of the five terms is unit-pinned in gate-2 `test_gps.jl`). Godot `Sandbox.gd`: a NEW `"gps"` render
+mode (`_enter_gps_mode` off `raim ∈ fidelity`); `_draw_gps` = a polar SKY PLOT (zenith center / horizon edge,
+satellites colored in-solve green / masked-excluded grey / faulted orange — the geometry→DOP visual) + a
+per-satellite RESIDUAL bar chart (the spoofed sat's bar SPIKES — the RAIM signature), ALL telemetry; the
+DOP/RAIM scalars render in the left readout (`_update_readout` skips the sat_* arrays — the slice-3/6
+float()-crash watch-item, re-confirmed). The shared fidelity button becomes the raim cycler
+(off→detect→exclude); the **NEW five-error-toggle button ROW** (`_gps_toggle_btns` — the one genuinely new
+client-UI element, advisor: five toggles not a cycler) + the fault slider. A gps-specific left inset
+(`GPS_PLOT_L`) clears the tall readout panel. The slice-1..6 views are UNTOUCHED (all their UI tests re-run
+green). `net/slice7_verify.gd` (drives the real server over BOTH scenarios: DOP finite + decomposes
+gdop²=pdop²+tdop² / pdop²=hdop²+vdop², **VDOP>HDOP** on the shipped layout, **sweeps 3.05→4.55 with the drift**;
+the `clock` toggle moves pos_err [bit-identical t, draw-held]; then `load_scenario slice7_raim`: the fault
+slider raises `raim_flag` at the crossover [20 m→flag 0, 120 m→flag 1, bit-identical t — the not-a-dead-knob];
+`set_fidelity raim exclude` DROPS `n_sats_used` 6→5, `fault_sat`=3, and COLLAPSES `pos_err_m` 211.9→5.6 [the
+snap-back] — all on the SCALARS, never the display arrays. `S7V OK`, exit 0). **Verifier mechanics:** step
+counts are MULTIPLES of `emit_every` (16) so the LAST emit of a burst lands exactly on the target t (the
+slice-2/6 drain contract — an off-multiple count leaves the last frame short and the drain times out; this bit
+the first run). `net/slice7_ui_test.gd` (mock client, no server: handshake → gps mode + the raim cycler; the
+ring walks off→detect→exclude and wraps; the five error toggles each send `set_fidelity` + flip via the
+`.bind(term)` wiring; the fault slider sends `set_param`; reset resyncs the rung + toggles to defaults —
+`S7UI OK`). `Sandbox.tscn` smoke-loaded headless against BOTH slice-7 servers (server `DONE` ⇒ scene connected
+on the gps branch, no GDScript errors — catches gps-branch parse bugs the SimClient verifier can't).
+`test_scenario.jl` +2 loader testsets (both loaders: GPS fidelity defaults, NO radar/jammer/DF/ESM fidelity or
+entities, ≥4 sats [≥5 for RAIM], one receiver, DISTINCT per-SV clock errors [the `clock`-corrupts-position
+premise], fault_bias stored SI METRES [`haskey :fault_bias_m` the discriminating unit check], error keys not
+knobs, the fault slider addresses `:fault_bias_m`). The `_draw_gps` PIXEL branch (Godot skips `_draw` headless)
+VISUALLY CONFIRMED via 3 windowed shots (the shot harness, [[ewsim-godot-headless]] — a throwaway ShotGps
+wrapper pointed `run/main_scene` at itself, reverted after): **DOP** = a spread green constellation + the DOP
+readout (VDOP>HDOP); **RAIM-detect** = raim_flag 1 + pos_err 209 + the sv3 residual tallest; **RAIM-exclude** =
+sv3 ORANGE (excluded) + the isolated residual spike (max |r| = 101 m) + n_sats_used 5 + pos_err collapsed
+209→5.9 — the RAIM lesson as a picture. **Showcase note:** the DOP drift is tuned for an ~8 s good→bad sweep;
+a longer live run keeps clustering toward a near-singular constellation (readout → `FINITE_CEIL`) — reset to
+replay. No open step remains in slice 7's required gates. **(stretch, deferred)** offline `batch.jl`
+`kind=:dop_mc`/`:raim_roc` + `clients/notebooks/slice7_gps.jl` Pluto.
+
+Run the slice-7 showcase: `julia --project=core tools/server.jl scenarios/slice7_dop.yaml` (or
+`scenarios/slice7_raim.yaml`), then launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-detects GPS
+and shows the sky/residual view; toggle the five error terms to watch the error budget breathe, cycle the
+`raim:` button to raise the integrity flag / snap the fix back, drag the fault-bias slider across the
+detection threshold). Re-run the gate-3 proof headless: start that server, then `godot --headless --path
+clients/godot --script res://net/slice7_verify.gd` (exit 0 = pass; it `load_scenario`s slice7_raim itself, so
+launch it against the slice7_dop server). The UI test needs NO server: `godot --headless --path clients/godot
+--script res://net/slice7_ui_test.gd`. All 1492 tests: `pwsh tools/test.ps1`.
 
 ---
 

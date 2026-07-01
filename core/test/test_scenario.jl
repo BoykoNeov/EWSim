@@ -19,6 +19,8 @@ const _SCEN4S = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice4_sel
 const _SCEN4O = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice4_standoff.yaml"))
 const _SCEN5 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice5_geoloc.yaml"))
 const _SCEN6 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice6_deinterleave.yaml"))
+const _SCEN7D = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice7_dop.yaml"))
+const _SCEN7R = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice7_raim.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -335,6 +337,96 @@ end
         # the two MEASUREMENT-QUALITY knobs on the ESM (both on comp keys the consumer reads).
         @test all(k -> k.target === :esm1, scn.knobs)
         @test Set(k.key for k in scn.knobs) == Set([:jitter_us, :p_intercept])
+    end
+
+    @testset "loader parses slice7_dop.yaml (GPS DOP / error-budget, sky view)" begin
+        # Cheap insurance like the slice-2..6 loader tests: a malformed showcase fails HERE as a
+        # clear test, not downstream as a confusing server-launch timeout in the Godot verifier.
+        scn = load_scenario(_SCEN7D)
+        @test scn.name == "slice7_dop"
+        # `raim` present is the GPS-view discriminator (raim ∈ fidelity → the client sky/DOP view).
+        # DOP scene default: a realistic error subset (iono+tropo+noise) + raim off (no fault here).
+        @test scn.world.fidelity[:raim] === :off
+        @test scn.world.fidelity[:iono] === :on
+        @test scn.world.fidelity[:tropo] === :on
+        @test scn.world.fidelity[:noise] === :on
+        @test scn.world.fidelity[:clock] === :off
+        @test scn.world.fidelity[:multipath] === :off
+        # NO radar/jammer/DF/ESM physics — GPS is single-domain (the one-lesson rule), so the GPS
+        # path never touches those RNG streams and slices 1-6 stay byte-identical.
+        @test !haskey(scn.world.fidelity, :propagation)
+        @test !haskey(scn.world.fidelity, :cfar)
+        @test !haskey(scn.world.fidelity, :ep)
+        @test !haskey(scn.world.fidelity, :estimator)
+        @test !haskey(scn.world.fidelity, :deinterleaver)
+        @test !any(e -> e.kind in (:radar, :jammer, :target, :clutter, :emitter, :df_sensor,
+                                   :df_station, :pulse_emitter, :esm), values(scn.world.entities))
+
+        # ≥ 4 satellites (the 4×4 x/y/z/clock solve) + exactly one receiver.
+        sats = sort!([id for (id, e) in scn.world.entities if e.kind === :gps_satellite])
+        @test length(sats) ≥ 4
+        @test count(e -> e.kind === :gps_receiver, values(scn.world.entities)) == 1
+        # distinct per-SV clock errors (stored SI metres — a common value would be absorbed by the
+        # receiver clock; the `clock` toggle corrupts POSITION only because they DIFFER, advisor).
+        clkerrs = [scn.world.entities[id].comp[:clock_err_m] for id in sats]
+        @test length(unique(clkerrs)) > 1
+        # no fault in the DOP scene (all fault_bias_m = 0 — the fault is the slice7_raim lesson).
+        @test all(scn.world.entities[id].comp[:fault_bias_m] == 0.0 for id in sats)
+        # at least one satellite drifts (the DOP-sweep lesson) — a nonzero velocity.
+        @test any(EWSim._norm3(scn.world.entities[id].vel) > 0 for id in sats)
+
+        # receiver config stored SI metres; the clock bias key is METRES (the §1 c·b-metres
+        # convention — haskey :clock_bias_m, NOT a seconds/ns key, is the discriminating unit check).
+        rx = first(e for (_, e) in scn.world.entities if e.kind === :gps_receiver)
+        @test haskey(rx.comp, :clock_bias_m) && rx.comp[:clock_bias_m] == 30.0
+        @test rx.comp[:sigma_range_m] == 3.0
+        @test haskey(rx.comp, :raim_threshold)
+        @test count(s -> s isa GpsSatellite, scn.subs) == length(sats)
+        @test count(s -> s isa GpsReceiver, scn.subs) == 1
+        @test count(s -> s isa GpsSolver, scn.subs) == 1
+
+        # the error terms are FIDELITY (the button row), never sliders; the DOP scene has NO knobs
+        # (its levers are the toggles + the drift). If it grew a knob it must not address an error key.
+        @test all(k -> k.key ∉ (:iono, :tropo, :clock, :multipath, :noise, :raim), scn.knobs)
+    end
+
+    @testset "loader parses slice7_raim.yaml (GPS RAIM / fault, sky+residual view)" begin
+        scn = load_scenario(_SCEN7R)
+        @test scn.name == "slice7_raim"
+        # raim present (the discriminator) + DEFAULT :detect so the integrity flag is visible on
+        # connect (the default fault is above threshold). noise on (a realistic stat); others off.
+        @test scn.world.fidelity[:raim] === :detect
+        @test scn.world.fidelity[:noise] === :on
+        @test !haskey(scn.world.fidelity, :propagation)
+        @test !haskey(scn.world.fidelity, :cfar)
+        @test !haskey(scn.world.fidelity, :ep)
+        @test !haskey(scn.world.fidelity, :estimator)
+        @test !haskey(scn.world.fidelity, :deinterleaver)
+        @test !any(e -> e.kind in (:radar, :jammer, :target, :clutter, :emitter, :df_sensor,
+                                   :df_station, :pulse_emitter, :esm), values(scn.world.entities))
+
+        # RAIM needs OVER-determination: ≥ 5 satellites (n−4 ≥ 1 residual DOF; :exclude drops to
+        # n−1 and must stay ≥ 4). This scene ships 6.
+        sats = sort!([id for (id, e) in scn.world.entities if e.kind === :gps_satellite])
+        @test length(sats) ≥ 5
+        @test count(e -> e.kind === :gps_receiver, values(scn.world.entities)) == 1
+
+        # exactly one satellite carries a nonzero fault_bias_m (the spoof), stored SI metres (the
+        # haskey/value on :fault_bias_m — NOT a scaled key — is the discriminating unit check; the
+        # slice-4/6 "keys equal defaults so the load must actually have run" rule).
+        faults = [(id, scn.world.entities[id].comp[:fault_bias_m]) for id in sats]
+        faulted = [id for (id, f) in faults if f != 0.0]
+        @test length(faulted) == 1
+        @test scn.world.entities[faulted[1]].comp[:fault_bias_m] == 100.0
+
+        # the ONE live slider is the fault bias on the spoofed satellite (addresses the comp key the
+        # GpsSatellite reads); the raim rung is a fidelity (the cycler button), never a slider.
+        @test length(scn.knobs) == 1
+        @test scn.knobs[1].target === faulted[1]
+        @test scn.knobs[1].key === :fault_bias_m
+        @test all(k -> k.key ∉ (:iono, :tropo, :clock, :multipath, :noise, :raim), scn.knobs)
+        @test count(s -> s isa GpsSatellite, scn.subs) == length(sats)
+        @test count(s -> s isa GpsSolver, scn.subs) == 1
     end
 
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin

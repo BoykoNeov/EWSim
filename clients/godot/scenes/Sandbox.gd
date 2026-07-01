@@ -27,8 +27,16 @@ extends Node2D
 #     (CORE output), the threshold line, and green markers at the detected PRIs (the phantom
 #     subharmonic appears under cdif, vanishes under sdif). The fidelity button cycles the
 #     deinterleaver rung (cdif↔sdif).
+#   • "gps" (slice 7) — a GPS sky-plot + satellite-residual view (none of the above shows a polar
+#     az/el sky or a per-satellite residual bar): a polar SKY PLOT (zenith center, horizon edge —
+#     the geometry→DOP visual, satellites colored in-solve / masked-excluded), a RESIDUAL bar chart
+#     (per-satellite sat_resid_m — the faulted satellite's bar spikes, the RAIM visual), and the
+#     DOP/error scalars in the readout. The shared fidelity button cycles the raim rung
+#     (off→detect→exclude); a NEW ROW of five error-term toggles (iono/tropo/clock/multipath/noise)
+#     + a fault-bias slider are the error-budget / fault levers. ALL from telemetry.
 # A handshake shipping `range_axis_m` selects "cfar"; one shipping `pri_axis_us` selects "esm";
-# one whose fidelity carries `estimator` selects "geoloc"; otherwise "spatial".
+# one whose fidelity carries `estimator` selects "geoloc"; one whose fidelity carries `raim` selects
+# "gps"; otherwise "spatial".
 
 const HOST := "127.0.0.1"
 const PORT := 8765
@@ -70,7 +78,7 @@ var _fidelity_default := {}
 # --- CFAR range-power view (slice 3): populated only when the handshake ships a range axis.
 # `_mode` switches the whole render path AND the fidelity-toggle button. The spatial mirror
 # (_entities/_blips) and the cfar mirror (_profile_db/...) are disjoint — only one is live.
-var _mode := "spatial"            # "spatial" (1/2/4) | "cfar" (3) | "geoloc" (5) | "esm" (6)
+var _mode := "spatial"            # "spatial" (1/2/4) | "cfar" (3) | "geoloc" (5) | "esm" (6) | "gps" (7)
 var _cfar_radar := ""             # radar id whose "<id>.profile_db" etc. we render
 var _range_axis: Array = []       # per-cell slant range (m) — handshake, core output
 var _n_cells := 0
@@ -119,6 +127,22 @@ var _esm_assign: Array = []       # per-pulse assigned-emitter index (0=unassign
 var _esm_pri: Array = []          # detected PRIs (µs) — the histogram markers (phantom appears/vanishes)
 var _esm_hist_hi := 1.0           # top of the histogram count axis (auto-expands)
 const DEINT_RUNGS := ["cdif", "sdif"]   # slice-6 deinterleaver cycler (the §12 badge button)
+
+# --- GPS / sky view (slice 7): populated only when the handshake fidelity carries `raim` (the
+# GPS-view discriminator — no static axis ships since the satellites MOVE, unlike CFAR/ESM). A polar
+# sky plot + a per-satellite residual bar chart, ALL from telemetry (the DOP/error scalars render in
+# the left readout). The receiver id is discovered from the entity stream (the geoloc df_station
+# pattern). The shared fidelity button becomes the raim cycler; the NEW five-toggle error row is the
+# one genuinely new client-UI element this slice adds.
+var _gps_rx := ""                 # gps_receiver id whose "<id>.sat_*"/DOP telemetry we render
+var _gps_az: Array = []           # per-satellite azimuth (deg) — sky-plot angle (display only)
+var _gps_el: Array = []           # per-satellite elevation (deg) — sky-plot radius (display only)
+var _gps_resid: Array = []        # per-satellite range residual (m) — the RAIM bar chart (display only)
+var _gps_used: Array = []         # per-satellite Bool — in-solve (green) vs masked/excluded (grey/red)
+var _gps_toggle_row: HBoxContainer = null   # the NEW five-error-toggle button ROW
+var _gps_toggle_btns := {}        # term(String) -> Button (findable + pressable by the headless UI test)
+const GPS_ERR_TERMS := ["iono", "tropo", "clock", "multipath", "noise"]   # the five error-term toggles
+const RAIM_RUNGS := ["off", "detect", "exclude"]   # slice-7 raim cycler (the shared fidelity button)
 
 func _ready() -> void:
 	_font = ThemeDB.fallback_font
@@ -216,6 +240,8 @@ func _on_scenario(obj: Dictionary) -> void:
 		_enter_esm_mode(obj)
 	elif _fidelity.has("estimator"):
 		_enter_geoloc_mode(obj)
+	elif _fidelity.has("raim"):
+		_enter_gps_mode(obj)
 	else:
 		_mode = "spatial"
 		_setup_spatial_fid_btn()
@@ -291,6 +317,75 @@ func _enter_esm_mode(obj: Dictionary) -> void:
 		_prop_btn.pressed.connect(_on_deint_pressed)
 	_prop_btn.tooltip_text = "Cycle deinterleaver (set_fidelity): cdif ↔ sdif"
 
+func _enter_gps_mode(_obj: Dictionary) -> void:
+	# Slice-7 GPS: a handshake whose fidelity carries `raim` (and NO range_axis_m / pri_axis_us /
+	# estimator) flips the client into the sky/DOP view (no static axis ships — the satellites move,
+	# unlike CFAR/ESM; `raim` presence is the discriminator). The shared fidelity button becomes the
+	# raim cycler (off→detect→exclude); the disconnect is guarded so the headless UI test — which
+	# builds the button without _build_ui's connect — doesn't error, exactly like _enter_cfar_mode.
+	# Then build the NEW five-error-toggle button ROW (the one genuinely new client-UI element).
+	_mode = "gps"
+	_fid_kind = "gps"
+	if _prop_btn.pressed.is_connected(_on_prop_pressed):
+		_prop_btn.pressed.disconnect(_on_prop_pressed)
+	if not _prop_btn.pressed.is_connected(_on_raim_pressed):
+		_prop_btn.pressed.connect(_on_raim_pressed)
+	_prop_btn.tooltip_text = "Cycle RAIM (set_fidelity): off → detect → exclude"
+	_build_gps_toggles()
+
+func _build_gps_toggles() -> void:
+	# The NEW UI element: a ROW of five error-term toggle buttons — NOT a cycler (advisor: five
+	# independent on/off keys, the genuinely new element). Each flips its fidelity key + sends
+	# set_fidelity. Stored by term in `_gps_toggle_btns` so the headless UI test can find + press
+	# them; re-rendered from `_fidelity` (the badge source) on toggle + on reset. Rebuilt fresh
+	# (idempotent) so a load_scenario between GPS scenes can't leave freed buttons behind. Attached
+	# under `_knob_box` (below the fault slider) — present in both the real UI and the UI-test harness.
+	if _gps_toggle_row != null and is_instance_valid(_gps_toggle_row):
+		_gps_toggle_row.queue_free()
+	_gps_toggle_btns = {}
+	_gps_toggle_row = HBoxContainer.new()
+	_knob_box.add_child(_gps_toggle_row)
+	for term in GPS_ERR_TERMS:
+		var b := Button.new()
+		b.tooltip_text = "Toggle the %s error term (set_fidelity): on ↔ off" % term
+		b.pressed.connect(_on_gps_toggle_pressed.bind(term))
+		_gps_toggle_row.add_child(b)
+		_gps_toggle_btns[term] = b
+	_update_gps_toggles()
+
+func _update_gps_toggles() -> void:
+	for term in _gps_toggle_btns:
+		if is_instance_valid(_gps_toggle_btns[term]):
+			_gps_toggle_btns[term].text = "%s:%s" % [term, str(_fidelity.get(term, "off"))]
+
+func _on_gps_toggle_pressed(term: String) -> void:
+	# Flip one error-term key on↔off + tell the core (set_fidelity — the slice-2 live toggle,
+	# generalised; every GPS key is introduce-safe so the server accepts it even if the scenario
+	# omitted it — the draw is 2·n_sats unconditionally, a toggle gates the CONTRIBUTION not the
+	# draw, so a mid-run flip is bit-identical). The client owns the displayed state: update badge +
+	# the toggle row locally (the server applies it silently on the next look, no reply).
+	var cur := str(_fidelity.get(term, "off"))
+	var next := "off" if cur == "on" else "on"
+	_fidelity[term] = next
+	_client.send({"type": "set_fidelity", "key": term, "value": next})
+	_render_badge()
+	_update_gps_toggles()
+
+func _on_raim_pressed() -> void:
+	# Advance the raim rung (off→detect→exclude→off) + tell the core (set_fidelity). `:raim` is
+	# introduce-safe AND draw-free (the fault is a constant, the rung is post-draw), so a mid-run
+	# cycle is bit-identical (the slice-4 :ep contract, NOT slice-3's draw-flip): only the solver's
+	# phase-4 integrity check / exclusion changes — the flag raises under :detect, the bad satellite
+	# drops + the fix snaps back under :exclude. The client owns the displayed rung: update badge +
+	# button locally (the server applies it silently, no reply).
+	var cur := str(_fidelity.get("raim", "off"))
+	var i := RAIM_RUNGS.find(cur)
+	var next: String = RAIM_RUNGS[(i + 1) % RAIM_RUNGS.size()] if i >= 0 else "off"
+	_fidelity["raim"] = next
+	_client.send({"type": "set_fidelity", "key": "raim", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
 func _render_badge() -> void:
 	# §12: a visible "<fidelity> approximation" badge, built from the live local fidelity
 	# map (never hardcoded), re-rendered whenever the propagation toggle changes it.
@@ -312,6 +407,8 @@ func _update_fid_btn() -> void:
 			_prop_btn.text = "est: %s" % str(_fidelity.get("estimator", "?"))
 		"esm":
 			_prop_btn.text = "deint: %s" % str(_fidelity.get("deinterleaver", "?"))
+		"gps":
+			_prop_btn.text = "raim: %s" % str(_fidelity.get("raim", "?"))
 		_:
 			_update_prop_btn()
 
@@ -396,10 +493,29 @@ func _on_state(obj: Dictionary) -> void:
 		_geoloc_on_state(obj)
 	elif _mode == "esm":
 		_esm_on_state()
+	elif _mode == "gps":
+		_gps_on_state(obj)
 	else:
 		_spatial_on_state(obj)
 	_update_readout()
 	queue_redraw()
+
+func _gps_on_state(obj: Dictionary) -> void:
+	# Discover the receiver id from the entity stream (no handshake axis — the geoloc df_station
+	# pattern), then pull the per-satellite display arrays the solver shipped (sky-plot az/el, the
+	# RAIM residual bars, the in-solve flags). ALL display-only; the DOP/error/RAIM SCALARS render in
+	# the left readout via _update_readout (which skips Array telemetry — the slice-3/6 float()-crash
+	# watch-item, re-confirmed for the sat_* keys). Never recompute the fix/DOP/residuals here.
+	if _gps_rx == "":
+		for e in obj.get("entities", []):
+			if str(e.get("kind", "")) == "gps_receiver":
+				_gps_rx = str(e.get("id", ""))
+				break
+	if _gps_rx != "":
+		_gps_az    = _telemetry.get(_gps_rx + ".sat_az_deg", [])
+		_gps_el    = _telemetry.get(_gps_rx + ".sat_el_deg", [])
+		_gps_resid = _telemetry.get(_gps_rx + ".sat_resid_m", [])
+		_gps_used  = _telemetry.get(_gps_rx + ".sat_used", [])
 
 func _esm_on_state() -> void:
 	# Pull the ESM arrays the core shipped (the histogram + threshold are CORE output — we plot them,
@@ -553,6 +669,8 @@ func _on_reset_pressed() -> void:
 	_fidelity = _fidelity_default.duplicate()
 	_render_badge()
 	_update_fid_btn()
+	if _mode == "gps":
+		_update_gps_toggles()   # resync the five error toggles to the scenario default too
 	if _running:
 		_client.send({"type": "run", "mode": "realtime", "speed": 1.0})
 
@@ -583,6 +701,8 @@ func _draw() -> void:
 		_draw_plan()
 	elif _mode == "esm":
 		_draw_esm()
+	elif _mode == "gps":
+		_draw_gps()
 	else:
 		_draw_spatial()
 
@@ -928,3 +1048,97 @@ func _draw_esm_histogram(rect: Rect2) -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.45))
 	draw_string(_font, Vector2(rect.position.x + rect.size.x * 0.5 - 22, rect.end.y + 28),
 		"PRI τ (µs)", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.5))
+
+# --- GPS / sky view (slice 7) -------------------------------------------------
+# Two panels from core telemetry. TOP: a polar SKY PLOT (zenith center, horizon edge) — each
+# satellite at radius ∝ (90−el) and angle = az, colored in-solve (green) / masked-or-excluded (grey)
+# / faulted-excluded (orange). A spread constellation fills the sky (low DOP); a clustered one bunches
+# (high DOP) — the geometry→DOP visual. BOTTOM: a RESIDUAL bar chart — |sat_resid_m| per satellite;
+# the spoofed satellite's bar SPIKES (the RAIM visual). The DOP/pos_err/raim_flag SCALARS render in
+# the left readout (_update_readout skips these arrays). All core output — nothing recomputed here.
+
+func _gps_color(i: int, used: bool, fault_sat: int) -> Color:
+	if fault_sat == i + 1:                    # fault_sat is a 1-based CONFIGURED index (0 = none)
+		return Color(1.0, 0.55, 0.15)         # faulted / excluded — orange
+	if used:
+		return Color(0.4, 1.0, 0.5)           # in-solve — green
+	return Color(0.6, 0.6, 0.6)               # masked / excluded / not-used — grey
+
+const GPS_PLOT_L := 268.0         # a wider left inset than PLOT_L so the sky plot + residual bars
+                                  # clear the (tall, ~17-key) DOP/RAIM scalar readout panel on the left
+
+func _draw_gps() -> void:
+	var vp := get_viewport_rect().size
+	var full := Rect2(GPS_PLOT_L, PLOT_T, vp.x - GPS_PLOT_L - PLOT_R, vp.y - PLOT_T - PLOT_B)
+	var sky_h := full.size.y * 0.60
+	var sky := Rect2(full.position.x, full.position.y, full.size.x, sky_h)
+	var bars := Rect2(full.position.x, sky.end.y + 40.0, full.size.x, full.end.y - (sky.end.y + 40.0))
+	_draw_gps_sky(sky)
+	_draw_gps_resid(bars)
+
+func _draw_gps_sky(rect: Rect2) -> void:
+	draw_string(_font, rect.position + Vector2(2, -6),
+		"sky plot — satellites at az/el (zenith center, horizon edge); spread → low DOP, clustered → high DOP",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.6))
+	var c := rect.position + rect.size * 0.5
+	var R := minf(rect.size.x, rect.size.y) * 0.46
+	# horizon + elevation rings (30°, 60°) + zenith dot
+	draw_arc(c, R, 0.0, TAU, 64, Color(1, 1, 1, 0.25), 1.0)
+	for el_ring in [30.0, 60.0]:
+		draw_arc(c, R * (1.0 - el_ring / 90.0), 0.0, TAU, 48, Color(1, 1, 1, 0.10), 1.0)
+	draw_circle(c, 2.0, Color(1, 1, 1, 0.35))
+	# azimuth spokes + labels (0/90/180/270°, world az from +x, CCW, screen y up)
+	for az_deg in [0.0, 90.0, 180.0, 270.0]:
+		var a := deg_to_rad(az_deg)
+		var edge := c + Vector2(R * cos(a), -R * sin(a))
+		draw_line(c, edge, Color(1, 1, 1, 0.08), 1.0)
+		draw_string(_font, edge + Vector2(-8, -4), "%d°" % int(az_deg),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.4))
+	# satellites
+	var fault_sat := int(_telemetry.get(_gps_rx + ".fault_sat", 0)) if _gps_rx != "" else 0
+	var n := _gps_az.size()
+	for i in n:
+		var az := deg_to_rad(float(_gps_az[i]))
+		var el := clampf(float(_gps_el[i]), 0.0, 90.0)
+		var r := R * (1.0 - el / 90.0)
+		var p := c + Vector2(r * cos(az), -r * sin(az))
+		var used: bool = bool(_gps_used[i]) if i < _gps_used.size() else true
+		var col := _gps_color(i, used, fault_sat)
+		draw_circle(p, 5.0, col)
+		draw_string(_font, p + Vector2(7, -6), "sv%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, col)
+	_gps_sky_legend(rect)
+
+func _gps_sky_legend(rect: Rect2) -> void:
+	var x := rect.end.x - 140.0
+	var y := rect.position.y + 14.0
+	draw_circle(Vector2(x + 6, y), 5.0, Color(0.4, 1.0, 0.5))
+	draw_string(_font, Vector2(x + 18, y + 4), "in solve", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.6, 1.0, 0.7))
+	draw_circle(Vector2(x + 6, y + 16), 5.0, Color(0.6, 0.6, 0.6))
+	draw_string(_font, Vector2(x + 18, y + 20), "masked/excluded", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.8, 0.8, 0.8))
+	draw_circle(Vector2(x + 6, y + 32), 5.0, Color(1.0, 0.55, 0.15))
+	draw_string(_font, Vector2(x + 18, y + 36), "faulted", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.7, 0.4))
+
+func _draw_gps_resid(rect: Rect2) -> void:
+	draw_rect(rect, Color(0.2, 0.25, 0.3), false, 1.0)
+	draw_string(_font, rect.position + Vector2(2, -6),
+		"range residuals |r| per satellite — the spoofed satellite's bar spikes (the RAIM signature)",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.6))
+	var n := _gps_resid.size()
+	if n == 0:
+		return
+	var fault_sat := int(_telemetry.get(_gps_rx + ".fault_sat", 0)) if _gps_rx != "" else 0
+	var hi := 1.0
+	for v in _gps_resid:
+		hi = maxf(hi, absf(float(v)))
+	var bw := rect.size.x / float(n)
+	for i in n:
+		var mag := absf(float(_gps_resid[i]))
+		var bh := (mag / hi) * (rect.size.y - 6.0)
+		var x := rect.position.x + float(i) * bw
+		var used: bool = bool(_gps_used[i]) if i < _gps_used.size() else true
+		var col := _gps_color(i, used, fault_sat)
+		draw_rect(Rect2(x + bw * 0.15, rect.end.y - bh, maxf(1.0, bw * 0.7), bh), col)
+		draw_string(_font, Vector2(x + bw * 0.5 - 8, rect.end.y + 14), "sv%d" % (i + 1),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.45))
+	draw_string(_font, Vector2(rect.position.x + 2, rect.position.y + 12), "max |r| = %.0f m" % hi,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.5))
