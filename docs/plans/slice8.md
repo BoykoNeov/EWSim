@@ -374,18 +374,55 @@ vector math on `StaticArrays` (the `_range`/`_solve_normal` no-`LinearAlgebra` h
       lesson, RK4 = the exact reference); Euler drag-off energy drifts UPWARD (~+0.05%, phase-dependent)
       → probed as a comment, NOT asserted. Slices 1–7 byte-identical (frames/dynamics touch no
       radar/detection path; `_sample_z` golden + `test_determinism` green through the include).
-- [ ] 2. **The missile wired (phase 1 — first force-based integrator).** `BallisticMissile` in
-      `missile.jl` (after `radar.jl`, no radar back-dep), `integrate!` dispatching `integrator`,
-      the z=0 impact clamp + one-shot `:impact` event, optional velocity-aligned `att`.
-      `LIVE_FIDELITY_MODES += integrator = INTEGRATOR_MODES`. `:missile` kind + `_validate_missile`
-      in `scenario.jl` (the entity gets `[BallisticMissile]`, NOT `ConstantVelocity`). Energy/pos
-      telemetry `_finite`-clamped. `test_missile.jl` wired half (rk4==parabola, euler differs,
-      impact-once, energy matches); `test_determinism.jl` (bit-identical replay; introduce-on-non-
-      missile byte-identical; **mid-run toggle CHANGES the trajectory** — claim 3, the slice-5/6/7
-      opposite); `test_server.jl` (`set_fidelity integrator` write/reject + introduce-safe; warmup
-      tolerates a radar-free missile scenario). Slices 1–7 byte-identical.
+- [x] 2. **The missile wired (phase 1 — first force-based integrator).** DONE & green (1609 tests,
+      +47). `BallisticMissile` in `missile.jl` (included after `gps.jl`, before `scenario.jl`; **no
+      radar back-dep** — reuses only `dynamics.jl`/`frames.jl`/gnss's `_norm3`/geometry's
+      `_finite`/`_finite_coord`, grep-confirmed). `integrate!` (phase 1) dispatches
+      `get(w.fidelity, :integrator, :rk4)` → `integrator_step` under `total_accel`, does the `z≤0`
+      impact clamp (within-`dt`, named approx) + one-shot `:impact` event (pushed to `w.events`, NOT
+      env — so not wiped by `empty!(w.env)`) + `:impacted` latch (frozen splash), and sets a
+      velocity-aligned `att` (`quat_from_two_vectors([1,0,0], v′)` — exercises `frames.jl` live +
+      its apex `v→0` zero-vector guard → identity). **TELEMETRY-PHASE DEVIATION (advisor-confirmed):
+      the plan's "phase-1 writes into env[:telemetry]" is WRONG — `tick!` calls `empty!(w.env)`
+      immediately after phase 1, wiping it (and the radar readout is actually phase-3 observe!). So
+      the energy/position readout is published from `build_env!` (phase 2, post-empty!, reading the
+      post-integrate state) — a DERIVED quantity, RNG-free, own-keys → order-independent; NOT a
+      sensing/guidance phase (observe!/decide! stay EMPTY for slices 9–11).** Telemetry (all
+      `_finite`/`_finite_coord`-clamped): `<id>.pos_x/.pos_z/.speed/.alt/.ke_j/.pe_j/.e_total_j/
+      .de_frac/.impacted`; `E₀` (the ΔE reference) lazily set on the first tick from the launch
+      state (survives reset for free). `LIVE_FIDELITY_MODES += integrator = INTEGRATOR_MODES`
+      (referencing dynamics.jl's const — one-list-no-drift; introduce-safe, NO `:cfar`-style guard,
+      but **physics-changing NOT toggle-bit-identical** — the comment states the split explicitly).
+      `:missile` kind + `_validate_missile` in `scenario.jl` (the entity gets `[BallisticMissile]`,
+      **NOT** `ConstantVelocity` — the double-integration guard; `missile:` block → `mass_kg`,
+      `speed`/`elevation_deg` [deg→rad, x-z-plane `vel`; stored RAW too so gate-3 launch knobs can
+      address them], `cd_area_m2` [drag off = 0], optional `rho`; positive-mass / non-negative
+      cd_area/ρ rejected at LOAD). `test_missile.jl` wired half (+20: integrate! == gate-1 stepper
+      bit-exact; rk4 WIRED == analytic parabola / euler bows by ½·g·dt·t / trajectories differ;
+      impact fires ONCE + freezes + no-op after / launch-at-z=0-rises-not-insta-impacts; energy
+      telemetry == ½m‖v‖²+mgz every step + ΔE<1e-10 rk4 drag-off + ΔE<0 drag-on; finite telemetry +
+      att-never-NaN through apex; loader gets BallisticMissile NOT ConstantVelocity + rejects missing
+      mass / negative cd_area). `test_determinism.jl` (+1 testset: (2) same-config replay
+      bit-identical via `reinterpret`; (3) mid-run rk4→euler toggle CHANGES the flight — the
+      not-a-dead-knob, slice-5/6/7 opposite; (1) introduce `:integrator` on a NON-missile
+      RandomWalker world → byte-identical + rng untouched. **NB advisor #1: no RNG in slice 8, so no
+      vacuous rng-lockstep assertion — the three claims are pinned distinctly**). `test_server.jl`
+      (+2: `set_fidelity integrator` write/reject [bad rung rejected] + introduce-safe on a plain
+      radar scenario; `warmup!` tolerates a radar-free missile scenario — ROC batch skipped, phase-1
+      integrator + phase-2 telemetry warmed, live World pristine). Slices 1–7 **byte-identical** (the
+      `_sample_z` golden + all prior testsets green through the include). Gate 3 (scenario + Godot
+      spatial-view extension + verifiers) is next.
 - [ ] 3. **Scenario + Godot spatial-view extension + verifiers.** `scenarios/slice8_ballistic.yaml`
-      (probe-tuned, drag-off + `:rk4` default, launch/drag sliders). `Sandbox.gd` spatial view
+      (probe-tuned, drag-off + `:rk4` default, launch/drag sliders). **GATE-2 CARRY-OVER FLAGS
+      (advisor):** (a) **launch speed/elevation sliders are NOT achievable via reset** — `_reload!`
+      reloads from the YAML FILE, discarding any live `set_param` to `comp[:speed]`/
+      `comp[:elevation_deg]`, and nothing re-derives `vel` mid-flight, so only **`cd_area`** is a
+      working live lever. The raw keys ARE stored (a knob can address them), but decide at gate 3:
+      make launch geometry load-time-static (document "edit YAML + reconnect") OR add a genuine
+      re-launch mechanism — do NOT declare launch sliders "working" per the plan's stale wording;
+      VERIFY the reset behavior yourself. (b) **No t=0 telemetry frame** — the first `build_env!`
+      runs after the first `integrate!`, so the verifier must sample ΔE/energy after **≥1 step** (and
+      MID-FLIGHT, not post-impact where `de_frac = −1`). `Sandbox.gd` spatial view
       EXTENDED (missile marker + trail + impact + energy readout; the shared button → integrator
       cycler; NO new render mode). `net/slice8_verify.gd` (rk4 parabola + ΔE≈0; euler bows it;
       drag slider bleeds E; impact event once — S8V OK). `net/slice8_ui_test.gd` (integrator ring

@@ -244,10 +244,38 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             error("gps_receiver '$id': sigma_range_m must be > 0 (got $(comp[:sigma_range_m]))")
         subs = Subsystem[ConstantVelocity(id), GpsReceiver(id; revisit_s = get(comp, :revisit_s, 0.0)),
                          GpsSolver(id)]
+    elseif kind === :missile
+        # A ballistic projectile (slice 8): a `missile:` block carries `mass_kg`, the launch
+        # `speed` (m/s) + `elevation_deg` (deg → the x-z-plane launch velocity), the lumped
+        # drag `cd_area_m2` (drag off = 0), and optional `rho` (air density). The entity gets a
+        # `BallisticMissile` (the phase-1 force integrator that OWNS pos/vel advancement) and
+        # **NOT** a `ConstantVelocity` — two phase-1 movers on one entity would double-integrate
+        # (the watch-item). The launch state is SI: `speed`/`elevation_deg` are stored RAW in
+        # comp too (so gate-3 launch knobs can address them — a knob must name a real comp key)
+        # while `vel` is derived here.
+        haskey(ent, "missile") || error("missile entity '$id' has no `missile:` block")
+        mb = ent["missile"]
+        for k in ("mass_kg", "speed", "elevation_deg")
+            haskey(mb, k) || error("missile '$id' block missing required key '$k'")
+        end
+        comp[:mass_kg]       = _f64(mb["mass_kg"])
+        comp[:cd_area_m2]    = _f64(get(mb, "cd_area_m2", 0.0))
+        comp[:rho]           = _f64(get(mb, "rho", 1.225))
+        comp[:speed]         = _f64(mb["speed"])            # raw (knob-addressable, gate 3)
+        comp[:elevation_deg] = _f64(mb["elevation_deg"])    # raw (knob-addressable, gate 3)
+        el = deg2rad(comp[:elevation_deg])                  # deg → rad; x-z plane (no cross-range)
+        e.vel = Vec3(comp[:speed] * cos(el), 0.0, comp[:speed] * sin(el))
+        # Load-time guards (a malformed AUTHORED missile fails as a clear load error; a LIVE
+        # slider is clamped at the consumer — mass floor / drag-off — so it can't crash a tick).
+        comp[:mass_kg]    > 0 || error("missile '$id': mass_kg must be > 0 (got $(comp[:mass_kg]))")
+        comp[:cd_area_m2] ≥ 0 ||
+            error("missile '$id': cd_area_m2 must be ≥ 0 (got $(comp[:cd_area_m2]))")
+        comp[:rho]        ≥ 0 || error("missile '$id': rho must be ≥ 0 (got $(comp[:rho]))")
+        subs = Subsystem[BallisticMissile(id)]
     else
         error("unknown entity kind :$kind for '$id' (knows :radar, :target, :clutter, " *
               ":jammer, :emitter, :df_sensor, :df_station, :pulse_emitter, :esm, " *
-              ":gps_satellite, :gps_receiver)")
+              ":gps_satellite, :gps_receiver, :missile)")
     end
     return e, subs
 end
@@ -314,6 +342,7 @@ function load_scenario(path::AbstractString)
     _validate_geoloc(world)
     _validate_esm(world)
     _validate_gps(world)
+    _validate_missile(world)
     knobs = _parse_knobs(data, world)
     return Scenario(name, world, subs, knobs, dt_physics, emit_every)
 end
@@ -414,5 +443,23 @@ function _validate_gps(world::World)
         error("a GPS scenario needs ≥ 4 :gps_satellite entities to solve x/y/z/clock (got $n_sat)")
     n_rx == 1 ||
         error("a GPS scenario needs exactly one :gps_receiver (got $n_rx)")
+    return world
+end
+
+# A missile (slice 8) scenario needs at least one `:missile` to fly. Validate at LOAD (the
+# `_validate_cfar`/…/`_validate_gps` pattern), triggered by missile-entity presence so a non-
+# missile scenario is untouched (a missile scenario sets no REQUIRED fidelity key — `:integrator`
+# defaults `:rk4`). The per-missile guards (positive mass/ρ, non-negative cd_area) live in the
+# `:missile` build arm above (they throw during `_build_entity`), so this is the presence/count
+# floor; the double-integration guard (BallisticMissile, NOT ConstantVelocity) is structural in
+# the build arm and pinned by the loader test.
+function _validate_missile(world::World)
+    n_missile = 0
+    for (_, e) in world.entities
+        e.kind === :missile && (n_missile += 1)
+    end
+    n_missile == 0 && return world                       # not a missile scenario
+    n_missile ≥ 1 ||
+        error("a missile scenario needs ≥ 1 :missile entity (got $n_missile)")
     return world
 end

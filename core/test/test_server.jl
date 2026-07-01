@@ -129,6 +129,17 @@ function _gps_scenario(seed; emit_every = 4, fidelity = Dict{Symbol,Symbol}())
     return Scenario("gps", w, subs, Knob[], 1.0e-3, emit_every)
 end
 
+# A slice-8 missile scenario fixture (radar-free, missile-driven): one ballistic projectile with
+# a BallisticMissile (the first force-based phase-1 integrator). No radar (so warmup!'s ROC batch
+# is skipped), no draw stream (deterministic ODE). `:integrator` defaults :rk4.
+function _missile_scenario(seed; emit_every = 4, fidelity = Dict(:integrator => :rk4))
+    w = World(seed = seed, fidelity = fidelity)
+    w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 0.0), vel = Vec3(300.0, 0, 300.0),
+        comp = Dict{Symbol,Any}(:mass_kg => 100.0, :cd_area_m2 => 0.0, :rho => 1.225))
+    subs = Subsystem[BallisticMissile(:m1)]
+    return Scenario("missile", w, subs, Knob[], 1.0e-3, emit_every)
+end
+
 @testset "server" begin
 
     @testset "handle_command! mutates state per the §5 table" begin
@@ -358,6 +369,47 @@ end
         @test srv.scn.world.t == t0
         @test srv.scn.world.entities[:sv1].pos == pos0
         @test rand(copy(srv.scn.world.rng)) == rand(Xoshiro(6))    # live rng untouched
+    end
+
+    @testset "set_fidelity :integrator — write/reject + introduce-safe (slice-8 missile)" begin
+        # Slice-8 gate 2: :integrator (rungs INTEGRATOR_MODES) joins the per-key LIVE_FIDELITY_MODES
+        # table. Like :ep/:estimator/:deinterleaver and unlike :cfar it carries NO introduce-guard —
+        # absent a :missile entity nothing reads it, so it may be introduced on any scenario. NB
+        # (advisor #1): UNLIKE those keys it is PHYSICS-CHANGING not toggle-bit-identical (there is
+        # no RNG in slice 8) — introduce-safe ≠ toggle-invariant; the trajectory-change is pinned in
+        # test_determinism, here we pin only the wire write/reject + introduce-allowed.
+        srv = EWSim.Server(_missile_scenario(1))
+        w = srv.scn.world
+        @test w.fidelity[:integrator] === :rk4                     # the scenario default
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "integrator", :value => "euler"))
+        @test w.fidelity[:integrator] === :euler
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "integrator", :value => "rk4"))
+        @test w.fidelity[:integrator] === :rk4
+        # ...a bad rung is REJECTED before landing (would throw in integrate! → kill the session).
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "integrator", :value => "leapfrog"))
+
+        # INTRODUCING :integrator on a scenario WITHOUT it is ALLOWED (the :ep/:estimator/:deinterleaver
+        # contract, NOT :cfar's introduce-reject) — a non-missile world has no BallisticMissile to
+        # consume it, so it's a harmless no-op write. Use a plain radar scenario.
+        srv2 = EWSim.Server(_detect_scenario(1))
+        w2 = srv2.scn.world
+        @test !haskey(w2.fidelity, :integrator)
+        EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "integrator", :value => "euler"))
+        @test w2.fidelity[:integrator] === :euler
+    end
+
+    @testset "warmup! tolerates a missile scenario (slice-8, radar-free, phase-1 integrator)" begin
+        # A missile scenario is radar-free like slice-5/6/7, so warmup!'s ROC-batch warm is skipped
+        # (the radar-guard); the tick!+state_frame warm still runs — warming the phase-1 force
+        # integrator + the phase-2 energy telemetry round-trip. It must NOT throw and must leave the
+        # live World pristine.
+        srv = EWSim.Server(_missile_scenario(8))
+        t0   = srv.scn.world.t
+        pos0 = srv.scn.world.entities[:m1].pos
+        EWSim.warmup!(srv)                                          # must NOT throw (no radar)
+        @test srv.scn.world.t == t0
+        @test srv.scn.world.entities[:m1].pos == pos0              # deepcopy warm didn't move the live missile
     end
 
     @testset "scenario_frame ships the static ESM/PRI axis (handshake-once)" begin

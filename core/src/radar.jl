@@ -113,11 +113,18 @@ const EP_MODES = (:none, :freq_agility, :sidelobe_blanking)
 # draw-count change). NB the keys `iono/tropo/clock/multipath/noise` are generic words
 # NAMESPACED BY CONSUMPTION — only a GpsSolver reads them (the `:estimator`-without-a-Geolocator
 # precedent), so a non-GPS scenario toggling one is a harmless no-op.
+# `:integrator` (slice-8 missile; rungs `INTEGRATOR_MODES` from dynamics.jl, in scope here) is
+# likewise introduce-safe — absent a `:missile` entity nothing reads it, so a set_fidelity on
+# any slice-1..7 scenario is a no-op (the `:ep`/`:estimator` contract, NOT slice-3's `:cfar`
+# guard). BUT UNLIKE those it is PHYSICS-CHANGING, NOT toggle-bit-identical: there is no RNG in
+# slice 8, so "draw-count-invariance" is vacuous, and a rk4↔euler toggle CHANGES the trajectory
+# (the slice-2 `propagation` shape). Introduce-safe ≠ toggle-invariant — keep the two separate.
 const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES,
                              ep = EP_MODES, estimator = ESTIMATOR_MODES,
                              deinterleaver = DEINTERLEAVER_MODES,
                              iono = GPS_TOGGLE, tropo = GPS_TOGGLE, clock = GPS_TOGGLE,
-                             multipath = GPS_TOGGLE, noise = GPS_TOGGLE, raim = RAIM_MODES)
+                             multipath = GPS_TOGGLE, noise = GPS_TOGGLE, raim = RAIM_MODES,
+                             integrator = INTEGRATOR_MODES)
 
 # A perfect null (F⁴=0, even above the horizon), an antenna on the reflecting plane
 # (h→0), or a below-horizon mask all drive SNR→0, and `lin2db(0) = -Inf` would poison the

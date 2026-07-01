@@ -28,6 +28,7 @@ include("radar.jl")
 include("esm.jl")
 include("geolocation.jl")
 include("gps.jl")
+include("missile.jl")
 include("scenario.jl")
 include("batch.jl")
 include("server.jl")
@@ -72,6 +73,8 @@ export ConstantVelocity, RadarSensor, Jammer, DFSensor, Geolocator, Knob, Scenar
 export PulseEmitter, ESMReceiver, Deinterleaver
 # GPS subsystems (slice 7): the §9 cross-domain reuse pipeline (build_env!→observe!→decide!)
 export GpsSatellite, GpsReceiver, GpsSolver
+# Missile subsystem (slice 8): the first force-based integrator in the tick loop (phase 1)
+export BallisticMissile
 # Offline batch sweeps (ROC artifact + slice-2 coverage diagram)
 export run_batch, roc_grid, load_roc, coverage_grid, load_coverage
 # Interactive socket run loop (the live/driver path)

@@ -395,4 +395,66 @@ end
             @test rand(copy(wk.rng)) == rng_base                   # introduce/toggle added no draws
         end
     end
+
+    # Slice 8: the FIRST force-based integrator (BallisticMissile, phase 1). There is NO RNG in
+    # slice 8 (a closed-form ODE solve), so — advisor #1, the one place copying the slice-5/6/7
+    # template gives a FALSE claim — "draw-count-invariance" / "rng lockstep" is VACUOUS. Pin the
+    # THREE distinct claims instead: (1) INTRODUCE-safe (introducing :integrator on a NON-missile
+    # world is a no-op → byte-identical); (2) same-config replay is bit-identical (trivially, no
+    # RNG to desync); (3) a mid-run :integrator toggle CHANGES the trajectory (the not-a-dead-knob
+    # property — the OPPOSITE of slices 5/6/7's toggle-invariance; :integrator is physics-changing).
+    @testset "a missile scenario: replay bit-identical, but the integrator toggle CHANGES it" begin
+        function missile_trace(seed; integrator = :rk4, nsteps = 800, toggle_at = 0, toggle_to = nothing,
+                               start_int = integrator)
+            fid = Dict{Symbol,Symbol}()
+            start_int === nothing || (fid[:integrator] = start_int)   # nothing → INTRODUCE later
+            w = World(seed = seed, fidelity = fid)
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 0.0), vel = Vec3(300.0, 0, 300.0),
+                comp = Dict{Symbol,Any}(:mass_kg => 100.0, :cd_area_m2 => 0.0, :rho => 1.225))
+            subs = Subsystem[BallisticMissile(:m1)]
+            trace = Float64[]
+            for i in 1:nsteps
+                (toggle_to !== nothing && i == toggle_at) && (w.fidelity[:integrator] = toggle_to)
+                tick!(w, subs, 1.0e-3)
+                append!(trace, w.entities[:m1].pos); append!(trace, w.entities[:m1].vel)
+                empty!(w.events)
+            end
+            return w, trace
+        end
+
+        # (2) same-config replay bit-identical (the pos/vel fingerprint, reinterpret — sign of zero).
+        _, ta = missile_trace(0; integrator = :rk4)
+        _, tb = missile_trace(0; integrator = :rk4)
+        @test ta == tb && reinterpret(UInt64, ta) == reinterpret(UInt64, tb)
+
+        # (3) a mid-run rk4→euler toggle CHANGES the trajectory (the not-a-dead-knob property —
+        # the OPPOSITE of the last three slices). Toggle early (step 100) with plenty of steps left
+        # so the divergence is numerically unambiguous. Both runs are internally deterministic.
+        _, tk1 = missile_trace(0; start_int = :rk4, toggle_at = 100, toggle_to = :euler)
+        _, tk2 = missile_trace(0; start_int = :rk4, toggle_at = 100, toggle_to = :euler)
+        @test reinterpret(UInt64, tk1) == reinterpret(UInt64, tk2)   # each internally deterministic
+        _, tnever = missile_trace(0; integrator = :rk4)              # never toggled
+        @test tk1 != tnever                                          # ...but the toggle changed the flight
+
+        # (1) INTRODUCE-safe: introducing :integrator on a NON-missile world (the RandomWalker
+        # fixture) is a no-op — nothing reads the key without a BallisticMissile — so the trace is
+        # byte-identical to never touching it (the slice-1..7-stay-byte-identical claim, in miniature).
+        function walker_trace(; introduce = false, at = 100, nsteps = 300)
+            w = World(seed = 42)
+            w.entities[:walker] = Entity(:walker, :target; pos = Vec3(0.0, 0.0, 0.0),
+                                         vel = Vec3(1.0, -2.0, 0.5))
+            subs = Subsystem[RandomWalker(:walker, 0.3)]
+            tr = Vec3[]
+            for i in 1:nsteps
+                introduce && i == at && (w.fidelity[:integrator] = :euler)
+                tick!(w, subs, 1.0e-3)
+                push!(tr, w.entities[:walker].pos)
+            end
+            return w, tr
+        end
+        wi, ti = walker_trace(introduce = true)
+        wn, tn = walker_trace(introduce = false)
+        @test ti == tn                                              # introduce :integrator = no-op
+        @test rand(copy(wi.rng)) == rand(copy(wn.rng))              # ...and the rng stream untouched
+    end
 end

@@ -132,3 +132,170 @@
         @test INTEGRATOR_MODES == (:rk4, :euler)       # two rungs (semi_implicit rejected — probe)
     end
 end
+
+# --- gate 2: the BallisticMissile SUBSYSTEM wired into the tick loop -------------------
+# The first FORCE-based integrator in `tick!` (phase 1). Pins: integrate! matches the gate-1
+# stepper on a realized step; the rk4 WIRED trajectory == analytic parabola (drag off); the
+# euler wired trajectory DIFFERS (the fidelity is live — not a dead knob, the slice-2
+# propagation shape); the z=0 impact fires ONE `:impact` event + freezes the entity; the
+# energy telemetry matches ½m‖v‖²+mgz; finite telemetry on degenerate cases; loader arms +
+# rejects. The missile publishes its readout in build_env! (phase 2 — the plan's "phase-1
+# telemetry" is wiped by `empty!(w.env)`; advisor-confirmed), so `tick!` (which runs phase 2)
+# is what surfaces `w.env[:telemetry]`.
+@testset "missile subsystem — wired (phase 1 integrator + phase 2 readout)" begin
+    g  = G_ACCEL
+    gv = Vec3(0.0, 0.0, -g)
+    dt = 0.01
+
+    # A programmatic missile world (the test_jammer/test_gps fixture style): one :missile with
+    # `BallisticMissile`, launch pos/vel + comp, under the chosen :integrator rung.
+    function missile_world(; integrator = :rk4, pos = Vec3(0, 0, 0.0),
+                           vel = Vec3(300.0, 0.0, 300.0), mass = 100.0, cd_area = 0.0, rho = 1.225)
+        w = World(seed = 0, fidelity = Dict(:integrator => integrator))
+        w.entities[:m1] = Entity(:m1, :missile; pos = pos, vel = vel,
+            comp = Dict{Symbol,Any}(:mass_kg => mass, :cd_area_m2 => cd_area, :rho => rho))
+        return w, Subsystem[BallisticMissile(:m1)]
+    end
+
+    @testset "integrate! matches the gate-1 stepper on a realized step (rk4 and euler)" begin
+        for mode in (:rk4, :euler)
+            step = mode === :rk4 ? rk4_step : euler_step
+            w, subs = missile_world(integrator = mode, cd_area = 0.02, mass = 50.0)
+            p0 = w.entities[:m1].pos; v0 = w.entities[:m1].vel
+            accel(v) = total_accel(v; rho = 1.225, cd_area = 0.02, mass = 50.0)
+            pexp, vexp = step(accel, p0, v0, dt)
+            tick!(w, subs, dt)
+            @test w.entities[:m1].pos == pexp            # bit-exact match to the pure stepper
+            @test w.entities[:m1].vel == vexp
+        end
+    end
+
+    @testset "rk4 WIRED trajectory == analytic parabola (drag off), euler DIFFERS" begin
+        wr, sr = missile_world(integrator = :rk4)
+        we, se = missile_world(integrator = :euler)
+        p0 = Vec3(0, 0, 0.0); v0 = Vec3(300.0, 0.0, 300.0)
+        n = 400; t = n * dt
+        for _ in 1:n
+            tick!(wr, sr, dt); empty!(wr.events)
+            tick!(we, se, dt); empty!(we.events)
+        end
+        analytic = p0 + v0 * t + 0.5 * gv * t^2
+        @test wr.entities[:m1].pos ≈ analytic rtol = 1e-10       # rk4 tracks the parabola
+        # euler bows: it sits ABOVE the true parabola in z by ≈ ½·g·dt·t (the gate-1 pin, now
+        # through the wired integrator) — a MEASURABLE difference, so the rung is not dead.
+        @test we.entities[:m1].pos[3] - analytic[3] ≈ 0.5 * g * dt * t rtol = 1e-6
+        @test we.entities[:m1].pos != wr.entities[:m1].pos       # the fidelity is live
+    end
+
+    @testset "z=0 impact fires ONE :impact event, freezes the entity, subsequent ticks no-op" begin
+        # straight-up shot: rises, apexes (v→0, the zero-vector attitude guard), falls back to z=0.
+        w, subs = missile_world(integrator = :rk4, vel = Vec3(0, 0, 120.0))
+        n_impact = 0; impact_t = 0.0; frozen_pos = nothing; frozen_vel = nothing
+        for i in 1:4000
+            tick!(w, subs, dt)
+            k = count(e -> e[:kind] === :impact && e[:of] === :m1, w.events)
+            n_impact += k
+            k > 0 && (impact_t = w.t)
+            empty!(w.events)
+            if get(w.entities[:m1].comp, :impacted, false)
+                frozen_pos === nothing && (frozen_pos = w.entities[:m1].pos)
+                frozen_vel === nothing && (frozen_vel = w.entities[:m1].vel)
+            end
+        end
+        @test n_impact == 1                                      # EXACTLY once (latched)
+        @test w.entities[:m1].comp[:impacted] === true
+        @test w.entities[:m1].pos[3] == 0.0                      # clamped to the ground
+        @test w.entities[:m1].vel == zero(Vec3)                  # frozen (velocity zeroed)
+        @test frozen_pos == w.entities[:m1].pos                  # no drift after impact (no-op ticks)
+        @test frozen_vel == zero(Vec3)
+        # a launch at z=0 with UPWARD velocity does NOT insta-impact (integrates up on step 1)
+        wl, sl = missile_world(integrator = :rk4, pos = Vec3(0, 0, 0.0), vel = Vec3(100.0, 0, 50.0))
+        tick!(wl, sl, dt)
+        @test wl.entities[:m1].pos[3] > 0
+        @test !get(wl.entities[:m1].comp, :impacted, false)
+        @test isempty(wl.events)
+    end
+
+    @testset "energy telemetry matches ½m‖v‖²+mgz; ΔE≈0 for rk4 drag-off mid-flight" begin
+        m = 100.0
+        w, subs = missile_world(integrator = :rk4, mass = m, cd_area = 0.0)
+        maxde = 0.0; energy_ok = true; readout_ok = true
+        for i in 1:400
+            tick!(w, subs, dt); empty!(w.events)
+            tel = w.env[:telemetry]; e = w.entities[:m1]
+            ke = 0.5 * m * (e.vel[1]^2 + e.vel[2]^2 + e.vel[3]^2)
+            pe = m * g * e.pos[3]
+            energy_ok &= isapprox(tel["m1.ke_j"], ke; atol = 1e-6) &&
+                         isapprox(tel["m1.pe_j"], pe; atol = 1e-6) &&
+                         isapprox(tel["m1.e_total_j"], ke + pe; atol = 1e-6)
+            readout_ok &= isapprox(tel["m1.speed"], sqrt(e.vel[1]^2 + e.vel[2]^2 + e.vel[3]^2); atol = 1e-9) &&
+                          tel["m1.alt"] == e.pos[3] && tel["m1.pos_x"] == e.pos[1] && tel["m1.pos_z"] == e.pos[3]
+            maxde = max(maxde, abs(tel["m1.de_frac"]))
+        end
+        @test energy_ok                                         # ke/pe/e_total == ½m‖v‖²+mgz every step
+        @test readout_ok                                        # speed/alt/pos_x/pos_z readouts consistent
+        @test maxde < 1e-10                                     # rk4 drag-off conserves (machine eps)
+        @test w.env[:telemetry]["m1.impacted"] === false        # still flying at 400 steps
+        # drag on → ΔE goes NEGATIVE (energy bled): the gate-3 energy-slider lesson, pinned here.
+        wd, sd = missile_world(integrator = :rk4, mass = m, cd_area = 0.03)
+        for _ in 1:400; tick!(wd, sd, dt); empty!(wd.events); end
+        @test wd.env[:telemetry]["m1.de_frac"] < -1e-4          # E bled off under drag
+    end
+
+    @testset "finite telemetry on degenerate cases — no throw / no NaN" begin
+        # straight-up (v→0 at apex — the zero-vector attitude guard) then already-impacted (frozen).
+        w, subs = missile_world(integrator = :rk4, vel = Vec3(0, 0, 80.0))
+        keys = ("m1.pos_x", "m1.pos_z", "m1.speed", "m1.alt", "m1.ke_j", "m1.pe_j",
+                "m1.e_total_j", "m1.de_frac")
+        all_finite = true; att_finite = true
+        for _ in 1:3000
+            tick!(w, subs, dt); empty!(w.events)
+            tel = w.env[:telemetry]
+            all_finite &= all(isfinite(tel[k]) for k in keys)
+            att_finite &= all(isfinite, w.entities[:m1].att)
+        end
+        @test all_finite                                        # every readout finite through apex + impact
+        @test att_finite                                        # attitude never NaN'd through the apex guard
+        @test w.env[:telemetry]["m1.impacted"] === true         # ended frozen, telemetry still finite
+    end
+
+    @testset "loader: :missile gets BallisticMissile (NOT ConstantVelocity); arms + rejects" begin
+        base = """
+        name: m
+        seed: 0
+        dt_physics: 0.01
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 0.0]
+            missile:
+              mass_kg: 100.0
+              speed: 424.264
+              elevation_deg: 45.0
+              cd_area_m2: 0.0
+        """
+        mktempdir() do dir
+            good = joinpath(dir, "good.yaml"); write(good, base)
+            scn = load_scenario(good)
+            e = scn.world.entities[:m1]
+            @test e.kind === :missile
+            # the DOUBLE-INTEGRATION guard: BallisticMissile owns pos/vel, so NO ConstantVelocity
+            @test any(s -> s isa BallisticMissile, scn.subs)
+            @test !any(s -> s isa ConstantVelocity, scn.subs)
+            # launch state SI: speed 424.264 @ 45° → vel ≈ [300, 0, 300] (deg→rad in the x-z plane)
+            @test e.vel[1] ≈ 300.0 atol = 1e-2
+            @test e.vel[3] ≈ 300.0 atol = 1e-2
+            @test e.vel[2] == 0.0
+            @test e.comp[:speed] == 424.264 && e.comp[:elevation_deg] == 45.0   # raw stored (knob-addressable)
+            @test get(scn.world.fidelity, :integrator, :rk4) === :rk4           # default rung
+
+            # rejects: a missing mass, a negative cd_area (a malformed AUTHORED missile → load error)
+            nomass = replace(base, "      mass_kg: 100.0\n" => "")
+            p1 = joinpath(dir, "nomass.yaml"); write(p1, nomass)
+            @test_throws ErrorException load_scenario(p1)
+            negdrag = replace(base, "cd_area_m2: 0.0" => "cd_area_m2: -1.0")
+            p2 = joinpath(dir, "negdrag.yaml"); write(p2, negdrag)
+            @test_throws ErrorException load_scenario(p2)
+        end
+    end
+end
