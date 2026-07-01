@@ -29,6 +29,15 @@ const ESTIMATOR_MODES = (:pseudolinear, :ml)
 # count and 1/R̂, so an absolute floor is scale-fragile; advisor). For a PSD M,
 # det ∈ [0, m11·m22]; flooring it keeps a near-singular (collinear) solve huge-but-
 # FINITE rather than NaN — the readouts then clamp to FINITE_CEIL at the consumer.
+#
+# **Kept 2×2-closed-form for the pseudolinear DF baseline (slice-7 fallback (a)).** The
+# GPS generalization made `gauss_newton` N-dim (DF `:ml` and GPS both call it — the §9
+# reuse that MATTERS), but the pseudolinear `linear_ls` normal matrix has a TINY leading
+# pivot (the down-range/x information is the small one), which the natural-order N-dim
+# Cholesky handles less stably than this direct-det cofactor on shallow-geometry noisy
+# draws (a mean-shifting difference the slice-5 bias MC test catches). GPS never uses
+# `linear_ls`, so keeping the stable 2×2 here costs nothing and the reuse story stays
+# honest — the shared *scaffold* is `gauss_newton`/`_solve_normal`, not this baseline.
 function _solve2x2(m11::Float64, m12::Float64, m22::Float64, g1::Float64, g2::Float64)
     det   = m11 * m22 - m12 * m12
     floor = 1e-12 * (m11 * m22 + 1.0)          # relative ridge; +1 guards a degenerate M≈0
@@ -39,6 +48,27 @@ function _solve2x2(m11::Float64, m12::Float64, m22::Float64, g1::Float64, g2::Fl
     return p, cov
 end
 
+# Assemble the weighted normal equations from measurement rows: the N×N symmetric
+# `M = Σᵢ wᵢ·hᵢ·hᵢᵀ` and the RHS `g = Σᵢ wᵢ·hᵢ·bᵢ`. Generic over the row length `N`
+# (used by `gauss_newton` at N=2 for DF and N=4 for GPS) feeding the ONE shared
+# [`_solve_normal`](@ref) (§9 reuse). Streaming summation (no dense H), no LinearAlgebra.
+function _normal_eqs(rows, rhs, w, N::Integer)
+    M = zeros(Float64, N, N)
+    g = zeros(Float64, N)
+    @inbounds for i in eachindex(rhs)
+        h = rows[i]; wi = w[i]; bi = rhs[i]
+        for a in 1:N
+            wha = wi * h[a]
+            g[a] += wha * bi
+            for c in a:N
+                M[a, c] += wha * h[c]
+            end
+        end
+    end
+    @inbounds for a in 1:N, c in 1:a-1; M[a, c] = M[c, a]; end   # symmetrize
+    return M, g
+end
+
 """
     linear_ls(A, b, W) -> (p::SVector{2}, cov::SMatrix{2,2})
 
@@ -47,8 +77,8 @@ Weighted linear least squares for a 2-parameter model: solve the normal equation
 (at unit residual variance — `W` already carries the measurement weighting). `A` is
 an iterable of 2-element rows `Aᵢ`, `b` and `W` are vectors (`W` the DIAGONAL of the
 weight matrix). The 2×2 normal matrix is accumulated by summation and inverted in
-closed form (no LinearAlgebra). Generic / measurement-agnostic — `bearings_fix` and
-(later) GPS build their own `A`/`W` and call this.
+closed form via [`_solve2x2`](@ref) (no LinearAlgebra). Generic / measurement-agnostic —
+the DF pseudolinear baseline builds its own `A`/`W` and calls this.
 """
 function linear_ls(A, b, W)
     m11 = 0.0; m12 = 0.0; m22 = 0.0; g1 = 0.0; g2 = 0.0
@@ -70,27 +100,17 @@ function _wrss(r, R)
     return s
 end
 
-# Normal-equation pieces for A = H rows weighted by W = 1/R: returns the solve of
-# (HᵀR⁻¹H)·Δ = HᵀR⁻¹·r and cov = (HᵀR⁻¹H)⁻¹. Shared by a GN step and the final cov.
-function _normal_solve(H, r, R)
-    m11 = 0.0; m12 = 0.0; m22 = 0.0; g1 = 0.0; g2 = 0.0
-    @inbounds for i in eachindex(r)
-        h1 = H[i][1]; h2 = H[i][2]; w = 1.0 / R[i]; ri = r[i]
-        wh1 = w * h1; wh2 = w * h2
-        m11 += wh1 * h1; m12 += wh1 * h2; m22 += wh2 * h2
-        g1  += wh1 * ri; g2  += wh2 * ri
-    end
-    return _solve2x2(m11, m12, m22, g1, g2)
-end
-
 """
-    gauss_newton(p0, residual_fn, jacobian_fn, R; iters = 8) -> (p::SVector{2}, cov::SMatrix{2,2})
+    gauss_newton(p0, residual_fn, jacobian_fn, R; iters = 8) -> (p::Vector, cov::Matrix)
 
-Fixed-iteration Gauss-Newton for a 2-parameter nonlinear least squares.
-`residual_fn(p)` returns the residual vector `r` (already wrapped for angles),
-`jacobian_fn(p)` returns the Jacobian `H` (iterable of 2-rows, `∂model/∂p`), and `R`
-is the DIAGONAL vector of measurement variances. Each step solves
-`Δ = (HᵀR⁻¹H)⁻¹ HᵀR⁻¹ r`, `p ← p + Δ`; the returned `cov = (HᵀR⁻¹H)⁻¹` at the final `p`.
+Fixed-iteration Gauss-Newton for an **N-parameter** nonlinear least squares (N inferred
+from `length(p0)` — 2 for the DF bearings fix, 4 for the GPS trilateration fix, the
+§9 shared scaffold). `residual_fn(p)` returns the residual vector `r` (already wrapped
+for angles), `jacobian_fn(p)` returns the Jacobian `H` (iterable of N-rows, `∂model/∂p`),
+and `R` is the DIAGONAL vector of measurement variances. Each step solves
+`Δ = (HᵀR⁻¹H)⁻¹ HᵀR⁻¹ r` via [`_solve_normal`](@ref), `p ← p + Δ`; the returned
+`cov = (HᵀR⁻¹H)⁻¹` at the final `p`. Returns plain `Vector`/`Matrix` (dimension-generic);
+the 2-D `bearings_fix` wraps them back to `SVector{2}`/`SMatrix{2,2}`.
 
 **Fixed iteration COUNT, not until-convergence** (named approximation, HANDOFF §1):
 "N-step Gauss-Newton" keeps a tick bounded and bit-reproducible — a `while !converged`
@@ -100,21 +120,25 @@ loop could spin under bad geometry and stall the tick non-deterministically.
 result: a GN step under bad geometry can overshoot to a non-finite `p̂` or grow the
 residual. So a step that yields a non-finite `p` OR a larger weighted residual norm is
 REJECTED and the loop stops, keeping the last good `p` — and since callers seed `p0`
-at the pseudolinear fix, the worst case is "no better than pseudolinear," never
-NaN / never a spin.
+at a sensible guess (pseudolinear for DF, the scene origin for GPS), the worst case is
+"no better than the seed," never NaN / never a spin.
 """
 function gauss_newton(p0, residual_fn, jacobian_fn, R; iters::Integer = 8)
-    p     = SVector{2, Float64}(p0[1], p0[2])
+    N     = length(p0)
+    p     = collect(Float64, p0)                       # mutable N-vector
+    Winv  = [1.0 / Ri for Ri in R]                     # HᵀR⁻¹H weights (R constant across steps)
     rnorm = _wrss(residual_fn(p), R)
     for _ in 1:iters
-        Δ, _  = _normal_solve(jacobian_fn(p), residual_fn(p), R)
-        pnew  = p + Δ
-        all(isfinite, pnew) || break                 # divergence → keep last good p
+        M, g  = _normal_eqs(jacobian_fn(p), residual_fn(p), Winv, N)
+        Δ, _, _ = _solve_normal(M, g)
+        pnew  = p .+ Δ
+        all(isfinite, pnew) || break                   # divergence → keep last good p
         rnew  = _wrss(residual_fn(pnew), R)
         rnew > rnorm && break                          # step grew the residual → reject
         p = pnew; rnorm = rnew
     end
-    _, cov = _normal_solve(jacobian_fn(p), residual_fn(p), R)   # cov at the final fix
+    M, g = _normal_eqs(jacobian_fn(p), residual_fn(p), Winv, N)
+    _, cov, _ = _solve_normal(M, g)                    # cov at the final fix
     return p, cov
 end
 
@@ -179,7 +203,9 @@ function bearings_fix(thetas, positions, sigmas;
             end
             return rows
         end
-        return gauss_newton(ppl, resid, jac, Rdiag; iters = iters)
+        p, cov = gauss_newton(ppl, resid, jac, Rdiag; iters = iters)
+        return SVector{2, Float64}(p[1], p[2]),
+               SMatrix{2, 2, Float64}(cov[1,1], cov[2,1], cov[1,2], cov[2,2])
     end
 
     error("bearings_fix: unknown estimator :$estimator ($(join(ESTIMATOR_MODES, " | ")))")

@@ -798,6 +798,74 @@ start that server, then `godot --headless --path clients/godot --script res://ne
 --script res://net/slice6_ui_test.gd`. **(stretch, deferred)** offline `batch.jl` `kind=:pri_mc`
 (deinterleave success-rate vs jitter/emitter-density) + `clients/notebooks/slice6_pri.jl` Pluto diagram.
 
+**Slice 7 — GPS (pseudoranges → trilateration → DOP + RAIM)** (HANDOFF §9 REUSE milestone / §10 item 7)
+— **Gate 1 done & green (1308 tests).** The slice that cashes in §9 ("why the suite is one project"):
+lights NO new tick phase — it REUSES the `build_env!→observe!→decide!` shape a third time — its novelty
+is CROSS-DOMAIN CODE REUSE (the same `geometry.jl`/`estimation.jl` that fixed a DF emitter now
+trilaterate a GPS receiver, generalized 2→4: x,y,z + the receiver clock bias `c·b`). Lesson 1 = **DOP**
+(identical σ on every pseudorange, but a spread constellation pins the fix and a clustered one smears it —
+GEOMETRY sets the error, `σ_pos=DOP·σ`); lesson 2 = **RAIM** (over-determination → the LS residuals carry
+a consistency check → a spoofed satellite inflates the residual RSS → detect/exclude). Scope: **flat-local
+fictional satellites** (SI `Vec3`, NO ECEF/WGS84/orbits), single receiver, full 3-D solve; deferred: real
+orbits/ephemeris, Klobuchar/Saastamoinen, carrier-phase/RTK, multi-fault RAIM, GPS-spoofing-as-live-RGPO.
+NO draw-topology hazard (deterministic given the drawn pseudoranges, like slices 2/4/5/6). **Planned FULL
+in `docs/plans/slice7.md`** (3 gates: pure primitives → GPS pipeline wired → fidelity + 2 scenarios +
+Godot sky view + verifiers).
+
+Gate 1 (pure primitives green — closed-form + MC): **the 2→4 generalization decision (advisor-run as the
+a/b gate: implement (b), run the DF suite, let it decide).** `geometry.jl` gains the SHARED N-dim solver
+`_solve_normal(M,g)→(x,Minv,singular)` (hand-rolled Cholesky LLᵀ, no LinearAlgebra — the `_range` house
+style; relative-ridge pivot floor = the N-dim analog of `_solve2x2`'s det floor; a well-conditioned pivot
+used VERBATIM so N=2 reproduces the cofactor to floating-point, a rank-deficient pivot floored + flagged)
++ generic `dop(H)→(Q,singular)` (`Q=(HᵀH)⁻¹` at UNIT variance — σ NEVER inside Q, the slice-5 σθ-trap on
+the GPS surface) + `dop_components(Q;singular)→(gdop,pdop,hdop,vdop,tdop)` (a `singular` constellation
+ships `FINITE_CEIL` EXACTLY — the `gdop` det-guard analog). `estimation.jl`: **`gauss_newton` generalized
+to N-dim** (infers N from `p0`, assembles `HᵀR⁻¹H` via a generic `_normal_eqs`, solves via the shared
+`_solve_normal`) — **so DF `:ml` (N=2) and GPS `position_fix` (N=4) call literally the same scaffold (the
+§9 headline made real).** **`linear_ls`/`_solve2x2` KEPT 2×2-cofactor (advisor's fallback (a) for the
+pseudolinear path ONLY):** the pseudolinear normal matrix has a TINY LEADING pivot (down-range/x info is
+the small one), which natural-order Cholesky handles less stably on shallow-geometry noisy draws — the
+slice-5 pseudolinear-bias MC test caught it (bias collapsed 1265→8.8 m via near-singular outliers). GPS
+never uses `linear_ls`, so keeping the stable cofactor costs nothing and the reuse story stays honest —
+the shared machinery is `gauss_newton`/`dop`, not the DF baseline. **Byte-identity (honest wording):** the
+RNG draw stream + the `_sample_z` golden are UNTOUCHED (gnss.jl adds no code to the radar/detection path);
+DF **pseudolinear** is byte-identical (cofactor unchanged); DF **`:ml`** now routes through the Cholesky
+`_solve_normal` at N=2 (cofactor vs sqrt-Cholesky are equal to ULP, not bit-for-bit — `test_determinism`
+compares run-A-vs-B on the same code so it stays green; the value tests are atol/inequality). New
+`gnss.jl` (pure §9-style lib, defines `GPS_TOGGLE=(:off,:on)`/`RAIM_MODES=(:off,:detect,:exclude)` the
+one-list source-of-truth `LIVE_FIDELITY_MODES` will reference — so gnss.jl precedes radar.jl in the
+include order; reuses geometry/estimation, both already before radar): `pseudorange(sat,rx,cb;…)` =
+`‖sat−rx‖ + c·b + clock_err + fault_bias + iono + tropo + mp + noise` (a PURE sum — the terms arrive
+already-toggled + the stochastic mp/noise already-drawn, so gnss.jl stays RNG-free; the draw lives in
+gate-2 `observe!`); `position_fix(sat_positions,rho;seed,cb0,iters)` CALLS the generalized `gauss_newton`
+at N=4 (residual `rⱼ=ρⱼ−(‖pⱼ−p̂‖+ĉb)`, Jacobian row `Hⱼ=[−ûⱼ,1]` the classical GPS geometry matrix, the DF
+`[sinθ,−cosθ]` cousin) + returns `(pos,cb,Q,singular)`; the five error-term models (`iono_delay`/
+`tropo_delay` = deterministic elevation obliquity `zenith/sin(el)`, NOT Klobuchar/Saastamoinen; `mp_scale`
+= the multipath elevation weight; clock_err = per-SV constant; all NAMED approximations) + `sat_az_el`
+(sky geometry). **RAIM (the empirical-σ-multiple threshold — route (iii), the gate-1 probe DECISION):**
+`raim_statistic = √(SSE/(n−4))` (σ-normalized → dimensionless, E≈1 under H0), `raim_suspect` (largest
+normalized residual = the real single-fault ID), `raim_solve(…;mode,threshold)` (`:off` never flags /
+`:detect` flags stat>T / `:exclude` drops the suspect + re-solves keeping ≥4 → snap-back). The χ²/Pfa
+route was REJECTED: exclude drops n=6→5 (dof 2→1, odd → needs an erf-based χ² inverse the project has
+avoided for 6 slices); the empirical threshold works at every DOF + matches the probe-tune discipline
+(tune `k≈3–5` against the NOISY stat at gate 3 — the probe's noise-free stats are pure fault signal, ~1.0
+H0 floor underneath — advisor). **VDOP>HDOP holds on the shipped upper-hemisphere layout** (a placement
+property, pinned per-layout, NOT universal). `test_gnss.jl` (+70, wired after test_estimation): noise-free
+fix==truth (exactly-4 AND over-determined); the **§9 reuse pin** (`_solve_normal` N=2 == `_solve2x2`);
+**DOP decomposition vs an INDEPENDENT `_inv4` Gauss-Jordan recompute** (a different algorithm than the
+Cholesky under test — the slice-2 oracle rule) + VDOP>HDOP + the decomposition identities; **σ-invariance**
+(MC own Xoshiro: RMS_pos ∝ σ [ratio 2.000] while PDOP is a fixed number, RMS/σ≈PDOP); the **error budget —
+all FIVE terms** (iono raises cb [clock absorbs the +delay, known sign] + grows pos err; per-SV clock_err
+biases the fix; tropo obliquity sign+exactness; mp_scale worse-at-low-el; multipath+noise MC variance
+∝ σ, own Xoshiro); **RAIM detect/ID/exclude/off** (fault ID picks the RIGHT satellite — the real step, not
+tuned; exclude recovers truth <1e-4; `:off` never flags; **n=4 dof 0 is BLIND** — over-determination
+required); **singular→FINITE_CEIL EXACTLY** (<4 sats AND a coplanar az=0 constellation, no throw); **units
+ns round-trip** (the §1 metres-vs-seconds clock trifecta — `c·b` metres internal, ns at the boundary).
+Slices 1–6 green through the include. **Next: gate 2** — `GpsSatellite`/`GpsReceiver`/`GpsSolver` in a
+new `gps.jl` (after radar.jl, the geolocation.jl/esm.jl shape), `env[:gps_sats]`→`env[:pseudoranges]`→
+telemetry, the exact §1 draw order (multipath then noise, both unconditional, `2·n_sats` fixed),
+`:gps_satellite`/`:gps_receiver` kinds, `LIVE_FIDELITY_MODES` gains the six GPS keys.
+
 ---
 
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +

@@ -137,3 +137,130 @@ end
 # geometry) or an over-ceiling value becomes FINITE_CEIL, so the wire never carries
 # Inf/NaN (advisor's output-clamp-over-ridge guidance).
 _finite(x::Real) = isfinite(x) ? min(x, FINITE_CEIL) : FINITE_CEIL
+
+# ---------------------------------------------------------------------------------
+# The N-dimensional shared solver (slice 7 §9 reuse — "extend, don't fork"). GPS
+# (4 unknowns) needs the same normal-equation solve DF (2 unknowns) uses; rather
+# than a second solver, the DF call sites in estimation.jl delegate to THIS generic
+# routine at N=2, so DF geolocation and GPS trilateration call literally the same
+# code (the §9 headline made real). Pure, no `w.rng`, no LinearAlgebra — a
+# hand-rolled Cholesky (LLᵀ), ~plain loops over N (the `_range` house style).
+# ---------------------------------------------------------------------------------
+
+# Forward (L y = b) then back (Lᵀ x = y) substitution for a lower-triangular L.
+function _chol_solve(L::AbstractMatrix{Float64}, b::AbstractVector{Float64})
+    n = length(b)
+    y = Vector{Float64}(undef, n)
+    x = Vector{Float64}(undef, n)
+    @inbounds for i in 1:n
+        t = b[i]
+        for k in 1:i-1; t -= L[i, k] * y[k]; end
+        y[i] = t / L[i, i]
+    end
+    @inbounds for i in n:-1:1
+        t = y[i]
+        for k in i+1:n; t -= L[k, i] * x[k]; end
+        x[i] = t / L[i, i]
+    end
+    return x
+end
+
+"""
+    _solve_normal(M, g) -> (x, Minv, singular)
+
+Solve the `N×N` symmetric-PSD normal system `M·x = g` and return the solution `x`,
+the inverse `Minv = M⁻¹` (the covariance / DOP matrix), and a `singular` flag — all
+from ONE hand-rolled Cholesky factorization (no LinearAlgebra). This is the N-dim
+generalization of estimation.jl's old closed-form 2×2 `_solve2x2`; the DF call sites
+delegate here at N=2 and GPS at N=4 (§9 reuse).
+
+**Regularization (the N-dim analog of `_solve2x2`'s relative det floor).** A pivot
+that drops to/below a RELATIVE ridge `ridge = 1e-12·(tr(M)/N + 1)` marks the geometry
+rank-deficient: `singular` is set and the pivot is floored to `ridge`, so a singular
+constellation (< N independent rows, coplanar/clustered) yields a huge-but-FINITE
+`Minv` (never NaN/Inf, never a throw) — the readouts clamp to [`FINITE_CEIL`](@ref) at
+the consumer, or the caller keys off `singular` to ship `FINITE_CEIL` exactly. A
+WELL-conditioned pivot is used verbatim (no ridge added), so the N=2 solve reproduces
+the pre-refactor `_solve2x2` fix/cov to floating-point (the byte-safety obligation).
+"""
+function _solve_normal(M::AbstractMatrix{Float64}, g::AbstractVector{Float64})
+    n = length(g)
+    tr = 0.0
+    @inbounds for i in 1:n; tr += M[i, i]; end
+    ridge = 1e-12 * (tr / n + 1.0)
+    L = zeros(Float64, n, n)
+    singular = false
+    @inbounds for j in 1:n
+        s = M[j, j]
+        for k in 1:j-1; s -= L[j, k]^2; end
+        if s <= ridge                       # rank-deficient relative to the matrix scale
+            singular = true
+            s = ridge
+        end
+        Ljj = sqrt(s)
+        L[j, j] = Ljj
+        for i in j+1:n
+            t = M[i, j]
+            for k in 1:j-1; t -= L[i, k] * L[j, k]; end
+            L[i, j] = t / Ljj
+        end
+    end
+    x = _chol_solve(L, g)
+    Minv = Matrix{Float64}(undef, n, n)
+    e = zeros(Float64, n)
+    @inbounds for c in 1:n
+        fill!(e, 0.0); e[c] = 1.0
+        col = _chol_solve(L, e)
+        for i in 1:n; Minv[i, c] = col[i]; end
+    end
+    return x, Minv, singular
+end
+
+"""
+    dop(H) -> (Q, singular)
+
+The dilution-of-precision matrix `Q = (HᵀH)⁻¹` at **UNIT** measurement variance for a
+geometry/Jacobian `H` (an iterable of N-element rows). This is the same `(HᵀH)⁻¹` math
+`gdop` uses, generalized to N via the shared [`_solve_normal`](@ref) (§9 reuse) — GPS
+calls it at N=4 with unit-LOS rows `[−û, 1]`. **σ enters NEVER inside Q** (pure
+geometry) — the pseudorange σ multiplies the DOP at the readout (`σ_pos = DOP·σ`), the
+slice-5 σ-invariance trap on a new surface (advisor). `singular` (a rank-deficient /
+coplanar constellation) is passed through so [`dop_components`](@ref) can ship
+`FINITE_CEIL` exactly.
+"""
+function dop(H)
+    N = length(first(H))
+    M = zeros(Float64, N, N)
+    @inbounds for h in H
+        for a in 1:N, c in a:N
+            M[a, c] += h[a] * h[c]
+        end
+    end
+    @inbounds for a in 1:N, c in 1:a-1; M[a, c] = M[c, a]; end   # symmetrize
+    _, Q, singular = _solve_normal(M, zeros(Float64, N))
+    return Q, singular
+end
+
+"""
+    dop_components(Q; singular = false) -> (gdop, pdop, hdop, vdop, tdop)
+
+Decompose a 4×4 GPS DOP matrix `Q = (HᵀH)⁻¹` (from [`dop`](@ref); local frame — 1,2
+horizontal, 3 vertical, 4 receiver clock) into the classical dilution scalars:
+
+    GDOP = √(Q₁₁+Q₂₂+Q₃₃+Q₄₄)   PDOP = √(Q₁₁+Q₂₂+Q₃₃)
+    HDOP = √(Q₁₁+Q₂₂)           VDOP = √Q₃₃        TDOP = √Q₄₄
+
+All clamped to [`FINITE_CEIL`](@ref); a `singular` constellation ships `FINITE_CEIL`
+exactly (the `gdop` det-guard analog). **VDOP > HDOP is the TYPICAL upper-hemisphere
+consequence** (all ranges arrive from above → one-sided vertical info) — a property of
+the placement, verified per-layout, NOT a universal (named approximation, HANDOFF §1).
+"""
+function dop_components(Q; singular::Bool = false)
+    singular && return (FINITE_CEIL, FINITE_CEIL, FINITE_CEIL, FINITE_CEIL, FINITE_CEIL)
+    g = sqrt(max(Q[1,1] + Q[2,2] + Q[3,3] + Q[4,4], 0.0))
+    p = sqrt(max(Q[1,1] + Q[2,2] + Q[3,3], 0.0))
+    h = sqrt(max(Q[1,1] + Q[2,2], 0.0))
+    v = sqrt(max(Q[3,3], 0.0))
+    t = sqrt(max(Q[4,4], 0.0))
+    return (_finite(g), _finite(p), _finite(h), _finite(v), _finite(t))
+end

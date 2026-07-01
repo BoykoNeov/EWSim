@@ -21,6 +21,7 @@ include("detection.jl")
 include("geometry.jl")
 include("estimation.jl")
 include("deinterleave.jl")
+include("gnss.jl")
 include("radar.jl")
 include("esm.jl")
 include("geolocation.jl")
@@ -47,6 +48,10 @@ export cfar_alpha, cfar_threshold, cfar_scan
 # DF / geolocation shared libs (slice 5): geometry/DOP + estimation scaffold
 export bearing, wrap_angle, eig2x2, error_ellipse, gdop, FINITE_CEIL
 export linear_ls, gauss_newton, bearings_fix, ESTIMATOR_MODES
+# GPS shared-lib reuse (slice 7): N-dim solver siblings + GPS pseudorange positioning
+export dop, dop_components
+export sat_az_el, iono_delay, tropo_delay, mp_scale, pseudorange
+export position_fix, raim_statistic, raim_suspect, raim_solve, GPS_TOGGLE, RAIM_MODES
 # Multi-emitter EW / PRI deinterleaving shared lib (slice 6): difference histogram +
 # cdif/sdif PRI extraction + pulse↔emitter association
 export difference_histogram, detect_pris, associate, assoc_pct, DEINTERLEAVER_MODES, SPURIOUS_ID
