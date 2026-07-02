@@ -671,4 +671,64 @@ end
         end
         @test noseeker_trace(introduce = true) == noseeker_trace(introduce = false)   # :seeker no-op w/o a Seeker
     end
+
+    # Slice 12: augmented PN + the ManeuveringTarget mover — THE RNG-INFLECTION INVERTS BACK. Slice
+    # 11's Seeker made the missile arc draw; slice 12 has NO seeker → NO `w.rng` draw, so the framing
+    # RETURNS to the slice-8/9/10 shape: "draw-count invariance is VACUOUS" (do NOT copy slice-11's
+    # "1 draw/tick" language — the convention-4c trap running the OPPOSITE direction). THREE claims:
+    # (2) same-config replay bit-identical; the world consumes NO rng (pristine Xoshiro after the
+    # flight — the inverse of slice 11's fingerprint); (3) a :pn→:apn toggle CHANGES the trajectory
+    # against the MANEUVERING target (physics-changing, not-a-dead-knob); PLUS the additivity check —
+    # a :pn missile on a plain ConstantVelocity target (no maneuver, no :apn) replays bit-identical
+    # (the :pn/ConstantVelocity path is TEXTUALLY unchanged by the slice-12 edits).
+    @testset "an APN missile + maneuvering target: bit-identical replay; NO rng; the :apn toggle CHANGES it" begin
+        function apn_trace(; guidance = :apn, a_lat = 200.0, nsteps = 1500, toggle_at = 0,
+                           toggle_to = nothing, start_guid = guidance, maneuver = true)
+            fid = Dict{Symbol,Symbol}(:autopilot => :ideal)
+            start_guid === nothing || (fid[:guidance] = start_guid)
+            w = World(seed = 0, fidelity = fid)
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0),
+                vel = Vec3(700cosd(12), 0, 700sind(12)),
+                comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                    :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0, :kp => 2.0, :ki => 0.0, :kd => 0.0,
+                    :tau => 0.3, :a_max => 200.0))
+            tcomp = Dict{Symbol,Any}(:rcs_m2 => 1.0)
+            if maneuver
+                tcomp[:a_lat_mps2] = a_lat; tcomp[:turn_sign] = 1.0; tsub = ManeuveringTarget(:tgt1)
+            else
+                tsub = ConstantVelocity(:tgt1)
+            end
+            w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(6000.0, 0, 4200.0),
+                vel = Vec3(-800.0, 0, 200.0), comp = tcomp)
+            subs = Subsystem[BallisticMissile(:m1), Autopilot(:m1), tsub]
+            trace = Float64[]
+            for i in 1:nsteps
+                (toggle_to !== nothing && i == toggle_at) && (w.fidelity[:guidance] = toggle_to)
+                tick!(w, subs, 1.0e-3)
+                append!(trace, w.entities[:m1].pos); append!(trace, w.entities[:m1].vel)
+                append!(trace, w.entities[:m1].comp[:a_ctrl])          # the control fingerprint (sharper)
+                empty!(w.events)
+            end
+            return w, trace
+        end
+        # (2) same-config replay bit-identical (pos/vel/a_ctrl fingerprint, reinterpret — sign of zero).
+        wa, ta = apn_trace(); _, tb = apn_trace()
+        @test ta == tb && reinterpret(UInt64, ta) == reinterpret(UInt64, tb)
+        # NO `w.rng` draw — the missile arc is RNG-free again (the slice-11 inflection inverts): after
+        # the whole flight w.rng is a PRISTINE Xoshiro(0) (nothing drew). This is the sharp inverse of
+        # slice 11's "1 draw/tick" fingerprint — "draw-count invariance is VACUOUS" here.
+        @test rand(copy(wa.rng)) == rand(Xoshiro(0))
+        # (3) a mid-run :pn→:apn toggle CHANGES the trajectory (physics-changing, not-a-dead-knob) —
+        # against the MANEUVERING target the feedforward bites; each run internally deterministic.
+        _, tk1 = apn_trace(start_guid = :pn, toggle_at = 200, toggle_to = :apn)
+        _, tk2 = apn_trace(start_guid = :pn, toggle_at = 200, toggle_to = :apn)
+        @test reinterpret(UInt64, tk1) == reinterpret(UInt64, tk2)
+        _, tnever = apn_trace(guidance = :pn)                         # never toggled (stays pn)
+        @test tk1 != tnever                                           # the toggle changed the flight
+        # ADDITIVITY: a :pn missile on a plain ConstantVelocity target (NO maneuver block, NO :apn)
+        # replays bit-identical — the :pn/ConstantVelocity path is unperturbed by the slice-12 edits.
+        _, tp1 = apn_trace(guidance = :pn, maneuver = false)
+        _, tp2 = apn_trace(guidance = :pn, maneuver = false)
+        @test reinterpret(UInt64, tp1) == reinterpret(UInt64, tp2)
+    end
 end

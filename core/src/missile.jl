@@ -157,6 +157,77 @@ function build_env!(m::BallisticMissile, w::World)
     return nothing
 end
 
+# --- the MANEUVERING TARGET: a curving phase-1 mover (slice 12, HANDOFF §10 item 10) ----------
+# The maneuvering FOIL for the augmented-PN lesson. ConstantVelocity (radar.jl) flies a straight
+# line; ManeuveringTarget applies a CONSTANT lateral acceleration ⟂ its velocity (a coordinated,
+# speed-preserving g-turn IN THE x-z PLANE), so the target CURVES — the thing plain PN can't lead.
+# Against it plain PN lags by the target-accel term and, under a binding g-limit, SATURATES → misses;
+# APN's `(N/2)·a_T⊥` feedforward (Autopilot.decide!'s `:apn` branch above) anticipates the maneuver →
+# low demand → intercept (HANDOFF §10 item 10: "g-limit saturation modeled — this is why augmented
+# PN matters").
+#
+# REUSES `integrator_step(:rk4, ...)` (dynamics.jl) — the SAME stepper the missile flies — with an
+# `a_lat·perp(v)` closure, but SELF-CONTAINED: it ALWAYS steps `:rk4`, NOT coupled to the missile's
+# `:integrator` fidelity (else the target's path would move when the MISSILE's integrator toggles —
+# a cross-lesson leak). A ⟂-v turn is speed-preserving; RK4 holds the speed to machine eps over the
+# flight (probe: −2.7e-12 m/s drift over 8 s), so target-integration error ≪ the guidance lag.
+#
+# DETERMINISM (the slice-8/10 shape — NOT slice-11's): NO RNG (truth kinematics), so "draw-count
+# invariance" is VACUOUS. Introduce-safe: a plain `:target` gets `ConstantVelocity` (byte-identical) —
+# only a `maneuver:` block swaps in ManeuveringTarget. GRAVITY-FREE / kinematic (it feels ONLY its
+# commanded `a_T`, not `−g` — the ConstantVelocity lineage; the missile's own gravity leaves a small
+# honest `:apn` residual — gravity-comp PN is DEFERRED, HANDOFF §10 / convention 9).
+#
+# NAMED APPROXIMATIONS (HANDOFF §1): a CONSTANT lateral accel (no jink/weave program — a later
+# fidelity step); planar in x-z (the elevation view's plane, no cross-range — the slice-10 precedent).
+
+# The coordinated-turn lateral accel: `a_lat·sign` along the in-plane (x-z) unit ⟂ to v (v̂ rotated
+# +90° in x-z: `(vx,vz) → (−vz,vx)`). At v→0 (or a purely-vertical v) the in-plane speed vanishes →
+# zero accel (no NaN — the pursuit/frames zero-guard house style). Shared by the RK4 step AND the
+# truth `a_T` publish so they agree by construction.
+function _lateral_accel(v::Vec3, a_lat::Float64, sign::Float64)
+    vx, vz = v[1], v[3]
+    s = sqrt(vx * vx + vz * vz)
+    s < _FRAME_EPS && return zero(Vec3)
+    return (a_lat * sign / s) * Vec3(-vz, 0.0, vx)
+end
+
+"""
+    ManeuveringTarget(id)
+
+Advances entity `id` on a CONSTANT-lateral-accel coordinated g-turn in the x-z plane — the curving
+maneuvering foil for the augmented-PN lesson (slice 12), the accelerating sibling of
+[`ConstantVelocity`](@ref). Each physics step it solves `(ṗ, v̇) = (v, a_lat·perp(v))` via
+`integrator_step(:rk4, …)` (dynamics.jl — the same stepper the missile flies, but ALWAYS `:rk4`, NOT
+coupled to the missile's `:integrator`), advancing `(pos, vel)`. It owns pos/vel advancement, so the
+loader gives a maneuvering `:target` `[ManeuveringTarget]` and **NOT** `ConstantVelocity` (two phase-1
+movers would double-integrate). A ⟂-v turn is speed-preserving (RK4 holds it to machine eps).
+
+Config in the entity `comp` bag, read with DEFAULTS so a bare/live config can't crash a tick:
+`:a_lat_mps2` (lateral accel magnitude, m/s²; `0` → straight-line, the APN feedforward vanishes) and
+`:turn_sign` (`±1`, the turn direction; default `+1`). Writes `comp[:a_target]::Vec3` — the TRUTH
+target accel THIS tick (from the post-step velocity) — which the missile's phase-4 `:apn` `decide!`
+reads for the feedforward (phase-1 write < phase-4 read; comp survives `empty!(w.env)`). GRAVITY-FREE
+(feels only `a_T` — the ConstantVelocity lineage; § gravity handling above).
+"""
+struct ManeuveringTarget <: Subsystem
+    id::Symbol
+end
+
+function integrate!(mt::ManeuveringTarget, w::World, dt::Float64)
+    e     = w.entities[mt.id]
+    c     = e.comp
+    a_lat = Float64(get(c, :a_lat_mps2, 0.0))
+    tsign = Float64(get(c, :turn_sign, 1.0))
+    p′, v′ = integrator_step(:rk4, v -> _lateral_accel(v, a_lat, tsign), e.pos, e.vel, dt)
+    e.pos = p′
+    e.vel = v′
+    # The TRUTH target accel THIS tick, from the POST-step velocity (matches what the phase-4 `:apn`
+    # decide! consumes). `a_lat = 0` → zero → the APN feedforward vanishes (`:apn`-on-CV ≈ `:pn`).
+    c[:a_target] = _lateral_accel(v′, a_lat, tsign)
+    return nothing
+end
+
 # --- the GUIDED missile: the Autopilot subsystem (slice 9, HANDOFF §10 item 9) ----------------
 # The missile's FIRST `decide!` (phase 4 — the phase slice 5 lit for the DF Geolocator): "a missile
 # is integrate! (airframe) + observe! (seeker) + decide! (guidance)" (HANDOFF §3). The Autopilot
@@ -252,11 +323,24 @@ function decide!(a::Autopilot, w::World)
     # `:seeker_omega`, so this branch is never taken → the exact slice-10 truth `pn_accel`. The seeker
     # only overrides PN's ω-SOURCE, so it is gated on `guid === :pn` (pursuit reads the LOS directly,
     # no ω) — keeping `:seeker`/`:guidance`/`:autopilot` orthogonal.
+    # SLICE-12 APN SEAM: `:apn` = TPN + a `(N/2)·a_T⊥` feedforward on the TARGET's truth accel
+    # (`tgt.comp[:a_target]`, written this tick by the phase-1 `ManeuveringTarget` mover; phase-1 <
+    # phase-4, and comp survives `empty!(w.env)`). Against a maneuvering target plain PN saturates
+    # under the g-limit and misses; APN anticipates the maneuver → low demand → intercept (HANDOFF
+    # §10 item 10). Reads TRUTH û/ω/Vc (the exact `:pn` truth path) — no seeker (slice-12 scenarios
+    # carry none; the `:seeker_omega` branch stays `:pn`-gated). `get(...,:a_target, zero(Vec3))`
+    # defaults to zero on a CV target → the feedforward vanishes → `:apn` ≈ `:pn`. The fetch +
+    # feedforward live INSIDE this branch so the `:pn`/`:pursuit`/seeker paths are TEXTUALLY
+    # unchanged → slices 1–11 byte-identical.
     a_dem = if guid === :pn && haskey(c, :seeker_omega)
                 pn_accel_from_omega(c[:seeker_los]::Vec3, c[:seeker_omega]::Vec3,
                                     -range_rate(rel_pos, rel_vel); N = n_pn)
             elseif guid === :pn
                 pn_accel(e.pos, e.vel, tgt.pos, tgt.vel; N = n_pn)
+            elseif guid === :apn
+                pn_accel_augmented(los_unit(e.pos, tgt.pos), los_rate(rel_pos, rel_vel),
+                                   -range_rate(rel_pos, rel_vel),
+                                   get(tgt.comp, :a_target, zero(Vec3))::Vec3; N = n_pn)
             else
                 pursuit_accel(e.pos, e.vel, tgt.pos; k_guid = k_guid)
             end

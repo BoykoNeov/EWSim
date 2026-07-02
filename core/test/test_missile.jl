@@ -792,3 +792,184 @@ end
         end
     end
 end
+
+# --- slice 12 gate 2: augmented PN wired + the ManeuveringTarget curving mover ----------------
+# The RNG-free payoff of the missile arc: against a MANEUVERING target (a new phase-1 mover,
+# ManeuveringTarget, applying a constant lateral g-turn) plain PN lags by the target-accel term and,
+# under a BINDING g-limit, SATURATES → misses; APN's `(N/2)·a_T⊥` feedforward (Autopilot.decide!'s
+# `:apn` branch, reading the mover's truth `comp[:a_target]`) anticipates → low demand → intercept
+# (HANDOFF §10 item 10 — "g-limit saturation modeled, this is why augmented PN matters"). autopilot
+# :ideal HELD so the miss isolates the GUIDANCE LAW. Numbers PROBED against this live wired
+# decide!→integrate! path (wire_probe.jl, convention 10) — conservative one-sided bounds, NOT the
+# frame-sampling ratio. Determinism/byte-identity is the SLICE-10 shape (physics-changing, NO RNG —
+# ManeuveringTarget/`:apn` add no `w.rng` draw; the slice-11 RNG-inflection language INVERTS here).
+@testset "guided missile — augmented PN + maneuvering target wired (slice 12, :apn)" begin
+    dt = 1.0e-3
+    norm3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # The g-limited engagement (wire_probe): the slice10_pn crossing + a HARD maneuver (a_lat=200,
+    # ⟂-v, turn-sign=+1 — the clean CPA direction) + a BINDING a_max=200. r_stop=30, :ideal actuator.
+    function apn_world(; guidance = :apn, a_lat = 200.0, turn_sign = 1.0, a_max = 200.0, n_pn = 4.0,
+                       maneuver = true,
+                       m_vel = Vec3(700cosd(12), 0.0, 700sind(12)),
+                       t_pos = Vec3(6000.0, 0.0, 4200.0), t_vel = Vec3(-800.0, 0.0, 200.0))
+        w = World(seed = 0, fidelity = Dict(:autopilot => :ideal, :guidance => guidance))
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0), vel = m_vel,
+            comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                :k_guid => 3.0, :n_pn => n_pn, :r_stop => 30.0,
+                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :a_max => a_max))
+        tcomp = Dict{Symbol,Any}(:rcs_m2 => 1.0)
+        # `maneuver` arms the curving mover (a_lat/turn_sign); else a plain ConstantVelocity target.
+        if maneuver
+            tcomp[:a_lat_mps2] = a_lat; tcomp[:turn_sign] = turn_sign
+            tsub = ManeuveringTarget(:tgt1)
+        else
+            tsub = ConstantVelocity(:tgt1)
+        end
+        w.entities[:tgt1] = Entity(:tgt1, :target; pos = t_pos, vel = t_vel, comp = tcomp)
+        return w, Subsystem[BallisticMissile(:m1), Autopilot(:m1), tsub]
+    end
+    # Fly to FIRST CPA (the slice-10 discipline): min los_range up to where the target has clearly
+    # passed and range is opening; collect the saturation fraction (the mechanism tell).
+    function fly_cpa!(w, subs; n = 40000, open_hold = 200)
+        miss = Inf; nsat = 0; nguid = 0; opening = 0; prev = Inf
+        for _ in 1:n
+            tick!(w, subs, dt); empty!(w.events)
+            tel = w.env[:telemetry]; r = tel["m1.los_range"]
+            miss = min(miss, r)
+            tel["m1.saturated"] > 0.5 && (nsat += 1); nguid += 1
+            opening = r > prev ? opening + 1 : 0; prev = r
+            get(w.entities[:m1].comp, :impacted, false) && break
+            r < 1.0 && break
+            (opening >= open_hold && r > miss + 50.0) && break
+        end
+        return (miss = miss, sat_frac = nsat / max(nguid, 1), n = nguid)
+    end
+
+    @testset "ManeuveringTarget curves the target + writes truth comp[:a_target] (⟂ v, |a|=a_lat)" begin
+        w = World(seed = 0)
+        w.entities[:t] = Entity(:t, :target; pos = Vec3(6000.0, 0.0, 4200.0), vel = Vec3(-800.0, 0.0, 200.0),
+            comp = Dict{Symbol,Any}(:rcs_m2 => 1.0, :a_lat_mps2 => 200.0, :turn_sign => 1.0))
+        mt = ManeuveringTarget(:t)
+        v0 = w.entities[:t].vel; spd0 = norm3(v0); p0 = w.entities[:t].pos
+        integrate!(mt, w, dt)                                  # phase-1 mover (its only phase)
+        aT = w.entities[:t].comp[:a_target]; v1 = w.entities[:t].vel
+        # the TRUTH accel is a COORDINATED turn: ⟂ velocity, magnitude a_lat, planar (x-z, no y) —
+        # an INDEPENDENT recompute (⟂ + magnitude), NOT a call to the internal _lateral_accel.
+        @test aT isa Vec3
+        @test aT[2] == 0.0                                    # planar x-z (no cross-range)
+        @test EWSim._dot(aT, v1) ≈ 0.0 atol = 1e-6            # ⟂ to velocity (speed-preserving turn)
+        @test norm3(aT) ≈ 200.0 atol = 1e-6                   # magnitude == a_lat
+        # curved + speed-preserving (RK4 holds a ⟂-v turn's speed to ~machine eps).
+        for _ in 1:2000; integrate!(mt, w, dt); end
+        @test norm3(w.entities[:t].vel) ≈ spd0 atol = 1e-3    # speed preserved (probe: -2.7e-12 drift)
+        # the heading ROTATED (the path curved away from the straight-line extrapolation).
+        v̂0 = v0 / spd0; v̂n = w.entities[:t].vel / norm3(w.entities[:t].vel)
+        @test norm3(v̂n - v̂0) > 0.05                           # direction changed (curving)
+        straight = p0 + v0 * (2001 * dt)                      # where a CV target would be
+        @test norm3(w.entities[:t].pos - straight) > 1.0      # the maneuver bent the path
+    end
+
+    @testset "decide! under :apn writes comp[:a_ctrl] matching pn_accel_augmented on the realized state" begin
+        w, subs = apn_world(guidance = :apn, a_lat = 200.0, a_max = 3000.0)   # generous a_max → clamp inert
+        tick!(w, subs, dt); empty!(w.events)                  # tick 1: mover writes a_target, decide! commands
+        e = w.entities[:m1]; tgt = w.entities[:tgt1]
+        aT = tgt.comp[:a_target]::Vec3                        # the mover's truth accel this tick
+        û = los_unit(e.pos, tgt.pos); rp = tgt.pos - e.pos; rv = tgt.vel - e.vel
+        a_apn = clamp_accel(pn_accel_augmented(û, los_rate(rp, rv), -range_rate(rp, rv), aT; N = 4.0), 3000.0)
+        @test e.comp[:a_ctrl] ≈ a_apn atol = 1e-10            # :ideal → a_ctrl == a_cmd (the :apn path)
+        # the feedforward REALLY added — the command differs from the plain-:pn command (not a no-op).
+        a_pn = clamp_accel(pn_accel(e.pos, e.vel, tgt.pos, tgt.vel; N = 4.0), 3000.0)
+        @test norm3(e.comp[:a_ctrl] - a_pn) > 1.0             # (N/2)·a_T⊥ shifted the command
+    end
+
+    @testset "APN intercepts the maneuvering target where PN SATURATES + misses (the g-limit Lesson)" begin
+        rpn  = fly_cpa!(apn_world(guidance = :pn)...)
+        rapn = fly_cpa!(apn_world(guidance = :apn)...)
+        rpur = fly_cpa!(apn_world(guidance = :pursuit)...)
+        @test rpn.miss  > 100.0                               # PN saturates chasing the maneuver → miss (wire: 166.8)
+        @test rapn.miss < 5.0                                 # APN anticipates → tight intercept (wire: 0.85)
+        @test rpn.miss  > 20 * rapn.miss                      # the RATIO is the headline (advisor: not the abs)
+        @test rpn.sat_frac  > 0.3                             # PN's demand PEGS a_max most of the turn (wire: 0.63)
+        @test rapn.sat_frac < 0.05                            # APN never saturates — the mechanism (wire: 0.00)
+        @test rpur.miss > 100.0                               # the pursuit foil rides along + misses (wire: 261.6)
+    end
+
+    @testset "the a_max slider is the lesson knob — a larger a_max lets PN recover; APN flat" begin
+        # The g-limit is the BINDING constraint: raise a_max and PN's demand fits → it intercepts too
+        # (proving the miss was saturation, not a PN defect). APN is flat (it never needed the headroom).
+        rbind = fly_cpa!(apn_world(guidance = :pn,  a_max = 200.0)...)   # binds → miss
+        rfree = fly_cpa!(apn_world(guidance = :pn,  a_max = 350.0)...)   # clears the demand → hit
+        rapn  = fly_cpa!(apn_world(guidance = :apn, a_max = 200.0)...)
+        @test rbind.miss > 100.0                              # a_max=200 saturates PN (wire: 166.8)
+        @test rfree.miss < 5.0                                # a_max=350 → PN recovers (wire: 0.3)
+        @test rbind.miss > 20 * rfree.miss                    # the slider is the lever
+        @test rapn.miss  < 5.0                                # APN intercepts at the BINDING a_max (wire: 0.85)
+    end
+
+    @testset "the :pn↔:apn trajectories DIFFER (not-a-dead-knob, physics-changing, no RNG)" begin
+        wp, sp = apn_world(guidance = :apn); wq, sq = apn_world(guidance = :pn)
+        for _ in 1:3000
+            tick!(wp, sp, dt); empty!(wp.events)
+            tick!(wq, sq, dt); empty!(wq.events)
+        end
+        @test norm3(wp.entities[:m1].pos - wq.entities[:m1].pos) > 50.0   # a live outer knob moves the missile
+    end
+
+    @testset ":apn on a CONSTANT-VELOCITY target ≈ :pn — the feedforward vanishes (a_T = 0)" begin
+        # No maneuver (plain ConstantVelocity target): decide!'s `:apn` branch reads the default
+        # a_T = zero(Vec3), so `(N/2)·a_T⊥` vanishes and APN reduces to plain PN (introduce-safe).
+        rapn = fly_cpa!(apn_world(guidance = :apn, maneuver = false, a_max = 3000.0)...)
+        rpn  = fly_cpa!(apn_world(guidance = :pn,  maneuver = false, a_max = 3000.0)...)
+        @test rapn.miss ≈ rpn.miss atol = 1e-6                # feedforward vanishes → same trajectory (wire: |Δ|=0)
+    end
+
+    @testset "loader: a `maneuver:` block arms ManeuveringTarget (NOT ConstantVelocity); rejects bad a_lat" begin
+        base = """
+        name: apn
+        seed: 12
+        dt_physics: 0.001
+        fidelity: {autopilot: ideal, guidance: apn}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 700.0
+              elevation_deg: 12.0
+              cd_area_m2: 0.0
+              guidance: {n_pn: 4.0, r_stop: 30.0, kp: 2.0, tau: 0.3, a_max: 200.0}
+          - id: tgt1
+            kind: target
+            pos: [6000.0, 0.0, 4200.0]
+            vel: [-800.0, 0.0, 200.0]
+            target: {rcs_m2: 1.0, maneuver: {a_lat_mps2: 200.0, turn_sign: 1.0}}
+        """
+        mktempdir() do dir
+            good = joinpath(dir, "good.yaml"); write(good, base)
+            scn = load_scenario(good)
+            t = scn.world.entities[:tgt1]
+            # a MANEUVERING target gets ManeuveringTarget, NOT ConstantVelocity (the swap).
+            @test any(s -> s isa ManeuveringTarget && s.id === :tgt1, scn.subs)
+            @test !any(s -> s isa ConstantVelocity && s.id === :tgt1, scn.subs)
+            # a_lat/turn_sign land at the CONSUMED comp keys (the slider→consumed-key discipline).
+            @test t.comp[:a_lat_mps2] == 200.0 && t.comp[:turn_sign] == 1.0
+            @test get(scn.world.fidelity, :guidance, :pursuit) === :apn   # the third rung, now real
+            # a PLAIN target (no maneuver: block) stays ConstantVelocity → byte-identical to slices 1..11.
+            plain = replace(base, ", maneuver: {a_lat_mps2: 200.0, turn_sign: 1.0}" => "")
+            pp = joinpath(dir, "plain.yaml"); write(pp, plain)
+            sp = load_scenario(pp)
+            @test any(s -> s isa ConstantVelocity && s.id === :tgt1, sp.subs)
+            @test !any(s -> s isa ManeuveringTarget, sp.subs)
+            # a defaulted maneuver block (no a_lat authored) → a_lat defaults to 0 (straight-line).
+            defd = replace(base, "maneuver: {a_lat_mps2: 200.0, turn_sign: 1.0}" => "maneuver: {turn_sign: 1.0}")
+            pd = joinpath(dir, "defd.yaml"); write(pd, defd)
+            @test load_scenario(pd).world.entities[:tgt1].comp[:a_lat_mps2] == 0.0
+            # rejects: a non-finite a_lat is an AUTHORED load error (a huge finite slider just curves harder).
+            bad = replace(base, "a_lat_mps2: 200.0" => "a_lat_mps2: .inf")
+            pb = joinpath(dir, "bad.yaml"); write(pb, bad)
+            @test_throws ErrorException load_scenario(pb)
+        end
+    end
+end

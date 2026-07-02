@@ -1403,6 +1403,117 @@ clients/godot --script res://net/slice11_ui_test.gd`. All 1921 tests: `pwsh tool
 
 ---
 
+**Slice 12 — missile: augmented PN + a maneuvering-target mover (the seeker arc's RNG-free payoff)** (HANDOFF
+§10 item 10's deferred half — "g-limit saturation modeled, this is *why* augmented PN matters") — **COMPLETE.
+Gates 0–3 done & green (2008 tests); wire + UI machine-verified AND the spatial `_draw` VISUALLY CONFIRMED
+(2026-07-02).** Slice 10 gave PN against a CONSTANT-VELOCITY target (optimal, `a_cmd→0` at intercept); slice 11
+gave a noisy seeker + α-β filter so PN reads a MEASURED LOS. Slice 12 lands the last structural piece: even a
+PERFECT LOS estimate leaves plain PN LAGGING a MANEUVERING target by the target-accel term, and — under a
+BINDING g-limit — PN's demand SATURATES and it MISSES. **Augmented PN (`:apn`)** adds a `(N/2)·a_T⊥` feedforward
+on the target's TRUTH lateral acceleration → it anticipates the maneuver → low demand → tight intercept. **The
+lesson (the 3-ring fidelity button, :pn↔:apn):** vs a maneuvering target under a binding `a_max=200`, `:pn`
+saturates (pegs a_max most of the turn, `saturated` lit) and MISSES ≈167 m; `:apn` stays clear of a_max
+(peak demand ≈36) and INTERCEPTS ≈0.85 m (restoring the CV baseline miss ≈0.9 m — both carry the same gravity
+residual). **The g-limit is the BINDING constraint** — raise `a_max` to ≳350 and `:pn` RECOVERS too (proving
+the miss was saturation, not a PN defect); `:apn` is flat across a_max. **DETERMINISM — THE RNG INFLECTION
+INVERTS BACK:** slice 11's Seeker made the missile arc draw; slice 12 has NO seeker → NO `w.rng` draw, so the
+framing RETURNS to the slice-8/9/10 shape ("draw-count invariance is VACUOUS" — do NOT copy slice-11's
+"1 draw/tick" language; the convention-4c trap running the OPPOSITE direction). `:apn` is PHYSICS-CHANGING, NO
+RNG (like `:pn`): introduce-safe, but a toggle CHANGES the trajectory. **Scope RATIFIED-WITH-USER (2026-07-02):
+slice 11 was seeker+filter ONLY; APN + the maneuvering mover are slice 12** (needs a new mover; cleanly
+separable). Planned FULL in `docs/plans/slice12.md`. **Deferred (named, convention 9):** gravity-compensated PN
+(the residual `:apn` miss is the missile's OWN unmodeled gravity — a SECOND feedforward, not this slice);
+estimated `a_T` (slice 12 reads TRUTH — "even a perfect seeker still lags"; fusing APN with the noisy seeker is
+§11 Tier A); 6-DOF / jink-weave maneuver programs.
+
+Gate 0 (probe + scope pin — DONE & advisor-confirmed twice, `M:\claud_projects\temp\slice12_probe\`): the KEY
+EMPIRICAL FINDING (advisor #1) — under a GENEROUS `a_max` plain PN INTERCEPTS the maneuvering target anyway
+(miss ≈0 for BOTH rungs; APN only lowers `a_cmd`), exactly slice-10's "the floor is an `a_cmd` effect, not a
+miss" trap. So the MISS lesson REQUIRES a BINDING `a_max` — PN's high demand SATURATES → misses; APN's low
+demand stays under → intercepts. **The linchpin (advisor's discriminating check): HANDOFF §10 item 10 verbatim
+— "g-limit saturation modeled (this is *why* augmented PN matters)" — confirms the g-limited-MISS pivot is the
+FACE-VALUE design intent, not a tidier reading.** PINNED: slice10_pn crossing + `a_lat=200` (~20 g) ⟂-v
+**turn-sign=+1** (the CLEAN-first-CPA direction — the target curves AWAY after the first pass) + binding
+`a_max=200`, N=4, r_stop=30, RNG-free. The FOUR advisor LOCKS all confirmed: (#1) headline = MISS-RATIO under a
+binding g-limit (saturation is the corroborating mechanism — the advisor's "teach BOTH: the miss is the
+consequence, the demand/saturation contrast is the mechanism, expose both"); (#2) RNG-free / slice-10
+determinism shape; (#3) CLEAN FIRST CPA (`first_cpa==global_min` both arms); (#4) SIGN decisive — apn(+)=0.59 vs
+apn(−)=646.7 vs pn=166.8 (a flipped feedforward is WORSE than plain PN — the silent failure). CV sanity:
+apn==pn bit-identical at a_lat=0. RK4-mover speed drift −2.7e-12 over 8 s (a ⟂-v turn is speed-preserving).
+
+Gate 1 (primitive green — pure, closed-form, SI, RNG-free, no LinearAlgebra; +12 tests, 1933): `guidance.jl`
+gains **`GUIDANCE_MODES=(:pursuit,:pn,:apn)`** (add the third rung to the one-list source of truth —
+`LIVE_FIDELITY_MODES` REFERENCES it, `set_fidelity`/`_validate_fidelity` pick it up automatically, NO server
+change) + **`pn_accel_augmented(û,ω,Vc,a_T;N)=pn_accel_from_omega(û,ω,Vc;N)+(N/2)·(a_T−_dot(a_T,û)·û)`** —
+REUSING `pn_accel_from_omega` TEXTUALLY for the base so the `:pn` arithmetic is untouched (byte-identity by
+construction). `export pn_accel_augmented`. `test_guidance.jl` arms (explicit `atol`): `a_T=0`→reduces to PN
+EXACTLY (`==`, the introduce-safe property); a DIRECT feedforward recompute (a DIFFERENT expression — catches a
+`−`/transpose); `a_T∥û`→zero feedforward (the projection kills a radial maneuver); the feedforward ⟂ LOS; SIGN
+(the feedforward ADDS along +a_T⊥, a flip flips it); N-linearity isolated on a collision course (base PN=0);
+`:apn ∈ GUIDANCE_MODES`. Slices 1–11 byte-identical (golden + determinism green; no RNG added).
+
+Gate 2 (the maneuvering mover + the `:apn` rung wired; +45 tests, 1978). New **`ManeuveringTarget <: Subsystem`**
+(missile.jl — the accelerating sibling of `ConstantVelocity`): phase-1 `integrate!` solves
+`integrator_step(:rk4, v->a_lat·perp(v), …)` (the SAME stepper the missile flies, but ALWAYS `:rk4`, NOT coupled
+to the missile's `:integrator` — a cross-lesson leak guard) and writes `comp[:a_target]::Vec3` = the truth accel
+THIS tick (post-step velocity) for the phase-4 `:apn` decide! to read (phase-1 write < phase-4 read; comp
+survives `empty!`). GRAVITY-FREE / kinematic (feels only `a_T`, the ConstantVelocity lineage). Shared
+`_lateral_accel(v,a_lat,sign)` = `a_lat·sign` along the in-plane (x-z) unit ⟂ v (v→0 guard → zero). `export
+ManeuveringTarget`. `Autopilot.decide!`: the `guid===:apn` arm → `pn_accel_augmented(los_unit, los_rate,
+−range_rate, get(tgt.comp,:a_target,zero(Vec3)); N)` — reads the EXACT `:pn` truth û/ω/Vc plus the feedforward;
+the fetch+feedforward live INSIDE the `:apn` branch so `:pn`/`:pursuit`/the slice-11 seeker paths are TEXTUALLY
+unchanged → slices 1–11 byte-identical. `scenario.jl`: a `maneuver:` sub-block under `:target` reads
+`a_lat_mps2`/`turn_sign` at knob-addressable comp keys, LOAD-validated FINITE, and its PRESENCE swaps
+`ConstantVelocity → ManeuveringTarget` (a plain target stays ConstantVelocity, byte-identical). Numbers PROBED
+against the live decide!→integrate! path (`wire_probe.jl`, convention 10): pn miss 166.8/sat 0.63, apn 0.85/sat
+0.00, pn(CV)==apn(CV)=0.919 bit-identical. Test arms: **test_missile** (ManeuveringTarget curves + writes
+`comp[:a_target]` ⟂ v, |a|=a_lat; the `:apn` decide! matches `pn_accel_augmented`; miss(:apn)≪miss(:pn) under
+the g-limit + the a_max slider recovers pn; `:pn↔:apn` differ; `:apn`-on-CV ≈ `:pn`; loader arms+rejects bad
+a_lat); **test_determinism** (THE INVERSION — same-config bit-identical, **NO `w.rng` draw** [`rand(w.rng)==rand
+(Xoshiro(0))` — the sharp inverse of slice-11's "1 draw/tick"], `:pn↔:apn` toggle changes it, additivity: a
+`:pn`/ConstantVelocity world byte-identical); **test_server** (set_fidelity :guidance :apn write/reject/
+introduce-safe + the 3-ring cycle on the wire; the live a_lat/N/a_max sliders survive a huge-a_lat tick).
+Slices 1–11 byte-identical.
+
+Gate 3 (scenario + Godot 3-ring extension + verifiers — DONE & green, 2008 tests [+30]; wire + UI
+machine-verified AND `_draw` VISUALLY CONFIRMED 2026-07-02). NO `core/src/*.jl` change beyond gates 1–2 — the
+gate-3 diff is `Sandbox.gd` (the guidance ring) + `test_scenario.jl` + the scenario + two new `net/*.gd`.
+`scenarios/slice12_apn.yaml` (`guidance:apn` default, autopilot:ideal HELD, `[BallisticMissile, Autopilot]`
+interceptor + a `[ManeuveringTarget]` curving target, the binding a_max=200, the slice10_pn base geometry so the
+maneuver+APN are the ONLY new variables). Numbers PROBED on the EMIT GRID (`emit_probe.jl`, emit_every=16, the
+verifier's frame sampling): apn frame-miss 6.61/sat 0.00, pn 166.9/sat 0.63, pursuit 261.7; pn recovers to 3.8
+at a_max=350. Bounds pinned CONSERVATIVE one-sided (apn<30, pn>50, pn-recover<30 — NOT the ratio; the
+`ewsim-missile-verifier-sampling` memory). Godot `Sandbox.gd`: the EXISTING spatial view EXTENDED — the
+`guidance` cycler becomes a **3-RING** `GUIDANCE_RUNGS=["pursuit","pn","apn"]` (the generic `(i+1)%size`
+`_on_guidance_pressed` handler auto-extends; tooltip + comment updated); the slice-1..11 views UNTOUCHED
+(structurally the slice-10 guidance path, one rung wider). `net/slice12_verify.gd` (drives the real server, 4
+phases): `:apn` INTERCEPTS the maneuvering target (frame-min 6.61 < 30) with NO approach saturation (demand 36);
+**REPLAY — held-config bit-identical (two `:apn` runs' frame-min EQUAL, RNG-free determinism)**; `set_fidelity
+guidance pn` DEGRADES it (166.9 > 50, sat lit while los>300, demand 11366 > a_max=200 — the saturation is real);
+`set_param a_max 350` RECOVERS `:pn` (3.8 < 30, no saturation — the g-limit-is-the-constraint payoff). `S12V OK`,
+exit 0. `net/slice12_ui_test.gd` (mock client: handshake STAYS spatial + wires the GUIDANCE cycler NOT
+autopilot; the 3-ring walks pursuit→pn→apn + wraps; autopilot untouched; the a_lat slider → set_param to the
+TARGET tgt1; reset resyncs to apn — `S12UI OK`). Sandbox.tscn smoke-loaded headless against the slice-12 server
+(server `DONE` ⇒ scene connected, no GDScript errors). `test_scenario.jl` +1 testset (guidance:apn default
+PRESENT [the reserved third rung, now real], autopilot:ideal held, `[BallisticMissile, Autopilot]` NOT Seeker,
+`[ManeuveringTarget]` NOT ConstantVelocity, a_lat_mps2/turn_sign at consumed keys + the a_lat knob on tgt1,
+a_max=200 binding, loader rejects a non-finite a_lat). The `_draw` PIXEL branch VISUALLY CONFIRMED via a windowed
+shot (the shot harness, [[ewsim-godot-headless]], reverted+deleted after): the `:apn` mid-intercept renders the
+missile leading the target on the LOS line with **`a_demand=3.72` — LOW, well under a_max=200 (no saturation, the
+mechanism as a picture)**, the 4 sliders (a_lat on the target + N/a_max/r_stop), the "guidance: apn" button, and
+the fidelity badge. No open step remains in slice 12's required gates. **(stretch, deferred)**
+`clients/notebooks/slice12_apn.jl` Pluto (the miss-vs-a_lat / a_max sweep) + an offline `batch.jl` grid.
+
+Run the slice-12 showcase: `julia --project=core tools/server.jl scenarios/slice12_apn.yaml`, then launch Godot
+on `clients/godot` (the main `Sandbox.tscn` auto-uses the spatial view; cycle the `guidance:` 3-ring button to
+watch `:apn` LEAD the curving target [low a_demand, saturated off] vs `:pn` SATURATE + MISS [a_demand pegs
+a_max, saturated lit, wide miss]; drag a_max UP to 350+ to watch `:pn` recover, or a_lat UP to make `:pn` lag
+harder). Re-run the gate-3 proof headless: start that server, then `godot --headless --path clients/godot
+--script res://net/slice12_verify.gd` (exit 0 = pass). The UI test needs NO server: `godot --headless --path
+clients/godot --script res://net/slice12_ui_test.gd`. All 2008 tests: `pwsh tools/test.ps1`.
+
+---
+
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
 (`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0); `rf.jl`

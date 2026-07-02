@@ -26,6 +26,7 @@ const _SCEN9 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice9_purs
 const _SCEN10P = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice10_pn.yaml"))
 const _SCEN10G = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice10_glimit.yaml"))
 const _SCEN11 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice11_seeker.yaml"))
+const _SCEN12 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice12_apn.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -672,6 +673,90 @@ end
         @test_throws Exception load_scenario(mkbad(3.0e-3, 0.0, 0.05))     # α ≤ 0 rejected
         @test_throws Exception load_scenario(mkbad(3.0e-3, 1.0, 0.05))     # α ≥ 1 rejected
         @test_throws Exception load_scenario(mkbad(3.0e-3, 0.30, 0.0))     # β ≤ 0 rejected
+    end
+
+    @testset "loader parses slice12_apn.yaml (augmented PN + maneuvering target, spatial view)" begin
+        # The slice-12 showcase: augmented PN vs a MANEUVERING target. Keeps the SPATIAL view (guidance is
+        # the missile-view discriminator, the 3-ring button cycler); guidance DEFAULTS to :apn (the third
+        # rung, now real — the reserved-rung-becomes-real move) and autopilot is HELD at :ideal so the
+        # guidance-law lesson is isolated. RNG-free (no seeker → no w.rng draw). Cheap insurance: a
+        # malformed showcase fails HERE, not downstream.
+        scn = load_scenario(_SCEN12)
+        @test scn.name == "slice12_apn"
+        # guidance DEFAULTS to :apn (the third GUIDANCE_MODES rung, now the scenario default) + autopilot
+        # HELD at :ideal (the one button cycles guidance, not autopilot — convention 9).
+        @test scn.world.fidelity[:guidance] === :apn
+        @test scn.world.fidelity[:autopilot] === :ideal
+        # single-lesson: no OTHER-slice fidelity, no seeker, no view axes (guidance + autopilot only).
+        for k in (:propagation, :cfar, :ep, :estimator, :deinterleaver, :raim, :integrator, :seeker)
+            @test !haskey(scn.world.fidelity, k)
+        end
+        @test !any(e -> e.kind in (:radar, :jammer, :clutter, :emitter, :df_sensor, :df_station,
+                                   :pulse_emitter, :esm, :gps_satellite, :gps_receiver),
+                   values(scn.world.entities))
+        # exactly one guided :missile + one :target (the maneuvering engagement pair)
+        missiles = [id for (id, e) in scn.world.entities if e.kind === :missile]
+        targets  = [id for (id, e) in scn.world.entities if e.kind === :target]
+        @test length(missiles) == 1 && length(targets) == 1
+        m = scn.world.entities[missiles[1]]
+        t = scn.world.entities[targets[1]]
+        # the guided missile gets [BallisticMissile, Autopilot] (NO Seeker — slice-12 is truth-fed, RNG-free).
+        @test any(s -> s isa BallisticMissile, scn.subs)
+        @test any(s -> s isa Autopilot, scn.subs)
+        @test !any(s -> s isa Seeker, scn.subs)
+        # THE SWAP: the MANEUVERING target gets [ManeuveringTarget], NOT ConstantVelocity (the presence of
+        # ManeuveringTarget is the discriminating check — a `maneuver:` block swapped the mover).
+        @test any(s -> s isa ManeuveringTarget && s.id === targets[1], scn.subs)
+        @test !any(s -> s isa ConstantVelocity && s.id === targets[1], scn.subs)
+        # the maneuver params land at the CONSUMED comp keys (a_lat_mps2/turn_sign — the slider→consumed-key
+        # discipline; haskey is the discriminating check, a silently-failed read would still default).
+        @test haskey(t.comp, :a_lat_mps2) && t.comp[:a_lat_mps2] == 200.0
+        @test haskey(t.comp, :turn_sign) && t.comp[:turn_sign] == 1.0
+        # a_lat_mps2 (on the TARGET) + n_pn + a_max ARE live sliders; guidance is the fidelity BUTTON not a
+        # knob; launch geometry (speed/elevation) is not a slider.
+        keyset = Set(k.key for k in scn.knobs)
+        @test :a_lat_mps2 in keyset && :n_pn in keyset && :a_max in keyset
+        @test :guidance ∉ keyset && :autopilot ∉ keyset
+        @test all(k -> k.key ∉ (:speed, :elevation_deg), scn.knobs)
+        # the a_lat slider targets the TARGET tgt1 (the maneuver g); the guidance sliders target the missile.
+        @test any(k -> k.key === :a_lat_mps2 && k.target === targets[1], scn.knobs)
+        # the base crossing geometry (same as slice10_pn so the maneuver + APN are the ONLY new variables)
+        @test m.comp[:elevation_deg] == 12.0 && m.comp[:speed] == 700.0
+        # a_max is the BINDING g-limit (200 — the lesson default) so PN saturates while APN clears it.
+        @test m.comp[:a_max] == 200.0
+
+        # a_lat is LOAD-validated FINITE — a non-finite authored maneuver is REJECTED (the crash-guard,
+        # convention 5; a huge FINITE a_lat is fine — a live slider just curves harder).
+        mkman(al, ts = "1.0") = begin
+            f = tempname() * ".yaml"
+            write(f, """
+            name: bad_maneuver
+            seed: 12
+            entities:
+              - id: m1
+                kind: missile
+                pos: [0.0, 0.0, 3000.0]
+                missile:
+                  mass_kg: 140.0
+                  speed: 700.0
+                  elevation_deg: 12.0
+                  cd_area_m2: 0.0
+                  guidance: {n_pn: 4.0, r_stop: 30.0, kp: 2.0, ki: 0.0, kd: 0.0, tau: 0.3, a_max: 200.0}
+              - id: tgt1
+                kind: target
+                pos: [6000.0, 0.0, 4200.0]
+                vel: [-800.0, 0.0, 200.0]
+                target: {rcs_m2: 1.0, maneuver: {a_lat_mps2: $al, turn_sign: $ts}}
+            """)
+            f
+        end
+        @test load_scenario(mkman(200.0)) isa EWSim.Scenario       # the valid control loads
+        @test load_scenario(mkman(1.0e4)) isa EWSim.Scenario       # a huge FINITE a_lat is fine (just curves hard)
+        @test load_scenario(mkman(200.0, "-1.0")) isa EWSim.Scenario  # turn_sign = -1 (the other direction) is fine
+        @test_throws Exception load_scenario(mkman(".inf"))        # a non-finite a_lat is rejected
+        @test_throws Exception load_scenario(mkman(".nan"))        # NaN a_lat rejected too
+        @test_throws Exception load_scenario(mkman("200.0", ".nan"))  # a non-finite turn_sign is rejected (conv. 6)
+        @test_throws Exception load_scenario(mkman("200.0", ".inf"))  # Inf turn_sign rejected too
     end
 
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin

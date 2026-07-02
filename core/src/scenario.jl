@@ -100,8 +100,27 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
         subs = Subsystem[RadarSensor(id; revisit_s = get(comp, :revisit_s, 0.0))]
     elseif kind === :target
         haskey(ent, "target") || error("target entity '$id' has no `target:` block")
-        comp[:rcs_m2] = _f64(ent["target"]["rcs_m2"])
-        subs = Subsystem[ConstantVelocity(id)]
+        tb = ent["target"]
+        comp[:rcs_m2] = _f64(tb["rcs_m2"])
+        # Slice 12: a `maneuver:` sub-block turns the straight-line target into a CURVING one — swap
+        # ConstantVelocity → ManeuveringTarget (the augmented-PN foil). `a_lat_mps2`/`turn_sign` land
+        # at KNOB-ADDRESSABLE comp keys, read with DEFAULTS at the consumer (a bare block / live
+        # slider can't KeyError a tick). A plain target (NO `maneuver:` block) stays ConstantVelocity
+        # → byte-identical to slices 1..11 (the additivity master-check). `a_lat_mps2` is load-
+        # validated FINITE (a huge live value just curves harder — the "a live slider can't crash a
+        # tick" discipline; `turn_sign` defaults to +1, the clean direction — gate-0 probe).
+        if haskey(tb, "maneuver")
+            mn = tb["maneuver"]
+            comp[:a_lat_mps2] = _f64(get(mn, "a_lat_mps2", 0.0))
+            comp[:turn_sign]  = _f64(get(mn, "turn_sign", 1.0))
+            isfinite(comp[:a_lat_mps2]) ||
+                error("target '$id': maneuver.a_lat_mps2 must be finite (got $(comp[:a_lat_mps2]))")
+            isfinite(comp[:turn_sign]) ||   # a NaN/Inf sign → NaN accel → NaN pos → non-finite JSON (conv. 6)
+                error("target '$id': maneuver.turn_sign must be finite (got $(comp[:turn_sign]))")
+            subs = Subsystem[ManeuveringTarget(id)]
+        else
+            subs = Subsystem[ConstantVelocity(id)]
+        end
     elseif kind === :clutter
         # A passive range-band clutter source (slice 3): elevated-mean exponential power
         # over [range, range+extent] of the radar's profile. NO subsystem — it owns no

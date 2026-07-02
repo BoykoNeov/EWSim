@@ -74,6 +74,8 @@ export INTEGRATOR_MODES, G_ACCEL
 export pursuit_accel, autopilot_step, clamp_accel, autopilot_init, AUTOPILOT_MODES
 # Slice 10: the OUTER proportional-navigation law (pursuit_accel's sibling) + its fidelity rungs.
 export pn_accel, pn_accel_from_omega, GUIDANCE_MODES
+# Slice 12: augmented PN — TPN + (N/2)·a_T⊥ target-accel feedforward (the :apn rung).
+export pn_accel_augmented
 # Slice-1 subsystems + scenario loader (Jammer is the slice-4 build_env! subsystem;
 # DFSensor/Geolocator are the slice-5 observe!→decide! DF pair that light phase 4)
 export ConstantVelocity, RadarSensor, Jammer, DFSensor, Geolocator, Knob, Scenario, load_scenario
@@ -83,8 +85,9 @@ export PulseEmitter, ESMReceiver, Deinterleaver
 export GpsSatellite, GpsReceiver, GpsSolver
 # Missile subsystems: the ballistic airframe (slice 8, phase 1) + the guided Autopilot
 # (slice 9, phase 4 — the missile's first decide!: outer pursuit + inner PID) + the noisy
-# Seeker (slice 11, phase 3 — the missile's first observe!: noisy LOS + α-β LOS-rate filter)
-export BallisticMissile, Autopilot, Seeker
+# Seeker (slice 11, phase 3 — the missile's first observe!: noisy LOS + α-β LOS-rate filter) +
+# the ManeuveringTarget curving mover (slice 12, phase 1 — the augmented-PN foil)
+export BallisticMissile, Autopilot, Seeker, ManeuveringTarget
 # Offline batch sweeps (ROC artifact + slice-2 coverage diagram)
 export run_batch, roc_grid, load_roc, coverage_grid, load_coverage
 # Interactive socket run loop (the live/driver path)

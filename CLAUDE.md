@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–11 COMPLETE & green — 1921 tests.** Full gate-by-gate as-built detail (exact numbers,
+**Slices 1–12 COMPLETE & green — 2008 tests.** Full gate-by-gate as-built detail (exact numbers,
 test names, watch-items, advisor-catches, per-slice run commands) lives in **`docs/STATUS.md`**;
 pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -81,14 +81,18 @@ pre-implementation plans in `docs/plans/sliceN.md`.
   and the **first `w.rng` consumer in the missile arc** (the RNG inflection — conventions 3/11 now apply;
   byte-identity from *no Seeker* on prior slices). NEW fidelity-class combo: draw-invariant (4a,
   introducible) AND trajectory-changing. (1921)
+- **Slice 12** — augmented PN (`(N/2)·a_T⊥` feedforward on the target's truth accel) + a `ManeuveringTarget`
+  phase-1 mover; `:guidance` gains a THIRD rung `:apn` (the 3-ring pursuit→pn→apn). Vs a maneuvering target
+  under a BINDING `a_max`, plain `:pn` SATURATES → misses (~167 m); `:apn` anticipates → low demand → tight
+  intercept (~0.85 m, the CV baseline). The g-limit IS the constraint (raise a_max → pn recovers). **The RNG
+  inflection INVERTS BACK** — no seeker → no `w.rng` draw → the slice-10 shape ("draw-count invariance VACUOUS"
+  again). Reads TRUTH `a_T` ("even a perfect seeker still lags"); gravity-comp PN + estimated `a_T` DEFERRED.
+  Closes HANDOFF §10 item 10. (2008)
 
-**Next: slice 12** — HANDOFF §10 item 11's deferred half: **augmented PN (`N/2·a_T` feedforward) + a
-maneuvering-target mover**. The RNG-free payoff of slice 10's ~2g gravity floor (gravity-as-unmodeled-
-target-accel) and slice 11's clean filter: even a perfect seeker leaves plain PN lagging a *maneuvering*
-target by the target-accel term — APN closes it. **User-ratified split (2026-07-02):** slice 11 was
-seeker+filter ONLY; APN + the maneuvering mover are slice 12 (needs a new mover; cleanly separable). No
-plan written yet — draft `docs/plans/slice12.md` (gate-0 probe + 3 gates) and re-read HANDOFF §10 item 11
-+ §11 Tier A before implementing.
+**Next: slice 13 (roadmap item 12) — countermeasures**: chaff (= RGPO), flares (IR decoys); seeker
+discrimination = the EW/CFAR sandbox. HANDOFF §10 item 12 — "this stage *fuses the whole suite*." No plan
+written yet — draft `docs/plans/slice13.md` (gate-0 probe + 3 gates) and re-read HANDOFF §10 item 12 + §11
+Tier A before implementing. (The missile guidance arc — slices 8–12 — is now COMPLETE.)
 
 ## Conventions / hard-won disciplines
 

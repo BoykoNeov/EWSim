@@ -200,6 +200,27 @@ function _seeker_scenario(seed; emit_every = 4,
     return Scenario("seeker", w, subs, knobs, 1.0e-3, emit_every)
 end
 
+# A slice-12 APN scenario: the guided interceptor under `:guidance` (default :apn) vs a MANEUVERING
+# target ([ManeuveringTarget], a_lat=200 ⟂-v turn) under a BINDING a_max=200 — the g-limited APN
+# engagement (wire_probe). RNG-FREE (no seeker → no w.rng draw). a_lat/n_pn/a_max are live sliders (a
+# huge a_lat just curves harder — the "a live slider can't crash a tick" guard, now on the target).
+function _apn_scenario(seed; emit_every = 4, a_lat = 200.0,
+                       fidelity = Dict(:autopilot => :ideal, :guidance => :apn))
+    w = World(seed = seed, fidelity = fidelity)
+    w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0),
+        vel = Vec3(700cosd(12), 0, 700sind(12)),
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+            :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0, :kp => 2.0, :ki => 0.0, :kd => 0.0,
+            :tau => 0.3, :a_max => 200.0))
+    w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(6000.0, 0, 4200.0), vel = Vec3(-800.0, 0, 200.0),
+        comp = Dict{Symbol,Any}(:rcs_m2 => 1.0, :a_lat_mps2 => a_lat, :turn_sign => 1.0))
+    subs = Subsystem[BallisticMissile(:m1), Autopilot(:m1), ManeuveringTarget(:tgt1)]
+    knobs = Knob[Knob(:tgt1, :a_lat_mps2, 0.0, 1.0e3, "a_lat (target g)"),
+                 Knob(:m1, :n_pn, 1.0, 1.0e3, "N (nav const)"),
+                 Knob(:m1, :a_max, 10.0, 1.0e4, "a_max (g-limit)")]
+    return Scenario("apn", w, subs, knobs, 1.0e-3, emit_every)
+end
+
 @testset "server" begin
 
     @testset "handle_command! mutates state per the §5 table" begin
@@ -650,6 +671,57 @@ end
             ok || break
         end
         @test ok                                                  # pos + seeker telemetry finite through the huge σ
+    end
+
+    @testset "set_fidelity :guidance :apn — the third rung write/reject + introduce-safe (slice-12)" begin
+        # Slice-12: `:apn` is a NEW value of the existing `:guidance` key (GUIDANCE_MODES += :apn), so
+        # it flows through the SAME per-key LIVE_FIDELITY_MODES check AUTOMATICALLY (one-list-no-drift —
+        # no server change). Physics-changing, NO RNG (like :pn, UNLIKE :cfar it carries no introduce-
+        # guard). The trajectory change is pinned in test_determinism; here only the wire write/reject.
+        srv = EWSim.Server(_apn_scenario(1))
+        w = srv.scn.world
+        @test w.fidelity[:guidance] === :apn                       # the scenario default (the third rung, real)
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "guidance", :value => "pn"))
+        @test w.fidelity[:guidance] === :pn
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "guidance", :value => "apn"))
+        @test w.fidelity[:guidance] === :apn
+        # cycle through all three rungs on the wire (the 3-ring the Godot cycler drives).
+        for v in ("pursuit", "pn", "apn")
+            EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "guidance", :value => v))
+            @test w.fidelity[:guidance] === Symbol(v)
+        end
+        # a bad rung is REJECTED before landing (would throw in decide! → kill the session).
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "guidance", :value => "augmented"))
+        # INTRODUCING :apn mid-run on a scenario that omitted :guidance is ALLOWED (physics-changing, no
+        # RNG — no draw-topology hazard, the :pn precedent; the maneuvering mover already runs regardless).
+        srv2 = EWSim.Server(_apn_scenario(1; fidelity = Dict(:autopilot => :ideal)))
+        @test !haskey(srv2.scn.world.fidelity, :guidance)
+        EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "guidance", :value => "apn"))
+        @test srv2.scn.world.fidelity[:guidance] === :apn
+    end
+
+    @testset "live a_lat / N / a_max sliders survive the tick (a huge a_lat curves harder, not a throw)" begin
+        # a_lat (the target maneuver g) is a LIVE slider on the TARGET — the first live slider on the
+        # maneuvering mover. An absurd a_lat just curves the target harder (the _lateral_accel is bounded
+        # by construction: a unit ⟂ direction × a_lat) and the missile's a_max clamp caps its response —
+        # the tick can't throw / NaN the session. The "a live slider can't crash a tick" watch-item.
+        srv = EWSim.Server(_apn_scenario(2))
+        w = srv.scn.world
+        for (tgt, k, v) in (("tgt1", "a_lat_mps2", 5.0e3), ("m1", "n_pn", 1.0e3), ("m1", "a_max", 50.0))
+            EWSim.handle_command!(srv, Dict(:type => "set_param", :target => tgt, :key => k, :value => v))
+        end
+        @test w.entities[:tgt1].comp[:a_lat_mps2] == 5.0e3         # slider wrote the consumed comp key
+        ok = true
+        for _ in 1:500
+            tick!(w, srv.scn.subs, srv.scn.dt_physics)            # must NOT throw
+            empty!(w.events)
+            tel = w.env[:telemetry]
+            ok &= all(isfinite, w.entities[:m1].pos) && all(isfinite, w.entities[:tgt1].pos) &&
+                  isfinite(tel["m1.a_cmd"]) && isfinite(tel["m1.a_demand"])
+            ok || break
+        end
+        @test ok                                                  # missile + target pos + telemetry finite
     end
 
     @testset "warmup! tolerates a guided-missile scenario (slice-9, radar-free, phase 1+4)" begin

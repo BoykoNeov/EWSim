@@ -51,9 +51,16 @@ const AUTOPILOT_MODES = (:ideal, :pid)
 #   • `:pursuit` — the slice-9 tail-chaser: points AT the target, does not lead (the reference).
 #   • `:pn`      — proportional navigation: leads the target by nulling the LOS rotation rate
 #     (the collision-triangle law; `|a_cmd|` falls toward a small floor vs pursuit's climb).
-# Defined at gate 1 but NOT YET REFERENCED (radar.jl / decide! read it at gate 2) — so adding
-# it leaves every slice-1..9 path byte-identical.
-const GUIDANCE_MODES = (:pursuit, :pn)
+#   • `:apn`     — AUGMENTED PN (slice 12): TPN plus a `(N/2)·a_T⊥` feedforward on the TARGET's
+#     acceleration ⟂ LOS. Against a MANEUVERING target plain PN lags by the target-accel term and,
+#     under a binding g-limit, SATURATES → misses; APN anticipates the maneuver → low demand → no
+#     saturation → intercept (HANDOFF §10 item 10 — "g-limit saturation modeled — this is why
+#     augmented PN matters"). Reads TRUTH `a_T` (the "even a perfect seeker still lags" framing —
+#     RNG-free, no estimated target accel; that fusion is §11 Tier A). Same physics-changing/no-RNG
+#     shape as `:pn` — introduce-safe (a CV target has `a_T = 0` → feedforward vanishes → ≈ `:pn`).
+# Defined at gate 1; `:apn` NOT YET REFERENCED by a consumer (decide! reads it at gate 2) — so
+# adding the rung leaves every slice-1..11 path byte-identical.
+const GUIDANCE_MODES = (:pursuit, :pn, :apn)
 
 # The inner-loop PID state, carried per-missile across ticks (in the entity `comp` in gate 2):
 #   • `a_ach`  — the plant output (achieved control accel), the first-order-lag state;
@@ -159,6 +166,45 @@ so a slice-10 `:pn` scenario replays bit-identical (no `√(snr/2)`-style reasso
 """
 function pn_accel_from_omega(û::Vec3, ω::Vec3, Vc::Real; N::Real = 4.0)
     return (N * Vc) * _cross(ω, û)
+end
+
+"""
+    pn_accel_augmented(û::Vec3, ω::Vec3, Vc::Real, a_T::Vec3; N = 4.0) -> Vec3
+
+The OUTER **augmented proportional-navigation** command (§1, slice 12) — TPN plus a feedforward
+proportional to the TARGET's acceleration **perpendicular to the LOS**:
+
+    a_T⊥  = a_T − (a_T·û) û                           (target accel ⟂ LOS — the component PN must
+                                                       counter; the ∥-LOS part changes range, not λ̇)
+    a_apn = pn_accel_from_omega(û, ω, Vc; N) + (N/2)·a_T⊥      (m/s², ⟂ LOS)
+
+**Why the feedforward (the lesson).** Plain TPN `N·Vc·(ω×û)` nulls the LOS rate for a
+NON-accelerating target (optimal, `a_cmd→0` at intercept). A **maneuvering** target keeps
+regenerating LOS rate faster than PN removes it, so PN reacts a step behind and — **under a
+binding g-limit** — its demand SATURATES and it MISSES (HANDOFF §10 item 10: "g-limit saturation
+modeled — this is why augmented PN matters"). The `(N/2)·a_T⊥` term FEEDS FORWARD the maneuver so
+the missile turns WITH the target instead of chasing it: low demand, no saturation, tight
+intercept. The `N/2` coefficient is the standard APN result (constant-target-accel, the optimal-
+control / linearized-kinematics derivation).
+
+**Reads the TRUTH `a_T`** ("even a *perfect* seeker still lags" — RNG-free; estimating `a_T` from
+a noisy seeker is a later fidelity step, §11 Tier A). On a **constant-velocity** target `a_T = 0`
+→ `a_T⊥ = 0` → the feedforward vanishes and `a_apn` reduces to `pn_accel_from_omega` exactly (the
+introduce-safe / `:apn`-on-CV ≈ `:pn` property; the `+ zero(Vec3)` gives `+0.0` not bit-`===`, so
+tests use `≈` — the `−0.0 + 0.0 → +0.0` trap).
+
+**Byte-identity anchor:** the base term is `pn_accel_from_omega(û,ω,Vc;N)` TEXTUALLY (not a
+re-inlined `(N*Vc)*_cross(...)`), so the `:pn` arithmetic is untouched and any `:pn`/`:pursuit`
+path replays bit-identical (the feedforward lives only in this new function + the gate-2 `:apn`
+branch). **SIGN is the trifecta (HANDOFF §1):** a flipped `(N/2)·a_T⊥` (a `−` for the `+`, or a
+sign-flipped projection) makes `:apn` WORSE than `:pn` — the SILENT failure. Pinned two ways in
+`test_guidance.jl`: a direct `a_T⊥` recompute (a DIFFERENT expression) AND closed-loop
+`miss(:apn) < miss(:pn)` (gate 2 / the probe). Uses `_dot` only (frames.jl house style, no
+LinearAlgebra); zero-safe (`a_T = 0` → base; `û` from a coincident geometry → the base's guards).
+"""
+function pn_accel_augmented(û::Vec3, ω::Vec3, Vc::Real, a_T::Vec3; N::Real = 4.0)
+    a_T⊥ = a_T - _dot(a_T, û) * û                    # target accel ⟂ LOS (projection removes the ∥ part)
+    return pn_accel_from_omega(û, ω, Vc; N = N) + (N / 2) * a_T⊥
 end
 
 """

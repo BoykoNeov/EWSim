@@ -155,7 +155,7 @@ var _missile_id := ""             # missile entity id (for the .impacted flag te
 var _missile_trail: Array = []    # WORLD [x,y,z] breadcrumbs (mapped through _world_to_screen each draw)
 const INTEGRATOR_RUNGS := ["rk4", "euler"]   # slice-8 integrator cycler (the shared fidelity button)
 const AUTOPILOT_RUNGS := ["ideal", "pid"]    # slice-9 autopilot cycler (the shared fidelity button)
-const GUIDANCE_RUNGS := ["pursuit", "pn"]    # slice-10 OUTER-law cycler (the shared fidelity button)
+const GUIDANCE_RUNGS := ["pursuit", "pn", "apn"]   # slice-10/12 OUTER-law cycler (3-ring: +apn, slice 12)
 const SEEKER_RUNGS := ["raw", "filtered"]    # slice-11 seeker cycler (raw finite-diff ↔ α-β filtered)
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
@@ -344,7 +344,7 @@ func _setup_spatial_fid_btn() -> void:
 			_prop_btn.pressed.disconnect(_on_prop_pressed)
 		if not _prop_btn.pressed.is_connected(_on_guidance_pressed):
 			_prop_btn.pressed.connect(_on_guidance_pressed)
-		_prop_btn.tooltip_text = "Cycle guidance (set_fidelity): pursuit ↔ pn"
+		_prop_btn.tooltip_text = "Cycle guidance (set_fidelity): pursuit → pn → apn"
 		# Seed extents to fit the crossing (x ~0..8 km, z ~2..8 km); they only grow, so start close.
 		_x_max = 8000.0
 		_z_max = 8000.0
@@ -606,14 +606,17 @@ func _on_autopilot_pressed() -> void:
 	_update_fid_btn()
 
 func _on_guidance_pressed() -> void:
-	# Advance the OUTER-law rung (pursuit↔pn) and tell the core (set_fidelity). Like :autopilot/
-	# :integrator this is PHYSICS-CHANGING, not toggle-bit-identical: there is NO RNG in the missile
-	# arc, so a :pursuit↔:pn toggle CHANGES the trajectory going forward (the slice-2 `propagation`
-	# shape — the OPPOSITE of the slice-5/6/7 draw-free toggles). Introduce-safe (absent an Autopilot
-	# nothing reads it; the core defaults to :pursuit). The client owns the displayed rung: badge +
-	# button locally (the server applies it silently on the next tick). Under :pn the LOS line holds a
-	# constant bearing (the collision triangle) and |a_cmd| falls; under :pursuit the LOS swings and
-	# |a_cmd| climbs — the tail-chase. `:autopilot` stays FIXED (this button toggles only `guidance`).
+	# Advance the OUTER-law rung (the 3-RING pursuit → pn → apn) and tell the core (set_fidelity). Like
+	# :autopilot/:integrator this is PHYSICS-CHANGING, not toggle-bit-identical: there is NO RNG in the
+	# missile arc, so a rung flip CHANGES the trajectory going forward (the slice-2 `propagation` shape —
+	# the OPPOSITE of the slice-5/6/7 draw-free toggles). Introduce-safe (absent an Autopilot nothing
+	# reads it; the core defaults to :pursuit). The client owns the displayed rung: badge + button locally
+	# (the server applies it silently on the next tick). Under :pn the LOS line holds a constant bearing
+	# (the collision triangle) and |a_cmd| falls; under :pursuit the LOS swings and |a_cmd| climbs (the
+	# tail-chase); under :apn (slice 12) the `(N/2)·a_T⊥` feedforward anticipates a MANEUVERING target so
+	# the demand stays LOW where plain :pn saturates (`saturated` lit) and MISSES — the augmented-PN
+	# lesson, the a_demand/saturated readout is the tell. `:autopilot` stays FIXED (this toggles only
+	# `guidance`); on a non-maneuvering (slice-10) target :apn ≈ :pn (the feedforward vanishes).
 	var cur := str(_fidelity.get("guidance", "pursuit"))
 	var i := GUIDANCE_RUNGS.find(cur)
 	var next: String = GUIDANCE_RUNGS[(i + 1) % GUIDANCE_RUNGS.size()] if i >= 0 else "pursuit"

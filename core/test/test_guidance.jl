@@ -164,6 +164,57 @@
         @test pn_accel(m_pos, m_vel2, t_pos, t_vel; N = N) === pn_accel_from_omega(û, ω2, Vc2; N = N)
     end
 
+    @testset "pn_accel_augmented — APN feedforward: reduces to PN, ⟂-LOS, sign, N-scaling (slice 12)" begin
+        # Crossing geometry (same as above): û=(1,0,0), base PN = (0, N·vm·vy/D, 0). The APN
+        # feedforward adds (N/2)·a_T⊥ where a_T⊥ is the TARGET accel ⟂ LOS. RNG-free (truth a_T).
+        vm, D, vy, N = 600.0, 5000.0, 200.0, 4.0
+        m_pos = Vec3(0.0, 0.0, 0.0); m_vel = Vec3(vm, 0.0, 0.0); t_pos = Vec3(D, 0.0, 0.0); t_vel = Vec3(0.0, vy, 0.0)
+        r = t_pos - m_pos; v = t_vel - m_vel
+        û = los_unit(m_pos, t_pos); ω = los_rate(r, v); Vc = -range_rate(r, v)
+        base = pn_accel_from_omega(û, ω, Vc; N = N)                # the plain-PN command (the anchor)
+
+        # (1) a_T = 0 → the feedforward VANISHES → APN reduces to PN EXACTLY (introduce-safe /
+        # :apn-on-CV ≈ :pn; == ignores signed-zero so the `+zero(Vec3)` +0.0 trap is harmless here).
+        @test pn_accel_augmented(û, ω, Vc, zero(Vec3); N = N) == base
+
+        # (2) DIRECT feedforward recompute — a DIFFERENT expression than the impl (catches a `−`
+        # sign flip or a transpose). a_T with a ∥-LOS part (x) that MUST be projected out.
+        a_T = Vec3(100.0, 200.0, 50.0)                            # ∥ part = x=100 (removed), ⟂ part = (0,200,50)
+        a_apn = pn_accel_augmented(û, ω, Vc, a_T; N = N)
+        ff_hand = (N / 2) * Vec3(0.0, 200.0, 50.0)               # (N/2)·a_T⊥, a_T⊥ hand-projected onto ⟂û
+        @test (a_apn - base) ≈ ff_hand atol = 1e-9               # the feedforward is exactly (N/2)·a_T⊥
+        @test a_apn ≈ base + ff_hand atol = 1e-9
+
+        # (3) a_T ∥ û (a PURELY RADIAL maneuver) → a_T⊥ = 0 → NO feedforward (the projection kills
+        # it; a radial accel changes range, not LOS rate, so PN needs no lead for it).
+        @test pn_accel_augmented(û, ω, Vc, Vec3(777.0, 0.0, 0.0); N = N) == base
+
+        # (4) the feedforward is ⟂ LOS (a_apn − base) · û == 0 — the (N/2)·a_T⊥ construction.
+        @test EWSim._dot(a_apn - base, û) ≈ 0.0 atol = 1e-9
+
+        # (5) SIGN — the feedforward ADDS along +a_T⊥ (a `−` would make :apn WORSE than :pn, the
+        # silent failure). a_T with +y,+z ⟂-components → the command shifts +y,+z vs plain PN.
+        @test a_apn[2] > base[2]                                  # +y target accel → +y feedforward
+        @test a_apn[3] > base[3]                                  # +z target accel → +z feedforward
+        # flip a_T⊥ → the feedforward flips (symmetric), still ⟂ LOS.
+        a_flip = pn_accel_augmented(û, ω, Vc, Vec3(100.0, -200.0, -50.0); N = N)
+        @test (a_flip - base) ≈ -ff_hand atol = 1e-9
+
+        # (6) the feedforward scales with N (isolate it on a COLLISION course where base PN = 0, so
+        # a_apn IS the pure feedforward (N/2)·a_T⊥ → doubling N doubles a_apn).
+        m_c = Vec3(0.0, 0.0, 0.0); mv_c = Vec3(vm, 0.0, 0.0); t_c = Vec3(D, 0.0, 0.0); tv_c = Vec3(vm, 0.0, 0.0)
+        rc = t_c - m_c; vc = tv_c - mv_c
+        ûc = los_unit(m_c, t_c); ωc = los_rate(rc, vc); Vcc = -range_rate(rc, vc)
+        @test pn_accel_from_omega(ûc, ωc, Vcc; N = N) == zero(Vec3)   # collision course → base PN = 0
+        aN  = pn_accel_augmented(ûc, ωc, Vcc, a_T; N = N)
+        a2N = pn_accel_augmented(ûc, ωc, Vcc, a_T; N = 2 * N)
+        @test aN ≈ (N / 2) * Vec3(0.0, 200.0, 50.0) atol = 1e-9  # pure feedforward, base = 0
+        @test a2N ≈ 2 * aN atol = 1e-9                            # linear in N
+
+        # (7) the rung exists in the one-list source of truth (LIVE_FIDELITY_MODES references it).
+        @test :apn in GUIDANCE_MODES
+    end
+
     @testset "pn_accel — degenerate guards + endgame r→0 (finite, then CONSUMER-clamped)" begin
         # v→0 (relative velocity zero: missile matches target velocity) → ω=0, Vc=0 → zero.
         @test pn_accel(Vec3(0,0,0), Vec3(600,0,0), Vec3(5000,0,0), Vec3(600,0,0); N=4.0) == zero(Vec3)

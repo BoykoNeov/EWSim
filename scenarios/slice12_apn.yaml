@@ -1,0 +1,103 @@
+# slice12_apn — augmented proportional navigation vs a MANEUVERING target (HANDOFF §10 item 10,
+# slice 12 gate 3). The RNG-FREE payoff of the missile arc. Slice 10 gave PN against a CONSTANT-
+# VELOCITY target (optimal there — a_cmd → 0 at intercept). Slice 11 gave a noisy seeker + LOS-rate
+# filter so PN reads a MEASURED LOS. Slice 12 adds the last structural piece: even a PERFECT LOS
+# estimate leaves plain PN LAGGING a MANEUVERING target by the target-acceleration term, and —
+# under a BINDING g-limit — PN's demand SATURATES and it MISSES. Augmented PN (APN) adds a
+# (N/2)·a_T⊥ feedforward on the target's truth acceleration → it anticipates the maneuver → low
+# demand → tight intercept. In the EXISTING spatial / elevation view (extended — the target's CURVED
+# trail + the a_demand/saturated readout); NO new render mode (the slice-8/9/10/11 "stay spatial"
+# precedent). The handshake carries `guidance` in `fidelity` → the client's guidance-view path; the
+# shared fidelity button becomes the 3-RING cycler :pursuit → :pn → :apn.
+#
+# THE LESSON (the fidelity button, :pn ↔ :apn — the third rung is the new one):
+#   :apn runs augmented PN — the TPN command N·Vc·(ω×û) PLUS a (N/2)·a_T⊥ feedforward on the target's
+#   truth lateral acceleration (a_T, published each tick by the phase-1 ManeuveringTarget mover). The
+#   feedforward turns the missile WITH the maneuver instead of a step behind it, so the demand stays
+#   LOW (peak ≈ 36 m/s²), never pegs a_max, and the missile INTERCEPTS (miss ≈ the constant-velocity
+#   baseline). Cycle to :pn (plain proportional navigation) and — against the SAME maneuver, under the
+#   SAME binding a_max — PN reacts a step behind, its demand SATURATES (pegs a_max most of the turn,
+#   `saturated` LIT), the collision triangle never sets, and the missile MISSES WIDE. :pursuit rides
+#   along in the ring as the tail-chaser foil (misses by even more). `guidance` is PHYSICS-CHANGING,
+#   NO RNG (the slice-10 shape — a :pn↔:apn toggle MOVES the missile but adds no w.rng draw; "draw-
+#   count invariance is VACUOUS" — the slice-11 RNG-inflection INVERTS back here).
+#
+#   THE G-LIMIT IS THE BINDING CONSTRAINT (HANDOFF §10 item 10 — "g-limit saturation modeled, this is
+#   WHY augmented PN matters"). Raise the a_max slider and PN RECOVERS (at a_max ≳ 350 its demand fits
+#   → it intercepts too) — PROVING the miss was saturation, not a PN defect. APN is flat across a_max
+#   (it never needed the headroom). The lesson window is a_max ∈ ~[100, 350]; the default 200 is
+#   centered, and dragging a_max → 350+ is the "PN recovers" payoff.
+#
+#   MISS is measured at CPA from TRUTH positions (the slice-10/11 discipline). Probed against the live
+#   load_scenario→decide!→integrate!→telemetry wire (wire_probe.jl): miss(:pn) ≈ 166.8 m / sat 0.63
+#   vs miss(:apn) ≈ 0.85 m / sat 0.00 (a ~200× ratio); APN restores the maneuvering-target miss to the
+#   constant-velocity baseline (pn(CV) ≈ 0.9 m, both carry the same gravity residual). The residual
+#   apn miss is the missile's OWN gravity (unmodeled by the TARGET-accel feedforward) — gravity-comp
+#   PN is DEFERRED (convention 9). The verifier only sees state frames every emit_every (16) ticks, so
+#   PIN CONSERVATIVE one-sided bounds (pn miss > 50, apn miss < 30), NOT the ratio (the frame-sampling
+#   floor — [[ewsim-missile-verifier-sampling]]).
+#
+# THE MANEUVER: a CONSTANT lateral acceleration a_lat = 200 m/s² (~20 g) ⟂ the target velocity, turn-
+# sign = +1 (the CLEAN direction — the target curves AWAY after the first pass, so the first CPA is
+# the honest miss with no curve-back second CPA). A coordinated, speed-preserving g-turn IN the x-z
+# plane (the elevation view's plane — no cross-range, the slice-10 precedent). RK4 holds the turn's
+# speed to machine eps. Named approx: a CONSTANT accel (no jink/weave program — a later fidelity step);
+# gravity-free kinematic target (feels only a_T, not −g — the ConstantVelocity lineage).
+#
+# THE ENGAGEMENT IS PLANAR IN x-z: the interceptor climbs from z = 3000 m at 12° / 700 m/s; the target
+# (base [6000,0,4200], v[-800,0,200], |v| ≈ 825 > 700 so it OUTRUNS the missile) now CURVES under the
+# maneuver. Same base geometry as slice10_pn / slice11_seeker so the ONLY new variable is the maneuver
+# + APN (convention 9 — one lesson). RNG-FREE (no seeker → no w.rng draw); the seed is inert (harmless,
+# kept for format consistency).
+#
+# UNITS (the §1 trifecta): positions/velocities SI (m, m/s), a_lat in m/s², launch ELEVATION in DEGREES
+# → radians at the loader. dt = 1e-3 / emit_every = 16 (the standard cadence).
+name: slice12_apn
+seed: 12
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  # TWO keys, but ONE lesson: guidance is the toggle (the button cycles the 3-ring :pursuit→:pn→:apn),
+  # autopilot is HELD at :ideal so the guidance-law lesson is uncontaminated by the PID (convention 9 —
+  # one lesson per button; the client checks `guidance`). Both physics-changing, NO RNG, introduce-safe.
+  guidance: apn
+  autopilot: ideal
+
+entities:
+  # The guided interceptor: launched from the origin at z = 3000 m, CLIMBING at 12° at 700 m/s in the
+  # x-z plane. mass 140 kg, DRAG OFF (one lesson per scenario). The `guidance:` block makes it GUIDED →
+  # [BallisticMissile (phase-1 airframe), Autopilot (phase-4 guidance)]. n_pn = 4 (the PN/APN nav
+  # constant), r_stop = 30 (the endgame cutoff). a_max = 200 (~20 g) is the BINDING g-limit — under :pn
+  # it saturates against the maneuver (the miss), under :apn the low demand stays clear of it (the hit);
+  # drag the a_max slider to 350+ to watch PN recover (the g-limit-is-the-constraint payoff).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.225
+      guidance: {k_guid: 3.0, n_pn: 4.0, r_stop: 30.0, kp: 2.0, ki: 0.0, kd: 0.0, tau: 0.3, a_max: 200.0}
+  # The MANEUVERING target: a curving aircraft ahead at 4.2 km altitude, base velocity descending-and-
+  # closing at v[-800,0,200], now under a `maneuver:` block → [ManeuveringTarget] (NOT a ConstantVelocity).
+  # a_lat_mps2 = 200 (~20 g lateral), turn_sign = +1 (the clean-first-CPA direction). The mover writes the
+  # truth a_T into comp[:a_target] each tick, which the :apn decide! reads for the feedforward.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 0.0, 4200.0]
+    vel: [-800.0, 0.0, 200.0]
+    target: {rcs_m2: 1.0, maneuver: {a_lat_mps2: 200.0, turn_sign: 1.0}}
+
+knobs:
+  # The live sliders: a_lat (the target maneuver g — drag it UP to make plain PN lag harder), N (the
+  # PN/APN nav constant), and a_max (the g-limit — THE lesson knob: at the default 200 PN saturates and
+  # misses; drag it to 350+ and PN recovers, proving the g-limit was the binding constraint; APN is flat).
+  # r_stop is the endgame coast. The guidance METHOD is the fidelity BUTTON (the 3-ring), not a knob;
+  # launch geometry is not a slider. a_lat validated FINITE at load; a_max/n_pn floored/clamped at the
+  # consumer (a live slider can't crash a tick).
+  - {target: tgt1, key: a_lat_mps2, min: 0.0,   max: 400.0,  label: "a_lat (target g, m/s²)"}
+  - {target: m1,   key: n_pn,       min: 2.0,   max: 6.0,    label: "N (nav constant)"}
+  - {target: m1,   key: a_max,      min: 100.0, max: 600.0,  label: "a_max (g-limit, m/s²)"}
+  - {target: m1,   key: r_stop,     min: 0.0,   max: 100.0,  label: "r_stop (endgame, m)"}
