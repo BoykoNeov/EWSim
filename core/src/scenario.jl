@@ -311,6 +311,32 @@ function _parse_fidelity(data::AbstractDict)
     return fid
 end
 
+# A fidelity VALUE that reaches a tick dispatch (`observe!`/`decide!`) as an unknown rung throws
+# INSIDE `tick!` — and both the startup warmup and, more sharply, a mid-session `load_scenario`
+# run that throwing tick inside the session's IO/EOF-only try (server.jl), silently killing the
+# connection. Every other authored input is validated at LOAD (bandwidth>0, σθ>0, pri>0, …), but
+# the fidelity map — the one authored input that can still reach a throwing tick — was not. Close
+# it here, mirroring `set_fidelity`'s live check: `LIVE_FIDELITY_MODES` (radar.jl) is EXACTLY the
+# set of keys a tick dispatches on, so a bad VALUE on one of those keys is the precise crash
+# boundary. Keys NOT in that table (e.g. `detection`, which governs only the offline ROC batch and
+# is never tick-dispatched — or an unknown key nothing reads) can't crash a tick, so their values
+# pass; an UNRECOGNIZED key is `@warn`ed, not rejected, so a typo like `propogation:` (which would
+# silently default the lesson away) is at least visible without hard-failing a future inert key.
+const _KNOWN_FIDELITY_KEYS = (keys(LIVE_FIDELITY_MODES)..., :detection)
+
+function _validate_fidelity(world::World)
+    for (key, val) in world.fidelity
+        modes = get(LIVE_FIDELITY_MODES, key, nothing)
+        if modes !== nothing
+            val in modes ||
+                error("fidelity: $key '$val' unknown ($(join(modes, " | ")))")
+        elseif !(key in _KNOWN_FIDELITY_KEYS)
+            @warn "fidelity: '$key' is not a recognized fidelity key (nothing reads it)" key
+        end
+    end
+    return world
+end
+
 function _parse_knobs(data::AbstractDict, world::World)
     knobs = Knob[]
     haskey(data, "knobs") || return knobs
@@ -359,6 +385,7 @@ function load_scenario(path::AbstractString)
         append!(subs, per_entity[id])
     end
 
+    _validate_fidelity(world)
     _validate_cfar(world)
     _validate_geoloc(world)
     _validate_esm(world)
@@ -484,8 +511,6 @@ function _validate_missile(world::World)
         e.kind === :target && (n_target += 1)
     end
     n_missile == 0 && return world                       # not a missile scenario
-    n_missile ≥ 1 ||
-        error("a missile scenario needs ≥ 1 :missile entity (got $n_missile)")
     # Slice 9: a guided missile's Autopilot target-locks the nearest `:target` at runtime — so a
     # guided scenario must ship ≥ 1 (validated at LOAD, the `_validate_gps`/`_validate_esm` pattern,
     # so a mis-authored guided missile fails as a clear load error, not a runtime no-target coast).

@@ -31,7 +31,8 @@ function _detect_scenario(seed; emit_every = 4, revisit_s = 0.02)
     w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(9000.0, 0, 0),
         comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
     subs = Subsystem[RadarSensor(:radar1; revisit_s = revisit_s), ConstantVelocity(:tgt1)]
-    return Scenario("detect", w, subs, Knob[], 1.0e-3, emit_every)
+    knobs = Knob[Knob(:radar1, :pt_w, 1.0e3, 2.0e5, "Pt [W]"; log = true)]
+    return Scenario("detect", w, subs, knobs, 1.0e-3, emit_every)
 end
 
 # An in-memory CFAR scenario (the slice-3 dispatch): :cfar fidelity present, a radar with the
@@ -46,7 +47,9 @@ function _cfar_scenario(seed; emit_every = 4, ncells = 128)
     w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(10_000.0, 0, 0),
         comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
     subs = Subsystem[RadarSensor(:radar1; revisit_s = 0.0), ConstantVelocity(:tgt1)]
-    return Scenario("cfar", w, subs, Knob[], 1.0e-3, emit_every)
+    knobs = Knob[Knob(:radar1, :n_train, 4.0, 64.0, "N train"),
+                 Knob(:radar1, :n_guard, 0.0, 8.0, "N guard")]
+    return Scenario("cfar", w, subs, knobs, 1.0e-3, emit_every)
 end
 
 # An in-memory DF/geolocation scenario (the slice-5 dispatch): :estimator fidelity present, one
@@ -150,7 +153,10 @@ function _guided_scenario(seed; emit_every = 4, fidelity = Dict(:autopilot => :i
     w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(8000.0, -3000.0, 1000.0),
         vel = Vec3(0, 300.0, 0), comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
     subs = Subsystem[BallisticMissile(:m1), Autopilot(:m1), ConstantVelocity(:tgt1)]
-    return Scenario("guided", w, subs, Knob[], 1.0e-3, emit_every)
+    knobs = Knob[Knob(:m1, :k_guid, 0.5, 1.0e3, "k guid"), Knob(:m1, :kp, 0.1, 5.0e5, "Kp"),
+                 Knob(:m1, :ki, 0.0, 1.0e4, "Ki"), Knob(:m1, :kd, 0.0, 1.0e2, "Kd"),
+                 Knob(:m1, :tau, 1.0e-6, 2.0, "tau")]
+    return Scenario("guided", w, subs, knobs, 1.0e-3, emit_every)
 end
 
 @testset "server" begin
@@ -185,6 +191,39 @@ end
         # set_param on a missing entity fails loudly (a silent no-op would hide a typo)
         @test_throws ErrorException EWSim.handle_command!(srv,
             Dict(:type => "set_param", :target => "ghost", :key => "x", :value => 1))
+        # set_param on a real entity but a NON-KNOB key is rejected — writing it would bypass the
+        # load-time guards (e.g. `swerling` reaches pd_analytic and throws inside the next tick,
+        # killing the session). Only declared knobs are live-settable. `:swerling` is a real comp
+        # key on radar1 but NOT a knob in this fixture, so it must be refused.
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_param", :target => "radar1", :key => "swerling", :value => 7))
+    end
+
+    @testset "a bad load_scenario is atomic — the session keeps serving the old scenario" begin
+        # This is the payoff of validating fidelity at LOAD: a mid-session load_scenario of a file
+        # with a bad fidelity rung throws INSIDE handle_command! (the command try catches it →
+        # error frame → keep serving), and because the build+validate happens before any `srv`
+        # field is touched, `srv` is left EXACTLY on the old scenario — not a fatal tick death, not
+        # a half-loaded limbo. (Without the guard the load would succeed and the NEXT tick would
+        # throw in the tick loop, which the outer catch rethrows → session death.)
+        srv = EWSim.Server(_detect_scenario(1))
+        old_scn = srv.scn; old_path = srv.path
+        bad = tempname() * ".yaml"
+        write(bad, """
+        name: bad_fid
+        fidelity: {propagation: bogus}
+        entities:
+          - id: radar1
+            kind: radar
+            pos: [0,0,0]
+            radar: {pt_w: 1, gain_db: 1, freq_hz: 1.0e9, bandwidth_hz: 1.0e6,
+                    noise_fig_db: 0, losses_db: 0, pfa: 1.0e-6, swerling: 1}
+        """)
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "load_scenario", :path => bad))
+        @test srv.scn === old_scn        # unchanged — still the old scenario
+        @test srv.path == old_path       # not even the path was poisoned (atomic swap)
+        rm(bad; force = true)
     end
 
     @testset "set_fidelity toggles propagation live (slice-2 extension)" begin
@@ -503,8 +542,8 @@ end
     end
 
     @testset "a live n_train/n_guard slider can't crash the tick (consumer clamp)" begin
-        # set_param is the GENERIC channel (no per-key validation), so a slider dragged to an
-        # odd n_train or a negative guard reaches observe! directly — which must CLAMP it, never
+        # set_param writes a DECLARED KNOB (n_train/n_guard are knobs here), so a slider dragged to
+        # an odd n_train or a negative guard reaches observe! directly — which must CLAMP it, never
         # throw into tick! (the slice-2 set_fidelity / h≥0 watch-item, generalised: a live knob
         # can't kill the session). The loader rejects an odd AUTHORED n_train; this is the
         # live-drag half of that guard, exercised through the real set_param → tick path.

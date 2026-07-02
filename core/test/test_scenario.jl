@@ -564,6 +564,46 @@ end
         rm(bad; force = true)
     end
 
+    @testset "fidelity values are validated at LOAD (crash-boundary guard)" begin
+        # A bad fidelity VALUE on a tick-dispatched key (LIVE_FIDELITY_MODES) would throw inside
+        # the first tick! — at startup an ugly warmup crash, but mid-session (load_scenario) it
+        # runs in the session's IO/EOF-only try and silently kills the connection. Reject at LOAD,
+        # the bandwidth>0 / n_pulses≥1 discipline. Keys NOT tick-dispatched (detection, unknown)
+        # can't crash a tick, so their values pass.
+        mk(fid) = begin
+            f = tempname() * ".yaml"
+            write(f, """
+            name: fid
+            fidelity: {$fid}
+            entities:
+              - id: radar1
+                kind: radar
+                pos: [0,0,0]
+                radar: {pt_w: 1, gain_db: 1, freq_hz: 1.0e9, bandwidth_hz: 1.0e6,
+                        noise_fig_db: 0, losses_db: 0, pfa: 1.0e-6, swerling: 1}
+              - id: tgt1
+                kind: target
+                pos: [9000,0,0]
+                target: {rcs_m2: 1.0}
+            """)
+            f
+        end
+        # a bogus rung on a tick-dispatched key is rejected
+        b1 = mk("propagation: bogus")
+        @test_throws ErrorException load_scenario(b1); rm(b1; force = true)
+        b2 = mk("cfar: bogus")
+        @test_throws ErrorException load_scenario(b2); rm(b2; force = true)
+        # a valid rung loads
+        g1 = mk("propagation: two_ray")
+        scn = load_scenario(g1)
+        @test scn.world.fidelity[:propagation] === :two_ray; rm(g1; force = true)
+        # `detection` is NOT tick-dispatched (offline ROC batch only) — any value passes, so the
+        # three shipping slice-1/2/3 scenarios that declare it still load.
+        g2 = mk("propagation: free_space, detection: monte_carlo")
+        scn2 = load_scenario(g2)
+        @test scn2.world.fidelity[:detection] === :monte_carlo; rm(g2; force = true)
+    end
+
     @testset "loader parses a :cfar scenario with a :clutter band (slice 3)" begin
         f = tempname() * ".yaml"
         write(f, """

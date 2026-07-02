@@ -150,6 +150,16 @@ function handle_command!(srv::Server, cmd)
     if typ === :set_param
         target = Symbol(String(cmd[:target]));  key = Symbol(String(cmd[:key]))
         haskey(w.entities, target) || error("set_param: no entity '$target'")
+        # set_param may ONLY write a DECLARED KNOB. Knobs are the inputs designed to be live-
+        # mutated (and clamped at their consumers — the odd-n_train precedent); every OTHER comp
+        # key is validated once at LOAD (mass>0, cd_area≥0, bandwidth>0, σθ>0, tau/a_max>0, …)
+        # and thereafter assumes immutability. Writing a non-knob key here bypasses that whole
+        # guard class — e.g. `swerling 7` throws inside the next tick (session death, since the
+        # session's outer catch only swallows IO/EOF), `n_pulses` silently desyncs a replay's
+        # draw topology. The shipped client only builds sliders for knobs, so this rejects
+        # nothing a real client sends. (HANDOFF §6: a knob names a real entity + comp key.)
+        any(kb -> kb.target === target && kb.key === key, srv.scn.knobs) ||
+            error("set_param: '$target.$key' is not a declared knob (only knobs are live-settable)")
         comp = w.entities[target].comp
         comp[key] = _coerce_like(get(comp, key, nothing), Float64(cmd[:value]))
         return nothing
@@ -204,8 +214,14 @@ function handle_command!(srv::Server, cmd)
         return nothing
 
     elseif typ === :load_scenario
+        # Build + VALIDATE the new scenario BEFORE mutating any `srv` field, so a bad file (a
+        # rejected fidelity rung, a malformed entity block, …) throws here with `srv` untouched.
+        # The error is caught by the session's command try (report → keep serving), so the client
+        # stays live on the OLD scenario — an atomic swap, no half-loaded limbo (a stale `srv.path`
+        # would otherwise poison the next `reset`).
+        scn = load_scenario(String(cmd[:path]))
         srv.path = String(cmd[:path])
-        srv.scn  = load_scenario(srv.path)
+        srv.scn  = scn
         srv.seed = srv.scn.world.seed        # adopt the NEW scenario's seed
         srv.step_count = 0;  srv.step_budget = 0
         srv.mode = PAUSED
