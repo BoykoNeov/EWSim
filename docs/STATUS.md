@@ -1205,6 +1205,94 @@ NO server: `godot --headless --path clients/godot --script res://net/slice9_ui_t
 
 ---
 
+**Slice 10 — missile: proportional navigation (outer loop) + g-limit saturation-as-lesson** (HANDOFF §10 item
+10, the THIRD and FINAL slice of the missile-guidance arc) — **COMPLETE. Gates 1–3 done & green (1829 tests);
+wire + UI machine-verified AND the guided-missile spatial `_draw` VISUALLY CONFIRMED (2026-07-02).** The
+cascade seam built in slice 9 pays off: the OUTER law swaps `pursuit_accel → pn_accel` on the RESERVED
+`:guidance` key, the INNER PID UNTOUCHED. **PN drives the LOS rotation rate λ̇ → 0** (leads the crossing target
+onto a constant-bearing / decreasing-range collision triangle) — the tail-chaser slice 9 only approximated.
+**Two lessons, two scenarios (the slice-4 split, one button-toggle each):** (1) PN beats pursuit — **MISS is now
+an HONEST headline** (autopilot held :ideal lifts the slice-9 track_gap confound): pn intercepts cleanly while
+pursuit tail-chases into a big miss, and |a_cmd| FALLS (pn, toward the ~2g gravity floor) vs CLIMBS (pursuit);
+(2) g-limit saturation — the DELIBERATE INVERSION of slice 9's never-bind a_max: a hot geometry drives PN's
+early demand ABOVE a_max → the clamp BINDS → the missile can't set the triangle → the miss OPENS, and the a_max
+slider closes it. Fidelity `guidance ∈ (:pursuit, :pn)` is PHYSICS-CHANGING (the slice-2/8/9 shape, NO RNG —
+NOT slice-5/6/7 toggle-invariance). Deferred (the tee-ups): augmented PN + a maneuvering target (slice 11 — the
+~2g floor here is a literal in-scenario `N/(N-2)·g_perp` preview, gravity-as-unmodeled-target-accel); noisy
+seekers / λ̇ filtering (slice 11 — PN reads TARGET TRUTH); 6-DOF (§11 Tier A). Planned FULL in
+`docs/plans/slice10.md` (gate-0 probe + 3 gates). **Gate-0 advisor catches baked in:** the ~2g floor is NOT 0
+(g-symmetric probe, mechanism TESTED); TWO independent sign sources in `pn_accel`; the magnitude identity
+`N·Vc·‖ω‖` is structurally weak (pin the concrete vector); r_stop=0 default is the byte-identity lever.
+
+Gate 1 (primitive green — pure, closed-form, SI, RNG-free, no LinearAlgebra): `guidance.jl` gains
+`pn_accel(m_pos, m_vel, t_pos, t_vel; N=4.0) → Vec3` — TPN `a = N·Vc·(ω×û)` reusing `los_unit`/`los_rate`/
+`range_rate`/`_cross` (all frames.jl, in scope). ⟂ LOS, zeroes on a collision course, zero-guarded (v→0 /
+coincident / Vc=0 → 0). `GUIDANCE_MODES=(:pursuit,:pn)` the one-list source of truth (defined here, precedes
+radar.jl). `pursuit_accel`/`autopilot_step` UNCHANGED (the seam). Both exported. `test_guidance.jl` PN arms:
+the **collision-course-zero anchor** (pn≈0 vs pursuit=900 — the static Lesson-1 contrast, the sailor's-rule
+EXTERNAL anchor); the **crossing** geometry — ⟂-LOS + the concrete-vector recompute `(0, N·vm·vy/D, 0)` (a
+DIFFERENT expression than the cross-product path, catches the magnitude-preserving `û×ω` order flip) + the SIGN
+on ±y crossings (BOTH sign sources — the `−range_rate` Vc-sign and the `ω×û` order); N-linearity; degenerate
+guards + the endgame r→0 (finite-then-consumer-clamped). Slices 1–9 byte-identical (golden + determinism green
+through the include).
+
+Gate 2 (PN wired into the outer loop — the reserved `:guidance` key filled; +35 tests). `Autopilot.decide!`
+(missile.jl): `guid = get(w.fidelity,:guidance,:pursuit)` (DEFAULT :pursuit → the byte-identical slice-9 path)
+selects `pn_accel` vs `pursuit_accel`; a `_terminal_cutoff(a_dem, los_range, r_stop)` (§2 endgame coast-through
+— **r_stop=0 default is an EXACT no-op**, `r<0` never fires, so slice-9 stays bit-identical) then `clamp_accel`
+(the crash-guard that now BINDS on purpose in glimit). New telemetry (phase-4, post-empty!): `.a_demand`
+(PRE-clamp — the saturation tell), `.saturated` (0/1), `.los_rate` (‖ω‖), `.closing_speed` (Vc); all
+`_finite`-clamped; slice-9 keys kept. `LIVE_FIDELITY_MODES += guidance = GUIDANCE_MODES` (one-list-no-drift →
+`set_fidelity`/loader/`_KNOWN_FIDELITY_KEYS` pick it up automatically, NO server change). `scenario.jl`: the
+`guidance:` sub-block reads `n_pn`/`r_stop` at knob-addressable comp keys (n_pn>0, r_stop≥0 at LOAD). Tests:
+`test_missile.jl` (decide! matches pn_accel; **PN miss ≪ pursuit** [0.03 vs 708 m at first-CPA — target
+outruns missile so no re-convergence]; |a_cmd| falls-vs-climbs; :pursuit↔:pn DIFFER; **glimit saturation**
+miss(a_max=300)=410 ≫ miss(1000)=0.7, sat real not artifact; loader arms+rejects bad n_pn/r_stop);
+`test_determinism.jl` (the THREE claims + **the ADDITIVITY MASTER-CHECK: a verbatim slice-9 missile ≡
+:guidance=:pursuit, bit-identical** — the "slices are additive" teeth); `test_server.jl` (set_fidelity
+:guidance write/reject/introduce-safe; N/a_max/r_stop live sliders survive 500 ticks — huge N hits the clamp,
+not a throw, including the deliberately-binding a_max). Slices 1–9 byte-identical.
+
+Gate 3 (scenarios + Godot spatial-view extension + verifiers — DONE & green, 1829 tests; wire + UI
+machine-verified AND `_draw` VISUALLY CONFIRMED 2026-07-02). `scenarios/slice10_pn.yaml` (Lesson 1: 12°
+crossing, `v[-800,0,200]` target that OUTRUNS the missile, a_max=3000 generous — pn miss 0.03 ≪ pursuit 708,
+a_cmd 213→46 vs 63→374) + `scenarios/slice10_glimit.yaml` (Lesson 2: 5° hot geometry, high fast-crossing
+target, a_max=300 BINDS — miss 410 / sat_frac 0.84 / peak demand ~785; a_max↑ → miss 0.7). Numbers PROBED
+against the live `load_scenario→decide!→integrate!→telemetry` path (loader/framesampled/bands probes) +
+frame-sampled for the verifier. Godot `Sandbox.gd`: the EXISTING spatial view EXTENDED — **the `guidance`
+discriminator branch is checked BEFORE `autopilot`** (advisor: slice-10 ships BOTH keys; autopilot held :ideal;
+the ONE button must toggle `guidance` — convention 9), `_on_guidance_pressed` (:pursuit↔:pn ring),
+`GUIDANCE_RUNGS`, button/badge; `_draw_spatial` missile-marker + `_draw_guidance_los` branches extended
+(`guidance` fid_kind); the new a_demand/saturated/los_rate/closing_speed readout auto-renders (all scalars). The
+slice-1..9 views UNTOUCHED (slice-8/9/sandbox UI tests re-run green). `net/slice10_verify.gd` (drives the real
+server, **branches on the scenario name**: on `slice10_pn` — pn min-los 2.87 + a_cmd FALLS [first-descending
+band 221→117] / set_fidelity pursuit degrades to 708 with a_cmd CLIMBING [53→94]; on `slice10_glimit` — default
+a_max=300 SATURATES the early turn [los>2500-gated, avoiding the r→0 endgame spike — advisor] + miss 410, then
+set_param a_max=1200 CLOSES the miss to 1.6 with no early saturation — `S10V OK`, exit 0 on BOTH).
+`net/slice10_ui_test.gd` (mock client: handshake STAYS spatial + wires the GUIDANCE cycler NOT autopilot; ring
+walks pursuit→pn + wraps; autopilot untouched; n_pn slider → set_param; reset resyncs to pn — `S10UI OK`).
+`Sandbox.tscn` smoke-loaded headless against BOTH slice-10 servers (server DONE ⇒ scene connected, no GDScript
+errors). `test_scenario.jl` +1 testset (both scenarios: guidance:pn default now PRESENT [the reserved key
+FILLED], autopilot:ideal held, [BallisticMissile, Autopilot] NOT ConstantVelocity, n_pn/r_stop at consumed
+keys, n_pn/a_max/r_stop knobs but guidance/autopilot NOT). The `_draw` PIXEL branch VISUALLY CONFIRMED via 3
+windowed shots (the shot harness, [[ewsim-godot-headless]], reverted after): **pn** = the LOS line + missile
+lead + readout a_cmd=a_demand=32.75 (on the floor, unsaturated); **pursuit** = a_cmd=270 (the climbing
+tail-chase, ≫ pn at the same range); **glimit** = **a_cmd=300 PINNED at a_max while a_demand=821** (the g-limit
+saturation as a picture, the clamp visibly binding). No open step remains in slice 10's required gates.
+**(stretch, deferred)** `clients/notebooks/slice10_pn.jl` Pluto (the λ̇/|a_cmd| curves + a miss-vs-a_max
+saturation sweep) + an offline `batch.jl` miss-vs-N/a_max grid.
+
+Run the slice-10 showcase: `julia --project=core tools/server.jl scenarios/slice10_pn.yaml` (or
+`slice10_glimit.yaml`), then launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-uses the spatial
+view; cycle the `guidance:` button to watch pn LEAD [constant-bearing LOS, |a_cmd| falling] vs pursuit
+TAIL-CHASE [swinging LOS, |a_cmd| climbing]; on glimit drag the `a_max` slider up to close the saturated miss).
+Re-run the gate-3 proof headless: start that server, then `godot --headless --path clients/godot --script
+res://net/slice10_verify.gd` (exit 0 = pass; it branches on the scenario name). The UI test needs NO server:
+`godot --headless --path clients/godot --script res://net/slice10_ui_test.gd`. All 1829 tests: `pwsh
+tools/test.ps1`.
+
+---
+
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
 (`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0); `rf.jl`

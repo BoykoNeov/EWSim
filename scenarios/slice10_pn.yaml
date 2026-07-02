@@ -1,0 +1,85 @@
+# slice10_pn — the proportional-navigation showcase, LESSON 1 (HANDOFF §10 item 10, slice 10 gate 3).
+# The third and final missile-guidance slice: the OUTER law swaps from the slice-9 tail-chaser to
+# PROPORTIONAL NAVIGATION. In the EXISTING spatial / elevation view (extended: the LOS line is now the
+# constant-bearing tell, plus the a_demand/saturated readout); NO new render mode (the slice-4/8/9
+# "stay spatial" precedent). The handshake carries `guidance` in `fidelity` (and NO range_axis_m /
+# pri_axis_us / estimator / raim) → the client's missile-view discriminator; the shared fidelity
+# button becomes the :pursuit↔:pn cycler (CHECKED BEFORE `autopilot`, which is HELD FIXED at :ideal).
+#
+# THE LESSON (the fidelity button, :pn ↔ :pursuit):
+#   :pn is PROPORTIONAL NAVIGATION — it commands a lateral accel proportional to the LOS rotation rate
+#   ω and the closing speed (a = N·Vc·(ω×û)), driving λ̇ → 0. It LEADS the crossing target onto a
+#   constant-bearing / decreasing-range COLLISION TRIANGLE: the LOS line holds a fixed bearing and
+#   |a_cmd| FALLS toward a small floor as the triangle is established. Cycle to :pursuit (the slice-9
+#   tail-chaser) and the missile points AT the target, never leading — the LOS bearing SWINGS, |a_cmd|
+#   CLIMBS toward abeam, and the miss BALLOONS. `guidance` is PHYSICS-CHANGING (a toggle CHANGES the
+#   trajectory — the slice-2/8/9 shape, NOT a slice-5/6/7 toggle-bit-identical rung); NO RNG in the
+#   missile arc.
+#
+#   MISS is now an HONEST HEADLINE (the slice-9 constraint "miss conflates guidance + autopilot, use
+#   track_gap" is LIFTED because autopilot = :ideal, so miss isolates the GUIDANCE LAW). Probed against
+#   the live load_scenario→decide!→integrate!→telemetry wire path (gate3 pin): :pn miss ≈ 0.0 m (at the
+#   ~0.9 m/tick sampling floor — pin the RATIO, not the absolute), :pursuit miss ≈ 708 m. The a_cmd
+#   contrast: :pn |a_cmd| falls (probe ~213 → 46), :pursuit climbs (~63 → 374). PIN "pursuit ≫ pn".
+#
+# THE TEE-UP FOR SLICE 11 (augmented PN), shown honestly: plain PN is optimal against a NON-maneuvering
+# target; the ~2g |a_cmd| FLOOR here (not 0 — probed) is the N/(N-2)·g_perp PN-lag against gravity
+# acting as an unmodeled target acceleration (the gravity-free CV target vs the gravity-carrying
+# missile) — a literal in-scenario preview of why augmented PN matters. Slice 10 models PN, not APN.
+#
+# THE ENGAGEMENT IS PLANAR IN x-z (the elevation view's plane): the interceptor climbs from z = 3000 m
+# at 12° and the crossing target descends-and-closes in x-z (v[-800,0,200]) — the lead turn is VISIBLE
+# in the downrange×altitude view. The target OUTRUNS the missile (|t_vel| ≈ 825 > 700 m/s), so a
+# tail-chaser physically CANNOT get a second pass — the min-los_range miss IS the honest first-CPA miss
+# (no re-convergence to hide the lesson).
+#
+# a_max = 3000 m/s² (~306 g) is a GENEROUS CRASH-GUARD that NEVER BINDS here (Lesson 1 held clean —
+# g-limit saturation is slice10_glimit's Lesson 2; probed sat_frac = 0.0). r_stop = 30 m is the endgame
+# coast-through (the ω = r×v/‖r‖² blow-up guard as r→0; probed miss-invariant across r_stop).
+#
+# UNITS (the §1 trifecta): positions/velocities SI (m, m/s), accelerations m/s², launch ELEVATION in
+# DEGREES → radians at the loader. dt = 1e-3 / emit_every = 16 (the standard cadence — at dt ≥ 0.02 the
+# sub-ms wall_dt rounds to 0 steps/iter and REALTIME stalls; the guidance loop runs at the tick dt).
+name: slice10_pn
+seed: 10
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  # TWO keys, but ONE lesson: guidance is the toggle (the button cycles it), autopilot is HELD at
+  # :ideal so the guidance-law lesson is uncontaminated by the PID (convention 9 — one lesson per
+  # button; the client checks `guidance` BEFORE `autopilot`). Both physics-changing, introduce-safe.
+  guidance: pn
+  autopilot: ideal
+
+entities:
+  # The guided interceptor: launched from the origin at z = 3000 m, CLIMBING at 12° at 700 m/s in the
+  # x-z plane. mass 140 kg, DRAG OFF (one lesson per scenario). The `guidance:` block makes it GUIDED →
+  # [BallisticMissile (phase-1 airframe), Autopilot (phase-4 guidance)], NOT a ConstantVelocity.
+  # n_pn = 4 (the PN navigation constant), r_stop = 30 (the endgame cutoff); both live sliders.
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.225
+      guidance: {k_guid: 3.0, n_pn: 4.0, r_stop: 30.0, kp: 2.0, ki: 0.0, kd: 0.0, tau: 0.3, a_max: 3000.0}
+  # The crossing target: a constant-velocity aircraft ahead at 4.2 km altitude, descending-and-closing
+  # at v[-800,0,200] — it crosses the interceptor's climb IN x-z (the elevation plane) fast enough to
+  # OUTRUN the missile, so pursuit tail-chases into a big miss while PN leads to a clean intercept.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 0.0, 4200.0]
+    vel: [-800.0, 0.0, 200.0]
+    target: {rcs_m2: 1.0}
+
+knobs:
+  # The live sliders: N (the PN nav constant — a hotter/softer lead), a_max (the g-limit crash-guard,
+  # generous here), r_stop (the endgame coast-through). k_guid tunes the pursuit foil. The guidance
+  # method is the fidelity BUTTON, not a knob; launch geometry is not a slider.
+  - {target: m1, key: n_pn,   min: 2.0, max: 6.0,   label: "N (nav constant)"}
+  - {target: m1, key: a_max,  min: 100.0, max: 5000.0, label: "a_max (g-limit, m/s²)"}
+  - {target: m1, key: r_stop, min: 0.0, max: 100.0,  label: "r_stop (endgame, m)"}
+  - {target: m1, key: k_guid, min: 1.0, max: 6.0,   label: "K_guid (pursuit turn-rate)"}

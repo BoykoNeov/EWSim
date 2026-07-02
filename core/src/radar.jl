@@ -123,12 +123,19 @@ const EP_MODES = (:none, :freq_agility, :sidelobe_blanking)
 # is the SAME shape as `:integrator` — introduce-safe (absent an `Autopilot` subsystem nothing
 # reads it) AND physics-changing (a :ideal↔:pid toggle changes the trajectory, no RNG). Do NOT
 # copy the slice-5/6/7 toggle-invariance language onto it.
+# `:guidance` (slice-10 OUTER law; rungs `GUIDANCE_MODES` from guidance.jl, in scope here) is the
+# SAME shape again — introduce-safe (absent a consumer nothing reads it; `decide!` defaults to
+# `:pursuit`, the slice-9 law, so introducing the key on any slice-1..9 scenario is byte-identical)
+# AND physics-changing (a :pursuit↔:pn toggle CHANGES the trajectory, no RNG). Orthogonal to
+# `:autopilot` (outer vs inner loop); slice-10 scenarios pin `:autopilot=:ideal` so the one client
+# button toggles one lesson. Referencing GUIDANCE_MODES here (not re-listing) is one-list-no-drift.
 const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES,
                              ep = EP_MODES, estimator = ESTIMATOR_MODES,
                              deinterleaver = DEINTERLEAVER_MODES,
                              iono = GPS_TOGGLE, tropo = GPS_TOGGLE, clock = GPS_TOGGLE,
                              multipath = GPS_TOGGLE, noise = GPS_TOGGLE, raim = RAIM_MODES,
-                             integrator = INTEGRATOR_MODES, autopilot = AUTOPILOT_MODES)
+                             integrator = INTEGRATOR_MODES, autopilot = AUTOPILOT_MODES,
+                             guidance = GUIDANCE_MODES)
 
 # A perfect null (F⁴=0, even above the horizon), an antenna on the reflecting plane
 # (h→0), or a below-horizon mask all drive SNR→0, and `lin2db(0) = -Inf` would poison the

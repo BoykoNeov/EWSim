@@ -282,15 +282,21 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
         if haskey(mb, "guidance")
             gb = ent["missile"]["guidance"]
             comp[:k_guid] = _f64(get(gb, "k_guid", 3.0))
+            comp[:n_pn]   = _f64(get(gb, "n_pn", 4.0))          # slice-10 PN navigation constant
+            comp[:r_stop] = _f64(get(gb, "r_stop", 0.0))        # slice-10 endgame cutoff (0 = off)
             comp[:kp]     = _f64(get(gb, "kp", 2.0))
             comp[:ki]     = _f64(get(gb, "ki", 0.0))
             comp[:kd]     = _f64(get(gb, "kd", 0.0))
             comp[:tau]    = _f64(get(gb, "tau", 0.3))
             comp[:a_max]  = _f64(get(gb, "a_max", 3000.0))
             # Load-time guards for the AUTHORED values (a live tau→0 slider is clamped at the
-            # consumer via `max(tau, _FRAME_EPS)`; a_max is fixed config, not a slider).
-            comp[:tau]   > 0 || error("missile '$id': guidance.tau must be > 0 (got $(comp[:tau]))")
-            comp[:a_max] > 0 || error("missile '$id': guidance.a_max must be > 0 (got $(comp[:a_max]))")
+            # consumer via `max(tau, _FRAME_EPS)`; a_max is fixed config, not a slider). n_pn>0 (a
+            # zero/negative gain would silently null PN); r_stop≥0 (a negative cutoff is meaningless —
+            # 0 = off, the byte-identity default).
+            comp[:tau]    > 0 || error("missile '$id': guidance.tau must be > 0 (got $(comp[:tau]))")
+            comp[:a_max]  > 0 || error("missile '$id': guidance.a_max must be > 0 (got $(comp[:a_max]))")
+            comp[:n_pn]   > 0 || error("missile '$id': guidance.n_pn must be > 0 (got $(comp[:n_pn]))")
+            comp[:r_stop] >= 0 || error("missile '$id': guidance.r_stop must be ≥ 0 (got $(comp[:r_stop]))")
             push!(subs, Autopilot(id))
         end
     else

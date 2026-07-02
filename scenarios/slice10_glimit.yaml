@@ -1,0 +1,75 @@
+# slice10_glimit — the g-limit-saturation showcase, LESSON 2 (HANDOFF §10 item 10, slice 10 gate 3).
+# The DELIBERATE INVERSION of slice 9's a_max discipline. Slice 9's headline watch-item was "a_max
+# must NEVER bind — tune the scenario so it never binds" (a pure crash-guard; a binding clamp would
+# silently import slice-10's saturation lesson). SLICE 10 IS WHERE THAT LESSON ARRIVES: here a_max
+# BINDS ON PURPOSE and that is the point. Same spatial view + the same fidelity button (:pursuit↔:pn),
+# a SECOND scenario (the slice-4 split) so the button toggles exactly ONE lesson each.
+#
+# THE LESSON (the `a_max` slider — g-limit saturation):
+#   Under :pn a HOT geometry (large initial heading error / high fast-crossing target) drives PN's peak
+#   lateral demand ABOVE the airframe g-limit → the clamp_accel guard BINDS → the missile CANNOT turn
+#   hard enough to establish the collision triangle EARLY → the miss OPENS. Drag the `a_max` slider UP
+#   and watch the miss SHRINK as the airframe out-muscles the demand; drag it DOWN and watch saturation
+#   open the miss. The headline numbers: MISS(a_max) and the SATURATION FRACTION (share of guided ticks
+#   where the pre-clamp demand a_demand > a_max) + the lit `saturated` flag.
+#
+#   Probed against the live load_scenario→decide!→integrate! wire path (gate3 pin): the UNSATURATED
+#   peak PN demand ≈ 785 m/s² (~80 g). miss(a_max): 300 → ~410 m (sat_frac ≈ 0.84, saturated lit),
+#   ≥ 1000 → ~0.7 m (sat_frac 0). Sharp knee at the ~785 demand peak; saturation is the ESTABLISH-THE-
+#   TRIANGLE early turn (NOT the endgame ω-spike, which r_stop coasts through). a_max = 300 m/s²
+#   (~31 g) is the DEFAULT so the connect-state shows a legible saturated miss the slider then closes.
+#
+# THE TEE-UP FOR SLICE 11 (augmented PN): plain PN is optimal against a NON-maneuvering target; the
+# saturation modeled here is WHY augmented PN matters (APN adds an N/2·a_T target-accel feedforward).
+# Slice 10 MODELS the saturation (the HANDOFF verb) and NAMES APN + the maneuvering target as the
+# next-slice motivation — the exact structural parallel to how slice 9 teed up PN. PN, not APN; a
+# constant-velocity target (saturation forced by GEOMETRY, not target accel — no new mover).
+#
+# WHY IT SATURATES WITHOUT A MANEUVERING TARGET: the missile launches nearly LEVEL (5° elevation) at a
+# HIGH, FAST-CROSSING target (z = 6500 m, v[-700,0,-150]) — a large initial heading error means PN
+# must pull HARD EARLY to swing onto the lead, and that early demand (~785 m/s²) exceeds a_max = 300.
+# A gentle geometry would drive a_cmd → 0 with no saturation (the artifact the probe ruled out).
+#
+# a_max = 300 m/s² BINDS ON PURPOSE (do NOT "fix" it — the binding clamp IS the lesson; see the slice-9
+# vs slice-10 a_max inversion, convention 5 / watch-items). r_stop = 30 m endgame coast-through.
+# dt = 1e-3 / emit_every = 16 (the standard cadence — the realtime floor).
+name: slice10_glimit
+seed: 10
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  # ONE lesson (g-limit saturation), toggled by the a_max SLIDER, not the button. guidance = :pn is the
+  # law under test; autopilot = :ideal isolates it (miss = the law + the clamp, not the PID). The button
+  # still cycles :pursuit↔:pn (a secondary view — pursuit misses too, but Lesson 2 is the a_max lever).
+  guidance: pn
+  autopilot: ideal
+
+entities:
+  # The guided interceptor: launched nearly LEVEL (5°) at 800 m/s from z = 3000 m — the large heading
+  # error to the high fast-crossing target is what forces PN's early demand above a_max. mass 140 kg,
+  # DRAG OFF. a_max = 300 m/s² is the BINDING g-limit (the lesson); n_pn = 4, r_stop = 30.
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 800.0
+      elevation_deg: 5.0
+      cd_area_m2: 0.0
+      rho: 1.225
+      guidance: {k_guid: 3.0, n_pn: 4.0, r_stop: 30.0, kp: 2.0, ki: 0.0, kd: 0.0, tau: 0.3, a_max: 300.0}
+  # The hot crossing target: a constant-velocity aircraft high at 6.5 km, descending-and-closing fast at
+  # v[-700,0,-150]. The geometry (large heading error + fast cross) drives PN's early lateral demand to
+  # ~785 m/s², well above the a_max = 300 g-limit → saturation → a visible miss the slider closes.
+  - id: tgt1
+    kind: target
+    pos: [4000.0, 0.0, 6500.0]
+    vel: [-700.0, 0.0, -150.0]
+    target: {rcs_m2: 1.0}
+
+knobs:
+  # THE lesson slider is a_max (the g-limit): drag it up → the miss closes; drag it down → saturation
+  # opens the miss. N and r_stop are also live. The guidance method is the fidelity BUTTON.
+  - {target: m1, key: a_max,  min: 60.0, max: 2000.0, label: "a_max (g-limit, m/s²)"}
+  - {target: m1, key: n_pn,   min: 2.0, max: 6.0,     label: "N (nav constant)"}
+  - {target: m1, key: r_stop, min: 0.0, max: 100.0,   label: "r_stop (endgame, m)"}

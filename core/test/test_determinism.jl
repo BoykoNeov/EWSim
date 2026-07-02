@@ -516,4 +516,68 @@ end
         end
         @test ballistic_trace(introduce = true) == ballistic_trace(introduce = false)
     end
+
+    # Slice 10: the OUTER law swaps to proportional navigation on `:guidance`. Still NO RNG (a
+    # deterministic ODE + PN + PID), so — the slice-8/9 discipline — the THREE-claim framing (NOT
+    # slice-5/6/7 toggle-invariance): (1) INTRODUCE-safe (`get(w.fidelity,:guidance,:pursuit)` defaults
+    # to the slice-9 law, so introducing the key on a guided missile — or a ballistic one — is a no-op
+    # → byte-identical); (2) same-config replay bit-identical (pos/vel/a_ctrl fingerprint); (3) a
+    # mid-run :pursuit→:pn toggle CHANGES the trajectory (the not-a-dead-knob — :guidance is PHYSICS-
+    # CHANGING). PLUS the ADDITIVITY MASTER-CHECK: a guided missile carrying NO :guidance key (a
+    # verbatim slice-9 world) replays BIT-IDENTICAL to one with :guidance=:pursuit added — the r_stop=0
+    # default makes the §2 cutoff an exact no-op, so the default path IS the unchanged slice-9 code.
+    @testset "a PN missile: replay bit-identical; :guidance toggle CHANGES it; slice-9 path unchanged" begin
+        # The Lesson-1 crossing (matches test_missile / gate2_wire): PN and pursuit diverge sharply.
+        function pn_trace(; guidance = :pn, nsteps = 1500, toggle_at = 0, toggle_to = nothing,
+                          start_guid = guidance, with_slice10_keys = true)
+            fid = Dict{Symbol,Symbol}(:autopilot => :ideal)
+            start_guid === nothing || (fid[:guidance] = start_guid)   # nothing → INTRODUCE later / slice-9 world
+            w = World(seed = 0, fidelity = fid)
+            comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                :k_guid => 3.0, :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :a_max => 3000.0)
+            if with_slice10_keys                                       # a slice-10 missile authors these
+                comp[:n_pn] = 4.0; comp[:r_stop] = 30.0
+            end
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0),
+                vel = Vec3(700cosd(12), 0, 700sind(12)), comp = comp)
+            w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(6000.0, 0, 4200.0),
+                vel = Vec3(-800.0, 0, 200.0), comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+            subs = Subsystem[BallisticMissile(:m1), Autopilot(:m1), ConstantVelocity(:tgt1)]
+            trace = Float64[]
+            for i in 1:nsteps
+                (toggle_to !== nothing && i == toggle_at) && (w.fidelity[:guidance] = toggle_to)
+                tick!(w, subs, 1.0e-3)
+                append!(trace, w.entities[:m1].pos); append!(trace, w.entities[:m1].vel)
+                append!(trace, w.entities[:m1].comp[:a_ctrl])          # the control fingerprint (sharper)
+                empty!(w.events)
+            end
+            return w, trace
+        end
+        # (2) same-config replay bit-identical (pos/vel/a_ctrl fingerprint, reinterpret — sign of zero).
+        _, ta = pn_trace(guidance = :pn); _, tb = pn_trace(guidance = :pn)
+        @test ta == tb && reinterpret(UInt64, ta) == reinterpret(UInt64, tb)
+
+        # (3) a mid-run :pursuit→:pn toggle CHANGES the trajectory (the not-a-dead-knob; each run
+        # internally deterministic). Toggle early with plenty of steps left so it diverges unambiguously.
+        _, tk1 = pn_trace(start_guid = :pursuit, toggle_at = 200, toggle_to = :pn)
+        _, tk2 = pn_trace(start_guid = :pursuit, toggle_at = 200, toggle_to = :pn)
+        @test reinterpret(UInt64, tk1) == reinterpret(UInt64, tk2)
+        _, tnever = pn_trace(guidance = :pursuit)                     # never toggled (stays pursuit)
+        @test tk1 != tnever                                           # the toggle changed the flight
+
+        # (1) INTRODUCE-safe: introducing :guidance=:pursuit onto a world running the DEFAULT law is a
+        # no-op (the default IS :pursuit) → byte-identical to never setting the key.
+        _, tintro = pn_trace(start_guid = nothing, toggle_at = 200, toggle_to = :pursuit)
+        _, tbare  = pn_trace(start_guid = nothing)                    # never any :guidance key
+        @test reinterpret(UInt64, tintro) == reinterpret(UInt64, tbare)
+
+        # THE ADDITIVITY MASTER-CHECK (the "slices are additive" teeth): a guided missile carrying
+        # NEITHER the :guidance key NOR the slice-10 comp keys (n_pn/r_stop) — i.e. a VERBATIM slice-9
+        # world — replays BIT-IDENTICAL to the same missile with :guidance=:pursuit added. The r_stop=0
+        # default makes the §2 terminal cutoff an EXACT no-op, so the pursuit branch is the unchanged
+        # slice-9 code path. (This is what keeps every slice-9 scenario bit-for-bit after the edit.)
+        _, tslice9 = pn_trace(start_guid = nothing, with_slice10_keys = false)   # a pure slice-9 missile
+        _, tpursuit = pn_trace(guidance = :pursuit, with_slice10_keys = false)   # + :guidance=:pursuit
+        @test reinterpret(UInt64, tslice9) == reinterpret(UInt64, tpursuit)
+    end
 end

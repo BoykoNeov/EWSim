@@ -470,3 +470,159 @@ end
         end
     end
 end
+
+# --- slice 10 gate 2: the OUTER law swapped — proportional navigation wired ------------------
+# The cascade seam pays off: `decide!` selects `pn_accel` vs `pursuit_accel` on `:guidance` (default
+# :pursuit → the byte-identical slice-9 path — pinned in test_determinism), the INNER PID untouched.
+# autopilot is :ideal in every arm so MISS isolates the GUIDANCE LAW (the slice-9 track_gap confound
+# is lifted). Pins: decide! under :pn writes comp[:a_ctrl] matching pn_accel on the realized state;
+# the wired PN loop INTERCEPTS the crossing with a miss ≪ pursuit's (Lesson 1); |a_cmd| FALLS toward
+# CPA under :pn vs GROWS under :pursuit (the tail-chase foil, on the wire); the :pursuit↔:pn paths
+# DIFFER (not-a-dead-knob); g-limit SATURATION on the wire — a bound a_max lifts the miss, a larger
+# a_max closes it (Lesson 2, the deliberate inversion of slice 9's never-bind clamp); loader arms +
+# rejects (bad n_pn / r_stop). Numbers PROBED against this live decide!→integrate! path (gate2_wire).
+@testset "guided missile — proportional navigation wired (slice 10, :guidance outer law)" begin
+    dt = 1.0e-3
+    norm3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # The Lesson-1 crossing (gate2_wire): interceptor [0,0,3000] @ 700 m/s / 12° in x-z; a fast
+    # x-z-crossing target [6000,0,4200] descending-and-closing at v[-800,0,200]. a_max GENEROUS
+    # (3000, never binds — Lesson 2 held out). r_stop=30 (endgame coast-through). :ideal actuator.
+    function pn_world(; guidance = :pn, autopilot = :ideal, n_pn = 4.0, r_stop = 30.0,
+                      k_guid = 3.0, a_max = 3000.0,
+                      m_vel = Vec3(700cosd(12), 0.0, 700sind(12)),
+                      t_pos = Vec3(6000.0, 0.0, 4200.0), t_vel = Vec3(-800.0, 0.0, 200.0))
+        w = World(seed = 0, fidelity = Dict(:autopilot => autopilot, :guidance => guidance))
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0), vel = m_vel,
+            comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                :k_guid => k_guid, :n_pn => n_pn, :r_stop => r_stop,
+                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :a_max => a_max))
+        w.entities[:tgt1] = Entity(:tgt1, :target; pos = t_pos, vel = t_vel,
+            comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+        return w, Subsystem[BallisticMissile(:m1), Autopilot(:m1), ConstantVelocity(:tgt1)]
+    end
+    # Fly to FIRST CPA: min los_range up to where the target has clearly passed and the range is
+    # opening (open_hold consecutive steps, ≥50 m past the min) — the honest first-pass miss (an
+    # unbounded run lets a tail-chaser spiral back in, hiding the lesson). Collects the a_cmd/
+    # a_demand/saturated profiles for the climb-vs-fall + saturation pins.
+    function fly_cpa!(w, subs; n = 40000, open_hold = 200)
+        miss = Inf; acmd = Float64[]; ademand = Float64[]; nsat = 0; nguid = 0
+        opening = 0; prev = Inf
+        for _ in 1:n
+            tick!(w, subs, dt); empty!(w.events)
+            tel = w.env[:telemetry]; r = tel["m1.los_range"]
+            miss = min(miss, r)
+            push!(acmd, tel["m1.a_cmd"]); push!(ademand, tel["m1.a_demand"])
+            tel["m1.saturated"] > 0.5 && (nsat += 1); nguid += 1
+            opening = r > prev ? opening + 1 : 0; prev = r
+            get(w.entities[:m1].comp, :impacted, false) && break
+            r < 1.0 && break
+            (opening >= open_hold && r > miss + 50.0) && break
+        end
+        return (miss = miss, acmd = acmd, ademand = ademand,
+                sat_frac = nsat / max(nguid, 1), n = nguid)
+    end
+    at(prof, f) = prof[clamp(round(Int, f * length(prof)), 1, length(prof))]
+
+    @testset "decide! under :pn writes comp[:a_ctrl] matching pn_accel on the realized state" begin
+        w, subs = pn_world(guidance = :pn, autopilot = :ideal, n_pn = 4.0)
+        tick!(w, subs, dt); empty!(w.events)                 # tick 1: decide! computes the 1st command
+        e = w.entities[:m1]; tgt = w.entities[:tgt1]
+        # reconstruct from the pure kernel on the POST-integrate state (r ≫ r_stop → cutoff inert)
+        a_cmd = clamp_accel(pn_accel(e.pos, e.vel, tgt.pos, tgt.vel; N = 4.0), 3000.0)
+        @test e.comp[:a_ctrl] ≈ a_cmd atol = 1e-12           # :ideal → a_ctrl == a_cmd (pn path)
+        @test e.comp[:a_ctrl] isa Vec3
+        # and it is NOT the pursuit command (the branch really swapped — a different vector)
+        a_pur = clamp_accel(pursuit_accel(e.pos, e.vel, tgt.pos; k_guid = 3.0), 3000.0)
+        @test norm3(e.comp[:a_ctrl] - a_pur) > 1.0
+    end
+
+    @testset "PN intercepts the crossing with miss ≪ pursuit (Lesson 1, autopilot :ideal)" begin
+        rp = fly_cpa!(pn_world(guidance = :pn)...)
+        rq = fly_cpa!(pn_world(guidance = :pursuit)...)
+        @test rp.miss < 5.0                                  # PN leads → clean intercept (probe: 0.03 m)
+        @test rq.miss > 100.0                                # pursuit tail-chases → big miss (probe: 708 m)
+        @test rq.miss > 20 * rp.miss                         # the RATIO is the headline (advisor: not PN abs)
+        @test rp.sat_frac == 0.0                             # a_max generous — Lesson 2 held out here
+    end
+
+    @testset "|a_cmd| FALLS toward CPA under :pn, GROWS under :pursuit (the tail-chase foil)" begin
+        rp = fly_cpa!(pn_world(guidance = :pn)...)
+        rq = fly_cpa!(pn_world(guidance = :pursuit)...)
+        # PN establishes the lead then coasts: demand falls off its early peak (probe: 213 → 46).
+        @test at(rp.acmd, 0.7) < at(rp.acmd, 0.2)
+        # pursuit points AT the target: the angle-off opens toward abeam, demand climbs (probe: 63 → 374).
+        @test at(rq.acmd, 0.7) > at(rq.acmd, 0.2)
+    end
+
+    @testset "the :pursuit↔:pn trajectories DIFFER (not-a-dead-knob, physics-changing)" begin
+        wp, sp = pn_world(guidance = :pn)
+        wq, sq = pn_world(guidance = :pursuit)
+        for _ in 1:3000
+            tick!(wp, sp, dt); empty!(wp.events)
+            tick!(wq, sq, dt); empty!(wq.events)
+        end
+        @test norm3(wp.entities[:m1].pos - wq.entities[:m1].pos) > 50.0   # a live outer knob
+    end
+
+    @testset "g-limit SATURATION on the wire — a bound a_max lifts the miss, more a_max closes it" begin
+        # The hot glimit geometry (gate2_wire): missile 800 m/s / 5° (large heading error), a high
+        # fast-crossing target — the unsaturated PN peak demand ≈ 785 m/s². Under a BINDING a_max the
+        # missile can't turn hard enough EARLY → the collision triangle isn't set → the miss opens.
+        hot = (m_vel = Vec3(800cosd(5), 0.0, 800sind(5)),
+               t_pos = Vec3(4000.0, 0.0, 6500.0), t_vel = Vec3(-700.0, 0.0, -150.0))
+        rbind = fly_cpa!(pn_world(guidance = :pn, a_max = 300.0; hot...)...)   # a_max BINDS
+        rfree = fly_cpa!(pn_world(guidance = :pn, a_max = 1000.0; hot...)...)  # a_max clears the demand
+        @test rbind.sat_frac > 0.3                           # the clamp binds most of the early turn (probe: 0.84)
+        @test rbind.miss > 100.0                             # saturation opens the miss (probe: 410 m)
+        @test rfree.miss < 5.0                               # clearing the demand → clean intercept (probe: 0.7 m)
+        @test rbind.miss > 20 * rfree.miss                   # the a_max slider is the lever (Lesson 2)
+        @test maximum(rbind.ademand) > 300.0                 # the pre-clamp demand exceeds a_max (saturation real)
+    end
+
+    @testset "loader: a guided :missile arms n_pn/r_stop at the consumed keys; rejects bad values" begin
+        base = """
+        name: pn
+        seed: 10
+        dt_physics: 0.001
+        fidelity: {autopilot: ideal, guidance: pn}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 700.0
+              elevation_deg: 12.0
+              cd_area_m2: 0.0
+              guidance: {k_guid: 3.0, n_pn: 4.0, r_stop: 30.0, kp: 2.0, tau: 0.3, a_max: 3000.0}
+          - id: tgt1
+            kind: target
+            pos: [6000.0, 0.0, 4200.0]
+            vel: [-800.0, 0.0, 200.0]
+            target: {rcs_m2: 1.0}
+        """
+        mktempdir() do dir
+            good = joinpath(dir, "good.yaml"); write(good, base)
+            scn = load_scenario(good)
+            m = scn.world.entities[:m1]
+            @test any(s -> s isa Autopilot, scn.subs)
+            # n_pn / r_stop land at the CONSUMED comp keys (the slider→consumed-key discipline)
+            @test m.comp[:n_pn] == 4.0 && m.comp[:r_stop] == 30.0
+            @test get(scn.world.fidelity, :guidance, :pursuit) === :pn      # the reserved key, now filled
+            # a defaulted block (no n_pn/r_stop authored) → the safe defaults (4.0 / 0.0 = cutoff off)
+            defs = replace(base, "guidance: {k_guid: 3.0, n_pn: 4.0, r_stop: 30.0, kp: 2.0, tau: 0.3, a_max: 3000.0}" =>
+                                  "guidance: {k_guid: 3.0, kp: 2.0, tau: 0.3, a_max: 3000.0}")
+            pd = joinpath(dir, "defs.yaml"); write(pd, defs)
+            md = load_scenario(pd).world.entities[:m1]
+            @test md.comp[:n_pn] == 4.0 && md.comp[:r_stop] == 0.0
+            # rejects: n_pn ≤ 0 (would null PN) and r_stop < 0 (meaningless) are AUTHORED load errors
+            badn = replace(base, "n_pn: 4.0" => "n_pn: 0.0")
+            p1 = joinpath(dir, "badn.yaml"); write(p1, badn)
+            @test_throws ErrorException load_scenario(p1)
+            badr = replace(base, "r_stop: 30.0" => "r_stop: -5.0")
+            p2 = joinpath(dir, "badr.yaml"); write(p2, badr)
+            @test_throws ErrorException load_scenario(p2)
+        end
+    end
+end

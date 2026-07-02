@@ -23,6 +23,8 @@ const _SCEN7D = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice7_dop
 const _SCEN7R = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice7_raim.yaml"))
 const _SCEN8 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice8_ballistic.yaml"))
 const _SCEN9 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice9_pursuit.yaml"))
+const _SCEN10P = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice10_pn.yaml"))
+const _SCEN10G = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice10_glimit.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -533,6 +535,57 @@ end
         @test Set(k.key for k in scn.knobs) == Set((:kp, :ki, :kd, :tau, :k_guid))
         @test all(k -> k.target === missiles[1], scn.knobs)
         @test all(k -> k.key ∉ (:autopilot, :a_max, :speed, :elevation_deg), scn.knobs)
+    end
+
+    @testset "loader parses slice10_pn.yaml + slice10_glimit.yaml (PN outer law, spatial view)" begin
+        # The slice-10 showcases: PN vs pursuit (slice10_pn) and g-limit saturation (slice10_glimit).
+        # Both keep the SPATIAL view (guidance is the missile-view discriminator, the button cycler);
+        # autopilot is HELD at :ideal so the guidance-law lesson is isolated. Cheap insurance: a
+        # malformed showcase fails HERE, not downstream.
+        for (path, nm, amax) in ((_SCEN10P, "slice10_pn", 3000.0), (_SCEN10G, "slice10_glimit", 300.0))
+            scn = load_scenario(path)
+            @test scn.name == nm
+            # `guidance` present is the missile-view discriminator; the RESERVED slice-9 key is now
+            # FILLED — default :pn (the clean intercept / the saturating law on connect).
+            @test scn.world.fidelity[:guidance] === :pn
+            # autopilot HELD at :ideal (the one button toggles guidance, not autopilot — convention 9).
+            @test scn.world.fidelity[:autopilot] === :ideal
+            # single-lesson: no OTHER-slice fidelity, no view axes (guidance + autopilot only).
+            for k in (:propagation, :cfar, :ep, :estimator, :deinterleaver, :raim, :integrator)
+                @test !haskey(scn.world.fidelity, k)
+            end
+            @test !any(e -> e.kind in (:radar, :jammer, :clutter, :emitter, :df_sensor, :df_station,
+                                       :pulse_emitter, :esm, :gps_satellite, :gps_receiver),
+                       values(scn.world.entities))
+            # exactly one guided :missile + one :target (the crossing pair)
+            missiles = [id for (id, e) in scn.world.entities if e.kind === :missile]
+            targets  = [id for (id, e) in scn.world.entities if e.kind === :target]
+            @test length(missiles) == 1 && length(targets) == 1
+            m = scn.world.entities[missiles[1]]
+            # a GUIDED missile gets [BallisticMissile, Autopilot], NOT ConstantVelocity (the double-
+            # integration guard — the discriminating check).
+            @test any(s -> s isa BallisticMissile, scn.subs)
+            @test any(s -> s isa Autopilot, scn.subs)
+            @test !any(s -> s isa ConstantVelocity && s.id === missiles[1], scn.subs)
+            # the slice-10 gains land at the CONSUMED comp keys (n_pn/r_stop — the slider→consumed-key
+            # discipline); haskey is the discriminating check (a silently-failed read would still default).
+            @test haskey(m.comp, :n_pn) && m.comp[:n_pn] == 4.0
+            @test haskey(m.comp, :r_stop) && m.comp[:r_stop] == 30.0
+            @test m.comp[:a_max] == amax          # generous (pn) vs deliberately-binding (glimit)
+            # n_pn / a_max ARE live sliders; guidance is the fidelity BUTTON not a knob; launch geometry
+            # (speed/elevation) is not a slider.
+            keyset = Set(k.key for k in scn.knobs)
+            @test :n_pn in keyset && :a_max in keyset && :r_stop in keyset
+            @test :guidance ∉ keyset && :autopilot ∉ keyset
+            @test all(k -> k.key ∉ (:speed, :elevation_deg), scn.knobs)
+            @test all(k -> k.target === missiles[1], scn.knobs)
+        end
+        # the crossing geometry is scenario-specific: slice10_pn launches at 12°, slice10_glimit at 5°
+        # (the large heading error that forces early saturation) — pinned so a geometry edit is visible.
+        mp = load_scenario(_SCEN10P).world.entities[:m1]
+        mg = load_scenario(_SCEN10G).world.entities[:m1]
+        @test mp.comp[:elevation_deg] == 12.0 && mp.comp[:speed] == 700.0
+        @test mg.comp[:elevation_deg] == 5.0 && mg.comp[:speed] == 800.0
     end
 
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin

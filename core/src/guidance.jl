@@ -41,6 +41,20 @@
 #     P-only undershoots by exactly `1/(1+Kp)`, I drives the steady-state error to 0, D damps).
 const AUTOPILOT_MODES = (:ideal, :pid)
 
+# The guidance-fidelity (OUTER-law) rungs — the SINGLE source of truth for the `:guidance`
+# key (the AUTOPILOT_MODES precedent, defined HERE so radar.jl's `LIVE_FIDELITY_MODES` can
+# REFERENCE it — one-list-no-drift). PHYSICS-CHANGING, NO RNG (the slice-2/8/9 shape, NOT the
+# slice-5/6/7 toggle-invariant rungs): introduce-safe (absent a consumer nothing reads it, and
+# `get(w.fidelity, :guidance, :pursuit)` defaults to the slice-9 law → byte-identical), but a
+# `:pursuit↔:pn` toggle CHANGES the trajectory (not-a-dead-knob — the OPPOSITE of slices 5/6/7,
+# so "RNG lockstep / draw-count-invariance" is VACUOUS here; convention 4c).
+#   • `:pursuit` — the slice-9 tail-chaser: points AT the target, does not lead (the reference).
+#   • `:pn`      — proportional navigation: leads the target by nulling the LOS rotation rate
+#     (the collision-triangle law; `|a_cmd|` falls toward a small floor vs pursuit's climb).
+# Defined at gate 1 but NOT YET REFERENCED (radar.jl / decide! read it at gate 2) — so adding
+# it leaves every slice-1..9 path byte-identical.
+const GUIDANCE_MODES = (:pursuit, :pn)
+
 # The inner-loop PID state, carried per-missile across ticks (in the entity `comp` in gate 2):
 #   • `a_ach`  — the plant output (achieved control accel), the first-order-lag state;
 #   • `e_int`  — the integral of the accel error `∫e dt` (the I term's memory);
@@ -86,6 +100,48 @@ function pursuit_accel(m_pos::Vec3, m_vel::Vec3, t_pos::Vec3; k_guid::Real = 3.0
 end
 
 """
+    pn_accel(m_pos::Vec3, m_vel::Vec3, t_pos::Vec3, t_vel::Vec3; N = 4.0) -> Vec3
+
+The OUTER **proportional-navigation** guidance law (§1, slice 10) — the sibling of
+[`pursuit_accel`](@ref) the cascade seam was built to swap in. True proportional navigation
+(TPN): command a lateral acceleration proportional to the LOS rotation rate `ω` and the
+closing speed `Vc`, perpendicular to the LOS:
+
+    r   = t_pos − m_pos                              (relative position, target − missile)
+    v   = t_vel − m_vel                              (relative velocity)
+    û   = los_unit(m_pos, t_pos)                     (r̂; frames.jl)
+    ω   = los_rate(r, v)  = (r × v) / ‖r‖²           (frames.jl — the sign-tested slice-8 kernel)
+    Vc  = −range_rate(r, v)                          (closing speed; POSITIVE when closing —
+                                                      frames.jl's sign is "negative = closing")
+    a_cmd = N · Vc · (ω × û)                          (m/s², ⟂ LOS; N ≈ 3–5, dimensionless)
+
+`ω = r×v/‖r‖²` is ⟂ to `r̂ = û` (a cross product with `r`), so `ω × û` has magnitude `‖ω‖` and
+lies **perpendicular to the LOS** — the accel that rotates the velocity to **null `λ̇`**.
+
+**The defining PN property (the test anchor):** on a **constant-bearing, decreasing-range**
+(collision-course) geometry `ω = 0 → a_cmd = 0` (the sailor's rule — steady bearing means
+collision, no correction). On a **crossing** geometry `ω ≠ 0` and the command turns the missile
+to **lead** (unlike pursuit, which points AT the target). Against a NON-maneuvering target PN is
+optimal (`a_cmd → 0` at intercept); against a maneuvering target it lags by a target-accel term
+(→ augmented PN, slice 11). Reads **target truth** (ω from truth pos/vel — no seeker, slice 11).
+
+**SIGN is the trifecta (HANDOFF §1) — TWO independent sources, both pinned in `test_guidance.jl`:**
+the `Vc = −range_rate` term (a `+` flips the whole command) and the cross-product ORDER `ω × û`
+(a swap to `û × ω` flips sign but PRESERVES magnitude — the silent one). Zero-guards fall out of
+frames.jl (`v→0` / coincident / zero-range → zero ω or zero Vc → zero command; no NaN). The
+endgame `r→0` blow-up (`ω → ∞`) is bounded at the CONSUMER (the `r_stop` terminal cutoff +
+`a_max` clamp in `decide!`, gate 2), NOT here — `pn_accel` alone stays huge-but-FINITE.
+"""
+function pn_accel(m_pos::Vec3, m_vel::Vec3, t_pos::Vec3, t_vel::Vec3; N::Real = 4.0)
+    r  = t_pos - m_pos                               # relative position (target − missile)
+    v  = t_vel - m_vel                               # relative velocity
+    û  = los_unit(m_pos, t_pos)                       # r̂ (zero-range guard inside → zero vector)
+    ω  = los_rate(r, v)                              # LOS angular rate (zero-range guard inside)
+    Vc = -range_rate(r, v)                           # closing speed (POSITIVE when closing)
+    return (N * Vc) * _cross(ω, û)                    # ⟂ LOS, magnitude N·Vc·‖ω‖ — the ORDER matters
+end
+
+"""
     clamp_accel(a::Vec3, a_max::Real) -> Vec3
 
 Magnitude clamp: if `‖a‖ > a_max` scale `a` down to `a_max` (preserving direction), else
@@ -103,6 +159,22 @@ function clamp_accel(a::Vec3, a_max::Real)
     (mag <= a_max || mag < _FRAME_EPS) && return a
     return a * (a_max / mag)
 end
+
+"""
+    _terminal_cutoff(a::Vec3, r::Real, r_stop::Real) -> Vec3
+
+The §2 endgame guard (HANDOFF §10 item 10 — "avoid the LOS-rate→∞ blow-up as range→0"). PN's
+`ω = r×v/‖r‖²` blows up as `r→0` with any residual miss (`_FRAME_EPS = 1e-12` is FAR too small
+to catch it — the probe saw 2×10⁶ m/s² at r ≈ 0.1 m). Below a small **`r_stop`** range the outer
+law FREEZES (zero command) and the missile COASTS THROUGH the endgame (the interceptor's fins
+can't act faster than the tick anyway); CPA/impact detection ends the engagement. The probe pins
+CPA-miss IDENTICAL across `r_stop ∈ {0,5,…,120}` (no corruption; Decision 4).
+
+**`r_stop = 0` is an EXACT no-op** (`r = los_range ≥ 0`, so `r < 0` never fires → returns `a`
+unchanged): the default, so a slice-9 `:pursuit` scenario that authors no `r_stop` takes the
+byte-identical slice-9 path. Slice-10 `:pn` scenarios author `r_stop ≈ 30–50 m`.
+"""
+_terminal_cutoff(a::Vec3, r::Real, r_stop::Real) = r < r_stop ? zero(Vec3) : a
 
 """
     autopilot_step(mode::Symbol, a_cmd::Vec3, state::AutopilotState, dt::Float64;

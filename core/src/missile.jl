@@ -203,16 +203,23 @@ function decide!(a::Autopilot, w::World)
     # No target (misconfigured — load validates ≥1) or already impacted (engagement over): no
     # command, coast/frozen. Publish zero/finite telemetry so the readout never blanks.
     if tgt === nothing || get(c, :impacted, false)
-        tel["$sid.a_cmd"]      = 0.0
-        tel["$sid.a_ach"]      = 0.0
-        tel["$sid.track_gap"]  = 0.0
-        tel["$sid.los_range"]  = _finite(tgt === nothing ? 0.0 : los_range(e.pos, tgt.pos))
-        tel["$sid.range_rate"] = 0.0
+        tel["$sid.a_cmd"]         = 0.0
+        tel["$sid.a_ach"]         = 0.0
+        tel["$sid.track_gap"]     = 0.0
+        tel["$sid.los_range"]     = _finite(tgt === nothing ? 0.0 : los_range(e.pos, tgt.pos))
+        tel["$sid.range_rate"]    = 0.0
+        tel["$sid.a_demand"]      = 0.0                        # slice-10 keys — never stale
+        tel["$sid.saturated"]     = 0.0
+        tel["$sid.los_rate"]      = 0.0
+        tel["$sid.closing_speed"] = 0.0
         return nothing
     end
 
     mode   = get(w.fidelity, :autopilot, :ideal)
+    guid   = get(w.fidelity, :guidance, :pursuit)             # slice-10 OUTER law; DEFAULT :pursuit
     k_guid = Float64(get(c, :k_guid, 3.0))
+    n_pn   = Float64(get(c, :n_pn, 4.0))                       # PN navigation constant (:pn only)
+    r_stop = Float64(get(c, :r_stop, 0.0))                     # §2 endgame cutoff; DEFAULT 0 = no-op
     kp     = Float64(get(c, :kp, 2.0))
     ki     = Float64(get(c, :ki, 0.0))
     kd     = Float64(get(c, :kd, 0.0))
@@ -220,9 +227,16 @@ function decide!(a::Autopilot, w::World)
     a_max  = Float64(get(c, :a_max, 3000.0))
     dt     = Float64(get(c, :dt_s, 1.0e-3))
 
-    # OUTER pursuit → commanded lateral accel, clamped to a_max (the CRASH-GUARD; the scenario tunes
-    # a_max so it never binds — saturation-as-lesson is slice 10).
-    a_cmd = clamp_accel(pursuit_accel(e.pos, e.vel, tgt.pos; k_guid = k_guid), a_max)
+    # OUTER law → commanded lateral accel (§3 seam, slice 10 — the INNER PID below is UNCHANGED).
+    # Select on `:guidance` (default `:pursuit` = the exact slice-9 path → byte-identical): PN leads
+    # (nulls λ̇), pursuit tail-chases. The §2 terminal cutoff coasts the missile through the r→0
+    # endgame (r_stop=0 default is an EXACT no-op → slice-9 unaffected); then clamp to a_max. In
+    # slice10_pn a_max is generous (never binds); in slice10_glimit it BINDS ON PURPOSE — g-limit
+    # saturation is the lesson, the deliberate inversion of slice 9's crash-guard-only clamp.
+    a_dem = guid === :pn ? pn_accel(e.pos, e.vel, tgt.pos, tgt.vel; N = n_pn) :
+                           pursuit_accel(e.pos, e.vel, tgt.pos; k_guid = k_guid)
+    a_dem = _terminal_cutoff(a_dem, los_range(e.pos, tgt.pos), r_stop)
+    a_cmd = clamp_accel(a_dem, a_max)
 
     # INNER PID autopilot → achieved accel (dispatch on the fidelity rung).
     state = get(c, :ap_state, autopilot_init())::AutopilotState
@@ -240,13 +254,21 @@ function decide!(a::Autopilot, w::World)
     a_ctrl = mode === :pid ? a_ach : clamp_accel(a_ach, a_max)
     c[:a_ctrl] = a_ctrl
 
-    # Telemetry: the lesson is the tracking GAP (commanded vs achieved), not miss distance.
+    # Telemetry: the slice-9 keys (the tracking GAP) PLUS the slice-10 PN/saturation readouts. The
+    # slice-10 lesson is MISS at CPA (isolated at :ideal — the verifier's job) + the saturation the
+    # `a_demand`(pre-clamp) vs `a_cmd`(post-clamp) split makes visible. All `_finite`-clamped (no
+    # Inf/NaN to JSON — the r→0 pre-clamp `a_demand` can be huge; §2 layer 3).
     rel_pos = tgt.pos - e.pos
     rel_vel = tgt.vel - e.vel
-    tel["$sid.a_cmd"]      = _finite(_norm3(a_cmd))
-    tel["$sid.a_ach"]      = _finite(_norm3(a_ctrl))
-    tel["$sid.track_gap"]  = _finite(_norm3(a_cmd - a_ctrl))
-    tel["$sid.los_range"]  = _finite(los_range(e.pos, tgt.pos))
-    tel["$sid.range_rate"] = _finite_coord(range_rate(rel_pos, rel_vel))   # signed (neg = closing)
+    a_demand = _norm3(a_dem)                                   # PRE-clamp, POST-cutoff (saturation)
+    tel["$sid.a_cmd"]         = _finite(_norm3(a_cmd))         # post-clamp (slice-9 key)
+    tel["$sid.a_ach"]         = _finite(_norm3(a_ctrl))
+    tel["$sid.track_gap"]     = _finite(_norm3(a_cmd - a_ctrl))
+    tel["$sid.los_range"]     = _finite(los_range(e.pos, tgt.pos))
+    tel["$sid.range_rate"]    = _finite_coord(range_rate(rel_pos, rel_vel))  # signed (neg = closing)
+    tel["$sid.a_demand"]      = _finite(a_demand)              # PRE-clamp demand (the saturation tell)
+    tel["$sid.saturated"]     = a_demand > a_max ? 1.0 : 0.0  # g-limit binding? (the Lesson-2 flag)
+    tel["$sid.los_rate"]      = _finite(_norm3(los_rate(rel_pos, rel_vel)))  # ‖ω‖ (the PN driver)
+    tel["$sid.closing_speed"] = _finite_coord(-range_rate(rel_pos, rel_vel))  # Vc (POSITIVE closing)
     return nothing
 end

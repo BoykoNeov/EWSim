@@ -71,6 +71,8 @@ export INTEGRATOR_MODES, G_ACCEL
 # `AutopilotState` is an INTERNAL state record (the JamContribution/BearingRecord precedent —
 # not exported); `autopilot_init` IS exported (the test constructs the zero state bare).
 export pursuit_accel, autopilot_step, clamp_accel, autopilot_init, AUTOPILOT_MODES
+# Slice 10: the OUTER proportional-navigation law (pursuit_accel's sibling) + its fidelity rungs.
+export pn_accel, GUIDANCE_MODES
 # Slice-1 subsystems + scenario loader (Jammer is the slice-4 build_env! subsystem;
 # DFSensor/Geolocator are the slice-5 observe!→decide! DF pair that light phase 4)
 export ConstantVelocity, RadarSensor, Jammer, DFSensor, Geolocator, Knob, Scenario, load_scenario

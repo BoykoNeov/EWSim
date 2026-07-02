@@ -50,11 +50,9 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–9 COMPLETE & green — 1723 tests at last commit.** (An uncommitted round of load/
-command hardening — load-time fidelity validation, `set_param` knob-only guard, atomic
-`load_scenario` — is in the working tree, not part of any slice.) Full gate-by-gate as-built
-detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands) lives
-in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
+**Slices 1–10 COMPLETE & green — 1829 tests.** Full gate-by-gate as-built detail (exact numbers,
+test names, watch-items, advisor-catches, per-slice run commands) lives in **`docs/STATUS.md`**;
+pre-implementation plans in `docs/plans/sliceN.md`.
 
 - **Slice 1** — radar → detection → ROC. Free-space radar eq, analytic+MC Pd (Swerling 0/1),
   the wire protocol + Godot socket seam, the server run-loop, the `batch.jl`/ROC path. (227)
@@ -74,10 +72,13 @@ in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
   euler (physics-changing, not toggle-invariant). First phase-1 force-based mover. (1633)
 - **Slice 9** — PID autopilot under a pursuit outer law; `:autopilot` ideal vs pid, the
   commanded-vs-achieved track-gap lesson. First missile `decide!`. (1723)
+- **Slice 10** — proportional navigation (outer loop) + g-limit saturation-as-lesson; `:guidance`
+  pursuit vs pn (the reserved key filled, physics-changing). MISS is the honest headline (pn ≪
+  pursuit); the a_max clamp BINDS on purpose (the slice-9 inversion). Closes the missile arc. (1829)
 
-**Next: slice 10** — proportional navigation + g-limit saturation-as-lesson (HANDOFF §10 item
-10; the `:guidance` fidelity key is reserved, unused). Not yet planned — write
-`docs/plans/slice10.md` first (the staged-gate discipline below).
+**Next: slice 11** — HANDOFF §11: noisy seekers / LOS-rate filtering + augmented PN (the maneuvering
+target the slice-10 ~2g floor teed up). Not yet planned — write `docs/plans/slice11.md` first (the
+staged-gate discipline below). Re-read HANDOFF §11 for the frozen scope before planning.
 
 ## Conventions / hard-won disciplines
 

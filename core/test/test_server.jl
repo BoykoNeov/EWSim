@@ -159,6 +159,26 @@ function _guided_scenario(seed; emit_every = 4, fidelity = Dict(:autopilot => :i
     return Scenario("guided", w, subs, knobs, 1.0e-3, emit_every)
 end
 
+# A slice-10 PN scenario: the guided interceptor under `:guidance` (default :pn) with the slice-10
+# comp keys (n_pn/r_stop) and N/a_max/r_stop as live sliders. a_max is deliberately SMALL (300 — the
+# glimit shape) so the slider test exercises the DELIBERATELY-BINDING clamp guard (a huge N → a demand
+# far above a_max → clamp, never a throw). The hot glimit geometry (gate2_wire).
+function _pn_scenario(seed; emit_every = 4, fidelity = Dict(:autopilot => :ideal, :guidance => :pn))
+    w = World(seed = seed, fidelity = fidelity)
+    w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0),
+        vel = Vec3(800cosd(5), 0, 800sind(5)),
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+            :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0, :kp => 2.0, :ki => 0.0, :kd => 0.0,
+            :tau => 0.3, :a_max => 300.0))
+    w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(4000.0, 0, 6500.0),
+        vel = Vec3(-700.0, 0, -150.0), comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+    subs = Subsystem[BallisticMissile(:m1), Autopilot(:m1), ConstantVelocity(:tgt1)]
+    knobs = Knob[Knob(:m1, :n_pn, 1.0, 1.0e3, "N (nav const)"),
+                 Knob(:m1, :a_max, 10.0, 1.0e4, "a_max (g-limit)"),
+                 Knob(:m1, :r_stop, 0.0, 200.0, "r_stop (endgame)")]
+    return Scenario("pn", w, subs, knobs, 1.0e-3, emit_every)
+end
+
 @testset "server" begin
 
     @testset "handle_command! mutates state per the §5 table" begin
@@ -505,6 +525,56 @@ end
             ok &= all(isfinite, w.entities[:m1].pos)
         end
         @test ok                                                   # pos stayed finite through the divergence
+    end
+
+    @testset "set_fidelity :guidance — write/reject + introduce-safe (slice-10 PN outer law)" begin
+        # Slice-10 gate 2: :guidance (rungs GUIDANCE_MODES) joins the per-key LIVE_FIDELITY_MODES table
+        # AUTOMATICALLY (the per-key check reads it; _KNOWN_FIDELITY_KEYS = keys(LIVE_FIDELITY_MODES) —
+        # no server change). Like :autopilot/:integrator and unlike :cfar it carries NO introduce-guard
+        # (absent an Autopilot subsystem nothing reads it) AND is PHYSICS-CHANGING (the trajectory
+        # change is pinned in test_determinism; here only the wire write/reject + introduce-allowed).
+        srv = EWSim.Server(_pn_scenario(1))
+        w = srv.scn.world
+        @test w.fidelity[:guidance] === :pn                        # the scenario default
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "guidance", :value => "pursuit"))
+        @test w.fidelity[:guidance] === :pursuit
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "guidance", :value => "pn"))
+        @test w.fidelity[:guidance] === :pn
+        # ...a bad rung is REJECTED before landing (would throw in decide! → kill the session).
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "guidance", :value => "homing"))
+        # INTRODUCING :guidance on a scenario WITHOUT it is ALLOWED — a slice-9 guided world (Autopilot
+        # present, no :guidance key, defaulting to :pursuit) and a non-missile world both accept it.
+        srv2 = EWSim.Server(_guided_scenario(1))
+        @test !haskey(srv2.scn.world.fidelity, :guidance)
+        EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "guidance", :value => "pn"))
+        @test srv2.scn.world.fidelity[:guidance] === :pn
+        srv3 = EWSim.Server(_detect_scenario(1))
+        EWSim.handle_command!(srv3, Dict(:type => "set_fidelity", :key => "guidance", :value => "pn"))
+        @test srv3.scn.world.fidelity[:guidance] === :pn           # inert on a radar world (nothing reads it)
+    end
+
+    @testset "live N / a_max / r_stop sliders survive the tick (a huge N hits the clamp, not a throw)" begin
+        # N (n_pn), a_max, and r_stop are LIVE sliders. A huge N drives the PN demand far above a_max,
+        # but clamp_accel caps it — the tick can't throw / NaN the session. This is the "a live slider
+        # can't crash a tick" watch-item, now including the DELIBERATELY-BINDING a_max (the glimit
+        # inversion of slice 9's never-bind clamp — the guard role the clamp keeps even when it binds).
+        srv = EWSim.Server(_pn_scenario(2))
+        w = srv.scn.world
+        for (k, v) in (("n_pn", 1.0e3), ("a_max", 50.0), ("r_stop", 150.0))
+            EWSim.handle_command!(srv, Dict(:type => "set_param", :target => "m1", :key => k, :value => v))
+        end
+        @test w.entities[:m1].comp[:n_pn] == 1.0e3                  # slider wrote the consumed comp key
+        ok = true
+        for _ in 1:500
+            tick!(w, srv.scn.subs, srv.scn.dt_physics)             # must NOT throw
+            empty!(w.events)
+            tel = w.env[:telemetry]
+            ok &= all(isfinite, w.entities[:m1].pos) && isfinite(tel["m1.a_cmd"]) &&
+                  isfinite(tel["m1.a_demand"]) && isfinite(tel["m1.los_rate"])
+            ok || break
+        end
+        @test ok                                                   # pos + telemetry finite through the huge-N demand
     end
 
     @testset "warmup! tolerates a guided-missile scenario (slice-9, radar-free, phase 1+4)" begin

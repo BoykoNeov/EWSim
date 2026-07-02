@@ -155,6 +155,7 @@ var _missile_id := ""             # missile entity id (for the .impacted flag te
 var _missile_trail: Array = []    # WORLD [x,y,z] breadcrumbs (mapped through _world_to_screen each draw)
 const INTEGRATOR_RUNGS := ["rk4", "euler"]   # slice-8 integrator cycler (the shared fidelity button)
 const AUTOPILOT_RUNGS := ["ideal", "pid"]    # slice-9 autopilot cycler (the shared fidelity button)
+const GUIDANCE_RUNGS := ["pursuit", "pn"]    # slice-10 OUTER-law cycler (the shared fidelity button)
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
 func _ready() -> void:
@@ -310,6 +311,23 @@ func _setup_spatial_fid_btn() -> void:
 		# render cramped in the corner (advisor). They grow to fit as the missile climbs/flies.
 		_x_max = 2000.0
 		_z_max = 1000.0
+	elif _fidelity.has("guidance"):
+		# Slice-10 PN missile: a `guidance` fidelity keeps the SPATIAL elevation view (the crossing
+		# engagement is planar in x-z) but repurposes the shared button as the :pursuit↔:pn OUTER-law
+		# cycler. CHECKED BEFORE `autopilot` ON PURPOSE: slice-10 scenarios ship BOTH keys (autopilot:
+		# ideal is HELD FIXED so the guidance-law lesson is uncontaminated), and the ONE button must
+		# toggle `guidance`, not `autopilot` (convention 9 — one lesson per button). Same guarded
+		# disconnect as the other _fid_kind setups. The LOS line's constant-bearing-vs-swing is the
+		# PN-vs-pursuit tell; the a_demand/saturated readout is the g-limit-saturation number.
+		_fid_kind = "guidance"
+		if _prop_btn.pressed.is_connected(_on_prop_pressed):
+			_prop_btn.pressed.disconnect(_on_prop_pressed)
+		if not _prop_btn.pressed.is_connected(_on_guidance_pressed):
+			_prop_btn.pressed.connect(_on_guidance_pressed)
+		_prop_btn.tooltip_text = "Cycle guidance (set_fidelity): pursuit ↔ pn"
+		# Seed extents to fit the crossing (x ~0..8 km, z ~2..8 km); they only grow, so start close.
+		_x_max = 8000.0
+		_z_max = 8000.0
 	elif _fidelity.has("autopilot"):
 		# Slice-9 guided missile: an `autopilot` fidelity (no range/pri axis, no estimator/raim/integrator)
 		# keeps the SPATIAL elevation view (the engagement is planar in x-z — the interceptor climbs, the
@@ -456,6 +474,8 @@ func _update_fid_btn() -> void:
 			_prop_btn.text = "integrator: %s" % str(_fidelity.get("integrator", "?"))
 		"autopilot":
 			_prop_btn.text = "autopilot: %s" % str(_fidelity.get("autopilot", "?"))
+		"guidance":
+			_prop_btn.text = "guidance: %s" % str(_fidelity.get("guidance", "?"))
 		_:
 			_update_prop_btn()
 
@@ -560,6 +580,23 @@ func _on_autopilot_pressed() -> void:
 	var next: String = AUTOPILOT_RUNGS[(i + 1) % AUTOPILOT_RUNGS.size()] if i >= 0 else "ideal"
 	_fidelity["autopilot"] = next
 	_client.send({"type": "set_fidelity", "key": "autopilot", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
+func _on_guidance_pressed() -> void:
+	# Advance the OUTER-law rung (pursuit↔pn) and tell the core (set_fidelity). Like :autopilot/
+	# :integrator this is PHYSICS-CHANGING, not toggle-bit-identical: there is NO RNG in the missile
+	# arc, so a :pursuit↔:pn toggle CHANGES the trajectory going forward (the slice-2 `propagation`
+	# shape — the OPPOSITE of the slice-5/6/7 draw-free toggles). Introduce-safe (absent an Autopilot
+	# nothing reads it; the core defaults to :pursuit). The client owns the displayed rung: badge +
+	# button locally (the server applies it silently on the next tick). Under :pn the LOS line holds a
+	# constant bearing (the collision triangle) and |a_cmd| falls; under :pursuit the LOS swings and
+	# |a_cmd| climbs — the tail-chase. `:autopilot` stays FIXED (this button toggles only `guidance`).
+	var cur := str(_fidelity.get("guidance", "pursuit"))
+	var i := GUIDANCE_RUNGS.find(cur)
+	var next: String = GUIDANCE_RUNGS[(i + 1) % GUIDANCE_RUNGS.size()] if i >= 0 else "pursuit"
+	_fidelity["guidance"] = next
+	_client.send({"type": "set_fidelity", "key": "guidance", "value": next})
 	_render_badge()
 	_update_fid_btn()
 
@@ -850,12 +887,14 @@ func _draw_spatial() -> void:
 
 	# missile (slice 8): the fading trajectory trail + a nose-oriented marker + an impact burst,
 	# on top of the elevation view (drawn only in the missile-view branch, so slice-1/2/4 are untouched)
-	if _fid_kind == "missile" or _fid_kind == "autopilot":
+	if _fid_kind == "missile" or _fid_kind == "autopilot" or _fid_kind == "guidance":
 		_draw_missile()
-	# guided missile (slice 9): a LOS line missile→target so the pursuit geometry reads (the target
-	# marker is drawn by the generic :target branch above; the a_cmd/a_ach/track_gap readout is the
-	# lesson number, rendered as text by _update_readout — all scalars, no Array-crash).
-	if _fid_kind == "autopilot":
+	# guided missile (slice 9/10): a LOS line missile→target so the guidance geometry reads (the target
+	# marker is drawn by the generic :target branch above; the a_cmd/a_ach/track_gap [slice 9] +
+	# a_demand/saturated [slice 10] readout is the lesson number, rendered as text by _update_readout —
+	# all scalars, no Array-crash). Under :pn the LOS line holds a constant bearing (the collision
+	# triangle); under :pursuit it swings — the visible PN-vs-pursuit tell.
+	if _fid_kind == "autopilot" or _fid_kind == "guidance":
 		_draw_guidance_los()
 
 	# detection blips: expanding rings that fade over BLIP_TTL
