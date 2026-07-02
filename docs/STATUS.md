@@ -1293,6 +1293,116 @@ tools/test.ps1`.
 
 ---
 
+**Slice 11 — missile: noisy seeker + LOS-rate filtering (the missile's FIRST `observe!`)** (HANDOFF §10 item
+11, the FIRST slice of the seeker arc) — **COMPLETE. Gates 0–3 done & green (1921 tests); wire + UI
+machine-verified AND the seeker spatial `_draw` VISUALLY CONFIRMED (2026-07-02).** Slice 10's PN read TARGET
+TRUTH (`ω = r×v/‖r‖²` from truth pos/vel); slice 11 replaces that with a REAL seeker — the missile MEASURES
+the LOS *angle* with white angular noise (`σ_seek`) and an **α-β tracker estimates the LOS *rate* λ̇ WITHOUT
+differentiating**. **The lesson (the fidelity button, :filtered↔:raw):** the `:raw` naïve finite-difference
+`λ̇=Δλ/dt` amplifies the angle noise by 1/dt → PN's `N·Vc·λ̇` pegs `a_max`, the missile flails and MISSES
+WIDE; the `:filtered` α-β estimate is smooth → a TIGHT intercept ≈ the slice-10 truth-fed miss. **"A missile
+is integrate! + observe! + decide!" (HANDOFF §3) is COMPLETE** — the phase-3 `observe!` missile.jl:11
+anticipated is filled. **THE RNG INFLECTION: the seeker is the FIRST `w.rng` consumer in the missile arc**, so
+the slice-8/9/10 "RNG-is-vacuous" boilerplate INVERTS here (conventions 3/11 now APPLY); byte-identity for
+slices 1–10 comes from *the Seeker NOT EXISTING* (no draw), NOT a draw-skipping `:truth` rung (there is none —
+`SEEKER_MODES=(:raw,:filtered)` only; "truth-fed PN" IS slice 10). **Scope RATIFIED-WITH-USER (2026-07-02):
+seeker + filter ONLY; augmented PN + a maneuvering target → SLICE 12** (the RNG-free payoff of slice 10's ~2g
+floor). Planned FULL in `docs/plans/slice11.md`. **The NEW fidelity-class combo (name both, copy neither
+template): `:seeker` is DRAW-INVARIANT (class 4a — both rungs draw the SAME 1 randn/tick → `set_fidelity`
+introduces it freely, UNLIKE `:cfar`) YET TRAJECTORY-CHANGING (a toggle moves the missile — the slice-10
+shape).**
+
+Gate 0 (probe + scope pin — DONE & advisor-confirmed, `M:\claud_projects\temp\slice11_probe\`): PINNED
+**scalar in-plane α-β** (NOT vector — the engagement is planar x-z, ω∥±y, no atan2 singularity; the lesson IS
+the scalar λ̇), **σ_seek=3 mrad / α=0.30 / β=0.05**, one scenario, headline = **MISS-RATIO** (saturation is
+corroborating color). β U-shape confirmed BOTH arms (β→0 lags, β≥0.3 lets noise through → the miss climbs
+again — the "smaller β smooths harder" trap). ⚠ deviation from the plan's σ=1 mrad guess: the scalar form
+drops the out-of-plane noise channel, so the raw miss only EXPLODES at ~3 mrad (at 1 mrad the in-plane
+sign-flip cancels → only ~4.6 m). LOCK 1: the truth path reproduces slice 10 with `pn_cmd==pn_accel` asserted.
+
+Gate 1 (primitive green — pure, recursive, SI, RNG-free, no LinearAlgebra; +16 tests, 1845): `estimation.jl`
+gains `SEEKER_MODES=(:raw,:filtered)` (the one-list source of truth, defined before radar.jl) + the scalar
+`alpha_beta_los_step(λ_est, λ̇_est, λ_meas, dt; α, β)` (predict–correct: `λ_pred=λ_est+λ̇_est·dt`, innovation
+`wrap_angle(λ_meas−λ_pred)`, correct with α and `β/dt` — the `β/dt` floored at `_ALPHA_BETA_DT_FLOOR=1e-12`,
+exact no-op at dt=1e-3). `guidance.jl`: `pn_accel_from_omega(û, ω, Vc; N)=(N*Vc)*_cross(ω, û)` (the swappable
+inner form — û FIRST, ω SECOND; NO `m_vel` param — TPN has no missile-vel term) + `pn_accel` becomes a thin
+truth wrapper. **BYTE-IDENTITY proven two ways:** `pn_accel === (N*Vc)*_cross(ω,û)` slice-10-inline pin
+(`test_guidance.jl`, bit-exact `===`) + full golden/`test_determinism` green. `test_estimation.jl` bands
+MEASURED open-loop (NOT the probe's closed-loop numbers — advisor: the open-loop-variance-min (α,β) are NOT
+the closed-loop-miss-min): convergence λ̇_est→ω_true ~1e-13; variance reduction filt <raw/8 (MC, own Xoshiro,
+Wilson band); α/β scaling; dt→0/huge-meas/extreme-gain guards finite. **Fix logged:** the `pn_accel` docstring
+must stay glued to its function (inserting the new block between them → a "cannot document" precompile error →
+relocated `pn_accel_from_omega` AFTER `pn_accel`).
+
+Gate 2 (the Seeker wired — the missile's FIRST `observe!`, the `:seeker` key filled; +45 tests, 1890). New
+`Seeker <: Subsystem` (missile.jl): phase-1 `integrate!` captures its OWN `comp[:dt_s_seeker]` (self-contained,
+advisor #4 — NOT a lean on the Autopilot's `:dt_s`); phase-3 `observe!` draws **ONE `randn(w.rng)`
+UNCONDITIONALLY at the top** (before the tgt/impact gate — convention 3, a FIXED count), measures the noisy LOS
+angle, updates BOTH the raw finite-diff memory AND the α-β state every tick (the rung selects only which ω is
+written), reconstructs `ω=Vec3(0,−λ̇,0)` / `û=(cosλ,0,sinλ)` into `comp[:seeker_omega]`/`[:seeker_los]`, and
+writes `lambda_dot_raw`/`lambda_dot_filt`/`lambda_dot_used`/`sigma_seek` telemetry. `Autopilot.decide!`: the
+ω-source branch `guid===:pn && haskey(c,:seeker_omega)` → `pn_accel_from_omega(û_seek, ω_seek, TRUTH Vc)`
+(rel_pos/rel_vel hoisted for the truth Vc); the truth `pn_accel` path UNTOUCHED (no Seeker ⇒ no `:seeker_omega`
+⇒ slice-10 byte-identical). `LIVE_FIDELITY_MODES += seeker = SEEKER_MODES` (radar.jl, one-list-no-drift; class
+4a — no `:cfar`-style guard). `scenario.jl`: a `seeker:` block reads `sigma_seek`/`alpha`/`beta` at
+knob-addressable comp keys, LOAD-validated (σ≥0, 0<α<1, β>0), armed `[BallisticMissile, Seeker, Autopilot]`.
+`export Seeker`. Numbers PROBED against the live decide!→integrate! path (convention 10). Test arms:
+**test_missile** (the phase-3→4 seam `a_ctrl ≈ clamp(pn_accel_from_omega(û,ω,Vc))` [`atol=1e-9` — decide!
+double-clamps vs a single-clamp oracle, a 1-ULP diff on a saturated tick], filtered≪raw, raw saturates,
+trajectories differ, **1 randn/tick draw-count pin** via Xoshiro-advance, huge-σ no-crash, loader
+arms+rejects); **test_determinism** (THE INFLECTION — the FIRST non-vacuous missile-arc RNG test: same-seed
+bit-identical WITH the seeker drawing, 1-draw/tick, the NEW COMBO :raw↔:filtered draw-invariant AND
+trajectory-changing, introduce-safe on a no-Seeker slice-10 missile); **test_server** (set_fidelity :seeker
+write/reject/introduce-safe [4a], the σ/α/β live sliders survive a huge-σ tick). Slices 1–10 byte-identical.
+
+Gate 3 (scenario + Godot spatial-view extension + verifiers — DONE & green, 1921 tests [+31]; wire + UI
+machine-verified AND `_draw` VISUALLY CONFIRMED 2026-07-02). NO `core/src/*.jl` change beyond gates 1–2 — the
+gate-3 diff is `Sandbox.gd` + `test_scenario.jl` + the scenario + two new `net/*.gd`, so slices 1–10 stay
+byte-identical structurally. `scenarios/slice11_seeker.yaml` (seed 6, `seeker:filtered` default, guidance:pn +
+autopilot:ideal HELD, the slice10_pn crossing so the seeker is the ONLY new variable). Numbers PROBED against
+the live `load_scenario→observe!→decide!→integrate!→telemetry` wire (a 21-seed sweep): **seed 6 miss(:filtered)
+≈ 0.39 m (frame-sampled ≈ 0.39, CPA on the emit grid) vs miss(:raw) ≈ 1391 m** (~3500×), saturation 0.01 vs
+0.79, `var(λ̇_filt)≈0.10 ≪ var(λ̇_raw)≈22.7`. Bounds pinned CONSERVATIVE one-sided (filtered<30, raw>300 — NOT
+the ratio; raw is a random walk, the filtered side floored by emit_every sampling — the
+`ewsim-missile-verifier-sampling` memory). Godot `Sandbox.gd`: the EXISTING spatial view EXTENDED — **the
+`seeker` discriminator branch is checked BEFORE `guidance` AND `autopilot`** (slice-11 ships ALL THREE keys;
+guidance/autopilot held; the ONE button toggles `seeker` — convention 9; the exact slice-10 "guidance before
+autopilot" precedent one lesson deeper), `_on_seeker_pressed` (:raw↔:filtered ring), `SEEKER_RUNGS`,
+button/badge; `_draw_spatial` missile-marker + `_draw_guidance_los` branches extended (`seeker` fid_kind); the
+new lambda_dot_raw/filt/used readout auto-renders (all scalars, no Array-crash). The slice-1..10 views
+UNTOUCHED (slice-10 UI test re-run green — the seeker branch does NOT hijack slice-10, which has no `seeker`
+key → falls through to guidance). `net/slice11_verify.gd` (drives the real server: FILTERED intercepts [frame-
+sampled min-los 0.39 < 30] with λ̇_filt smoother than λ̇_raw [var 7.3 ≪ 959 over the FULL 6000-step run into
+the r→0 endgame spike — vs the probe's 0.10/22.7 to-CPA; both hold with margin, and the shot's unsaturated
+mid-flight `a_cmd=917` confirms the endgame inflation is not the lesson]; `set_fidelity seeker raw`
+DEGRADES [min-los 1391 > 300, > 10× filtered] with early-turn saturation [los>2500-gated, the slice-10
+first-descending/_past_early latch reused]; **REPLAY — the first NON-VACUOUS missile-arc same-seed identity:
+two filtered runs' missile pos_x/pos_z sequences compared element-wise bit-for-bit** [on an RNG-AFFECTED value,
+NOT the RNG-independent clock `t` — advisor #1] — `S11V OK`, exit 0). `net/slice11_ui_test.gd` (mock client:
+handshake STAYS spatial + wires the SEEKER cycler NOT guidance/autopilot; ring walks raw→filtered + wraps;
+guidance/autopilot untouched; σ_seek slider → set_param; reset resyncs to filtered — `S11UI OK`). Sandbox.tscn
+full-lifecycle loaded (the windowed shot instantiated the real scene → connect → handshake → state → `_draw`,
+exit 0 — a superset of the headless smoke-load). `test_scenario.jl` +1 testset (seeker:filtered default PRESENT
+[the new key, not pre-reserved unlike :guidance], guidance:pn/autopilot:ideal held, [BallisticMissile, Seeker,
+Autopilot] NOT ConstantVelocity, sigma_seek/alpha/beta at consumed keys + knobs, seed present, loader rejects
+bad σ/α/β). The `_draw` PIXEL branch VISUALLY CONFIRMED via 2 windowed shots (the shot harness,
+[[ewsim-godot-headless]], reverted+deleted after): **filtered** = a clean LOS line + smooth trail + readout
+`a_cmd=a_demand=917` (unsaturated, below a_max=3000) + `lambda_dot_filt=−0.16`; **raw** = a WILD kinked trail +
+`a_cmd=a_ach=3000` PINNED at a_max while `a_demand=25875` (8.6× over — the saturation flailing as a picture) +
+`closing_speed=−1291` (diverged past the target). No open step remains in slice 11's required gates.
+**(stretch, deferred)** `clients/notebooks/slice11_seeker.jl` Pluto (the λ̇_raw-vs-λ̇_filt variance + a
+miss-vs-σ_seek/(α,β) sweep) + an offline `batch.jl` grid.
+
+Run the slice-11 showcase: `julia --project=core tools/server.jl scenarios/slice11_seeker.yaml`, then launch
+Godot on `clients/godot` (the main `Sandbox.tscn` auto-uses the spatial view; cycle the `seeker:` button to
+watch :filtered LEAD [steady LOS, low a_cmd, saturated off] vs :raw FLAIL [jittering LOS/λ̇, a_cmd pegged at
+a_max, wide miss]; drag σ_seek UP to watch the raw miss explode / the filtered miss hold). Re-run the gate-3
+proof headless: start that server, then `godot --headless --path clients/godot --script
+res://net/slice11_verify.gd` (exit 0 = pass). The UI test needs NO server: `godot --headless --path
+clients/godot --script res://net/slice11_ui_test.gd`. All 1921 tests: `pwsh tools/test.ps1`.
+
+---
+
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
 (`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0); `rf.jl`

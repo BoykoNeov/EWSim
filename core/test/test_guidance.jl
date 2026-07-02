@@ -137,6 +137,33 @@
         @test norm3_test(a_2N) ≈ 2 * norm3_test(a_cmd) atol = 1e-9
     end
 
+    @testset "pn_accel refactor — byte-identical truth path + from_omega recompute (slice 11)" begin
+        # The slice-11 `pn_accel_from_omega` seam must keep the slice-10 truth path BIT-IDENTICAL
+        # (convention 2 — a reassociation would 1-ULP-desync slice-10 replay). On the slice10_pn
+        # engagement geometry, the wrapper reproduces the slice-10 INLINE arithmetic
+        # `(N·Vc)·_cross(ω,û)` EXACTLY (===, SVector bit-equality) — NOT `≈`.
+        m_pos = Vec3(0.0, 0.0, 3000.0)
+        m_vel = Vec3(700*cos(deg2rad(12)), 0.0, 700*sin(deg2rad(12)))
+        t_pos = Vec3(6000.0, 0.0, 4200.0); t_vel = Vec3(-800.0, 0.0, 200.0); N = 4.0
+        r = t_pos - m_pos; v = t_vel - m_vel
+        û = los_unit(m_pos, t_pos); ω = los_rate(r, v); Vc = -range_rate(r, v)
+        inline = (N * Vc) * EWSim._cross(ω, û)                     # the exact slice-10 expression
+        @test pn_accel(m_pos, m_vel, t_pos, t_vel; N = N) === inline
+        @test pn_accel_from_omega(û, ω, Vc; N = N) === inline      # the wrapper delegates bit-exactly
+
+        # INDEPENDENT recompute — expand ω×û component-wise and scale by N·Vc by hand (a
+        # different expression path; a `û×ω` transpose in the impl would flip the sign vs this).
+        ox, oy, oz = ω[1], ω[2], ω[3]; ux, uy, uz = û[1], û[2], û[3]
+        hand = Vec3(oy*uz - oz*uy, oz*ux - ox*uz, ox*uy - oy*ux) * (N * Vc)
+        @test pn_accel_from_omega(û, ω, Vc; N = N) ≈ hand atol = 1e-9
+
+        # NO missile-velocity term in the seam (advisor #6): m_vel enters pn_accel ONLY through
+        # û/ω/Vc, so reconstructing those from a different m_vel still reproduces it bit-exactly.
+        m_vel2 = Vec3(500.0, 30.0, 120.0)
+        v2 = t_vel - m_vel2; ω2 = los_rate(t_pos - m_pos, v2); Vc2 = -range_rate(t_pos - m_pos, v2)
+        @test pn_accel(m_pos, m_vel2, t_pos, t_vel; N = N) === pn_accel_from_omega(û, ω2, Vc2; N = N)
+    end
+
     @testset "pn_accel — degenerate guards + endgame r→0 (finite, then CONSUMER-clamped)" begin
         # v→0 (relative velocity zero: missile matches target velocity) → ω=0, Vc=0 → zero.
         @test pn_accel(Vec3(0,0,0), Vec3(600,0,0), Vec3(5000,0,0), Vec3(600,0,0); N=4.0) == zero(Vec3)

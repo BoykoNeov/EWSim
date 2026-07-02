@@ -138,7 +138,27 @@ function pn_accel(m_pos::Vec3, m_vel::Vec3, t_pos::Vec3, t_vel::Vec3; N::Real = 
     û  = los_unit(m_pos, t_pos)                       # r̂ (zero-range guard inside → zero vector)
     ω  = los_rate(r, v)                              # LOS angular rate (zero-range guard inside)
     Vc = -range_rate(r, v)                           # closing speed (POSITIVE when closing)
-    return (N * Vc) * _cross(ω, û)                    # ⟂ LOS, magnitude N·Vc·‖ω‖ — the ORDER matters
+    return pn_accel_from_omega(û, ω, Vc; N = N)       # ⟂ LOS, N·Vc·‖ω‖ — byte-identical to slice 10
+end
+
+"""
+    pn_accel_from_omega(û::Vec3, ω::Vec3, Vc::Real; N = 4.0) -> Vec3
+
+The INNER TPN command form (slice 11): `a_cmd = N · Vc · (ω × û)`, taking `û`/`ω`/`Vc`
+**already computed** — the swappable-estimate seam PN reads either from **truth** (the
+[`pn_accel`](@ref) wrapper, slice 10) or from the **seeker/filter estimate** (the `Autopilot`
+`decide!` branch, slice 11), keeping ONE arithmetic path. **No `m_vel` param** — TPN
+`N·Vc·(ω×û)` has no missile-velocity term (a dead param would build rotation into the seam —
+advisor #6). The cross-product ORDER `ω × û` (not `û × ω`) is the silent sign source; the
+`Vc = −range_rate` sign is the other (both pinned in `test_guidance.jl`).
+
+**Byte-identity anchor (the slice-10 truth path must NOT move):** this reproduces the exact
+slice-10 inline arithmetic `(N * Vc) * _cross(ω, û)` — same operands, same grouping, same order
+(the [`pn_accel`](@ref) wrapper computes `û`/`ω`/`Vc` in the slice-10 order and delegates here),
+so a slice-10 `:pn` scenario replays bit-identical (no `√(snr/2)`-style reassociation — conv. 2).
+"""
+function pn_accel_from_omega(û::Vec3, ω::Vec3, Vc::Real; N::Real = 4.0)
+    return (N * Vc) * _cross(ω, û)
 end
 
 """

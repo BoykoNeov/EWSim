@@ -156,6 +156,7 @@ var _missile_trail: Array = []    # WORLD [x,y,z] breadcrumbs (mapped through _w
 const INTEGRATOR_RUNGS := ["rk4", "euler"]   # slice-8 integrator cycler (the shared fidelity button)
 const AUTOPILOT_RUNGS := ["ideal", "pid"]    # slice-9 autopilot cycler (the shared fidelity button)
 const GUIDANCE_RUNGS := ["pursuit", "pn"]    # slice-10 OUTER-law cycler (the shared fidelity button)
+const SEEKER_RUNGS := ["raw", "filtered"]    # slice-11 seeker cycler (raw finite-diff ↔ α-β filtered)
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
 func _ready() -> void:
@@ -311,6 +312,25 @@ func _setup_spatial_fid_btn() -> void:
 		# render cramped in the corner (advisor). They grow to fit as the missile climbs/flies.
 		_x_max = 2000.0
 		_z_max = 1000.0
+	elif _fidelity.has("seeker"):
+		# Slice-11 noisy seeker: a `seeker` fidelity keeps the SPATIAL elevation view (the crossing
+		# engagement is planar in x-z) but repurposes the shared button as the :raw↔:filtered SEEKER
+		# cycler. CHECKED BEFORE `guidance` AND `autopilot` ON PURPOSE: slice-11 scenarios ship ALL THREE
+		# keys (guidance:pn + autopilot:ideal are HELD FIXED so the seeker/filter lesson is uncontaminated),
+		# and the ONE button must toggle `seeker`, not guidance/autopilot (convention 9 — one lesson per
+		# button; the exact slice-10 "guidance before autopilot" precedent, one lesson deeper). Same guarded
+		# disconnect as the other _fid_kind setups. The LOS/λ̇ readout JITTERS under :raw (saturated lit,
+		# wild a_cmd) vs STEADY under :filtered (the α-β smoothing) — the visual tell. `seeker` is a NEW
+		# fidelity-class combo: DRAW-INVARIANT (introduce-safe, no desync) YET TRAJECTORY-CHANGING.
+		_fid_kind = "seeker"
+		if _prop_btn.pressed.is_connected(_on_prop_pressed):
+			_prop_btn.pressed.disconnect(_on_prop_pressed)
+		if not _prop_btn.pressed.is_connected(_on_seeker_pressed):
+			_prop_btn.pressed.connect(_on_seeker_pressed)
+		_prop_btn.tooltip_text = "Cycle seeker (set_fidelity): raw ↔ filtered"
+		# Seed extents to fit the crossing (x ~0..8 km, z ~2..8 km); they only grow, so start close.
+		_x_max = 8000.0
+		_z_max = 8000.0
 	elif _fidelity.has("guidance"):
 		# Slice-10 PN missile: a `guidance` fidelity keeps the SPATIAL elevation view (the crossing
 		# engagement is planar in x-z) but repurposes the shared button as the :pursuit↔:pn OUTER-law
@@ -476,6 +496,8 @@ func _update_fid_btn() -> void:
 			_prop_btn.text = "autopilot: %s" % str(_fidelity.get("autopilot", "?"))
 		"guidance":
 			_prop_btn.text = "guidance: %s" % str(_fidelity.get("guidance", "?"))
+		"seeker":
+			_prop_btn.text = "seeker: %s" % str(_fidelity.get("seeker", "?"))
 		_:
 			_update_prop_btn()
 
@@ -597,6 +619,26 @@ func _on_guidance_pressed() -> void:
 	var next: String = GUIDANCE_RUNGS[(i + 1) % GUIDANCE_RUNGS.size()] if i >= 0 else "pursuit"
 	_fidelity["guidance"] = next
 	_client.send({"type": "set_fidelity", "key": "guidance", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
+func _on_seeker_pressed() -> void:
+	# Advance the SEEKER rung (raw↔filtered) and tell the core (set_fidelity). A NEW fidelity-class combo:
+	# DRAW-INVARIANT (both rungs draw the SAME 1 randn/tick — the filter is pure post-processing, so a
+	# mid-run flip does NOT desync the RNG; introduce-safe, UNLIKE the slice-3 :cfar draw-topology flip)
+	# YET TRAJECTORY-CHANGING (an :raw↔:filtered toggle CHANGES the missile's flight — the slice-10 shape).
+	# So copy NEITHER the slice-5 "toggle-bit-identical" NOR the slice-8/9/10 "no-RNG" language: the seeker
+	# is the FIRST w.rng consumer in the missile arc. Introduce-safe (absent a Seeker nothing reads it; the
+	# core defaults PN to truth). Under :filtered the α-β tracker yields a smooth λ̇ → a tight intercept,
+	# `saturated` off; under :raw the naïve finite-diff amplifies the σ_seek angle noise by 1/dt → PN pegs
+	# a_max, `saturated` lit, the miss opens (the LOS/λ̇ readout JITTERS — the visual tell). `guidance` +
+	# `autopilot` stay FIXED (this button toggles only `seeker`). The client owns the displayed rung: badge
+	# + button locally (the server applies it silently on the next tick, no reply).
+	var cur := str(_fidelity.get("seeker", "filtered"))
+	var i := SEEKER_RUNGS.find(cur)
+	var next: String = SEEKER_RUNGS[(i + 1) % SEEKER_RUNGS.size()] if i >= 0 else "filtered"
+	_fidelity["seeker"] = next
+	_client.send({"type": "set_fidelity", "key": "seeker", "value": next})
 	_render_badge()
 	_update_fid_btn()
 
@@ -887,14 +929,15 @@ func _draw_spatial() -> void:
 
 	# missile (slice 8): the fading trajectory trail + a nose-oriented marker + an impact burst,
 	# on top of the elevation view (drawn only in the missile-view branch, so slice-1/2/4 are untouched)
-	if _fid_kind == "missile" or _fid_kind == "autopilot" or _fid_kind == "guidance":
+	if _fid_kind == "missile" or _fid_kind == "autopilot" or _fid_kind == "guidance" or _fid_kind == "seeker":
 		_draw_missile()
-	# guided missile (slice 9/10): a LOS line missile→target so the guidance geometry reads (the target
+	# guided missile (slice 9/10/11): a LOS line missile→target so the guidance geometry reads (the target
 	# marker is drawn by the generic :target branch above; the a_cmd/a_ach/track_gap [slice 9] +
-	# a_demand/saturated [slice 10] readout is the lesson number, rendered as text by _update_readout —
-	# all scalars, no Array-crash). Under :pn the LOS line holds a constant bearing (the collision
-	# triangle); under :pursuit it swings — the visible PN-vs-pursuit tell.
-	if _fid_kind == "autopilot" or _fid_kind == "guidance":
+	# a_demand/saturated [slice 10] + lambda_dot_raw/lambda_dot_filt/lambda_dot_used [slice 11] readout is
+	# the lesson number, rendered as text by _update_readout — all scalars, no Array-crash). Under :pn the
+	# LOS line holds a constant bearing (the collision triangle); under :pursuit it swings. For the slice-11
+	# seeker the λ̇ readout JITTERS under :raw (saturated lit) vs STEADY under :filtered (the α-β smoothing).
+	if _fid_kind == "autopilot" or _fid_kind == "guidance" or _fid_kind == "seeker":
 		_draw_guidance_los()
 
 	# detection blips: expanding rings that fade over BLIP_TTL

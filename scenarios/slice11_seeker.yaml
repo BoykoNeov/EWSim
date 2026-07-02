@@ -1,0 +1,103 @@
+# slice11_seeker — the noisy-seeker + LOS-rate-filter showcase (HANDOFF §10 item 11, slice 11 gate 3).
+# The FIRST slice of the seeker arc, and the missile's FIRST phase-3 observe! ("a missile is integrate!
+# + observe! + decide!" — HANDOFF §3 — is COMPLETE here). Slice 10's proportional navigation read the
+# target's TRUTH pos/vel (ω = r×v/‖r‖² from truth). Slice 11 replaces that truth-feed with a REAL
+# seeker: the missile MEASURES the line-of-sight angle with white angular noise (σ_seek), and an α-β
+# tracker estimates the LOS rate λ̇ WITHOUT differentiating it. In the EXISTING spatial / elevation view
+# (extended — the LOS line + a λ̇_raw/λ̇_filt/saturated readout); NO new render mode (the slice-8/9/10
+# "stay spatial" precedent). The handshake carries `seeker` in `fidelity` → the client's seeker-view
+# discriminator (CHECKED BEFORE `guidance`, which is HELD at :pn, and `autopilot`, HELD at :ideal); the
+# shared fidelity button becomes the :raw↔:filtered cycler.
+#
+# THE LESSON (the fidelity button, :filtered ↔ :raw):
+#   :filtered runs the α-β LOS-rate filter — a predict–correct tracker that estimates ω DIRECTLY (no
+#   differentiation), outputs a SMOOTH λ̇, and PN leads the crossing target to a TIGHT intercept
+#   (miss ≈ the slice-10 truth-fed miss), `saturated` OFF. Cycle to :raw and the seeker's λ̇ is recovered
+#   by NAÏVELY finite-differencing consecutive noisy angles (λ̇ = Δλ/dt) — which amplifies the σ_seek
+#   angle noise by 1/dt (~1 rad/s per sample at dt=1e-3). PN's command N·Vc·(ω×û) then carries N·Vc·(σ/dt)
+#   of pure noise (thousands of m/s²) → `a_demand` pegs `a_max` almost every tick, `saturated` stays LIT,
+#   the command direction is near-random, and the missile MISSES WIDE. `seeker` is a NEW fidelity-class
+#   COMBO: DRAW-INVARIANT (both rungs draw the same 1 randn/tick — introduce-safe, UNLIKE :cfar) YET
+#   TRAJECTORY-CHANGING (a toggle moves the missile — the slice-10 shape). The seeker is the FIRST w.rng
+#   consumer in the missile arc, so this scenario carries a SEED (the first missile scenario that must).
+#
+#   MISS is measured at CPA from TRUTH positions (the seeker noise corrupts the GUIDANCE, never the CPA
+#   measurement — the slice-10 discipline, unchanged). Probed against the live load_scenario→observe!→
+#   decide!→integrate!→telemetry wire (gate3 pin, seed 6): miss(:filtered) ≈ 0.39 m (CPA), miss(:raw)
+#   ≈ 1391 m — a ~3500× ratio, with saturation 0.01 (filtered) vs 0.79 (raw) and var(λ̇_filt) ≈ 0.10 ≪
+#   var(λ̇_raw) ≈ 22.7 (the α-β smoothing, 200×). The verifier only sees state frames every emit_every
+#   (16) ticks, so its FRAME-SAMPLED filtered min ≈ 0.39 m too (seed 6's CPA lands on an emit boundary).
+#   PIN "raw ≫ filtered" as CONSERVATIVE one-sided bounds (filtered < 30 m, raw > 300 m — NOT the ratio;
+#   the raw miss is a random walk and the filtered side is floored by the emit_every frame sampling).
+#
+# THE TEE-UP FOR SLICE 12 (augmented PN + a maneuvering target), named honestly: even a PERFECT filter
+# leaves plain PN lagging a MANEUVERING target by the N/2·a_T term (the slice-10 ~2g gravity floor was a
+# literal in-scenario preview). Slice 11 models the SEEKER/FILTER (HANDOFF §10.11); APN + the maneuvering
+# mover are the RNG-free slice-12 payoff (the user-ratified split).
+#
+# THE ENGAGEMENT IS PLANAR IN x-z (the elevation view's plane, ω ∥ ±y — why the α-β filter is the SCALAR
+# in-plane form on λ = atan(Δz,Δx), not a vector-on-direction tracker): the interceptor climbs from
+# z = 3000 m at 12° and the crossing target descends-and-closes in x-z (v[-800,0,200]). The target
+# OUTRUNS the missile (|t_vel| ≈ 825 > 700 m/s) so a diverged (raw) missile CANNOT get a second pass —
+# the min-los_range miss IS the honest first-CPA miss (no re-convergence hides the lesson). Same geometry
+# as slice10_pn so the ONLY new variable is the seeker (convention 9 — one lesson).
+#
+# a_max = 3000 m/s² (~306 g) is the crash-guard (as in slice10_pn): under :filtered it never binds
+# (clean intercept); under :raw the noise DRIVES it into the clamp (saturated lit — the "raw is broken"
+# corroborating tell, the slice-10 saturation telemetry REUSED). r_stop = 30 m is the endgame coast.
+#
+# UNITS (the §1 trifecta): positions/velocities SI (m, m/s), σ_seek in RADIANS, launch ELEVATION in
+# DEGREES → radians at the loader. dt = 1e-3 / emit_every = 16 (the standard cadence; the guidance +
+# seeker loop runs at the tick dt — the seeker draws its noise sample every tick).
+name: slice11_seeker
+seed: 6
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  # THREE keys, but ONE lesson: seeker is the toggle (the button cycles :raw↔:filtered), guidance is
+  # HELD at :pn and autopilot at :ideal so the seeker/filter lesson is uncontaminated (convention 9 —
+  # one lesson per button; the client checks `seeker` BEFORE `guidance`/`autopilot`). seeker is
+  # draw-invariant (introduce-safe) AND trajectory-changing; guidance/autopilot are physics-changing.
+  seeker: filtered
+  guidance: pn
+  autopilot: ideal
+
+entities:
+  # The guided interceptor: launched from the origin at z = 3000 m, CLIMBING at 12° at 700 m/s in the
+  # x-z plane. mass 140 kg, DRAG OFF (one lesson per scenario). The `guidance:` block makes it GUIDED and
+  # the `seeker:` block adds the phase-3 Seeker → [BallisticMissile, Seeker, Autopilot] (NOT a
+  # ConstantVelocity). n_pn = 4 (the PN nav constant), r_stop = 30 (the endgame cutoff).
+  #   seeker: σ_seek = 3 mrad (the 1-σ LOS angular noise — the probe's pinned regime: at 3 mrad the raw
+  #   finite-diff miss EXPLODES while the α-β filter recovers a tight intercept), α = 0.30 (α-β angle
+  #   gain), β = 0.05 (α-β rate gain — the probe's closed-loop-miss minimum; β→0 lags, β≥0.3 lets noise
+  #   through, both open the miss — the U-shape).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.225
+      guidance: {k_guid: 3.0, n_pn: 4.0, r_stop: 30.0, kp: 2.0, ki: 0.0, kd: 0.0, tau: 0.3, a_max: 3000.0}
+      seeker: {sigma_seek: 3.0e-3, alpha: 0.30, beta: 0.05}
+  # The crossing target: a constant-velocity aircraft ahead at 4.2 km altitude, descending-and-closing at
+  # v[-800,0,200] — it crosses the interceptor's climb IN x-z fast enough to OUTRUN the missile, so a
+  # noise-diverged (raw) missile tail-chases into a big miss while the filtered seeker leads a clean kill.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 0.0, 4200.0]
+    vel: [-800.0, 0.0, 200.0]
+    target: {rcs_m2: 1.0}
+
+knobs:
+  # The live sliders: the seeker noise + filter gains (σ_seek/α/β — the lesson levers, drag σ_seek UP to
+  # watch the raw miss explode / the filtered miss hold; α/β trade tracking lag vs noise rejection), plus
+  # the PN nav constant N and the g-limit a_max. The seeker METHOD is the fidelity BUTTON, not a knob;
+  # launch geometry is not a slider. All validated at LOAD (σ≥0, 0<α<1, β>0) and floored at the consumer.
+  - {target: m1, key: sigma_seek, min: 0.0,   max: 0.02,   label: "σ_seek (LOS noise, rad)"}
+  - {target: m1, key: alpha,      min: 0.05,  max: 0.95,   label: "α (α-β angle gain)"}
+  - {target: m1, key: beta,       min: 0.005, max: 0.30,   label: "β (α-β rate gain)"}
+  - {target: m1, key: n_pn,       min: 2.0,   max: 6.0,    label: "N (nav constant)"}
+  - {target: m1, key: a_max,      min: 100.0, max: 5000.0, label: "a_max (g-limit, m/s²)"}

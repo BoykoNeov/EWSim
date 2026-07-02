@@ -580,4 +580,95 @@ end
         _, tpursuit = pn_trace(guidance = :pursuit, with_slice10_keys = false)   # + :guidance=:pursuit
         @test reinterpret(UInt64, tslice9) == reinterpret(UInt64, tpursuit)
     end
+
+    # Slice 11: THE RNG INFLECTION — the Seeker is the FIRST w.rng consumer in the missile arc, so the
+    # slice-8/9/10 "RNG-is-vacuous" framing INVERTS and the FULL determinism contract (the slice-5/6/7
+    # shape) returns — now NON-vacuous. FOUR claims: (2) same-seed replay bit-identical WITH the seeker
+    # DRAWING (a real RNG fingerprint, the first in the missile arc); the Seeker draws EXACTLY 1
+    # randn/tick UNCONDITIONALLY (convention 3); (3) the NEW COMBO — a :raw↔:filtered toggle is
+    # DRAW-COUNT-INVARIANT (class 4a — same rng end-state, introducible) YET TRAJECTORY-CHANGING
+    # (physics — the missile moves): draw-invariant (like slice 5) AND physics-changing (like slice 10)
+    # at ONCE, which no prior slice had; (1) introducing :seeker on a slice-10 PN missile that has NO
+    # Seeker subsystem is a no-op → byte-identical (byte-identity from NO Seeker, NOT a draw-skipping
+    # :truth rung — there is none; "truth-fed PN" IS slice 10).
+    @testset "a noisy-seeker missile: bit-identical replay WITH rng; the :seeker toggle is draw-invariant" begin
+        function seeker_trace(; seeker = :filtered, seed = 3, nsteps = 1500, toggle_at = 0,
+                              toggle_to = nothing, start_seeker = seeker)
+            fid = Dict{Symbol,Symbol}(:autopilot => :ideal, :guidance => :pn)
+            start_seeker === nothing || (fid[:seeker] = start_seeker)   # nothing → INTRODUCE later
+            w = World(seed = seed, fidelity = fid)
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0),
+                vel = Vec3(700cosd(12), 0, 700sind(12)),
+                comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                    :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0, :kp => 2.0, :ki => 0.0, :kd => 0.0,
+                    :tau => 0.3, :a_max => 3000.0, :sigma_seek => 3.0e-3, :alpha => 0.30, :beta => 0.05))
+            w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(6000.0, 0, 4200.0),
+                vel = Vec3(-800.0, 0, 200.0), comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+            subs = Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:tgt1)]
+            trace = Float64[]
+            for i in 1:nsteps
+                (toggle_to !== nothing && i == toggle_at) && (w.fidelity[:seeker] = toggle_to)
+                tick!(w, subs, 1.0e-3)
+                append!(trace, w.entities[:m1].pos)
+                append!(trace, w.entities[:m1].comp[:a_ctrl])       # the control fingerprint (sharper)
+                empty!(w.events)
+            end
+            return w, trace
+        end
+
+        # (2) same-seed replay bit-identical WITH the seeker drawing (NON-vacuous — the first in the
+        # missile arc; pos + a_ctrl fingerprint, reinterpret catches sign-of-zero), streams in lockstep.
+        wa, ta = seeker_trace(seeker = :filtered, seed = 3)
+        wb, tb = seeker_trace(seeker = :filtered, seed = 3)
+        @test ta == tb && reinterpret(UInt64, ta) == reinterpret(UInt64, tb)
+        @test rand(copy(wa.rng)) == rand(copy(wb.rng))
+        # a DIFFERENT seed ⇒ a different trace — the seeker noise genuinely drives it (rng exercised).
+        _, tc = seeker_trace(seeker = :filtered, seed = 4)
+        @test ta != tc
+
+        # the Seeker draws EXACTLY 1 randn/tick: after N ticks w.rng == a fresh Xoshiro(seed) advanced
+        # by N draws (the seeker is the ONLY consumer — convention 3, unconditional, rung-invariant).
+        let N = 1500
+            ref = Xoshiro(3); for _ in 1:N; randn(ref); end
+            @test randn(copy(ref)) == randn(copy(wa.rng))
+        end
+
+        # (3) THE NEW COMBO — :raw vs :filtered: DRAW-COUNT-INVARIANT (same rng end-state, class 4a)
+        # YET TRAJECTORY-CHANGING (the missile moves). Both draw 1/tick; the rung selects only which ω
+        # PN reads. The combination NO prior slice had: draw-invariant AND physics-changing at once.
+        wr, tr = seeker_trace(seeker = :raw, seed = 3)
+        wf, tf = seeker_trace(seeker = :filtered, seed = 3)
+        @test rand(copy(wr.rng)) == rand(copy(wf.rng))      # draw-count-invariant (the rung adds no draw)
+        @test tr != tf                                      # ...but the trajectory changed (not a dead knob)
+
+        # a mid-run :filtered→:raw toggle: bit-identical twice, the toggle changed NO draws (rng
+        # end-state == the never-toggled filtered run) while the trajectory differs (slice-5 live-knob).
+        wk1, tk1 = seeker_trace(start_seeker = :filtered, toggle_at = 300, toggle_to = :raw, seed = 3)
+        wk2, tk2 = seeker_trace(start_seeker = :filtered, toggle_at = 300, toggle_to = :raw, seed = 3)
+        @test reinterpret(UInt64, tk1) == reinterpret(UInt64, tk2)   # same-seed toggle bit-identical
+        @test rand(copy(wk1.rng)) == rand(copy(wf.rng))              # toggle changed NO draws
+        @test tk1 != tf                                              # ...but the rung flip changed the flight
+
+        # (1) INTRODUCE-safe: introducing :seeker on a slice-10 PN missile that has NO Seeker subsystem
+        # is a no-op — nothing reads comp[:seeker_omega] — so the trace is byte-identical to never
+        # touching it. Byte-identity comes from the Seeker NOT EXISTING (no draw), NOT a :truth rung.
+        function noseeker_trace(; introduce = false, at = 300, nsteps = 800)
+            w = World(seed = 3, fidelity = Dict(:autopilot => :ideal, :guidance => :pn))
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0),
+                vel = Vec3(700cosd(12), 0, 700sind(12)),
+                comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                    :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0, :kp => 2.0, :ki => 0.0, :kd => 0.0,
+                    :tau => 0.3, :a_max => 3000.0))
+            w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(6000.0, 0, 4200.0),
+                vel = Vec3(-800.0, 0, 200.0), comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+            subs = Subsystem[BallisticMissile(:m1), Autopilot(:m1), ConstantVelocity(:tgt1)]  # NO Seeker
+            tr = Float64[]
+            for i in 1:nsteps
+                introduce && i == at && (w.fidelity[:seeker] = :raw)
+                tick!(w, subs, 1.0e-3); append!(tr, w.entities[:m1].pos); empty!(w.events)
+            end
+            return tr
+        end
+        @test noseeker_trace(introduce = true) == noseeker_trace(introduce = false)   # :seeker no-op w/o a Seeker
+    end
 end

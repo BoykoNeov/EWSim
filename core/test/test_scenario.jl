@@ -25,6 +25,7 @@ const _SCEN8 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice8_ball
 const _SCEN9 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice9_pursuit.yaml"))
 const _SCEN10P = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice10_pn.yaml"))
 const _SCEN10G = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice10_glimit.yaml"))
+const _SCEN11 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice11_seeker.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -586,6 +587,91 @@ end
         mg = load_scenario(_SCEN10G).world.entities[:m1]
         @test mp.comp[:elevation_deg] == 12.0 && mp.comp[:speed] == 700.0
         @test mg.comp[:elevation_deg] == 5.0 && mg.comp[:speed] == 800.0
+    end
+
+    @testset "loader parses slice11_seeker.yaml (noisy seeker + LOS-rate filter, spatial view)" begin
+        # The slice-11 showcase: a noisy-seeker + α-β LOS-rate filter driving PN's ω. Keeps the SPATIAL
+        # view (seeker is the missile-view discriminator, the button cycler); guidance is HELD at :pn (the
+        # seeker feeds PN's ω) and autopilot at :ideal so the seeker/filter lesson is isolated. Cheap
+        # insurance: a malformed showcase fails HERE, not downstream. This is the missile's FIRST observe!
+        # scenario AND the FIRST missile scenario that consumes w.rng (so it carries a seed).
+        scn = load_scenario(_SCEN11)
+        @test scn.name == "slice11_seeker"
+        # `seeker` present is the missile-view discriminator; the NEW key (not pre-reserved, unlike
+        # :guidance) — default :filtered (the clean intercept on connect; the reserved-word-becomes-real
+        # move, one slice deeper than slice-10's :guidance).
+        @test scn.world.fidelity[:seeker] === :filtered
+        # guidance HELD at :pn (the seeker feeds PN) and autopilot at :ideal (the one button toggles
+        # seeker, not guidance/autopilot — convention 9).
+        @test scn.world.fidelity[:guidance] === :pn
+        @test scn.world.fidelity[:autopilot] === :ideal
+        # single-lesson: no OTHER-slice fidelity, no view axes (seeker + guidance + autopilot only).
+        for k in (:propagation, :cfar, :ep, :estimator, :deinterleaver, :raim, :integrator)
+            @test !haskey(scn.world.fidelity, k)
+        end
+        @test !any(e -> e.kind in (:radar, :jammer, :clutter, :emitter, :df_sensor, :df_station,
+                                   :pulse_emitter, :esm, :gps_satellite, :gps_receiver),
+                   values(scn.world.entities))
+        # exactly one guided :missile + one :target (the crossing pair)
+        missiles = [id for (id, e) in scn.world.entities if e.kind === :missile]
+        targets  = [id for (id, e) in scn.world.entities if e.kind === :target]
+        @test length(missiles) == 1 && length(targets) == 1
+        m = scn.world.entities[missiles[1]]
+        # a SEEKER-equipped guided missile gets [BallisticMissile, Seeker, Autopilot] — the Seeker (the
+        # phase-3 observe!) is armed, NOT a ConstantVelocity (the double-integration guard); the presence
+        # of Seeker is the discriminating check (a bare `guidance:` missile with no `seeker:` block would
+        # get only [BallisticMissile, Autopilot], the slice-10 shape).
+        @test any(s -> s isa BallisticMissile, scn.subs)
+        @test any(s -> s isa Seeker && s.id === missiles[1], scn.subs)
+        @test any(s -> s isa Autopilot, scn.subs)
+        @test !any(s -> s isa ConstantVelocity && s.id === missiles[1], scn.subs)
+        # the seeker knobs land at the CONSUMED comp keys (sigma_seek/alpha/beta — the slider→consumed-key
+        # discipline; haskey is the discriminating check, a silently-failed read would still default).
+        @test haskey(m.comp, :sigma_seek) && m.comp[:sigma_seek] == 3.0e-3
+        @test haskey(m.comp, :alpha) && m.comp[:alpha] == 0.30
+        @test haskey(m.comp, :beta) && m.comp[:beta] == 0.05
+        # sigma_seek / alpha / beta ARE live sliders (the seeker levers); seeker is the fidelity BUTTON not
+        # a knob; launch geometry (speed/elevation) is not a slider.
+        keyset = Set(k.key for k in scn.knobs)
+        @test :sigma_seek in keyset && :alpha in keyset && :beta in keyset
+        @test :n_pn in keyset && :a_max in keyset
+        @test :seeker ∉ keyset && :guidance ∉ keyset && :autopilot ∉ keyset
+        @test all(k -> k.key ∉ (:speed, :elevation_deg), scn.knobs)
+        @test all(k -> k.target === missiles[1], scn.knobs)
+        # the crossing geometry (same as slice10_pn so the seeker is the ONLY new variable — convention 9)
+        @test m.comp[:elevation_deg] == 12.0 && m.comp[:speed] == 700.0
+
+        # the seeker gains are LOAD-validated (σ≥0, 0<α<1, β>0) — a live filter can't be silently nulled.
+        # A bad value in the `seeker:` block must be REJECTED at load (the crash-guard, convention 5).
+        mkbad(σ, α, β) = begin
+            f = tempname() * ".yaml"
+            write(f, """
+            name: bad_seeker
+            seed: 1
+            entities:
+              - id: m1
+                kind: missile
+                pos: [0.0, 0.0, 3000.0]
+                missile:
+                  mass_kg: 140.0
+                  speed: 700.0
+                  elevation_deg: 12.0
+                  cd_area_m2: 0.0
+                  guidance: {n_pn: 4.0, r_stop: 30.0, kp: 2.0, ki: 0.0, kd: 0.0, tau: 0.3, a_max: 3000.0}
+                  seeker: {sigma_seek: $σ, alpha: $α, beta: $β}
+              - id: tgt1
+                kind: target
+                pos: [6000.0, 0.0, 4200.0]
+                vel: [-800.0, 0.0, 200.0]
+                target: {rcs_m2: 1.0}
+            """)
+            f
+        end
+        @test load_scenario(mkbad(3.0e-3, 0.30, 0.05)) isa EWSim.Scenario  # the valid control loads
+        @test_throws Exception load_scenario(mkbad(-1.0e-3, 0.30, 0.05))   # σ < 0 rejected
+        @test_throws Exception load_scenario(mkbad(3.0e-3, 0.0, 0.05))     # α ≤ 0 rejected
+        @test_throws Exception load_scenario(mkbad(3.0e-3, 1.0, 0.05))     # α ≥ 1 rejected
+        @test_throws Exception load_scenario(mkbad(3.0e-3, 0.30, 0.0))     # β ≤ 0 rejected
     end
 
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin

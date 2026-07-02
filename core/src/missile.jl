@@ -7,8 +7,11 @@
 # (forces → accel → vel → pos) via the gate-1 steppers in `dynamics.jl`, under the shared
 # `frames.jl` frame algebra. It lights NO NEW phase — its novelty is REAL dynamics where
 # every prior slice had passive movers, plus the first live use of `frames.jl`
-# (velocity-aligned attitude). `observe!`/`decide!` stay EMPTY here — guidance / seekers are
-# slices 9–11 (do NOT add them).
+# (velocity-aligned attitude). `BallisticMissile` itself stays `integrate!`-ONLY: its
+# `observe!`/`decide!` are empty and the airframe never adds them. Guidance and the seeker ride on
+# SEPARATE subsystems layered onto the same `:missile` entity — the phase-4 `Autopilot` (slice 9,
+# below) and the phase-3 `Seeker` (slice 11, below) — so "a missile is integrate! + observe! +
+# decide!" (HANDOFF §3) is assembled from three subsystems, not folded into this one.
 #
 # Included AFTER radar.jl (mirroring geolocation.jl/esm.jl/gps.jl) but with NO back-dep on
 # radar's radar/jammer symbols: it reuses only `dynamics.jl` (`total_accel`,
@@ -227,14 +230,36 @@ function decide!(a::Autopilot, w::World)
     a_max  = Float64(get(c, :a_max, 3000.0))
     dt     = Float64(get(c, :dt_s, 1.0e-3))
 
+    # Relative kinematics (TRUTH) — the seeker ω-source branch reads truth `Vc` from these (§ scope:
+    # only the LOS ANGLE is noisy) and the telemetry below reuses them. Hoisted here from the old
+    # inline telemetry site so the branch can read `Vc`; the truth `pn_accel` path is UNTOUCHED (it
+    # computes its own r/v internally), so slice-10 stays byte-identical.
+    rel_pos = tgt.pos - e.pos
+    rel_vel = tgt.vel - e.vel
+
     # OUTER law → commanded lateral accel (§3 seam, slice 10 — the INNER PID below is UNCHANGED).
     # Select on `:guidance` (default `:pursuit` = the exact slice-9 path → byte-identical): PN leads
     # (nulls λ̇), pursuit tail-chases. The §2 terminal cutoff coasts the missile through the r→0
     # endgame (r_stop=0 default is an EXACT no-op → slice-9 unaffected); then clamp to a_max. In
     # slice10_pn a_max is generous (never binds); in slice10_glimit it BINDS ON PURPOSE — g-limit
     # saturation is the lesson, the deliberate inversion of slice 9's crash-guard-only clamp.
-    a_dem = guid === :pn ? pn_accel(e.pos, e.vel, tgt.pos, tgt.vel; N = n_pn) :
-                           pursuit_accel(e.pos, e.vel, tgt.pos; k_guid = k_guid)
+    #
+    # SLICE-11 SEEKER SEAM: if the phase-3 `Seeker.observe!` wrote an estimate THIS tick
+    # (`haskey(c, :seeker_omega)` — observe! ran before this phase-4 decide!), PN reads the seeker's
+    # ω_est/û_est via `pn_accel_from_omega(û, ω, Vc)` (with TRUTH `Vc` — § scope) INSTEAD of truth
+    # pos/vel. The `pn_accel_from_omega` arg order is û FIRST, ω SECOND (it computes `_cross(ω, û)` —
+    # a swap would flip the command sign). Byte-identity for slices 1–10: with NO Seeker there is no
+    # `:seeker_omega`, so this branch is never taken → the exact slice-10 truth `pn_accel`. The seeker
+    # only overrides PN's ω-SOURCE, so it is gated on `guid === :pn` (pursuit reads the LOS directly,
+    # no ω) — keeping `:seeker`/`:guidance`/`:autopilot` orthogonal.
+    a_dem = if guid === :pn && haskey(c, :seeker_omega)
+                pn_accel_from_omega(c[:seeker_los]::Vec3, c[:seeker_omega]::Vec3,
+                                    -range_rate(rel_pos, rel_vel); N = n_pn)
+            elseif guid === :pn
+                pn_accel(e.pos, e.vel, tgt.pos, tgt.vel; N = n_pn)
+            else
+                pursuit_accel(e.pos, e.vel, tgt.pos; k_guid = k_guid)
+            end
     a_dem = _terminal_cutoff(a_dem, los_range(e.pos, tgt.pos), r_stop)
     a_cmd = clamp_accel(a_dem, a_max)
 
@@ -257,9 +282,8 @@ function decide!(a::Autopilot, w::World)
     # Telemetry: the slice-9 keys (the tracking GAP) PLUS the slice-10 PN/saturation readouts. The
     # slice-10 lesson is MISS at CPA (isolated at :ideal — the verifier's job) + the saturation the
     # `a_demand`(pre-clamp) vs `a_cmd`(post-clamp) split makes visible. All `_finite`-clamped (no
-    # Inf/NaN to JSON — the r→0 pre-clamp `a_demand` can be huge; §2 layer 3).
-    rel_pos = tgt.pos - e.pos
-    rel_vel = tgt.vel - e.vel
+    # Inf/NaN to JSON — the r→0 pre-clamp `a_demand` can be huge; §2 layer 3). `rel_pos`/`rel_vel`
+    # are computed above (hoisted for the seeker branch).
     a_demand = _norm3(a_dem)                                   # PRE-clamp, POST-cutoff (saturation)
     tel["$sid.a_cmd"]         = _finite(_norm3(a_cmd))         # post-clamp (slice-9 key)
     tel["$sid.a_ach"]         = _finite(_norm3(a_ctrl))
@@ -270,5 +294,115 @@ function decide!(a::Autopilot, w::World)
     tel["$sid.saturated"]     = a_demand > a_max ? 1.0 : 0.0  # g-limit binding? (the Lesson-2 flag)
     tel["$sid.los_rate"]      = _finite(_norm3(los_rate(rel_pos, rel_vel)))  # ‖ω‖ (the PN driver)
     tel["$sid.closing_speed"] = _finite_coord(-range_rate(rel_pos, rel_vel))  # Vc (POSITIVE closing)
+    return nothing
+end
+
+# --- the NOISY SEEKER: the missile's FIRST observe! (slice 11, HANDOFF §10 item 11) ------------
+# "A missile is integrate! (airframe) + observe! (seeker) + decide! (guidance)" (HANDOFF §3): the
+# Seeker fills the phase-3 observe! missile.jl:11 anticipated ("observe!/decide! stay EMPTY here —
+# guidance/seekers are slices 9–11"), COMPLETING that sentence. It replaces slice 10's truth-fed PN
+# (pn_accel reading target truth) with a MEASURED line-of-sight: the seeker senses the LOS *angle*
+# with white angular noise (`sigma_seek`), and the α-β filter (estimation.jl `alpha_beta_los_step`)
+# estimates the LOS *rate* λ̇ WITHOUT differentiating it — the whole slice-11 lesson (the `:raw`
+# finite-difference foil amplifies the angle noise by 1/dt → PN's `N·Vc·λ̇` pegs `a_max`, the miss
+# opens; the α-β filter recovers a smooth λ̇ → tight intercept).
+#
+# THE RNG INFLECTION — do NOT copy the slice-8/9/10 "RNG is VACUOUS" boilerplate; it INVERTS here.
+# The Seeker is the FIRST `w.rng` consumer in the missile arc, so conventions 3 (unconditional draw)
+# and 11 (own Xoshiro for MC) now APPLY. `observe!` draws ONE `randn(w.rng)` sample UNCONDITIONALLY
+# every tick — a FIXED count invariant to the `:seeker` rung, the `sigma_seek`/`alpha`/`beta`
+# sliders, target geometry, AND post-impact (the missile freezes but the target keeps moving, so
+# observe! keeps running — the `detect_once`/`_draw_pseudoranges` "draw-then-gate-the-VALUE"
+# template). Gate only the value PN consumes, never the draw. `:seeker` is a GENUINELY NEW
+# fidelity-class combo (named at `SEEKER_MODES`, estimation.jl): DRAW-INVARIANT (class 4a — both
+# rungs draw the same 1 sample, so `set_fidelity` may INTRODUCE it, UNLIKE `:cfar`) YET
+# TRAJECTORY-CHANGING (a `:raw↔:filtered` toggle MOVES the missile — the slice-10 shape). Copy
+# NEITHER the slice-5 "toggle-bit-identical" NOR the slice-8/9/10 "no-RNG" language. Byte-identity
+# for slices 1–10 comes from the Seeker NOT EXISTING there, NOT a draw-skipping `:truth` rung (there
+# is none; "truth-fed PN" IS slice 10 — no Seeker).
+#
+# SCALAR IN-PLANE (gate-0 FINDINGS decision 3): the engagement is planar in x-z, ω ∥ ±y, so the
+# seeker tracks a SCALAR LOS angle `λ = atan(Δz, Δx)` and reconstructs `ω = Vec3(0, −λ̇, 0)` for PN
+# (with r=(rx,0,rz), v=(vx,0,vz): `los_rate_y = (rz·vx − rx·vz)/r²` and `λ̇ = −ω_y`). Scalar avoids
+# the vector form's tangent-injection / cross-innovation-sign / renormalize bug surface. `Vc` stays
+# TRUTH (only the angle is noisy — one lesson per scenario, § scope; decide! supplies it).
+struct Seeker <: Subsystem
+    id::Symbol
+end
+
+# Phase 1: capture the tick `dt` into comp (the α-β predict step needs it; `observe!` has no `dt`
+# arg — cf. `RadarSensor.observe!`). Its OWN capture key `:dt_s_seeker` (self-contained, advisor #4)
+# — NOT a lean on the Autopilot's `:dt_s`, whose presence assumes the Autopilot is armed alongside
+# the Seeker (the missile.jl `Autopilot.integrate!` dt-capture precedent). Does NOT move the entity.
+function integrate!(s::Seeker, w::World, dt::Float64)
+    w.entities[s.id].comp[:dt_s_seeker] = dt
+    return nothing
+end
+
+# Phase 3: the missile's first sensor read. Draw the angle-noise sample UNCONDITIONALLY (convention
+# 3), measure the noisy LOS angle, update BOTH the raw finite-difference memory AND the α-β filter
+# state every tick (so a mid-run `:raw↔:filtered` toggle keeps both paths warm and stays
+# draw-count-invariant — the rung selects only WHICH ω is written), and write the chosen ω/û into
+# comp for the phase-4 `decide!` (the tick contract's phase order hands off THIS tick — no one-tick
+# delay for the estimate; the seeker senses this tick's truth + noise). RNG-free after the one draw
+# (the filter is deterministic post-processing).
+function observe!(s::Seeker, w::World)
+    e = w.entities[s.id]
+    c = e.comp
+    # CONVENTION 3 — the unconditional draw, FIRST, before any target/geometry/impact gate. A FIXED
+    # 1 draw/tick (scalar in-plane; the vector form's 2 ⟂ draws are NOT used — FINDINGS decision 3).
+    n = randn(w.rng)
+
+    tgt = _nearest_target(w, e)
+    tgt === nothing && return nothing        # no LOS to measure (load validates ≥1 target); draw taken
+
+    dt = Float64(get(c, :dt_s_seeker, 1.0e-3))
+    σ  = max(Float64(get(c, :sigma_seek, 3.0e-3)), 0.0)   # σ≥0 floor (a live slider can't go negative)
+    α  = Float64(get(c, :alpha, 0.30))                    # α-β gains (load-validated 0<α<1, β>0; the
+    β  = Float64(get(c, :beta,  0.05))                    # filter floors β/dt, so no consumer re-clamp)
+
+    # Truth LOS in the x-z engagement plane and the noisy MEASURED angle (NOT wrapped — only the
+    # filter's/raw's innovation-DIFFERENCE wraps; wrapping the absolute angle here is a needless op).
+    û_tru  = los_unit(e.pos, tgt.pos)
+    λ_tru  = atan(û_tru[3], û_tru[1])
+    λ_meas = λ_tru + σ * n
+
+    # Lazy first-tick init (the `e0_j` precedent): seed the raw memory + α-β state, λ̇ = 0 both paths.
+    if !get(c, :seek_init, false)
+        c[:seek_lambda_prev]   = λ_meas
+        c[:seek_lambda_est]    = λ_meas
+        c[:seek_lambdadot_est] = 0.0
+        c[:seek_init]          = true
+        λ̇_raw = 0.0
+        λ_est = λ_meas; λ̇_est = 0.0
+    else
+        # RAW foil: finite-difference consecutive noisy angles (amplifies the angle noise by 1/dt).
+        λ_prev = Float64(c[:seek_lambda_prev])
+        λ̇_raw  = wrap_angle(λ_meas - λ_prev) / dt
+        c[:seek_lambda_prev] = λ_meas
+        # FILTERED: one α-β predict–correct step (updates state EVERY tick, both rungs → warm + invariant).
+        λ_est = Float64(c[:seek_lambda_est]); λ̇_est = Float64(c[:seek_lambdadot_est])
+        λ_est, λ̇_est = alpha_beta_los_step(λ_est, λ̇_est, λ_meas, dt; α = α, β = β)
+        c[:seek_lambda_est]    = λ_est
+        c[:seek_lambdadot_est] = λ̇_est
+    end
+
+    # The rung selects WHICH (λ̇, λ) PN consumes; the draw count is identical either way. Reconstruct
+    # the in-plane `ω = Vec3(0, −λ̇, 0)` and `û = (cos λ, 0, sin λ)` from the CHOSEN rate/angle (a
+    # CONSISTENT estimate source — FINDINGS decision f). `decide!` supplies TRUTH `Vc`.
+    rung = get(w.fidelity, :seeker, :filtered)
+    λ̇_used, λ_used = rung === :raw ? (λ̇_raw, λ_meas) : (λ̇_est, λ_est)
+    c[:seeker_omega] = Vec3(0.0, -λ̇_used, 0.0)
+    c[:seeker_los]   = Vec3(cos(λ_used), 0.0, sin(λ_used))
+
+    # Seeker telemetry — phase-3 observe! is POST-`empty!(w.env)` (the radar-readout phase), so a
+    # direct `w.env[:telemetry]` write survives. All SCALARS (no Array → no `float()`-crash in the
+    # client). λ̇ is SIGNED → `_finite_coord`; σ is a magnitude → `_finite`.
+    tel = get!(() -> Dict{String,Any}(), w.env, :telemetry)
+    sid = String(s.id)
+    tel["$sid.lambda_dot_raw"]  = _finite_coord(λ̇_raw)         # naïve finite-diff (jitters under :raw)
+    tel["$sid.lambda_dot_filt"] = _finite_coord(λ̇_est)         # α-β estimate (smooth — always available)
+    tel["$sid.lambda_dot_used"] = _finite_coord(λ̇_used)        # the one PN actually consumed this tick
+    tel["$sid.sigma_seek"]      = _finite(σ)
     return nothing
 end

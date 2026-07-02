@@ -626,3 +626,169 @@ end
         end
     end
 end
+
+# --- slice 11 gate 2: the noisy Seeker wired — the missile's FIRST observe! (phase 3) ---------
+# "A missile is integrate! + observe! + decide!" (HANDOFF §3) COMPLETES here. PN reads a MEASURED
+# LOS (noisy angle → α-β LOS-rate filter) instead of truth. autopilot :ideal / guidance :pn HELD so
+# the miss isolates the SEEKER/filter (the slice-10 isolation, one knob further). Pins: observe!
+# writes comp[:seeker_omega]/[:seeker_los] and decide! feeds them to pn_accel_from_omega (the phase-
+# 3→phase-4 seam); FILTERED miss ≪ RAW miss on the wire (the Lesson); :raw SATURATES while :filtered
+# doesn't; the :raw↔:filtered trajectories DIFFER (not-a-dead-knob); the Seeker draws EXACTLY 1
+# randn/tick (draw-count-invariance — the FIRST non-vacuous RNG pin in the missile arc); a huge
+# σ_seek slider pegs a_max but never crashes a tick; loader arms [BallisticMissile, Seeker,
+# Autopilot] + rejects bad gains. Numbers PROBED against this live decide!→integrate! path
+# (slice11_gate2_measure): σ=3 mrad, α=0.30, β=0.05 → filtered ~0.9 m, raw ~713 m, sat 0.01 vs 0.80.
+@testset "guided missile — noisy seeker + α-β LOS-rate filter wired (slice 11, :seeker)" begin
+    dt = 1.0e-3
+    norm3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # The slice-10 crossing (slice10_pn geometry) + a Seeker (phase-3 observe!). SEED matters now —
+    # the seeker is the FIRST w.rng consumer in the missile arc (the RNG inflection).
+    function seeker_world(; seeker = :filtered, seed = 0, sigma = 3.0e-3, α = 0.30, β = 0.05,
+                          n_pn = 4.0, r_stop = 30.0, a_max = 3000.0)
+        w = World(seed = seed, fidelity = Dict(:autopilot => :ideal, :guidance => :pn, :seeker => seeker))
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0),
+            vel = Vec3(700cosd(12), 0.0, 700sind(12)),
+            comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                :k_guid => 3.0, :n_pn => n_pn, :r_stop => r_stop,
+                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :a_max => a_max,
+                :sigma_seek => sigma, :alpha => α, :beta => β))
+        w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(6000.0, 0.0, 4200.0),
+            vel = Vec3(-800.0, 0.0, 200.0), comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:tgt1)]
+    end
+    # Fly to FIRST CPA (the slice-10 discipline — miss at CPA from TRUTH; the seeker corrupts the
+    # guidance, never the CPA measurement). Collects the saturation fraction over steered ticks.
+    function fly_cpa!(w, subs; n = 40000, open_hold = 200)
+        miss = Inf; nsat = 0; nguid = 0; opening = 0; prev = Inf
+        for _ in 1:n
+            tick!(w, subs, dt); empty!(w.events)
+            tel = w.env[:telemetry]; r = tel["m1.los_range"]
+            miss = min(miss, r)
+            tel["m1.saturated"] > 0.5 && (nsat += 1); nguid += 1
+            opening = r > prev ? opening + 1 : 0; prev = r
+            get(w.entities[:m1].comp, :impacted, false) && break
+            r < 1.0 && break
+            (opening >= open_hold && r > miss + 50.0) && break
+        end
+        return (miss = miss, sat_frac = nsat / max(nguid, 1))
+    end
+
+    @testset "observe! writes seeker_omega/los; decide! feeds them to pn_accel_from_omega (the seam)" begin
+        w, subs = seeker_world(seeker = :filtered, seed = 0)
+        for _ in 1:100; tick!(w, subs, dt); empty!(w.events); end   # past tick 1 (ω=0) → a real ω
+        e = w.entities[:m1]; c = e.comp; tgt = w.entities[:tgt1]
+        @test haskey(c, :seeker_omega) && c[:seeker_omega] isa Vec3
+        @test haskey(c, :seeker_los)   && c[:seeker_los]   isa Vec3
+        @test norm3(c[:seeker_omega]) > 0.0                          # a real (nonzero) estimated ω — teeth
+        # ω is in-plane (∥ ±y): the scalar reconstruction Vec3(0,−λ̇,0) has ZERO x/z components.
+        @test c[:seeker_omega][1] == 0.0 && c[:seeker_omega][3] == 0.0
+        # decide! consumed EXACTLY what observe! wrote (the phase-3→phase-4 seam): a_ctrl matches
+        # pn_accel_from_omega(û_seek, ω_seek, TRUTH Vc) clamped — û FIRST, ω SECOND (an arg-swap
+        # flips the command sign). Reads truth Vc from the post-integrate state decide! used.
+        Vc = -range_rate(tgt.pos - e.pos, tgt.vel - e.vel)           # truth closing speed (§ scope)
+        expected = clamp_accel(pn_accel_from_omega(c[:seeker_los], c[:seeker_omega], Vc; N = 4.0), 3000.0)
+        @test c[:a_ctrl] ≈ expected atol = 1e-9
+    end
+
+    @testset "filtered miss ≪ raw miss on the wire (the Lesson, autopilot :ideal)" begin
+        rf = fly_cpa!(seeker_world(seeker = :filtered, seed = 0)...)
+        rr = fly_cpa!(seeker_world(seeker = :raw,      seed = 0)...)
+        @test rf.miss < 5.0                                          # α-β recovers ≈ truth (measure: 0.90 m)
+        @test rr.miss > 100.0                                        # naïve finite-diff blows up (measure: 713 m)
+        @test rr.miss > 20 * rf.miss                                # the RATIO is the headline (measure: 793×)
+    end
+
+    @testset ":raw saturates a_max; :filtered does not (the saturation tell, reused from slice 10)" begin
+        rf = fly_cpa!(seeker_world(seeker = :filtered, seed = 0)...)
+        rr = fly_cpa!(seeker_world(seeker = :raw,      seed = 0)...)
+        @test rr.sat_frac > 0.3                                      # N·Vc·(σ/dt) pegs a_max (measure: 0.80)
+        @test rf.sat_frac < 0.1                                      # the filter keeps demand in-band (measure: 0.01)
+    end
+
+    @testset "the :raw↔:filtered trajectories DIFFER (not-a-dead-knob — the new combo's physics arm)" begin
+        wr, sr = seeker_world(seeker = :raw, seed = 0)
+        wf, sf = seeker_world(seeker = :filtered, seed = 0)
+        for _ in 1:1500
+            tick!(wr, sr, dt); empty!(wr.events)
+            tick!(wf, sf, dt); empty!(wf.events)
+        end
+        # a toggle MOVES the missile (trajectory-changing); the DRAW-INVARIANCE half of the new
+        # class-4a-AND-physics-changing combo is pinned in test_determinism (measure: max Δpos 122 m).
+        @test norm3(wr.entities[:m1].pos - wf.entities[:m1].pos) > 10.0
+    end
+
+    @testset "the Seeker draws EXACTLY 1 randn/tick (draw-count-invariance, convention 3)" begin
+        # The seeker is the ONLY w.rng consumer, so after N ticks w.rng must equal a fresh
+        # Xoshiro(seed) advanced by N randn draws — proving 1 UNCONDITIONAL draw/tick, invariant to
+        # the rung. Cross well past intercept (N=3000, post-CPA coast) so late ticks count too.
+        for seeker in (:filtered, :raw), N in (500, 3000)
+            w, subs = seeker_world(seeker = seeker, seed = 7)
+            for _ in 1:N; tick!(w, subs, dt); empty!(w.events); end
+            ref = Xoshiro(7); for _ in 1:N; randn(ref); end
+            @test randn(copy(ref)) == randn(copy(w.rng))            # exactly N draws over N ticks
+        end
+    end
+
+    @testset "a huge σ_seek slider pegs a_max but never crashes a tick (live-slider guard)" begin
+        # sigma_seek is a KNOB — an absurd live value must not throw / NaN (the α-β β/dt floor + the
+        # clamp_accel crash-guard). Peg it (5 rad of angular noise) and fly: no throw, all finite.
+        w, subs = seeker_world(seeker = :raw, seed = 0, sigma = 5.0)
+        ok = true
+        for _ in 1:800
+            tick!(w, subs, dt); empty!(w.events)
+            tel = w.env[:telemetry]
+            ok &= all(isfinite, w.entities[:m1].comp[:a_ctrl]) && all(isfinite, w.entities[:m1].pos) &&
+                  isfinite(tel["m1.a_ach"]) && isfinite(tel["m1.lambda_dot_raw"])
+            ok || break
+        end
+        @test ok
+    end
+
+    @testset "loader: a seeker missile arms [BallisticMissile, Seeker, Autopilot]; rejects bad gains" begin
+        base = """
+        name: sk
+        seed: 11
+        dt_physics: 0.001
+        fidelity: {autopilot: ideal, guidance: pn, seeker: filtered}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 700.0
+              elevation_deg: 12.0
+              cd_area_m2: 0.0
+              guidance: {k_guid: 3.0, n_pn: 4.0, r_stop: 30.0, kp: 2.0, tau: 0.3, a_max: 3000.0}
+              seeker: {sigma_seek: 0.003, alpha: 0.30, beta: 0.05}
+          - id: tgt1
+            kind: target
+            pos: [6000.0, 0.0, 4200.0]
+            vel: [-800.0, 0.0, 200.0]
+            target: {rcs_m2: 1.0}
+        """
+        mktempdir() do dir
+            good = joinpath(dir, "good.yaml"); write(good, base)
+            scn = load_scenario(good)
+            m = scn.world.entities[:m1]
+            # a SEEKER missile: BallisticMissile (phase-1) + Seeker (phase-3) + Autopilot (phase-4),
+            # NOT ConstantVelocity (the double-integration guard).
+            @test any(s -> s isa Seeker, scn.subs)
+            @test any(s -> s isa BallisticMissile, scn.subs)
+            @test any(s -> s isa Autopilot, scn.subs)
+            @test !any(s -> s isa ConstantVelocity && s.id === :m1, scn.subs)
+            # the gains land at the CONSUMED comp keys (the slider→consumed-key discipline)
+            @test m.comp[:sigma_seek] == 0.003 && m.comp[:alpha] == 0.30 && m.comp[:beta] == 0.05
+            @test get(scn.world.fidelity, :seeker, :filtered) === :filtered   # the NEW key, now real
+            # rejects: σ<0, α∉(0,1), β≤0 are AUTHORED load errors (a live slider is floored/clamped)
+            for (tag, patt, repl) in (("negsig", "sigma_seek: 0.003", "sigma_seek: -0.001"),
+                                      ("ahi",    "alpha: 0.30", "alpha: 1.0"),
+                                      ("alo",    "alpha: 0.30", "alpha: 0.0"),
+                                      ("blo",    "beta: 0.05",  "beta: 0.0"))
+                p = joinpath(dir, "$tag.yaml"); write(p, replace(base, patt => repl))
+                @test_throws ErrorException load_scenario(p)
+            end
+        end
+    end
+end

@@ -129,13 +129,22 @@ const EP_MODES = (:none, :freq_agility, :sidelobe_blanking)
 # AND physics-changing (a :pursuit↔:pn toggle CHANGES the trajectory, no RNG). Orthogonal to
 # `:autopilot` (outer vs inner loop); slice-10 scenarios pin `:autopilot=:ideal` so the one client
 # button toggles one lesson. Referencing GUIDANCE_MODES here (not re-listing) is one-list-no-drift.
+# `:seeker` (slice-11 noisy seeker; rungs `SEEKER_MODES` from estimation.jl, in scope here) is a
+# GENUINELY NEW fidelity-class COMBO — do NOT copy either prior template: it is DRAW-INVARIANT
+# (class 4a, the `:estimator` shape — the Seeker draws ONE `randn` sample every tick on BOTH rungs,
+# the filter is pure post-processing, so `set_fidelity` may INTRODUCE it freely, UNLIKE `:cfar`'s
+# draw-topology flip) YET TRAJECTORY-CHANGING (the slice-10 shape — a `:raw↔:filtered` toggle selects
+# which ω PN consumes, so it MOVES the missile; NOT toggle-bit-identical, NOT a dead knob). It is
+# ALSO the FIRST `w.rng` consumer in the missile arc, so the slice-8/9/10 "RNG-is-vacuous" language
+# does NOT apply here; byte-identity for slices 1–10 comes from NO Seeker existing (nothing reads the
+# key). Orthogonal to `:guidance`/`:autopilot` (slice-11 pins `:guidance=:pn`, `:autopilot=:ideal`).
 const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES,
                              ep = EP_MODES, estimator = ESTIMATOR_MODES,
                              deinterleaver = DEINTERLEAVER_MODES,
                              iono = GPS_TOGGLE, tropo = GPS_TOGGLE, clock = GPS_TOGGLE,
                              multipath = GPS_TOGGLE, noise = GPS_TOGGLE, raim = RAIM_MODES,
                              integrator = INTEGRATOR_MODES, autopilot = AUTOPILOT_MODES,
-                             guidance = GUIDANCE_MODES)
+                             guidance = GUIDANCE_MODES, seeker = SEEKER_MODES)
 
 # A perfect null (F⁴=0, even above the horizon), an antenna on the reflecting plane
 # (h→0), or a below-horizon mask all drive SNR→0, and `lin2db(0) = -Inf` would poison the

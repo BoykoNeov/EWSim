@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–10 COMPLETE & green — 1829 tests.** Full gate-by-gate as-built detail (exact numbers,
+**Slices 1–11 COMPLETE & green — 1921 tests.** Full gate-by-gate as-built detail (exact numbers,
 test names, watch-items, advisor-catches, per-slice run commands) lives in **`docs/STATUS.md`**;
 pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -75,10 +75,20 @@ pre-implementation plans in `docs/plans/sliceN.md`.
 - **Slice 10** — proportional navigation (outer loop) + g-limit saturation-as-lesson; `:guidance`
   pursuit vs pn (the reserved key filled, physics-changing). MISS is the honest headline (pn ≪
   pursuit); the a_max clamp BINDS on purpose (the slice-9 inversion). Closes the missile arc. (1829)
+- **Slice 11** — noisy seeker + LOS-rate filtering; `:seeker` raw vs filtered — the naïve finite-diff
+  `λ̇=Δλ/dt` amplifies angle noise → PN pegs a_max & misses wide, the α-β tracker recovers a smooth λ̇
+  → tight intercept. The missile's **first phase-3 `observe!`** ("integrate!+observe!+decide!" COMPLETE)
+  and the **first `w.rng` consumer in the missile arc** (the RNG inflection — conventions 3/11 now apply;
+  byte-identity from *no Seeker* on prior slices). NEW fidelity-class combo: draw-invariant (4a,
+  introducible) AND trajectory-changing. (1921)
 
-**Next: slice 11** — HANDOFF §11: noisy seekers / LOS-rate filtering + augmented PN (the maneuvering
-target the slice-10 ~2g floor teed up). Not yet planned — write `docs/plans/slice11.md` first (the
-staged-gate discipline below). Re-read HANDOFF §11 for the frozen scope before planning.
+**Next: slice 12** — HANDOFF §10 item 11's deferred half: **augmented PN (`N/2·a_T` feedforward) + a
+maneuvering-target mover**. The RNG-free payoff of slice 10's ~2g gravity floor (gravity-as-unmodeled-
+target-accel) and slice 11's clean filter: even a perfect seeker leaves plain PN lagging a *maneuvering*
+target by the target-accel term — APN closes it. **User-ratified split (2026-07-02):** slice 11 was
+seeker+filter ONLY; APN + the maneuvering mover are slice 12 (needs a new mover; cleanly separable). No
+plan written yet — draft `docs/plans/slice12.md` (gate-0 probe + 3 gates) and re-read HANDOFF §10 item 11
++ §11 Tier A before implementing.
 
 ## Conventions / hard-won disciplines
 

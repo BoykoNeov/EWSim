@@ -106,3 +106,101 @@ _ell_area(C) = sqrt(max(C[1,1]*C[2,2] - C[1,2]^2, 0.0))   # ∝ 1σ ellipse area
         @test_throws ErrorException bearings_fix([0.0, 0.1], S, fill(0.02,2); estimator = :nope)
     end
 end
+
+# --- the α-β LOS-rate filter (slice 11 gate 1) --------------------------------------
+# The recursive seeker filter (NOT a gauss_newton reuse — those are batch). These are
+# OPEN-LOOP primitive checks (synthetic ramp + noise, NO guidance loop): NECESSARY but
+# NOT SUFFICIENT (advisor #1) — the (α,β) that minimise open-loop variance are NOT the
+# ones that minimise closed-loop miss (over-smoothing → lag near CPA → the β U-shape),
+# which the gate-0 probe / gate-2 wire test SWEEP. Here we pin the PRIMITIVE's math:
+#   • rate convergence — a clean constant-ω ramp drives λ̇_est → ω_true (external anchor:
+#     the KNOWN ramp rate, α-β's zero-lag property for a constant-velocity input, NOT a
+#     self-calibrated round-trip);
+#   • variance reduction — on a NOISY ramp Var(λ̇_filt) ≪ Var(λ̇_raw), with λ̇_raw anchored
+#     to the analytic finite-diff std `σ√2/dt` (the external "why the filter matters"
+#     baseline — the noise the naïve :raw path amplifies); own Xoshiro (convention 11);
+#   • α/β scaling — larger β tracks a ramp FASTER (open-loop; the gain does what it says —
+#     explicitly NOT a miss claim, which is the closed-loop U-shape story);
+#   • degenerate guards — dt→0 / huge meas / extreme gains stay finite (no throw / no NaN).
+@testset "estimation: α-β LOS-rate filter (seeker, slice 11)" begin
+    dt = 1e-3
+
+    @testset "SEEKER_MODES is the (:raw, :filtered) source of truth" begin
+        @test SEEKER_MODES == (:raw, :filtered)
+    end
+
+    # Run the scalar α-β filter over a CLEAN constant-ω LOS ramp λ(k) = λ0 + ω_true·k·dt,
+    # returning the final (λ_est, λ̇_est). Init on the first sample (the Seeker's gate-2 init).
+    function ramp_track(ω_true, α, β; λ0 = 0.1, nsteps = 2000)
+        λ_meas(k) = λ0 + ω_true * (k * dt)
+        λ_est = λ_meas(0); λ̇_est = 0.0
+        for k in 1:nsteps
+            λ_est, λ̇_est = alpha_beta_los_step(λ_est, λ̇_est, λ_meas(k), dt; α = α, β = β)
+        end
+        return λ_est, λ̇_est
+    end
+
+    @testset "rate convergence: clean ramp → λ̇_est == ω_true (external anchor)" begin
+        # α-β has ZERO steady-state lag for a constant-velocity (ramp) input, so the estimated
+        # rate converges to the KNOWN ramp rate (not a self-calibrated round-trip). Probe: the
+        # residual settles to ~1e-13 by 2000 steps — atol=1e-6 clears it with vast margin.
+        for ω_true in (0.5, -0.3, 0.13)
+            _, λ̇ = ramp_track(ω_true, 0.5, 0.2)
+            @test λ̇ ≈ ω_true atol = 1e-6
+        end
+    end
+
+    @testset "variance reduction: Var(λ̇_filt) ≪ Var(λ̇_raw ≈ σ√2/dt) (own Xoshiro)" begin
+        # A NOISY ramp: λ_meas = clean ramp + σ·randn. The :raw foil finite-differences
+        # consecutive noisy angles (λ̇_raw = wrap(λ_meas−λ_prev)/dt) — std ≈ σ√2/dt analytically
+        # (the noise the filter must reject). The α-β estimate's std is ≫ smaller (probe ~11.8×).
+        σ = 3e-3; ω_true = 0.5; α = 0.5; β = 0.1
+        rng = Xoshiro(11)
+        λ_clean(k) = 0.1 + ω_true * (k * dt)
+        λ_prev = λ_clean(0) + σ * randn(rng)
+        λ_est = λ_prev; λ̇_est = 0.0
+        nsteps = 8000; burn = 2000
+        n = 0; sraw = 0.0; sraw2 = 0.0; sfil = 0.0; sfil2 = 0.0
+        for k in 1:nsteps
+            λ_meas = λ_clean(k) + σ * randn(rng)
+            λ̇_raw  = EWSim.wrap_angle(λ_meas - λ_prev) / dt
+            λ_est, λ̇_est = alpha_beta_los_step(λ_est, λ̇_est, λ_meas, dt; α = α, β = β)
+            if k > burn
+                n += 1
+                sraw += λ̇_raw; sraw2 += λ̇_raw^2
+                sfil += λ̇_est; sfil2 += λ̇_est^2
+            end
+            λ_prev = λ_meas
+        end
+        std_raw = sqrt(sraw2/n - (sraw/n)^2)
+        std_fil = sqrt(sfil2/n - (sfil/n)^2)
+        analytic_raw = σ * sqrt(2) / dt                          # the external finite-diff baseline
+        @test std_raw ≈ analytic_raw rtol = 0.05                 # probe: 4.241 vs 4.243 (raw IS the amplifier)
+        @test std_fil < std_raw / 8                              # probe: ~11.8× reduction — the filter works
+    end
+
+    @testset "α/β scaling: larger β tracks a ramp faster (open-loop, NOT a miss claim)" begin
+        # From a zero-rate start on a clean ramp, a LARGER β drives λ̇_est toward ω_true in
+        # fewer steps (the gain does what it says). Measure the rate error at a FIXED early
+        # step count: β=0.10 is far ahead of β=0.02 (probe: err@100 4e-12 vs 2e-3). This is an
+        # OPEN-LOOP tracking-speed claim — the closed-loop "which β gives the best miss" is the
+        # β U-shape (gate 0 / gate 2), deliberately NOT asserted here.
+        ω_true = 0.5
+        track_err(β) = abs(ramp_track(ω_true, 0.4, β; nsteps = 100)[2] - ω_true)
+        @test track_err(0.10) < track_err(0.02)                  # larger β → faster tracking
+        @test track_err(0.02) < 1e-2                             # even the slow gain is tracking (probe ~2e-3)
+    end
+
+    @testset "degenerate guards: dt→0 / huge meas / extreme gains stay finite" begin
+        # dt→0: the β/dt rate-correction is floored (no divide-by-zero) → huge-but-FINITE, no NaN.
+        g = alpha_beta_los_step(0.1, 0.2, 0.15, 0.0; α = 0.5, β = 0.1)
+        @test all(isfinite, g)
+        # a huge measurement is bounded by wrap_angle → the innovation stays in [−π,π] → finite.
+        g = alpha_beta_los_step(0.1, 0.2, 1.0e9, dt; α = 0.5, β = 0.1)
+        @test all(isfinite, g)
+        # extreme gains (α at the 0 and 1 edges, β large) — still no throw / no NaN (the caller
+        # validates 0<α<1, β>0 at LOAD — gate 2 — but the primitive itself must stay safe).
+        @test all(isfinite, alpha_beta_los_step(0.1, 0.2, 0.15, dt; α = 0.0, β = 0.0))
+        @test all(isfinite, alpha_beta_los_step(0.1, 0.2, 0.15, dt; α = 1.0, β = 0.9))
+    end
+end

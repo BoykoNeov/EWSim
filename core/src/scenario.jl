@@ -272,6 +272,29 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             error("missile '$id': cd_area_m2 must be ≥ 0 (got $(comp[:cd_area_m2]))")
         comp[:rho]        ≥ 0 || error("missile '$id': rho must be ≥ 0 (got $(comp[:rho]))")
         subs = Subsystem[BallisticMissile(id)]
+        # Slice 11: a `seeker:` sub-block adds the phase-3 `Seeker` (the missile's first sensor) —
+        # a noisy LOS-angle seeker feeding the α-β LOS-rate filter that PN reads instead of truth.
+        # Its `sigma_seek`/`alpha`/`beta` land at KNOB-ADDRESSABLE comp keys (a gate-3 slider must
+        # name a real comp key) read with DEFAULTS at the consumer (a bare block / live slider can't
+        # KeyError a tick). Armed BEFORE the Autopilot so the entity is `[BallisticMissile, Seeker,
+        # Autopilot]` (the plan's order; phases separate observe!/decide! regardless). A slice-1..10
+        # missile has NO `seeker:` block → no Seeker → no `w.rng` draw → byte-identical (the seeker
+        # is the FIRST missile-arc RNG consumer; byte-identity comes from it NOT EXISTING). The
+        # α-β gains are load-validated (0<α<1, β>0) so a live filter can't be silently nulled; σ≥0
+        # (a negative angular noise is meaningless — the consumer also floors it).
+        if haskey(mb, "seeker")
+            sb = mb["seeker"]
+            comp[:sigma_seek] = _f64(get(sb, "sigma_seek", 3.0e-3))   # 1-σ LOS angular noise (rad)
+            comp[:alpha]      = _f64(get(sb, "alpha", 0.30))          # α-β angle gain (0<α<1)
+            comp[:beta]       = _f64(get(sb, "beta",  0.05))          # α-β rate gain (β>0)
+            comp[:sigma_seek] >= 0 ||
+                error("missile '$id': seeker.sigma_seek must be ≥ 0 (got $(comp[:sigma_seek]))")
+            (0 < comp[:alpha] < 1) ||
+                error("missile '$id': seeker.alpha must be in (0,1) (got $(comp[:alpha]))")
+            comp[:beta] > 0 ||
+                error("missile '$id': seeker.beta must be > 0 (got $(comp[:beta]))")
+            push!(subs, Seeker(id))
+        end
         # Slice 9: a GUIDED missile carries a `guidance:` sub-block (k_guid/kp/ki/kd/tau/a_max). Its
         # presence adds the `Autopilot` (phase-4 decide!) and reads the gains into comp — the gain
         # keys are KNOB-ADDRESSABLE (a gate-3 slider must name a real comp key), and the consumer

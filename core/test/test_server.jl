@@ -179,6 +179,27 @@ function _pn_scenario(seed; emit_every = 4, fidelity = Dict(:autopilot => :ideal
     return Scenario("pn", w, subs, knobs, 1.0e-3, emit_every)
 end
 
+# A slice-11 seeker scenario: the guided interceptor with [BallisticMissile, Seeker, Autopilot] under
+# `:seeker` (default :filtered) — the FIRST server scenario that consumes w.rng (the Seeker draws one
+# randn/tick), so it carries a seed. σ_seek/α/β are live sliders. The slice-10 crossing (clean filtered
+# intercept, catastrophic raw miss).
+function _seeker_scenario(seed; emit_every = 4,
+                          fidelity = Dict(:autopilot => :ideal, :guidance => :pn, :seeker => :filtered))
+    w = World(seed = seed, fidelity = fidelity)
+    w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0),
+        vel = Vec3(700cosd(12), 0, 700sind(12)),
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+            :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0, :kp => 2.0, :ki => 0.0, :kd => 0.0,
+            :tau => 0.3, :a_max => 3000.0, :sigma_seek => 3.0e-3, :alpha => 0.30, :beta => 0.05))
+    w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(6000.0, 0, 4200.0),
+        vel = Vec3(-800.0, 0, 200.0), comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+    subs = Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:tgt1)]
+    knobs = Knob[Knob(:m1, :sigma_seek, 0.0, 0.05, "σ_seek (LOS noise)"),
+                 Knob(:m1, :alpha, 0.01, 0.99, "α (angle gain)"),
+                 Knob(:m1, :beta, 1.0e-4, 1.0, "β (rate gain)")]
+    return Scenario("seeker", w, subs, knobs, 1.0e-3, emit_every)
+end
+
 @testset "server" begin
 
     @testset "handle_command! mutates state per the §5 table" begin
@@ -575,6 +596,60 @@ end
             ok || break
         end
         @test ok                                                   # pos + telemetry finite through the huge-N demand
+    end
+
+    @testset "set_fidelity :seeker — write/reject + introduce-safe (slice-11 noisy seeker)" begin
+        # Slice-11 gate 2: :seeker (rungs SEEKER_MODES from estimation.jl) joins the per-key
+        # LIVE_FIDELITY_MODES table AUTOMATICALLY (no server change). The NEW fidelity-class COMBO:
+        # DRAW-INVARIANT (class 4a — both rungs draw the same 1 randn/tick, the filter is pure
+        # post-processing → like :ep/:estimator and UNLIKE :cfar it carries NO introduce-guard) YET
+        # TRAJECTORY-CHANGING (the trajectory change is pinned in test_determinism; here only the wire
+        # write/reject + introduce-allowed).
+        srv = EWSim.Server(_seeker_scenario(1))
+        w = srv.scn.world
+        @test w.fidelity[:seeker] === :filtered                    # the scenario default
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "seeker", :value => "raw"))
+        @test w.fidelity[:seeker] === :raw
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "seeker", :value => "filtered"))
+        @test w.fidelity[:seeker] === :filtered
+        # ...a bad rung is REJECTED before landing (would throw in observe! → kill the session).
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "seeker", :value => "kalman"))
+        # INTRODUCING :seeker mid-run is ALLOWED (class 4a — introducing it changes NO draw count, the
+        # sharp contrast to :cfar's introduce-reject): inert on a radar world (no Seeker reads it), and
+        # draw-count-safe on a seeker world that omitted the key (defaulting to :filtered).
+        srv2 = EWSim.Server(_detect_scenario(1))
+        EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "seeker", :value => "raw"))
+        @test srv2.scn.world.fidelity[:seeker] === :raw            # inert on a radar world (nothing reads it)
+        srv3 = EWSim.Server(_seeker_scenario(1; fidelity = Dict(:autopilot => :ideal, :guidance => :pn)))
+        @test !haskey(srv3.scn.world.fidelity, :seeker)           # a seeker world that omitted the key
+        EWSim.handle_command!(srv3, Dict(:type => "set_fidelity", :key => "seeker", :value => "raw"))
+        @test srv3.scn.world.fidelity[:seeker] === :raw           # introduced mid-run — draw-count-safe
+    end
+
+    @testset "live σ_seek / α / β sliders survive the tick (a huge σ pegs a_max, not a throw)" begin
+        # σ_seek, α, β are LIVE sliders — the FIRST live sliders on a path with an RNG draw. An absurd
+        # σ drives the raw finite-diff λ̇ to thousands of m/s² → the a_max clamp caps it (never a
+        # throw); α→edge / β→edge can't NaN the α-β step (the β/dt floor). The "a live slider can't
+        # crash a tick" watch-item, now with a draw in the loop.
+        srv = EWSim.Server(_seeker_scenario(2;
+            fidelity = Dict(:autopilot => :ideal, :guidance => :pn, :seeker => :raw)))
+        w = srv.scn.world
+        for (k, v) in (("sigma_seek", 5.0), ("alpha", 0.99), ("beta", 1.0))
+            EWSim.handle_command!(srv, Dict(:type => "set_param", :target => "m1", :key => k, :value => v))
+        end
+        @test w.entities[:m1].comp[:sigma_seek] == 5.0            # slider wrote the consumed comp key
+        ok = true
+        for _ in 1:500
+            tick!(w, srv.scn.subs, srv.scn.dt_physics)            # must NOT throw
+            empty!(w.events)
+            tel = w.env[:telemetry]
+            ok &= all(isfinite, w.entities[:m1].pos) && isfinite(tel["m1.a_cmd"]) &&
+                  isfinite(tel["m1.a_demand"]) && isfinite(tel["m1.lambda_dot_raw"]) &&
+                  isfinite(tel["m1.lambda_dot_filt"])
+            ok || break
+        end
+        @test ok                                                  # pos + seeker telemetry finite through the huge σ
     end
 
     @testset "warmup! tolerates a guided-missile scenario (slice-9, radar-free, phase 1+4)" begin

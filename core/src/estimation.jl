@@ -24,6 +24,32 @@
 #   • :ml           — iterated Gauss-Newton seeded at pseudolinear, removes most bias.
 const ESTIMATOR_MODES = (:pseudolinear, :ml)
 
+# The seeker-fidelity rungs (slice 11) — the SINGLE source of truth for the `:seeker` key,
+# defined HERE (estimation.jl precedes radar.jl) so gate-2's `LIVE_FIDELITY_MODES` REFERENCES
+# it (the `ESTIMATOR_MODES`/`GUIDANCE_MODES` "mode-const-before-radar, one-list-no-drift"
+# precedent) and `set_fidelity` picks it up with no server change.
+#
+# A GENUINELY NEW FIDELITY-CLASS COMBINATION — name it precisely, copy NEITHER template
+# (advisor / gate-0 FINDINGS):
+#   • DRAW-INVARIANT (class 4a, the slice-5 `:estimator` shape): BOTH rungs draw the SAME
+#     one `randn(w.rng)` seeker sample every tick; the filter is pure post-processing → the
+#     rung is INTRODUCIBLE via `set_fidelity` (UNLIKE `:cfar`, which flips draw topology), and
+#     a `:raw↔:filtered` toggle never desyncs the RNG stream.
+#   • YET TRAJECTORY-CHANGING (the slice-10 `:guidance` shape): the toggle selects WHICH `ω`
+#     PN consumes (`:raw` → naïve finite-difference `λ̇`, `:filtered` → the α-β estimate), so it
+#     MOVES the missile — NOT bit-identical (do NOT copy the slice-5 "toggle-bit-identical"
+#     language), and NOT a dead knob.
+# This is also the FIRST `w.rng` consumer in the missile arc: the slice-8/9/10 "RNG-is-vacuous"
+# boilerplate INVERTS here — conventions 3 (unconditional draw) and 11 (own Xoshiro for MC)
+# now APPLY. Byte-identity for slices 1–10 comes from the Seeker NOT EXISTING there, NOT from a
+# draw-skipping `:truth` rung (there is none; "truth-fed PN" IS slice 10 — no Seeker).
+#   • :raw      — the naïve foil: finite-difference consecutive noisy LOS angles
+#     (`λ̇_raw = wrap(λ_meas − λ_prev)/dt`), amplifying the angle noise by `1/dt`.
+#     PN's `N·Vc·λ̇_raw` then carries thousands of m/s² of noise → `a_max` pegs, the miss opens.
+#   • :filtered — the α-β tracker (`alpha_beta_los_step`) estimates `λ̇` by predict–correct
+#     WITHOUT differentiating → a smooth rate, PN leads to a tight intercept, saturation off.
+const SEEKER_MODES = (:raw, :filtered)
+
 # Solve the weighted 2×2 normal equations M·p = g and return (p, cov = M⁻¹), with a
 # RELATIVE det floor (NOT an absolute one — det carries units and scales with sensor
 # count and 1/R̂, so an absolute floor is scale-fragile; advisor). For a PSD M,
@@ -209,4 +235,51 @@ function bearings_fix(thetas, positions, sigmas;
     end
 
     error("bearings_fix: unknown estimator :$estimator ($(join(ESTIMATOR_MODES, " | ")))")
+end
+
+# A tiny dt floor for the rate-correction divide (`β/dt`). estimation.jl precedes frames.jl,
+# so it can't borrow `_FRAME_EPS` — a local literal of the same 1e-12 magnitude. An EXACT no-op
+# at the tick `dt = 1e-3` (so it never perturbs the probe-validated behaviour); it only guards a
+# live `dt→0` from a divide-by-zero (the `autopilot_step` τ-floor precedent — clamp at consumer).
+const _ALPHA_BETA_DT_FLOOR = 1e-12
+
+"""
+    alpha_beta_los_step(λ_est, λ̇_est, λ_meas, dt; α = 0.3, β = 0.05) -> (λ_est′, λ̇_est′)
+
+One predict–correct step of an **α-β tracker** on a SCALAR line-of-sight ANGLE `λ` (radians,
+in the engagement plane) and its rate `λ̇` (rad/s) — the recursive seeker LOS-rate filter
+HANDOFF §10.11 names. **A NEW primitive, not a `gauss_newton`/`bearings_fix` reuse:** those
+batch neighbours are least-squares over a fixed measurement set; a seeker filter is RECURSIVE
+(predict–correct across ticks). Estimating the rate this way is the whole slice-11 lesson —
+it produces `λ̇` WITHOUT differentiating the noisy angle (the `:raw` finite-difference foil
+amplifies noise by `1/dt`; this does not).
+
+    λ_pred = λ_est + λ̇_est·dt                     (predict: the LOS keeps rotating at λ̇_est)
+    r      = wrap(λ_meas − λ_pred)                 (wrapped innovation — the ±π branch guard)
+    λ_est′ = λ_pred + α·r                          (correct the angle)
+    λ̇_est′ = λ̇_est + (β/dt)·r                      (correct the rate — the divide dt is floored)
+
+**SCALAR in-plane, NOT the vector-on-direction form** (gate-0 FINDINGS decision 3): the slice-11
+engagement is planar in x-z, so `ω ∥ ±y` and `λ = atan(Δz, Δx)` is well-conditioned (the LOS
+never approaches vertical → no atan2 singularity). Scalar avoids the vector form's tangent-
+injection / cross-innovation-sign / renormalize bug surface. The Seeker (gate 2) reconstructs
+`ω = Vec3(0, −λ̇_est, 0)` for PN from this scalar rate.
+
+`α ∈ (0,1)` (angle gain) and `β > 0` (rate gain) trade tracking lag vs noise rejection — larger
+`β` tracks faster / smooths less. **The gains are tuned for CLOSED-LOOP miss (a U-shape in β —
+gate 0 / gate 2), NOT open-loop variance** (over-smoothing trades noise for lag near CPA); this
+primitive is only the recursive step. RNG-free and dependency-free (`wrap_angle` only, the §12
+house style — no LinearAlgebra); the noise is injected in the Seeker BEFORE this is called, so
+the filter is deterministic post-processing. `dt→0` is floored (no divide-by-zero → no NaN); a
+huge `λ_meas` is bounded by `wrap_angle` → the step never throws / never NaNs (the caller
+validates `α`/`β` at load — gate 2 — this stays a safe pure primitive).
+"""
+function alpha_beta_los_step(λ_est::Real, λ̇_est::Real, λ_meas::Real, dt::Real;
+                             α::Real = 0.3, β::Real = 0.05)
+    dt_c   = max(Float64(dt), _ALPHA_BETA_DT_FLOOR)   # floor ONLY the β/dt divide (predict is divide-free)
+    λ_pred = λ_est + λ̇_est * dt
+    r      = wrap_angle(λ_meas - λ_pred)              # wrapped innovation (±π branch)
+    λ_est′ = λ_pred + α * r
+    λ̇_est′ = λ̇_est + (β / dt_c) * r
+    return λ_est′, λ̇_est′
 end
