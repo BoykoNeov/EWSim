@@ -125,8 +125,8 @@ end
 @testset "estimation: α-β LOS-rate filter (seeker, slice 11)" begin
     dt = 1e-3
 
-    @testset "SEEKER_MODES is the (:raw, :filtered) source of truth" begin
-        @test SEEKER_MODES == (:raw, :filtered)
+    @testset "SEEKER_MODES is the (:raw, :filtered, :scan) source of truth" begin
+        @test SEEKER_MODES == (:raw, :filtered, :scan)               # slice-13 :scan appended (the 4b rung)
     end
 
     # Run the scalar α-β filter over a CLEAN constant-ω LOS ramp λ(k) = λ0 + ω_true·k·dt,
@@ -202,5 +202,118 @@ end
         # validates 0<α<1, β>0 at LOAD — gate 2 — but the primitive itself must stay safe).
         @test all(isfinite, alpha_beta_los_step(0.1, 0.2, 0.15, dt; α = 0.0, β = 0.0))
         @test all(isfinite, alpha_beta_los_step(0.1, 0.2, 0.15, dt; α = 1.0, β = 0.9))
+    end
+end
+
+# The slice-13 countermeasures primitives (gate 1): the seeker angular-profile processing
+# layer — paint a lobe per return over a FIXED grid, cluster CFAR detections into peaks,
+# resolve the tracked bearing by discrimination. PURE / RNG-free / wrap-safe. Teeth
+# (convention 11): a DIFFERENT-expression recompute for the centroid (catches a transpose /
+# a wrap slip); the ±π SEAM (the slice-5 wrap trap); a symmetric midpoint EXTERNAL anchor;
+# the NN+halfwidth-reject gate semantics (gate-0 FINDINGS — NOT keep-in-gate-then-centroid);
+# the additivity anchor (a singleton centroid returns its bearing EXACTLY, `===`); the
+# determinism keystone (the profile LENGTH is decoy-count-INDEPENDENT — paint the fixed grid).
+@testset "estimation: countermeasures seeker primitives (slice 13)" begin
+
+    @testset "DISCRIMINATION_MODES is the (:none, :gated) source of truth" begin
+        @test DISCRIMINATION_MODES == (:none, :gated)
+    end
+
+    @testset "paint_angular_profile!: floor + additive Gaussian lobes, wrap-safe, fixed length" begin
+        grid  = collect(-0.1:0.005:0.1)                              # a fixed angular grid (41 bins)
+        power = similar(grid)
+
+        # ONE lobe: peaks AT the source bearing, floors far away, sits above the floor everywhere.
+        paint_angular_profile!(power, grid, [(0.0, 40.0)]; σ_beam = 0.015, floor = 1.0)
+        @test length(power) == length(grid)
+        @test grid[argmax(power)] == 0.0                             # the peak bin is the source bearing
+        @test power[argmax(power)] ≈ 41.0 atol = 1e-9               # floor + amp at Δλ=0
+        @test power[1]   ≈ 1.0 atol = 1e-6                          # a bin ≫ σ_beam away → the bare floor
+        @test all(>=(1.0), power)                                    # never below the floor
+
+        # ADDITIVITY over sources (the linear-power superposition — the decoy adds its own lobe):
+        # profile(A ∪ B) − floor == (profile(A) − floor) + (profile(B) − floor), elementwise.
+        pa = similar(grid); pb = similar(grid); pab = similar(grid)
+        paint_angular_profile!(pa,  grid, [(-0.03, 40.0)];              σ_beam = 0.015, floor = 1.0)
+        paint_angular_profile!(pb,  grid, [( 0.04, 80.0)];              σ_beam = 0.015, floor = 1.0)
+        paint_angular_profile!(pab, grid, [(-0.03, 40.0), (0.04, 80.0)]; σ_beam = 0.015, floor = 1.0)
+        @test pab .- 1.0 ≈ (pa .- 1.0) .+ (pb .- 1.0) atol = 1e-12
+
+        # LENGTH is decoy-count-INDEPENDENT (the determinism keystone — paint the fixed grid,
+        # never per-return): 0, 1, 2 sources all write exactly length(grid) cells.
+        for srcs in ([], [(0.0, 40.0)], [(-0.03, 40.0), (0.04, 80.0)])
+            paint_angular_profile!(power, grid, srcs; σ_beam = 0.015, floor = 1.0)
+            @test length(power) == length(grid)
+        end
+
+        # WRAP-SAFE painting: a source near +π lobes onto grid cells near −π (angularly adjacent
+        # across the seam) — a naïve (grid−λ) would floor them (the slice-5 seam trap).
+        seam_grid  = [3.10, 3.14, -3.14, -3.10]
+        seam_power = similar(seam_grid)
+        paint_angular_profile!(seam_power, seam_grid, [(3.14, 40.0)]; σ_beam = 0.02, floor = 1.0)
+        @test seam_power[3] > 30.0                                   # the −3.14 cell (wrap-dist ≈ 0.003) IS lit
+    end
+
+    @testset "intensity_centroid: singleton ===, weighted mean, ±π seam, symmetric anchor" begin
+        # ADDITIVITY ANCHOR: a single already-wrapped peak returns its bearing EXACTLY (=== ).
+        @test intensity_centroid([(0.37, 5.0)]) === 0.37
+        @test intensity_centroid([(-1.20, 2.0)]) === -1.20
+        # EMPTY → nothing (the Seeker then coasts on the prediction).
+        @test intensity_centroid(Tuple{Float64, Float64}[]) === nothing
+
+        # INTENSITY-WEIGHTED MEAN, pinned by a DIFFERENT expression (Σwλ/Σw, valid off the seam).
+        peaks = [(0.10, 1.0), (0.20, 3.0)]
+        expect = (1.0 * 0.10 + 3.0 * 0.20) / (1.0 + 3.0)             # = 0.175
+        @test intensity_centroid(peaks) ≈ expect atol = 1e-12
+        @test intensity_centroid(peaks) ≈ 0.175   atol = 1e-12
+
+        # SYMMETRIC EXTERNAL ANCHOR: equal weights → the geometric midpoint, ref-independent.
+        @test intensity_centroid([(0.1, 1.0), (0.3, 1.0)]) ≈ 0.2 atol = 1e-12
+
+        # ±π SEAM: a target near +π and a decoy near −π blend to the TOP of the circle (≈ ±π),
+        # NOT a jump to 0 (the naïve mean bug). c = wrap(3.1 + ½·wrap(−3.1−3.1)) ≈ π.
+        c = intensity_centroid([(3.1, 1.0), (-3.1, 1.0)])
+        @test abs(c) > 3.0                                           # near ±π (naïve mean would give ≈ 0)
+        @test abs(abs(c) - π) < 0.05                                 # actually at the seam top
+    end
+
+    @testset "extract_peaks: contiguous-run clustering → power-weighted centroids" begin
+        grid = [i * 0.01 for i in 0:20]                             # 21 bins, 0.00 … 0.20
+        z    = fill(1.0, 21)
+        z[4] = 2.0; z[5] = 5.0; z[6] = 3.0                          # run A: bins 4–6 (strongest at 5)
+        z[14] = 4.0; z[15] = 6.0                                     # run B: bins 14–15
+        det  = falses(21); det[4:6] .= true; det[14:15] .= true
+
+        peaks = extract_peaks(grid, z, det)
+        @test length(peaks) == 2                                    # two separated runs → two peaks
+
+        # Peak angle = the run's POWER-WEIGHTED centroid, pinned by a DIFFERENT expression
+        # (Σ grid·z / Σ z, valid off the seam); strength = Σ z over the run.
+        cenA = (0.03*2.0 + 0.04*5.0 + 0.05*3.0) / (2.0 + 5.0 + 3.0)  # = 0.041
+        cenB = (0.13*4.0 + 0.14*6.0)             / (4.0 + 6.0)       # = 0.136
+        @test peaks[1][1] ≈ cenA atol = 1e-12
+        @test peaks[1][2] ≈ 10.0 atol = 1e-12                       # strength A = Σ z
+        @test peaks[2][1] ≈ cenB atol = 1e-12
+        @test peaks[2][2] ≈ 10.0 atol = 1e-12
+
+        # ONE run → one peak; NO detections → an EMPTY vector (coast, never track nothing).
+        @test length(extract_peaks(grid, z, det .& (grid .< 0.10))) == 1
+        @test isempty(extract_peaks(grid, z, falses(21)))
+    end
+
+    @testset "validation_gate: nearest-neighbor within halfwidth, else coast (nothing)" begin
+        # NEAREST (not brightest): a brighter decoy at 0.19 is IGNORED for the closer target at
+        # 0.10 — the discriminator CFAR cannot be (a bright decoy is a strong detection).
+        peaks = [(0.10, 5.0), (0.19, 20.0)]
+        @test validation_gate(peaks, 0.10, 0.045) === 0.10          # target kept, brighter decoy rejected
+        # The decoy leaving the gate: prediction on the target, only the decoy in the list, beyond
+        # halfwidth → COAST (nothing); the caller holds the prediction (never tracks the decoy).
+        @test validation_gate([(0.20, 1.0)], 0.10, 0.045) === nothing
+        # Empty peaks → nothing.
+        @test validation_gate(Tuple{Float64, Float64}[], 0.10, 0.045) === nothing
+        # In-gate boundary: nearest within halfwidth is kept.
+        @test validation_gate([(0.14, 1.0)], 0.10, 0.045) === 0.14
+        # WRAP-SAFE gate: a peak near −π and a prediction near +π are angularly ADJACENT.
+        @test validation_gate([(-3.13, 1.0)], 3.13, 0.045) === -3.13
     end
 end

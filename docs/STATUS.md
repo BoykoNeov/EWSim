@@ -1512,6 +1512,70 @@ harder). Re-run the gate-3 proof headless: start that server, then `godot --head
 --script res://net/slice12_verify.gd` (exit 0 = pass). The UI test needs NO server: `godot --headless --path
 clients/godot --script res://net/slice12_ui_test.gd`. All 2008 tests: `pwsh tools/test.ps1`.
 
+**Slice 13 — countermeasures: a decoy that seduces a CFAR-scanning seeker + an α-β discrimination gate (the
+suite-fusing slice)** (HANDOFF §10 item 12 — "chaff (= RGPO), flares (IR decoys); seeker discrimination = the
+EW/CFAR sandbox … this stage *fuses the whole suite*") — **IN PROGRESS. Gate 0 (probe) + Gate 1 (primitives) done
+& green (2042 tests, +34); gates 2–3 pending.** Opens the countermeasures arc: put a `:decoy` in front of the
+slice-11 seeker and lift the slice-3 CFAR sandbox onto the LOS-ANGLE axis. The lesson is **seduction vs
+discrimination** — the seeker forms a NOISY angular-power profile, CFAR-DETECTS the peaks (target + decoy), and
+either blends them (`:none`, an intensity-weighted centroid walks the seeker OFF truth → miss) or DISCRIMINATES
+(`:gated`, an α-β predicted-LOS gate rejects the separated decoy → holds). **The fusion is HONEST because the two
+reused libs do DIFFERENT jobs:** detection.jl (`cfar_scan`, UNCHANGED) DETECTS the peaks in the noisy profile;
+estimation.jl (the α-β predicted-LOS gate) DISCRIMINATES which peak to keep — CFAR alone cannot reject a brighter
+decoy. **RGPO is REALIZED here in ANGLE** (the seeker walked off by a decoy IS the match-then-drag RGPO model,
+HANDOFF §9); the deferred piece is the *range-gate-against-a-tracking-radar* variant, NOT "RGPO". **Scope fork (b)
+RATIFIED (user, 2026-07-02):** a full continuous angular-profile CFAR-scan seeker (`:scan` rung), not the smaller
+two-discrete-return option. **DETERMINISM — the RNG inflection RE-INVERTS to APPLIES** (a seeker draws again;
+conventions 3/11 apply — do NOT carry slice-12's "no-RNG/vacuous" language), **and the class is 4b, NOT
+slice-11's 4a:** `:scan` FLIPS the draw topology (`1` → `2·N_p·N_bins` randn/tick via `_draw_profile!` on the
+fixed grid) → introduce-REJECTED like `:cfar`; `SEEKER_MODES` gains MIXED introduce-safety (`:raw↔:filtered`
+safe, any switch touching `:scan` rejected); `discrimination` is draw-invariant AMONG its rungs, trajectory-
+changing, and INERT without `:scan` (the `:raim`-without-GPS coupling) — "draw-invariant within a 4b host", NOT
+free-standing 4a. Planned FULL in `docs/plans/slice13.md`. **Deferred (named, convention 9):** the range-gate
+RGPO variant vs a tracking radar; the RF/IR seeker split + an IR env channel (§11 Tier A — chaff and flare are
+the SAME mechanic at this fidelity, an angular lobe + an intensity scalar; the scenario picks ONE); decoy
+dynamics (bloom/burn-out/timed-ejection/fall — slice-13 decoy is constant-velocity, constant-intensity, present
+from t=0); the 2-D az×el profile + monopulse (slice 13 scans ONE in-plane angle, a 1-D window); multiple/salvo
+decoys.
+
+Gate 0 (probe + config pin — DONE & advisor-confirmed, `M:\claud_projects\temp\slice13_probe\` `probe*.jl` +
+`FINDINGS.md`): pinned the angular grid/beam/CFAR config so the target + decoy lobes RESOLVE into two clean CFAR
+peaks (separation ≳ a beamwidth AND clear of the guard+training span — the slice-3 masked-close-target lesson on
+the angle axis, swept over the separation the engagement traverses so BOTH peaks survive CFAR throughout); the
+headline; the intensity ratio + separation + near-co-location start (clean first CPA, `:gated` locks truth first
+then the decoy lobe exits the gate); the sign/wrap; the `2·N_p·N_bins` draw-count invariance; miss-vs-true-target.
+**Two FINDINGS overrides of the plan (both carried into gate 1):** `paint_angular_profile!` was PROMOTED into the
+pure estimation.jl layer (kept OFF the byte-identity-critical radar.jl); and `validation_gate` is a
+NEAREST-NEIGHBOR + halfwidth-reject → `nothing`-coast (NOT the plan-§3 keep-in-gate-then-centroid, which re-blends
+the decoy and made `:gated` WORSE than `:none`).
+
+Gate 1 (primitive green — pure, closed-form, SI, RNG-free, no LinearAlgebra [`wrap_angle` only]; +34 tests, 2042):
+estimation.jl gains FOUR pure fns (all wrap-safe about a reference bearing — the ±π seam guard) + two mode tuples,
+all exported: **`paint_angular_profile!(power, grid, sources; σ_beam, floor=1.0)`** — floor every cell then ADD a
+Gaussian lobe `amp·exp(−½(Δλ/σ_beam)²)` per source (`Δλ=wrap_angle(grid−λ_s)`); the profile LENGTH is
+decoy-count-INDEPENDENT (paint-the-fixed-grid, the determinism keystone — the noisy floor is added downstream by
+`_draw_profile!`, so this stays RNG-free). **`intensity_centroid(peaks)`** — the intensity-weighted mean bearing
+about the STRONGEST-weight peak (self-contained ref, the additivity anchor: a singleton returns its bearing
+EXACTLY `===`; empty → `nothing`); serves double duty (within-cluster peak angle AND the `:none` cross-peak
+blend). **`extract_peaks(grid, z, detections)`** — cluster CONTIGUOUS detection runs → per-run
+`(intensity_centroid, Σz)`, grid order, no detections → empty. **`validation_gate(peaks, λ_pred, halfwidth)`** —
+the RGPO track-gate: the NEAREST peak to the α-β predicted bearing IF within `halfwidth`, else `nothing` (coast).
+**`SEEKER_MODES = (:raw, :filtered, :scan)`** (`:scan` appended — the 4b rung) + **`DISCRIMINATION_MODES =
+(:none, :gated)`**, both the one-list source of truth defined in estimation.jl (precedes radar.jl); gate 2's
+`LIVE_FIDELITY_MODES` will REFERENCE them (no re-list, the drift-catch). `alpha_beta_los_step` + `:raw`/`:filtered`
+UNCHANGED (byte-identity anchor). `test_estimation.jl` arms (explicit `atol`, convention 11): the centroid
+DIFFERENT-expression recompute (`Σwλ/Σw` off-seam); the singleton `===` additivity anchor; the ±π SEAM (target
+near +π, decoy near −π → blend to ≈±π, not a jump to 0 — the slice-5 wrap trap); a symmetric-midpoint EXTERNAL
+anchor; `extract_peaks` contiguous-run clustering → power-weighted centroids; the NN+halfwidth-reject gate
+semantics (the FINDINGS override); `paint_angular_profile!` floor+additive-lobe superposition, wrap-safe painting,
+and the fixed (decoy-count-independent) LENGTH; both mode tuples pinned. Slices 1–12 byte-identical (golden +
+determinism green — no RNG added, estimation.jl stays pure). **GATE-2 forward-flags (advisor):** (a) the
+grid-centering off-by-one MOVED (not vanished) — make `angular_grid(boresight, N_bins, bin_w)` a tiny TESTED
+helper (or pin an observe!-path bin assertion), don't bury it in `observe!`; (b) keep the gate `halfwidth ≥ 0.045`
+(the gate-0 `hw`) and validate it at LOAD — a tighter `hw` silently converts the gate's hold into a coast (couples
+to the masking window). NEXT: gate 2 (the `:decoy` kind + the `:scan` profile/scan/gate `observe!` + the
+`discrimination` rung + the `:scan`-introduce-reject `set_fidelity` guard + test_missile/determinism/server arms).
+
 ---
 
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +

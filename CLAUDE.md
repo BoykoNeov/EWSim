@@ -50,9 +50,9 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–12 COMPLETE & green — 2008 tests.** Full gate-by-gate as-built detail (exact numbers,
-test names, watch-items, advisor-catches, per-slice run commands) lives in **`docs/STATUS.md`**;
-pre-implementation plans in `docs/plans/sliceN.md`.
+**Slices 1–12 COMPLETE & green; slice 13 IN PROGRESS (gates 0–1 done) — 2042 tests.** Full gate-by-gate
+as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands) lives in
+**`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
 - **Slice 1** — radar → detection → ROC. Free-space radar eq, analytic+MC Pd (Swerling 0/1),
   the wire protocol + Godot socket seam, the server run-loop, the `batch.jl`/ROC path. (227)
@@ -89,10 +89,17 @@ pre-implementation plans in `docs/plans/sliceN.md`.
   again). Reads TRUTH `a_T` ("even a perfect seeker still lags"); gravity-comp PN + estimated `a_T` DEFERRED.
   Closes HANDOFF §10 item 10. (2008)
 
-**Next: slice 13 (roadmap item 12) — countermeasures**: chaff (= RGPO), flares (IR decoys); seeker
-discrimination = the EW/CFAR sandbox. HANDOFF §10 item 12 — "this stage *fuses the whole suite*." No plan
-written yet — draft `docs/plans/slice13.md` (gate-0 probe + 3 gates) and re-read HANDOFF §10 item 12 + §11
-Tier A before implementing. (The missile guidance arc — slices 8–12 — is now COMPLETE.)
+- **Slice 13 (roadmap item 12) — countermeasures (IN PROGRESS)**: a `:decoy` seduces the slice-11 seeker; the
+  slice-3 CFAR sandbox lifts onto the LOS-ANGLE axis (`:scan` rung); seduction (`:none` blend) vs discrimination
+  (`:gated` α-β predicted-LOS gate = the RGPO track-gate in angle). Plan: `docs/plans/slice13.md` (gate-0 probe +
+  3 gates; fork (b) — full continuous angular-profile CFAR scan — RATIFIED). **Gate 0 (probe) + Gate 1
+  (primitives: `paint_angular_profile!`/`intensity_centroid`/`extract_peaks`/`validation_gate` +
+  `SEEKER_MODES+=:scan` + `DISCRIMINATION_MODES`) DONE & green.** RNG inflection RE-INVERTS to APPLIES (a seeker
+  draws again, conventions 3/11); `:scan` is class 4b (draw-topology flip `1`→`2·N_p·N_bins`, introduce-rejected
+  like `:cfar`), `discrimination` draw-invariant-within-the-4b-host + inert without `:scan`. NEXT: gate 2 (the
+  `:decoy` kind + the `:scan` observe! + the `discrimination` rung + the introduce-reject guard). (2042)
+
+(The missile guidance arc — slices 8–12 — is COMPLETE.)
 
 ## Conventions / hard-won disciplines
 

@@ -48,7 +48,35 @@ const ESTIMATOR_MODES = (:pseudolinear, :ml)
 #     PN's `N·Vc·λ̇_raw` then carries thousands of m/s² of noise → `a_max` pegs, the miss opens.
 #   • :filtered — the α-β tracker (`alpha_beta_los_step`) estimates `λ̇` by predict–correct
 #     WITHOUT differentiating → a smooth rate, PN leads to a tight intercept, saturation off.
-const SEEKER_MODES = (:raw, :filtered)
+#   • :scan     — slice-13 countermeasures: instead of ONE noisy truth bearing, the seeker forms
+#     a NOISY angular-power PROFILE over a fixed `N_bins` grid (K lobes painted by
+#     `paint_angular_profile!`, then the `2·N_p·N_bins` `randn` floor from `_draw_profile!`),
+#     CFAR-DETECTS the peaks (`cfar_scan`, the slice-3 sandbox on the ANGLE axis), and resolves
+#     the tracked bearing by `discrimination` (`:none` blend-all vs `:gated` α-β-gated). It is a
+#     GENUINELY DIFFERENT CLASS from :raw/:filtered — a DRAW-TOPOLOGY FLIP (class 4b, the `:cfar`
+#     shape): `1` randn/tick (:raw/:filtered) → `2·N_p·N_bins`/tick, so `set_fidelity` must REJECT
+#     INTRODUCING or REMOVING it (gate 2, the cfar precedent) while `:raw↔:filtered` stay
+#     introduce-safe — `SEEKER_MODES` gains MIXED introduce-safety. The measurement NOISE moved
+#     into the profile floor (the `2·N_p·N_bins` draws), so `:scan` draws EXACTLY that (no +1
+#     output `randn`) and the slice-11 `sigma_seek` slider goes INERT under it (documented, gate 2).
+const SEEKER_MODES = (:raw, :filtered, :scan)
+
+# The discrimination rungs (slice-13 countermeasures) — the peak-resolution selector for the
+# `:scan` seeker, the SINGLE source of truth (gate-2's `LIVE_FIDELITY_MODES` REFERENCES it; the
+# `SEEKER_MODES` one-list-no-drift, defined HERE so estimation.jl precedes radar.jl). A NESTED
+# fidelity: DRAW-INVARIANT among its rungs (both build the SAME profile / SAME `2·N_p·N_bins`
+# draws — they differ ONLY in post-detection peak SELECTION, zero extra draws → introduce-safe once
+# `:scan` is on) YET TRAJECTORY-CHANGING (the toggle MOVES the missile — not a dead knob), and
+# INERT unless `seeker=:scan` (no profile → no peaks → the key does nothing; the `:raim`-without-GPS
+# coupling). NOT the free-standing class-4a of slice-11 `:seeker` — it is "draw-invariant within a
+# 4b host" (the copy-paste false-claim trap, convention 4c).
+#   • :none  — the intensity-weighted centroid of ALL detected peaks (`intensity_centroid`) → the
+#     brighter/separating decoy lobe drags the blend OFF the target → the seeker is SEDUCED.
+#   • :gated — the nearest-neighbor peak to the α-β PREDICTED bearing within a gate half-width
+#     (`validation_gate`; coast on the prediction if none is in-gate) → the RGPO track-gate rejects
+#     the separated decoy lobe → the seeker HOLDS the true target. CFAR alone cannot reject a
+#     brighter decoy; this α-β predicted-LOS association is the discriminator (HANDOFF §9).
+const DISCRIMINATION_MODES = (:none, :gated)
 
 # Solve the weighted 2×2 normal equations M·p = g and return (p, cov = M⁻¹), with a
 # RELATIVE det floor (NOT an absolute one — det carries units and scales with sensor
@@ -282,4 +310,137 @@ function alpha_beta_los_step(λ_est::Real, λ̇_est::Real, λ_meas::Real, dt::Re
     λ_est′ = λ_pred + α * r
     λ̇_est′ = λ̇_est + (β / dt_c) * r
     return λ_est′, λ̇_est′
+end
+
+# =====================================================================================
+# Slice-13 countermeasures — the seeker angular-profile processing primitives (gate 1).
+#
+# The slice-3 CFAR RANGE sandbox lifted onto the LOS-ANGLE axis: paint a beam-shaped lobe
+# per return over a FIXED angular grid, add the noisy floor (`_draw_profile!`, radar.jl,
+# UNCHANGED), CFAR-detect the peaks (`cfar_scan`, detection.jl, UNCHANGED — its power-vector
+# + cell-index signature is already generic), then resolve the tracked bearing by the
+# `discrimination` rung. These FOUR functions are the PURE, RNG-free, dependency-free
+# (`wrap_angle` only, the §12 house style — no LinearAlgebra) processing layer; the noise is
+# injected UPSTREAM by `_draw_profile!`, so they carry NO draw-topology hazard themselves.
+#
+# THE ±π SEAM is the trap: bearings are `atan(Δz, Δx) ∈ [−π, π]`, and a naïve weighted mean
+# bugs at the branch cut — so every centroid/gate/innovation averages WRAPPED deltas about a
+# REFERENCE bearing (the §1 wrap trifecta, the slice-5 `wrap_angle` precedent).
+# =====================================================================================
+
+"""
+    paint_angular_profile!(power, grid, sources; σ_beam, floor = 1.0) -> power
+
+Paint the DETERMINISTIC linear-power angular profile for the `:scan` seeker. Start every
+cell at the homogeneous `floor` (the noise level the CFAR α calibrates against — the
+slice-3 convention), then ADD a beam-shaped Gaussian lobe `amp·exp(−½(Δλ/σ_beam)²)` for
+each `(λ_source, amp)` in `sources`, with `Δλ = wrap_angle(grid[i] − λ_source)` (the ±π
+seam guard). `grid` is the fixed vector of bin-center bearings (rad); `power` is written in
+place (`length(power) == length(grid)`).
+
+**The determinism keystone (convention 3): K returns paint K lobes onto the SAME fixed
+grid.** The profile LENGTH — and hence the downstream `_draw_profile!` draw count
+(`2·N_p·N_bins`) — is INDEPENDENT of how many sources there are: paint-then-draw-the-fixed-
+grid, NEVER draw-per-return (a per-return draw would desync replay the instant a decoy
+blooms). The Gaussian lobe is a named approximation (no sidelobes at this fidelity;
+sinc/boxcar are alternatives). Pure / RNG-free — the noisy floor is added afterward by
+`_draw_profile!` in the Seeker (gate 2).
+"""
+function paint_angular_profile!(power, grid, sources; σ_beam::Real, floor::Real = 1.0)
+    fill!(power, floor)
+    @inbounds for (λs, amp) in sources
+        for i in eachindex(grid)
+            d = wrap_angle(grid[i] - λs)
+            power[i] += amp * exp(-0.5 * (d / σ_beam)^2)
+        end
+    end
+    return power
+end
+
+"""
+    intensity_centroid(peaks) -> λ_c::Float64   (or `nothing` if `peaks` is empty)
+
+Intensity-weighted mean bearing of `peaks` (an iterable of `(λ, weight)` tuples), computed
+WRAP-SAFELY about the strongest-weight bearing `λ_ref`:
+
+    λ_c = wrap_angle(λ_ref + Σ wᵢ·wrap_angle(λᵢ − λ_ref) / Σ wᵢ)
+
+Averaging WRAPPED deltas about a reference (not a naïve mean) is the ±π seam guard — a
+target near +π and a decoy near −π blend to the true midpoint, NOT a jump to 0 (the slice-5
+wrap trap). Choosing `λ_ref` = the strongest peak's OWN bearing makes it self-contained (no
+external reference) and gives the **additivity anchor**: a SINGLE peak returns its bearing
+EXACTLY (`wrap(λ−λ)=0` → `wrap(λ)=λ`, bit-exact for an already-wrapped `λ ∈ [−π, π]`).
+Used BOTH within a cluster (`extract_peaks`, the peak angle) AND across peaks (the `:none`
+blend). Pure / wrap-safe (`wrap_angle` only).
+"""
+function intensity_centroid(peaks)
+    isempty(peaks) && return nothing
+    λ_ref = 0.0; w_ref = -Inf                          # the strongest-weight bearing = the wrap reference
+    for (λ, w) in peaks
+        w > w_ref && (w_ref = w; λ_ref = λ)
+    end
+    num = 0.0; den = 0.0
+    for (λ, w) in peaks
+        num += w * wrap_angle(λ - λ_ref); den += w
+    end
+    den == 0.0 && return λ_ref                         # degenerate all-zero weights → the reference bearing
+    return wrap_angle(λ_ref + num / den)
+end
+
+"""
+    extract_peaks(grid, z, detections) -> Vector{Tuple{Float64, Float64}}
+
+Cluster CONTIGUOUS runs of `detections[i] == true` in the scanned profile `z` into peaks.
+Each contiguous run `[i, j−1]` becomes one `(λ_peak, strength)`: `λ_peak` is the
+`intensity_centroid` of the run's bin bearings `grid[k]` weighted by their scanned power
+`z[k]` (a power-weighted, wrap-safe centroid → sub-bin angular resolution), and `strength =
+Σ z[k]` over the run (the peak's total power, the centroid weight for the `:none` blend and
+the association strength). Peaks are returned in grid (ascending-bin) order; NO detections
+→ an EMPTY vector (the Seeker then coasts on the α-β prediction — never tracks nothing).
+`grid`, `z`, `detections` share the fixed grid length. Pure.
+"""
+function extract_peaks(grid, z, detections)
+    peaks = Tuple{Float64, Float64}[]
+    n = length(grid)
+    i = 1
+    @inbounds while i <= n
+        if detections[i]
+            j = i
+            while j <= n && detections[j]; j += 1; end       # [i, j−1] is one contiguous run
+            cluster  = [(grid[k], z[k]) for k in i:j-1]
+            strength = 0.0
+            for k in i:j-1; strength += z[k]; end
+            push!(peaks, (intensity_centroid(cluster), strength))
+            i = j
+        else
+            i += 1
+        end
+    end
+    return peaks
+end
+
+"""
+    validation_gate(peaks, λ_pred, halfwidth) -> λ::Float64   (or `nothing`)
+
+The RGPO track-GATE / nearest-neighbor association — the discriminator (`:gated`). Returns
+the bearing of the peak NEAREST the α-β predicted bearing `λ_pred`, but only if it lies
+within `halfwidth` of the prediction (`|wrap_angle(λ − λ_pred)| ≤ halfwidth`); otherwise
+`nothing` (COAST — the caller holds `λ_pred`, NEVER tracks a peak outside the gate). Empty
+`peaks` → `nothing`.
+
+This is what rejects a SEPARATED decoy: once the decoy lobe leaves the gate about the
+target-locked prediction, the nearest IN-gate peak is the target's and the brighter decoy is
+ignored. CFAR alone cannot reject a brighter decoy (a bright decoy is a strong DETECTION, not
+a rejection) — the α-β predicted-LOS ASSOCIATION is the discriminator (HANDOFF §9: the seeker
+walked off by a decoy IS the RGPO model; the gate is precisely what RGPO captures and drags).
+Nearest-neighbor + a hard `halfwidth` reject (NOT keep-all-in-gate-then-centroid, which
+re-blends the decoy and makes `:gated` worse than `:none` — gate-0 FINDINGS). Pure / wrap-safe.
+"""
+function validation_gate(peaks, λ_pred::Real, halfwidth::Real)
+    best_λ = 0.0; best_d = Inf
+    for (λ, _) in peaks
+        d = abs(wrap_angle(λ - λ_pred))
+        d < best_d && (best_d = d; best_λ = λ)
+    end
+    return best_d <= halfwidth ? best_λ : nothing
 end
