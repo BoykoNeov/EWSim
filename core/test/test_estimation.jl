@@ -219,6 +219,31 @@ end
         @test DISCRIMINATION_MODES == (:none, :gated)
     end
 
+    @testset "angular_grid: centered, ascending, length == N_bins (the off-by-one pin)" begin
+        # The centering `grid[i] = boresight + (i−(N_bins+1)/2)·bin_w` is its OWN off-by-one trap
+        # (gate-1 forward-flag) — a half-bin shift misaligns the whole profile vs boresight. Pin it
+        # with a closed-form round-trip so it can't hide in observe!.
+        bore = 0.20; bw = 0.005; N = 64
+        g = angular_grid(bore, N, bw)
+        @test length(g) == N                                          # length == N_bins, always
+        @test issorted(g)                                            # ascending (extract_peaks needs it)
+        @test all(k -> g[k+1] - g[k] ≈ bw, 1:N-1)                    # uniform bin_w spacing (atol via ≈)
+        # EVEN N: the boresight falls BETWEEN the two central bins (N/2 at −bw/2, N/2+1 at +bw/2).
+        @test g[N ÷ 2]     ≈ bore - bw/2 atol = 1e-12
+        @test g[N ÷ 2 + 1] ≈ bore + bw/2 atol = 1e-12
+        @test (g[N ÷ 2] + g[N ÷ 2 + 1]) / 2 ≈ bore atol = 1e-12      # the window is centered on boresight
+        # ODD N: the CENTER bin sits EXACTLY on the boresight.
+        go = angular_grid(bore, 65, bw)
+        @test go[33] ≈ bore atol = 1e-12                             # bin (65+1)/2 = 33 == boresight
+        # LENGTH is boresight-INDEPENDENT (the determinism grid — the draw count is fixed by N_bins).
+        @test length(angular_grid(-1.7, N, bw)) == N
+        @test length(angular_grid( 2.9, N, bw)) == N
+        # A KNOWN bearing lands in the expected bin (the round-trip): a source ON bin (N/2+4)'s
+        # center is nearest that bin — a half-bin shift in the centering would move argmin.
+        src = g[N ÷ 2 + 4]
+        @test argmin(abs.(g .- src)) == N ÷ 2 + 4
+    end
+
     @testset "paint_angular_profile!: floor + additive Gaussian lobes, wrap-safe, fixed length" begin
         grid  = collect(-0.1:0.005:0.1)                              # a fixed angular grid (41 bins)
         power = similar(grid)

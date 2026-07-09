@@ -329,6 +329,34 @@ end
 # =====================================================================================
 
 """
+    angular_grid(boresight, N_bins, bin_w) -> Vector{Float64}
+
+The FIXED angular bin-center grid for the `:scan` seeker — `N_bins` cells of width `bin_w`
+(rad) centered on `boresight`: `grid[i] = boresight + (i − (N_bins+1)/2)·bin_w`, i ∈ 1:N_bins,
+ascending. For even `N_bins` the boresight falls BETWEEN the two central bins (bin `N/2` at
+`−bin_w/2`, bin `N/2+1` at `+bin_w/2`); for odd `N_bins` the center bin sits EXACTLY on the
+boresight. Length is `N_bins` REGARDLESS of `boresight` — the determinism grid: `_draw_profile!`
+draws `2·N_p·N_bins` `randn` independent of geometry (convention 3, the draw-count keystone).
+
+**A TINY TESTED helper on purpose (gate-1 forward-flag):** the ±π-wrap is handled by the painted
+delta (`paint_angular_profile!`) and the centroid/gate references, but the bin CENTERING
+`(i−(N_bins+1)/2)·bin_w` is its own off-by-one trap — a half-bin shift misaligns the whole
+profile vs boresight and only the coarse closed-loop numbers might catch it. Pinned by a closed-
+form round-trip so it can't hide in `observe!`.
+
+**NOT wrapped to [−π,π]:** the seeker FOV is a small window (span `N_bins·bin_w`, ±0.16 rad in the
+slice-13 config) about the LOS, which stays clear of the ±π seam in the planar x-z engagement (the
+slice-11 "λ never vertical" well-conditioning). Keeping the grid MONOTONIC ascending is what
+`extract_peaks`' contiguous-run clustering needs; the seam guard lives in the wrapped deltas, not
+here. Pure / dependency-free.
+"""
+function angular_grid(boresight::Real, N_bins::Integer, bin_w::Real)
+    c   = (N_bins + 1) / 2                          # the fractional center index (N/2+½ for even N)
+    b   = Float64(boresight); bw = Float64(bin_w)
+    return [b + (i - c) * bw for i in 1:N_bins]
+end
+
+"""
     paint_angular_profile!(power, grid, sources; σ_beam, floor = 1.0) -> power
 
 Paint the DETERMINISTIC linear-power angular profile for the `:scan` seeker. Start every

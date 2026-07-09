@@ -138,13 +138,25 @@ const EP_MODES = (:none, :freq_agility, :sidelobe_blanking)
 # ALSO the FIRST `w.rng` consumer in the missile arc, so the slice-8/9/10 "RNG-is-vacuous" language
 # does NOT apply here; byte-identity for slices 1–10 comes from NO Seeker existing (nothing reads the
 # key). Orthogonal to `:guidance`/`:autopilot` (slice-11 pins `:guidance=:pn`, `:autopilot=:ideal`).
+# `:seeker` gains a THIRD rung `:scan` (slice-13 countermeasures; `SEEKER_MODES` from estimation.jl,
+# already appended at gate 1) — but `:scan` is NOT the class-4a shape of `:raw`/`:filtered`: it FLIPS
+# the draw topology (1 → 2·N_p·N_bins/tick, the profile floor `_draw_profile!` draws), so it is
+# INTRODUCE-REJECTED like `:cfar` (server.jl `set_fidelity`, the mixed-introduce-safety guard) while
+# `:raw↔:filtered` stay live. `:discrimination` (slice-13; rungs `DISCRIMINATION_MODES` from
+# estimation.jl) is the peak-resolution selector for the `:scan` seeker — DRAW-INVARIANT among its
+# rungs (both build the SAME profile / SAME draws, differ only in post-detection peak SELECTION → the
+# toggle is draw-count-invariant and introduce-safe once `:scan` is on) YET TRAJECTORY-CHANGING (a
+# `:none↔:gated` toggle MOVES the missile — not a dead knob), and INERT unless `seeker=:scan` (no
+# profile → no peaks → the key does nothing; the `:raim`-without-GPS coupling). NOT free-standing
+# class-4a — it is "draw-invariant within the 4b `:scan` host" (convention 4c, the copy-paste trap).
 const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES,
                              ep = EP_MODES, estimator = ESTIMATOR_MODES,
                              deinterleaver = DEINTERLEAVER_MODES,
                              iono = GPS_TOGGLE, tropo = GPS_TOGGLE, clock = GPS_TOGGLE,
                              multipath = GPS_TOGGLE, noise = GPS_TOGGLE, raim = RAIM_MODES,
                              integrator = INTEGRATOR_MODES, autopilot = AUTOPILOT_MODES,
-                             guidance = GUIDANCE_MODES, seeker = SEEKER_MODES)
+                             guidance = GUIDANCE_MODES, seeker = SEEKER_MODES,
+                             discrimination = DISCRIMINATION_MODES)
 
 # A perfect null (F⁴=0, even above the horizon), an antenna on the reflecting plane
 # (h→0), or a below-horizon mask all drive SNR→0, and `lin2db(0) = -Inf` would poison the

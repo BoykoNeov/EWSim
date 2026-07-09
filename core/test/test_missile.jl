@@ -793,6 +793,211 @@ end
     end
 end
 
+# --- slice 13 gate 2: the :scan seeker + :decoy wired — countermeasures (seduction vs gate) ----
+# The slice-3 CFAR RANGE sandbox lifted onto the LOS-ANGLE axis: instead of ONE noisy truth bearing,
+# the :scan seeker paints a lobe per {target, decoy} over a FIXED grid, DRAWS the noisy floor
+# (2·N_p·N_bins randn — a draw-TOPOLOGY flip from :raw/:filtered's 1), CFAR-detects the peaks, and
+# resolves the tracked bearing by the `discrimination` rung: `:none` blends ALL peaks (SEDUCED by the
+# brighter/separated decoy → the aimpoint walks OFF → a miss) while `:gated` keeps only the NN peak to
+# the α-β predicted bearing (the RGPO track-gate → the decoy rejected → intercept). THE HEADLINE is the
+# AIMPOINT (bearing) error (FINDINGS #1 — clean by construction, independent of endgame saturation),
+# with miss corroborating. THE TRUTH-PATH INVARIANT: the decoy is `kind === :decoy`, so `_nearest_target`
+# (miss/CPA) ALWAYS references the true target — the seeker is seduced, but the honest miss is vs the
+# thing it was supposed to hit. Draw count is EXACTLY 2·N_p·N_bins/tick, decoy-count-independent.
+@testset "guided missile — :scan seeker + :decoy countermeasures wired (slice 13, :discrimination)" begin
+    dt = 1.0e-3
+    norm3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+    Np = 10; Nb = 64                                             # the pinned scan grid (draw = 2·Np·Nb = 1280)
+
+    # The slice-11 crossing + a :scan seeker + (optionally) a born-offset :decoy. The decoy sits Δ≈0.09
+    # rad off the target bearing (≫ σ_beam so it RESOLVES into a second CFAR peak), 2× brighter, flying
+    # PARALLEL (v = target vel) — the flare/off-board reading (born already-resolved; FINDINGS pivot #2).
+    function scan_world(; disc = :none, seed = 6, decoy = true, tgt_amp = 40.0, dcy_amp = 80.0,
+                        gate_hw = 0.045, a_max = 3000.0)
+        w = World(seed = seed, fidelity = Dict(:autopilot => :ideal, :guidance => :pn,
+                                               :seeker => :scan, :discrimination => disc))
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0),
+            vel = Vec3(700cosd(12), 0.0, 700sind(12)),
+            comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0,
+                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :a_max => a_max,
+                :sigma_seek => 3.0e-3, :alpha => 0.30, :beta => 0.05,
+                :scan_n_bins => Nb, :scan_bin_width => 0.005, :scan_sigma_beam => 0.015,
+                :scan_floor => 1.0, :scan_n_pulses => Np, :scan_cfar_variant => :ca,
+                :scan_cfar_ntrain => 16, :scan_cfar_nguard => 4, :scan_cfar_pfa => 1.0e-3,
+                :gate_halfwidth => gate_hw))
+        w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(6000.0, 0.0, 4200.0),
+            vel = Vec3(-800.0, 0.0, 200.0), comp = Dict{Symbol,Any}(:rcs_m2 => 1.0, :intensity => tgt_amp))
+        subs = Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:tgt1)]
+        if decoy
+            w.entities[:dcy1] = Entity(:dcy1, :decoy; pos = Vec3(5868.0, 0.0, 4735.0),
+                vel = Vec3(-800.0, 0.0, 200.0), comp = Dict{Symbol,Any}(:intensity => dcy_amp))
+            push!(subs, ConstantVelocity(:dcy1))
+        end
+        return w, subs
+    end
+
+    # Fly to first CPA vs the TRUE target (decoy excluded); collect min-miss + the MIDCOURSE mean
+    # aimpoint error |λ_est − λ_target| (the FINDINGS headline, clean of the endgame bearing blow-up).
+    function fly_scan!(w, subs; n = 8000, open_hold = 200, aim_lo = 100, aim_hi = 1000)
+        tgt = w.entities[:tgt1]
+        miss = Inf; prev = Inf; opening = 0; aim_sum = 0.0; aim_n = 0
+        for k in 1:n
+            tick!(w, subs, dt); empty!(w.events)
+            r = los_range(w.entities[:m1].pos, tgt.pos)             # vs the TRUE target (truth-path)
+            miss = min(miss, r)
+            tel = w.env[:telemetry]
+            if aim_lo <= k <= aim_hi && haskey(tel, "m1.aim_error")
+                aim_sum += tel["m1.aim_error"]; aim_n += 1
+            end
+            get(w.entities[:m1].comp, :impacted, false) && break
+            r < 1.0 && break
+            opening = r > prev ? opening + 1 : 0; prev = r
+            (opening >= open_hold && r > miss + 50.0) && break
+        end
+        return (miss = miss, aim = aim_n == 0 ? NaN : aim_sum / aim_n)
+    end
+
+    @testset "observe! paints/scans → seeker_omega/los + n_peaks telemetry (the phase-3 seam)" begin
+        w, subs = scan_world(disc = :gated, seed = 6)
+        for _ in 1:200; tick!(w, subs, dt); empty!(w.events); end
+        c = w.entities[:m1].comp; tel = w.env[:telemetry]
+        @test haskey(c, :seeker_omega) && c[:seeker_omega] isa Vec3
+        @test c[:seeker_omega][1] == 0.0 && c[:seeker_omega][3] == 0.0   # in-plane ∥ ±y
+        @test norm3(c[:seeker_omega]) > 0.0                              # a real estimated ω
+        # the NEW scan telemetry — SCALARS only (no Array → no float()-crash); ≥2 peaks (target+decoy)
+        @test haskey(tel, "m1.aim_error") && isfinite(tel["m1.aim_error"])
+        @test haskey(tel, "m1.n_peaks")   && tel["m1.n_peaks"] >= 1      # CFAR detected ≥1 peak
+        @test tel["m1.gated"] == 1.0                                     # the active rung readout
+        @test isfinite(tel["m1.target_bearing"]) && isfinite(tel["m1.decoy_bearing"])
+    end
+
+    @testset ":none is SEDUCED, :gated HOLDS — aimpoint error (the Lesson, FINDINGS #1)" begin
+        rn = fly_scan!(scan_world(disc = :none,  seed = 6)...)
+        rg = fly_scan!(scan_world(disc = :gated, seed = 6)...)
+        # aimpoint (bearing) error: :none blends the decoy in → walks OFF (≈4°); :gated NN-gates it out
+        # (≈0.05°). Conservative one-sided bounds + the RATIO (probe: 3.97° vs 0.056°, ~71×).
+        @test rg.aim < deg2rad(0.5)                                     # :gated tracks the truth (< 0.5°)
+        @test rn.aim > deg2rad(2.0)                                     # :none is pulled off (> 2°)
+        @test rn.aim > 20 * rg.aim                                      # the aim RATIO is the headline
+        # miss CORROBORATES (born-offset makes it clean here): :gated intercepts, :none misses wide.
+        @test rg.miss < 5.0                                             # :gated intercepts (probe 0.06 m)
+        @test rn.miss > 100.0                                           # :none seduced → misses (probe 539 m)
+    end
+
+    @testset "the :none↔:gated trajectories DIFFER (not-a-dead-knob; RNG in lockstep)" begin
+        wn, sn = scan_world(disc = :none,  seed = 6)
+        wg, sg = scan_world(disc = :gated, seed = 6)
+        for _ in 1:2000
+            tick!(wn, sn, dt); empty!(wn.events)
+            tick!(wg, sg, dt); empty!(wg.events)
+        end
+        # a toggle MOVES the missile (trajectory-changing); the draw-INVARIANCE half (both draw the same
+        # 2·Np·Nb) is pinned below + in test_determinism — the "draw-invariant within a 4b host" combo.
+        @test norm3(wn.entities[:m1].pos - wg.entities[:m1].pos) > 10.0
+    end
+
+    @testset "miss/CPA is vs the true :target, NEVER the :decoy (the truth-path invariant)" begin
+        # _nearest_target excludes :decoy (kind === :decoy), so even the SEDUCED :none miss is measured
+        # against the true target — the honest miss against the thing the missile was supposed to hit.
+        w, subs = scan_world(disc = :none, seed = 6)
+        @test EWSim._nearest_target(w, w.entities[:m1]).id === :tgt1     # the decoy is NOT the nearest target
+        @test EWSim._nearest_decoy(w, w.entities[:m1]).id === :dcy1      # the decoy IS visible to the seeker
+    end
+
+    @testset "draw count EXACTLY 2·N_p·N_bins/tick, decoy-count-INDEPENDENT (convention 3 keystone)" begin
+        # The :scan seeker is the ONLY w.rng consumer; after N ticks w.rng == Xoshiro(seed) advanced by
+        # 2·Np·Nb·N draws — the topology flip from :raw/:filtered's 1/tick. Pin it decoy PRESENT and
+        # ABSENT (the fixed grid → the count can't depend on how many lobes are painted).
+        for decoy in (true, false), N in (300, 2000), disc in (:none, :gated)
+            w, subs = scan_world(disc = disc, seed = 7, decoy = decoy)
+            for _ in 1:N; tick!(w, subs, dt); empty!(w.events); end
+            ref = Xoshiro(7); for _ in 1:(2*Np*Nb*N); randn(ref); end
+            @test randn(copy(ref)) == randn(copy(w.rng))                # exactly 2·Np·Nb draws/tick
+        end
+    end
+
+    @testset "a huge decoy intensity / wide gate never crashes a tick (live-slider guard)" begin
+        # intensity + gate_halfwidth are KNOBS — absurd live values just paint a taller lobe / widen the
+        # gate; no throw / NaN (√(power/2) stays finite; validation_gate is safe at any halfwidth).
+        w, subs = scan_world(disc = :gated, seed = 6, dcy_amp = 5.0e8, gate_hw = 3.0)
+        ok = true
+        for _ in 1:600
+            tick!(w, subs, dt); empty!(w.events)
+            tel = w.env[:telemetry]
+            ok &= all(isfinite, w.entities[:m1].comp[:a_ctrl]) && all(isfinite, w.entities[:m1].pos) &&
+                  isfinite(tel["m1.aim_error"])
+            ok || break
+        end
+        @test ok
+    end
+
+    @testset "loader: a :scan missile + :decoy arm; rejects bad scan/decoy config" begin
+        base = """
+        name: cm
+        seed: 6
+        dt_physics: 0.001
+        fidelity: {autopilot: ideal, guidance: pn, seeker: scan, discrimination: none}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 700.0
+              elevation_deg: 12.0
+              cd_area_m2: 0.0
+              guidance: {k_guid: 3.0, n_pn: 4.0, r_stop: 30.0, kp: 2.0, tau: 0.3, a_max: 3000.0}
+              seeker:
+                sigma_seek: 0.003
+                alpha: 0.30
+                beta: 0.05
+                n_bins: 64
+                bin_width: 0.005
+                sigma_beam: 0.015
+                n_pulses: 10
+                cfar_variant: ca
+                cfar_n_train: 16
+                cfar_n_guard: 4
+                cfar_pfa: 0.001
+                gate_halfwidth: 0.045
+          - id: tgt1
+            kind: target
+            pos: [6000.0, 0.0, 4200.0]
+            vel: [-800.0, 0.0, 200.0]
+            target: {rcs_m2: 1.0, intensity: 40.0}
+          - id: dcy1
+            kind: decoy
+            pos: [5868.0, 0.0, 4735.0]
+            vel: [-800.0, 0.0, 200.0]
+            decoy: {intensity: 80.0}
+        """
+        mktempdir() do dir
+            good = joinpath(dir, "good.yaml"); write(good, base)
+            scn = load_scenario(good)
+            m = scn.world.entities[:m1]; d = scn.world.entities[:dcy1]
+            @test any(s -> s isa Seeker, scn.subs)                       # the :scan seeker is armed
+            @test d.kind === :decoy                                      # the decoy is :decoy, NOT :target
+            @test any(s -> s isa ConstantVelocity && s.id === :dcy1, scn.subs)   # a passive mover
+            @test m.comp[:scan_n_bins] == 64 && m.comp[:scan_n_pulses] == 10     # scan config at consumed keys
+            @test m.comp[:scan_cfar_variant] === :ca
+            @test m.comp[:gate_halfwidth] == 0.045
+            @test d.comp[:intensity] == 80.0 && scn.world.entities[:tgt1].comp[:intensity] == 40.0
+            @test get(scn.world.fidelity, :discrimination, :none) === :none      # the NEW key, default reveals the fix
+            # rejects the AUTHORED bad configs (each a clear load error, not a throw inside observe!):
+            for (tag, patt, repl) in (("negint",  "intensity: 80.0",   "intensity: -1.0"),      # decoy intensity < 0
+                                      ("oddtrain", "cfar_n_train: 16",  "cfar_n_train: 15"),     # odd n_train
+                                      ("nobins",   "n_bins: 64",        "n_bins: 0"),            # N_bins < 1
+                                      ("osnp",     "cfar_variant: ca",  "cfar_variant: os"),     # os + n_pulses>1 (throws in cfar)
+                                      ("badbeam",  "sigma_beam: 0.015", "sigma_beam: 0.0"),      # σ_beam ≤ 0
+                                      ("badhw",    "gate_halfwidth: 0.045", "gate_halfwidth: 0.0")) # hw ≤ 0
+                p = joinpath(dir, "$tag.yaml"); write(p, replace(base, patt => repl))
+                @test_throws ErrorException load_scenario(p)
+            end
+        end
+    end
+end
+
 # --- slice 12 gate 2: augmented PN wired + the ManeuveringTarget curving mover ----------------
 # The RNG-free payoff of the missile arc: against a MANEUVERING target (a new phase-1 mover,
 # ManeuveringTarget, applying a constant lateral g-turn) plain PN lags by the target-accel term and,

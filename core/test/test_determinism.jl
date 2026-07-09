@@ -731,4 +731,91 @@ end
         _, tp2 = apn_trace(guidance = :pn, maneuver = false)
         @test reinterpret(UInt64, tp1) == reinterpret(UInt64, tp2)
     end
+
+    # Slice 13: the :scan seeker + :decoy — THE RNG-INFLECTION RE-INVERTS to APPLIES (a seeker draws
+    # again; slice 12's "no-RNG/vacuous" language is WRONG here). But the CLASS is 4b, NOT slice-11's
+    # 4a: :scan FLIPS the draw topology (1 → 2·N_p·N_bins/tick), and `discrimination` is DRAW-INVARIANT
+    # AMONG its rungs (both paint the same profile / draw the same 2·N_p·N_bins, differ only in peak
+    # SELECTION) YET TRAJECTORY-CHANGING — "draw-invariant within a 4b host." FOUR claims: (2) same-config
+    # replay bit-identical WITH the 2·N_p·N_bins draw; the :none↔:gated toggle CHANGES the trajectory with
+    # the RNG in LOCKSTEP (draw-invariant, NOT vacuous — the opposite of slice 12); the draw-count keystone
+    # (2·N_p·N_bins/tick, decoy-independent); and a :filtered seeker still draws EXACTLY 1 (the mixed
+    # topology). Same geometry as the slice-11/smoke crossing + a born-offset decoy.
+    @testset "a :scan seeker + :decoy: bit-identical replay WITH rng; :none↔:gated draw-invariant + physics" begin
+        Np = 10; Nb = 64
+        function scan_trace(; disc = :none, seed = 3, nsteps = 1200, toggle_at = 0, toggle_to = nothing,
+                            start_disc = disc, decoy = true, seeker = :scan)
+            fid = Dict{Symbol,Symbol}(:autopilot => :ideal, :guidance => :pn, :seeker => seeker)
+            start_disc === nothing || (fid[:discrimination] = start_disc)
+            w = World(seed = seed, fidelity = fid)
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0),
+                vel = Vec3(700cosd(12), 0, 700sind(12)),
+                comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                    :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0, :kp => 2.0, :ki => 0.0, :kd => 0.0,
+                    :tau => 0.3, :a_max => 3000.0, :sigma_seek => 3.0e-3, :alpha => 0.30, :beta => 0.05,
+                    :scan_n_bins => Nb, :scan_bin_width => 0.005, :scan_sigma_beam => 0.015,
+                    :scan_floor => 1.0, :scan_n_pulses => Np, :scan_cfar_variant => :ca,
+                    :scan_cfar_ntrain => 16, :scan_cfar_nguard => 4, :scan_cfar_pfa => 1.0e-3,
+                    :gate_halfwidth => 0.045))
+            w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(6000.0, 0, 4200.0),
+                vel = Vec3(-800.0, 0, 200.0), comp = Dict{Symbol,Any}(:rcs_m2 => 1.0, :intensity => 40.0))
+            subs = Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:tgt1)]
+            if decoy
+                w.entities[:dcy1] = Entity(:dcy1, :decoy; pos = Vec3(5868.0, 0, 4735.0),
+                    vel = Vec3(-800.0, 0, 200.0), comp = Dict{Symbol,Any}(:intensity => 80.0))
+                push!(subs, ConstantVelocity(:dcy1))
+            end
+            trace = Float64[]
+            for i in 1:nsteps
+                (toggle_to !== nothing && i == toggle_at) && (w.fidelity[:discrimination] = toggle_to)
+                tick!(w, subs, 1.0e-3)
+                append!(trace, w.entities[:m1].pos)
+                append!(trace, w.entities[:m1].comp[:a_ctrl])          # the control fingerprint (sharper)
+                empty!(w.events)
+            end
+            return w, trace
+        end
+
+        # (2) same-config replay bit-identical WITH the seeker drawing (pos + a_ctrl, reinterpret catches
+        # sign-of-zero); streams in lockstep. A DIFFERENT seed ⇒ a different trace (the profile floor rng).
+        wa, ta = scan_trace(disc = :gated, seed = 3); wb, tb = scan_trace(disc = :gated, seed = 3)
+        @test ta == tb && reinterpret(UInt64, ta) == reinterpret(UInt64, tb)
+        @test rand(copy(wa.rng)) == rand(copy(wb.rng))
+        _, tc = scan_trace(disc = :gated, seed = 4)
+        @test ta != tc
+
+        # THE DRAW-COUNT KEYSTONE: the :scan seeker is the ONLY consumer → after N ticks w.rng ==
+        # Xoshiro(seed) advanced by 2·N_p·N_bins·N draws (the topology flip). Decoy-count-INDEPENDENT.
+        let N = 1200
+            ref = Xoshiro(3); for _ in 1:(2*Np*Nb*N); randn(ref); end
+            @test randn(copy(ref)) == randn(copy(wa.rng))
+            wnd, _ = scan_trace(disc = :gated, seed = 3, decoy = false)  # NO decoy → SAME count
+            @test randn(copy(ref)) == randn(copy(wnd.rng))
+        end
+
+        # (3) THE COMBO — :none vs :gated: DRAW-INVARIANT among the discrimination rungs (same rng
+        # end-state — both paint+draw the same profile, differ only in peak selection) YET TRAJECTORY-
+        # CHANGING (the missile moves). Draw-count invariance is SHARP here (not vacuous — the opposite
+        # of slice 12): the RNG stream is real and in lockstep across the toggle.
+        wn, tn = scan_trace(disc = :none,  seed = 3)
+        wg, tg = scan_trace(disc = :gated, seed = 3)
+        @test rand(copy(wn.rng)) == rand(copy(wg.rng))     # draw-invariant (the rung adds no draw)
+        @test tn != tg                                      # ...but the trajectory changed (not a dead knob)
+
+        # a mid-run :none→:gated toggle: bit-identical twice, changed NO draws (rng end-state == the
+        # never-toggled :gated run) while the trajectory differs from staying :none.
+        wk1, tk1 = scan_trace(start_disc = :none, toggle_at = 200, toggle_to = :gated, seed = 3)
+        _,   tk2 = scan_trace(start_disc = :none, toggle_at = 200, toggle_to = :gated, seed = 3)
+        @test reinterpret(UInt64, tk1) == reinterpret(UInt64, tk2)
+        @test rand(copy(wk1.rng)) == rand(copy(wg.rng))    # the toggle changed NO draws (lockstep)
+        @test tk1 != tn                                     # ...but the rung flip changed the flight
+
+        # THE MIXED TOPOLOGY: a :filtered seeker (the slice-11 point path, no decoy) still draws EXACTLY
+        # 1/tick — the additivity anchor that the missile.jl `:scan` branch left the point arm untouched.
+        let N = 800
+            wf, _ = scan_trace(seeker = :filtered, start_disc = nothing, decoy = false, seed = 3, nsteps = N)
+            ref = Xoshiro(3); for _ in 1:N; randn(ref); end
+            @test randn(copy(ref)) == randn(copy(wf.rng))
+        end
+    end
 end

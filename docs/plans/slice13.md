@@ -479,21 +479,24 @@ so the ONE button toggles the ONE discrimination lesson (convention 9).
       additivity/decoy-count-independent length). Slices 1–12 byte-identical (golden + determinism green).
       **Advisor-confirmed design; the one catch (the `SEEKER_MODES==(:raw,:filtered)` assertion) handled.**
       LIVE_FIDELITY_MODES `discrimination` entry + the `:scan` introduce-reject guard are GATE 2 (wiring).
-- [ ] **2. Wired** — the `:decoy` kind + the `:scan` profile/scan/gate `observe!` + the `discrimination` rung +
-      the `:scan`-introduce-reject guard; test_missile/test_determinism/test_server arms; slices 1–12 byte-identical.
-      **GATE-1 FORWARD-FLAGS (advisor, carry into gate 2):**
-      - **The bin↔bearing / grid-construction off-by-one did NOT vanish — it MOVED.** Plan §3 wanted
-        `bearing_to_bin`/`bin_to_bearing` TESTED so the ±π-wrap + off-by-one bin arithmetic couldn't hide in
-        `observe!`; the FINDINGS rightly dropped them (grid-as-vector + wrapped-in-paint deltas), but the trap
-        relocated to the grid CENTERING `grid[i] = boresight + (i−(N_bins+1)/2)·bin_w`. Make it a TINY TESTED
-        helper (`angular_grid(boresight, N_bins, bin_w)`) OR pin an `observe!`-path assertion that a known target
-        bearing lands in the expected bin — a half-bin shift misaligns the whole profile vs boresight and only the
-        coarse closed-loop numbers would (maybe) catch it. **Do NOT bury it unabstracted in `observe!`.**
-      - **Keep the gate halfwidth ≥ 0.045 (the gate-0 `hw`).** `validation_gate`'s coast path (→`nothing`→hold
-        `λ_pred`) is newly reachable (the probe's `gate_nn` never coasted); it is inert in gate-0 geometry ONLY
-        because the target peak sits within `hw` of the prediction. A tighter `hw` silently converts "hold" into
-        "coast", and it COUPLES to the masking window (a masked TARGET peak also triggers the coast → `:gated`
-        dead-reckons). Validate `hw` at LOAD and pin the robust window.
+- [x] **2. Wired DONE (2112 tests, +70)** — `angular_grid(boresight,N_bins,bin_w)` promoted into estimation.jl
+      (the gate-1 forward-flag; exported + TESTED — the centering off-by-one pin). scenario.jl: the `:decoy` kind
+      ([ConstantVelocity]+`comp[:intensity]`≥0, `_nearest_target` SKIPS it — the truth-path invariant) + `:target`
+      `intensity` (default 1.0, byte-identity) + the seeker scan config (LOAD-validated incl. the os/so/go×N_p>1
+      combo reject — advisor). missile.jl: `Seeker.observe!` split → `_observe_point!` (slice-11 body VERBATIM, 1
+      draw) + `_observe_scan!` (tick-1 truth-seed then FALL THROUGH to the draw [advisor — every tick incl. tick 1
+      draws, so 1500×1280]; grid-on-`λ_pred`, paint all target+decoy, `_draw_profile!` [2·N_p·N_bins, SAME N_p to
+      cfar], `extract_peaks`, `:none` blend / `:gated` NN gate, coast → `λ_pred`, α-β update; `sigma_seek` INERT
+      under `:scan`). radar.jl: `LIVE_FIDELITY_MODES += discrimination`. server.jl `set_fidelity`: the 4b guard —
+      reject introducing OR removing `:scan` (`cur_scan != new_scan`, BOTH directions). Smoke (seed 6, FINDINGS
+      op-point): `:none` aim 3.97°/miss 539 m vs `:gated` 0.056°/0.06 m (~71×); draw EXACTLY 1280/tick, decoy-count-
+      independent. test_missile/test_determinism/test_server arms all green; slices 1–12 byte-identical (golden +
+      determinism). **Both gate-1 forward-flags handled** (angular_grid tested; gate_halfwidth validated `>0` at
+      LOAD, robust default 0.045 — the `≥0.045` window is a gate-3 verifier pin). **GATE-3 FORWARD-FLAG (advisor):**
+      Δ GROWS as range closes (parallel decoy, fixed linear offset, shrinking slant → growing subtended angle) —
+      the gate-3 verifier must confirm the decoy stays inside ±FOV/2 (±0.16) across the WHOLE emit-grid window on
+      the wire (if it walks out, only the target paints and `:none` stops being seduced → the lesson collapses).
+      Re-probe on the emit grid (convention 10) — do NOT inherit the per-tick smoke numbers.
 - [ ] **3. Scenario + Godot + verifiers** — `slice13_decoy.yaml`, the discrimination cycler + decoy/seduced-LOS
       view, the four proofs, `test_scenario.jl` arm. Update STATUS.md + CLAUDE.md. Commit + push (end-of-batch
       ritual).

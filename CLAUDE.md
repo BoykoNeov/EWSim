@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–12 COMPLETE & green; slice 13 IN PROGRESS (gates 0–1 done) — 2042 tests.** Full gate-by-gate
+**Slices 1–12 COMPLETE & green; slice 13 IN PROGRESS (gates 0–2 done) — 2112 tests.** Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands) lives in
 **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -96,8 +96,14 @@ as-built detail (exact numbers, test names, watch-items, advisor-catches, per-sl
   (primitives: `paint_angular_profile!`/`intensity_centroid`/`extract_peaks`/`validation_gate` +
   `SEEKER_MODES+=:scan` + `DISCRIMINATION_MODES`) DONE & green.** RNG inflection RE-INVERTS to APPLIES (a seeker
   draws again, conventions 3/11); `:scan` is class 4b (draw-topology flip `1`→`2·N_p·N_bins`, introduce-rejected
-  like `:cfar`), `discrimination` draw-invariant-within-the-4b-host + inert without `:scan`. NEXT: gate 2 (the
-  `:decoy` kind + the `:scan` observe! + the `discrimination` rung + the introduce-reject guard). (2042)
+  like `:cfar`), `discrimination` draw-invariant-within-the-4b-host + inert without `:scan`. **Gate 2 (WIRED) DONE
+  & green:** the `:decoy` kind (`_nearest_target` skips it — miss/CPA always vs the true target) + `Seeker.observe!`
+  split into `_observe_point!` (slice-11 VERBATIM, 1 draw) / `_observe_scan!` (2·N_p·N_bins, tick-1 truth-cued lock,
+  paint→`_draw_profile!`→`cfar_scan`→`extract_peaks`→`:none` blend/`:gated` NN gate) + `angular_grid` + the
+  `discrimination` key + the 4b `:scan` introduce/remove-reject `set_fidelity` guard. Smoke (seed 6): `:none` aim
+  3.97°/miss 539 m vs `:gated` 0.056°/0.06 m (~71×), draw EXACTLY 1280/tick. NEXT: gate 3 (`slice13_decoy.yaml` +
+  Godot discrimination cycler + decoy/seduced-LOS view + the four proofs + `test_scenario.jl`; re-probe on the
+  emit grid; the decoy stays inside ±FOV/2 across the run). (2112)
 
 (The missile guidance arc — slices 8–12 — is COMPLETE.)
 

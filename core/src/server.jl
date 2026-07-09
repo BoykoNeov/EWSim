@@ -187,6 +187,20 @@ function handle_command!(srv::Server, cmd)
         (key === :cfar && !haskey(w.fidelity, :cfar)) &&
             error("set_fidelity: cannot introduce :cfar mid-run — a non-CFAR scenario draws " *
                   "a different RNG topology; load a CFAR scenario instead")
+        # Draw-topology guard (slice-13): the `:seeker` rung `:scan` flips the seeker draw topology
+        # (1 randn/tick for :raw/:filtered → 2·N_p·N_bins for the profile floor), so INTRODUCING or
+        # REMOVING `:scan` mid-run desyncs a replay. Reject BOTH directions (unlike `:cfar`, which
+        # only blocks introduce — here `:scan→:filtered` is equally a topology flip): the guard fires
+        # iff the value crosses the `:scan` boundary. `:raw↔:filtered` (both 1 draw) and the nested
+        # `:none↔:gated` discrimination toggle (draw-invariant among rungs) stay live-settable.
+        if key === :seeker
+            cur_scan = get(w.fidelity, :seeker, :filtered) === :scan
+            new_scan = (val === :scan)
+            cur_scan != new_scan &&
+                error("set_fidelity: cannot $(new_scan ? "introduce" : "remove") :scan mid-run — " *
+                      "the :scan seeker draws a different RNG topology (2·N_p·N_bins vs 1); " *
+                      "load a :scan scenario instead")
+        end
         w.fidelity[key] = val
         return nothing
 

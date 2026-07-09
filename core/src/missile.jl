@@ -430,9 +430,27 @@ end
 # comp for the phase-4 `decide!` (the tick contract's phase order hands off THIS tick — no one-tick
 # delay for the estimate; the seeker senses this tick's truth + noise). RNG-free after the one draw
 # (the filter is deterministic post-processing).
+# Phase 3 dispatcher: the `:scan` rung (slice-13 countermeasures) runs a WHOLLY different draw
+# topology (`2·N_p·N_bins` for the angular-profile floor) from `:raw`/`:filtered` (`1` randn), so it
+# is a SEPARATE code path — NOT a value-branch inside the point path. Reading `:seeker` is pure (no
+# RNG), so this dispatch does not perturb the draw ORDER: a `:raw`/`:filtered`/no-scan scenario runs
+# `_observe_point!` with `n = randn(w.rng)` as its literal first statement → slices 1–12 byte-identical
+# BY CONSTRUCTION (the slice-11 body is textually UNCHANGED below). `:scan` is introduce/remove-rejected
+# at `set_fidelity` (server.jl, the 4b guard), so this branch is only ever reached from a `:scan`-loaded
+# scenario — never toggled onto a live point-path replay.
 function observe!(s::Seeker, w::World)
     e = w.entities[s.id]
     c = e.comp
+    rung = get(w.fidelity, :seeker, :filtered)
+    rung === :scan ? _observe_scan!(s, w, e, c) : _observe_point!(s, w, e, c, rung)
+    return nothing
+end
+
+# The slice-11 point seeker — ONE noisy truth bearing → raw finite-diff + α-β filter. VERBATIM the
+# slice-11 body (the only change: `rung` is now a parameter, not re-read here — a pure move that
+# leaves the RNG draw order bit-identical). Kept textually unchanged so the golden + determinism
+# tests replay bit-for-bit (the `+0.0`/spelling bit trap — do NOT reformat the arithmetic).
+function _observe_point!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung::Symbol)
     # CONVENTION 3 — the unconditional draw, FIRST, before any target/geometry/impact gate. A FIXED
     # 1 draw/tick (scalar in-plane; the vector form's 2 ⟂ draws are NOT used — FINDINGS decision 3).
     n = randn(w.rng)
@@ -474,7 +492,6 @@ function observe!(s::Seeker, w::World)
     # The rung selects WHICH (λ̇, λ) PN consumes; the draw count is identical either way. Reconstruct
     # the in-plane `ω = Vec3(0, −λ̇, 0)` and `û = (cos λ, 0, sin λ)` from the CHOSEN rate/angle (a
     # CONSISTENT estimate source — FINDINGS decision f). `decide!` supplies TRUTH `Vc`.
-    rung = get(w.fidelity, :seeker, :filtered)
     λ̇_used, λ_used = rung === :raw ? (λ̇_raw, λ_meas) : (λ̇_est, λ_est)
     c[:seeker_omega] = Vec3(0.0, -λ̇_used, 0.0)
     c[:seeker_los]   = Vec3(cos(λ_used), 0.0, sin(λ_used))
@@ -488,5 +505,130 @@ function observe!(s::Seeker, w::World)
     tel["$sid.lambda_dot_filt"] = _finite_coord(λ̇_est)         # α-β estimate (smooth — always available)
     tel["$sid.lambda_dot_used"] = _finite_coord(λ̇_used)        # the one PN actually consumed this tick
     tel["$sid.sigma_seek"]      = _finite(σ)
+    return nothing
+end
+
+# The seeker's painted sources (slice-13 `:scan`): the in-plane LOS bearing + `:intensity` lobe
+# amplitude of EVERY `:target` AND `:decoy` (the ONLY consumer that sees decoys). Sorted by id so the
+# deterministic `power` accumulation order is canonical (the sorted-id house style; the draw itself is
+# over cells, source-order-independent). The decoy carries `kind === :decoy`, so this is where the
+# seeker CAN be seduced — while `_nearest_target` (radar / autopilot truth / CPA) skips it.
+function _scan_sources(w::World, e::Entity)
+    srcs = Tuple{Float64,Float64}[]
+    for id in sort!(Symbol[id for (id, o) in w.entities if o.kind === :target || o.kind === :decoy])
+        o = w.entities[id]
+        û = los_unit(e.pos, o.pos)
+        push!(srcs, (atan(û[3], û[1]), Float64(get(o.comp, :intensity, 1.0))))
+    end
+    return srcs
+end
+
+# The nearest `:decoy` to the missile — for the seduced-LOS telemetry/visual only (NOT the truth path;
+# `_nearest_target` still governs miss/CPA). `nothing` if the scenario ships no decoy.
+function _nearest_decoy(w::World, e::Entity)
+    best = nothing; bestR = Inf
+    for id in sort!(Symbol[id for (id, o) in w.entities if o.kind === :decoy])
+        R = _range(w.entities[id].pos, e.pos)
+        R < bestR && (bestR = R; best = w.entities[id])
+    end
+    return best
+end
+
+# The slice-13 `:scan` seeker — the slice-3 CFAR RANGE sandbox lifted onto the LOS-ANGLE axis. Instead
+# of ONE noisy truth bearing, the seeker forms a NOISY angular-power PROFILE over a FIXED grid, CFAR-
+# detects the peaks (target + decoy lobes), and resolves the tracked bearing by the `discrimination`
+# rung (`:none` blend-all → SEDUCED; `:gated` α-β-predicted NN gate → the decoy REJECTED). THE DRAW
+# TOPOLOGY FLIPS: `_draw_profile!` draws EXACTLY `2·N_p·N_bins` randn EVERY tick (incl. tick 1, over the
+# FIXED grid → decoy-count-independent, convention 3) — vs the point path's 1. The measurement NOISE
+# MOVED into the profile floor, so there is NO `+σ·randn` output draw and the slice-11 `sigma_seek`
+# slider goes INERT here (the live noise knob is now the profile SNR / `pfa`). PN consumes the α-β
+# estimate (like `:filtered`); the gate reuses the α-β PREDICTED bearing as its center = the RGPO
+# track-gate. CUED-LOCK precondition (the load-bearing seam): tick-1 seeds the α-β from the TRUTH LOS
+# to `_nearest_target` (which excludes `:decoy`) so the track starts ON the target — robust even with
+# the decoy present at t=0; a tick-1 peak-pick seed could land on a brighter decoy and INVERT the lesson.
+function _observe_scan!(s::Seeker, w::World, e::Entity, c::AbstractDict)
+    dt = Float64(get(c, :dt_s_seeker, 1.0e-3))
+    α  = Float64(get(c, :alpha, 0.30))
+    β  = Float64(get(c, :beta,  0.05))
+
+    # Static scan config (load-validated; read with the FINDINGS-pinned defaults at the consumer).
+    N_bins   = Int(get(c, :scan_n_bins, 64))
+    bin_w    = Float64(get(c, :scan_bin_width, 0.005))
+    σ_beam   = Float64(get(c, :scan_sigma_beam, 0.015))
+    floor    = Float64(get(c, :scan_floor, 1.0))
+    n_pulses = Int(get(c, :scan_n_pulses, 10))                 # SAME N_p feeds the draw AND cfar_scan
+    variant  = Symbol(get(c, :scan_cfar_variant, :ca))
+    n_train  = Int(get(c, :scan_cfar_ntrain, 16))
+    n_guard  = Int(get(c, :scan_cfar_nguard, 4))
+    pfa      = Float64(get(c, :scan_cfar_pfa, 1.0e-3))
+    hw       = Float64(get(c, :gate_halfwidth, 0.045))
+    disc     = get(w.fidelity, :discrimination, :none)         # DEFAULT :none — the button reveals the fix
+
+    tgt = _nearest_target(w, e)                                # truth target (decoy excluded by kind)
+
+    # CUED-LOCK: tick-1 seed the α-β from the TRUTH LOS to the true target (NOT a peak pick). λ̇ = 0.
+    if !get(c, :seek_init, false)
+        λ0 = 0.0
+        if tgt !== nothing
+            û0 = los_unit(e.pos, tgt.pos); λ0 = atan(û0[3], û0[1])
+        end
+        c[:seek_lambda_est]    = λ0
+        c[:seek_lambdadot_est] = 0.0
+        c[:seek_lambda_prev]   = λ0            # keep the raw memory warm (inert under :scan; harmless)
+        c[:seek_init]          = true
+    end
+
+    λ_est = Float64(c[:seek_lambda_est]); λ̇_est = Float64(c[:seek_lambdadot_est])
+    λ_pred = λ_est + λ̇_est * dt                # the α-β prediction = grid BORESIGHT + the gate center
+
+    # Paint the FIXED grid centered on the prediction (tracking boresight; draw count is boresight-
+    # independent), then DRAW the noisy floor — the 2·N_p·N_bins topology flip, EVERY tick incl. tick 1.
+    grid  = angular_grid(λ_pred, N_bins, bin_w)
+    power = Vector{Float64}(undef, N_bins)
+    paint_angular_profile!(power, grid, _scan_sources(w, e); σ_beam = σ_beam, floor = floor)
+    z = Vector{Float64}(undef, N_bins)
+    _draw_profile!(z, power, w.rng, n_pulses)
+
+    # CFAR-detect (the slice-3 sandbox, UNCHANGED) → cluster into (λ, strength) peaks.
+    _, detections = cfar_scan(z; variant = variant, n_train = n_train,
+                              n_guard = n_guard, pfa = pfa, n_pulses = n_pulses)
+    peaks = extract_peaks(grid, z, detections)
+
+    # Resolve the tracked bearing by the discrimination rung; COAST on the prediction if none is kept
+    # (empty peaks, or `:gated` finds nothing in-gate) — λ_meas = λ_pred → the α-β innovation is EXACTLY
+    # 0 (a clean dead-reckon on the prediction, never "track nothing"). The rung is DRAW-INVARIANT here:
+    # both paths ran the SAME paint + SAME 2·N_p·N_bins draws; they differ ONLY in this peak SELECTION.
+    sel    = disc === :gated ? validation_gate(peaks, λ_pred, hw) : intensity_centroid(peaks)
+    λ_meas = sel === nothing ? λ_pred : sel
+
+    # The EXACT slice-11 α-β update on the resolved bearing (the gate reuses this state next tick).
+    λ_est, λ̇_est = alpha_beta_los_step(λ_est, λ̇_est, λ_meas, dt; α = α, β = β)
+    c[:seek_lambda_est]    = λ_est
+    c[:seek_lambdadot_est] = λ̇_est
+
+    # PN consumes the α-β estimate (like `:filtered`); reconstruct ω/û from it. `decide!` supplies Vc.
+    c[:seeker_omega] = Vec3(0.0, -λ̇_est, 0.0)
+    c[:seeker_los]   = Vec3(cos(λ_est), 0.0, sin(λ_est))
+
+    # Telemetry — SCALARS only (no Array → no `float()`-crash); the profile/detections are NOT shipped.
+    λ_tgt = 0.0
+    if tgt !== nothing
+        ût = los_unit(e.pos, tgt.pos); λ_tgt = atan(ût[3], ût[1])
+    end
+    dcy   = _nearest_decoy(w, e)
+    λ_dcy = 0.0
+    if dcy !== nothing
+        ûd = los_unit(e.pos, dcy.pos); λ_dcy = atan(ûd[3], ûd[1])
+    end
+    tel = get!(() -> Dict{String,Any}(), w.env, :telemetry)
+    sid = String(s.id)
+    tel["$sid.lambda_used"]     = _finite_coord(λ_meas)             # the resolved bearing PN tracked
+    tel["$sid.lambda_est"]      = _finite_coord(λ_est)              # α-β estimate
+    tel["$sid.lambda_dot_used"] = _finite_coord(λ̇_est)             # the rate PN consumed
+    tel["$sid.target_bearing"]  = _finite_coord(λ_tgt)             # truth LOS to the TRUE target
+    tel["$sid.decoy_bearing"]   = _finite_coord(λ_dcy)             # truth LOS to the nearest decoy
+    tel["$sid.aim_error"]       = _finite(abs(wrap_angle(λ_est - λ_tgt)))  # THE headline (FINDINGS #1)
+    tel["$sid.n_peaks"]         = length(peaks)                    # CFAR peak count (int scalar)
+    tel["$sid.gated"]           = disc === :gated ? 1.0 : 0.0      # the active discrimination rung
     return nothing
 end

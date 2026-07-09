@@ -55,7 +55,7 @@ export bearing, wrap_angle, eig2x2, error_ellipse, gdop, FINITE_CEIL
 export linear_ls, gauss_newton, bearings_fix, ESTIMATOR_MODES
 export alpha_beta_los_step, SEEKER_MODES
 # Countermeasures — the :scan seeker angular-profile processing primitives (slice 13 gate 1)
-export paint_angular_profile!, intensity_centroid, extract_peaks, validation_gate, DISCRIMINATION_MODES
+export angular_grid, paint_angular_profile!, intensity_centroid, extract_peaks, validation_gate, DISCRIMINATION_MODES
 # GPS shared-lib reuse (slice 7): N-dim solver siblings + GPS pseudorange positioning
 export dop, dop_components
 export sat_az_el, iono_delay, tropo_delay, mp_scale, pseudorange

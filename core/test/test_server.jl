@@ -221,6 +221,34 @@ function _apn_scenario(seed; emit_every = 4, a_lat = 200.0,
     return Scenario("apn", w, subs, knobs, 1.0e-3, emit_every)
 end
 
+# A slice-13 :scan-seeker countermeasures scenario: the guided interceptor with a :scan seeker (the
+# angular-profile CFAR path) + a true target + a born-offset :decoy, under `:discrimination` (default
+# :none, so the button reveals the fix). `intensity` + `gate_halfwidth` are LIVE sliders (a huge value
+# just paints/widens harder — no crash). The :scan seeker draws 2·N_p·N_bins/tick (the topology flip).
+function _scan_scenario(seed; emit_every = 4,
+                        fidelity = Dict(:autopilot => :ideal, :guidance => :pn,
+                                        :seeker => :scan, :discrimination => :none))
+    w = World(seed = seed, fidelity = fidelity)
+    w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0),
+        vel = Vec3(700cosd(12), 0, 700sind(12)),
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+            :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0, :kp => 2.0, :ki => 0.0, :kd => 0.0,
+            :tau => 0.3, :a_max => 3000.0, :sigma_seek => 3.0e-3, :alpha => 0.30, :beta => 0.05,
+            :scan_n_bins => 64, :scan_bin_width => 0.005, :scan_sigma_beam => 0.015,
+            :scan_floor => 1.0, :scan_n_pulses => 10, :scan_cfar_variant => :ca,
+            :scan_cfar_ntrain => 16, :scan_cfar_nguard => 4, :scan_cfar_pfa => 1.0e-3,
+            :gate_halfwidth => 0.045))
+    w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(6000.0, 0, 4200.0),
+        vel = Vec3(-800.0, 0, 200.0), comp = Dict{Symbol,Any}(:rcs_m2 => 1.0, :intensity => 40.0))
+    w.entities[:dcy1] = Entity(:dcy1, :decoy; pos = Vec3(5868.0, 0, 4735.0),
+        vel = Vec3(-800.0, 0, 200.0), comp = Dict{Symbol,Any}(:intensity => 80.0))
+    subs = Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1),
+                     ConstantVelocity(:tgt1), ConstantVelocity(:dcy1)]
+    knobs = Knob[Knob(:dcy1, :intensity, 0.0, 500.0, "decoy intensity"),
+                 Knob(:m1, :gate_halfwidth, 0.005, 0.2, "gate hw (rad)")]
+    return Scenario("scan", w, subs, knobs, 1.0e-3, emit_every)
+end
+
 @testset "server" begin
 
     @testset "handle_command! mutates state per the §5 table" begin
@@ -722,6 +750,59 @@ end
             ok || break
         end
         @test ok                                                  # missile + target pos + telemetry finite
+    end
+
+    @testset "set_fidelity :discrimination — write/introduce-safe; :scan introduce/remove REJECTED (slice-13)" begin
+        # Slice-13 gate 2: `:discrimination` (rungs DISCRIMINATION_MODES) joins the per-key
+        # LIVE_FIDELITY_MODES table AUTOMATICALLY (one-list-no-drift). It is DRAW-INVARIANT among its
+        # rungs (both paint+draw the same profile, differ only in peak selection) → introduce-safe, no
+        # guard. But `:seeker → :scan` FLIPS the draw topology (1 → 2·N_p·N_bins), so INTRODUCING or
+        # REMOVING :scan is REJECTED (the cfar precedent, BOTH directions — the sharpest form).
+        srv = EWSim.Server(_scan_scenario(1))
+        w = srv.scn.world
+        @test w.fidelity[:discrimination] === :none                # the scenario default (reveals the fix)
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "discrimination", :value => "gated"))
+        @test w.fidelity[:discrimination] === :gated
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "discrimination", :value => "none"))
+        @test w.fidelity[:discrimination] === :none
+        # a bad rung is REJECTED before landing (would throw in observe! → kill the session).
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "discrimination", :value => "adaptive"))
+        # THE 4b GUARD — REMOVING :scan mid-run (:scan → :filtered) is REJECTED (topology flip 1280→1).
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "seeker", :value => "filtered"))
+        @test w.fidelity[:seeker] === :scan                        # rung untouched after the reject
+        # ...and INTRODUCING :scan on a non-scan (slice-11) seeker world is REJECTED too (the other
+        # direction — 1→1280). A :raw↔:filtered switch on that world stays live (both 1 draw/tick).
+        srv2 = EWSim.Server(_seeker_scenario(1))                   # seeker = :filtered
+        @test_throws ErrorException EWSim.handle_command!(srv2,
+            Dict(:type => "set_fidelity", :key => "seeker", :value => "scan"))
+        @test srv2.scn.world.fidelity[:seeker] === :filtered       # still :filtered after the reject
+        EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "seeker", :value => "raw"))
+        @test srv2.scn.world.fidelity[:seeker] === :raw            # :raw↔:filtered stays live (no topology flip)
+    end
+
+    @testset "live decoy intensity / gate_halfwidth sliders survive the tick (no crash, slice-13)" begin
+        # intensity + gate_halfwidth are LIVE sliders on the :scan path (which DRAWS 2·N_p·N_bins/tick).
+        # An absurd intensity just paints a taller lobe (√(power/2) stays finite); a wide gate widens the
+        # NN acceptance (validation_gate is safe at any halfwidth). Neither throws / NaNs the session.
+        srv = EWSim.Server(_scan_scenario(2;
+            fidelity = Dict(:autopilot => :ideal, :guidance => :pn, :seeker => :scan, :discrimination => :gated)))
+        w = srv.scn.world
+        for (tgt, k, v) in (("dcy1", "intensity", 5.0e8), ("m1", "gate_halfwidth", 3.0))
+            EWSim.handle_command!(srv, Dict(:type => "set_param", :target => tgt, :key => k, :value => v))
+        end
+        @test w.entities[:dcy1].comp[:intensity] == 5.0e8         # slider wrote the consumed comp key
+        ok = true
+        for _ in 1:500
+            tick!(w, srv.scn.subs, srv.scn.dt_physics)            # must NOT throw
+            empty!(w.events)
+            tel = w.env[:telemetry]
+            ok &= all(isfinite, w.entities[:m1].pos) && isfinite(tel["m1.aim_error"]) &&
+                  isfinite(tel["m1.lambda_used"]) && isfinite(tel["m1.a_cmd"])
+            ok || break
+        end
+        @test ok                                                  # pos + scan telemetry finite through the huge slider
     end
 
     @testset "warmup! tolerates a guided-missile scenario (slice-9, radar-free, phase 1+4)" begin

@@ -102,6 +102,15 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
         haskey(ent, "target") || error("target entity '$id' has no `target:` block")
         tb = ent["target"]
         comp[:rcs_m2] = _f64(tb["rcs_m2"])
+        # Slice 13: the `:scan` seeker paints a lobe of amplitude `comp[:intensity]` (over the unit
+        # floor) per source into its angular profile — the target's brightness AS SEEN BY the seeker
+        # (the RCS/radiant ratio; the lobe amplitude and the `:none` centroid weight). DEFAULTS to 1.0
+        # so slices 1–12 (which never read it) are byte-identical; validated ≥ 0 (a negative amplitude
+        # is meaningless — a live huge value just paints a taller lobe, no crash: "a live slider can't
+        # crash a tick"). KNOB-addressable (a gate-3 slider names this comp key).
+        comp[:intensity] = _f64(get(tb, "intensity", 1.0))
+        comp[:intensity] >= 0 ||
+            error("target '$id': intensity must be ≥ 0 (got $(comp[:intensity]))")
         # Slice 12: a `maneuver:` sub-block turns the straight-line target into a CURVING one — swap
         # ConstantVelocity → ManeuveringTarget (the augmented-PN foil). `a_lat_mps2`/`turn_sign` land
         # at KNOB-ADDRESSABLE comp keys, read with DEFAULTS at the consumer (a bare block / live
@@ -121,6 +130,22 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
         else
             subs = Subsystem[ConstantVelocity(id)]
         end
+    elseif kind === :decoy
+        # A countermeasure decoy (slice 13): chaff / a flare — a PASSIVE `ConstantVelocity` mover
+        # (born already-separated in angle from the target, flying parallel — the "present from t=0,
+        # constant velocity, constant intensity" named approximations; no bloom / burn-out / timed
+        # ejection). It carries a `comp[:intensity]` lobe amplitude the `:scan` seeker paints just like
+        # a target's — but its `kind === :decoy` (NEVER `:target`) so `_nearest_target` (radar / jammer
+        # boresight / the Autopilot truth path / the CPA-miss readout) SKIPS it: the seeker may be
+        # SEDUCED, but miss/CPA is ALWAYS computed vs the true `:target` (the truth-path invariant).
+        # The ONLY consumer that sees the decoy is the `:scan` Seeker's angular profile. `intensity`
+        # is KNOB-addressable + validated ≥ 0 (the target-arm precedent; a live huge value just paints
+        # a taller lobe — no crash).
+        db = get(ent, "decoy", Dict{Any,Any}())
+        comp[:intensity] = _f64(get(db, "intensity", 1.0))
+        comp[:intensity] >= 0 ||
+            error("decoy '$id': intensity must be ≥ 0 (got $(comp[:intensity]))")
+        subs = Subsystem[ConstantVelocity(id)]
     elseif kind === :clutter
         # A passive range-band clutter source (slice 3): elevated-mean exponential power
         # over [range, range+extent] of the radar's profile. NO subsystem — it owns no
@@ -312,6 +337,51 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                 error("missile '$id': seeker.alpha must be in (0,1) (got $(comp[:alpha]))")
             comp[:beta] > 0 ||
                 error("missile '$id': seeker.beta must be > 0 (got $(comp[:beta]))")
+            # Slice 13: the `:scan` seeker (fidelity `seeker: scan`) forms a NOISY angular-power
+            # PROFILE over a FIXED grid (the slice-3 CFAR sandbox on the LOS-ANGLE axis) instead of
+            # ONE noisy truth bearing. The grid/beam/CFAR/gate config lands here (STATIC — draw-count/
+            # axis defining, so load-time only, NOT live sliders; only `intensity`/`gate_halfwidth`
+            # are knobs), read with DEFAULTS at the consumer (the gate-0 FINDINGS operating point). A
+            # `:raw`/`:filtered` seeker never reads these keys → they are inert there (slices 1–12
+            # byte-identical). All LOAD-validated: a malformed config must fail as a clear load error,
+            # NOT a throw inside `cfar_scan`/`_draw_profile!` → observe! → the session's IO-only catch.
+            comp[:scan_n_bins]      = Int(get(sb, "n_bins", 64))            # fixed grid cell count
+            comp[:scan_bin_width]   = _f64(get(sb, "bin_width", 0.005))     # bin angular width (rad)
+            comp[:scan_sigma_beam]  = _f64(get(sb, "sigma_beam", 0.015))    # Gaussian lobe σ (rad)
+            comp[:scan_floor]       = _f64(get(sb, "floor", 1.0))           # homogeneous noise floor
+            comp[:scan_n_pulses]    = Int(get(sb, "n_pulses", 10))          # N_p integration (draw ×2·N_p·N_bins)
+            comp[:scan_cfar_variant]= Symbol(get(sb, "cfar_variant", "ca")) # CFAR detector variant
+            comp[:scan_cfar_ntrain] = Int(get(sb, "cfar_n_train", 16))      # training cells (even)
+            comp[:scan_cfar_nguard] = Int(get(sb, "cfar_n_guard", 4))       # guard cells
+            comp[:scan_cfar_pfa]    = _f64(get(sb, "cfar_pfa", 1.0e-3))     # CFAR design Pfa
+            comp[:gate_halfwidth]   = _f64(get(sb, "gate_halfwidth", 0.045))# α-β validation-gate half-width (rad, KNOB)
+            comp[:scan_n_bins]  ≥ 1 ||
+                error("missile '$id': seeker.n_bins must be ≥ 1 (got $(comp[:scan_n_bins]))")
+            comp[:scan_bin_width]  > 0 ||
+                error("missile '$id': seeker.bin_width must be > 0 (got $(comp[:scan_bin_width]))")
+            comp[:scan_sigma_beam] > 0 ||
+                error("missile '$id': seeker.sigma_beam must be > 0 (got $(comp[:scan_sigma_beam]))")
+            comp[:scan_floor]      > 0 ||   # √(power/2) in _draw_profile!; a ≤0 floor makes the noise σ imaginary/NaN
+                error("missile '$id': seeker.floor must be > 0 (got $(comp[:scan_floor]))")
+            comp[:scan_n_pulses]   ≥ 1 ||
+                error("missile '$id': seeker.n_pulses must be ≥ 1 (got $(comp[:scan_n_pulses]))")
+            comp[:scan_cfar_variant] in CFAR_VARIANTS ||
+                error("missile '$id': seeker.cfar_variant must be one of $(CFAR_VARIANTS) " *
+                      "(got :$(comp[:scan_cfar_variant]))")
+            iseven(comp[:scan_cfar_ntrain]) && comp[:scan_cfar_ntrain] ≥ 2 ||
+                error("missile '$id': seeker.cfar_n_train must be even and ≥ 2 (got $(comp[:scan_cfar_ntrain]))")
+            comp[:scan_cfar_nguard] ≥ 0 ||
+                error("missile '$id': seeker.cfar_n_guard must be ≥ 0 (got $(comp[:scan_cfar_nguard]))")
+            (0 < comp[:scan_cfar_pfa] < 1) ||
+                error("missile '$id': seeker.cfar_pfa must be in (0,1) (got $(comp[:scan_cfar_pfa]))")
+            comp[:gate_halfwidth]  > 0 ||
+                error("missile '$id': seeker.gate_halfwidth must be > 0 (got $(comp[:gate_halfwidth]))")
+            # The OS/SO/GO CFAR closed forms are N_p=1 ONLY (`cfar_alpha`/`_cfar_pfa` THROW for
+            # n_pulses>1). With the seeker running N_p>1, an authored os/so/go variant would throw
+            # inside `cfar_scan` → observe! → session death — reject the combo at LOAD (advisor).
+            (comp[:scan_cfar_variant] in (:os, :so, :go) && comp[:scan_n_pulses] > 1) &&
+                error("missile '$id': seeker.cfar_variant :$(comp[:scan_cfar_variant]) requires " *
+                      "n_pulses == 1 (got $(comp[:scan_n_pulses])); use :ca for multi-pulse integration")
             push!(subs, Seeker(id))
         end
         # Slice 9: a GUIDED missile carries a `guidance:` sub-block (k_guid/kp/ki/kd/tau/a_max). Its
@@ -342,7 +412,7 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             push!(subs, Autopilot(id))
         end
     else
-        error("unknown entity kind :$kind for '$id' (knows :radar, :target, :clutter, " *
+        error("unknown entity kind :$kind for '$id' (knows :radar, :target, :decoy, :clutter, " *
               ":jammer, :emitter, :df_sensor, :df_station, :pulse_emitter, :esm, " *
               ":gps_satellite, :gps_receiver, :missile)")
     end

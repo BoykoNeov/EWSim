@@ -1576,6 +1576,45 @@ helper (or pin an observe!-path bin assertion), don't bury it in `observe!`; (b)
 to the masking window). NEXT: gate 2 (the `:decoy` kind + the `:scan` profile/scan/gate `observe!` + the
 `discrimination` rung + the `:scan`-introduce-reject `set_fidelity` guard + test_missile/determinism/server arms).
 
+Gate 2 (WIRED — the `:decoy` kind + the `:scan` profile/scan/gate `observe!` + the `discrimination` rung + the 4b
+introduce-reject guard; +70 tests, 2112; slices 1–12 byte-identical): **`angular_grid(boresight, N_bins, bin_w)`**
+promoted into estimation.jl (the gate-1 forward-flag — the fixed bin-center grid `grid[i]=boresight+(i−(N+1)/2)·bin_w`,
+NOT wrapped [small FOV, planar engagement — monotonic for `extract_peaks`]; length = N_bins boresight-independent, the
+determinism grid), exported + TESTED (centering/ascending/uniform-spacing/known-bin round-trip — the off-by-one pin).
+**scenario.jl:** a NEW **`kind === :decoy`** ([`ConstantVelocity`] mover + `comp[:intensity]` lobe amplitude, validated
+≥0; born already-separated + parallel — the flare reading, present from t=0) that `_nearest_target` SKIPS (the
+truth-path invariant — miss/CPA always vs the true `:target`); `:target` gains `comp[:intensity]` (default 1.0,
+byte-identity for slices 1–12); the `seeker:` block gains the STATIC scan config (`n_bins`/`bin_width`/`sigma_beam`/
+`floor`/`n_pulses`/`cfar_variant`/`cfar_n_train`/`cfar_n_guard`/`cfar_pfa`/`gate_halfwidth`, all LOAD-validated:
+`n_bins≥1`, even `n_train≥2`, `bin_width`/`sigma_beam`/`floor`/`gate_halfwidth`>0, `pfa∈(0,1)`, AND the os/so/go×`n_pulses>1`
+combo REJECTED — those CFAR closed forms are N_p=1 only, would throw inside `cfar_scan`→observe!). **missile.jl:**
+`Seeker.observe!` split into a thin `rung`-dispatcher → **`_observe_point!`** (the slice-11 body VERBATIM, 1 randn —
+byte-identity by construction; `:raw`/`:filtered` take it textually unchanged) + **`_observe_scan!`** (the new path):
+tick-1 CUED-LOCK seed from the TRUTH LOS to `_nearest_target` (decoy-excluded → locks the target first, robust even
+with the decoy at t=0) then FALL THROUGH to the draw (NOT an early return — every tick incl. tick 1 draws, so the count
+is 1500×1280 not 1499×1280, advisor); center the grid on `λ_pred`, `paint_angular_profile!` all `:target`+`:decoy`
+lobes (`_scan_sources`, sorted-id), `_draw_profile!` (the 2·N_p·N_bins topology flip, SAME N_p feeds `cfar_scan`),
+`extract_peaks`, select (`:none`=`intensity_centroid` blend-all / `:gated`=`validation_gate` NN), COAST on `λ_pred` if
+none (α-β innovation exactly 0), then the EXACT `alpha_beta_los_step`; PN consumes the α-β estimate (like `:filtered`);
+scalar telemetry (`aim_error` [THE headline], `lambda_used`/`lambda_est`/`target_bearing`/`decoy_bearing`/`n_peaks`/
+`gated` — no Array). **The `sigma_seek` slider goes INERT under `:scan`** (noise moved into the profile floor; the live
+noise knob is now `pfa`/`intensity`) — named. **radar.jl:** `LIVE_FIDELITY_MODES += discrimination = DISCRIMINATION_MODES`
+(the one-list reference; `:scan` already flowed via `SEEKER_MODES`). **server.jl `set_fidelity`:** the 4b guard —
+reject a `:seeker` change that INTRODUCES *or* REMOVES `:scan` (`cur_scan != new_scan`; BOTH directions, unlike `:cfar`'s
+introduce-only — `:scan→:filtered` is equally a 1280↔1 topology flip); `:raw↔:filtered` + `:none↔:gated` stay live.
+Smoke (temp, seed 6, the FINDINGS operating point): `:none` aim(mid) 3.97° / miss 539 m vs `:gated` 0.056° / 0.06 m
+(≈71× aim ratio — the lesson holds), draw count EXACTLY 1280/tick (2·10·64), decoy-count-independent. `test_missile`
+arms: observe! paints/scans + n_peaks telemetry; `:none` seduced vs `:gated` holds (aim `< 0.5°` vs `> 2°`, ratio `>20×`;
+miss `< 5 m` vs `> 100 m`); the `:none↔:gated` trajectories DIFFER; miss vs the true `:target` (`_nearest_target.id ===
+:tgt1`); the 2·N_p·N_bins draw-count keystone (decoy present AND absent, both `:none`/`:gated`); the huge-intensity/
+wide-gate live-slider guard; the loader arm + 6 rejects. `test_determinism`: same-config `:scan` replay bit-identical
+WITH the 1280/tick draw; the `:none↔:gated` toggle CHANGES the trajectory with the RNG in LOCKSTEP (draw-invariant
+within the 4b host — NOT "vacuous", the opposite of slice 12); the mixed topology (`:filtered` still exactly 1/tick).
+`test_server`: `:discrimination` write/introduce-safe; `:scan` introduce AND remove REJECTED (both directions), while
+`:raw↔:filtered` stays live; the live `intensity`/`gate_halfwidth` sliders survive the tick. NEXT: gate 3 (the
+`slice13_decoy.yaml` scenario + the Godot discrimination cycler + decoy/seduced-LOS view + the four proofs +
+`test_scenario.jl` arm; re-probe on the emit grid, convention 10; confirm the decoy stays inside ±FOV/2 across the run).
+
 ---
 
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
