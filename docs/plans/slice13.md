@@ -497,9 +497,24 @@ so the ONE button toggles the ONE discrimination lesson (convention 9).
       the gate-3 verifier must confirm the decoy stays inside ±FOV/2 (±0.16) across the WHOLE emit-grid window on
       the wire (if it walks out, only the target paints and `:none` stops being seduced → the lesson collapses).
       Re-probe on the emit grid (convention 10) — do NOT inherit the per-tick smoke numbers.
-- [ ] **3. Scenario + Godot + verifiers** — `slice13_decoy.yaml`, the discrimination cycler + decoy/seduced-LOS
-      view, the four proofs, `test_scenario.jl` arm. Update STATUS.md + CLAUDE.md. Commit + push (end-of-batch
-      ritual).
+- [x] **3. Scenario + Godot + verifiers DONE (2153 tests, +41)** — `scenarios/slice13_decoy.yaml`
+      (`discrimination:none` default; `seeker:scan`/`guidance:pn`/`autopilot:ideal` HELD; born-resolved decoy
+      dcy1 at Δ₀≈0.10 rad, intensity 80 vs target 40, `a_max=3000` generous — a POINTING miss). Sandbox.gd:
+      `DISCRIMINATION_RUNGS`, `_on_discrimination_pressed`, the discrimination branch CHECKED FIRST in
+      `_setup_spatial_fid_btn` (before the held seeker/guidance/autopilot), the "disc:" button label, the orange
+      ✦ decoy glyph + `_draw_discrimination_los` (the missile→decoy LOS + the tracked-aim ray from λ_est).
+      **Re-probed on the emit-grid wire** (`M:\claud_projects\temp\slice13_probe\emit_probe.jl`, seed 6):
+      `:none` aim 4.825°/miss 597.6 m vs `:gated` aim 0.054°/miss 4.16 m (~89× aim ratio); the decoy stays
+      inside ±FOV/2 through the aim window (the GATE-3 FORWARD-FLAG CLEARED — Δ grows only 5.75°→7.3° vs the
+      9.17° FOV half). **The four proofs GREEN:** `slice13_verify.gd` (S13V OK — the aim/miss contrast, the
+      1280-draw/tick same-seed bit-identical pos replay, the 4b `set_fidelity seeker raw` reject), 
+      `slice13_ui_test.gd` (S13UI OK — the discrimination cycler none↔gated, intensity→dcy1 set_param, reset
+      resync), the Sandbox.tscn headless smoke-load (server DONE ⇒ scene connected, no GDScript errors), and
+      the windowed shot-harness (`:none` aim ray walks to the ✦ decoy / `:gated` aim ray holds on the target,
+      aim_error 2.6e-4 rad). `test_scenario.jl` slice-13 loader arm (the four-key fidelity, the `:decoy`-kind
+      truth-path invariant, the scan config at consumed keys, the negative-intensity / odd-n_train / N_bins<1 /
+      os-at-N_p>1 rejects). Slices 1–12 byte-identical (golden + determinism green). STATUS.md + CLAUDE.md
+      updated. **Slice 13 COMPLETE.**
 
 ## Context / landmarks
 - **The seeker slice 13 extends:** `Seeker.observe!` (missile.jl:433) — today draws 1 `randn` (line 438) then

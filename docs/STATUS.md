@@ -1514,8 +1514,9 @@ clients/godot --script res://net/slice12_ui_test.gd`. All 2008 tests: `pwsh tool
 
 **Slice 13 — countermeasures: a decoy that seduces a CFAR-scanning seeker + an α-β discrimination gate (the
 suite-fusing slice)** (HANDOFF §10 item 12 — "chaff (= RGPO), flares (IR decoys); seeker discrimination = the
-EW/CFAR sandbox … this stage *fuses the whole suite*") — **IN PROGRESS. Gate 0 (probe) + Gate 1 (primitives) done
-& green (2042 tests, +34); gates 2–3 pending.** Opens the countermeasures arc: put a `:decoy` in front of the
+EW/CFAR sandbox … this stage *fuses the whole suite*") — **COMPLETE. Gates 0–3 done & green (2153 tests). Gate 0
+(probe) + Gate 1 (primitives, +34) + Gate 2 (wired, +70) + Gate 3 (scenario/Godot/verifiers, +41).** Opens the
+countermeasures arc: put a `:decoy` in front of the
 slice-11 seeker and lift the slice-3 CFAR sandbox onto the LOS-ANGLE axis. The lesson is **seduction vs
 discrimination** — the seeker forms a NOISY angular-power profile, CFAR-DETECTS the peaks (target + decoy), and
 either blends them (`:none`, an intensity-weighted centroid walks the seeker OFF truth → miss) or DISCRIMINATES
@@ -1611,9 +1612,58 @@ wide-gate live-slider guard; the loader arm + 6 rejects. `test_determinism`: sam
 WITH the 1280/tick draw; the `:none↔:gated` toggle CHANGES the trajectory with the RNG in LOCKSTEP (draw-invariant
 within the 4b host — NOT "vacuous", the opposite of slice 12); the mixed topology (`:filtered` still exactly 1/tick).
 `test_server`: `:discrimination` write/introduce-safe; `:scan` introduce AND remove REJECTED (both directions), while
-`:raw↔:filtered` stays live; the live `intensity`/`gate_halfwidth` sliders survive the tick. NEXT: gate 3 (the
-`slice13_decoy.yaml` scenario + the Godot discrimination cycler + decoy/seduced-LOS view + the four proofs +
-`test_scenario.jl` arm; re-probe on the emit grid, convention 10; confirm the decoy stays inside ±FOV/2 across the run).
+`:raw↔:filtered` stays live; the live `intensity`/`gate_halfwidth` sliders survive the tick.
+Gate 3 (gate 3 — visible live, 2153 tests, +41): `scenarios/slice13_decoy.yaml` — the slice-11 crossing (m1
+climbs from z=3000 at 12°/700 m/s; the true target tgt1 `[6000,0,4200]` v`[-800,0,200]` OUTRUNS the missile so
+the first CPA is the honest miss) PLUS a born-already-resolved `:decoy` dcy1 at `[5850,0,4793]` (Δ₀≈0.10 rad ≈
+5.75° above the target bearing — ≈6·σ_beam, resolves into a SECOND CFAR peak), flying PARALLEL (v = tgt.vel → a
+fixed linear offset), `intensity: 80` (2× the target's 40 — the brighter competing peak). `fidelity`:
+`discrimination:none` DEFAULT (the button REVEALS the fix) + `seeker:scan`/`guidance:pn`/`autopilot:ideal` HELD
+(convention 9 — the one button toggles discrimination). `a_max: 3000` GENEROUS — the headline is a POINTING miss
+(aimpoint error), NOT saturation (the OPPOSITE of slice-12; the gate-0 pivot #1). knobs: the decoy `intensity`
+(seduction lever) + `gate_halfwidth` (discrimination lever) + `n_pn`/`a_max`; `sigma_seek` is NOT exposed (INERT
+under `:scan` — the dead-knob surprise). **RE-PROBED on the EMIT-GRID wire** (`emit_probe.jl`, convention 10, seed
+6 — NOT the per-tick gate-2 smoke): loads through `load_scenario→tick!(w,subs,dt)` and samples `w.env[:telemetry]`
+at every emit_every — `:none` aim(mid [0.4,1.4]s) **4.825°** / miss **597.6 m** (SEDUCED — the intensity-weighted
+centroid of both peaks walks the aim toward the brighter decoy) vs `:gated` aim **0.054°** / miss **4.16 m** (HOLDS
+— the NN-to-α-β-prediction gate rejects the decoy) — an **≈89× aim ratio**; draw EXACTLY 1280/tick. **The GATE-3
+FORWARD-FLAG CLEARED:** the parallel decoy's subtended Δ grows only 5.75°→~7.3° over the midcourse vs the **9.17°
+FOV half-width** (±0.16 rad), and `:none` misses by 598 m so R never collapses → the decoy stays inside ±FOV/2 for
+t∈[0.02,4.4]s (through the whole aim window); no FOV walk-out, the lesson does NOT collapse. Godot `Sandbox.gd`:
+the SPATIAL view EXTENDED (no new mode — the slice-8..12 precedent) — `DISCRIMINATION_RUNGS=(none,gated)`,
+`_on_discrimination_pressed` (the none↔gated ring), the `discrimination` branch CHECKED FIRST in
+`_setup_spatial_fid_btn` (BEFORE the held seeker/guidance/autopilot — a slice-13 scene ships all four keys; the
+one button toggles the ONE lesson, convention 9), the "disc:" button label + full-four-key badge; the NEW VISUAL —
+an orange ✦ decoy glyph + `_draw_discrimination_los` (the faint missile→decoy LOS + the seeker's TRACKED-aim ray
+drawn from the `lambda_est` telemetry: under `:none` it walks toward the ✦ decoy, under `:gated` it holds on the
+target). All readout SCALARS (no Array telemetry — the `float()`-crash watch-item; the profile/detections are NOT
+shipped). Slice-1..12 views UNTOUCHED (the discriminator falls through — no `discrimination` key → the slice-11/12
+paths unchanged). **THE FOUR PROOFS GREEN:** `net/slice13_verify.gd` (S13V OK, exit 0 — drives the real server:
+`:none` aim 4.825°/miss 597.6 m SEDUCED, `:gated` aim 0.054°/miss 4.16 m HOLDS, the ≈89× ratio, the midcourse
+FOV-containment guard, the **1280-draw/tick same-seed bit-identical pos_x/pos_z replay** [the slice-11 RNG-consumer
+discipline — the `:scan` seeker DRAWS], the 4b guard `set_fidelity seeker raw` REJECTED with an error frame [removing
+`:scan` = a topology flip], miss ALWAYS vs the true target); `net/slice13_ui_test.gd` (S13UI OK — the discrimination
+cycler none↔gated, the held keys untouched, badge/button track, `intensity`→dcy1 `set_param`, reset resyncs to
+none); the `Sandbox.tscn` headless smoke-load (server `WARMING→LISTENING→DONE` ⇒ the scene connected + handshaked,
+NO GDScript errors); and the **windowed shot-harness** (`_draw` fires only windowed — [[ewsim-godot-headless]], the
+slice-3/4 technique, Vulkan/RTX 5090): `:none` = the yellow aim ray walking to the ✦ decoy glyph (aim_error 0.13→
+0.20 rad, seduced), `:gated` = the aim ray HELD on the grey target (aim_error 2.6e-4 rad ≈ 0.015°) — captured from
+t=0 (the harness `reset`+`set_fidelity` BEFORE stepping, since switching `:none→:gated` mid-flight lets `:none` STEAL
+the α-β track onto the decoy first — the RGPO-steal regime, a live gotcha the mid-flight capture surfaced).
+`test_scenario.jl` slice-13 loader arm: the four-key fidelity (discrimination:none default + the three held), the
+`:decoy`-kind truth-path invariant (`d.kind === :decoy !== :target`), the target+decoy `intensity` at consumed comp
+keys, the scan grid/beam/CFAR/gate config at consumed keys, `intensity`/`gate_halfwidth` sliders (NOT sigma_seek —
+dead under `:scan`), `a_max=3000` generous, the base geometry, and the LOAD rejects (negative decoy intensity / odd
+n_train / N_bins<1 / an os variant at N_p>1). Slices 1–12 byte-identical (golden + determinism green through the
+scenario/client/test edits — no `core/src` change beyond gate 2). **Slice 13 COMPLETE — the countermeasures arc
+opens; HANDOFF §10 item 12 ("fuses the whole suite") CLOSED.**
+Run the slice-13 showcase: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice13_decoy.yaml`, then
+launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-uses the spatial view; cycle the `disc:` button to
+watch the aim ray seduce toward the ✦ decoy under `:none` and snap back to the target under `:gated`; drag the decoy
+`intensity` / `gate half-width` sliders). Re-run the gate-3 proof headless: start that server, then the console
+Godot `--headless --path clients/godot --script res://net/slice13_verify.gd` (exit 0 = pass). The UI test needs NO
+server: `… --script res://net/slice13_ui_test.gd`. **(stretch, deferred)** a Pluto miss-vs-intensity/separation
+sweep + an offline `batch.jl` miss-vs-`I`/gate grid (own seeded stream — the distribution path).
 
 ---
 

@@ -27,6 +27,7 @@ const _SCEN10P = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice10_p
 const _SCEN10G = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice10_glimit.yaml"))
 const _SCEN11 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice11_seeker.yaml"))
 const _SCEN12 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice12_apn.yaml"))
+const _SCEN13 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice13_decoy.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -757,6 +758,117 @@ end
         @test_throws Exception load_scenario(mkman(".nan"))        # NaN a_lat rejected too
         @test_throws Exception load_scenario(mkman("200.0", ".nan"))  # a non-finite turn_sign is rejected (conv. 6)
         @test_throws Exception load_scenario(mkman("200.0", ".inf"))  # Inf turn_sign rejected too
+    end
+
+    @testset "loader parses slice13_decoy.yaml (decoy seduction vs α-β gate, spatial view)" begin
+        # The slice-13 showcase: a DECOY seduces the :scan CFAR-scanning seeker; the α-β predicted-LOS gate
+        # rejects it. Keeps the SPATIAL view (discrimination is the missile-view discriminator, the button
+        # cycler CHECKED FIRST — before the HELD seeker/guidance/autopilot). seeker=:scan (the NEW angular-
+        # profile-CFAR path), guidance=:pn, autopilot=:ideal are HELD so the discrimination lesson is
+        # isolated. The :scan seeker consumes w.rng (2·N_p·N_bins/tick) so this carries a seed. Cheap
+        # insurance: a malformed showcase fails HERE, not downstream.
+        scn = load_scenario(_SCEN13)
+        @test scn.name == "slice13_decoy"
+        # `discrimination` DEFAULTS to :none (so the button REVEALS the fix — the NEW key). seeker=:scan,
+        # guidance=:pn, autopilot=:ideal HELD (the one button toggles discrimination — convention 9).
+        @test scn.world.fidelity[:discrimination] === :none
+        @test scn.world.fidelity[:seeker] === :scan
+        @test scn.world.fidelity[:guidance] === :pn
+        @test scn.world.fidelity[:autopilot] === :ideal
+        # single-lesson: no OTHER-slice fidelity, no view axes (discrimination+seeker+guidance+autopilot).
+        for k in (:propagation, :cfar, :ep, :estimator, :deinterleaver, :raim, :integrator)
+            @test !haskey(scn.world.fidelity, k)
+        end
+        @test !any(e -> e.kind in (:radar, :jammer, :clutter, :emitter, :df_sensor, :df_station,
+                                   :pulse_emitter, :esm, :gps_satellite, :gps_receiver),
+                   values(scn.world.entities))
+        # exactly one guided :missile + one true :target + one :decoy (the truth-path invariant: the decoy
+        # is a SEPARATE kind, NEVER :target — so `_nearest_target` skips it and miss/CPA stays vs the target).
+        missiles = [id for (id, e) in scn.world.entities if e.kind === :missile]
+        targets  = [id for (id, e) in scn.world.entities if e.kind === :target]
+        decoys   = [id for (id, e) in scn.world.entities if e.kind === :decoy]
+        @test length(missiles) == 1 && length(targets) == 1 && length(decoys) == 1
+        m = scn.world.entities[missiles[1]]
+        t = scn.world.entities[targets[1]]
+        d = scn.world.entities[decoys[1]]
+        @test d.kind === :decoy && d.kind !== :target        # the truth-path invariant, made explicit
+        # the SCAN seeker is armed → [BallisticMissile, Seeker, Autopilot] (the slice-11 stack); the decoy
+        # is a PASSIVE ConstantVelocity mover (born already-separated, flies parallel — no new mover).
+        @test any(s -> s isa BallisticMissile, scn.subs)
+        @test any(s -> s isa Seeker && s.id === missiles[1], scn.subs)
+        @test any(s -> s isa Autopilot, scn.subs)
+        @test any(s -> s isa ConstantVelocity && s.id === decoys[1], scn.subs)
+        # the target AND the decoy carry a `comp[:intensity]` lobe amplitude (the :scan seeker paints both;
+        # the decoy's is brighter — the competing peak). haskey is the discriminating check.
+        @test haskey(t.comp, :intensity) && t.comp[:intensity] == 40.0
+        @test haskey(d.comp, :intensity) && d.comp[:intensity] == 80.0
+        # the scan config lands at the CONSUMED comp keys (grid/beam/CFAR/gate — the slider→consumed-key
+        # discipline; a silently-failed read would still default, so haskey is the teeth).
+        @test haskey(m.comp, :scan_n_bins) && m.comp[:scan_n_bins] == 64
+        @test haskey(m.comp, :scan_sigma_beam) && m.comp[:scan_sigma_beam] == 0.015
+        @test haskey(m.comp, :scan_n_pulses) && m.comp[:scan_n_pulses] == 10
+        @test haskey(m.comp, :scan_cfar_variant) && m.comp[:scan_cfar_variant] === :ca
+        @test haskey(m.comp, :gate_halfwidth) && m.comp[:gate_halfwidth] == 0.045
+        # intensity (on the DECOY) + gate_halfwidth ARE live sliders (the seduction + discrimination levers);
+        # seeker/discrimination are the fidelity BUTTON not knobs; sigma_seek is NOT exposed (INERT under
+        # :scan — the dead-knob surprise); launch geometry is not a slider.
+        keyset = Set(k.key for k in scn.knobs)
+        @test :intensity in keyset && :gate_halfwidth in keyset
+        @test :discrimination ∉ keyset && :seeker ∉ keyset && :guidance ∉ keyset && :autopilot ∉ keyset
+        @test :sigma_seek ∉ keyset          # sigma_seek is DEAD under :scan → not a slider (advisor)
+        @test all(k -> k.key ∉ (:speed, :elevation_deg), scn.knobs)
+        # the intensity slider targets the DECOY dcy1 (the seduction lever); the gate slider the missile.
+        @test any(k -> k.key === :intensity && k.target === decoys[1], scn.knobs)
+        @test any(k -> k.key === :gate_halfwidth && k.target === missiles[1], scn.knobs)
+        # a_max is GENEROUS (3000 — NOT binding midcourse; the headline is a POINTING miss, not saturation
+        # — the OPPOSITE of slice-12). The base crossing geometry matches slice-11 (the decoy is the ONLY
+        # new variable — convention 9).
+        @test m.comp[:a_max] == 3000.0
+        @test m.comp[:elevation_deg] == 12.0 && m.comp[:speed] == 700.0
+
+        # LOAD-validated: a negative decoy intensity / odd n_train / N_bins < 1 / an os/so/go variant at
+        # N_p>1 must be REJECTED at load (the crash-guard, convention 5; a bad value would throw inside
+        # paint/cfar_scan → observe! → the session's IO-only catch, silently dropping the connection).
+        mkdec(dint, ntrain = "16", nbins = "64", variant = "ca", npulses = "10") = begin
+            f = tempname() * ".yaml"
+            write(f, """
+            name: bad_decoy
+            seed: 6
+            entities:
+              - id: m1
+                kind: missile
+                pos: [0.0, 0.0, 3000.0]
+                missile:
+                  mass_kg: 140.0
+                  speed: 700.0
+                  elevation_deg: 12.0
+                  cd_area_m2: 0.0
+                  guidance: {n_pn: 4.0, r_stop: 30.0, kp: 2.0, ki: 0.0, kd: 0.0, tau: 0.3, a_max: 3000.0}
+                  seeker: {sigma_seek: 3.0e-3, alpha: 0.30, beta: 0.05, n_bins: $nbins,
+                           bin_width: 0.005, sigma_beam: 0.015, floor: 1.0, n_pulses: $npulses,
+                           cfar_variant: $variant, cfar_n_train: $ntrain, cfar_n_guard: 4,
+                           cfar_pfa: 1.0e-3, gate_halfwidth: 0.045}
+              - id: tgt1
+                kind: target
+                pos: [6000.0, 0.0, 4200.0]
+                vel: [-800.0, 0.0, 200.0]
+                target: {rcs_m2: 1.0, intensity: 40.0}
+              - id: dcy1
+                kind: decoy
+                pos: [5850.0, 0.0, 4793.0]
+                vel: [-800.0, 0.0, 200.0]
+                decoy: {intensity: $dint}
+            """)
+            f
+        end
+        @test load_scenario(mkdec("80.0")) isa EWSim.Scenario          # the valid control loads
+        @test load_scenario(mkdec("0.0")) isa EWSim.Scenario           # intensity 0 (a dark decoy) is fine
+        @test_throws Exception load_scenario(mkdec("-1.0"))            # a NEGATIVE decoy intensity rejected
+        @test_throws Exception load_scenario(mkdec("80.0", "17"))     # ODD n_train rejected (even-only CFAR)
+        @test_throws Exception load_scenario(mkdec("80.0", "16", "0")) # N_bins < 1 rejected
+        # os/so/go CFAR closed forms are N_p=1 only → an os variant at n_pulses>1 must be rejected (advisor).
+        @test_throws Exception load_scenario(mkdec("80.0", "16", "64", "os", "10"))
+        @test load_scenario(mkdec("80.0", "16", "64", "os", "1")) isa EWSim.Scenario  # os at N_p=1 is fine
     end
 
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin

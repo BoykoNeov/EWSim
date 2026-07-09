@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–12 COMPLETE & green; slice 13 IN PROGRESS (gates 0–2 done) — 2112 tests.** Full gate-by-gate
+**Slices 1–13 COMPLETE & green — 2153 tests.** Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands) lives in
 **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -89,23 +89,26 @@ as-built detail (exact numbers, test names, watch-items, advisor-catches, per-sl
   again). Reads TRUTH `a_T` ("even a perfect seeker still lags"); gravity-comp PN + estimated `a_T` DEFERRED.
   Closes HANDOFF §10 item 10. (2008)
 
-- **Slice 13 (roadmap item 12) — countermeasures (IN PROGRESS)**: a `:decoy` seduces the slice-11 seeker; the
-  slice-3 CFAR sandbox lifts onto the LOS-ANGLE axis (`:scan` rung); seduction (`:none` blend) vs discrimination
-  (`:gated` α-β predicted-LOS gate = the RGPO track-gate in angle). Plan: `docs/plans/slice13.md` (gate-0 probe +
-  3 gates; fork (b) — full continuous angular-profile CFAR scan — RATIFIED). **Gate 0 (probe) + Gate 1
-  (primitives: `paint_angular_profile!`/`intensity_centroid`/`extract_peaks`/`validation_gate` +
-  `SEEKER_MODES+=:scan` + `DISCRIMINATION_MODES`) DONE & green.** RNG inflection RE-INVERTS to APPLIES (a seeker
-  draws again, conventions 3/11); `:scan` is class 4b (draw-topology flip `1`→`2·N_p·N_bins`, introduce-rejected
-  like `:cfar`), `discrimination` draw-invariant-within-the-4b-host + inert without `:scan`. **Gate 2 (WIRED) DONE
-  & green:** the `:decoy` kind (`_nearest_target` skips it — miss/CPA always vs the true target) + `Seeker.observe!`
-  split into `_observe_point!` (slice-11 VERBATIM, 1 draw) / `_observe_scan!` (2·N_p·N_bins, tick-1 truth-cued lock,
-  paint→`_draw_profile!`→`cfar_scan`→`extract_peaks`→`:none` blend/`:gated` NN gate) + `angular_grid` + the
-  `discrimination` key + the 4b `:scan` introduce/remove-reject `set_fidelity` guard. Smoke (seed 6): `:none` aim
-  3.97°/miss 539 m vs `:gated` 0.056°/0.06 m (~71×), draw EXACTLY 1280/tick. NEXT: gate 3 (`slice13_decoy.yaml` +
-  Godot discrimination cycler + decoy/seduced-LOS view + the four proofs + `test_scenario.jl`; re-probe on the
-  emit grid; the decoy stays inside ±FOV/2 across the run). (2112)
+- **Slice 13 (roadmap item 12) — countermeasures COMPLETE**: a `:decoy` seduces the slice-11 seeker; the
+  slice-3 CFAR sandbox lifts onto the LOS-ANGLE axis (`:scan` rung); seduction (`:none` intensity-blend of ALL
+  CFAR peaks) vs discrimination (`:gated` α-β predicted-LOS **nearest-neighbour** gate = the RGPO track-gate in
+  angle). The FUSION lives in the discrimination half: `cfar_scan` DETECTS the peaks in the noisy angular profile
+  (a real job — two lobes in fast-Rayleigh noise), the α-β predicted gate DISCRIMINATES which peak to keep (CFAR
+  alone can't reject a BRIGHTER decoy). The HEADLINE is AIMPOINT error `|λ_est−λ_target|` (clean by construction;
+  miss corroborates) under a GENEROUS `a_max` (a POINTING miss, ≠ slice-12's saturation miss). RNG inflection
+  RE-INVERTS to APPLIES (a seeker draws again, conventions 3/11); `:scan` is class 4b (draw-topology flip
+  `1`→`2·N_p·N_bins`, introduce/remove-rejected like `:cfar`), `discrimination` draw-invariant-within-the-4b-host
+  + inert without `:scan`. The `:decoy` kind is NEVER `:target` (`_nearest_target` skips it → miss/CPA ALWAYS vs
+  the true target — the seeker is seduced but the miss is honest). `Seeker.observe!` split into `_observe_point!`
+  (slice-11 VERBATIM, 1 draw) / `_observe_scan!` (2·N_p·N_bins, tick-1 truth-cued lock, paint→`_draw_profile!`→
+  `cfar_scan`→`extract_peaks`→`:none` blend / `:gated` NN gate). Emit-grid wire (seed 6): `:none` aim 4.83°/miss
+  598 m vs `:gated` aim 0.054°/miss 4.16 m (~89×), draw EXACTLY 1280/tick; the born-resolved parallel decoy stays
+  inside ±FOV/2 across the aim window. Four proofs green (verifier + UI + smoke-load + windowed shot: `:none` aim
+  ray walks to the ✦ decoy, `:gated` holds on the target). Closes HANDOFF §10 item 12 — "fuses the whole suite".
+  Deferred (NAMED): the range-gate RGPO variant vs a tracking radar; RF/IR seeker split; decoy dynamics
+  (bloom/burn-out/ejection); 2-D az×el/monopulse; salvo. (2153)
 
-(The missile guidance arc — slices 8–12 — is COMPLETE.)
+(The missile guidance arc — slices 8–12 — is COMPLETE. The countermeasures arc opens with slice 13.)
 
 ## Conventions / hard-won disciplines
 

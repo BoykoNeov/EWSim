@@ -157,6 +157,7 @@ const INTEGRATOR_RUNGS := ["rk4", "euler"]   # slice-8 integrator cycler (the sh
 const AUTOPILOT_RUNGS := ["ideal", "pid"]    # slice-9 autopilot cycler (the shared fidelity button)
 const GUIDANCE_RUNGS := ["pursuit", "pn", "apn"]   # slice-10/12 OUTER-law cycler (3-ring: +apn, slice 12)
 const SEEKER_RUNGS := ["raw", "filtered"]    # slice-11 seeker cycler (raw finite-diff ↔ α-β filtered)
+const DISCRIMINATION_RUNGS := ["none", "gated"]   # slice-13 countermeasures cycler (blend-all ↔ α-β predicted-LOS gate)
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
 func _ready() -> void:
@@ -289,7 +290,30 @@ func _setup_spatial_fid_btn() -> void:
 	# else `propagation` (slice 1/2, the binary toggle wired in _build_ui). The disconnect is
 	# guarded so the headless UI tests — which build the button without _build_ui's connect —
 	# don't error, exactly like _enter_cfar_mode.
-	if _fidelity.has("ep"):
+	if _fidelity.has("discrimination"):
+		# Slice-13 countermeasures: a `discrimination` fidelity keeps the SPATIAL elevation view (the
+		# crossing engagement is planar in x-z) but repurposes the shared button as the :none↔:gated
+		# DISCRIMINATION cycler. CHECKED FIRST — BEFORE seeker/guidance/autopilot — ON PURPOSE: a
+		# slice-13 scenario ships ALL FOUR keys (seeker:scan + guidance:pn + autopilot:ideal are HELD
+		# FIXED so the discrimination lesson is uncontaminated), and the ONE button must toggle
+		# `discrimination`, not the held ones (convention 9 — one lesson per button; the slice-11
+		# "seeker before guidance/autopilot" precedent, one lesson deeper). Same guarded disconnect as
+		# the other _fid_kind setups. Under :none the seeker's tracked-LOS ray (drawn from λ_est) walks
+		# toward the brighter DECOY glyph → the missile leads the BLEND → a miss; under :gated the α-β
+		# predicted-LOS gate rejects the separated decoy peak → the ray HOLDS on the target → intercept
+		# (the visual tell; the aim_error readout is the number). `discrimination` is DRAW-INVARIANT among
+		# its rungs (both paint+draw the same 2·N_p·N_bins profile — they differ only in peak SELECTION,
+		# introduce-safe once :scan is on) YET TRAJECTORY-CHANGING, and INERT without seeker=:scan.
+		_fid_kind = "discrimination"
+		if _prop_btn.pressed.is_connected(_on_prop_pressed):
+			_prop_btn.pressed.disconnect(_on_prop_pressed)
+		if not _prop_btn.pressed.is_connected(_on_discrimination_pressed):
+			_prop_btn.pressed.connect(_on_discrimination_pressed)
+		_prop_btn.tooltip_text = "Cycle discrimination (set_fidelity): none ↔ gated"
+		# Seed extents to fit the crossing (x ~0..8 km, z ~2..8 km); they only grow, so start close.
+		_x_max = 8000.0
+		_z_max = 8000.0
+	elif _fidelity.has("ep"):
 		_fid_kind = "ep"
 		if _prop_btn.pressed.is_connected(_on_prop_pressed):
 			_prop_btn.pressed.disconnect(_on_prop_pressed)
@@ -498,6 +522,8 @@ func _update_fid_btn() -> void:
 			_prop_btn.text = "guidance: %s" % str(_fidelity.get("guidance", "?"))
 		"seeker":
 			_prop_btn.text = "seeker: %s" % str(_fidelity.get("seeker", "?"))
+		"discrimination":
+			_prop_btn.text = "disc: %s" % str(_fidelity.get("discrimination", "?"))
 		_:
 			_update_prop_btn()
 
@@ -642,6 +668,27 @@ func _on_seeker_pressed() -> void:
 	var next: String = SEEKER_RUNGS[(i + 1) % SEEKER_RUNGS.size()] if i >= 0 else "filtered"
 	_fidelity["seeker"] = next
 	_client.send({"type": "set_fidelity", "key": "seeker", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
+func _on_discrimination_pressed() -> void:
+	# Advance the DISCRIMINATION rung (none↔gated) and tell the core (set_fidelity). Like the slice-11
+	# seeker this is DRAW-INVARIANT among its rungs YET TRAJECTORY-CHANGING: both :none and :gated paint
+	# the SAME angular profile and draw the SAME 2·N_p·N_bins randn/tick (they differ ONLY in
+	# post-detection peak SELECTION — blend-all vs α-β-predicted-LOS gate), so a mid-run flip does NOT
+	# desync the RNG (introduce-safe ONCE seeker=:scan is on — the nested-in-4b property). So copy NEITHER
+	# the slice-3 "draw-flip" NOR a "no-RNG" line: the :scan seeker DRAWS. Under :none the intensity-
+	# weighted centroid of ALL detected peaks walks the aim toward the brighter DECOY (seduced → a miss);
+	# under :gated the nearest peak to the α-β PREDICTED bearing is kept (the target-locked track rejects
+	# the separated decoy → intercept) — the RGPO track-gate, in angle. `seeker`/`guidance`/`autopilot`
+	# stay FIXED (this button toggles only `discrimination`). INERT without seeker=:scan (no profile → no
+	# peaks → nothing to discriminate — the :raim-without-GPS coupling). The client owns the displayed
+	# rung: badge + button locally (the server applies it silently on the next tick, no reply).
+	var cur := str(_fidelity.get("discrimination", "none"))
+	var i := DISCRIMINATION_RUNGS.find(cur)
+	var next: String = DISCRIMINATION_RUNGS[(i + 1) % DISCRIMINATION_RUNGS.size()] if i >= 0 else "none"
+	_fidelity["discrimination"] = next
+	_client.send({"type": "set_fidelity", "key": "discrimination", "value": next})
 	_render_badge()
 	_update_fid_btn()
 
@@ -929,10 +976,20 @@ func _draw_spatial() -> void:
 			draw_colored_polygon(PackedVector2Array(
 				[p + Vector2(0, -8), p + Vector2(8, 0), p + Vector2(0, 8), p + Vector2(-8, 0)]), jcol)
 			draw_string(_font, p + Vector2(11, 4), id, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, jcol)
+		elif e.kind == "decoy":
+			# Countermeasure decoy (slice 13): a distinct ORANGE ✦ (a 4-point star) — the false lobe
+			# the :scan seeker paints alongside the true target. It is NEVER the truth path
+			# (`_nearest_target` skips kind :decoy → miss/CPA is always vs the true target); it exists to
+			# SEDUCE the undiscriminated seeker (the :none blend leads the missile toward this glyph).
+			var dcol := Color(1.0, 0.6, 0.15)
+			draw_colored_polygon(PackedVector2Array([
+				p + Vector2(0, -9), p + Vector2(2.5, -2.5), p + Vector2(9, 0), p + Vector2(2.5, 2.5),
+				p + Vector2(0, 9), p + Vector2(-2.5, 2.5), p + Vector2(-9, 0), p + Vector2(-2.5, -2.5)]), dcol)
+			draw_string(_font, p + Vector2(11, 4), id + " (decoy)", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, dcol)
 
 	# missile (slice 8): the fading trajectory trail + a nose-oriented marker + an impact burst,
 	# on top of the elevation view (drawn only in the missile-view branch, so slice-1/2/4 are untouched)
-	if _fid_kind == "missile" or _fid_kind == "autopilot" or _fid_kind == "guidance" or _fid_kind == "seeker":
+	if _fid_kind == "missile" or _fid_kind == "autopilot" or _fid_kind == "guidance" or _fid_kind == "seeker" or _fid_kind == "discrimination":
 		_draw_missile()
 	# guided missile (slice 9/10/11): a LOS line missile→target so the guidance geometry reads (the target
 	# marker is drawn by the generic :target branch above; the a_cmd/a_ach/track_gap [slice 9] +
@@ -940,8 +997,13 @@ func _draw_spatial() -> void:
 	# the lesson number, rendered as text by _update_readout — all scalars, no Array-crash). Under :pn the
 	# LOS line holds a constant bearing (the collision triangle); under :pursuit it swings. For the slice-11
 	# seeker the λ̇ readout JITTERS under :raw (saturated lit) vs STEADY under :filtered (the α-β smoothing).
-	if _fid_kind == "autopilot" or _fid_kind == "guidance" or _fid_kind == "seeker":
+	if _fid_kind == "autopilot" or _fid_kind == "guidance" or _fid_kind == "seeker" or _fid_kind == "discrimination":
 		_draw_guidance_los()
+	# countermeasures (slice 13): the DECOY glyph is drawn in the entity loop above; here overlay the
+	# faint missile→decoy LOS + the seeker's TRACKED-aim ray (from λ_est) — under :none it walks toward
+	# the decoy (seduced), under :gated it holds on the target (the discrimination tell).
+	if _fid_kind == "discrimination":
+		_draw_discrimination_los()
 
 	# detection blips: expanding rings that fade over BLIP_TTL
 	for b in _blips:
@@ -1000,6 +1062,33 @@ func _draw_guidance_los() -> void:
 		if rng < 60.0:                                              # near intercept → ring it
 			draw_arc(tp, 12.0, 0.0, TAU, 24, Color(1.0, 0.6, 0.2), 2.0)
 		break                                                      # single target in slice 9
+
+func _draw_discrimination_los() -> void:
+	# Slice 13: the seduction-vs-discrimination tell drawn in the elevation view. Two overlays on top of
+	# the true-target LOS (drawn by _draw_guidance_los): (1) a faint missile→decoy LOS (orange) so the
+	# false lobe's geometry reads; (2) the seeker's TRACKED-aim ray from λ_est (the α-β bearing the core
+	# shipped) — a bright yellow ray from the missile along (cos λ_est, 0, sin λ_est). Under :none the ray
+	# walks BETWEEN the target and the brighter decoy (the seduced blend → the missile leads off-target →
+	# a miss); under :gated the gate rejects the decoy peak so the ray HOLDS on the target (intercept).
+	# ALL from entity pos / telemetry — nothing recomputed (the α-β estimate is core output, HANDOFF §1).
+	if _missile_id == "" or not _entities.has(_missile_id):
+		return
+	var mpos: Array = _entities[_missile_id].pos
+	var mp := _world_to_screen(mpos)
+	# (1) faint missile→decoy LOS (drawn to every decoy in the scene)
+	for id in _entities:
+		if str(_entities[id].kind) != "decoy":
+			continue
+		draw_line(mp, _world_to_screen(_entities[id].pos), Color(1.0, 0.6, 0.15, 0.35), 1.0)
+	# (2) the tracked-aim ray from λ_est — the seduced/held bearing the seeker is actually steering on.
+	if _telemetry.has(_missile_id + ".lambda_est"):
+		var lam := float(_telemetry[_missile_id + ".lambda_est"])
+		# ray length ≈ the range to the true target so the ray reaches the target plane (clamped so a
+		# huge/early los_range can't shoot far off screen); world x-z direction (cos λ, 0, sin λ).
+		var L := clampf(float(_telemetry.get(_missile_id + ".los_range", 6000.0)), 500.0, 12000.0)
+		var tip := [float(mpos[0]) + L * cos(lam), 0.0, float(mpos[2]) + L * sin(lam)]
+		draw_line(mp, _world_to_screen(tip), Color(1.0, 0.95, 0.3, 0.9), 2.0)
+		draw_string(_font, mp + Vector2(6, 18), "aim", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.95, 0.3))
 
 # --- CFAR range-power view (slice 3) ------------------------------------------
 # A plot: x = range (the core's static range axis), y = power in dB. Three layers, all from
