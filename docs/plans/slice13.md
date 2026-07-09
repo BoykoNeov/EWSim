@@ -497,7 +497,7 @@ so the ONE button toggles the ONE discrimination lesson (convention 9).
       the gate-3 verifier must confirm the decoy stays inside ±FOV/2 (±0.16) across the WHOLE emit-grid window on
       the wire (if it walks out, only the target paints and `:none` stops being seduced → the lesson collapses).
       Re-probe on the emit grid (convention 10) — do NOT inherit the per-tick smoke numbers.
-- [x] **3. Scenario + Godot + verifiers DONE (2153 tests, +41)** — `scenarios/slice13_decoy.yaml`
+- [x] **3. Scenario + Godot + verifiers DONE (2159 tests, +47)** — `scenarios/slice13_decoy.yaml`
       (`discrimination:none` default; `seeker:scan`/`guidance:pn`/`autopilot:ideal` HELD; born-resolved decoy
       dcy1 at Δ₀≈0.10 rad, intensity 80 vs target 40, `a_max=3000` generous — a POINTING miss). Sandbox.gd:
       `DISCRIMINATION_RUNGS`, `_on_discrimination_pressed`, the discrimination branch CHECKED FIRST in

@@ -917,6 +917,27 @@ end
         end
     end
 
+    @testset "composition golden: _observe_scan! λ_est is byte-pinned per rung (convention 2)" begin
+        # The draw-count keystone above pins the RNG STREAM; the estimation.jl unit goldens pin each
+        # deterministic link (angular_grid / paint_angular_profile! / _draw_profile! / extract_peaks /
+        # intensity_centroid / validation_gate). This locks the LAST link — the _observe_scan! WIRING
+        # (λ_pred grid center, the tick-1 cued-lock truth seed, the disc→selection arg order, the α-β
+        # update) — end-to-end, so a silent refactor can't desync replay while sailing under the loose
+        # lesson bounds (aim < 0.5° vs 0.056°, ~9× margin). `===` is Float64 bit-equality; probed off the
+        # live tick! path at seed 6 (convention 10). The two rungs DIVERGE from tick 1: `:none` walks the
+        # aimpoint OFF toward the brighter decoy (λ_est climbs), `:gated` NN-gates it out (λ_est holds).
+        gold = Dict(
+            :none  => [0.21621316295743476, 0.23306850480364805, 0.2446078687413303],
+            :gated => [0.1957472248935027,  0.1959439136332688,  0.19677838734434888])
+        for disc in (:none, :gated)
+            w, subs = scan_world(disc = disc, seed = 6)
+            for k in 1:3
+                tick!(w, subs, dt); empty!(w.events)
+                @test w.entities[:m1].comp[:seek_lambda_est] === gold[disc][k]
+            end
+        end
+    end
+
     @testset "a huge decoy intensity / wide gate never crashes a tick (live-slider guard)" begin
         # intensity + gate_halfwidth are KNOBS — absurd live values just paint a taller lobe / widen the
         # gate; no throw / NaN (√(power/2) stays finite; validation_gate is safe at any halfwidth).

@@ -1514,7 +1514,7 @@ clients/godot --script res://net/slice12_ui_test.gd`. All 2008 tests: `pwsh tool
 
 **Slice 13 — countermeasures: a decoy that seduces a CFAR-scanning seeker + an α-β discrimination gate (the
 suite-fusing slice)** (HANDOFF §10 item 12 — "chaff (= RGPO), flares (IR decoys); seeker discrimination = the
-EW/CFAR sandbox … this stage *fuses the whole suite*") — **COMPLETE. Gates 0–3 done & green (2153 tests). Gate 0
+EW/CFAR sandbox … this stage *fuses the whole suite*") — **COMPLETE. Gates 0–3 done & green (2159 tests). Gate 0
 (probe) + Gate 1 (primitives, +34) + Gate 2 (wired, +70) + Gate 3 (scenario/Godot/verifiers, +41).** Opens the
 countermeasures arc: put a `:decoy` in front of the
 slice-11 seeker and lift the slice-3 CFAR sandbox onto the LOS-ANGLE axis. The lesson is **seduction vs
@@ -1613,7 +1613,7 @@ WITH the 1280/tick draw; the `:none↔:gated` toggle CHANGES the trajectory with
 within the 4b host — NOT "vacuous", the opposite of slice 12); the mixed topology (`:filtered` still exactly 1/tick).
 `test_server`: `:discrimination` write/introduce-safe; `:scan` introduce AND remove REJECTED (both directions), while
 `:raw↔:filtered` stays live; the live `intensity`/`gate_halfwidth` sliders survive the tick.
-Gate 3 (gate 3 — visible live, 2153 tests, +41): `scenarios/slice13_decoy.yaml` — the slice-11 crossing (m1
+Gate 3 (gate 3 — visible live, 2159 tests, +47): `scenarios/slice13_decoy.yaml` — the slice-11 crossing (m1
 climbs from z=3000 at 12°/700 m/s; the true target tgt1 `[6000,0,4200]` v`[-800,0,200]` OUTRUNS the missile so
 the first CPA is the honest miss) PLUS a born-already-resolved `:decoy` dcy1 at `[5850,0,4793]` (Δ₀≈0.10 rad ≈
 5.75° above the target bearing — ≈6·σ_beam, resolves into a SECOND CFAR peak), flying PARALLEL (v = tgt.vel → a
@@ -1655,12 +1655,24 @@ the α-β track onto the decoy first — the RGPO-steal regime, a live gotcha th
 keys, the scan grid/beam/CFAR/gate config at consumed keys, `intensity`/`gate_halfwidth` sliders (NOT sigma_seek —
 dead under `:scan`), `a_max=3000` generous, the base geometry, and the LOAD rejects (negative decoy intensity / odd
 n_train / N_bins<1 / an os variant at N_p>1). Slices 1–12 byte-identical (golden + determinism green through the
-scenario/client/test edits — no `core/src` change beyond gate 2). **Slice 13 COMPLETE — the countermeasures arc
+scenario/client/test edits — no `core/src` change beyond gate 2). **BYTE-IDENTITY ON THE NEW SCAN PATH — advisor
+review close-out:** the RNG stream is pinned by the shared `_draw_profile!` `===` draw-order golden (test_radar.jl,
+reused verbatim by `_observe_scan!`) + the 1280-draw keystone (its sole consumer); each deterministic link by its
+estimation.jl unit golden (`angular_grid`/`paint_angular_profile!`/`extract_peaks`/`intensity_centroid`/
+`validation_gate`, `===`/`atol=1e-12`); and — the gap the review closed — the `_observe_scan!` COMPOSITION (λ_pred
+grid center, tick-1 cued-lock seed, disc→selection arg order, α-β wiring) by a NEW composition golden pinning
+`seek_lambda_est` across the first 3 ticks per rung with `===` (probed off the live tick! path, convention 10; the two
+rungs DIVERGE from tick 1 — `:none` walks the aimpoint off, `:gated` holds), so a silent refactor can't desync replay
+while sailing under the loose lesson bounds. **Slice 13 COMPLETE — the countermeasures arc
 opens; HANDOFF §10 item 12 ("fuses the whole suite") CLOSED.**
 Run the slice-13 showcase: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice13_decoy.yaml`, then
 launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-uses the spatial view; cycle the `disc:` button to
 watch the aim ray seduce toward the ✦ decoy under `:none` and snap back to the target under `:gated`; drag the decoy
-`intensity` / `gate half-width` sliders). Re-run the gate-3 proof headless: start that server, then the console
+`intensity` / `gate half-width` sliders). **RESET between rungs to see the clean `:gated` recovery** (the slice-2
+"`reset` BEFORE `set_fidelity`" pattern): letting `:none` run first STEALS the α-β track onto the brighter decoy, so
+a mid-flight `:none→:gated` toggle keeps tracking the decoy (the gate now centers on the stolen prediction — the
+RGPO-steal regime). Press `reset` (→ t=0, the cued-lock re-seeds on the true target) THEN cycle to `:gated` so it
+runs from launch — the honest live procedure, exactly what the verifier + shot-harness do. Re-run the gate-3 proof headless: start that server, then the console
 Godot `--headless --path clients/godot --script res://net/slice13_verify.gd` (exit 0 = pass). The UI test needs NO
 server: `… --script res://net/slice13_ui_test.gd`. **(stretch, deferred)** a Pluto miss-vs-intensity/separation
 sweep + an offline `batch.jl` miss-vs-`I`/gate grid (own seeded stream — the distribution path).

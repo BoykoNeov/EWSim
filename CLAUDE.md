@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–13 COMPLETE & green — 2153 tests.** Full gate-by-gate
+**Slices 1–13 COMPLETE & green — 2159 tests.** Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands) lives in
 **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -106,7 +106,7 @@ as-built detail (exact numbers, test names, watch-items, advisor-catches, per-sl
   inside ±FOV/2 across the aim window. Four proofs green (verifier + UI + smoke-load + windowed shot: `:none` aim
   ray walks to the ✦ decoy, `:gated` holds on the target). Closes HANDOFF §10 item 12 — "fuses the whole suite".
   Deferred (NAMED): the range-gate RGPO variant vs a tracking radar; RF/IR seeker split; decoy dynamics
-  (bloom/burn-out/ejection); 2-D az×el/monopulse; salvo. (2153)
+  (bloom/burn-out/ejection); 2-D az×el/monopulse; salvo. (2159)
 
 (The missile guidance arc — slices 8–12 — is COMPLETE. The countermeasures arc opens with slice 13.)
 

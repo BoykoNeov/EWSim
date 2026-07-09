@@ -16,7 +16,10 @@
 #   Cycle to :gated — CFAR-detect the peaks, keep the nearest one to the α-β PREDICTED bearing (the
 #   target-locked track always returns the target peak — the decoy sits outside the gate), centroid
 #   that → the decoy is REJECTED → the aim stays on the truth → tight intercept (≈ the :scan no-decoy
-#   baseline). `discrimination` is DRAW-INVARIANT among its rungs (both paint the SAME profile + draw
+#   baseline). LIVE: `reset` BEFORE switching to :gated (the slice-2 reset-then-set_fidelity pattern) —
+#   letting :none run first STEALS the α-β track onto the brighter decoy, so a mid-flight :none→:gated
+#   toggle centers the gate on the stolen prediction and keeps the decoy (the RGPO-steal regime); reset
+#   re-seeds the cued-lock on the true target so :gated runs clean from t=0. `discrimination` is DRAW-INVARIANT among its rungs (both paint the SAME profile + draw
 #   the SAME 2·N_p·N_bins randn — they differ ONLY in post-detection peak SELECTION) YET
 #   TRAJECTORY-CHANGING (a :none↔:gated toggle MOVES the missile) — the slice-11 shape one level up.
 #   It is INERT without `seeker=:scan` (no profile → no peaks → nothing to discriminate — the
