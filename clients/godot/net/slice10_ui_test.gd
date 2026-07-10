@@ -64,11 +64,12 @@ func _initialize() -> void:
 	if btn0 != "guidance: pn":
 		return _fail("button did not render 'guidance: pn' (the toggled lesson, not autopilot): '%s'" % btn0)
 
-	# Cycle the guidance ring pn→pursuit→pn (2 presses wrap). Each press sends set_fidelity{key:
-	# guidance} + re-renders badge + button. It must NEVER send a set_fidelity for autopilot (held fixed).
+	# Cycle the guidance 3-RING pn→apn→pursuit→pn (3 presses wrap — the apn rung landed in slice 12, so the
+	# outer-law cycler is now GUIDANCE_RUNGS=[pursuit,pn,apn]). Each press sends set_fidelity{key: guidance}
+	# + re-renders badge + button. It must NEVER send a set_fidelity for autopilot (held fixed).
 	var seq: Array = []
 	var touched_autopilot := false
-	for step in 2:
+	for step in 3:
 		sb._on_guidance_pressed()
 	for d in mock.sent:
 		if str(d.get("type", "")) == "set_fidelity" and str(d.get("key", "")) == "guidance":
@@ -76,8 +77,8 @@ func _initialize() -> void:
 		if str(d.get("type", "")) == "set_fidelity" and str(d.get("key", "")) == "autopilot":
 			touched_autopilot = true
 	print("S10UI_CYCLE seq=%s  final btn='%s'" % [str(seq), sb._prop_btn.text])
-	if seq != ["pursuit", "pn"]:
-		return _fail("guidance cycle sent wrong set_fidelity sequence: %s" % str(seq))
+	if seq != ["apn", "pursuit", "pn"]:
+		return _fail("guidance 3-ring cycle sent wrong set_fidelity sequence: %s (want apn→pursuit→pn)" % str(seq))
 	if touched_autopilot:
 		return _fail("the guidance button must NOT touch autopilot (the held-fixed inner loop)")
 	if sb._prop_btn.text != "guidance: pn":
@@ -104,9 +105,9 @@ func _initialize() -> void:
 	# Reset must resync the button/badge to the scenario default (server reloads YAML → the defaults, no
 	# new handshake — the client owns the displayed state) + send reset. First move the rung OFF the
 	# default so the resync is observable.
-	sb._on_guidance_pressed()               # pn → pursuit
-	if sb._prop_btn.text != "guidance: pursuit":
-		return _fail("pre-reset button should be 'guidance: pursuit', got '%s'" % sb._prop_btn.text)
+	sb._on_guidance_pressed()               # pn → apn (the first rung off the default in the 3-ring)
+	if sb._prop_btn.text != "guidance: apn":
+		return _fail("pre-reset button should be 'guidance: apn', got '%s'" % sb._prop_btn.text)
 	sb._on_reset_pressed()
 	print("S10UI_RESET btn='%s' badge='%s'" % [sb._prop_btn.text, sb._badge.text])
 	if sb._prop_btn.text != "guidance: pn":
@@ -118,8 +119,8 @@ func _initialize() -> void:
 	if not saw_reset:
 		return _fail("reset button sent no reset frame")
 
-	print("S10UI OK: slice-10 handshake STAYS spatial + wires the GUIDANCE cycler (NOT autopilot); ring " +
-		"walks pursuit→pn and wraps; autopilot untouched; badge/button track; n_pn slider sends set_param; " +
+	print("S10UI OK: slice-10 handshake STAYS spatial + wires the GUIDANCE cycler (NOT autopilot); the " +
+		"3-ring walks apn→pursuit→pn and wraps; autopilot untouched; badge/button track; n_pn slider sends set_param; " +
 		"reset resyncs to pn")
 	_teardown()
 	quit(0)

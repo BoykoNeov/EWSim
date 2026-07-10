@@ -160,11 +160,13 @@ var _missile_trail: Array = []    # WORLD [x,y,z] breadcrumbs (mapped through _w
 # straight-in and one arrives well before the other (the spread).
 var _salvo_trails := {}
 const INTEGRATOR_RUNGS := ["rk4", "euler"]   # slice-8 integrator cycler (the shared fidelity button)
-const AUTOPILOT_RUNGS := ["ideal", "pid"]    # slice-9 autopilot cycler (the shared fidelity button)
+const AUTOPILOT_RUNGS := ["ideal", "pid"]    # slice-9 autopilot cycler (the ONE source of truth for the rungs)
 # The autopilot ring is PER-SCENARIO: slice-9 stays the 2-ring :ideal↔:pid (its UI test asserts the
-# 2-cycle), slice-15 (autopilot:fin) upgrades to the 3-ring :ideal→:pid→:fin at handshake. Set once in
-# the discriminator; reset leaves it (reset only resyncs _fidelity), so the 3-ring survives a re-launch.
-var _autopilot_rungs: Array = ["ideal", "pid"]
+# 2-cycle), slice-15 (autopilot:fin) upgrades to the 3-ring :ideal→:pid→:fin at handshake. Initialized
+# FROM the const (one-list-no-drift — the fin branch appends `fin`, nothing re-lists the base rungs). Set
+# once in the discriminator; reset leaves it (reset only resyncs _fidelity), so the 3-ring survives a
+# re-launch.
+var _autopilot_rungs: Array = AUTOPILOT_RUNGS.duplicate()
 const GUIDANCE_RUNGS := ["pursuit", "pn", "apn"]   # slice-10/12 OUTER-law cycler (3-ring: +apn, slice 12)
 const SEEKER_RUNGS := ["raw", "filtered"]    # slice-11 seeker cycler (raw finite-diff ↔ α-β filtered)
 const DISCRIMINATION_RUNGS := ["none", "gated"]   # slice-13 countermeasures cycler (blend-all ↔ α-β predicted-LOS gate)
@@ -410,7 +412,7 @@ func _setup_spatial_fid_btn() -> void:
 		# The δ̇_max slider is the live lever (raise it → the cap rises → :fin approaches :ideal). The MISS
 		# stays small across the slider (PN robust — the "lack of effect" that motivates the deferred 6-DOF).
 		_fid_kind = "autopilot"
-		_autopilot_rungs = ["ideal", "pid", "fin"]
+		_autopilot_rungs = AUTOPILOT_RUNGS + ["fin"]   # the 3-ring, built FROM the const (no re-list)
 		if _prop_btn.pressed.is_connected(_on_prop_pressed):
 			_prop_btn.pressed.disconnect(_on_prop_pressed)
 		if not _prop_btn.pressed.is_connected(_on_autopilot_pressed):
