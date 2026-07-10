@@ -219,6 +219,29 @@ function build_env!(m::BallisticMissile, w::World)
     return nothing
 end
 
+"""
+    _airframe_view_info(w::World) -> Union{Nothing, Dict}
+
+The slice-16 airframe VIEW HINT, shipped ONCE at handshake (the `_cfar_axis_info` /
+`_esm_axis_info` precedent — a static, scenario-derived marker the client discriminates its
+view on, NOT a per-frame quantity). Returns `nothing` unless some `:missile` entity carries
+airframe params (`:af_cma`), in which case it ships `airframe_view => true` and the target id.
+
+This is the Option-P′ resolution (advisor): slice 16 gates the rotational integrator on
+PARAMS-PRESENCE, not a `:airframe` fidelity rung — the trajectory is byte-identical across a
+Cmα flip (rotation is isolated from translation this slice), so a `point_mass|6dof` fidelity
+would name a path effect it cannot produce until slice-17's α→lift coupling (the convention-4c
+false-fidelity / dead-knob trap). The lesson lever is the LIVE `af_cma` KNOB (a slider, not a
+button); this marker only lets the client recognize the airframe view and drop the fidelity
+button (nothing to cycle) — the `range_axis_m`→cfar handshake-key mechanism, no new fidelity.
+"""
+function _airframe_view_info(w::World)
+    missiles = sort!(Symbol[id for (id, e) in w.entities
+                            if e.kind === :missile && haskey(e.comp, :af_cma)])
+    isempty(missiles) && return nothing
+    return Dict{Symbol,Any}(:airframe_view => true, :airframe_target => String(missiles[1]))
+end
+
 # --- the MANEUVERING TARGET: a curving phase-1 mover (slice 12, HANDOFF §10 item 10) ----------
 # The maneuvering FOIL for the augmented-PN lesson. ConstantVelocity (radar.jl) flies a straight
 # line; ManeuveringTarget applies a CONSTANT lateral acceleration ⟂ its velocity (a coordinated,

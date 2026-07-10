@@ -141,7 +141,10 @@ end
 The trim angle of attack `α_trim = −(Cmδ/Cmα)·δ` (rad) — the α at which the control moment
 `Cmδ·δ` balances the static moment `Cmα·α` (net pitching moment zero). The CENTER the
 undamped short-period oscillation swings about (advisor tooth #3). Independent of V (both
-terms scale with Q·S·d). `Cmα = 0` (neutral) has no finite trim → returns `Inf`·sign (a
-`_finite`-clampable degenerate, never consumed live without a stable Cmα).
+terms scale with Q·S·d). With `δ = 0` (no control input) the trim is EXACTLY `0` for any
+Cmα — returned directly, so a live Cmα slider crossing `0` at δ = 0 does NOT hit the `0/0`
+NaN (the common case; the readout stays 0, not a spurious `_finite` ceiling spike). With
+`δ ≠ 0` and `Cmα → 0` (neutral) no finite trim exists → `±Inf` (a `_finite`-clampable
+degenerate, never consumed live without a stable Cmα).
 """
-trim_alpha(delta::Float64, p::AirframeParams) = -(p.Cmd / p.Cma) * delta
+trim_alpha(delta::Float64, p::AirframeParams) = delta == 0.0 ? 0.0 : -(p.Cmd / p.Cma) * delta

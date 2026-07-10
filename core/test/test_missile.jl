@@ -1662,7 +1662,8 @@ end
             tick!(w, subs, dt); empty!(w.events)
             tel = w.env[:telemetry]
             finite &= all(isfinite, w.entities[:m1].att) &&
-                      isfinite(tel["m1.alpha"]) && isfinite(tel["m1.omega_sp"])
+                      isfinite(tel["m1.alpha"]) && isfinite(tel["m1.omega_sp"]) &&
+                      isfinite(tel["m1.alpha_trim"])             # incl. the Cmα=0 0/0 tick (advisor)
         end
         @test finite                                             # convention 5 — a live knob can't crash a tick
     end

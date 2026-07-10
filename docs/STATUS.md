@@ -1872,6 +1872,71 @@ res://net/slice15_verify.gd` (exit 0 = pass). The UI test needs NO server: `… 
 
 ---
 
+**Slice 16 — the 6-DOF airframe, FIRST HALF: pitch-plane ROTATIONAL DYNAMICS (HANDOFF §11 Tier-A)** — the
+DEFERRED rotational half of the Tier-A "6-DOF airframe + actuator/fin dynamics" entry (slice 15 did the
+actuator/fin half). The FIRST rotational state in the project: slices 8–15's missile was a POINT MASS whose
+`att` was a KINEMATIC velocity-alignment (a named approximation); here `att` becomes a DYNAMICAL OUTPUT of the
+aero pitching moment — the direct ROTATION analog of slice 8's ballistic force-integrator (which made `pos` a
+force-integrated output). This opens the committed slice-16→17→… arc that recapitulates 8→9→10 FOR ROTATION,
+frames/signs FIRST. **2409 tests, all green.**
+
+THE LESSON (the af_cma slider — a live KNOB, NOT a fidelity button): `Cmα` is the STATIC STABILITY derivative
+∂Cm/∂α. Drag it through 0 — Cmα<0 (STABLE) → the airframe WEATHERVANES: α oscillates about trim at the
+short-period ω_sp=√(−Cmα·QSd/I), decaying under Cmq damping, the nose TRACKS the flight path. Cmα>0 (UNSTABLE)
+→ it TUMBLES: |α| diverges, ω_sp is imaginary (the readout ships the FINITE_CEIL sentinel via `_finite`). The
+#1 SIGN TRAP (a DOUBLE flip of both the α=θ−γ definition AND the moment sign oscillates at the SAME ω_sp), so
+the moment SIGN is pinned DIRECTLY in `test_airframe.jl` (advisor tooth #1), not just the frequency.
+
+THE ISOLATION (the slice-16 scope + the headline proof): rotation reads the live flight condition (V, γ) but
+does NOT feed back into (pos, vel) — no α→lift→γ coupling this slice (that is slice 17). So the TRAJECTORY is
+BYTE-IDENTICAL across any Cmα (verifier: posdiff = 0.0 across the Cmα-sign flip); only the ATTITUDE changes.
+This is WHY there is NO `:airframe = point_mass | 6dof` fidelity: a toggle that leaves the path bit-identical
+would name a coupling it cannot produce until slice 17 (the convention-4c FALSE-FIDELITY / dead-knob trap —
+the slice-15 `k_δ`-cancellation precedent). **Option-P′ (advisor-reconciled):** the client recognizes the view
+by a handshake `airframe_view` marker (the `range_axis_m`→cfar precedent), keeps the core PARAMS-PRESENCE
+gated (`haskey(c, :af_cma)`), and DROPS the shared fidelity button (nothing to cycle — the Cmα slider is the
+lesson lever). Class **4c** (physics-changing, NO RNG — truth-fed, no seeker → "draw-count invariance
+VACUOUS", the 3rd consecutive 4c after slices 14/15; LIVE-SETTABLE, no `set_fidelity` guard — the
+:integrator/:autopilot/:apn/:cooperation precedent).
+
+GATES. **Gate 1** — `core/src/airframe.jl` (the rotation analog of `dynamics.jl`, pure/RNG-free/no-LinearAlgebra):
+`AirframeParams` (S, d, I, Cma, Cmd, Cmq, ρ), `pitch_moment` (M = QSd·(Cmα·α + Cmδ·δ + Cmq·q̄), q̄=q·d/2V,
+V-floor guard), `rk4_rot` (the generic (θ,q) stepper, structured so slice-17's joint [pos,vel,θ,q] step reuses
+the closure shape), `airframe_step`, `short_period_freq` (NaN-guarded for Cmα≥0 — a live slider crossing 0
+can't throw), `trim_alpha` (δ=0 → EXACTLY 0, no 0/0 NaN). `test_airframe.jl` (closed forms with the 3 advisor
+teeth: moment sign BOTH Cmα signs; V/γ-frozen SHM RK4-exact to ~1e-15; damping log-decrement pins ζ, not just
+ω_sp; divergence for Cmα>0). **Gate 2** — `BallisticMissile.integrate!` gains `_integrate_airframe!` gated on
+`haskey(c, :af_cma)` (the `:a_ctrl`-guard precedent → slices 8–15 BYTE-IDENTICAL); phase-2 build_env! ships the
+`pitch_theta/gamma/alpha/pitch_q/omega_sp/alpha_trim` telemetry; `scenario.jl` parses the `airframe:` block
+(Cma NOT sign-guarded — crossing 0 IS the lesson). `test_missile.jl` airframe wiring (ISOLATION bit-identical
+to a no-airframe twin, sign lesson, att-round-trip, live-Cmα crash-safe sweep). **Gate 3** —
+`scenarios/slice16_airframe.yaml` (open-loop 40°/500 m/s ballistic climb, alpha0=0.15 kick, af_cma the sole
+knob, NO fidelity); `_airframe_view_info` + `scenario_frame` merge (the handshake marker); the Godot airframe
+view (button dropped; the missile marker draws the NOSE off θ vs a CYAN VELOCITY reference off γ — the gap IS
+α, labeled). **Four proofs green:** `net/slice16_verify.gd` (`S16V OK` — STABLE max|α|=0.150 rad / ω_sp=2.40
+real, REPLAY bit-identical 0.150115, UNSTABLE max|α|→1.0e6 / ω_sp=1e9 sentinel, **posdiff=0.0** the isolation);
+`net/slice16_ui_test.gd` (`S16UI OK` — stays spatial, _fid_kind=airframe, button HIDDEN, af_cma slider →
+set_param m1, reset keeps it hidden); `Sandbox.tscn` headless smoke-load (`EWSIM_SERVER_DONE`, no parse
+errors); the windowed shot-harness capture (TWO contrasting shots — stable α=3.2° nose≈velocity/ω_sp=2.31 vs
+mild-unstable α=23.8° nose visibly off velocity/ω_sp=1e9 sentinel). Numbers PROBED against the live
+load_scenario→tick!→telemetry wire, PINNED as conservative frame-sampled bounds (emit_every=16).
+
+**Slice 16 COMPLETE — the 6-DOF airframe's rotational primitive is VALIDATED & BANKED.** DEFERRED (NAMED,
+convention 9): **slice 17 = the inner α/g autopilot + the α→lift→γ coupling** (the real path-changing
+`:airframe` toggle — a stable Cmα LANDS then, once the coupling exists for it to name; the fin state δ from
+slice 15 feeds the moment equation); then α-limited-maneuverability miss → bank-to-turn (the 3-D quaternion+ω
+superset, the geometry.jl→frames.jl "2-D first" precedent) → radome/body-rate parasitic loop. **Slice-17
+CLIENT NOTE:** the airframe branch is checked FIRST in `_setup_spatial_fid_btn`; when slice 17 adds an
+`:airframe` fidelity alongside `af_cma`, `_airframe_view` will be true AND a fidelity present, so value-guard
+the branch then (else it hides the button slice 17 wants).
+Run the slice-16 showcase: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice16_airframe.yaml`,
+then launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-uses the spatial airframe view; drag the
+Cmα slider through 0 to watch the nose go from weathervaning to tumbling — the nose/velocity gap is α). Re-run
+the gate-3 proof headless: start that server, then the console Godot `--headless --path clients/godot --script
+res://net/slice16_verify.gd` (exit 0 = pass). The UI test needs NO server: `… --script res://net/slice16_ui_test.gd`.
+
+---
+
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
 (`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0); `rf.jl`

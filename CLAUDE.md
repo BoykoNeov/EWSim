@@ -50,9 +50,10 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–15 COMPLETE & green — 2347 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slice 15
-OPENS the §11 Tier-A horizon (the actuator/fin half of "6-DOF airframe + actuator/fin dynamics").** Full
-gate-by-gate as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
+**Slices 1–16 COMPLETE & green — 2409 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–16
+are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
+slice 16 the FIRST HALF of the 6-DOF airframe itself (pitch-plane rotational dynamics).** Full gate-by-gate
+as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
 - **Slice 1** — radar → detection → ROC. Free-space radar eq, analytic+MC Pd (Swerling 0/1),
@@ -158,9 +159,39 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   angle-of-attack half (trigger recorded); a 2nd-order actuator (ω_a/ζ_a); per-channel fin allocation / hinge-
   moment / stall; the actuator feeding a MOMENT (→α→lift) = 6-DOF. (2347)
 
+- **Slice 16 (§11 Tier-A, the 6-DOF airframe's FIRST HALF) — pitch-plane ROTATIONAL DYNAMICS COMPLETE**: the
+  DEFERRED rotational half of Tier-A's "6-DOF airframe + actuator/fin dynamics" (slice 15 did the fin half). The
+  FIRST rotational state in the project — `att`, a KINEMATIC velocity-alignment through slices 8–15, becomes a
+  DYNAMICAL OUTPUT of the aero pitching moment (the ROTATION analog of slice 8's ballistic force-integrator that
+  made `pos` force-integrated). New pure lib `airframe.jl` (`AirframeParams`, `pitch_moment` M=QSd·(Cmα·α+Cmδ·δ+
+  Cmq·q̄), `rk4_rot` the generic (θ,q) stepper — shaped so slice-17's joint [pos,vel,θ,q] step reuses the closure,
+  `short_period_freq` NaN-guarded, `trim_alpha` δ=0→0). THE LESSON (the af_cma slider, a live KNOB not a fidelity
+  button): Cmα<0 WEATHERVANES (α oscillates about trim at ω_sp=√(−Cmα·QSd/I), damped by Cmq, nose tracks γ) vs
+  Cmα>0 TUMBLES (|α| diverges, ω_sp imaginary → FINITE_CEIL sentinel). #1 SIGN TRAP → the moment SIGN pinned
+  DIRECTLY (advisor tooth #1), V/γ-frozen SHM RK4-exact ~1e-15, damping log-decrement pins ζ. THE ISOLATION (the
+  headline proof): rotation reads (V,γ) but does NOT feed (pos,vel) — no α→lift this slice (slice 17) → the
+  TRAJECTORY is BYTE-IDENTICAL across the Cmα flip (verifier posdiff=**0.0**). This is WHY there is NO `:airframe`
+  fidelity toggle — a path-bit-identical toggle would name a coupling it can't produce yet (the convention-4c
+  FALSE-FIDELITY trap, the slice-15 k_δ-cancellation precedent). **Option-P′** (advisor-reconciled): a handshake
+  `airframe_view` marker (the range_axis_m→cfar precedent) makes the client recognize the view + DROP the shared
+  button (nothing to cycle), core stays PARAMS-PRESENCE gated (`haskey(c,:af_cma)`, slices 8–15 byte-identical).
+  Class **4c** (physics-changing, NO RNG — truth-fed, no seeker → "draw-count invariance VACUOUS", the 3rd
+  consecutive 4c after 14/15; LIVE-SETTABLE, no `set_fidelity` guard). The Godot marker draws the NOSE off θ vs a
+  CYAN VELOCITY reference off γ — the gap IS α, labeled. Four proofs green (verifier: STABLE max|α|=0.150/ω_sp=2.40
+  real, REPLAY bit-identical, UNSTABLE max|α|→1e6/ω_sp=1e9 sentinel, posdiff=0.0; UI: button HIDDEN + af_cma
+  slider→set_param; smoke-load DONE; TWO contrasting shots — stable α=3.2° nose≈v vs mild-unstable α=23.8° nose
+  off v/ω_sp sentinel). Deferred (NAMED): **slice 17 = the inner α/g autopilot + α→lift→γ coupling** (the real
+  path-changing `:airframe` toggle lands THEN — a stable Cmα gains a coupling to name; the fin state δ from slice
+  15 feeds the moment equation); then α-limited-maneuverability miss → bank-to-turn (3-D quaternion+ω, the
+  geometry→frames "2-D first" precedent) → radome/body-rate parasitic loop. SLICE-17 CLIENT NOTE: the airframe
+  branch is checked FIRST in `_setup_spatial_fid_btn` — value-guard it when slice 17 adds an `:airframe` fidelity
+  alongside `af_cma` (else it hides the button slice 17 wants). (2409)
+
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened
-with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slice 15 OPENS the §11 Tier-A horizon
-(the actuator/fin half); what remains is the rest of §11 Tier-A/B/C — most concretely the DEFERRED 6-DOF airframe.)
+with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–16 are into the §11 Tier-A
+horizon — slice 15 the actuator/fin half, slice 16 the 6-DOF airframe's FIRST HALF (pitch-plane rotational
+dynamics); what remains is slice 17 (the α/g autopilot + α→lift coupling) then the rest of §11 Tier-A/B/C — most
+concretely the FULL 6-DOF airframe [bank-to-turn / 3-D].)
 
 ## Conventions / hard-won disciplines
 

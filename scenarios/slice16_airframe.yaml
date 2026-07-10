@@ -1,0 +1,77 @@
+# slice16_airframe — the PITCH-PLANE ROTATIONAL DYNAMICS primitive (HANDOFF §11 Tier-A, slice 16 gate 3).
+# The FIRST rotational state in the project: slices 8–15's missile was a POINT MASS whose `att` was a
+# KINEMATIC velocity-alignment (a named approximation). Here `att` finally becomes a DYNAMICAL OUTPUT —
+# BallisticMissile.integrate! integrates `(θ, q)` under the aero pitching moment (airframe.jl), the direct
+# ROTATION analog of slice 8's ballistic force-integrator (which made `pos` a force-integrated output).
+#
+# THE LESSON (the af_cma slider — a KNOB, not a fidelity button):
+#   `Cmα` is the STATIC STABILITY derivative ∂Cm/∂α. Drag the slider through 0:
+#     • Cmα < 0 (STABLE) — a nose-up perturbation (α>0) makes a nose-DOWN restoring moment → the airframe
+#       WEATHERVANES: α oscillates about trim (here ≈0, δ=0) at the short-period frequency ω_sp =
+#       √(−Cmα·QSd/I), decaying under the Cmq pitch damping. The nose TRACKS the flight path.
+#     • Cmα > 0 (UNSTABLE) — the moment REINFORCES the perturbation → the airframe TUMBLES: |α| diverges,
+#       ω_sp is imaginary (no oscillation; the readout ships the FINITE_CEIL sentinel via _finite).
+#   The nose vector (drawn from θ) visibly SEPARATES from the velocity vector (drawn from γ) — that gap IS
+#   α, the angle of attack. This is the #1 SIGN TRAP (frames/signs FIRST): a DOUBLE flip of both the
+#   α = θ−γ definition AND the moment sign oscillates at the SAME ω_sp, so the moment SIGN is pinned
+#   directly in test_airframe.jl, not just the frequency.
+#
+# ISOLATION (the slice-16 scope, advisor-scoped): rotation reads the live flight condition (V, γ) but does
+# NOT feed back into (pos, vel) — no α→lift→γ coupling this slice (that is slice 17). So the TRAJECTORY is
+# BYTE-IDENTICAL across any Cmα (the pos-invariance the verifier asserts); only the ATTITUDE changes. This
+# is WHY there is NO `:airframe = point_mass | 6dof` fidelity: a toggle that leaves the path bit-identical
+# would name a coupling it cannot produce until slice 17 (the convention-4c false-fidelity / dead-knob
+# trap). The lesson lever is the LIVE af_cma KNOB; the client drops the fidelity button (nothing to cycle).
+# Framed honestly (the slice-15 "lack of effect is the lesson" precedent): slice 16 VALIDATES and BANKS the
+# rotational primitive (the fin state δ that slice-17's moment equation consumes is now integrable); the
+# path stays put, the ATTITUDE comes alive.
+#
+# NAMED APPROXIMATIONS (§1): pitch plane ONLY (roll/yaw frozen — the 2-D reduction; 3-D waits for
+# bank-to-turn); LINEAR aero moment in (α, δ, q̄) — no stall/nonlinear Cm(α); constant ρ (shared with
+# dynamics.jl); OPEN-LOOP δ (no autopilot closes the fin — slice 17); ISOLATED rotation (no α→lift).
+#
+# OPEN-LOOP, NO guidance/target — a single ballistic missile arcing over, its attitude ringing (stable) or
+# tumbling (unstable). RNG-FREE (no seeker → no w.rng draw); the seed is inert (kept for format
+# consistency). UNITS (the §1 trifecta): pos/vel SI (m, m/s), Cmα/Cmδ/Cmq in 1/rad, I in kg·m², launch
+# ELEVATION in DEGREES → radians at the loader, α/θ/γ readouts in radians. dt = 1e-3 / emit_every = 16.
+name: slice16_airframe
+seed: 16
+dt_physics: 1.0e-3
+emit_every: 16
+
+# NO `fidelity:` block — slice 16 gates the rotational integrator on airframe PARAMS-PRESENCE (:af_cma),
+# not a fidelity rung (see the ISOLATION note above). The handshake ships an `airframe_view` marker
+# (server-side, from the airframe params) so the client recognizes the view and drops the fidelity button.
+
+entities:
+  # The single ballistic interceptor: launched from the ground CLIMBING at 40° at 500 m/s in the x-z plane,
+  # mass 100 kg, DRAG OFF (one lesson per scenario — the arc is a clean parabola; γ bends purely under
+  # gravity). NO `guidance:` block → OPEN-LOOP (just [BallisticMissile], which now also owns the rotational
+  # integrate! when the `airframe:` block is present). The `airframe:` block gives it pitch-plane rotation:
+  #   ref_len_m 0.2 / inertia_kgm2 50 — a representative slender missile (probed, temp/slice16_probe).
+  #   cma -0.3 (STABLE default; the LESSON KNOB) → ω_sp ≈ 2.4 rad/s (T ≈ 2.6 s) at launch V.
+  #   cmd 0.1 (control effectiveness; inert here since δ=0) / cmq -150 (pitch damping → the ring decays).
+  #   alpha0 0.15 rad (~8.6°) — the initial angle-of-attack KICK: the nose starts pitched above the flight
+  #     path so the weathervane (stable) / tumble (unstable) is immediately visible. delta 0 (open-loop, no
+  #     trim offset → α oscillates about 0).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 0.0]
+    missile:
+      mass_kg: 100.0
+      speed: 500.0
+      elevation_deg: 40.0
+      cd_area_m2: 0.0
+      rho: 1.225
+      airframe: {ref_len_m: 0.2, inertia_kgm2: 50.0, cma: -0.3, cmd: 0.1, cmq: -150.0, alpha0: 0.15, delta: 0.0}
+
+knobs:
+  # THE lesson lever: Cmα (af_cma). Drag it from the stable default (-0.3) through 0 to +0.3 and watch the
+  # airframe cross from WEATHERVANING (α rings toward trim, nose tracks the flight path) to TUMBLING (|α|
+  # diverges, nose runs away from velocity). Crossing 0 is SAFE at the consumer — short_period_freq/pitch_
+  # moment/trim_alpha are NaN-guarded (convention 5: a live slider can't crash a tick); the ω_sp/α_trim
+  # readouts ship huge-but-finite (_finite → FINITE_CEIL) at the neutral point, never Inf/NaN. Cmα is NOT
+  # sign-guarded at LOAD either (crossing zero IS the lesson). The initial-perturbation alpha0 and the
+  # launch geometry are NOT sliders (alpha0 is read once at launch-init; a live change would be inert and
+  # misleading) — one unambiguous knob (convention 9, one lesson per view).
+  - {target: m1, key: af_cma, min: -0.5, max: 0.5, label: "Cmα (static stability ∂Cm/∂α, 1/rad)"}

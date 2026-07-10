@@ -999,6 +999,56 @@ end
         @test !haskey(g, :range_axis_m) && !haskey(g, :n_cells)
     end
 
+    @testset "scenario_frame ships the airframe_view marker (slice 16, handshake-once)" begin
+        # A slice-16 rotational-dynamics scenario carries NO fidelity — the integrator is gated on
+        # airframe PARAMS-PRESENCE (:af_cma) and the Cmα SLIDER is the lesson. The handshake ships an
+        # `airframe_view` marker (the `_cfar_axis_info`/`_esm_axis_info` view-hint precedent) so the client
+        # recognizes the view and drops the fidelity button (nothing to cycle — the advisor Option-P′ path,
+        # NOT an :airframe false-fidelity toggle). Assert the marker + target ship, the fidelity map is
+        # EMPTY, the af_cma knob is exposed, and no cfar/esm axis leaks in.
+        dir = mktempdir()
+        af = joinpath(dir, "af.yaml"); write(af, """
+        name: af_test
+        seed: 16
+        dt_physics: 1.0e-3
+        emit_every: 16
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 0.0]
+            missile:
+              mass_kg: 100.0
+              speed: 500.0
+              elevation_deg: 40.0
+              cd_area_m2: 0.0
+              airframe: {cma: -0.3, cmq: -150.0, alpha0: 0.15}
+        knobs:
+          - {target: m1, key: af_cma, min: -0.5, max: 0.5, label: "Cma"}
+        """)
+        srv = EWSim.Server(load_scenario(af); path = af)
+        f = EWSim.scenario_frame(srv)
+        @test f[:airframe_view] === true
+        @test f[:airframe_target] == "m1"
+        @test isempty(f[:fidelity])                              # NO fidelity — the params-presence gate
+        @test any(k -> k[:key] === :af_cma, f[:knobs])           # the Cmα slider is exposed (the lesson lever)
+        @test !haskey(f, :range_axis_m) && !haskey(f, :pri_axis_us)   # not a cfar/esm view
+        # a NON-airframe missile (slice 8, no `airframe:` block) ships NO marker (the gate is params-presence)
+        b = joinpath(dir, "ballistic.yaml"); write(b, """
+        name: ballistic_test
+        seed: 8
+        dt_physics: 1.0e-3
+        emit_every: 16
+        fidelity: {integrator: rk4}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 0.0]
+            missile: {mass_kg: 100.0, speed: 500.0, elevation_deg: 40.0, cd_area_m2: 0.0}
+        """)
+        g = EWSim.scenario_frame(EWSim.Server(load_scenario(b); path = b))
+        @test !haskey(g, :airframe_view) && !haskey(g, :airframe_target)
+    end
+
     @testset "set_seed + reset compose into a clean seeded replay" begin
         srv = EWSim.Server(load_scenario(_SCEN_SRV); path = _SCEN_SRV)
         # advance, moving the target off its start

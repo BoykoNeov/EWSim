@@ -491,10 +491,19 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   noise jamming. Each is a swap, not a rewrite. **[OPENED — slice 15]** the actuator/fin
   half landed as the `:fin` autopilot rung (a rate-limited fin servo behind the existing
   `autopilot` knob — the g-onset-rate cap `|da_ach/dt| ≤ k_δ·δ̇_max`, a pure Tier-A swap, no
-  contract change). The **6-DOF airframe + angle-of-attack half stays DEFERRED**; its trigger
-  (a lesson needing the body to point off the velocity vector — α-limited maneuverability or a
-  radome/body-rate parasitic loop) is recorded in `docs/plans/slice15.md`. The fin deflection
-  state δ that 6-DOF's moment equation consumes is now banked.
+  contract change). **[OPENED — slice 16]** the 6-DOF airframe's FIRST HALF landed as
+  pitch-plane ROTATIONAL DYNAMICS (`airframe.jl` — the aero pitching moment + a rotational
+  RK4 integrator; `att` becomes a DYNAMICAL output, Cmα<0 weathervanes vs Cmα>0 tumbles, the
+  static-stability sign lesson). It is ISOLATED (rotation reads V/γ but does NOT feed
+  translation this slice — pos byte-identical across the Cmα flip), gated on airframe
+  PARAMS-PRESENCE (`:af_cma`) with a handshake `airframe_view` marker — deliberately NOT the
+  `fidelity.airframe = point_mass | 6dof` toggle yet, because a path-bit-identical toggle would
+  name a coupling it can't produce until the α→lift half exists (the convention-4c
+  false-fidelity trap). **The α→lift→γ coupling + the `:airframe` fidelity toggle land NEXT
+  (slice 17, the inner α/g autopilot)**; the fin state δ from slice 15 feeds slice-17's moment
+  equation. What remains DEFERRED beyond slice 17: bank-to-turn (the 3-D quaternion+ω superset)
+  and the radome/body-rate parasitic loop; the α-limited-maneuverability trigger is recorded in
+  `docs/plans/slice15.md` / `slice16.md`.
 - **Sibling domains that reuse the shared libs.** IR/EO seekers and IRST (add an IR
   environment channel to `env`, reuse `frames.jl`/`estimation.jl`); communications EW —
   jamming of frequency-hopping / spread-spectrum links — as a parallel to radar EW;

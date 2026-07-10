@@ -96,6 +96,9 @@
         @test center ≈ αtrim atol = 1e-4                        # the CENTER is trim, not the endpoint
         @test minimum(ths) ≈ 0.0 atol = 1e-4                    # swings down to the start
         @test maximum(ths) ≈ 2 * αtrim atol = 1e-4             # and up to 2·trim
+        # δ = 0 → trim EXACTLY 0 for any Cmα (no 0/0 NaN when a live Cmα slider crosses 0).
+        @test trim_alpha(0.0, stable(Cma = 0.0, Cmd = 0.1)) === 0.0
+        @test trim_alpha(0.0, stable(Cma = -0.3, Cmd = 0.1)) === 0.0
     end
 
     @testset "γ offset: α = θ − γ, oscillation about θ = γ (frame round-trip)" begin

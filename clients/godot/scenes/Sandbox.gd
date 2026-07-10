@@ -92,6 +92,12 @@ const CFAR_RUNGS := ["fixed", "ca", "go", "so", "os"]
 # (slice 3, range_axis present), "ep" (slice 4, an `ep` fidelity), else "propagation" (slice
 # 1/2). The render `_mode` stays "spatial" for slice 4 (no range axis); only the button differs.
 var _fid_kind := "propagation"
+# Slice-16 pitch-plane ROTATIONAL DYNAMICS: a handshake `airframe_view` marker (shipped by the core
+# from airframe params, NOT a fidelity — slice 16 carries none; the Cmα slider is the lesson) flips the
+# shared button OFF (nothing to cycle) and turns on the nose-vs-velocity attitude overlay in the missile
+# draw. `att` is a DYNAMICAL output now (Cmα<0 weathervanes / Cmα>0 tumbles), read off the θ/γ telemetry.
+var _airframe_view := false        # handshake airframe_view (slice 16) — the rotational-dynamics overlay
+var _airframe_target := ""         # the missile id carrying the airframe params (handshake)
 const EP_RUNGS := ["none", "freq_agility", "sidelobe_blanking"]
 const EST_RUNGS := ["pseudolinear", "ml"]   # slice-5 estimator cycler (the §12 badge button)
 const CFAR_Y_LO := -15.0          # bottom of the dB axis (noise floor ≈ 0 dB; deep nulls clamp)
@@ -259,6 +265,11 @@ func _on_scenario(obj: Dictionary) -> void:
 	# can resync the client unilaterally.
 	_fidelity = (obj.get("fidelity", {}) as Dictionary).duplicate()
 	_fidelity_default = _fidelity.duplicate()
+	# Slice-16 airframe view marker (handshake-once, the range_axis_m precedent): a rotational-
+	# dynamics scenario ships airframe_view=true + the target id. It carries NO fidelity, so it
+	# lands in the spatial branch below; _setup_spatial_fid_btn reads these to drop the button.
+	_airframe_view = bool(obj.get("airframe_view", false))
+	_airframe_target = str(obj.get("airframe_target", ""))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -303,7 +314,26 @@ func _setup_spatial_fid_btn() -> void:
 	# else `propagation` (slice 1/2, the binary toggle wired in _build_ui). The disconnect is
 	# guarded so the headless UI tests — which build the button without _build_ui's connect —
 	# don't error, exactly like _enter_cfar_mode.
-	if _fidelity.has("cooperation"):
+	if _airframe_view:
+		# Slice-16 pitch-plane ROTATIONAL DYNAMICS: the handshake ships airframe_view (from the missile's
+		# airframe params) but NO fidelity — the rotational integrator is gated on PARAMS-PRESENCE, and the
+		# Cmα SLIDER (a knob, auto-built by _build_knobs) is the lesson, not a fidelity button. So there is
+		# NOTHING for the shared button to cycle: DROP it (hide + guarded disconnect). CHECKED FIRST because
+		# a slice-16 scenario carries no fidelity key, so every _fidelity.has(...) branch below would fall
+		# through to `propagation` and mislabel the button (the advisor's Option-P′ fix: recognize the view
+		# by its handshake key, keep the core params-gated with no `:airframe` false-fidelity toggle). The
+		# lesson is DRAWN (the nose vector off θ vs the velocity vector off γ — their gap is α, the angle of
+		# attack): Cmα<0 WEATHERVANES (α rings toward trim, ω_sp real) vs Cmα>0 TUMBLES (α diverges, ω_sp the
+		# sentinel). The trajectory is BYTE-IDENTICAL across the slider (rotation ⊥ translation — the slice-16
+		# isolation; α→lift coupling is slice 17). Class 4c, RNG-free.
+		_fid_kind = "airframe"
+		if _prop_btn.pressed.is_connected(_on_prop_pressed):
+			_prop_btn.pressed.disconnect(_on_prop_pressed)
+		_prop_btn.visible = false      # no fidelity to cycle — the Cmα slider is the lesson lever
+		# Seed extents to fit the ballistic arc (40°/500 m/s → apex ~5 km alt, ~24 km down); they only grow.
+		_x_max = 6000.0
+		_z_max = 3000.0
+	elif _fidelity.has("cooperation"):
 		# Slice-14 cooperative salvo (THE CAPSTONE): a `cooperation` fidelity keeps the SPATIAL elevation
 		# view (the salvo engagement is planar in x-z — N interceptors climb, a common target crosses in
 		# altitude) but repurposes the shared button as the :solo↔:salvo COOPERATION cycler. CHECKED FIRST —
@@ -564,6 +594,11 @@ func _render_badge() -> void:
 	for k in _fidelity.keys():
 		parts.append("%s: %s" % [k, _fidelity[k]])
 	parts.sort()
+	# Slice-16 airframe: no fidelity map (params-presence gate) — name the approximation explicitly so the
+	# badge isn't blank (pitch-plane only, linear aero, isolated rotation — the §1 named approximations).
+	if _airframe_view and parts.is_empty():
+		_badge.text = "approximation — airframe: pitch-plane rotational dynamics (linear aero, isolated: no α→lift)"
+		return
 	_badge.text = "approximation — " + (" · ".join(parts) if not parts.is_empty() else "unspecified")
 
 func _update_fid_btn() -> void:
@@ -592,6 +627,10 @@ func _update_fid_btn() -> void:
 			_prop_btn.text = "disc: %s" % str(_fidelity.get("discrimination", "?"))
 		"cooperation":
 			_prop_btn.text = "coop: %s" % str(_fidelity.get("cooperation", "?"))
+		"airframe":
+			# Slice-16: no fidelity to cycle — the button is hidden (dropped in _setup_spatial_fid_btn),
+			# the Cmα slider is the lesson. Keep it hidden here too (defensive against a re-show).
+			_prop_btn.visible = false
 		_:
 			_update_prop_btn()
 
@@ -1091,7 +1130,7 @@ func _draw_spatial() -> void:
 
 	# missile (slice 8): the fading trajectory trail + a nose-oriented marker + an impact burst,
 	# on top of the elevation view (drawn only in the missile-view branch, so slice-1/2/4 are untouched)
-	if _fid_kind == "missile" or _fid_kind == "autopilot" or _fid_kind == "guidance" or _fid_kind == "seeker" or _fid_kind == "discrimination":
+	if _fid_kind == "missile" or _fid_kind == "airframe" or _fid_kind == "autopilot" or _fid_kind == "guidance" or _fid_kind == "seeker" or _fid_kind == "discrimination":
 		_draw_missile()
 	# guided missile (slice 9/10/11): a LOS line missile→target so the guidance geometry reads (the target
 	# marker is drawn by the generic :target branch above; the a_cmd/a_ach/track_gap [slice 9] +
@@ -1140,6 +1179,38 @@ func _draw_missile() -> void:
 			var a := TAU * float(k) / 8.0
 			draw_line(head, head + Vector2(cos(a), sin(a)) * 10.0, ic, 2.0)
 		draw_string(_font, head + Vector2(11, -8), "%s impact" % _missile_id, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ic)
+		return
+	# Slice-16 airframe view: `att` is a DYNAMICAL output, so the BODY marker points along θ (the
+	# integrated pitch attitude, from telemetry) — DISTINCT from the velocity/flight-path γ. Draw the
+	# nose triangle along θ, a CYAN velocity reference line along γ, and label the gap α = θ−γ (the angle
+	# of attack). Both directions are built from WORLD angles mapped through _world_to_screen (so the
+	# elevation projection is consistent) then normalized to a fixed screen length. Cmα<0 → the nose rings
+	# around velocity (weathervane); Cmα>0 → the nose runs away (tumble). Falls back to the trail tangent
+	# if the θ/γ keys are absent (defensive — an airframe scenario always ships them).
+	if _airframe_view and _telemetry.has(_missile_id + ".pitch_theta") and _telemetry.has(_missile_id + ".gamma"):
+		var head_w: Array = _missile_trail[-1]
+		var th := float(_telemetry[_missile_id + ".pitch_theta"])
+		var ga := float(_telemetry[_missile_id + ".gamma"])
+		var alpha := float(_telemetry.get(_missile_id + ".alpha", th - ga))
+		var Lw := 500.0                        # world-meter probe length (direction only; screen-normalized)
+		var nose_tip := _world_to_screen([head_w[0] + Lw * cos(th), head_w[1], head_w[2] + Lw * sin(th)])
+		var vel_tip := _world_to_screen([head_w[0] + Lw * cos(ga), head_w[1], head_w[2] + Lw * sin(ga)])
+		var nose_dir := (nose_tip - head)
+		var vel_dir := (vel_tip - head)
+		nose_dir = nose_dir.normalized() if nose_dir.length() > 0.5 else Vector2(1, 0)
+		vel_dir = vel_dir.normalized() if vel_dir.length() > 0.5 else Vector2(1, 0)
+		# velocity (flight-path γ) reference: a faint cyan arrow
+		var vc := Color(0.4, 0.85, 1.0)
+		draw_line(head, head + vel_dir * 52.0, vc, 1.5)
+		draw_string(_font, head + vel_dir * 52.0 + Vector2(4, 0), "v (γ)", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, vc)
+		# nose (body attitude θ): a bright triangle marker — the angle to v IS α
+		var mc := Color(1.0, 0.85, 0.2)
+		var perp := Vector2(-nose_dir.y, nose_dir.x)
+		var nose_head := head + nose_dir * 46.0
+		draw_line(head, nose_head, mc, 2.0)
+		draw_colored_polygon(PackedVector2Array([
+			nose_head + nose_dir * 9.0, nose_head - nose_dir * 6.0 + perp * 5.0, nose_head - nose_dir * 6.0 - perp * 5.0]), mc)
+		draw_string(_font, head + Vector2(11, -10), "%s  α=%.1f°" % [_missile_id, rad_to_deg(alpha)], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, mc)
 		return
 	# nose direction from the last trail segment (screen space); a dot if the segment is too short
 	var dir := Vector2(0, -1)

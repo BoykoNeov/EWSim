@@ -109,6 +109,13 @@ function scenario_frame(srv::Server)
     # ESM-view discriminator. `nothing` for a non-ESM scenario (keys simply don't appear).
     einfo = _esm_axis_info(scn.world)
     einfo === nothing || merge!(frame, einfo)
+    # A slice-16 airframe scenario ships a static `airframe_view` marker here (the same
+    # handshake-once, `_cfar_axis_info` pattern) so the client recognizes the rotational-
+    # dynamics view and drops the fidelity button — slice 16 carries NO fidelity (the Cmα
+    # slider is the lesson, gated on params-presence, not a `:airframe` rung). `nothing` for a
+    # non-airframe scenario (the keys simply don't appear → the missile view is unchanged).
+    afinfo = _airframe_view_info(scn.world)
+    afinfo === nothing || merge!(frame, afinfo)
     return frame
 end
 
