@@ -62,6 +62,27 @@ const AUTOPILOT_MODES = (:ideal, :pid)
 # adding the rung leaves every slice-1..11 path byte-identical.
 const GUIDANCE_MODES = (:pursuit, :pn, :apn)
 
+# The cooperation-fidelity (SALVO) rungs — the SINGLE source of truth for the `:cooperation`
+# key (the GUIDANCE_MODES precedent, defined HERE so radar.jl's `LIVE_FIDELITY_MODES` can
+# REFERENCE it at gate 2 — one-list-no-drift). Slice 14, the capstone: N interceptors share
+# their time-to-go over an IDEAL datalink to arrive SIMULTANEOUSLY (HANDOFF §10 item 13).
+# PHYSICS-CHANGING, NO RNG — class 4c (the `:integrator`/`:autopilot`/`:apn` shape, NOT
+# slice-13's draw-topology 4b): a `:solo↔:salvo` toggle CHANGES the trajectory (the faster
+# missile stretches its path) but the scenario is truth-fed PN with NO seeker — the cooperation
+# lesson is isolated exactly as slice 12 isolated APN, so there is NO `w.rng` consumer.
+# Therefore "draw-count invariance" is VACUOUS here (do NOT copy slice-13's draw language) and
+# there is NO draw-topology to flip → `:cooperation` is introduce-SAFE, live-settable, and
+# `set_fidelity` needs NO new guard (unlike slice-13 `:scan` / slice-3 `:cfar`).
+#   • `:solo`  — no cooperation: each interceptor flies plain PN to its own natural t_go, so a
+#     salvo launched from different ranges impacts SPREAD OUT in time (the reference).
+#   • `:salvo` — impact-time-control cooperation: each missile drives its t_go toward the team
+#     consensus `t_d = max_j t_go_j(0)` (the SLOWEST sets the pace — the only time all can reach,
+#     since a missile can stretch but not shorten). The faster missiles S-curve to delay, the
+#     slowest flies ~straight, and all N arrive TOGETHER (Δτ → 0) while every missile still hits.
+# Defined at gate 1; `:salvo` NOT YET REFERENCED by a consumer (the `SalvoCoordinator` build_env!
+# + decide! read it at gate 2) — so adding the rung leaves every slice-1..13 path byte-identical.
+const COOPERATION_MODES = (:solo, :salvo)
+
 # The inner-loop PID state, carried per-missile across ticks (in the entity `comp` in gate 2):
 #   • `a_ach`  — the plant output (achieved control accel), the first-order-lag state;
 #   • `e_int`  — the integral of the accel error `∫e dt` (the I term's memory);
@@ -205,6 +226,121 @@ LinearAlgebra); zero-safe (`a_T = 0` → base; `û` from a coincident geometry �
 function pn_accel_augmented(û::Vec3, ω::Vec3, Vc::Real, a_T::Vec3; N::Real = 4.0)
     a_T⊥ = a_T - _dot(a_T, û) * û                    # target accel ⟂ LOS (projection removes the ∥ part)
     return pn_accel_from_omega(û, ω, Vc; N = N) + (N / 2) * a_T⊥
+end
+
+# The convention-#6 numerical-safety floor on the closing speed inside `time_to_go` — a NAMED
+# const like `_FRAME_EPS`, NOT a convention-#5 live slider clamp (gate-0 FINDINGS, advisor). The
+# `t_go = R/V_c` estimate blows up as `V_c → 0`, which HAPPENS mid-course when a stretching salvo
+# missile turns ⟂ to the LOS and its own closing speed collapses (even goes negative). Flooring
+# `V_c` at 50 m/s keeps `t_go` (and hence the impact-time-error feedback) FINITE (no Inf/NaN to
+# the wire — convention 6) without distorting normal operation: in-scenario closing is
+# ~1000–1250 m/s, so the floor (≤ 300 in the gate-0 sweep, outcome-invariant) NEVER binds during
+# clean closing.
+const VC_FLOOR = 50.0
+
+"""
+    time_to_go(los_r::Real, closing_speed::Real) -> Float64
+
+The zeroth-order **time-to-go** estimate `t_go ≈ R / V_c` (§1, slice 14) — how long until the
+missile reaches the target at the current closing rate. `los_r` is the LOS range `R`
+(`los_range`, frames.jl); `closing_speed` is the POSITIVE closing rate `V_c = −range_rate`
+(frames.jl's sign is "negative = closing"). **Named approximation:** the zeroth-order estimate
+(constant closing speed); the PN-curvature correction `t_go·(1 + λ̇²/(2(2N−1)))` is a fidelity
+choice the gate-0 probe found UNNECESSARY (the zeroth-order estimate does not under-delay on the
+pinned geometry — so it is deliberately NOT added; the speed-based `R/‖v‖` was REJECTED, it
+over-estimates when the target closes fast).
+
+**The `V_c → 0` guard (convention 6 — no Inf/NaN to the wire).** As a salvo missile STRETCHES
+(turns ⟂ to the LOS to delay), its closing speed collapses toward and past zero, so a bare
+`R/V_c` would blow up (→ Inf) or flip sign mid-course. `time_to_go` FLOORS the divisor at
+[`VC_FLOOR`](@ref) (`R / max(V_c, VC_FLOOR)`): a receding / at-CPA missile gets a
+large-but-FINITE `t_go = R/VC_FLOOR`, never `Inf`/`NaN`. `VC_FLOOR ≪` normal closing (~1000 m/s)
+→ the floor NEVER binds during clean closing, so it distorts nothing (the gate-0 floor sweep is
+outcome-invariant).
+"""
+time_to_go(los_r::Real, closing_speed::Real) = los_r / max(closing_speed, VC_FLOOR)
+
+"""
+    salvo_consensus(t_go_list) -> Float64
+
+The shared-state reduction (§1, slice 14): the team's **desired impact time-to-go**
+`t_d = maximum(t_go_list)` — the SLOWEST missile's time-to-go. This is the ONLY common arrival
+time all interceptors can ACHIEVE: a missile can STRETCH its path to delay, but cannot SHORTEN
+below its own minimum-time trajectory, so the consensus must be the maximum (never the mean or
+min — those are unreachable by the laggard). Pure reduction over the team's published `t_go`
+(the coordinator's `build_env!` calls this ONCE at launch over `kind === :missile`, gate 2 —
+the fixed-at-launch consensus the gate-0 probe pinned as robust; a per-tick recompute
+self-pollutes, since the very stretch it induces collapses each missile's `V_c` and inflates its
+`t_go`, running the consensus away — probe8/9).
+
+**The solo degenerate — the additivity bridge.** One element → itself, `===` bit-exact
+(`maximum((x,)) === x`): a lone missile's consensus is its own `t_go` → the impact-time error is
+identically zero → the `:salvo` command reduces to plain PN (see the early return in
+[`impact_time_control_accel`](@ref)). The cooperation only bites with N ≥ 2 at different ranges.
+"""
+salvo_consensus(t_go_list) = maximum(t_go_list)
+
+"""
+    impact_time_control_accel(m_pos, m_vel, t_pos, t_vel, t_d; N = 4.0, K_it = 0.45) -> Vec3
+
+The OUTER **impact-time-control** guidance command (§1, slice 14 — the salvo law) — the
+[`pn_accel`](@ref) base PLUS a feedback term that shapes the flight time so the missile arrives
+at the team's shared desired time-to-go `t_d`. The classic ITCG family (Jeon–Lee–Tahk 2006: PN
+plus a bias on the impact-time error):
+
+    base = pn_accel(m_pos, m_vel, t_pos, t_vel; N)               (the slice-10 PN command, REUSED)
+    V_c  = −range_rate(t_pos − m_pos, t_vel − m_vel)             (closing speed, POSITIVE closing)
+    t_go = time_to_go(los_range(m_pos, t_pos), V_c)              (this missile's own time-to-go)
+    err  = t_d − t_go                                            (>0 ⇒ EARLY ⇒ must STRETCH / delay)
+    v⊥   = m_vel − (m_vel·û) û                                    (the missile velocity ⟂ to the LOS)
+    a    = base + (K_it · err · ‖m_vel‖) · (v⊥/‖v⊥‖)             (m/s²)
+
+`t_d` is the shared **desired REMAINING time-to-go** (gate 2: the coordinator publishes
+`w.env[:salvo_t_d] = T_d − w.t`, the fixed launch consensus minus elapsed time), and `err =
+t_d − t_go` is this missile's impact-time error: **positive ⇒ the missile has LESS time-to-go
+than the team wants ⇒ it is EARLY ⇒ it must LENGTHEN its path to delay.**
+
+**THE SIGN IS THE TRIFECTA TRAP (HANDOFF §1).** The feedback pushes along `+v⊥` (the velocity's
+⟂-LOS component) when EARLY: GROWING the heading error curves the missile OFF the direct line →
+a LONGER arc → a LATER arrival (the intended delay). A `−` would make an early missile take a
+SHORTCUT — arriving even earlier, the silent failure. Pinned two ways in `test_guidance.jl`: a
+direct feedback recompute (a DIFFERENT expression) AND the kinematic `dot(feedback, v⊥) > 0` for
+an early missile; and closed-loop `Δτ(:salvo) < Δτ(:solo)` at gate 2.
+
+**TWO GUARDS (advisor):**
+  (i) **`err == 0.0` early-returns `base` bit-exact** (NOT `base + zero(Vec3)`, whose −0.0+0.0→+0.0
+    would flip a sign bit): a missile exactly on-time takes the plain-PN command `===`. This is the
+    convention-11 bit-exact no-op and the LAW-LEVEL solo degenerate anchor (gate-0 FINDINGS moved
+    it here from the scenario level — a 1-missile salvo is loader-forbidden anyway; additivity for
+    slices 1–13 is guaranteed by GATING, never by this equivalence).
+  (ii) **the feedback is BOUNDED, two ways.** The `t_go` blow-up as `V_c → 0` (the stretching
+    missile's own closing collapse) is floored inside [`time_to_go`](@ref) (`VC_FLOOR`), so `err`
+    stays finite; and a near-head-on tick (`‖v⊥‖ < 1e-6`, no ⟂ handle) early-returns `base`. The
+    head-on floor is DELIBERATELY larger than `_FRAME_EPS`: because the feedback DIRECTION is
+    normalized (`v⊥/‖v⊥‖`), its MAGNITUDE `K_it·err·‖v‖` is INDEPENDENT of `‖v⊥‖`, so a
+    tiny-but-nonzero `‖v⊥‖` would inject a FULL-magnitude feedback along a numerically
+    ill-conditioned direction — the `1e-6` floor suppresses feedback exactly when the ⟂-direction
+    is unreliable. The residual PN `ω → ∞` endgame blow-up is bounded at the CONSUMER
+    (`_terminal_cutoff` + `clamp_accel` in `decide!`, gate 2), as for `pn_accel`.
+
+`K_it` (units 1/s²) is the impact-time-error gain — the gate-0 nominal 0.45 (window [0.42, 0.50]):
+too cold → weak collapse; the sweet spot → tight simultaneous arrival; too hot (≥ 0.55) → the near
+missile OVER-stretches and MISSES (the "salvo can fail" upper edge — the slice-12 pin-the-window
+discipline). Reuses `pn_accel`/`los_unit`/`los_range`/`range_rate` (frames.jl house style, no
+LinearAlgebra); zero-safe via the two guards.
+"""
+function impact_time_control_accel(m_pos::Vec3, m_vel::Vec3, t_pos::Vec3, t_vel::Vec3, t_d::Real;
+                                   N::Real = 4.0, K_it::Real = 0.45)
+    base = pn_accel(m_pos, m_vel, t_pos, t_vel; N = N)           # the slice-10 PN command (REUSED)
+    Vc   = -range_rate(t_pos - m_pos, t_vel - m_vel)            # closing speed (POSITIVE when closing)
+    tgo  = time_to_go(los_range(m_pos, t_pos), Vc)             # this missile's own time-to-go
+    err  = t_d - tgo                                           # impact-time error (>0 ⇒ EARLY ⇒ stretch)
+    err == 0.0 && return base                                  # BIT-EXACT no-op (conv. 11) — NOT base + 0
+    û    = los_unit(m_pos, t_pos)                              # r̂ (zero-range guard inside → zero vector)
+    v⊥   = m_vel - _dot(m_vel, û) * û                          # missile velocity ⟂ to the LOS
+    n    = _norm3(v⊥)
+    n < 1e-6 && return base                                    # near head-on: no ⟂ handle this tick (see docstring)
+    return base + (K_it * err * _norm3(m_vel)) * (v⊥ / n)
 end
 
 """

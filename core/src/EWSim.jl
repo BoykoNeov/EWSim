@@ -78,6 +78,8 @@ export pursuit_accel, autopilot_step, clamp_accel, autopilot_init, AUTOPILOT_MOD
 export pn_accel, pn_accel_from_omega, GUIDANCE_MODES
 # Slice 12: augmented PN — TPN + (N/2)·a_T⊥ target-accel feedforward (the :apn rung).
 export pn_accel_augmented
+# Slice 14 (capstone): cooperative salvo — time-to-go + impact-time-control (the :salvo rung).
+export time_to_go, salvo_consensus, impact_time_control_accel, COOPERATION_MODES
 # Slice-1 subsystems + scenario loader (Jammer is the slice-4 build_env! subsystem;
 # DFSensor/Geolocator are the slice-5 observe!→decide! DF pair that light phase 4)
 export ConstantVelocity, RadarSensor, Jammer, DFSensor, Geolocator, Knob, Scenario, load_scenario

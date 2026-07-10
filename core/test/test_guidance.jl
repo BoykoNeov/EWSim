@@ -215,6 +215,74 @@
         @test :apn in GUIDANCE_MODES
     end
 
+    @testset "salvo — time_to_go + salvo_consensus + impact-time-control (slice 14 gate 1)" begin
+        # The cooperative salvo law: t_go ≈ R/V_c, the team consensus t_d = max t_go, and an
+        # impact-time-control command = PN base + a ⟂-LOS feedback that STRETCHES an early missile.
+        # RNG-free (truth-fed PN, no seeker — class 4c). Every check is an explicit-atol closed form
+        # or an independent recompute (convention 11 — no self-calibrated tautology).
+
+        # (1) time_to_go = R / V_c on a clean closing geometry (V_c ≫ VC_FLOOR → the floor is inert).
+        @test time_to_go(5000.0, 600.0) ≈ 5000.0 / 600.0 atol = 1e-12
+        # the V_c → 0 / receding guard (convention 6): a bare R/V_c would blow up; the VC_FLOOR floor
+        # gives a large-but-FINITE t_go = R/VC_FLOOR (NOT a "returns 0" sentinel — gate-0 FINDINGS).
+        @test time_to_go(5000.0, 0.0)    === 5000.0 / EWSim.VC_FLOOR    # V_c = 0  → floored
+        @test time_to_go(5000.0, -300.0) === 5000.0 / EWSim.VC_FLOOR    # receding → floored, finite
+        @test isfinite(time_to_go(5000.0, -1e9))                        # never Inf/NaN
+
+        # (2) salvo_consensus = maximum (the SLOWEST missile sets the pace) + the SINGLETON additivity
+        # anchor: one element → itself, bit-exact `===` (the :salvo-on-a-solo bridge — convention 11).
+        @test salvo_consensus((3.0, 7.0, 5.0)) == 7.0
+        @test salvo_consensus([2.0, 9.0, 4.0]) == 9.0
+        @test salvo_consensus((4.2,)) === 4.2                           # singleton → itself, bit-exact
+
+        # (3) the cooperation rung is in the one-list source of truth (LIVE_FIDELITY_MODES refs it, gate 2).
+        @test COOPERATION_MODES === (:solo, :salvo)
+
+        # ---- impact_time_control_accel on a fixed geometry (missile with a ⟂-LOS velocity handle) ----
+        m_pos = Vec3(0.0, 0.0, 0.0); m_vel = Vec3(600.0, 100.0, 0.0)    # heading +x with a +y ⟂ component
+        t_pos = Vec3(5000.0, 0.0, 0.0); t_vel = Vec3(0.0, 0.0, 0.0)     # stationary target on the +x LOS
+        N = 4.0; K_it = 0.45
+        base = pn_accel(m_pos, m_vel, t_pos, t_vel; N = N)              # the PN base term (REUSED unchanged)
+        û    = los_unit(m_pos, t_pos)                                   # = (1,0,0)
+        v⊥   = m_vel - EWSim._dot(m_vel, û) * û                         # = (0,100,0), the ⟂-LOS velocity
+
+        # (4) BIT-EXACT no-op at err == 0 (t_d == this missile's own t_go): the command `===` plain PN
+        # via the EARLY RETURN of pn_accel(...) — NOT `base + zero(Vec3)` (whose −0.0+0.0→+0.0 flips a
+        # sign bit). The LAW-LEVEL solo degenerate anchor (gate-0 FINDINGS moved it here).
+        Vc0  = -range_rate(t_pos - m_pos, t_vel - m_vel)               # recompute V_c the impl's way
+        tgo0 = time_to_go(los_range(m_pos, t_pos), Vc0)                # ...and t_go → t_d = tgo0 ⇒ err = 0.0
+        @test impact_time_control_accel(m_pos, m_vel, t_pos, t_vel, tgo0; N = N, K_it = K_it) === base
+
+        # (5) DIRECT feedback recompute — a DIFFERENT expression than the impl (catches a transpose /
+        # sign slip). An EARLY missile (t_d > t_go ⇒ err > 0) gets base + K_it·err·‖v‖·v̂⊥.
+        t_d  = tgo0 + 0.6667                                           # t_d > t_go ⇒ err ≈ +0.6667 (EARLY)
+        a    = impact_time_control_accel(m_pos, m_vel, t_pos, t_vel, t_d; N = N, K_it = K_it)
+        err  = t_d - tgo0
+        fb_hand = (K_it * err * norm3_test(m_vel)) * (v⊥ / norm3_test(v⊥))
+        @test (a - base) ≈ fb_hand atol = 1e-9                         # the feedback is exactly K_it·err·‖v‖·v̂⊥
+        @test a ≈ base + fb_hand atol = 1e-9
+
+        # (6) THE SIGN ANCHOR (the trifecta trap) — an EARLY missile flies a LONGER arc. The feedback
+        # lies along +v⊥ (grows the heading error → longer path → later arrival, the intended delay).
+        # A kinematic assertion (dot with the ⟂-LOS velocity > 0), NOT a self-calibrated round-trip.
+        @test EWSim._dot(a - base, v⊥) > 0.0                           # feedback along +v⊥ ⇒ delay
+        # a LATE missile (t_d < t_go ⇒ err < 0) flips it (shortens toward the LOS — symmetric).
+        a_late = impact_time_control_accel(m_pos, m_vel, t_pos, t_vel, tgo0 - 0.5; N = N, K_it = K_it)
+        @test EWSim._dot(a_late - base, v⊥) < 0.0
+
+        # (7) the head-on guard — a missile flying STRAIGHT down the LOS has no ⟂ handle (‖v⊥‖ ≈ 0),
+        # so the feedback is undefined this tick → return the PN base (`===`), even with err ≠ 0.
+        m_head = Vec3(600.0, 0.0, 0.0)                                 # v ∥ û ⇒ v⊥ = 0
+        base_h = pn_accel(m_pos, m_head, t_pos, t_vel; N = N)
+        @test impact_time_control_accel(m_pos, m_head, t_pos, t_vel, tgo0 + 2.0; N = N, K_it = K_it) === base_h
+
+        # (8) BOUNDED as V_c → 0 (the ITCG terminal blow-up, distinct from PN's r→0): an abeam
+        # geometry (V_c = 0) floors t_go via VC_FLOOR → the command stays FINITE (no Inf/NaN to JSON).
+        m_ab = Vec3(0.0, 600.0, 0.0)                                   # flying +y, abeam the +x target
+        a_ab = impact_time_control_accel(m_pos, m_ab, t_pos, t_vel, 9.0; N = N, K_it = K_it)
+        @test all(isfinite, a_ab)
+    end
+
     @testset "pn_accel — degenerate guards + endgame r→0 (finite, then CONSUMER-clamped)" begin
         # v→0 (relative velocity zero: missile matches target velocity) → ω=0, Vc=0 → zero.
         @test pn_accel(Vec3(0,0,0), Vec3(600,0,0), Vec3(5000,0,0), Vec3(600,0,0); N=4.0) == zero(Vec3)
