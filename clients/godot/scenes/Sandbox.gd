@@ -153,11 +153,18 @@ const RAIM_RUNGS := ["off", "detect", "exclude"]   # slice-7 raim cycler (the sh
 # `propagation` shape), NOT a slice-5/6/7 draw-free toggle.
 var _missile_id := ""             # missile entity id (for the .impacted flag telemetry)
 var _missile_trail: Array = []    # WORLD [x,y,z] breadcrumbs (mapped through _world_to_screen each draw)
+# Slice-14 salvo: per-missile WORLD breadcrumb trails, id -> Array[[x,y,z]]. Populated ONLY in the
+# cooperation view (the multi-interceptor scenario), so slices 8–13 (single missile, _missile_trail)
+# are untouched. The two trails ARE the visual: under :salvo the near missile weaves a stretched
+# S-curve while the far reference flies ~straight (both converge together); under :solo both fly
+# straight-in and one arrives well before the other (the spread).
+var _salvo_trails := {}
 const INTEGRATOR_RUNGS := ["rk4", "euler"]   # slice-8 integrator cycler (the shared fidelity button)
 const AUTOPILOT_RUNGS := ["ideal", "pid"]    # slice-9 autopilot cycler (the shared fidelity button)
 const GUIDANCE_RUNGS := ["pursuit", "pn", "apn"]   # slice-10/12 OUTER-law cycler (3-ring: +apn, slice 12)
 const SEEKER_RUNGS := ["raw", "filtered"]    # slice-11 seeker cycler (raw finite-diff ↔ α-β filtered)
 const DISCRIMINATION_RUNGS := ["none", "gated"]   # slice-13 countermeasures cycler (blend-all ↔ α-β predicted-LOS gate)
+const COOPERATION_RUNGS := ["solo", "salvo"]   # slice-14 salvo cycler (uncoordinated PN ↔ impact-time-control)
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
 func _ready() -> void:
@@ -290,7 +297,33 @@ func _setup_spatial_fid_btn() -> void:
 	# else `propagation` (slice 1/2, the binary toggle wired in _build_ui). The disconnect is
 	# guarded so the headless UI tests — which build the button without _build_ui's connect —
 	# don't error, exactly like _enter_cfar_mode.
-	if _fidelity.has("discrimination"):
+	if _fidelity.has("cooperation"):
+		# Slice-14 cooperative salvo (THE CAPSTONE): a `cooperation` fidelity keeps the SPATIAL elevation
+		# view (the salvo engagement is planar in x-z — N interceptors climb, a common target crosses in
+		# altitude) but repurposes the shared button as the :solo↔:salvo COOPERATION cycler. CHECKED FIRST —
+		# BEFORE discrimination/seeker/guidance/autopilot — ON PURPOSE: a slice-14 scenario ships
+		# cooperation + guidance:pn + autopilot:ideal (NO seeker/discrimination), all HELD FIXED so the
+		# cooperation lesson is uncontaminated, and the ONE button must toggle `cooperation`, not the held
+		# ones (convention 9 — one lesson per button; the slice-13 "discrimination before the held keys"
+		# precedent, one lesson deeper). Same guarded disconnect as the other _fid_kind setups. Under :solo
+		# each missile flies plain PN to its own natural t_go → the two trails arrive SPREAD out in time
+		# (one hits while the sibling is still far); under :salvo the NEAR missile weaves a stretched S-curve
+		# to delay toward the shared T_d while the FAR reference flies ~straight → both converge TOGETHER
+		# (Δτ → 0, the per-missile t_go/impact_time_err readout is the number). `cooperation` is class 4c
+		# (PHYSICS-CHANGING, NO RNG → live-settable, NO set_fidelity guard — the :integrator/:autopilot/:apn
+		# precedent, the CONTRAST to slice-13 :scan's introduce-reject); "draw-count invariance" is VACUOUS
+		# (no w.rng consumer — truth-fed PN, no seeker). It is INERT without a :datalink coordinator (no
+		# salvo_t_d field → the :salvo decide! branch is unreachable → :salvo ≡ :solo).
+		_fid_kind = "cooperation"
+		if _prop_btn.pressed.is_connected(_on_prop_pressed):
+			_prop_btn.pressed.disconnect(_on_prop_pressed)
+		if not _prop_btn.pressed.is_connected(_on_cooperation_pressed):
+			_prop_btn.pressed.connect(_on_cooperation_pressed)
+		_prop_btn.tooltip_text = "Cycle cooperation (set_fidelity): solo ↔ salvo"
+		# Seed extents to fit the salvo (x ~0..9 km, z ~3..5 km); they only grow, so start close.
+		_x_max = 10000.0
+		_z_max = 6000.0
+	elif _fidelity.has("discrimination"):
 		# Slice-13 countermeasures: a `discrimination` fidelity keeps the SPATIAL elevation view (the
 		# crossing engagement is planar in x-z) but repurposes the shared button as the :none↔:gated
 		# DISCRIMINATION cycler. CHECKED FIRST — BEFORE seeker/guidance/autopilot — ON PURPOSE: a
@@ -524,6 +557,8 @@ func _update_fid_btn() -> void:
 			_prop_btn.text = "seeker: %s" % str(_fidelity.get("seeker", "?"))
 		"discrimination":
 			_prop_btn.text = "disc: %s" % str(_fidelity.get("discrimination", "?"))
+		"cooperation":
+			_prop_btn.text = "coop: %s" % str(_fidelity.get("cooperation", "?"))
 		_:
 			_update_prop_btn()
 
@@ -692,6 +727,26 @@ func _on_discrimination_pressed() -> void:
 	_render_badge()
 	_update_fid_btn()
 
+func _on_cooperation_pressed() -> void:
+	# Advance the COOPERATION rung (solo↔salvo) and tell the core (set_fidelity). THE CAPSTONE toggle.
+	# Class 4c — PHYSICS-CHANGING, NO RNG (the :integrator/:autopilot/:apn shape, NOT slice-13's
+	# draw-topology 4b): there is NO w.rng consumer in the salvo scenario (truth-fed PN, no seeker), so a
+	# :solo↔:salvo flip CHANGES the trajectories going forward with NO RNG to desync — "draw-count
+	# invariance" is VACUOUS. LIVE-SETTABLE with NO introduce-reject (the CONTRAST to slice-13 :scan): the
+	# server's set_fidelity accepts cooperation freely (no draw-topology to flip). Under :salvo each missile
+	# reads the coordinator's shared T_d and the NEAR (faster) missile stretches to arrive with the FAR
+	# reference (Δτ → 0); under :solo each flies plain PN to its own natural t_go (they arrive SPREAD out).
+	# INERT without a :datalink coordinator (no salvo_t_d → :salvo ≡ :solo). `guidance`/`autopilot` stay
+	# FIXED (this button toggles only `cooperation`). The client owns the displayed rung: badge + button
+	# locally (the server applies it silently on the next tick, no reply).
+	var cur := str(_fidelity.get("cooperation", "solo"))
+	var i := COOPERATION_RUNGS.find(cur)
+	var next: String = COOPERATION_RUNGS[(i + 1) % COOPERATION_RUNGS.size()] if i >= 0 else "solo"
+	_fidelity["cooperation"] = next
+	_client.send({"type": "set_fidelity", "key": "cooperation", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
 func _on_state(obj: Dictionary) -> void:
 	_telemetry = obj.get("telemetry", {})
 	if _mode == "cfar":
@@ -764,6 +819,16 @@ func _spatial_on_state(obj: Dictionary) -> void:
 				_missile_trail.append(pos)
 				if _missile_trail.size() > MISSILE_TRAIL_MAX:
 					_missile_trail.pop_front()
+			# Slice-14 salvo: a PER-MISSILE trail (keyed by id) so N interceptors each render their own
+			# path (the stretched-S vs straight-in contrast). Populated only in the cooperation view; the
+			# single _missile_trail above stays the slice-8..13 path (untouched). Same repeat-skip + cap.
+			if _fid_kind == "cooperation":
+				var tr: Array = _salvo_trails.get(id, [])
+				if tr.is_empty() or tr[-1] != pos:
+					tr.append(pos)
+					if tr.size() > MISSILE_TRAIL_MAX:
+						tr.pop_front()
+				_salvo_trails[id] = tr
 		_x_max = max(_x_max, absf(float(pos[0])) * 1.08)
 		_z_max = max(_z_max, float(pos[2]) * 1.15)
 
@@ -885,6 +950,7 @@ func _on_reset_pressed() -> void:
 	_client.send({"type": "reset"})       # reload scenario, held seed re-applied (clean replay)
 	_blips.clear()
 	_missile_trail.clear()                # start the ballistic trail fresh on the re-launch
+	_salvo_trails.clear()                 # slice-14: clear the per-missile salvo trails on re-launch
 	# `reset` reloads the YAML server-side → propagation reverts to the scenario default,
 	# but the server sends no new handshake. Resync the local fidelity so the badge/button
 	# don't lie about a toggle the reset just undid.
@@ -1004,6 +1070,11 @@ func _draw_spatial() -> void:
 	# the decoy (seduced), under :gated it holds on the target (the discrimination tell).
 	if _fid_kind == "discrimination":
 		_draw_discrimination_los()
+	# cooperative salvo (slice 14 — THE CAPSTONE): the N-interceptor multi-missile render. NOT in the
+	# single-missile _draw_missile/_draw_guidance_los branches above (those assume ONE _missile_id) — it
+	# has its own per-missile-trail path so the two interceptors' stretched-vs-straight arcs both show.
+	if _fid_kind == "cooperation":
+		_draw_salvo()
 
 	# detection blips: expanding rings that fade over BLIP_TTL
 	for b in _blips:
@@ -1089,6 +1160,71 @@ func _draw_discrimination_los() -> void:
 		var tip := [float(mpos[0]) + L * cos(lam), 0.0, float(mpos[2]) + L * sin(lam)]
 		draw_line(mp, _world_to_screen(tip), Color(1.0, 0.95, 0.3, 0.9), 2.0)
 		draw_string(_font, mp + Vector2(6, 18), "aim", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.95, 0.3))
+
+func _draw_salvo() -> void:
+	# Slice 14 (THE CAPSTONE): the N-interceptor salvo, drawn in the elevation view. Each :missile gets
+	# its OWN colored trail (from _salvo_trails) + a nose marker + a faint LOS to the common target + a
+	# per-missile t_go / range label — so the LESSON reads straight off the pixels: under :salvo the NEAR
+	# missile weaves a stretched S-curve to delay while the FAR reference flies ~straight and both
+	# converge together (Δτ → 0); under :solo both fly straight-in and one reaches the target well before
+	# the sibling (the spread). The arrival-spread NUMBER lives in the text readout (each missile's t_go +
+	# impact_time_err, the coordinator's salvo_t_d/T_d) — ALL scalars from telemetry, nothing recomputed
+	# (the Godot-pure invariant). The two trail colors distinguish the interceptors; the common target is
+	# drawn by the generic :target branch in _draw_spatial.
+	var mids := PackedStringArray()
+	for id in _entities:
+		if str(_entities[id].kind) == "missile":
+			mids.append(id)
+	mids.sort()                                                    # canonical order → stable colors
+	# the common target screen point (for the per-missile LOS lines + the intercept ring)
+	var tgt_p := Vector2.ZERO
+	var have_tgt := false
+	for id in _entities:
+		if str(_entities[id].kind) == "target":
+			tgt_p = _world_to_screen(_entities[id].pos)
+			have_tgt = true
+			break
+	# distinct per-missile hues (amber for the near/first, cyan for the far/second; extra ids wrap)
+	var palette := [Color(1.0, 0.75, 0.2), Color(0.4, 0.85, 1.0), Color(0.8, 0.5, 1.0), Color(0.5, 1.0, 0.6)]
+	for mi in mids.size():
+		var mid: String = mids[mi]
+		var col: Color = palette[mi % palette.size()]
+		var tr: Array = _salvo_trails.get(mid, [])
+		# the flown path (the stretched-S vs straight tell), mapped fresh each draw (auto-expand safe)
+		if tr.size() >= 2:
+			var pts := PackedVector2Array()
+			for wp in tr:
+				pts.append(_world_to_screen(wp))
+			draw_polyline(pts, Color(col.r, col.g, col.b, 0.55), 1.5)
+		if not _entities.has(mid):
+			continue
+		var head := _world_to_screen(_entities[mid].pos)
+		# faint LOS from this interceptor to the common target (the closing geometry)
+		if have_tgt:
+			draw_line(head, tgt_p, Color(col.r, col.g, col.b, 0.3), 1.0)
+		# nose marker oriented along the last trail segment (a dot if the segment is too short)
+		var dir := Vector2(0, -1)
+		if tr.size() >= 2:
+			var d := head - _world_to_screen(tr[-2])
+			if d.length() > 0.5:
+				dir = d.normalized()
+		var perp := Vector2(-dir.y, dir.x)
+		draw_colored_polygon(PackedVector2Array([
+			head + dir * 9.0, head - dir * 6.0 + perp * 5.0, head - dir * 6.0 - perp * 5.0]), col)
+		# per-missile label: id + t_go + range (the arrival-timing readout, from telemetry scalars)
+		var lbl := mid
+		if _telemetry.has(mid + ".t_go"):
+			lbl += "  t_go=%.2fs" % float(_telemetry[mid + ".t_go"])
+		if _telemetry.has(mid + ".los_range"):
+			lbl += "  r=%.0fm" % float(_telemetry[mid + ".los_range"])
+		draw_string(_font, head + Vector2(11, -8), lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, col)
+	# ring the target when ANY interceptor is at intercept range (the first-CPA moment — under :solo one
+	# missile rings while the sibling is still far; under :salvo both close together).
+	if have_tgt:
+		for mid in mids:
+			if float(_telemetry.get(mid + ".los_range", 1.0e9)) < 60.0:
+				draw_arc(tgt_p, 12.0, 0.0, TAU, 24, Color(1.0, 0.6, 0.2), 2.0)
+				break
 
 # --- CFAR range-power view (slice 3) ------------------------------------------
 # A plot: x = range (the core's static range axis), y = power in dB. Three layers, all from

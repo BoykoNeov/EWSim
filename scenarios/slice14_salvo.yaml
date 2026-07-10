@@ -1,0 +1,154 @@
+# slice14_salvo — cooperative guidance: a salvo of interceptors sharing time-to-go for
+# SIMULTANEOUS arrival (HANDOFF §10 item 13, slice 14 gate 3 — THE CAPSTONE, closing the
+# committed roadmap). The missile guidance arc (slices 8–12) built the single-interceptor stack
+# (integrate! + observe! + decide!); slice 14 puts N=2 interceptors in ONE scenario and lets them
+# SHARE STATE through the guidance law: each missile's time-to-go t_go ≈ R/V_c is pooled over an
+# IDEAL datalink into a team desired impact time T_d = max_j t_go_j(0) (the SLOWEST sets the pace —
+# the only time all can reach, since a missile can STRETCH its path but not SHORTEN below its
+# minimum-time trajectory), and an impact-time-control term shapes each trajectory so all N arrive
+# together (Δτ → 0). The SalvoCoordinator (a non-physical :datalink node) is the single writer of
+# the shared field w.env[:salvo_t_d] = T_d − w.t (phase-2 build_env!); each Autopilot READS it in
+# phase-4 decide! and drives err = salvo_t_d − t_go_self to zero (>0 ⇒ EARLY ⇒ STRETCH).
+#
+# THE LESSON (the fidelity button, :solo ↔ :salvo — the NEW `cooperation` key, class 4c):
+#   :solo (no cooperation, the DEFAULT so the button reveals the fix) — each missile flies plain PN
+#   to its own natural t_go; launched from ASYMMETRIC ranges (near A at R≈6.1 km, far B at R≈9.1 km)
+#   they impact SPREAD OUT in time (Δτ ≈ 2.3 s — a defender picks them off one at a time). Cycle to
+#   :salvo — each missile drives t_go → the shared T_d; the NEAR (faster-arriving) missile STRETCHES
+#   its path (a pronounced ⟂-LOS-velocity S-curve/weave — detour ~2× the straight range) to delay,
+#   the FAR missile (the reference, the natural max t_go) flies ~straight, and BOTH arrive TOGETHER
+#   (Δτ collapses to ≲ 0.5 s, a ~4.5× compression) while EACH still HITS (miss < 1 m). Cooperation
+#   reshapes TIMING, not accuracy. `cooperation` is class 4c (PHYSICS-CHANGING, NO RNG — the
+#   :integrator/:autopilot/:apn shape, NOT slice-13's draw-topology 4b): a :solo↔:salvo toggle MOVES
+#   the missiles but there is NO w.rng consumer (truth-fed PN, no seeker — the cooperation lesson is
+#   isolated exactly as slice 12 isolated APN), so "draw-count invariance" is VACUOUS and there is NO
+#   draw-topology to flip → `:cooperation` is introduce-SAFE and LIVE-SETTABLE (set_fidelity needs NO
+#   guard, the class-4c contrast to slice-13's :scan reject).
+#
+#   THE HEADLINE IS THE ARRIVAL SPREAD Δτ = |CPA_A − CPA_B| over the two interceptors. There is NO
+#   core arrival-time stamp: geometry F is an AIR intercept (a MOVING target at altitude 4500 m — a
+#   slow CV target dodges the ground-target gravity-droop miss that makes un-compensated PN miss by
+#   ~940 m), so each missile reaches CPA and COASTS PAST (r_stop=30), and the BallisticMissile
+#   :impact (ground, z≤0) fires only LATER on the fall — never at the intercept. So Δτ is the
+#   first-CPA time of each missile's `los_range` stream (already on the wire from Autopilot.decide!),
+#   computed CONSUMER-side by the verifier/tests with the descending-band first-CPA (running-min,
+#   break only well past the min — the slice-10..12 miss-distance discipline). MISS/CPA is ALWAYS vs
+#   the true `:target`, per missile (each missile's _nearest_target is the single common tgt1; the
+#   :datalink node is kind===:datalink so _nearest_target SKIPS it → neither missile ever targets the
+#   coordinator or the sibling — the truth-path invariant).
+#
+#   a_max = 3000 m/s² (~306 g) is GENEROUS and does NOT bind mid-course — the residual Δτ is a
+#   CONTROL-AUTHORITY / gain artifact, NOT a physical g-limit (the OPPOSITE shape from slice-12, where
+#   the g-limit WAS the lesson; do NOT import saturation/g-limit language). The lesson is "impact-time
+#   control authority collapses the arrival spread." OWN THE TUNING TENSION as the lesson (the k_it
+#   slider): too-cold K_it → weak collapse; the sweet spot [0.42, 0.50] → tight simultaneous arrival;
+#   too-hot K_it (≥ 0.55) → the NEAR missile OVER-stretches and MISSES (the "salvo can fail" upper
+#   edge — the slice-12 pin-the-window discipline).
+#
+# THE t_d CONSENSUS IS FIXED-AT-LAUNCH (gate-0 FINDINGS, robustness default): the coordinator
+# computes T_d = max t_go(0) ONCE at launch and republishes the shared REMAINING time T_d − w.t every
+# tick. A per-tick max recompute — and every continuous-ratchet variant — was REJECTED by the probe:
+# cooperative guidance induces the very stretch that collapses each missile's V_c and INFLATES its
+# t_go = R/V_c, so a live consensus self-pollutes and runs T_d away (to ~99–105 s). The one-shot
+# launch exchange IS the state-sharing; each missile then independently tracks (T_d − t_now). NAMED
+# APPROXIMATION (HANDOFF §1; convention 9 — DEFERRED, NAMED): the datalink is IDEAL (zero-latency,
+# lossless, truth-shared) — a noisy/latent/lossy link + consensus filtering is the §11 Tier-C horizon;
+# the cooperative approach-ANGLE variant, weapon–target assignment (N>2/heterogeneous), an explicit
+# point-defense/defender model (the Δτ metric self-justifies — spread→0 IS the number), and
+# decoys/countermeasures in the salvo are all DEFERRED (one lesson per scenario).
+#
+# THE ENGAGEMENT (geometry F, probed against the real core physics — gate-0 FINDINGS): a slow MOVING
+# target (CV) crosses ahead at 4.5 km altitude; the two interceptors launch from z=3000 m at 750 m/s,
+# each AIMED at the target's initial position (elevation_deg = atan2(Δz, Δx) so the launch velocity
+# = 750 · los_unit(missile, target) — the probe's exact aim reproduced through the loader's x-z-plane
+# speed/elevation construction). Planar in x-z (no cross-range). mass 140 kg, DRAG OFF (cd_area=0),
+# one lesson per scenario. dt=1e-3, emit_every=16. RNG-FREE (no seeker — the "even a perfect seeker
+# still lags" framing; the seed is inert, carried only for format).
+#
+# UNITS (the §1 trifecta): positions/velocities SI (m, m/s); launch ELEVATION in DEGREES → radians at
+# the loader; K_it in 1/s²; a_max in m/s². T_d/t_go/Δτ in seconds.
+name: slice14_salvo
+seed: 0
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  # THREE keys, but ONE lesson: cooperation is the toggle (the button cycles :solo↔:salvo), and
+  # guidance=:pn / autopilot=:ideal are HELD so the Δτ isolates the COOPERATION lesson (convention 9
+  # — one lesson per button; the client checks `cooperation` BEFORE guidance/autopilot). cooperation
+  # is class-4c (physics-changing, NO RNG → live-settable, NO set_fidelity guard — the :integrator/
+  # :autopilot/:apn precedent, the CONTRAST to slice-13 :scan's introduce-reject). NO seeker → the
+  # cooperation lesson runs truth-fed, RNG-free (the slice-12 shape).
+  cooperation: solo
+  guidance: pn
+  autopilot: ideal
+
+entities:
+  # The NEAR interceptor A: launched from [3000, 0, 3000] at 750 m/s, AIMED at the target's initial
+  # position [9000, 0, 4500] → Δ=[6000,0,1500] → elevation_deg = atan2(1500,6000) = 14.0362435°
+  # (so vel = 750·los_unit ≈ [727.6, 0, 181.9]). Natural R≈6.18 km → the SHORTER-range, faster-
+  # arriving missile (natural t_go(0) ≈ 5.0 s) — the one that must STRETCH under :salvo to meet the
+  # far missile's later arrival. [BallisticMissile, Autopilot] (guided, NO seeker → truth-fed PN).
+  # a_max = 3000 (generous, does NOT bind mid-course — a POINTING/timing lesson, not saturation);
+  # r_stop = 30 m endgame coast; k_it = 0.45 (the FINDINGS nominal, window [0.42, 0.50]).
+  - id: mA
+    kind: missile
+    pos: [3000.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 750.0
+      elevation_deg: 14.0362434679265        # atan2(1500, 6000) — aimed at tgt1(0)
+      cd_area_m2: 0.0
+      rho: 1.225
+      guidance: {n_pn: 4.0, r_stop: 30.0, kp: 2.0, ki: 0.0, kd: 0.0, tau: 0.3, a_max: 3000.0, k_it: 0.45}
+  # The FAR interceptor B: launched from [0, 0, 3000] at 750 m/s, AIMED at [9000, 0, 4500] →
+  # Δ=[9000,0,1500] → elevation_deg = atan2(1500,9000) = 9.4623222° (vel ≈ [739.7, 0, 123.3]).
+  # Natural R≈9.12 km → the LONGER-range, later-arriving missile (natural t_go(0) ≈ 7.3 s) — the
+  # REFERENCE whose t_go SETS the team T_d (salvo_consensus = max). Under :salvo it flies ~straight
+  # (its err ≈ 0); under :solo it simply arrives ~2.3 s AFTER A (the spread). Same [BallisticMissile,
+  # Autopilot] stack, same gains — the ONLY asymmetry is the launch range/heading (the lesson driver).
+  - id: mB
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 750.0
+      elevation_deg: 9.46232220802563         # atan2(1500, 9000) — aimed at tgt1(0)
+      cd_area_m2: 0.0
+      rho: 1.225
+      guidance: {n_pn: 4.0, r_stop: 30.0, kp: 2.0, ki: 0.0, kd: 0.0, tau: 0.3, a_max: 3000.0, k_it: 0.45}
+  # The common TRUE target: a slow constant-velocity aircraft crossing ahead at 4.5 km altitude,
+  # closing at v[-500,0,0] (a slow CV → clean PN intercepts for BOTH missiles, an HONEST solo baseline
+  # spread in TIME not accuracy; a stationary/faster target reintroduces the gravity-droop miss —
+  # rejected at gate 0). kind === :target → _nearest_target returns THIS for BOTH interceptors (the
+  # truth path / the CPA-miss readout). NO `maneuver:` block → ConstantVelocity (byte-identical mover).
+  - id: tgt1
+    kind: target
+    pos: [9000.0, 0.0, 4500.0]
+    vel: [-500.0, 0.0, 0.0]
+    target: {rcs_m2: 1.0}
+  # The SALVO COORDINATOR: a non-physical :datalink node (NO mover — it never integrates) carrying
+  # ONLY the phase-2 SalvoCoordinator build_env!. It gathers every kind===:missile interceptor's
+  # truth time-to-go over the IDEAL datalink, reduces them to T_d = max t_go ONCE at launch, and
+  # publishes the shared remaining time w.env[:salvo_t_d] = T_d − w.t (SINGLE writer). kind ===
+  # :datalink (NEVER :target/:missile) so _nearest_target SKIPS it — it can neither be targeted nor
+  # hijack a missile's truth target. No authored block (the team is gathered by kind at runtime); the
+  # pos is only a client glyph anchor (placed at the target for a tidy view). This entity exists ONLY
+  # in a salvo scenario — absent it, w.env[:salvo_t_d] is never written and slices 1–13 are
+  # byte-identical (additivity by construction). The loader requires ≥2 :missile interceptors when a
+  # :datalink is present (a team of one is the law-level err==0 degenerate, loader-forbidden).
+  - id: link
+    kind: datalink
+    pos: [9000.0, 0.0, 4500.0]
+
+knobs:
+  # The live sliders: K_it (THE lesson lever — the impact-time-control gain on the NEAR missile mA,
+  # the one that stretches; drag it to walk the tuning tension: too-cold → weak collapse, sweet spot
+  # → tight simultaneous arrival, too-hot ≥0.55 → mA over-stretches and MISSES), the PN nav constant
+  # N, and the g-limit a_max. The cooperation METHOD (:solo↔:salvo) is the fidelity BUTTON, not a
+  # knob; the launch geometry is fixed in the scenario (not a slider). k_it is validated > 0 at LOAD
+  # (a live huge value just curves harder then clamps — "a live slider can't crash a tick"); a_max/
+  # n_pn floored/clamped at the consumer. All target mA (the stretching near missile — its gains are
+  # the pedagogically meaningful levers; mB is the ~straight reference).
+  - {target: mA, key: k_it,  min: 0.1,   max: 0.7,    label: "K_it (impact-time gain, 1/s²)"}
+  - {target: mA, key: n_pn,  min: 2.0,   max: 6.0,    label: "N (nav constant)"}
+  - {target: mA, key: a_max, min: 100.0, max: 5000.0, label: "a_max (g-limit, m/s²)"}

@@ -1679,6 +1679,115 @@ sweep + an offline `batch.jl` miss-vs-`I`/gate grid (own seeded stream — the d
 
 ---
 
+**Slice 14 — cooperative guidance: a salvo of interceptors sharing time-to-go for SIMULTANEOUS arrival (HANDOFF
+§10 item 13 — "Cooperative guidance … Capstone")** — **COMPLETE. Gates 0–3 done & green (2259 tests). THE
+COMMITTED ROADMAP IS CLOSED.** The missile guidance arc (slices 8–12) built the single-interceptor stack; slice
+14 puts N=2 interceptors in ONE scenario and lets them SHARE STATE through the guidance law: each missile's
+time-to-go `t_go ≈ R/V_c` is pooled over an IDEAL datalink into a team consensus `T_d = max_j t_go_j(0)`, and an
+impact-time-control term shapes each trajectory so all N arrive together (Δτ → 0). **SCOPE FORK (C) — guidance-law
+cooperation** (ratified 2026-07-10); (A) distributed/measurement-fusion estimation + (B) weapon–target assignment
+are HANDOFF §11 Tier-C horizons, DEFERRED (NAMED). The RNG story INVERTS BACK to VACUOUS (the slice-12 shape):
+truth-fed PN, NO seeker → NO `w.rng` consumer → class **4c** (physics-changing, no RNG — the `:integrator`/
+`:autopilot`/`:apn` shape, NOT slice-13's draw-topology 4b). Do NOT carry slice-13's "2·N_p·N_bins draws / 4b"
+language — that is the convention-4c copy-paste false-claim trap running the slice-13→14 direction.
+
+Gate 0 (throwaway probe, `M:\claud_projects\temp\slice14_probe\`, advisor-confirmed): reused the REAL core
+physics (`using EWSim`), hand-rolled the `time_to_go`/`salvo_consensus`/`impact_time_control_accel` candidates +
+the 2-missile coordinator + the integrate!→build_env!→decide!(×2) loop. **Geometry F pinned:** a slow MOVING
+target `[9000,0,4500]` v`[-500,0,0]` (a CV target dodges the ground-target gravity-droop miss — a stationary far
+target makes plain PN miss ~940 m); near missile A `[3000,0,3000]` (natural t_go(0)≈5.0 s), far B `[0,0,3000]`
+(≈7.3 s), both aimed at the target, speed 750; N=4, **K_it=0.45** (window [0.42,0.50]), a_max=3000 (generous —
+does NOT bind), r_stop=30, `VC_FLOOR=50`. **The t_d FORK RESOLVED — FIXED absolute-time `T_d`** (advisor's
+robustness default WINS empirically): the coordinator computes `T_d=max t_go(0)` ONCE and publishes the shared
+REMAINING time `w.env[:salvo_t_d]=T_d−w.t`; each missile's `err=salvo_t_d−t_go`. Per-tick-max AND every
+continuous-ratchet variant (probe8/9) were REJECTED — cooperative guidance induces the very stretch that
+collapses each missile's V_c and INFLATES its `t_go=R/V_c`, so a live consensus SELF-POLLUTES and runs T_d away
+(to ~99–105 s at R≈5000 m mid-course). **The one-shot launch exchange IS the state-sharing** (lands on advisor
+#2's fallback with the mechanism pinned). Headline: Δτ(:solo)=2.34 s → Δτ(:salvo)=0.52 s (~4.5× collapse) with
+BOTH hitting (<1 m); the near missile stretches (τ 5.04→6.87 s) via a ⟂-LOS-velocity WEAVE (detour ~2×) to meet
+the far reference's natural 7.39 s. The metric SELF-JUSTIFIES (spread→0 IS the number) → **no defender model
+needed** (deferred). The ITCG terminal blowup (V_c→0 mid-weave) is bounded two ways: `VC_FLOOR` in `time_to_go`
+(the estimate) + `clamp_accel` at the consumer (the command). The solo degenerate moves to the LAW level
+(`err==0` early-returns `pn_accel` bit-exact; a 1-missile salvo is loader-forbidden). `FINDINGS.md` pinned the
+geometry + the RATIO + conservative one-sided bounds; advisor RE-CONSULTED after the numbers.
+
+Gate 1 (primitive green — `core/src/guidance.jl`, pure/RNG-free/no-LinearAlgebra, +43 tests → 2174): NEW
+`time_to_go(los_r, V_c) = los_r/max(V_c, VC_FLOOR)` (the receding/CPA guard → finite, convention 6),
+`salvo_consensus(t_go_list) = maximum(...)` (the only reachable common time; singleton `===` itself — the
+additivity anchor), `impact_time_control_accel(m,t,tgt,t_d; N, K_it)` = `pn_accel` base + a `(K_it·err·‖v‖)·v̂⊥`
+⟂-LOS feedback that STRETCHES an EARLY missile (err>0). TWO GUARDS: (i) `err==0.0` early-returns `base` bit-exact
+(NOT `base+zero(Vec3)` — the −0.0+0.0→+0.0 flip); (ii) the head-on floor `‖v⊥‖<1e-6` early-returns `base` (the
+normalized-direction full-magnitude trap). `COOPERATION_MODES=(:solo,:salvo)` + `VC_FLOOR=50.0` added; `pn_accel`/
+`GUIDANCE_MODES`/etc. UNCHANGED (byte-identity anchor). `test_guidance.jl` arms: `time_to_go=R/V_c` + the
+receding→finite guard; `salvo_consensus=max` + singleton `===` + N-pin; the direct feedback recompute (a DIFFERENT
+expression — the sign/transpose catch); the `err==0` command `===` `pn_accel` bit-exact no-op; an EARLY missile
+gets a path-LENGTHENING command (`dot(fb, v⊥)>0` kinematic anchor). Slices 1–13 byte-identical (golden +
+determinism green — guidance.jl stays pure).
+
+Gate 2 (wired — `core/src/missile.jl` + `scenario.jl` + `radar.jl`, +48 tests → 2222): the NEW `:datalink` kind
+(`scenario.jl`) → `[SalvoCoordinator]`, a NON-PHYSICAL entity (no mover) carrying ONLY the phase-2 `build_env!`.
+`SalvoCoordinator.build_env!` gathers every `kind===:missile` interceptor's truth t_go (the esm/gps count-by-kind
+precedent, never hard-coded ids), latches `T_d = salvo_consensus(...)` ONCE (the `haskey(c,:salvo_td)` lazy-latch),
+and publishes `w.env[:salvo_t_d] = T_d − w.t` each tick as the SINGLE writer (survives `empty!(w.env)` — phase 2 →
+live for phase-4 decide!). `Autopilot.decide!` gains the `:salvo` branch gated `coop===:salvo &&
+haskey(w.env,:salvo_t_d)` → `impact_time_control_accel(...; K_it=k_it)`; every non-salvo arm is the slice-10/11/12
+arithmetic TEXTUALLY UNCHANGED (byte-identity by construction — the `:salvo` fetch lives INSIDE its branch). NEW
+per-missile telemetry `t_go`/`impact_time_err` (SHIPPED whenever a coordinator is present — under `:solo` the error
+is SHOWN but not applied; the coordinator ships `salvo_t_d`/`T_d`); all SCALARS (no `float()`-crash). `k_it`
+(`c[:k_it]`, default 0.45, LOAD-validated >0) is a KNOB-addressable live gain. `LIVE_FIDELITY_MODES += cooperation`
+(radar.jl, one-list-no-drift); `set_fidelity` gains **NO new guard** — class 4c, `:solo↔:salvo` LIVE-SETTABLE (the
+`:integrator`/`:autopilot` precedent, the CONTRAST to slice-13 `:scan`'s introduce-reject). `_validate_missile`:
+a `:datalink` scenario needs ≥2 `:missile` interceptors (LOAD error). test_missile/test_determinism/test_server +
+scenario arms; slices 1–13 byte-identical (SalvoCoordinator is SCENARIO-instantiated, never globally registered —
+absent a `:datalink` nothing writes/reads the field).
+
+Gate 3 (scenario + Godot spatial-view extension + verifiers — visible live, +37 tests → **2259**):
+`scenarios/slice14_salvo.yaml` — geometry F (near mA elev `atan2(1500,6000)=14.036°`, far mB `atan2(1500,9000)=
+9.462°` — the loader's speed/elevation construction reproduces the probe's `750·los_unit` aim exactly), the common
+CV target tgt1, the `[SalvoCoordinator]` `link` `:datalink` node; `cooperation:solo` DEFAULT (the button REVEALS
+the fix) + `guidance:pn`/`autopilot:ideal` HELD; `k_it`/`n_pn`/`a_max` sliders on mA. **RE-PROBED on the EMIT-GRID
+wire** (`emit_probe.jl`, convention 10 — loads through `load_scenario→tick!` and samples `los_range` every
+emit_every=16): **Δτ(:solo)=2.352 s → Δτ(:salvo)=0.528 s, RATIO 4.45×, both hit** (frame-sampled miss ≤8.67 m —
+the CPA falls BETWEEN 16-tick frames, so the true <1 m intercept reads coarser; bounds set against the wire, NOT
+the per-tick FINDINGS); RNG-free replay bit-identical. mB's CPA is IDENTICAL (7.392 s) in both modes — it IS the
+reference; mA does all the stretching (5.040→6.864 s). Godot `Sandbox.gd`: the SPATIAL view EXTENDED (no new mode)
+— `COOPERATION_RUNGS=(solo,salvo)`, `_on_cooperation_pressed`, the `cooperation` branch CHECKED FIRST in
+`_setup_spatial_fid_btn` (BEFORE the held guidance/autopilot — convention 9), the "coop:" button + badge; the NEW
+VISUAL — `_draw_salvo` renders N interceptors with PER-MISSILE colored trails (`_salvo_trails`, amber near / cyan
+far) + nose markers + per-missile LOS to the common target + a `t_go`/range label each (the arrival-timing readout;
+the coordinator's `salvo_t_d`/`T_d` + each missile's `impact_time_err` render as text). Slice-1..13 views UNTOUCHED
+(the discriminator falls through — no `cooperation` key). **THE FOUR PROOFS GREEN:** `net/slice14_verify.gd` (S14V
+OK, exit 0 — drives the real server: `:solo` Δτ=2.352 s SPREAD [mA CPA 5.04/mB 7.39], the per-missile CPA + a
+pos-sequence checksum BIT-IDENTICAL on same-config replay [class-4c RNG-free determinism, NOT slice-13's
+RNG-affected pos], `set_fidelity cooperation salvo` ACCEPTED LIVE → Δτ=0.528 s COLLAPSE with both hitting, the 4.45×
+ratio, miss ALWAYS vs the true `:target`); `net/slice14_ui_test.gd` (S14UI OK — the cooperation cycler solo↔salvo,
+the held keys untouched, badge/button track, `k_it`→mA `set_param`, reset resyncs to solo); the `Sandbox.tscn`
+headless smoke-load (server `WARMING→LISTENING→DONE` ⇒ the scene connected + handshaked, NO GDScript errors); and
+the **windowed shot-harness** (`_draw` fires only windowed — [[ewsim-godot-headless]], Vulkan/RTX 5090): `:solo` =
+mA (amber) at the target r=1879 m/t_go=1.54 s while mB (cyan) lags at r=4781 m/t_go=3.87 s (the SPREAD), `:salvo` =
+mA weaves a pronounced S-CURVE to delay (impact_time_err 2.30→0.57, closing_speed 1223→755 — the ⟂-LOS stretch
+mechanism) so both converge. `test_scenario.jl` slice-14 loader arm: the three-key fidelity (cooperation:solo
+default + the two held), the `:datalink`-kind truth-path invariant (`lk.kind===:datalink !==:target !==:missile`),
+≥2 `:missile` + one common `:target` + one `[SalvoCoordinator]`, each missile `[BallisticMissile, Autopilot]`
+(NO Seeker — RNG-free), the datalink has NO mover, `k_it` at a consumed comp key, asymmetric launch elevations,
+the LOAD rejects (a 1-missile salvo / `k_it≤0`). Slices 1–13 byte-identical (golden + determinism green through
+the scenario/client/test edits — no `core/src` change beyond gate 2). **Slice 14 COMPLETE — the missile guidance
+arc's CAPSTONE; HANDOFF §10 item 13 CLOSED, the committed roadmap (items 1–13) is DONE.** DEFERRED (NAMED,
+convention 9): consensus filtering / noisy-lossy-latent datalink (the Tier-C horizon); cooperative *estimation*
+(A) + weapon–target assignment (B); the cooperative approach-ANGLE variant; an explicit point-defense/defender
+model; N>2 / heterogeneous interceptors; decoys in the salvo.
+Run the slice-14 showcase: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice14_salvo.yaml`, then
+launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-uses the spatial view; cycle the `coop:` button to
+watch the two interceptors go from SPREAD [`:solo` — one reaches the target while the sibling is far] to TOGETHER
+[`:salvo` — the near missile weaves a stretched S-curve to delay and both converge]; drag the `K_it` slider to walk
+the tuning tension — too-cold → weak collapse, sweet spot → tight arrival, ≥0.55 → the near missile over-stretches
+and misses). Re-run the gate-3 proof headless: start that server, then the console Godot `--headless --path
+clients/godot --script res://net/slice14_verify.gd` (exit 0 = pass). The UI test needs NO server: `… --script
+res://net/slice14_ui_test.gd`. **(stretch, deferred)** a Pluto Δτ-vs-geometry-asymmetry / stretch-vs-`t_d` sweep +
+an offline `batch.jl` Δτ-vs-geometry grid (RNG-free here — the distribution path is trivial).
+
+---
+
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
 (`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0); `rf.jl`

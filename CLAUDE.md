@@ -50,9 +50,9 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–13 COMPLETE & green — 2159 tests.** Full gate-by-gate
-as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands) lives in
-**`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
+**Slices 1–14 COMPLETE & green — 2259 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE.** Full
+gate-by-gate as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
+lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
 - **Slice 1** — radar → detection → ROC. Free-space radar eq, analytic+MC Pd (Swerling 0/1),
   the wire protocol + Godot socket seam, the server run-loop, the `batch.jl`/ROC path. (227)
@@ -108,7 +108,30 @@ as-built detail (exact numbers, test names, watch-items, advisor-catches, per-sl
   Deferred (NAMED): the range-gate RGPO variant vs a tracking radar; RF/IR seeker split; decoy dynamics
   (bloom/burn-out/ejection); 2-D az×el/monopulse; salvo. (2159)
 
-(The missile guidance arc — slices 8–12 — is COMPLETE. The countermeasures arc opens with slice 13.)
+- **Slice 14 (roadmap item 13) — cooperative salvo guidance COMPLETE (THE CAPSTONE)**: N=2 interceptors SHARE
+  their time-to-go over an IDEAL datalink so they arrive SIMULTANEOUSLY. A `[SalvoCoordinator]` `:datalink` node
+  (a NEW non-physical kind, phase-2 `build_env!`, SINGLE writer) pools every `kind===:missile` interceptor's truth
+  `t_go≈R/V_c` into the team consensus `T_d=max_j t_go_j(0)` — FIXED-AT-LAUNCH (the robustness default; a per-tick
+  or ratcheted consensus SELF-POLLUTES: the stretch it induces collapses V_c and inflates `t_go=R/V_c`, running T_d
+  to ~99–105 s — probe8/9), republished as the shared REMAINING time `w.env[:salvo_t_d]=T_d−w.t`. The NEW
+  `:cooperation` fidelity (`(:solo,:salvo)`): `:solo` = plain PN to each missile's natural `t_go` → SPREAD arrivals;
+  `:salvo` = `impact_time_control_accel` (PN base + a `(K_it·err·‖v‖)·v̂⊥` ⟂-LOS feedback, `err=salvo_t_d−t_go>0 ⇒
+  EARLY ⇒ STRETCH`) drives every missile's `t_go→T_d` → the near missile WEAVES a stretched S-curve to delay while
+  the far reference flies ~straight → both arrive TOGETHER (Δτ collapses **2.35→0.53 s, ~4.5×** on the emit-grid
+  wire) while each still HITS (cooperation reshapes TIMING, not accuracy). `a_max=3000` GENEROUS — the residual Δτ
+  is a CONTROL-AUTHORITY/gain artifact, NOT a g-limit (the OPPOSITE of slice-12; do NOT import saturation language).
+  The RNG inflection INVERTS BACK to VACUOUS (truth-fed PN, NO seeker → NO `w.rng` consumer) — class **4c**
+  (physics-changing, no RNG; `:cooperation` LIVE-SETTABLE, NO `set_fidelity` guard — the `:integrator`/`:autopilot`/
+  `:apn` precedent, the CONTRAST to slice-13 `:scan`'s introduce-reject). The FIRST multi-interceptor scenario +
+  the FIRST `:datalink` kind. The solo degenerate is a LAW-level `err==0` bit-exact `pn_accel` early-return (a
+  1-missile salvo is loader-forbidden); additivity for slices 1–13 is BY GATING (`:salvo` unreachable without the
+  mode AND the coordinator). The metric SELF-JUSTIFIES → no defender model (deferred). Closes HANDOFF §10 item 13.
+  Deferred (NAMED): consensus filtering / noisy-latent-lossy datalink (Tier-C); cooperative estimation (A) + WTA
+  (B); the approach-ANGLE variant; a point-defense model; N>2 / heterogeneous; decoys in the salvo. (2259)
+
+(The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened
+with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; what remains is the §11 Tier-A/B/C
+horizons.)
 
 ## Conventions / hard-won disciplines
 

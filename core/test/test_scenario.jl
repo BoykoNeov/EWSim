@@ -28,6 +28,7 @@ const _SCEN10G = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice10_g
 const _SCEN11 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice11_seeker.yaml"))
 const _SCEN12 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice12_apn.yaml"))
 const _SCEN13 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice13_decoy.yaml"))
+const _SCEN14 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice14_salvo.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -869,6 +870,110 @@ end
         # os/so/go CFAR closed forms are N_p=1 only → an os variant at n_pulses>1 must be rejected (advisor).
         @test_throws Exception load_scenario(mkdec("80.0", "16", "64", "os", "10"))
         @test load_scenario(mkdec("80.0", "16", "64", "os", "1")) isa EWSim.Scenario  # os at N_p=1 is fine
+    end
+
+    @testset "loader parses slice14_salvo.yaml (cooperative salvo, spatial view — THE CAPSTONE)" begin
+        # The slice-14 showcase: TWO interceptors share time-to-go over an ideal datalink so they arrive
+        # SIMULTANEOUSLY (HANDOFF §10 item 13). Keeps the SPATIAL view (cooperation is the missile-view
+        # discriminator, the button cycler CHECKED FIRST — before the HELD guidance/autopilot). guidance=:pn
+        # (truth-fed PN base), autopilot=:ideal are HELD so the cooperation lesson is isolated; NO seeker →
+        # RNG-free (class 4c). The FIRST multi-interceptor scenario + the FIRST :datalink kind. Cheap
+        # insurance: a malformed showcase fails HERE, not downstream.
+        scn = load_scenario(_SCEN14)
+        @test scn.name == "slice14_salvo"
+        # `cooperation` DEFAULTS to :solo (so the button REVEALS the fix — the NEW key). guidance=:pn,
+        # autopilot=:ideal HELD (the one button toggles cooperation — convention 9).
+        @test scn.world.fidelity[:cooperation] === :solo
+        @test scn.world.fidelity[:guidance] === :pn
+        @test scn.world.fidelity[:autopilot] === :ideal
+        # single-lesson: no OTHER-slice fidelity, no view axes (cooperation+guidance+autopilot ONLY).
+        for k in (:propagation, :cfar, :ep, :estimator, :deinterleaver, :raim, :integrator, :seeker, :discrimination)
+            @test !haskey(scn.world.fidelity, k)
+        end
+        @test !any(e -> e.kind in (:radar, :jammer, :clutter, :emitter, :df_sensor, :df_station,
+                                   :pulse_emitter, :esm, :gps_satellite, :gps_receiver, :decoy),
+                   values(scn.world.entities))
+        # ≥ 2 guided :missile interceptors + one common :target + one :datalink coordinator (the truth-path
+        # invariant: the datalink is a SEPARATE kind, NEVER :target/:missile — so `_nearest_target` skips it
+        # and each missile's target is the single common :target, never the sibling or the coordinator).
+        missiles = sort([id for (id, e) in scn.world.entities if e.kind === :missile])
+        targets  = [id for (id, e) in scn.world.entities if e.kind === :target]
+        links    = [id for (id, e) in scn.world.entities if e.kind === :datalink]
+        @test length(missiles) == 2 && length(targets) == 1 && length(links) == 1
+        lk = scn.world.entities[links[1]]
+        @test lk.kind === :datalink && lk.kind !== :target && lk.kind !== :missile   # the truth-path invariant
+        # each interceptor is a [BallisticMissile, Autopilot] stack (NO Seeker — truth-fed PN); the datalink
+        # carries the SalvoCoordinator (phase-2 build_env!) and NO mover (it never integrates).
+        for mid in missiles
+            @test any(s -> s isa BallisticMissile && s.id === mid, scn.subs)
+            @test any(s -> s isa Autopilot && s.id === mid, scn.subs)
+            @test !any(s -> s isa Seeker && s.id === mid, scn.subs)   # NO seeker → RNG-free (class 4c)
+        end
+        @test any(s -> s isa SalvoCoordinator && s.id === links[1], scn.subs)
+        @test !any(s -> s isa ConstantVelocity && s.id === links[1], scn.subs)  # the datalink has NO mover
+        # the target is a plain ConstantVelocity mover (a slow CV → clean PN, no gravity-droop miss).
+        @test any(s -> s isa ConstantVelocity && s.id === targets[1], scn.subs)
+        # each missile carries the impact-time-control gain `k_it` at a CONSUMED comp key (the salvo feedback
+        # strength; a silently-failed read would still default, so haskey is the teeth) + a GENEROUS a_max
+        # (3000 — does NOT bind midcourse; the residual Δτ is a control-authority artifact, NOT a g-limit —
+        # the OPPOSITE of slice-12). The asymmetric launch elevations drive the natural-t_go spread.
+        mA = scn.world.entities[missiles[1]]; mB = scn.world.entities[missiles[2]]
+        @test haskey(mA.comp, :k_it) && mA.comp[:k_it] == 0.45
+        @test haskey(mB.comp, :k_it) && mB.comp[:k_it] == 0.45
+        @test mA.comp[:a_max] == 3000.0 && mB.comp[:a_max] == 3000.0
+        @test mA.comp[:speed] == 750.0 && mB.comp[:speed] == 750.0
+        @test mA.comp[:elevation_deg] != mB.comp[:elevation_deg]   # asymmetric aim → the t_go spread
+        # k_it/n_pn/a_max ARE live sliders (the salvo tuning levers); cooperation is the fidelity BUTTON not
+        # a knob; launch geometry is not a slider.
+        keyset = Set(k.key for k in scn.knobs)
+        @test :k_it in keyset
+        @test :cooperation ∉ keyset && :guidance ∉ keyset && :autopilot ∉ keyset
+        @test all(k -> k.key ∉ (:speed, :elevation_deg), scn.knobs)
+
+        # LOAD-validated (convention 5): a salvo (:datalink) scenario needs ≥ 2 :missile interceptors; k_it
+        # must be > 0. A mis-authored salvo must fail as a clear LOAD error, not a runtime no-op. `two`
+        # controls whether a SECOND missile is present (the ≥2 check); `kit` is mB's gain (the > 0 check).
+        mksalvo(two::Bool, kit = "0.45") = begin
+            f = tempname() * ".yaml"
+            m2 = two ? """
+              - id: mB
+                kind: missile
+                pos: [0.0, 0.0, 3000.0]
+                missile:
+                  mass_kg: 140.0
+                  speed: 750.0
+                  elevation_deg: 9.46
+                  cd_area_m2: 0.0
+                  guidance: {n_pn: 4.0, r_stop: 30.0, kp: 2.0, ki: 0.0, kd: 0.0, tau: 0.3, a_max: 3000.0, k_it: $kit}
+            """ : ""
+            write(f, """
+            name: bad_salvo
+            fidelity: {cooperation: solo, guidance: pn, autopilot: ideal}
+            entities:
+              - id: mA
+                kind: missile
+                pos: [3000.0, 0.0, 3000.0]
+                missile:
+                  mass_kg: 140.0
+                  speed: 750.0
+                  elevation_deg: 14.04
+                  cd_area_m2: 0.0
+                  guidance: {n_pn: 4.0, r_stop: 30.0, kp: 2.0, ki: 0.0, kd: 0.0, tau: 0.3, a_max: 3000.0, k_it: 0.45}
+            $m2  - id: tgt1
+                kind: target
+                pos: [9000.0, 0.0, 4500.0]
+                vel: [-500.0, 0.0, 0.0]
+                target: {rcs_m2: 1.0}
+              - id: link
+                kind: datalink
+                pos: [9000.0, 0.0, 4500.0]
+            """)
+            f
+        end
+        @test load_scenario(mksalvo(true)) isa EWSim.Scenario        # the valid 2-missile control loads
+        @test_throws Exception load_scenario(mksalvo(false))         # a salvo with ONE missile is rejected
+        @test_throws Exception load_scenario(mksalvo(true, "0.0"))   # k_it ≤ 0 rejected (the feedback gain)
+        @test_throws Exception load_scenario(mksalvo(true, "-0.5"))  # negative k_it rejected
     end
 
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin
