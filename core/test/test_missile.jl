@@ -1200,6 +1200,145 @@ end
     end
 end
 
+# --- slice 15 gate 2: the rate-limited fin servo wired (:fin) — the g-onset cap on the wire ----
+# The :fin autopilot rung on a truth-fed PN missile vs a maneuvering target. Pins the WIRING: the
+# achieved-g BUILD RATE is HARD-CAPPED at k_δ·δ̇_max (the g-onset cap — telemetry `g_onset`, ≤ the cap
+# EVERYWHERE by construction), the RATE limit BINDS (fin_rate_sat>0) while the DEFLECTION/g-limit does
+# NOT (fin_defl_sat==0 && saturated==0 — the isolation, advisor #2), yet the MISS stays small (PN
+# robust — the "lack of effect" IS the lesson, motivating 6-DOF). :ideal is UNCAPPED (its vector
+# g-onset ≫ the cap); the :ideal↔:pid↔:fin trajectories DIFFER (not-a-dead-knob, class 4c — no RNG).
+# The loader validates the fin params >0. The fin telemetry keys are SCALARS (no Array → no float()
+# client crash — convention 13). The g-cap δ_max·k_δ=2500 ≤ a_max=2600 (δ_max is the g-limit), and
+# the rate cap k_δ·δ̇_max=2000 is DISTINCT from both (δ̇_max=0.4) — the three numbers are separable.
+@testset "fin servo wired (slice 15, :fin) — g-onset cap + isolation + PN robustness" begin
+    dt = 1.0e-3
+    norm3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+    kδ = 5000.0; δmax = 0.5; Gcap = kδ * δmax                # effective g-cap 2500 ≤ a_max 2600
+    R_WIN = 200.0                                            # mid-course window (outside the r_stop=30 endgame)
+
+    # A crossing + maneuvering engagement (the slice-12 geometry) with the rate-limited fin plant.
+    # a_max=2600 GENEROUS (δ_max is the g-limit); δ̇_max is the lesson slider; kd=0 (no derivative kick).
+    function fin_world(; autopilot = :fin, δ̇max = 0.4, a_lat = 160.0, a_max = 2600.0)
+        w = World(seed = 0, fidelity = Dict(:autopilot => autopilot, :guidance => :pn))
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0),
+            vel = Vec3(700cosd(12), 0.0, 700sind(12)),
+            comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0,
+                :kp => 3.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :a_max => a_max,
+                :k_delta => kδ, :delta_max => δmax, :delta_rate_max => δ̇max, :tau_fin => 0.02))
+        w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(6000.0, 0.0, 4200.0),
+            vel = Vec3(-800.0, 0.0, 200.0),
+            comp = Dict{Symbol,Any}(:rcs_m2 => 1.0, :a_lat_mps2 => a_lat, :turn_sign => 1.0))
+        return w, Subsystem[BallisticMissile(:m1), Autopilot(:m1), ManeuveringTarget(:tgt1)]
+    end
+    # Fly to first CPA, collecting: miss; peak VECTOR g-onset from comp[:a_ctrl] (mode-agnostic, whole
+    # flight — the cap holds everywhere by construction, so this is the strongest bound); whether the
+    # rate/defl/a_max clamps EVER bind in the mid-course window (r > R_WIN — the clean isolation window).
+    function fly!(w, subs; n = 40000)
+        miss = Inf; a_prev = nothing; peak_onset = 0.0
+        any_rate_sat = false; any_defl_sat = false; any_sat = false; keys_seen = false; last_tel = nothing
+        opening = 0; prev = Inf
+        for _ in 1:n
+            tick!(w, subs, dt); empty!(w.events)
+            tel = w.env[:telemetry]; last_tel = tel; r = tel["m1.los_range"]
+            miss = min(miss, r)
+            a = w.entities[:m1].comp[:a_ctrl]::Vec3
+            a_prev !== nothing && (peak_onset = max(peak_onset, norm3(a - a_prev) / dt))
+            a_prev = a
+            if haskey(tel, "m1.g_onset")                     # :fin ships these
+                keys_seen = true
+                if r > R_WIN
+                    tel["m1.fin_rate_sat"] > 0.5 && (any_rate_sat = true)
+                    tel["m1.fin_defl_sat"] > 0.5 && (any_defl_sat = true)
+                    tel["m1.saturated"]    > 0.5 && (any_sat = true)
+                end
+            end
+            get(w.entities[:m1].comp, :impacted, false) && break
+            r < 1.0 && break
+            opening = r > prev ? opening + 1 : 0; prev = r
+            (opening >= 200 && r > miss + 50.0) && break
+        end
+        return (miss = miss, peak_onset = peak_onset, rate_sat = any_rate_sat,
+                defl_sat = any_defl_sat, sat = any_sat, keys = keys_seen, tel = last_tel)
+    end
+
+    @testset "the g-onset cap BINDS on the wire, ISOLATED; miss stays small (PN robust)" begin
+        rf = fly!(fin_world(autopilot = :fin, δ̇max = 0.4)...)
+        cap_onset = kδ * 0.4                                  # 2000 m/s³ (distinct from Gcap=2500, a_max=2600)
+        @test rf.keys                                        # the :fin telemetry keys ship
+        @test rf.peak_onset <= 1.02 * cap_onset              # achieved-g BUILD RATE HARD-CAPPED (everywhere)
+        @test rf.rate_sat                                    # the RATE limit BINDS (the lesson is live)
+        @test !rf.defl_sat                                   # δ_max does NOT bind (isolation — advisor #2)
+        @test !rf.sat                                        # a_max does NOT bind (isolation — advisor #2)
+        @test rf.miss < 10.0                                 # PN homes fine despite the cap (the "lack of effect")
+        # the telemetry keys are SCALARS (no Array → no float() client crash — convention 13)
+        @test rf.tel["m1.fin_defl"] isa Real && rf.tel["m1.fin_rate"] isa Real && rf.tel["m1.g_onset"] isa Real
+        @test rf.tel["m1.fin_rate_sat"] isa Real && rf.tel["m1.fin_defl_sat"] isa Real
+    end
+
+    @testset ":ideal is UNCAPPED (g-onset ≫ the cap) + ships NO fin keys (byte-identical wire)" begin
+        ri = fly!(fin_world(autopilot = :ideal)...)
+        cap_onset = kδ * 0.4
+        @test !ri.keys                                       # :ideal ships NO fin telemetry keys
+        @test ri.peak_onset > 2.0 * cap_onset                # :ideal follows a_cmd's steps → uncapped onset
+    end
+
+    @testset "the :ideal↔:pid↔:fin trajectories DIFFER (not-a-dead-knob, class 4c, no RNG)" begin
+        wi, si = fin_world(autopilot = :ideal)
+        wp, sp = fin_world(autopilot = :pid)
+        wf, sf = fin_world(autopilot = :fin)
+        for _ in 1:1500
+            tick!(wi, si, dt); empty!(wi.events)
+            tick!(wp, sp, dt); empty!(wp.events)
+            tick!(wf, sf, dt); empty!(wf.events)
+        end
+        pi = wi.entities[:m1].pos; pp = wp.entities[:m1].pos; pf = wf.entities[:m1].pos
+        @test norm3(pi - pf) > 1.0                           # :ideal vs :fin — the plant reshapes the path
+        @test norm3(pp - pf) > 0.1                           # :pid vs :fin — a different plant (rate cap vs lag)
+    end
+
+    @testset "loader validates the fin params > 0 (k_delta/delta_max/delta_rate_max/tau_fin)" begin
+        base = """
+        name: fin
+        seed: 3
+        dt_physics: 0.001
+        fidelity: {autopilot: fin, guidance: pn}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 700.0
+              elevation_deg: 12.0
+              cd_area_m2: 0.0
+              guidance: {n_pn: 4.0, r_stop: 30.0, kp: 3.0, tau: 0.3, a_max: 2600.0, k_delta: 5000.0, delta_max: 0.5, delta_rate_max: 0.4, tau_fin: 0.02}
+          - id: tgt1
+            kind: target
+            pos: [6000.0, 0.0, 4200.0]
+            vel: [-800.0, 0.0, 200.0]
+            target: {rcs_m2: 1.0, maneuver: {a_lat_mps2: 160.0, turn_sign: 1.0}}
+        """
+        mktempdir() do dir
+            good = joinpath(dir, "good.yaml"); write(good, base)
+            scn = load_scenario(good)
+            m = scn.world.entities[:m1]
+            @test m.comp[:k_delta] == 5000.0 && m.comp[:delta_max] == 0.5
+            @test m.comp[:delta_rate_max] == 0.4 && m.comp[:tau_fin] == 0.02
+            @test get(scn.world.fidelity, :autopilot, :ideal) === :fin
+            # each authored fin param must be > 0 (the mass/a_max/tau LOAD-validation precedent).
+            for (field, badval) in (("k_delta: 5000.0", "k_delta: 0.0"),
+                                    ("delta_max: 0.5", "delta_max: -0.1"),
+                                    ("delta_rate_max: 0.4", "delta_rate_max: 0.0"),
+                                    ("tau_fin: 0.02", "tau_fin: -1.0"))
+                bad = replace(base, field => badval)
+                p = joinpath(dir, "bad_$(field[1:3]).yaml"); write(p, bad)
+                @test_throws ErrorException load_scenario(p)
+            end
+        end
+    end
+end
+
 # --- slice 14 gate 2: cooperative salvo guidance wired (the capstone, :cooperation) -----------
 # N interceptors share time-to-go over an ideal datalink to arrive SIMULTANEOUSLY (HANDOFF §10 item
 # 13). The `SalvoCoordinator` (phase-2 build_env!, on a `:datalink` node) pools `kind===:missile`

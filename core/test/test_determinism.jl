@@ -517,6 +517,71 @@ end
         @test ballistic_trace(introduce = true) == ballistic_trace(introduce = false)
     end
 
+    # Slice 15: the :fin autopilot rung (a rate-limited fin servo). Class 4c (physics-changing, NO
+    # RNG — the :autopilot/:guidance/:cooperation shape, NOT slice-13's draw-topology 4b): "draw-count
+    # invariance" is VACUOUS (no w.rng consumer — the fin plant is a deterministic ODE). (1) same-config
+    # replay bit-identical (pos/vel/a_ctrl fingerprint); (2) a mid-run :ideal→:fin toggle CHANGES the
+    # trajectory (not-a-dead-knob — the fin plant reshapes the path); (3) INTRODUCE-CLEAN BOTH
+    # DIRECTIONS — a :fin introduce on a BALLISTIC missile (no Autopilot) is a no-op → byte-identical
+    # (the class-4c live-safety: NO draw-topology to flip → NO reject guard, unlike slice-13 :scan).
+    # AutopilotState is structurally UNCHANGED (δ lives in :fin_state) so the :ideal/:pid fingerprints
+    # above stay bit-for-bit — the byte-identity master check (the slice-9 guided_trace stays green).
+    @testset "a fin-servo missile: replay bit-identical; :fin toggle CHANGES it; introduce-clean" begin
+        function fin_trace(; autopilot = :fin, nsteps = 1500, toggle_at = 0, toggle_to = nothing,
+                           start_ap = autopilot)
+            fid = Dict{Symbol,Symbol}(:guidance => :pn)
+            start_ap === nothing || (fid[:autopilot] = start_ap)
+            w = World(seed = 0, fidelity = fid)
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0),
+                vel = Vec3(700cosd(12), 0.0, 700sind(12)),
+                comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                    :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0,
+                    :kp => 3.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :a_max => 2600.0,
+                    :k_delta => 5000.0, :delta_max => 0.5, :delta_rate_max => 0.4, :tau_fin => 0.02))
+            w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(6000.0, 0.0, 4200.0),
+                vel = Vec3(-800.0, 0.0, 200.0),
+                comp = Dict{Symbol,Any}(:rcs_m2 => 1.0, :a_lat_mps2 => 160.0, :turn_sign => 1.0))
+            subs = Subsystem[BallisticMissile(:m1), Autopilot(:m1), ManeuveringTarget(:tgt1)]
+            trace = Float64[]
+            for i in 1:nsteps
+                (toggle_to !== nothing && i == toggle_at) && (w.fidelity[:autopilot] = toggle_to)
+                tick!(w, subs, 1.0e-3)
+                append!(trace, w.entities[:m1].pos); append!(trace, w.entities[:m1].vel)
+                append!(trace, w.entities[:m1].comp[:a_ctrl])       # the control fingerprint (sharper)
+                empty!(w.events)
+            end
+            return w, trace
+        end
+        # (1) same-config replay bit-identical (RNG-free — reinterpret catches sign-of-zero).
+        _, ta = fin_trace(autopilot = :fin); _, tb = fin_trace(autopilot = :fin)
+        @test ta == tb && reinterpret(UInt64, ta) == reinterpret(UInt64, tb)
+
+        # (2) a mid-run :ideal→:fin toggle CHANGES the flight (not-a-dead-knob), and replays deterministically.
+        _, tk1 = fin_trace(start_ap = :ideal, toggle_at = 200, toggle_to = :fin)
+        _, tk2 = fin_trace(start_ap = :ideal, toggle_at = 200, toggle_to = :fin)
+        @test reinterpret(UInt64, tk1) == reinterpret(UInt64, tk2)
+        _, tnever = fin_trace(autopilot = :ideal)
+        @test tk1 != tnever                                        # the rate-limited plant reshaped the flight
+
+        # (3) INTRODUCE-clean: introducing :fin on a BALLISTIC missile (no Autopilot subsystem) is a
+        # no-op — nothing reads the key — byte-identical (the class-4c live-safety; contrast slice-13 :scan).
+        function ballistic_trace(; introduce = false, at = 100, nsteps = 400)
+            w = World(seed = 0, fidelity = Dict(:integrator => :rk4))
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 1000.0), vel = Vec3(300.0, 0, 300.0),
+                comp = Dict{Symbol,Any}(:mass_kg => 100.0, :cd_area_m2 => 0.0, :rho => 1.225))
+            subs = Subsystem[BallisticMissile(:m1)]
+            tr = Float64[]
+            for i in 1:nsteps
+                introduce && i == at && (w.fidelity[:autopilot] = :fin)
+                tick!(w, subs, 1.0e-3)
+                append!(tr, w.entities[:m1].pos)
+                empty!(w.events)
+            end
+            return tr
+        end
+        @test ballistic_trace(introduce = true) == ballistic_trace(introduce = false)
+    end
+
     # Slice 10: the OUTER law swaps to proportional navigation on `:guidance`. Still NO RNG (a
     # deterministic ODE + PN + PID), so — the slice-8/9 discipline — the THREE-claim framing (NOT
     # slice-5/6/7 toggle-invariance): (1) INTRODUCE-safe (`get(w.fidelity,:guidance,:pursuit)` defaults

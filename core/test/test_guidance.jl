@@ -340,4 +340,111 @@
         # programming-error guard, like integrator_step's)
         @test_throws ErrorException autopilot_step(:bogus, Vec3(1,0,0), autopilot_init(), dt)
     end
+
+    # ─── Slice 15: the rate-limited fin servo (:fin) — the limits carry the fidelity ───────────
+    # THE CRUX (convention-4c false-fidelity trap): a LINEAR fin servo is the :pid plant relabeled
+    # (k_δ cancels). So the NONLINEAR limits (δ̇_max, δ_max) are the entire content — proven by the
+    # :pid equivalence at δ̇/δ→∞, and the RATE limit's signature is the G-ONSET CAP |da_ach/dt| ≤
+    # k_δ·δ̇_max (the slice-15 lesson — distinct from :pid's τ-lag and slice-10's a_max magnitude cap).
+    @testset "fin servo (:fin) — :pid equivalence + rate/deflection limits + g-onset cap (slice 15)" begin
+        kδ = 5000.0
+
+        @testset ":pid equivalence at δ̇_max,δ_max → ∞ (THE CRUX — the limits carry the fidelity)" begin
+            # With the limits removed the fin servo IS the :pid first-order lag (k_δ cancels), to
+            # float tolerance (the k_δ·(u/k_δ) ≈ u round-off accumulates ~1 ULP/step). A TIME-VARYING
+            # command exercises the transient + the e_int/e_prev threading, not just the fixed point.
+            kp, ki, kd, tau = 3.0, 5.0, 0.2, 0.25
+            ap_p = autopilot_init(); ap_f = autopilot_init(); fin = fin_actuator_init()
+            maxdiff = 0.0
+            for k in 1:2000
+                t = k * dt
+                a_cmd = Vec3(100.0 * sin(3.0 * t), 60.0 * cos(2.0 * t), 0.0)
+                a_p, ap_p        = autopilot_step(:pid, a_cmd, ap_p, dt; kp=kp, ki=ki, kd=kd, tau=tau)
+                a_f, ap_f, fin, _ = fin_autopilot_step(a_cmd, ap_f, fin, dt; kp=kp, ki=ki, kd=kd,
+                                        tau_s=tau, k_delta=kδ, delta_max=1e12, delta_rate_max=1e12)
+                maxdiff = max(maxdiff, norm3_test(a_p - a_f))
+            end
+            @test maxdiff < 1e-6                    # probe: ~3.8e-13 — the k_δ-cancel algebra to float tol
+        end
+
+        @testset "rate limit: δ ramps at EXACTLY δ̇_max under a hard step (external kinematic anchor)" begin
+            # A huge command pins δ_cmd at δ_max; a tight τ_s makes the desired slew ≫ δ̇_max, so the
+            # servo slews at EXACTLY δ̇_max → δ(t) = δ̇_max·t (a rate-limited integrator ramps at the
+            # limit — an external kinematic check, not a self-calibrated round-trip).
+            δ̇max = 2.0; δmax = 0.5
+            ap = autopilot_init(); fin = fin_actuator_init()
+            local diag = (delta=0.0, delta_rate=0.0, rate_sat=false, defl_sat=false)
+            for _ in 1:50                            # 50 ms; δ̇max·t = 0.1 rad < δmax (not yet pinned)
+                _, ap, fin, diag = fin_autopilot_step(Vec3(1e6, 0.0, 0.0), ap, fin, dt; kp=3.0,
+                                       k_delta=kδ, delta_max=δmax, delta_rate_max=δ̇max, tau_s=0.02)
+            end
+            @test diag.delta ≈ δ̇max * 0.050 atol = 1e-9   # 0.1000 rad — the ramp SLOPE is δ̇_max exactly
+            @test diag.rate_sat                            # the servo is rate-saturated during the ramp
+            @test !diag.defl_sat                           # δ (0.1) has NOT reached δ_max (0.5) yet
+        end
+
+        @testset "deflection limit: a sustained command pins δ = δ_max, a_ach = k_δ·δ_max exact" begin
+            δmax = 0.5
+            ap = autopilot_init(); fin = fin_actuator_init()
+            local a = zero(Vec3); local diag = (delta=0.0, delta_rate=0.0, rate_sat=false, defl_sat=false)
+            for _ in 1:4000                          # settle well past the ramp (δ̇max large → rate free)
+                a, ap, fin, diag = fin_autopilot_step(Vec3(1e6, 0.0, 0.0), ap, fin, dt; kp=3.0,
+                                      k_delta=kδ, delta_max=δmax, delta_rate_max=50.0, tau_s=0.02)
+            end
+            @test diag.delta ≈ δmax atol = 1e-9
+            @test diag.defl_sat                            # the deflection limit binds (δ pinned)
+            @test norm3_test(a) ≈ kδ * δmax atol = 1e-6    # a_ach = k_δ·δ_max = 2500 exactly
+            @test a ≈ Vec3(kδ * δmax, 0.0, 0.0) atol = 1e-6    # along the +x command direction
+        end
+
+        @testset "linear regime: neither clamp binds ⇒ a_ach = k_δ·δ (the effectiveness map)" begin
+            # A gentle command keeps the servo in the linear (:pid-equivalent) regime: rate_sat and
+            # defl_sat both stay LOW, and the achieved accel is exactly k_δ·δ (the map, no clamp).
+            ap = autopilot_init(); fin = fin_actuator_init()
+            local a = zero(Vec3); local diag = (delta=0.0, delta_rate=0.0, rate_sat=false, defl_sat=false)
+            for _ in 1:800
+                a, ap, fin, diag = fin_autopilot_step(Vec3(200.0, 0.0, 0.0), ap, fin, dt; kp=3.0,
+                                      k_delta=kδ, delta_max=0.5, delta_rate_max=50.0, tau_s=0.3)
+            end
+            @test !diag.rate_sat && !diag.defl_sat         # linear regime — neither nonlinearity active
+            @test norm3_test(a) ≈ kδ * diag.delta atol = 1e-9   # a_ach = k_δ·δ (effectiveness map)
+            @test norm3_test(a) < 250.0                    # tracks a_cmd=200 (P-only undershoot, no clamp)
+        end
+
+        @testset "g-onset cap: |Δa_ach|/dt ≤ k_δ·δ̇_max by construction (THE slice-15 lesson)" begin
+            # a_ach = k_δ·δ and δ slews ≤ δ̇_max ⇒ the achieved-g cannot BUILD faster than k_δ·δ̇_max
+            # (a jerk cap). A sign-flipping command demands a fast g reversal → the servo slews at
+            # δ̇_max → peak onset = the cap. δ_cmd = 2000/k_δ = 0.4 < δ_max so the DEFLECTION limit
+            # never binds (the isolation — this is a RATE cap, not slice-10's magnitude clamp).
+            δ̇max = 1.5; cap = kδ * δ̇max
+            ap = autopilot_init(); fin = fin_actuator_init()
+            local a_prev = zero(Vec3); peak_onset = 0.0; any_defl = false
+            for k in 1:3000
+                a_cmd = k < 1500 ? Vec3(2000.0, 0.0, 0.0) : Vec3(-2000.0, 0.0, 0.0)
+                a, ap, fin, diag = fin_autopilot_step(a_cmd, ap, fin, dt; kp=3.0,
+                                      k_delta=kδ, delta_max=0.5, delta_rate_max=δ̇max, tau_s=0.02)
+                k > 1 && (peak_onset = max(peak_onset, norm3_test(a - a_prev) / dt))
+                any_defl |= diag.defl_sat
+                a_prev = a
+            end
+            @test peak_onset <= cap * (1 + 1e-9)           # HARD-CAPPED at k_δ·δ̇_max — the jerk bound
+            @test peak_onset > 0.9 * cap                   # and the cap actually BINDS (not vacuous)
+            @test !any_defl                                # δ_max NEVER binds → the cap is CLEAN (isolation)
+        end
+
+        @testset "zero/degenerate-safe — a_cmd=0 ⇒ a_ach=0; τ_s→0 floored; Inf command → no NaN" begin
+            a, ap, fin, diag = fin_autopilot_step(zero(Vec3), autopilot_init(), fin_actuator_init(), dt;
+                                   kp=3.0, k_delta=kδ, delta_max=0.5, delta_rate_max=2.0)
+            @test a == zero(Vec3) && all(isfinite, a)
+            @test diag.delta == 0.0 && !diag.rate_sat && !diag.defl_sat
+            # τ_s → 0 floored (max(τ_s,_FRAME_EPS)) — no divide-by-zero, single step finite
+            a2, _, _, _ = fin_autopilot_step(Vec3(100.0,0,0), autopilot_init(), fin_actuator_init(), dt;
+                              kp=3.0, k_delta=kδ, delta_max=0.5, delta_rate_max=2.0, tau_s=0.0)
+            @test all(isfinite, a2)
+            # a diverged Inf command → clamp_accel zeroes the deflection → no NaN to the wire (conv. 6)
+            a3, _, _, _ = fin_autopilot_step(Vec3(Inf,0,0), autopilot_init(), fin_actuator_init(), dt;
+                              kp=3.0, k_delta=kδ, delta_max=0.5, delta_rate_max=2.0)
+            @test all(isfinite, a3)
+        end
+    end
 end

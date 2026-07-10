@@ -39,7 +39,14 @@
 #   • `:ideal` — the actuator is perfect, `a_ach ≡ a_cmd` instantly (the reference).
 #   • `:pid`   — a realistic first-order lag closed by a PID on the accel error (the lesson:
 #     P-only undershoots by exactly `1/(1+Kp)`, I drives the steady-state error to 0, D damps).
-const AUTOPILOT_MODES = (:ideal, :pid)
+#   • `:fin`   — the SAME PID command driving an explicit fin servo with a RATE limit (δ̇_max) and a
+#     deflection limit (δ_max), mapped to accel by `a = k_δ·δ` (slice 15, §11 Tier A). A LINEAR fin
+#     servo collapses to the `:pid` plant relabeled (k_δ cancels — the convention-4c false-fidelity
+#     trap), so the NONLINEAR LIMITS carry the fidelity: the lesson is the RATE limit CAPPING THE
+#     G-ONSET RATE (`|da_ach/dt| ≤ k_δ·δ̇_max`) — distinct from `:pid`'s τ-lag and slice-10's `a_max`
+#     magnitude cap. The `:fin` branch NEVER routes through `autopilot_step` (a SEPARATE kernel
+#     `fin_autopilot_step` — so `:ideal`/`:pid`'s bytes stay frozen; byte-identity master check).
+const AUTOPILOT_MODES = (:ideal, :pid, :fin)
 
 # The guidance-fidelity (OUTER-law) rungs — the SINGLE source of truth for the `:guidance`
 # key (the AUTOPILOT_MODES precedent, defined HERE so radar.jl's `LIVE_FIDELITY_MODES` can
@@ -99,6 +106,25 @@ command has been applied. The `e_prev = 0` start gives the usual first-step deri
 (harmless — the `a_max` clamp guards the command, and the plant lag `τ` bounds the response).
 """
 autopilot_init() = (a_ach = zero(Vec3), e_int = zero(Vec3), e_prev = zero(Vec3))
+
+# The fin-servo plant state (slice 15), carried per-missile in its OWN comp key `:fin_state` —
+# SEPARATE from `AutopilotState` so adding `:fin` does NOT grow the `AutopilotState` NamedTuple
+# (growing it would perturb every `:ideal`/`:pid` missile's determinism fingerprint — advisor #4,
+# the byte-identity hazard). The PID memory (`a_ach`/`e_int`/`e_prev`) stays in `AutopilotState`,
+# structurally UNCHANGED; only the fin deflection δ lives here. A FIRST-order servo → δ alone
+# suffices (a 2nd-order actuator would also carry δ̇ — Option 3, deferred). `δ` is a Vec3 (the
+# planar `clamp_accel` deflection abstraction — a single magnitude-limited deflection, not a
+# resolved per-channel fin set; named approximation, §1).
+const FinState = @NamedTuple{δ::Vec3}
+
+"""
+    fin_actuator_init() -> FinState
+
+The zero fin state (`δ = 0`): the launch/reset condition (fins centered, no deflection). The
+`fin_autopilot_step` caller threads the returned `δ′` back each tick (the `autopilot_init`
+precedent for `AutopilotState`).
+"""
+fin_actuator_init() = (δ = zero(Vec3),)
 
 """
     pursuit_accel(m_pos::Vec3, m_vel::Vec3, t_pos::Vec3; k_guid = 3.0) -> Vec3
@@ -419,4 +445,75 @@ function autopilot_step(mode::Symbol, a_cmd::Vec3, state::AutopilotState, dt::Fl
         return a_ach′, (a_ach = a_ach′, e_int = e_int, e_prev = e)
     end
     error("autopilot_step: unknown autopilot :$mode ($(join(AUTOPILOT_MODES, " | ")))")
+end
+
+"""
+    fin_autopilot_step(a_cmd::Vec3, ap::AutopilotState, fin::FinState, dt::Float64;
+                       kp = 2.0, ki = 0.0, kd = 0.0, tau_s = 0.3,
+                       k_delta, delta_max, delta_rate_max)
+        -> (a_ach::Vec3, ap′::AutopilotState, fin′::FinState, diag::NamedTuple)
+
+One step of the INNER autopilot with an explicit **rate-limited fin servo** plant (§2, slice 15,
+the `:fin` rung). The SAME PID command as `:pid` drives a fin deflection through a first-order
+servo with a RATE limit (`delta_rate_max`, rad/s) and a deflection limit (`delta_max`, rad),
+mapped to lateral accel by the control-effectiveness gain `a = k_δ·δ` (`k_delta`, m/s²·rad⁻¹):
+
+    a_prev = k_δ·δ                                    (δ = fin.δ; the previous achieved accel)
+    e      = a_cmd − a_prev                           (accel error — the SAME PID input as :pid)
+    e_int′ = e_int + e·dt                             (integral memory)
+    ė      = (e − e_prev)/dt                           (discrete derivative)
+    u      = Kp·e + Ki·e_int′ + Kd·ė                   (fin command, accel domain — DUPLICATED from :pid)
+    δ_cmd  = clamp(u/k_δ, δ_max)                       (desired deflection, DEFLECTION-command limited)
+    δ̇_des  = (δ_cmd − δ)/τ_s                           (first-order fin servo, τ_s the servo time const)
+    δ̇      = clamp(δ̇_des, δ̇_max)                       (← THE RATE LIMIT — the lesson)
+    δ′     = clamp(δ + δ̇·dt, δ_max)                    (integrate + DEFLECTION-position limit)
+    a_ach  = k_δ·δ′                                    (control-effectiveness map, m/s² per rad)
+
+**THE CRUX (convention-4c false-fidelity trap, load-bearing).** A LINEAR fin servo `τ_s·δ̇ = δ_cmd−δ`
+with the linear map `a = k_δ·δ` collapses to `τ_s·ȧ = u − a` — **the `:pid` plant relabeled**
+(k_δ cancels: `a_ach = k_δ·δ + k_δ·(u/k_δ − δ)/τ_s·dt = a_prev + (u − a_prev)/τ_s·dt`, the exact
+`:pid` recursion). So a purely-linear fin model is NOT new physics — **the ONLY new physics is the
+nonlinear LIMITS** (`δ̇_max`, `δ_max`). With `δ̇_max, δ_max → ∞` this reproduces `autopilot_step(:pid,
+…; tau = tau_s)` to float tolerance (the equivalence anchor — `test_guidance.jl`, proving the limits
+carry the fidelity). **The lesson: the rate limit CAPS THE G-ONSET RATE** — `a_ach = k_δ·δ` and δ
+slews ≤ δ̇_max ⇒ `|da_ach/dt| ≤ k_δ·δ̇_max` by construction (a jerk cap), distinct from `:pid`'s τ-lag
+and slice-10's `a_max` magnitude cap. Point-mass PN is ROBUST to it (the miss does NOT open — the
+"lack of effect" that motivates 6-DOF; slice-15 gate-0).
+
+**A SEPARATE kernel (byte-identity).** `:ideal`/`:pid` in `autopilot_step` stay TEXTUALLY frozen —
+the PID arithmetic is DUPLICATED here deliberately (reusing `:pid`'s branch would entangle the
+frozen bytes). The `:fin` `decide!` branch (missile.jl) NEVER routes through `autopilot_step`.
+
+**State (advisor #4):** `ap′` carries the PID memory (`a_ach = k_δ·δ′` for continuity, `e_int`,
+`e_prev`); `fin′` carries `δ′`. The caller threads `ap′`→`:ap_state`, `fin′`→`:fin_state`. δ lives
+in `FinState`, NOT new `AutopilotState` fields (growing that NamedTuple is the byte-identity hazard).
+
+`diag = (delta = ‖δ′‖, delta_rate = ‖δ̇‖, rate_sat = ‖δ̇_des‖ > δ̇_max, defl_sat = ‖δ′‖ ≥ δ_max·(1−ε))`
+feeds the telemetry (the saturation tells; the `rate_sat`/`defl_sat` isolation flags). **Zero/
+non-finite-safe (conv. 5/6):** `a_cmd = 0, δ = 0 → a_ach = 0` (no NaN); `τ_s→0` floored
+(`max(τ_s, _FRAME_EPS)`); `clamp_accel` (reused as the magnitude clamp `_clamp_mag`) zeroes an
+Inf/NaN deflection → never NaN to JSON. `k_delta`/`delta_max`/`delta_rate_max` are REQUIRED kwargs
+(no silent default — the scenario/loader supplies validated `> 0` values).
+"""
+function fin_autopilot_step(a_cmd::Vec3, ap::AutopilotState, fin::FinState, dt::Float64;
+                            kp::Real = 2.0, ki::Real = 0.0, kd::Real = 0.0, tau_s::Real = 0.3,
+                            k_delta::Real, delta_max::Real, delta_rate_max::Real)
+    δ        = fin.δ
+    a_prev   = k_delta * δ                              # previous achieved accel (a_ach = k_δ·δ)
+    e        = a_cmd - a_prev
+    e_int    = ap.e_int + e * dt
+    ė        = (e - ap.e_prev) / dt
+    u        = kp * e + ki * e_int + kd * ė             # the SAME PID command (accel domain)
+    δ_cmd    = clamp_accel(u / k_delta, delta_max)      # desired deflection, DEFLECTION-command limited
+    τ        = max(Float64(tau_s), _FRAME_EPS)          # a live τ_s→0 slider can't divide-by-zero
+    δ̇_des    = (δ_cmd - δ) / τ                          # first-order fin servo
+    δ̇        = clamp_accel(δ̇_des, delta_rate_max)       # ← THE RATE LIMIT (the lesson)
+    rate_sat = _norm3(δ̇_des) > delta_rate_max
+    δ′       = clamp_accel(δ + δ̇ * dt, delta_max)       # integrate + deflection-position limit
+    defl_sat = _norm3(δ′) >= delta_max * (1 - 1e-9)
+    a_ach    = k_delta * δ′                             # control-effectiveness map (m/s² per rad)
+    return a_ach,
+           (a_ach = a_ach, e_int = e_int, e_prev = e),
+           (δ = δ′,),
+           (delta = _norm3(δ′), delta_rate = _norm3(δ̇), rate_sat = rate_sat, defl_sat = defl_sat)
 end

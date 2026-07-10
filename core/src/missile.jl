@@ -292,6 +292,15 @@ function decide!(a::Autopilot, w::World)
             tel["$sid.t_go"]            = 0.0
             tel["$sid.impact_time_err"] = 0.0
         end
+        # Slice-15 fin keys — never stale (gated on `:autopilot === :fin`, so a slice-1..14 / non-fin
+        # scenario ships NONE → byte-identical). Zeroed post-impact / no-target (the missile is frozen).
+        if get(w.fidelity, :autopilot, :ideal) === :fin
+            tel["$sid.fin_defl"]     = 0.0
+            tel["$sid.fin_rate"]     = 0.0
+            tel["$sid.fin_rate_sat"] = 0.0
+            tel["$sid.fin_defl_sat"] = 0.0
+            tel["$sid.g_onset"]      = 0.0
+        end
         return nothing
     end
 
@@ -370,19 +379,45 @@ function decide!(a::Autopilot, w::World)
     a_cmd = clamp_accel(a_dem, a_max)
 
     # INNER PID autopilot → achieved accel (dispatch on the fidelity rung).
-    state = get(c, :ap_state, autopilot_init())::AutopilotState
-    a_ach, state′ = autopilot_step(mode, a_cmd, state, dt; kp = kp, ki = ki, kd = kd, tau = tau)
-    if mode === :pid
-        # BOUND the plant: clamp the achieved accel and thread the CLAMPED value back as the plant
-        # state, so a badly-tuned (diverging) discrete PID can't run a_ach → Inf → NaN in pos
-        # (advisor). `e_int` is left unclamped (it winds up only harmlessly at any real tick count).
+    state      = get(c, :ap_state, autopilot_init())::AutopilotState
+    a_ach_prev = state.a_ach                                   # slice-15 g-onset readout (pre-step a_ach)
+    fin_diag   = nothing                                       # slice-15 fin telemetry (set only when :fin)
+    # SLICE-15 FIN SEAM: `:fin` = the SAME PID command driving a rate/deflection-limited fin servo
+    # (`a = k_δ·δ`; guidance.jl `fin_autopilot_step`). Gated on `mode === :fin` — UNREACHABLE for a
+    # slice-1..14 scenario (`get(w.fidelity,:autopilot,:ideal)` never returns `:fin`) → the `else`
+    # arm is the slice-9/10/12 arithmetic TEXTUALLY UNCHANGED → byte-identical (the `+0.0`/spelling
+    # bit trap; the PID arithmetic is DUPLICATED into `fin_autopilot_step`, not shared). Fin params
+    # fetched INSIDE the branch (the slice-12 fetch-in-branch discipline) and floored at the consumer
+    # (a live δ̇_max slider can't crash a tick — convention 5; LOAD-validated >0 for authored inputs).
+    if mode === :fin
+        tau_fin        = max(Float64(get(c, :tau_fin, tau)), _FRAME_EPS)        # fin servo τ; default = :pid tau
+        k_delta        = max(Float64(get(c, :k_delta, 5000.0)), _FRAME_EPS)     # control effectiveness (divisor >0)
+        delta_max      = max(Float64(get(c, :delta_max, 0.5)), _FRAME_EPS)      # deflection limit (rad)
+        delta_rate_max = max(Float64(get(c, :delta_rate_max, 2.0)), _FRAME_EPS) # THE LESSON SLIDER (rad/s)
+        fin = get(c, :fin_state, fin_actuator_init())::FinState
+        a_ach, state′, fin′, fin_diag = fin_autopilot_step(a_cmd, state, fin, dt; kp = kp, ki = ki,
+                                            kd = kd, tau_s = tau_fin, k_delta = k_delta,
+                                            delta_max = delta_max, delta_rate_max = delta_rate_max)
+        # Crash-guard (tuned NOT to bind: k_δ·δ_max ≤ a_max → δ_max is the g-cap, the RATE limit is
+        # the isolated lesson). Thread the CLAMPED value back as the plant's a_ach (as :pid does).
         a_ach  = clamp_accel(a_ach, a_max)
         state′ = (a_ach = a_ach, e_int = state′.e_int, e_prev = state′.e_prev)
+        c[:fin_state] = fin′
+        a_ctrl = a_ach
+    else
+        a_ach, state′ = autopilot_step(mode, a_cmd, state, dt; kp = kp, ki = ki, kd = kd, tau = tau)
+        if mode === :pid
+            # BOUND the plant: clamp the achieved accel and thread the CLAMPED value back as the plant
+            # state, so a badly-tuned (diverging) discrete PID can't run a_ach → Inf → NaN in pos
+            # (advisor). `e_int` is left unclamped (it winds up only harmlessly at any real tick count).
+            a_ach  = clamp_accel(a_ach, a_max)
+            state′ = (a_ach = a_ach, e_int = state′.e_int, e_prev = state′.e_prev)
+        end
+        # :ideal returns a_ach == a_cmd (already clamped), so a_ctrl == a_cmd (perfect tracking, gap 0);
+        # :pid uses the (already-clamped) plant output.
+        a_ctrl = mode === :pid ? a_ach : clamp_accel(a_ach, a_max)
     end
     c[:ap_state] = state′
-    # :ideal returns a_ach == a_cmd (already clamped), so a_ctrl == a_cmd (perfect tracking, gap 0);
-    # :pid uses the (already-clamped) plant output.
-    a_ctrl = mode === :pid ? a_ach : clamp_accel(a_ach, a_max)
     c[:a_ctrl] = a_ctrl
 
     # Telemetry: the slice-9 keys (the tracking GAP) PLUS the slice-10 PN/saturation readouts. The
@@ -411,6 +446,19 @@ function decide!(a::Autopilot, w::World)
         tgo_self = time_to_go(los_range(e.pos, tgt.pos), -range_rate(rel_pos, rel_vel))
         tel["$sid.t_go"]            = _finite(tgo_self)
         tel["$sid.impact_time_err"] = _finite_coord(std_rem - tgo_self)  # >0 ⇒ early ⇒ stretch
+    end
+    # Slice-15 fin diagnostics — SHIPPED WHENEVER mode === :fin (a slice-1..14 / :ideal / :pid
+    # scenario ships NONE → byte-identical wire). All SCALARS (no Array → no float() client crash).
+    # The g-onset readout IS the slice-15 lesson: the achieved-g BUILD RATE ‖a_ach−a_ach_prev‖/dt,
+    # hard-capped at k_δ·δ̇_max by the rate limit (vs :ideal's uncapped step). fin_rate_sat lights
+    # while the RATE limit binds (the lesson flag); fin_defl_sat must stay 0 (the isolation — the
+    # deflection/g-limit does NOT bind, so the cap is a clean RATE cap, not slice-10's magnitude one).
+    if mode === :fin && fin_diag !== nothing
+        tel["$sid.fin_defl"]     = _finite(fin_diag.delta)               # ‖δ‖ (rad) — the fin deflection
+        tel["$sid.fin_rate"]     = _finite(fin_diag.delta_rate)          # ‖δ̇‖ (rad/s) — the slew rate
+        tel["$sid.fin_rate_sat"] = fin_diag.rate_sat ? 1.0 : 0.0         # RATE limit binding? (the lesson flag)
+        tel["$sid.fin_defl_sat"] = fin_diag.defl_sat ? 1.0 : 0.0         # DEFLECTION limit binding? (isolation)
+        tel["$sid.g_onset"]      = _finite(_norm3(a_ctrl - a_ach_prev) / dt)  # achieved-g build rate (≤ k_δ·δ̇_max)
     end
     return nothing
 end

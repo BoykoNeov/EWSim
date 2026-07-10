@@ -418,6 +418,22 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # coordinator + `coop === :salvo`).
             comp[:k_it] = _f64(get(gb, "k_it", 0.45))
             comp[:k_it]   > 0 || error("missile '$id': guidance.k_it must be > 0 (got $(comp[:k_it]))")
+            # Slice 15: the rate-limited fin servo params (the `:fin` autopilot rung). KNOB-ADDRESSABLE
+            # (δ̇_max is the lesson slider) and read with DEFAULTS at the consumer (Autopilot.decide!),
+            # so a bare guidance block / a live slider can't KeyError a tick. LOAD-validated > 0 for the
+            # AUTHORED values (immutable inputs — the mass/a_max/tau precedent; live sliders clamp at the
+            # consumer via `max(·, _FRAME_EPS)`). A slice-9..14 missile that never runs `:fin` still
+            # carries the keys harmlessly (unread unless `autopilot: fin`). `k_delta·delta_max` is the
+            # effective g-cap (kept ≤ a_max in-scenario so δ_max — not a_max — is the g-limit, isolating
+            # the RATE limit as the lesson).
+            comp[:tau_fin]        = _f64(get(gb, "tau_fin", comp[:tau]))   # fin servo τ; default = :pid tau
+            comp[:k_delta]        = _f64(get(gb, "k_delta", 5000.0))       # control effectiveness (m/s²·rad⁻¹)
+            comp[:delta_max]      = _f64(get(gb, "delta_max", 0.5))        # deflection limit (rad)
+            comp[:delta_rate_max] = _f64(get(gb, "delta_rate_max", 2.0))   # THE LESSON SLIDER: rate limit (rad/s)
+            comp[:tau_fin]        > 0 || error("missile '$id': guidance.tau_fin must be > 0 (got $(comp[:tau_fin]))")
+            comp[:k_delta]        > 0 || error("missile '$id': guidance.k_delta must be > 0 (got $(comp[:k_delta]))")
+            comp[:delta_max]      > 0 || error("missile '$id': guidance.delta_max must be > 0 (got $(comp[:delta_max]))")
+            comp[:delta_rate_max] > 0 || error("missile '$id': guidance.delta_rate_max must be > 0 (got $(comp[:delta_rate_max]))")
             push!(subs, Autopilot(id))
         end
     elseif kind === :datalink

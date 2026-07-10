@@ -881,6 +881,58 @@ end
         @test ok                                                  # both missiles + salvo telemetry finite
     end
 
+    @testset "set_fidelity :autopilot :fin — the third plant rung write/reject + introduce-safe (slice-15, class 4c)" begin
+        # Slice-15: `:fin` is a NEW value of the existing `:autopilot` key (AUTOPILOT_MODES += :fin), so
+        # it flows through the SAME per-key LIVE_FIDELITY_MODES check AUTOMATICALLY (one-list-no-drift —
+        # no server change). Physics-changing, NO RNG → NO draw-topology to flip → NO introduce-guard
+        # (the :apn/:cooperation precedent; the CONTRAST to slice-13 :scan's introduce-reject). The
+        # trajectory change is pinned in test_determinism; here only the wire write/reject/introduce.
+        srv = EWSim.Server(_apn_scenario(1; fidelity = Dict(:autopilot => :fin, :guidance => :pn)))
+        w = srv.scn.world
+        @test w.fidelity[:autopilot] === :fin                      # the scenario default (the third plant rung)
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "autopilot", :value => "pid"))
+        @test w.fidelity[:autopilot] === :pid                      # :fin→:pid — accepted (live)
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "autopilot", :value => "fin"))
+        @test w.fidelity[:autopilot] === :fin                      # :pid→:fin (INTRODUCE-direction) — accepted
+        # cycle the 3-ring the Godot autopilot cycler drives (every step clean — no topology guard).
+        for v in ("ideal", "pid", "fin")
+            EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "autopilot", :value => v))
+            @test w.fidelity[:autopilot] === Symbol(v)
+        end
+        # a bad rung is REJECTED before landing (would throw in decide! → kill the session).
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "autopilot", :value => "bangbang"))
+        # INTRODUCING :fin mid-run on a scenario that omitted :autopilot is ALLOWED (class 4c — the
+        # CONTRAST to slice-13 :scan's introduce-reject; decide! reads default fin params, no crash).
+        srv2 = EWSim.Server(_apn_scenario(1; fidelity = Dict(:guidance => :pn)))
+        @test !haskey(srv2.scn.world.fidelity, :autopilot)
+        EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "autopilot", :value => "fin"))
+        @test srv2.scn.world.fidelity[:autopilot] === :fin
+        for _ in 1:50; tick!(srv2.scn.world, srv2.scn.subs, srv2.scn.dt_physics); empty!(srv2.scn.world.events); end
+        @test all(isfinite, srv2.scn.world.entities[:m1].pos)      # a tick under the introduced :fin is clean
+    end
+
+    @testset "a degenerate fin param can't crash a tick (δ̇_max→0 / τ_s→0 / k_δ→0 floored at the consumer)" begin
+        # The "a live slider can't crash a tick" discipline (convention 5): the fin CONSUMER floors
+        # δ̇_max/τ_s/k_δ at _FRAME_EPS (decide!/fin_autopilot_step), so a slider driven to 0 (or absurd)
+        # slews slower / divides safely — no throw, no NaN. Mutate the comp directly (the δ̇_max KNOB
+        # declaration is a gate-3 scenario concern; here we prove the CONSUMER guard in isolation).
+        srv = EWSim.Server(_apn_scenario(2; fidelity = Dict(:autopilot => :fin, :guidance => :pn)))
+        w = srv.scn.world
+        w.entities[:m1].comp[:delta_rate_max] = 0.0
+        w.entities[:m1].comp[:tau_fin] = 0.0
+        w.entities[:m1].comp[:k_delta] = 0.0                       # even a 0 effectiveness (divisor) is floored
+        ok = true
+        for _ in 1:500
+            tick!(w, srv.scn.subs, srv.scn.dt_physics); empty!(w.events)   # must NOT throw
+            tel = w.env[:telemetry]
+            ok &= all(isfinite, w.entities[:m1].pos) && isfinite(tel["m1.a_ach"]) &&
+                  isfinite(get(tel, "m1.g_onset", 0.0)) && isfinite(get(tel, "m1.fin_defl", 0.0))
+            ok || break
+        end
+        @test ok                                                   # no throw, no NaN — the tick survives
+    end
+
     @testset "warmup! tolerates a guided-missile scenario (slice-9, radar-free, phase 1+4)" begin
         # A guided missile is radar-free, so warmup!'s ROC-batch warm is skipped; the tick!+state_frame
         # warm still runs — warming the phase-1 integrator + the phase-4 Autopilot decide! + the accel
