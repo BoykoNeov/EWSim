@@ -436,6 +436,37 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             comp[:delta_rate_max] > 0 || error("missile '$id': guidance.delta_rate_max must be > 0 (got $(comp[:delta_rate_max]))")
             push!(subs, Autopilot(id))
         end
+        # Slice 16 (§11 Tier A): an `airframe:` sub-block gives the missile PITCH-PLANE ROTATIONAL
+        # DYNAMICS — BallisticMissile.integrate! then integrates `(θ, q)` under the aero moment
+        # (airframe.jl) and `att` becomes a dynamical output. Its PRESENCE (keyed on `:af_cma`)
+        # is the gate: a slice-8..15 missile has NO `airframe:` block → `att` stays velocity-aligned,
+        # byte-identical (no subsystem added — the same BallisticMissile owns rotation). `Cma` is the
+        # LESSON SLIDER (drag it through 0: Cmα<0 restores/oscillates → Cmα>0 tumbles — the #1 sign
+        # trap made interactive), so it is KNOB-ADDRESSABLE; the geometry (S,d,I) is fixed config.
+        # All LOAD-validated > 0 for the immutable inputs (a zero I divides the moment equation → a
+        # crash inside integrate! → the session's IO-only catch; the mass/tau precedent). `Cma` is NOT
+        # sign-guarded at load (crossing zero IS the lesson — the consumer's short_period_freq/pitch_
+        # moment are NaN-safe); `Cmd`/`Cmq`/`alpha0`/`delta` are unconstrained reals (a nose-down fin,
+        # a positive Cmq, either-sign perturbation are all physical).
+        if haskey(mb, "airframe")
+            ab = mb["airframe"]
+            comp[:af_S]      = _f64(get(ab, "ref_area_m2", π * 0.1^2))    # aero ref area (0.2 m dia default)
+            comp[:af_d]      = _f64(get(ab, "ref_len_m", 0.2))           # ref length (= q̄ nondim length)
+            comp[:af_I]      = _f64(get(ab, "inertia_kgm2", 50.0))       # pitch moment of inertia
+            comp[:af_cma]    = _f64(get(ab, "cma", -0.3))               # static stability ∂Cm/∂α (KNOB — the lesson)
+            comp[:af_cmd]    = _f64(get(ab, "cmd", 0.0))               # control effectiveness ∂Cm/∂δ
+            comp[:af_cmq]    = _f64(get(ab, "cmq", 0.0))               # pitch damping ∂Cm/∂q̄
+            comp[:af_alpha0] = _f64(get(ab, "alpha0", 0.0))            # initial angle of attack (rad, the perturbation)
+            comp[:af_delta]  = _f64(get(ab, "delta", 0.0))            # open-loop fin deflection (rad; no autopilot this slice)
+            comp[:af_S] > 0 || error("missile '$id': airframe.ref_area_m2 must be > 0 (got $(comp[:af_S]))")
+            comp[:af_d] > 0 || error("missile '$id': airframe.ref_len_m must be > 0 (got $(comp[:af_d]))")
+            comp[:af_I] > 0 || error("missile '$id': airframe.inertia_kgm2 must be > 0 (got $(comp[:af_I]))")
+            isfinite(comp[:af_cma]) || error("missile '$id': airframe.cma must be finite (got $(comp[:af_cma]))")
+            isfinite(comp[:af_cmd]) || error("missile '$id': airframe.cmd must be finite (got $(comp[:af_cmd]))")
+            isfinite(comp[:af_cmq]) || error("missile '$id': airframe.cmq must be finite (got $(comp[:af_cmq]))")
+            isfinite(comp[:af_alpha0]) || error("missile '$id': airframe.alpha0 must be finite (got $(comp[:af_alpha0]))")
+            isfinite(comp[:af_delta])  || error("missile '$id': airframe.delta must be finite (got $(comp[:af_delta]))")
+        end
     elseif kind === :datalink
         # A cooperative-guidance datalink node (slice 14, the capstone): a NON-PHYSICAL entity (no
         # mover — it never integrates) carrying ONLY the phase-2 `SalvoCoordinator` build_env!. It

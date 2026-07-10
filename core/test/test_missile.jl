@@ -1524,3 +1524,193 @@ end
         end
     end
 end
+
+# --- gate 2: the pitch-plane ROTATIONAL airframe wired into BallisticMissile.integrate! -----
+# (slice 16, §11 Tier A). The lesson wired end-to-end: an `airframe:` block gives the missile
+# a dynamical `att` — Cmα<0 WEATHERVANES/oscillates (α bounded, restores) vs Cmα>0 TUMBLES (α
+# diverges) — the #1 sign trap. The load-bearing property is ISOLATION: rotation reads (V,γ)
+# but does NOT feed back into (pos,vel), so the trajectory is BYTE-IDENTICAL to the same missile
+# with no airframe block (advisor: read-only w.r.t. translation). Pinned against the LIVE tick,
+# not a hand-recompute (convention 10). NO RNG (class 4c — determinism is trivial/vacuous, the
+# slice-8/14/15 shape); the wire is byte-identical for a non-airframe missile (gated telemetry).
+@testset "airframe rotational dynamics wired (slice 16, pitch-plane :sixdof)" begin
+    dt = 1.0e-3
+    norm3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # A fast, shallow shot (γ ≈ small, slowly drifting under gravity) so the short-period
+    # oscillation reads cleanly; drag off. `af=false` gives the ISOLATION TWIN (no airframe block).
+    function af_world(; cma = -0.3, cmd = 0.0, cmq = 0.0, alpha0 = 0.0, delta = 0.0, af = true,
+                        vel = Vec3(600.0, 0.0, 40.0))
+        w = World(seed = 0, fidelity = Dict{Symbol,Symbol}(:integrator => :rk4))
+        comp = Dict{Symbol,Any}(:mass_kg => 100.0, :cd_area_m2 => 0.0, :rho => 1.225)
+        if af
+            comp[:af_S] = π * 0.1^2; comp[:af_d] = 0.2; comp[:af_I] = 50.0
+            comp[:af_cma] = cma; comp[:af_cmd] = cmd; comp[:af_cmq] = cmq
+            comp[:af_alpha0] = alpha0; comp[:af_delta] = delta
+        end
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 1000.0), vel = vel, comp = comp)
+        return w, Subsystem[BallisticMissile(:m1)]
+    end
+    afp(c) = AirframeParams(c[:af_S], c[:af_d], c[:af_I], c[:af_cma], c[:af_cmd], c[:af_cmq], c[:rho])
+
+    @testset "ISOLATION — rotation does NOT touch (pos,vel): trajectory byte-identical to the twin" begin
+        # THE load-bearing property. A stable, an UNSTABLE, and a fin-deflected airframe must ALL
+        # leave the translation bit-for-bit equal to the no-airframe twin (rotation is read-only).
+        for (cma, alpha0, delta) in ((-0.3, 0.05, 0.0), (+0.3, 0.05, 0.0), (-0.3, 0.0, 0.1))
+            waf, saf = af_world(cma = cma, cmd = 0.1, alpha0 = alpha0, delta = delta, af = true)
+            wpl, spl = af_world(af = false)
+            ok = true
+            for _ in 1:1500
+                tick!(waf, saf, dt); empty!(waf.events)
+                tick!(wpl, spl, dt); empty!(wpl.events)
+                ok &= (waf.entities[:m1].pos == wpl.entities[:m1].pos) &&
+                      (waf.entities[:m1].vel == wpl.entities[:m1].vel)
+            end
+            @test ok                                             # bit-exact trajectory (the isolation)
+        end
+    end
+
+    @testset "wiring mirror — integrate! feeds airframe_step the LIVE (V,γ,δ,params)" begin
+        # Reproduce the subsystem's rotational update with the pure lib fed the SAME live (V,γ)
+        # from each post-tick velocity (γ = atan(vz,vx), V = ‖v‖ = _norm3). Pins integrate! →
+        # airframe_step (convention 11 — an INDEPENDENT recompute, not the same call).
+        waf, saf = af_world(cma = -0.3, cmd = 0.1, alpha0 = 0.05, delta = 0.02)
+        c = waf.entities[:m1].comp; p = afp(c)
+        θref = nothing; qref = nothing; ok = true
+        for _ in 1:400
+            tick!(waf, saf, dt); empty!(waf.events)
+            v = waf.entities[:m1].vel
+            V = norm3(v); γ = atan(v[3], v[1])
+            if θref === nothing                                  # tick 1: subsystem lazily inits θ=γ+α0, q=0
+                θref, qref = airframe_step(γ + 0.05, 0.0, dt; gamma = γ, V = V, delta = 0.02, p = p)
+            else
+                θref, qref = airframe_step(θref, qref, dt; gamma = γ, V = V, delta = 0.02, p = p)
+            end
+            ok &= isapprox(c[:pitch_theta], θref; atol = 1e-12) && isapprox(c[:pitch_q], qref; atol = 1e-12)
+        end
+        @test ok
+    end
+
+    @testset "SIGN LESSON — Cmα<0 α stays BOUNDED & restores; Cmα>0 α DIVERGES (the #1 trap)" begin
+        # stable: a 0.05 rad initial α oscillates but never grows past it (weathervanes to trim=0).
+        ws, ss = af_world(cma = -0.3, alpha0 = 0.05)
+        αs = Float64[]
+        for _ in 1:1500; tick!(ws, ss, dt); empty!(ws.events); push!(αs, ws.env[:telemetry]["m1.alpha"]); end
+        @test maximum(abs.(αs)) < 0.06                           # bounded by ~α0 (never grows)
+        @test any(<(0.0), αs) && any(>(0.0), αs)                 # crosses zero → oscillates (restoring)
+        @test ws.env[:telemetry]["m1.omega_sp"] > 0             # a real short-period freq (finite, >0)
+        # unstable: same perturbation DIVERGES — |α| ends ≫ α0, and ω_sp is NOT a real number.
+        wu, su = af_world(cma = +0.3, alpha0 = 0.05)
+        αu = Float64[]
+        for _ in 1:1500; tick!(wu, su, dt); empty!(wu.events); push!(αu, wu.env[:telemetry]["m1.alpha"]); end
+        @test abs(αu[end]) > 10 * 0.05                           # tumbled away (grew ≫ 10×)
+        @test wu.env[:telemetry]["m1.omega_sp"] == FINITE_CEIL   # NaN (no real freq) → _finite clamp
+    end
+
+    @testset "att comes ALIVE — a dynamical output OF θ (round-trips), ≠ velocity-aligned" begin
+        # `att` now ENCODES the integrated pitch θ (nose along (cosθ,0,sinθ)): recover θ back from
+        # att and pin it to comp[:pitch_theta]. And it DIFFERS from the velocity-aligned twin — the
+        # airframe LAGS the flight path (θ≠γ; a stable airframe weathervanes toward γ but can't
+        # follow instantly), so att is a real dynamical quantity, not the kinematic velocity-align.
+        wp, sp = af_world(cma = -0.3, alpha0 = 0.08)
+        wt, st = af_world(af = false)
+        maxdiff = 0.0; roundtrip_ok = true
+        for _ in 1:300
+            tick!(wp, sp, dt); empty!(wp.events); tick!(wt, st, dt); empty!(wt.events)
+            e = wp.entities[:m1]
+            nose = rotate(e.att, Vec3(1.0, 0.0, 0.0))            # att sends body-x → the nose vector
+            θ_from_att = atan(nose[3], nose[1])                  # recover the pitch angle
+            roundtrip_ok &= isapprox(θ_from_att, e.comp[:pitch_theta]; atol = 1e-9)
+            maxdiff = max(maxdiff, maximum(abs.(e.att .- wt.entities[:m1].att)))
+        end
+        @test roundtrip_ok                                       # att encodes θ, recoverable to 1e-9
+        @test maxdiff > 1e-3                                     # and differs from velocity-aligned (α ≠ 0)
+    end
+
+    @testset "gated wire — a non-airframe missile ships NO rotational keys (byte-identical)" begin
+        wpl, spl = af_world(af = false)
+        tick!(wpl, spl, dt); empty!(wpl.events)
+        tel = wpl.env[:telemetry]
+        for k in ("m1.alpha", "m1.pitch_theta", "m1.pitch_q", "m1.gamma", "m1.omega_sp", "m1.alpha_trim")
+            @test !haskey(tel, k)                                # absent → wire byte-identical to slices 8–15
+        end
+        # an airframe missile SHIPS them (the gate is real).
+        waf, saf = af_world(cma = -0.3, alpha0 = 0.05)
+        tick!(waf, saf, dt); empty!(waf.events)
+        @test all(haskey(waf.env[:telemetry], k) for k in ("m1.alpha", "m1.pitch_theta", "m1.gamma"))
+    end
+
+    @testset "determinism — an airframe missile replays bit-identical (class 4c, no RNG)" begin
+        wa, sa = af_world(cma = -0.2, cmd = 0.1, cmq = -50.0, alpha0 = 0.06, delta = 0.03)
+        wb, sb = af_world(cma = -0.2, cmd = 0.1, cmq = -50.0, alpha0 = 0.06, delta = 0.03)
+        ok = true
+        for _ in 1:800
+            tick!(wa, sa, dt); empty!(wa.events); tick!(wb, sb, dt); empty!(wb.events)
+            ok &= wa.entities[:m1].comp[:pitch_theta] == wb.entities[:m1].comp[:pitch_theta] &&
+                  wa.entities[:m1].comp[:pitch_q]     == wb.entities[:m1].comp[:pitch_q]
+        end
+        @test ok
+    end
+
+    @testset "live Cmα knob never crashes a tick — bounded/finite through a sign cross" begin
+        # emulate a live slider dragging Cmα from stable through 0 into unstable mid-flight: att
+        # and telemetry must stay FINITE the whole way (short_period_freq NaN-safe, no throw).
+        w, subs = af_world(cma = -0.3, alpha0 = 0.04)
+        finite = true
+        for i in 1:900
+            w.entities[:m1].comp[:af_cma] = -0.3 + 0.6 * (i / 900)   # -0.3 → +0.3, crossing 0
+            tick!(w, subs, dt); empty!(w.events)
+            tel = w.env[:telemetry]
+            finite &= all(isfinite, w.entities[:m1].att) &&
+                      isfinite(tel["m1.alpha"]) && isfinite(tel["m1.omega_sp"])
+        end
+        @test finite                                             # convention 5 — a live knob can't crash a tick
+    end
+
+    @testset "loader: an airframe: block arms the rotational keys + rejects bad geometry" begin
+        base = """
+        name: af
+        seed: 0
+        dt_physics: 0.001
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 1000.0]
+            missile:
+              mass_kg: 100.0
+              speed: 601.3
+              elevation_deg: 3.8
+              cd_area_m2: 0.0
+              airframe:
+                ref_area_m2: 0.0314159
+                ref_len_m: 0.2
+                inertia_kgm2: 50.0
+                cma: -0.3
+                cmd: 0.1
+                cmq: -8.0
+                alpha0: 0.05
+                delta: 0.0
+        """
+        mktempdir() do dir
+            good = joinpath(dir, "good.yaml"); write(good, base)
+            scn = load_scenario(good)
+            c = scn.world.entities[:m1].comp
+            @test c[:af_cma] == -0.3 && c[:af_I] == 50.0 && c[:af_alpha0] == 0.05   # parsed to the CONSUMED keys
+            @test any(s -> s isa BallisticMissile, scn.subs)     # no NEW subsystem — BallisticMissile owns rotation
+            # a knob addressing af_cma resolves (the lesson slider names a real comp key).
+            @test haskey(c, :af_cma)
+            # rejects: I ≤ 0 (a zero pitch inertia divides the moment equation → a tick crash).
+            badI = replace(base, "inertia_kgm2: 50.0" => "inertia_kgm2: 0.0")
+            pI = joinpath(dir, "badI.yaml"); write(pI, badI)
+            @test_throws ErrorException load_scenario(pI)
+            # rejects: a non-finite Cma (NaN cd → NaN moment → NaN att → non-finite JSON, conv. 6).
+            badC = replace(base, "cma: -0.3" => "cma: .nan")
+            pC = joinpath(dir, "badC.yaml"); write(pC, badC)
+            @test_throws ErrorException load_scenario(pC)
+            # Cmα > 0 (statically UNSTABLE) is NOT rejected — divergence IS a valid lesson state.
+            uns = replace(base, "cma: -0.3" => "cma: 0.3")
+            pu = joinpath(dir, "uns.yaml"); write(pu, uns)
+            @test load_scenario(pu).world.entities[:m1].comp[:af_cma] == 0.3
+        end
+    end
+end

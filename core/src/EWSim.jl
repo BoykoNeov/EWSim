@@ -24,6 +24,7 @@ include("deinterleave.jl")
 include("gnss.jl")
 include("frames.jl")
 include("dynamics.jl")
+include("airframe.jl")
 include("guidance.jl")
 include("radar.jl")
 include("esm.jl")
@@ -70,6 +71,10 @@ export rotate, rotate_inv, los_unit, los_range, range_rate, los_rate, az_el
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step
 export INTEGRATOR_MODES, G_ACCEL
+# Pitch-plane ROTATIONAL dynamics (slice 16, §11 Tier A — the 6-DOF airframe's first half):
+# aero pitching moment + rotational integrator + the short-period/trim closed forms.
+# `AirframeParams` is an authored-input record (the RadarParams precedent — exported).
+export AirframeParams, pitch_moment, rk4_rot, airframe_step, short_period_freq, trim_alpha
 # Missile guidance (slice 9): the outer pursuit law + the inner PID autopilot (pure).
 # `AutopilotState` is an INTERNAL state record (the JamContribution/BearingRecord precedent —
 # not exported); `autopilot_init` IS exported (the test constructs the zero state bare).

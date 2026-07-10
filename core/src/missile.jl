@@ -122,11 +122,53 @@ function integrate!(m::BallisticMissile, w::World, dt::Float64)
         end
         e.pos = p′
         e.vel = v′
-        # Velocity-aligned attitude (kinematic-only, named approx): body-x along v̂ gives the
-        # client a nose direction and exercises `frames.jl` in the live tick; the apex/impact
-        # `v→0` hits `quat_from_two_vectors`'s zero-vector guard (→ identity, no NaN).
-        e.att = quat_from_two_vectors(Vec3(1.0, 0.0, 0.0), v′)
+        # ATTITUDE — two regimes, gated on airframe-params presence (slice 16, §11 Tier A):
+        #   • NO airframe params (slices 8–15, the DEFAULT) → velocity-aligned attitude
+        #     (kinematic-only named approx): body-x along v̂. BYTE-IDENTICAL to slice 8 — the
+        #     `haskey(c, :af_cma)` guard makes a non-airframe missile take the EXACT prior line
+        #     (the `:a_ctrl` guard precedent — no RNG, no state, so class-4c introduce-safe).
+        #   • airframe params PRESENT → att is a DYNAMICAL output of the pitch-plane rotational
+        #     integrator: `att` finally comes alive (Cmα<0 weathervanes/oscillates, Cmα>0
+        #     tumbles). Rotation reads the live flight condition (V, γ) but does NOT feed back
+        #     into (pos, vel) — the slice-16 ISOLATION (α→lift coupling is slice 17). At θ = γ
+        #     (α = 0) this reduces to the velocity-aligned quaternion (same convention).
+        if haskey(c, :af_cma)
+            _integrate_airframe!(e, c, v′, dt)
+        else
+            # Velocity-aligned attitude (kinematic-only, named approx): body-x along v̂ gives the
+            # client a nose direction and exercises `frames.jl` in the live tick; the apex/impact
+            # `v→0` hits `quat_from_two_vectors`'s zero-vector guard (→ identity, no NaN).
+            e.att = quat_from_two_vectors(Vec3(1.0, 0.0, 0.0), v′)
+        end
     end
+    return nothing
+end
+
+# Pitch-plane rotational integration (slice 16). Advances the airframe attitude `(θ, q)` in
+# comp under the aero moment (airframe.jl), with the flight condition `(V, γ)` FROZEN over the
+# step — read from the just-integrated velocity `v′`, NOT fed back into it (the isolation). The
+# angle of attack `α = θ − γ`; on the FIRST tick `θ` is lazily initialized to `γ + α₀` (the
+# authored initial perturbation `:af_alpha0`, default 0), so the missile can be launched nose
+# off the velocity vector to excite the oscillation. `att` is then set from `θ` (nose along
+# `(cosθ, 0, sinθ)`), the same `quat_from_two_vectors` convention as the velocity-aligned path.
+function _integrate_airframe!(e::Entity, c::Dict{Symbol,Any}, v′::Vec3, dt::Float64)
+    Vspeed = _norm3(v′)
+    γ = atan(v′[3], v′[1])                                # pitch-plane flight-path angle
+    if !haskey(c, :pitch_theta)                           # lazy launch init (survives reset via reload)
+        c[:pitch_theta] = γ + Float64(get(c, :af_alpha0, 0.0))
+        c[:pitch_q]     = 0.0
+    end
+    p = AirframeParams(Float64(c[:af_S]), Float64(c[:af_d]), Float64(c[:af_I]),
+                       Float64(c[:af_cma]), Float64(c[:af_cmd]), Float64(c[:af_cmq]),
+                       Float64(get(c, :rho, 1.225)))
+    δ = Float64(get(c, :af_delta, 0.0))                   # open-loop fin deflection (no autopilot this slice)
+    θ, q = Float64(c[:pitch_theta]), Float64(c[:pitch_q])
+    θ′, q′ = airframe_step(θ, q, dt; gamma = γ, V = Vspeed, delta = δ, p = p)
+    c[:pitch_theta] = θ′
+    c[:pitch_q]     = q′
+    # Nose direction from the integrated pitch angle → the client's attitude (θ = γ ⇒ identical
+    # to velocity-aligned). The `v→0`/degenerate case rides quat_from_two_vectors's guards.
+    e.att = quat_from_two_vectors(Vec3(1.0, 0.0, 0.0), Vec3(cos(θ′), 0.0, sin(θ′)))
     return nothing
 end
 
@@ -154,6 +196,26 @@ function build_env!(m::BallisticMissile, w::World)
     tel["$sid.e_total_j"] = _finite_coord(etot)
     tel["$sid.de_frac"]   = _finite_coord(de)                 # (E−E₀)/E₀; ≈0 for RK4 drag-off
     tel["$sid.impacted"]  = get(c, :impacted, false)
+    # AIRFRAME rotational readout (slice 16) — shipped ONLY when the missile carries airframe
+    # params (the slice-15 fin-key precedent: gated so a non-airframe missile's wire is
+    # byte-identical). The lesson quantities: θ (pitch), γ (flight path), α = θ−γ (angle of
+    # attack — the headline; → α_trim if stable, diverges if unstable), q (pitch rate), and the
+    # short-period frequency ω_sp (NaN-safe → _finite). All derived from the post-integrate
+    # state, RNG-free, own keys → order-independent (the build_env! contract).
+    if haskey(c, :af_cma) && haskey(c, :pitch_theta)
+        θ  = Float64(c[:pitch_theta])
+        q  = Float64(c[:pitch_q])
+        γ  = atan(e.vel[3], e.vel[1])
+        p  = AirframeParams(Float64(c[:af_S]), Float64(c[:af_d]), Float64(c[:af_I]),
+                            Float64(c[:af_cma]), Float64(c[:af_cmd]), Float64(c[:af_cmq]),
+                            Float64(get(c, :rho, 1.225)))
+        tel["$sid.pitch_theta"] = _finite_coord(θ)
+        tel["$sid.gamma"]       = _finite_coord(γ)
+        tel["$sid.alpha"]       = _finite_coord(θ - γ)        # angle of attack (rad)
+        tel["$sid.pitch_q"]     = _finite_coord(q)            # pitch rate (rad/s)
+        tel["$sid.omega_sp"]    = _finite(short_period_freq(_norm3(e.vel), p))  # NaN (unstable) → FINITE_CEIL
+        tel["$sid.alpha_trim"]  = _finite_coord(trim_alpha(Float64(get(c, :af_delta, 0.0)), p))
+    end
     return nothing
 end
 
