@@ -488,7 +488,13 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   angle-of-attack limits (`fidelity.airframe = point_mass | 6dof`); layered atmosphere,
   ducting, tropospheric scatter (`propagation`); land/sea clutter with Doppler spectra,
   which unlocks MTI/MTD lessons; DRFM-style *coherent* jamming as a fidelity step above
-  noise jamming. Each is a swap, not a rewrite.
+  noise jamming. Each is a swap, not a rewrite. **[OPENED — slice 15]** the actuator/fin
+  half landed as the `:fin` autopilot rung (a rate-limited fin servo behind the existing
+  `autopilot` knob — the g-onset-rate cap `|da_ach/dt| ≤ k_δ·δ̇_max`, a pure Tier-A swap, no
+  contract change). The **6-DOF airframe + angle-of-attack half stays DEFERRED**; its trigger
+  (a lesson needing the body to point off the velocity vector — α-limited maneuverability or a
+  radome/body-rate parasitic loop) is recorded in `docs/plans/slice15.md`. The fin deflection
+  state δ that 6-DOF's moment equation consumes is now banked.
 - **Sibling domains that reuse the shared libs.** IR/EO seekers and IRST (add an IR
   environment channel to `env`, reuse `frames.jl`/`estimation.jl`); communications EW —
   jamming of frequency-hopping / spread-spectrum links — as a parallel to radar EW;

@@ -50,7 +50,8 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–14 COMPLETE & green — 2259 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE.** Full
+**Slices 1–15 COMPLETE & green — 2347 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slice 15
+OPENS the §11 Tier-A horizon (the actuator/fin half of "6-DOF airframe + actuator/fin dynamics").** Full
 gate-by-gate as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -129,9 +130,37 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   Deferred (NAMED): consensus filtering / noisy-latent-lossy datalink (Tier-C); cooperative estimation (A) + WTA
   (B); the approach-ANGLE variant; a point-defense model; N>2 / heterogeneous; decoys in the salvo. (2259)
 
+- **Slice 15 (§11 Tier-A, FIRST horizon extension) — a RATE-LIMITED FIN SERVO COMPLETE**: the actuator/fin half of
+  the Tier-A "6-DOF airframe + actuator/fin dynamics" entry (6-DOF DEFERRED). A THIRD `:autopilot` rung `:fin`
+  (`(:ideal,:pid,:fin)`): the SAME PID feeds a fin-deflection command `δ_cmd=clamp(u/k_δ,δ_max)`; the fin slews
+  through a first-order servo whose rate is HARD-CAPPED at `δ̇_max` (rad/s); `a_ach=k_δ·δ`. THE CRUX (advisor,
+  load-bearing): a LINEAR fin servo collapses to the `:pid` plant relabeled (`k_δ` cancels — the convention-4c
+  false-fidelity trap), so the NONLINEAR limits (δ̇_max, δ_max) carry the ENTIRE fidelity — PROVEN by the
+  `:pid`-equivalence-at-δ̇/δ→∞ test. THE LESSON (gate-0 EMPIRICAL PIVOT, 12 probes): the fin rate limit CAPS THE
+  G-ONSET RATE `|da_ach/dt| ≤ k_δ·δ̇_max` (telemetry `g_onset`, ≤ the cap EVERYWHERE by construction) — a jerk cap
+  cleanly DISTINCT from slice-9's steady-state gain undershoot `1/(1+Kp)`, slice-10/12's MAGNITUDE cap `a_max`. The
+  ISOLATION (advisor #2, ASSERTED): `k_δ·δ_max=2500 ≤ a_max=2600` and the maneuver tuned so `fin_defl_sat==0 &&
+  saturated==0` in the guided window → the cap is a CLEAN rate cap, not a slice-10 magnitude clamp in a fin costume
+  (the three numbers separable: rate cap 2000, g cap 2500, mag cap 2600). THE "LACK OF EFFECT" IS THE LESSON
+  (user-ratified): the MISS does NOT open — point-mass PN is robust to actuator rate limiting (the planned
+  "saturation opens the miss" did NOT materialize) — which is precisely WHY the DRAMATIC failure modes (guidance
+  limit cycle, α-limited maneuverability, radome/body-rate parasitic loop) genuinely need the DEFERRED 6-DOF (the
+  fin state δ that 6-DOF's moment equation consumes is now BANKED). Class **4c** (physics-changing, NO RNG —
+  truth-fed PN, no seeker; "draw-count invariance VACUOUS", the 2nd consecutive 4c after slice 14; LIVE-SETTABLE,
+  NO `set_fidelity` guard — the `:integrator`/`:autopilot`/`:apn`/`:cooperation` precedent, CONTRAST slice-13
+  `:scan`). `AutopilotState` STRUCTURALLY FROZEN (δ in its own `:fin_state` — advisor #4); the `:ideal`/`:pid` arm
+  TEXTUALLY UNCHANGED (slices 1–14 byte-identical). Emit-grid wire (seed 15): `:fin` δ̇=0.4 → g_onset caps at 2000
+  (=k_δ·δ̇_max), rate_sat binds, defl_sat/sat=0, miss 6.6; raise δ̇=2.0 → cap RISES to 10000 + binds LESS (rate_sat
+  7→1) + miss UNCHANGED (the lever, the "lack of effect"); `:ideal` ships NO fin keys (byte-identical wire), miss
+  9.2. Four proofs green (verifier + UI 3-ring ideal→pid→fin + smoke-load + windowed shot: the curved fin-limited
+  trail + a_cmd 441 vs a_ach 330 lag). The client routes the shared button to a PER-SCENARIO autopilot 3-ring on
+  `autopilot==:fin` (slice-9 stays a 2-ring). OPENS HANDOFF §11 Tier-A. Deferred (NAMED): the 6-DOF airframe /
+  angle-of-attack half (trigger recorded); a 2nd-order actuator (ω_a/ζ_a); per-channel fin allocation / hinge-
+  moment / stall; the actuator feeding a MOMENT (→α→lift) = 6-DOF. (2347)
+
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened
-with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; what remains is the §11 Tier-A/B/C
-horizons.)
+with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slice 15 OPENS the §11 Tier-A horizon
+(the actuator/fin half); what remains is the rest of §11 Tier-A/B/C — most concretely the DEFERRED 6-DOF airframe.)
 
 ## Conventions / hard-won disciplines
 

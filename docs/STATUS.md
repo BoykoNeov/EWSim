@@ -1788,6 +1788,90 @@ an offline `batch.jl` Δτ-vs-geometry grid (RNG-free here — the distribution 
 
 ---
 
+**Slice 15 — actuator/fin dynamics: a RATE-LIMITED FIN SERVO (HANDOFF §11 Tier-A, the FIRST horizon extension)** —
+**COMPLETE. Gates 0–3 done & green (2347 tests).** The §10 committed roadmap (items 1–13) was DONE at slice 14;
+slice 15 OPENS §11 Tier-A by taking the **actuator/fin half** of "6-DOF airframe + actuator/fin dynamics" and
+DEFERRING the 6-DOF airframe half (trigger recorded in `docs/plans/slice15.md`). A THIRD `:autopilot` rung `:fin`
+(`AUTOPILOT_MODES = (:ideal,:pid,:fin)`); a pure Tier-A swap behind the EXISTING `autopilot` knob — no contract
+change.
+
+THE CRUX (advisor, load-bearing — the convention-4c false-fidelity trap): a **linear** first-order fin servo
+`τ_s·δ̇=δ_cmd−δ` with `a=k_δ·δ` collapses to `τ_s·ȧ=a_cmd−a` — the `:pid` plant relabeled (`k_δ` cancels). So the
+**nonlinear limits (δ̇_max, δ_max) carry the ENTIRE fidelity**; a purely-linear fin model is NOT new physics.
+PROVEN by the gate-1 `:pid`-equivalence anchor (δ̇/δ→∞ ⇒ `fin_autopilot_step` tracks the `:pid` plant to `atol`;
+maxdiff ~3.8e-13). The degeneracy is a FEATURE, stated + tested.
+
+Gate 1 (primitives, `core/src/guidance.jl` — pure, RNG-free, no LinearAlgebra): `fin_autopilot_step` (PID command
+`u=kp·e+ki·e_int+kd·ė` → `δ_cmd=clamp_accel(u/k_δ,δ_max)` → `δ̇=clamp_accel((δ_cmd−δ)/τ_s, δ̇_max)` [THE RATE LIMIT]
+→ `δ′=clamp_accel(δ+δ̇·dt,δ_max)` → `a_ach=k_δ·δ′`; returns `(a_ach, ap′, fin′, diag)` with `diag=(delta,
+delta_rate, rate_sat, defl_sat)`), `fin_actuator_init`, `FinState=@NamedTuple{δ::Vec3}`. `AUTOPILOT_MODES += :fin`
+(one-list-no-drift, before radar.jl). `autopilot_step`/`pursuit_accel`/`pn_accel` UNCHANGED (byte-identity anchor);
+`clamp_accel` reused as the non-finite-safe magnitude clamp. `AutopilotState` STRUCTURALLY FROZEN — δ lives in its
+OWN `:fin_state` (advisor #4: growing the NamedTuple perturbs every `:pid`/`:ideal` determinism fingerprint).
+`test_guidance.jl` (+92): the `:pid` equivalence (the crux), the RATE-limit ramp (`‖δ‖=δ̇_max·t` under a step — an
+external kinematic anchor), the deflection pin (`a=k_δ·δ_max` exact), the effectiveness map, the diag flags
+(rate_sat/defl_sat light exactly when their clamp binds), zero/τ_s→0-safe.
+
+Gate 2 (wired): the `:fin` branch in `Autopilot.decide!` (`missile.jl` — the `:ideal`/`:pid` arm TEXTUALLY
+UNCHANGED, gated `mode===:fin`; `a_ach=clamp_accel(·,a_max)` crash-guard tuned NOT to bind; `:fin_state` threaded);
+SCALAR fin telemetry `fin_defl`/`fin_rate`/`fin_rate_sat`/`fin_defl_sat`/`g_onset` (`g_onset=‖a_ctrl−a_prev‖/dt`,
+the achieved-g build rate ≤ the cap by construction) shipped ONLY when `mode===:fin` → byte-identical wire for
+`:ideal`/`:pid` (no Array → no `float()` client crash — convention 13). `scenario.jl` parses + LOAD-validates the
+fin comp keys `k_delta`/`delta_max`/`delta_rate_max`/`tau_fin > 0` (the mass/`a_max`/`tau` precedent). Fidelity
+plumbing FREE: `LIVE_FIDELITY_MODES.autopilot = AUTOPILOT_MODES` picks up `:fin` (NO re-list), and `set_fidelity`
+needs NO guard — **class 4c** (physics-changing, NO RNG → no draw-topology to flip → introduce-safe, LIVE-settable;
+the `:integrator`/`:autopilot`/`:apn`/`:cooperation` precedent, the CONTRAST to slice-13 `:scan`'s reject).
+test_missile/test_determinism/test_server arms: the g-onset cap on the wire (peak ≤ `1.02·k_δ·δ̇_max`, `:ideal`
+uncapped ≫ 2·cap), the isolation (`defl_sat==0 && saturated==0` in the guided window), `:ideal↔:pid↔:fin`
+trajectories DIFFER (not-a-dead-knob, no RNG), replay bit-identical (pin `t`+pos, RNG-independent), `:fin`
+introduce clean both directions, `set_fidelity :autopilot :fin` accepted live, a degenerate δ̇_max slider can't
+crash a tick.
+
+THE LESSON (gate-0 EMPIRICAL PIVOT, 12 probes — the slice-12/14 discipline realized): the fin rate limit **CAPS
+THE G-ONSET RATE** `|da_ach/dt| ≤ k_δ·δ̇_max` (`a_ach=k_δ·δ`, δ slews ≤ δ̇_max ⇒ a jerk cap), cleanly DISTINCT from
+slice-9's steady-state GAIN undershoot `1/(1+Kp)` and slice-10/12's MAGNITUDE cap `a_max`. THE ISOLATION (advisor
+#2, ASSERTED): `k_δ·δ_max=2500 ≤ a_max=2600` and the maneuver tuned so `fin_defl_sat==0 && saturated==0` in the
+guided window → the g-onset number is a CLEAN rate cap, NOT a slice-10 magnitude clamp in a fin costume (the three
+numbers separable: rate cap 2000, g cap 2500, mag cap 2600). THE "LACK OF EFFECT" IS THE LESSON (user-ratified
+2026-07-10): the MISS does NOT open — point-mass PN is robust to actuator rate limiting (the planned "saturation
+opens the miss" did NOT materialize) — which is precisely WHY the DRAMATIC actuator failure modes (guidance-loop
+limit cycle, α-limited maneuverability, the radome/body-rate parasitic loop) genuinely need the DEFERRED 6-DOF
+airframe (empirically: PN+α-β+first-order actuator is unconditionally stable, no limit cycle even at N=55). Pin
+the g-onset CAP RATIO, NEVER a miss ratio (misses are sub-meter and `:fin`'s is not worse than `:ideal`'s).
+
+Gate 3 (scenario + Godot spatial-view extension + verifiers — +36 tests → **2347**): `scenarios/slice15_fin.yaml`
+(`autopilot:fin` default + `guidance:pn` HELD; the slice-10/12 crossing geometry + a maneuvering target
+[a_lat=160, turn_sign=+1]; the fin constants k_δ=5000/δ_max=0.5/δ̇_max=0.4/τ_fin=0.02; δ̇_max the lesson slider).
+`Sandbox.gd`: a value-keyed discriminator branch (`autopilot=="fin"`, checked BEFORE `guidance` — the slice-13/14
+"lesson key before the held keys" precedent, the FIRST value-keyed branch) routes the shared button to the
+AUTOPILOT cycler as a **PER-SCENARIO 3-ring** `_autopilot_rungs = [ideal,pid,fin]` (slice-9 stays the 2-ring so
+its UI test's 2-cycle assertion holds; the 3-ring SURVIVES reset). The generic readout auto-renders the fin
+scalars (fin_defl/fin_rate/fin_rate_sat/g_onset/track_gap — no new mode, the slice-8..14 "stay spatial"
+precedent). Numbers PROBED against the live `load_scenario→decide!→integrate!→telemetry` wire at the emit grid
+(`temp/slice15_probe/emit_probe.jl`, RNG-free → EXACT): `:fin` δ̇=0.4 → g_onset caps at **2000** (=k_δ·δ̇_max),
+rate_sat binds (11 emit frames), defl_sat/sat=0, miss 6.63; raise δ̇=2.0 → cap RISES to **10000** + binds LESS
+(rate_sat 11→5) + miss UNCHANGED (6.71 — the lever, the "lack of effect"); `:ideal` ships NO fin keys
+(byte-identical wire), miss 9.23. **Four proofs green:** `net/slice15_verify.gd` (`S15V OK`, exit 0 — the cap
+binds isolated + rate_sat drops when δ̇_max raised + `:ideal` no-key + RNG-free bit-identical replay + live
+`set_fidelity autopilot fin`); `net/slice15_ui_test.gd` (`S15UI OK` — the 3-ring walks ideal→pid→fin, wraps,
+survives reset, δ̇_max slider → set_param m1, guidance untouched); `Sandbox.tscn` headless smoke-load
+(`EWSIM_SERVER_DONE`, no parse errors); the windowed shot-harness capture (the curved fin-limited trail + the LOS
+line + a_cmd 441 vs a_ach 330 lag mid-jink — "the fins can't keep up," all fin scalars rendered, no `float()`
+crash). **Slice 15 COMPLETE — OPENS HANDOFF §11 Tier-A.** DEFERRED (NAMED, convention 9): the 6-DOF airframe /
+angle-of-attack half (the trigger recorded — a lesson needing the body to point off the velocity vector: α-limited
+maneuverability or a radome/body-rate parasitic loop; the fin state δ that 6-DOF's moment equation consumes is now
+BANKED); a 2nd-order actuator (ω_a/ζ_a bandwidth/damping — Option 3, a different lesson); per-channel fin
+allocation / hinge-moment / stall; the actuator feeding a MOMENT (→α→lift) = 6-DOF.
+Run the slice-15 showcase: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice15_fin.yaml`, then
+launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-uses the spatial view; cycle the `autopilot:` button
+through ideal→pid→fin to watch the plant ladder; drag the δ̇_max slider — lower it and the fins lag harder [bigger
+a_cmd–a_ach gap, g_onset capped], raise it toward 2.0 and `:fin` approaches `:ideal`, the miss unchanged). Re-run
+the gate-3 proof headless: start that server, then the console Godot `--headless --path clients/godot --script
+res://net/slice15_verify.gd` (exit 0 = pass). The UI test needs NO server: `… --script res://net/slice15_ui_test.gd`.
+**(stretch, deferred)** a Pluto MISS-vs-δ̇_max / phase-lag-vs-τ_s sweep (the rate-limit lesson as a curve).
+
+---
+
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
 (`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0); `rf.jl`

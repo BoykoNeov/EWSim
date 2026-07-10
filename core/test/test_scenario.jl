@@ -29,6 +29,7 @@ const _SCEN11 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice11_se
 const _SCEN12 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice12_apn.yaml"))
 const _SCEN13 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice13_decoy.yaml"))
 const _SCEN14 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice14_salvo.yaml"))
+const _SCEN15 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice15_fin.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -974,6 +975,78 @@ end
         @test_throws Exception load_scenario(mksalvo(false))         # a salvo with ONE missile is rejected
         @test_throws Exception load_scenario(mksalvo(true, "0.0"))   # k_it ≤ 0 rejected (the feedback gain)
         @test_throws Exception load_scenario(mksalvo(true, "-0.5"))  # negative k_it rejected
+    end
+
+    @testset "loader parses slice15_fin.yaml (rate-limited fin servo, spatial view)" begin
+        # The slice-15 showcase: the :fin autopilot rung (the rate-limited fin servo). Keeps the SPATIAL
+        # view; the client routes the shared button to the AUTOPILOT 3-ring on autopilot==:fin (checked
+        # BEFORE the held guidance). autopilot DEFAULTS to :fin (the third AUTOPILOT_MODES rung, now the
+        # scenario default — the reserved-rung-becomes-real move), guidance HELD at :pn so the fin-plant
+        # lesson is isolated. RNG-free (no seeker → no w.rng draw). Cheap insurance: a malformed showcase
+        # fails HERE, not downstream.
+        scn = load_scenario(_SCEN15)
+        @test scn.name == "slice15_fin"
+        # autopilot DEFAULTS to :fin (the third AUTOPILOT_MODES rung) + guidance HELD at :pn (the one
+        # button cycles autopilot, not guidance — convention 9).
+        @test scn.world.fidelity[:autopilot] === :fin
+        @test scn.world.fidelity[:guidance] === :pn
+        # single-lesson: no OTHER-slice fidelity, no seeker/cooperation, no view axes (autopilot+guidance).
+        for k in (:propagation, :cfar, :ep, :estimator, :deinterleaver, :raim, :integrator, :seeker,
+                  :discrimination, :cooperation)
+            @test !haskey(scn.world.fidelity, k)
+        end
+        @test !any(e -> e.kind in (:radar, :jammer, :clutter, :emitter, :df_sensor, :df_station,
+                                   :pulse_emitter, :esm, :gps_satellite, :gps_receiver, :datalink, :decoy),
+                   values(scn.world.entities))
+        # exactly one guided :missile + one :target (the maneuvering engagement pair)
+        missiles = [id for (id, e) in scn.world.entities if e.kind === :missile]
+        targets  = [id for (id, e) in scn.world.entities if e.kind === :target]
+        @test length(missiles) == 1 && length(targets) == 1
+        m = scn.world.entities[missiles[1]]
+        t = scn.world.entities[targets[1]]
+        # the guided missile gets [BallisticMissile, Autopilot] (NO Seeker — slice-15 is truth-fed, RNG-free).
+        @test any(s -> s isa BallisticMissile, scn.subs)
+        @test any(s -> s isa Autopilot, scn.subs)
+        @test !any(s -> s isa Seeker, scn.subs)
+        # the maneuvering target gets [ManeuveringTarget] (a `maneuver:` block swapped the mover — the a_cmd
+        # step the rate-limited fin lags behind).
+        @test any(s -> s isa ManeuveringTarget && s.id === targets[1], scn.subs)
+        @test !any(s -> s isa ConstantVelocity && s.id === targets[1], scn.subs)
+        # the FIN params land at the CONSUMED comp keys (the fin plant reads them each tick; haskey is the
+        # discriminating check — a silently-failed read would still default). The three separable numbers:
+        # rate cap k_δ·δ̇_max = 2000, g cap k_δ·δ_max = 2500, magnitude cap a_max = 2600.
+        @test haskey(m.comp, :k_delta) && m.comp[:k_delta] == 5000.0
+        @test haskey(m.comp, :delta_max) && m.comp[:delta_max] == 0.5
+        @test haskey(m.comp, :delta_rate_max) && m.comp[:delta_rate_max] == 0.4
+        @test haskey(m.comp, :tau_fin) && m.comp[:tau_fin] == 0.02
+        # δ̇_max (delta_rate_max, on the MISSILE) + a_lat_mps2 (on the TARGET) + a_max ARE live sliders;
+        # autopilot is the fidelity BUTTON not a knob; launch geometry (speed/elevation) is not a slider.
+        keyset = Set(k.key for k in scn.knobs)
+        @test :delta_rate_max in keyset && :a_lat_mps2 in keyset && :a_max in keyset
+        @test :autopilot ∉ keyset && :guidance ∉ keyset
+        @test all(k -> k.key ∉ (:speed, :elevation_deg), scn.knobs)
+        # the δ̇_max slider targets the MISSILE m1 (the fin rate limit); a_lat targets the maneuvering target.
+        @test any(k -> k.key === :delta_rate_max && k.target === missiles[1], scn.knobs)
+        @test any(k -> k.key === :a_lat_mps2 && k.target === targets[1], scn.knobs)
+        # the base crossing geometry (same as slice10_pn/slice12 so the fin plant is the ONLY new variable)
+        @test m.comp[:elevation_deg] == 12.0 && m.comp[:speed] == 700.0
+        # a_max = 2600 is GENEROUS (the g cap k_δ·δ_max = 2500 ≤ a_max, so δ_max is the effective g-limit
+        # and a_max never binds — the rate limit is the isolated lesson).
+        @test m.comp[:a_max] == 2600.0
+        @test m.comp[:k_delta] * m.comp[:delta_max] <= m.comp[:a_max]   # the g-cap isolation, on the wire
+
+        # each authored fin param is LOAD-validated > 0 (the mass/a_max/tau precedent — immutable authored
+        # inputs; a live slider clamps at the consumer, but the authored value must be positive at load).
+        mkfin(field, badval) = begin
+            base = read(_SCEN15, String)
+            f = tempname() * ".yaml"
+            write(f, replace(base, field => badval))
+            f
+        end
+        @test_throws Exception load_scenario(mkfin("k_delta: 5000.0", "k_delta: 0.0"))
+        @test_throws Exception load_scenario(mkfin("delta_max: 0.5", "delta_max: -0.1"))
+        @test_throws Exception load_scenario(mkfin("delta_rate_max: 0.4", "delta_rate_max: 0.0"))
+        @test_throws Exception load_scenario(mkfin("tau_fin: 0.02", "tau_fin: -1.0"))
     end
 
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin

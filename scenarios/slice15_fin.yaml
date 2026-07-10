@@ -1,0 +1,115 @@
+# slice15_fin — a RATE-LIMITED FIN SERVO (the :fin autopilot rung; HANDOFF §11 Tier-A, slice 15 gate 3).
+# THE FIRST §11 Tier-A extension (the committed §10 roadmap items 1–13 are DONE). It takes the
+# ACTUATOR/FIN-DYNAMICS half of the Tier-A entry ("6-DOF airframe + actuator/fin dynamics") and DEFERS
+# the 6-DOF airframe half (the trigger recorded in docs/plans/slice15.md + HANDOFF/STATUS). Slice 9 gave
+# the PID autopilot (steady-state gain undershoot 1/(1+Kp)); slice 10 gave PN + the MAGNITUDE g-limit
+# a_max; slice 12 the augmented-PN saturation. Slice 15 adds the last inner-loop piece: the achievable
+# lateral-g cannot BUILD faster than the fins can slew — a G-ONSET-RATE cap. In the EXISTING spatial /
+# elevation view (extended — the fin-deflection / g-onset / track-gap readout; NO new render mode, the
+# slice-8..14 "stay spatial" precedent). The handshake carries `autopilot` in `fidelity` → the shared
+# button becomes the 3-RING autopilot cycler :ideal → :pid → :fin (guidance:pn is HELD FIXED).
+#
+# THE LESSON (the fidelity button, :fin — the third autopilot rung is the new one; the δ̇_max slider is
+# the live lever):
+#   :fin runs the rate-limited fin servo. The SAME PID controller feeds a fin-deflection command
+#   δ_cmd = clamp(u/k_δ, δ_max); the fin slews toward it through a FIRST-ORDER servo whose rate is HARD-
+#   CAPPED at δ̇_max (rad/s); the achieved lateral accel is the control-effectiveness map a_ach = k_δ·δ.
+#   Because δ slews ≤ δ̇_max, the achieved-g BUILD RATE is capped: |da_ach/dt| ≤ k_δ·δ̇_max BY
+#   CONSTRUCTION (telemetry `g_onset`, ≤ the cap EVERYWHERE). Cycle to :ideal (perfect: a_ach = a_cmd
+#   instantly → UNCAPPED onset) or :pid (the lumped first-order lag — caps the onset too, but via the
+#   τ-exponential rise, a DIFFERENT mechanism). This is cleanly DISTINCT from slice 9 (steady-state GAIN
+#   undershoot) and slice 10/12 (MAGNITUDE cap a_max): slice 15 caps the RATE-OF-CHANGE of the
+#   achievable g. `autopilot` is PHYSICS-CHANGING, NO RNG (class 4c — a rung flip MOVES the missile but
+#   adds no w.rng draw; "draw-count invariance is VACUOUS", the second consecutive 4c after slice 14 —
+#   truth-fed PN, NO seeker → NO w.rng consumer). Live-settable, NO set_fidelity guard (the :integrator/
+#   :autopilot/:apn/:cooperation precedent; the CONTRAST to slice-13 :scan's introduce-reject).
+#
+#   THE δ̇_max SLIDER IS THE LEVER. Raising δ̇_max steepens the a_ach ramp (raises the g-onset cap) until
+#   the cap exceeds the command's own onset and the fin RATE limit stops binding (`fin_rate_sat` goes
+#   dark) — :fin approaches :ideal. Lowering it makes the fins lag harder. The RATE limit is the sole
+#   binding constraint here: k_δ·δ_max = 2500 (the DEFLECTION/g cap) ≤ a_max = 2600 (the magnitude
+#   crash-guard), and the maneuver is tuned so neither δ_max NOR a_max binds in the guided window
+#   (`fin_defl_sat == 0` and `saturated == 0`) — so the g-onset number is a CLEAN rate cap, NOT a
+#   slice-10 magnitude clamp in a fin costume (the isolation). The three numbers are separable: rate cap
+#   k_δ·δ̇_max = 2000, g cap k_δ·δ_max = 2500, magnitude cap a_max = 2600.
+#
+#   THE "LACK OF EFFECT" IS THE LESSON (user-ratified 2026-07-10). Across the whole δ̇_max slider the MISS
+#   stays small — the point-mass PN interceptor homes fine DESPITE the capped g-onset (the required
+#   deflections are a small fraction of a radian and PN's terminal gain absorbs the residual lag). This
+#   is the DELIBERATE teaching point, not a disappointment: finite actuator bandwidth is ACCEPTABLE for a
+#   point-mass homing loop — which is precisely WHY the DRAMATIC actuator failure modes (guidance-loop
+#   limit cycle, angle-of-attack-limited maneuverability, the radome/body-rate parasitic loop) genuinely
+#   need the DEFERRED 6-DOF airframe (empirically confirmed: PN + α-β + a first-order actuator is
+#   unconditionally stable — no limit cycle even at N=55; 12 gate-0 probes). Pin the g-onset CAP RATIO
+#   (`:fin` onset/cap ≈ 1), NEVER a miss ratio — the misses are sub-meter and :fin's is not worse.
+#
+#   MISS is measured at CPA from TRUTH positions (the slice-10..14 discipline). Numbers PROBED against the
+#   live load_scenario→decide!→integrate!→telemetry wire (emit_probe.jl) at the emit grid (emit_every=16).
+#   The verifier only sees state frames every emit_every ticks, so PIN CONSERVATIVE frame-sampled bounds,
+#   NOT tick-resolution numbers (the frame-sampling floor — [[ewsim-missile-verifier-sampling]]).
+#
+# THE ENGAGEMENT (the slice-12 geometry, reused so the ONLY new variable is the fin plant — convention 9,
+# one lesson): the interceptor climbs from z = 3000 m at 12° / 700 m/s; a MANEUVERING target (base
+# [6000,0,4200], v[-800,0,200]) curves under a constant ⟂-v lateral accel a_lat = 160 m/s² (turn_sign
+# +1, the clean-first-CPA direction). The mid-course jink gives a clean a_cmd STEP to watch a_ach RAMP
+# behind at the capped slope (that ramp IS the Godot visual). Planar in x-z (the elevation view's plane).
+# RNG-FREE (no seeker → no w.rng draw); the seed is inert (harmless, kept for format consistency).
+#
+# UNITS (the §1 trifecta): positions/velocities SI (m, m/s), a_lat in m/s², δ_max/δ̇_max in rad, rad/s,
+# k_δ in m/s²·rad⁻¹, launch ELEVATION in DEGREES → radians at the loader. dt = 1e-3 / emit_every = 16.
+name: slice15_fin
+seed: 15
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  # TWO keys, but ONE lesson: autopilot is the toggle (the button cycles the 3-ring :ideal→:pid→:fin),
+  # guidance is HELD at :pn so the fin-plant lesson is uncontaminated by the outer law (convention 9 —
+  # one lesson per button; the client routes on autopilot==:fin). Both physics-changing, NO RNG, class 4c.
+  autopilot: fin
+  guidance: pn
+
+entities:
+  # The guided interceptor: launched from z = 3000 m, CLIMBING at 12° at 700 m/s in the x-z plane. mass
+  # 140 kg, DRAG OFF (one lesson per scenario). The `guidance:` block makes it GUIDED → [BallisticMissile
+  # (phase-1 airframe), Autopilot (phase-4 guidance/plant)]. n_pn = 4 (the PN nav constant), r_stop = 30
+  # (the endgame cutoff). The PID gains kp = 3 / ki = 0 / kd = 0 (no derivative kick). The FIN params:
+  #   k_delta = 5000 (control effectiveness, m/s² per rad) — with delta_max = 0.5 rad the DEFLECTION/g cap
+  #     is k_δ·δ_max = 2500, held ≤ a_max = 2600 so a_max never binds (δ_max is the effective g-limit).
+  #   delta_rate_max = 0.4 (rad/s) — THE lesson slider: the rate cap is k_δ·δ̇_max = 2000 (distinct from
+  #     both the g cap 2500 and the magnitude cap 2600 — the three numbers are separable).
+  #   tau_fin = 0.02 (s) — the fin servo time constant (the δ̇/δ→∞ limit of the servo IS the :pid plant).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.225
+      guidance: {k_guid: 3.0, n_pn: 4.0, r_stop: 30.0, kp: 3.0, ki: 0.0, kd: 0.0, tau: 0.3, a_max: 2600.0, k_delta: 5000.0, delta_max: 0.5, delta_rate_max: 0.4, tau_fin: 0.02}
+  # The MANEUVERING target: a curving aircraft ahead at 4.2 km altitude, base velocity descending-and-
+  # closing at v[-800,0,200], under a `maneuver:` block → [ManeuveringTarget]. a_lat_mps2 = 160 (~16 g
+  # lateral), turn_sign = +1 (the clean-first-CPA direction). The mid-course jink is the a_cmd step the
+  # rate-limited fin lags behind — the g-onset cap made visible.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 0.0, 4200.0]
+    vel: [-800.0, 0.0, 200.0]
+    target: {rcs_m2: 1.0, maneuver: {a_lat_mps2: 160.0, turn_sign: 1.0}}
+
+knobs:
+  # The live sliders. δ̇_max (delta_rate_max) is THE lesson lever: at the default 0.4 the RATE limit binds
+  # (fin_rate_sat lit during the jink, g-onset capped at 2000); drag it UP toward 2.0 and the cap rises
+  # (the fins slew fast enough that the rate limit stops binding → :fin approaches :ideal, fin_rate_sat
+  # goes dark) with the miss UNCHANGED (the "lack of effect"). a_lat is the maneuver g (harder jink →
+  # more rate saturation); a_max is the magnitude crash-guard (kept clear of the g cap — raising it
+  # changes nothing, LOWERING it below 2500 would import a slice-10 magnitude clamp, so the floor is
+  # above the g cap). n_pn is the nav constant. The autopilot METHOD is the fidelity BUTTON (the 3-ring),
+  # not a knob; launch geometry is not a slider. All clamped/floored at the consumer (δ̇_max→0 floored,
+  # a_max floored) — a live slider can't crash a tick (convention 5); the fin params are ALSO validated
+  # FINITE-and-positive at LOAD (immutable authored inputs).
+  - {target: m1,   key: delta_rate_max, min: 0.05,  max: 2.0,    label: "δ̇_max (fin rate limit, rad/s)"}
+  - {target: tgt1, key: a_lat_mps2,     min: 0.0,   max: 300.0,  label: "a_lat (target g, m/s²)"}
+  - {target: m1,   key: a_max,          min: 2600.0, max: 4000.0, label: "a_max (magnitude g-limit, m/s²)"}
+  - {target: m1,   key: n_pn,           min: 2.0,   max: 6.0,    label: "N (nav constant)"}

@@ -161,6 +161,10 @@ var _missile_trail: Array = []    # WORLD [x,y,z] breadcrumbs (mapped through _w
 var _salvo_trails := {}
 const INTEGRATOR_RUNGS := ["rk4", "euler"]   # slice-8 integrator cycler (the shared fidelity button)
 const AUTOPILOT_RUNGS := ["ideal", "pid"]    # slice-9 autopilot cycler (the shared fidelity button)
+# The autopilot ring is PER-SCENARIO: slice-9 stays the 2-ring :ideal↔:pid (its UI test asserts the
+# 2-cycle), slice-15 (autopilot:fin) upgrades to the 3-ring :ideal→:pid→:fin at handshake. Set once in
+# the discriminator; reset leaves it (reset only resyncs _fidelity), so the 3-ring survives a re-launch.
+var _autopilot_rungs: Array = ["ideal", "pid"]
 const GUIDANCE_RUNGS := ["pursuit", "pn", "apn"]   # slice-10/12 OUTER-law cycler (3-ring: +apn, slice 12)
 const SEEKER_RUNGS := ["raw", "filtered"]    # slice-11 seeker cycler (raw finite-diff ↔ α-β filtered)
 const DISCRIMINATION_RUNGS := ["none", "gated"]   # slice-13 countermeasures cycler (blend-all ↔ α-β predicted-LOS gate)
@@ -388,6 +392,33 @@ func _setup_spatial_fid_btn() -> void:
 		# Seed extents to fit the crossing (x ~0..8 km, z ~2..8 km); they only grow, so start close.
 		_x_max = 8000.0
 		_z_max = 8000.0
+	elif _fidelity.get("autopilot", "") == "fin":
+		# Slice-15 rate-limited fin servo: ships autopilot:fin (the LESSON) + guidance:pn (HELD FIXED).
+		# The shared button becomes the 3-RING autopilot cycler :ideal→:pid→:fin. Keyed on the autopilot
+		# VALUE (== "fin", the FIRST value-keyed branch, not key-presence) and CHECKED BEFORE `guidance`
+		# ON PURPOSE: a slice-15 scenario ships BOTH keys but the fin PLANT is the lesson, so the one
+		# button must toggle `autopilot`, not the held `guidance` (convention 9 — one lesson per button;
+		# the slice-13/14 "lesson key before the held keys" precedent). No existing slice ships
+		# autopilot:fin, so nothing else matches this. Same guarded disconnect as the other _fid_kind
+		# setups. The ring is PER-SCENARIO (_autopilot_rungs → the 3-ring here) so the slice-9 button
+		# stays a 2-ring :ideal↔:pid — only a fin scenario reaches the third rung. `autopilot` is class 4c
+		# (PHYSICS-CHANGING, NO RNG → live-settable, NO set_fidelity guard — the :integrator/:apn/
+		# :cooperation precedent, the CONTRAST to slice-13 :scan's introduce-reject). The lesson is the
+		# g-onset RATE cap: under :fin the achieved-g cannot BUILD faster than k_δ·δ̇_max (the g_onset /
+		# fin_defl / fin_rate_sat / track-gap readout is the tell — the fins can't keep up), while :ideal
+		# follows a_cmd instantly (uncapped) and :pid caps the onset via the τ-lag (a different mechanism).
+		# The δ̇_max slider is the live lever (raise it → the cap rises → :fin approaches :ideal). The MISS
+		# stays small across the slider (PN robust — the "lack of effect" that motivates the deferred 6-DOF).
+		_fid_kind = "autopilot"
+		_autopilot_rungs = ["ideal", "pid", "fin"]
+		if _prop_btn.pressed.is_connected(_on_prop_pressed):
+			_prop_btn.pressed.disconnect(_on_prop_pressed)
+		if not _prop_btn.pressed.is_connected(_on_autopilot_pressed):
+			_prop_btn.pressed.connect(_on_autopilot_pressed)
+		_prop_btn.tooltip_text = "Cycle autopilot (set_fidelity): ideal → pid → fin"
+		# Seed extents to fit the engagement (x ~0..9 km, z ~0..6 km); they only grow, so start close.
+		_x_max = 9500.0
+		_z_max = 6000.0
 	elif _fidelity.has("guidance"):
 		# Slice-10 PN missile: a `guidance` fidelity keeps the SPATIAL elevation view (the crossing
 		# engagement is planar in x-z) but repurposes the shared button as the :pursuit↔:pn OUTER-law
@@ -652,15 +683,18 @@ func _on_integrator_pressed() -> void:
 	_update_fid_btn()
 
 func _on_autopilot_pressed() -> void:
-	# Advance the autopilot rung (ideal↔pid) and tell the core (set_fidelity). Like :integrator this is
-	# PHYSICS-CHANGING, not toggle-bit-identical: there is NO RNG in the missile arc, so an :ideal↔:pid
-	# toggle CHANGES the trajectory going forward (the slice-2 `propagation` shape — the OPPOSITE of the
-	# slice-5/6/7 draw-free toggles). Introduce-safe (absent an Autopilot nothing reads it). The client
+	# Advance the autopilot rung (slice-9 :ideal↔:pid, or slice-15 :ideal→:pid→:fin) and tell the core
+	# (set_fidelity). Like :integrator this is PHYSICS-CHANGING, not toggle-bit-identical: there is NO RNG
+	# in the missile arc, so a rung flip CHANGES the trajectory going forward (the slice-2 `propagation`
+	# shape — the OPPOSITE of the slice-5/6/7 draw-free toggles). Introduce-safe (absent an Autopilot
+	# nothing reads it). The slice-15 :fin rung is the rate-limited fin plant (the g-onset cap). The client
 	# owns the displayed rung: badge + button locally (the server applies it silently on the next tick).
 	# NB the PID-gain sliders are INERT under :ideal (the loop is bypassed) — correct, not a bug.
+	# The ring is PER-SCENARIO (_autopilot_rungs): slice-9 → :ideal↔:pid (2-ring), slice-15 →
+	# :ideal→:pid→:fin (3-ring, the rate-limited fin plant is the third rung — physics-changing, no RNG).
 	var cur := str(_fidelity.get("autopilot", "ideal"))
-	var i := AUTOPILOT_RUNGS.find(cur)
-	var next: String = AUTOPILOT_RUNGS[(i + 1) % AUTOPILOT_RUNGS.size()] if i >= 0 else "ideal"
+	var i := _autopilot_rungs.find(cur)
+	var next: String = _autopilot_rungs[(i + 1) % _autopilot_rungs.size()] if i >= 0 else "ideal"
 	_fidelity["autopilot"] = next
 	_client.send({"type": "set_fidelity", "key": "autopilot", "value": next})
 	_render_badge()
