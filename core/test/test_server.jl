@@ -249,6 +249,29 @@ function _scan_scenario(seed; emit_every = 4,
     return Scenario("scan", w, subs, knobs, 1.0e-3, emit_every)
 end
 
+# A slice-14 cooperative-salvo scenario (geometry F): 2 [BallisticMissile, Autopilot] interceptors
+# (near A, far B) at asymmetric ranges + a common ConstantVelocity target + a [SalvoCoordinator]
+# :datalink node, under `:cooperation` (default :solo, so the button reveals the fix). RNG-FREE
+# (truth-fed PN, no seeker → class 4c). `k_it` (the ITC gain) is a LIVE slider (a huge value just
+# curves harder then clamps — no crash). `:cooperation` is live-settable both directions (no guard).
+function _salvo_scenario(seed; emit_every = 4,
+                         fidelity = Dict(:guidance => :pn, :autopilot => :ideal, :cooperation => :solo))
+    w = World(seed = seed, fidelity = fidelity)
+    TGT0 = Vec3(9000.0, 0.0, 4500.0); MA0 = Vec3(3000.0, 0.0, 3000.0); MB0 = Vec3(0.0, 0.0, 3000.0)
+    gains() = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+        :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0, :kp => 2.0, :ki => 0.0, :kd => 0.0,
+        :tau => 0.3, :a_max => 3000.0, :k_it => 0.45)
+    w.entities[:mA] = Entity(:mA, :missile; pos = MA0, vel = 750.0 * los_unit(MA0, TGT0), comp = gains())
+    w.entities[:mB] = Entity(:mB, :missile; pos = MB0, vel = 750.0 * los_unit(MB0, TGT0), comp = gains())
+    w.entities[:tgt] = Entity(:tgt, :target; pos = TGT0, vel = Vec3(-500.0, 0.0, 0.0),
+        comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+    w.entities[:link] = Entity(:link, :datalink; pos = zero(Vec3), comp = Dict{Symbol,Any}())
+    subs = Subsystem[BallisticMissile(:mA), Autopilot(:mA), BallisticMissile(:mB), Autopilot(:mB),
+                     ConstantVelocity(:tgt), SalvoCoordinator(:link)]
+    knobs = Knob[Knob(:mA, :k_it, 0.01, 2.0, "K_it (ITC gain)"), Knob(:mB, :k_it, 0.01, 2.0, "K_it (ITC gain)")]
+    return Scenario("salvo", w, subs, knobs, 1.0e-3, emit_every)
+end
+
 @testset "server" begin
 
     @testset "handle_command! mutates state per the §5 table" begin
@@ -803,6 +826,59 @@ end
             ok || break
         end
         @test ok                                                  # pos + scan telemetry finite through the huge slider
+    end
+
+    @testset "set_fidelity :cooperation — write + introduce-safe BOTH directions (slice-14, class 4c)" begin
+        # Slice-14: `:cooperation` (rungs COOPERATION_MODES) joins the per-key LIVE_FIDELITY_MODES table
+        # AUTOMATICALLY (one-list-no-drift — no server change). Class 4c (physics-changing, no RNG — the
+        # :apn/:integrator shape): NO draw-topology to flip → live-settable BOTH directions with NO guard,
+        # the sharp CONTRAST to slice-13's `:scan` (which rejects introduce/remove). The trajectory change
+        # is pinned in test_determinism; here only the wire write/reject + the no-guard property.
+        srv = EWSim.Server(_salvo_scenario(1))
+        w = srv.scn.world
+        @test w.fidelity[:cooperation] === :solo                   # the scenario default (the button reveals the fix)
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "cooperation", :value => "salvo"))
+        @test w.fidelity[:cooperation] === :salvo                  # INTRODUCE-direction :solo→:salvo — ACCEPTED
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "cooperation", :value => "solo"))
+        @test w.fidelity[:cooperation] === :solo                   # REMOVE-direction :salvo→:solo — ALSO accepted
+        # cycle the 2-ring the Godot cooperation button drives — every step clean (no topology guard).
+        for v in ("salvo", "solo", "salvo")
+            EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "cooperation", :value => v))
+            @test w.fidelity[:cooperation] === Symbol(v)
+        end
+        # a bad rung is REJECTED before landing (would throw in decide! → kill the session).
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "cooperation", :value => "swarm"))
+        # INTRODUCING :cooperation mid-run on a scenario that omitted the key is ALLOWED (class 4c — the
+        # coordinator already publishes salvo_t_d regardless; :solo just doesn't read it). The CONTRAST to
+        # :scan: no `cur != new` topology guard fires.
+        srv2 = EWSim.Server(_salvo_scenario(1; fidelity = Dict(:guidance => :pn, :autopilot => :ideal)))
+        @test !haskey(srv2.scn.world.fidelity, :cooperation)
+        EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "cooperation", :value => "salvo"))
+        @test srv2.scn.world.fidelity[:cooperation] === :salvo
+    end
+
+    @testset "live k_it slider survives the tick (a huge K_it curves harder + clamps, not a throw)" begin
+        # k_it (the ITC cooperation gain) is a LIVE slider on each interceptor. An absurd K_it just drives a
+        # huge impact-time-error feedback that clamp_accel caps at a_max — the tick can't throw / NaN the
+        # session (the "a live slider can't crash a tick" watch-item; the VC_FLOOR keeps t_go finite too).
+        srv = EWSim.Server(_salvo_scenario(2))
+        w = srv.scn.world
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "cooperation", :value => "salvo"))
+        for m in ("mA", "mB")
+            EWSim.handle_command!(srv, Dict(:type => "set_param", :target => m, :key => "k_it", :value => 500.0))
+        end
+        @test w.entities[:mA].comp[:k_it] == 500.0                 # slider wrote the consumed comp key
+        ok = true
+        for _ in 1:500
+            tick!(w, srv.scn.subs, srv.scn.dt_physics)            # must NOT throw
+            empty!(w.events)
+            tel = w.env[:telemetry]
+            ok &= all(isfinite, w.entities[:mA].pos) && all(isfinite, w.entities[:mB].pos) &&
+                  isfinite(tel["mA.a_cmd"]) && isfinite(tel["mA.t_go"]) && isfinite(tel["link.salvo_t_d"])
+            ok || break
+        end
+        @test ok                                                  # both missiles + salvo telemetry finite
     end
 
     @testset "warmup! tolerates a guided-missile scenario (slice-9, radar-free, phase 1+4)" begin

@@ -818,4 +818,69 @@ end
             @test randn(copy(ref)) == randn(copy(wf.rng))
         end
     end
+
+    # Slice 14: cooperative salvo guidance — THE RNG-INFLECTION INVERTS BACK to VACUOUS (the slice-12
+    # shape, one arc-item later; do NOT carry slice-13's "seeker draws / 2·N_p·N_bins / 4b" language).
+    # The scenario is truth-fed PN with NO seeker → NO `w.rng` consumer, so "draw-count invariance" is
+    # VACUOUS. The CLASS is 4c (physics-changing, no RNG — the :integrator/:apn shape): a :solo↔:salvo
+    # toggle CHANGES the trajectory (the near missile stretches) with the RNG stream never touched, and
+    # there is NO draw-topology to flip → introduce-SAFE both directions (no server guard, unlike :scan).
+    # FOUR claims: (2) same-config replay bit-identical (per-missile pos/vel, RNG-INDEPENDENT — NOT
+    # slice-13's rng-affected pos); NO w.rng draw (pristine Xoshiro after the flight); (3) the toggle
+    # CHANGES the flight; (1) ADDITIVITY — introducing :cooperation on a NON-salvo (no-coordinator)
+    # missile is a no-op. Geometry F (the gate-0 2-missile salvo: near A + far B + a common CV target +
+    # a :datalink coordinator node).
+    @testset "a cooperative salvo: bit-identical replay, NO rng; the :solo↔:salvo toggle CHANGES it (4c)" begin
+        function salvo_trace(; cooperation = :salvo, nsteps = 1500, toggle_at = 0, toggle_to = nothing,
+                             start_coop = cooperation, coordinator = true)
+            fid = Dict{Symbol,Symbol}(:guidance => :pn, :autopilot => :ideal)
+            start_coop === nothing || (fid[:cooperation] = start_coop)   # nothing → INTRODUCE later
+            w = World(seed = 0, fidelity = fid)
+            TGT0 = Vec3(9000.0, 0.0, 4500.0); TGTV = Vec3(-500.0, 0.0, 0.0)
+            MA0 = Vec3(3000.0, 0.0, 3000.0); MB0 = Vec3(0.0, 0.0, 3000.0); SPEED = 750.0
+            gains() = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0, :kp => 2.0, :ki => 0.0, :kd => 0.0,
+                :tau => 0.3, :a_max => 3000.0, :k_it => 0.45)
+            w.entities[:mA] = Entity(:mA, :missile; pos = MA0, vel = SPEED * los_unit(MA0, TGT0), comp = gains())
+            w.entities[:mB] = Entity(:mB, :missile; pos = MB0, vel = SPEED * los_unit(MB0, TGT0), comp = gains())
+            w.entities[:tgt] = Entity(:tgt, :target; pos = TGT0, vel = TGTV, comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+            subs = Subsystem[BallisticMissile(:mA), Autopilot(:mA), BallisticMissile(:mB), Autopilot(:mB),
+                             ConstantVelocity(:tgt)]
+            coordinator && (w.entities[:link] = Entity(:link, :datalink; pos = zero(Vec3), comp = Dict{Symbol,Any}());
+                            push!(subs, SalvoCoordinator(:link)))
+            trace = Float64[]
+            for i in 1:nsteps
+                (toggle_to !== nothing && i == toggle_at) && (w.fidelity[:cooperation] = toggle_to)
+                tick!(w, subs, 1.0e-3)
+                append!(trace, w.entities[:mA].pos); append!(trace, w.entities[:mA].vel)
+                append!(trace, w.entities[:mB].pos); append!(trace, w.entities[:mB].vel)
+                empty!(w.events)
+            end
+            return w, trace
+        end
+        # (2) same-config replay bit-identical (per-missile pos/vel fingerprint; reinterpret — sign of zero).
+        wa, ta = salvo_trace(); _, tb = salvo_trace()
+        @test ta == tb && reinterpret(UInt64, ta) == reinterpret(UInt64, tb)
+        # NO `w.rng` draw — truth-fed PN, no seeker → after the whole flight w.rng is a PRISTINE Xoshiro(0)
+        # (the class-4c "vacuous" property; the sharp inverse of slice-11/13's seeker draws).
+        @test rand(copy(wa.rng)) == rand(Xoshiro(0))
+        # (3) a mid-run :solo→:salvo toggle CHANGES the trajectory (the near missile stretches) — the
+        # not-a-dead-knob property; each run internally deterministic. And :salvo→:solo is symmetric.
+        _, tk1 = salvo_trace(start_coop = :solo, toggle_at = 200, toggle_to = :salvo)
+        _, tk2 = salvo_trace(start_coop = :solo, toggle_at = 200, toggle_to = :salvo)
+        @test reinterpret(UInt64, tk1) == reinterpret(UInt64, tk2)
+        _, tsolo = salvo_trace(cooperation = :solo)                   # never toggled (stays solo)
+        @test tk1 != tsolo                                            # the toggle changed the flight
+        _, tr1 = salvo_trace(start_coop = :salvo, toggle_at = 200, toggle_to = :solo)
+        _, tr2 = salvo_trace(start_coop = :salvo, toggle_at = 200, toggle_to = :solo)
+        @test reinterpret(UInt64, tr1) == reinterpret(UInt64, tr2)   # the reverse introduce is clean too
+        # (1) ADDITIVITY — a 2-missile PN scenario with NO coordinator: introducing :cooperation=:salvo
+        # is a NO-OP (nothing writes `salvo_t_d` → the `:salvo` decide! arm is unreachable → plain PN),
+        # byte-identical to never touching it, and the rng stream is untouched (there is none). This is
+        # the class-4c additivity: the physics is unreachable without the mode AND the coordinator.
+        _, tn0 = salvo_trace(cooperation = :solo, coordinator = false)     # no coordinator, :solo
+        wn1, tn1 = salvo_trace(start_coop = :solo, toggle_at = 200, toggle_to = :salvo, coordinator = false)
+        @test reinterpret(UInt64, tn0) == reinterpret(UInt64, tn1)   # introduce :cooperation = no-op
+        @test rand(copy(wn1.rng)) == rand(Xoshiro(0))                # ...and the rng stream untouched
+    end
 end

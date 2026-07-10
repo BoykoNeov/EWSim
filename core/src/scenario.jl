@@ -409,12 +409,30 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             comp[:a_max]  > 0 || error("missile '$id': guidance.a_max must be > 0 (got $(comp[:a_max]))")
             comp[:n_pn]   > 0 || error("missile '$id': guidance.n_pn must be > 0 (got $(comp[:n_pn]))")
             comp[:r_stop] >= 0 || error("missile '$id': guidance.r_stop must be ≥ 0 (got $(comp[:r_stop]))")
+            # Slice 14: the impact-time-control gain `k_it` (the `:salvo` cooperation feedback strength,
+            # units 1/s²) is a KNOB-ADDRESSABLE guidance gain read with a DEFAULT at the consumer (a bare
+            # guidance block / a live slider can't KeyError a tick). Load-validated > 0 (the FINDINGS
+            # window is [0.42, 0.50]; too cold → weak collapse, too hot ≥0.55 → the near missile
+            # over-stretches and misses — the "salvo can fail" upper edge). A slice-9..13 missile that
+            # never runs `:salvo` still carries the key harmlessly (default 0.45; unread without a
+            # coordinator + `coop === :salvo`).
+            comp[:k_it] = _f64(get(gb, "k_it", 0.45))
+            comp[:k_it]   > 0 || error("missile '$id': guidance.k_it must be > 0 (got $(comp[:k_it]))")
             push!(subs, Autopilot(id))
         end
+    elseif kind === :datalink
+        # A cooperative-guidance datalink node (slice 14, the capstone): a NON-PHYSICAL entity (no
+        # mover — it never integrates) carrying ONLY the phase-2 `SalvoCoordinator` build_env!. It
+        # pools every `kind === :missile` interceptor's time-to-go over an IDEAL link into the team
+        # consensus `w.env[:salvo_t_d]` (single-writer). Its `kind === :datalink` (NEVER `:target`/
+        # `:missile`) so `_nearest_target` (radar / autopilot truth / CPA) SKIPS it — it can neither be
+        # targeted nor hijack a missile's truth target. No block required (the node has no authored
+        # params — the team is gathered by kind at runtime); a `pos` is optional (for the client glyph).
+        subs = Subsystem[SalvoCoordinator(id)]
     else
         error("unknown entity kind :$kind for '$id' (knows :radar, :target, :decoy, :clutter, " *
               ":jammer, :emitter, :df_sensor, :df_station, :pulse_emitter, :esm, " *
-              ":gps_satellite, :gps_receiver, :missile)")
+              ":gps_satellite, :gps_receiver, :missile, :datalink)")
     end
     return e, subs
 end
@@ -620,14 +638,22 @@ end
 # floor; the double-integration guard (BallisticMissile, NOT ConstantVelocity) is structural in
 # the build arm and pinned by the loader test.
 function _validate_missile(world::World)
-    n_missile = 0; guided = false; n_target = 0
+    n_missile = 0; guided = false; n_target = 0; n_datalink = 0
     for (_, e) in world.entities
         e.kind === :missile && (n_missile += 1)
         # A GUIDED missile is marked by the guidance comp keys (`:a_max` is set only in the
         # `guidance:` build arm) — it needs a `:target` to pursue.
         (e.kind === :missile && haskey(e.comp, :a_max)) && (guided = true)
-        e.kind === :target && (n_target += 1)
+        e.kind === :target   && (n_target += 1)
+        e.kind === :datalink && (n_datalink += 1)         # slice-14 salvo coordinator node(s)
     end
+    # Slice 14: a `:datalink` node is meaningless without a TEAM to coordinate — a salvo scenario
+    # needs ≥ 2 `:missile` interceptors (the lesson is solo-spread vs coordinated-arrival; N=1 is the
+    # loader-forbidden degenerate the law-level `err==0` anchor already covers). Validate at LOAD (the
+    # `_validate_gps`/`_validate_esm` pattern) so a mis-authored salvo fails as a clear load error, not
+    # a runtime no-op. Triggered by `:datalink` presence, so a non-salvo missile scenario is untouched.
+    n_datalink ≥ 1 && n_missile < 2 &&
+        error("a salvo (:datalink) scenario needs ≥ 2 :missile interceptors to coordinate (got $n_missile)")
     n_missile == 0 && return world                       # not a missile scenario
     # Slice 9: a guided missile's Autopilot target-locks the nearest `:target` at runtime — so a
     # guided scenario must ship ≥ 1 (validated at LOAD, the `_validate_gps`/`_validate_esm` pattern,

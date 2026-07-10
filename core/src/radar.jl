@@ -149,6 +149,18 @@ const EP_MODES = (:none, :freq_agility, :sidelobe_blanking)
 # `:none↔:gated` toggle MOVES the missile — not a dead knob), and INERT unless `seeker=:scan` (no
 # profile → no peaks → the key does nothing; the `:raim`-without-GPS coupling). NOT free-standing
 # class-4a — it is "draw-invariant within the 4b `:scan` host" (convention 4c, the copy-paste trap).
+# `:cooperation` (slice-14 salvo capstone; rungs `COOPERATION_MODES` from guidance.jl, in scope here)
+# is class 4c — the `:integrator`/`:autopilot`/`:apn` shape, NOT slice-13's draw-topology 4b. A
+# `:solo↔:salvo` toggle CHANGES the trajectory (the faster interceptor stretches its path via the
+# impact-time-control feedback) but the scenario is truth-fed PN with NO seeker → NO `w.rng` consumer,
+# so "draw-count invariance" is VACUOUS (do NOT copy slice-13's draw language) and there is NO
+# draw-topology to flip → `:cooperation` is introduce-SAFE and live-settable: `set_fidelity` needs NO
+# new guard (CONTRAST slice-13 `:scan` / slice-3 `:cfar`, which reject introduce). Byte-identity for
+# slices 1–13 is by CONSTRUCTION — absent a `SalvoCoordinator` (`:datalink` entity) nothing writes
+# `w.env[:salvo_t_d]`, and under `coop === :solo` the `decide!` salvo arm is unreachable. Orthogonal to
+# `:guidance`/`:autopilot`/`:seeker` (slice-14 pins `guidance=:pn`, `autopilot=:ideal`, no seeker so the
+# ONE button toggles the ONE cooperation lesson). Referencing COOPERATION_MODES (not re-listing) is
+# one-list-no-drift.
 const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES,
                              ep = EP_MODES, estimator = ESTIMATOR_MODES,
                              deinterleaver = DEINTERLEAVER_MODES,
@@ -156,7 +168,8 @@ const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES,
                              multipath = GPS_TOGGLE, noise = GPS_TOGGLE, raim = RAIM_MODES,
                              integrator = INTEGRATOR_MODES, autopilot = AUTOPILOT_MODES,
                              guidance = GUIDANCE_MODES, seeker = SEEKER_MODES,
-                             discrimination = DISCRIMINATION_MODES)
+                             discrimination = DISCRIMINATION_MODES,
+                             cooperation = COOPERATION_MODES)
 
 # A perfect null (F⁴=0, even above the horizon), an antenna on the reflecting plane
 # (h→0), or a below-horizon mask all drive SNR→0, and `lin2db(0) = -Inf` would poison the

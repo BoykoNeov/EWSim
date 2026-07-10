@@ -286,11 +286,19 @@ function decide!(a::Autopilot, w::World)
         tel["$sid.saturated"]     = 0.0
         tel["$sid.los_rate"]      = 0.0
         tel["$sid.closing_speed"] = 0.0
+        # Slice-14 salvo keys — never stale (gated on a coordinator being present, so a slice-9..13
+        # scenario without one ships NO new key → byte-identical). Zeroed post-impact / no-target.
+        if haskey(w.env, :salvo_t_d)
+            tel["$sid.t_go"]            = 0.0
+            tel["$sid.impact_time_err"] = 0.0
+        end
         return nothing
     end
 
     mode   = get(w.fidelity, :autopilot, :ideal)
     guid   = get(w.fidelity, :guidance, :pursuit)             # slice-10 OUTER law; DEFAULT :pursuit
+    coop   = get(w.fidelity, :cooperation, :solo)             # slice-14 cooperation modifier; DEFAULT :solo
+    k_it   = max(Float64(get(c, :k_it, 0.45)), 0.0)           # ITC gain (clamp-at-consumer: ≥0, no sign flip)
     k_guid = Float64(get(c, :k_guid, 3.0))
     n_pn   = Float64(get(c, :n_pn, 4.0))                       # PN navigation constant (:pn only)
     r_stop = Float64(get(c, :r_stop, 0.0))                     # §2 endgame cutoff; DEFAULT 0 = no-op
@@ -332,7 +340,21 @@ function decide!(a::Autopilot, w::World)
     # defaults to zero on a CV target → the feedforward vanishes → `:apn` ≈ `:pn`. The fetch +
     # feedforward live INSIDE this branch so the `:pn`/`:pursuit`/seeker paths are TEXTUALLY
     # unchanged → slices 1–11 byte-identical.
-    a_dem = if guid === :pn && haskey(c, :seeker_omega)
+    # SLICE-14 SALVO SEAM: cooperative impact-time-control guidance (the capstone). Gated on
+    # `coop === :salvo && haskey(w.env, :salvo_t_d)` — UNREACHABLE without BOTH the `:cooperation`
+    # rung AND the `SalvoCoordinator` (which alone writes `salvo_t_d`, in phase-2 build_env!). So a
+    # slice-1..13 scenario (no `:cooperation` key → `coop === :solo`; no coordinator → no field)
+    # NEVER takes this arm → falls through to the EXACT prior arithmetic below, textually unchanged
+    # → byte-identical. `impact_time_control_accel` = PN base + a ⟂-LOS impact-time-error feedback
+    # that STRETCHES an EARLY missile toward the shared desired remaining time `w.env[:salvo_t_d]`
+    # (`= T_d − w.t`, the fixed-at-launch consensus). Reads TRUTH target pos/vel (no seeker — slice-14
+    # is truth-fed PN, the cooperation lesson isolated as slice 12 isolated APN; the `:seeker_omega`
+    # branch stays below it and slice-14 scenarios carry no Seeker). The fetch + call live INSIDE this
+    # branch (the slice-12 `a_T`-fetch-inside-the-branch bit trap).
+    a_dem = if guid === :pn && coop === :salvo && haskey(w.env, :salvo_t_d)
+                impact_time_control_accel(e.pos, e.vel, tgt.pos, tgt.vel,
+                                          Float64(w.env[:salvo_t_d]); N = n_pn, K_it = k_it)
+            elseif guid === :pn && haskey(c, :seeker_omega)
                 pn_accel_from_omega(c[:seeker_los]::Vec3, c[:seeker_omega]::Vec3,
                                     -range_rate(rel_pos, rel_vel); N = n_pn)
             elseif guid === :pn
@@ -378,6 +400,18 @@ function decide!(a::Autopilot, w::World)
     tel["$sid.saturated"]     = a_demand > a_max ? 1.0 : 0.0  # g-limit binding? (the Lesson-2 flag)
     tel["$sid.los_rate"]      = _finite(_norm3(los_rate(rel_pos, rel_vel)))  # ‖ω‖ (the PN driver)
     tel["$sid.closing_speed"] = _finite_coord(-range_rate(rel_pos, rel_vel))  # Vc (POSITIVE closing)
+    # Slice-14 salvo diagnostics — SHIPPED WHENEVER A COORDINATOR IS PRESENT (`salvo_t_d` published),
+    # so BOTH `:solo` and `:salvo` salvo-scenarios readout this missile's time-to-go and the impact-
+    # time error the cooperation term nulls (under `:solo` the error is shown but NOT applied — the
+    # lesson: what the salvo law WOULD correct). ABSENT in a slice-9..13 scenario (no coordinator →
+    # no key) → those frames byte-identical. Per-missile (the shared `salvo_t_d`/`T_d` are the
+    # coordinator's keys). `impact_time_err > 0` ⇒ EARLY ⇒ `:salvo` stretches.
+    if haskey(w.env, :salvo_t_d)
+        std_rem  = Float64(w.env[:salvo_t_d])                 # shared desired REMAINING time-to-go
+        tgo_self = time_to_go(los_range(e.pos, tgt.pos), -range_rate(rel_pos, rel_vel))
+        tel["$sid.t_go"]            = _finite(tgo_self)
+        tel["$sid.impact_time_err"] = _finite_coord(std_rem - tgo_self)  # >0 ⇒ early ⇒ stretch
+    end
     return nothing
 end
 
@@ -630,5 +664,78 @@ function _observe_scan!(s::Seeker, w::World, e::Entity, c::AbstractDict)
     tel["$sid.aim_error"]       = _finite(abs(wrap_angle(λ_est - λ_tgt)))  # THE headline (FINDINGS #1)
     tel["$sid.n_peaks"]         = length(peaks)                    # CFAR peak count (int scalar)
     tel["$sid.gated"]           = disc === :gated ? 1.0 : 0.0      # the active discrimination rung
+    return nothing
+end
+
+# --- the SALVO COORDINATOR: the cooperative-guidance shared-state seam (slice 14, HANDOFF §10 item 13) --
+# The CAPSTONE's NEW phase-2 `build_env!` subsystem, on a non-physical `kind === :datalink` entity (no
+# mover — it never integrates). It realizes "N interceptors SHARING STATE" literally: it reads the truth
+# time-to-go of every `kind === :missile` interceptor over an IDEAL datalink (zero-latency, lossless),
+# reduces them to the team consensus `T_d = max_j t_go_j` ONCE at launch, and publishes the shared
+# REMAINING desired time-to-go `w.env[:salvo_t_d] = T_d − w.t` each tick as the SINGLE writer. Each
+# `Autopilot.decide!` (phase 4) only READS it; build_env! (phase 2) runs post-`empty!(w.env)`, so the
+# field survives to phase 4 (the slice-4 jammer / slice-8 energy telemetry-phase precedent).
+#
+# FIXED-AT-LAUNCH consensus (gate-0 FINDINGS — the robustness default, advisor): T_d is computed ONCE
+# (the `e0_j` lazy-latch precedent) and republished as `T_d − w.t`. A per-tick `max t_go` recompute — and
+# every continuous-ratchet variant — was REJECTED by probe8/9: cooperative guidance induces the very
+# stretch maneuver that collapses each missile's V_c and INFLATES its `t_go = R/V_c`, so a live consensus
+# self-pollutes and runs T_d away (to ~99–105 s). The one-shot launch exchange IS the state-sharing; each
+# missile then independently tracks `(T_d − t_now)`. NAMED APPROXIMATION: the ideal datalink — a
+# noisy/latent/lossy link + consensus filtering is the HANDOFF §11 Tier-C horizon (DEFERRED, convention 9).
+#
+# DETERMINISM (class 4c — the slice-12 shape, NOT slice-13's 4b): NO RNG (a deterministic max over truth
+# t_go), so "draw-count invariance" is VACUOUS (do NOT copy slice-13's draw language). Byte-identity for
+# slices 1–13 is BY CONSTRUCTION — the coordinator exists ONLY in a slice-14 salvo scenario; absent a
+# `:datalink` entity nothing writes `salvo_t_d`, and under `cooperation ∈ {unset, :solo}` nothing reads it.
+# It adds NO draw anywhere and touches no shared symbol on the detection path.
+#
+# THE TEAM SET is gathered by `kind === :missile` (the esm/gps count-by-kind precedent — never hard-coded
+# ids), sorted for a canonical order; each interceptor's target is its own `_nearest_target` (the single
+# common `:target`; `:decoy`/`:datalink` excluded by that filter's `kind === :target`). So N missiles never
+# target each other or the datalink node — miss/CPA is ALWAYS vs the true target (the truth-path invariant).
+struct SalvoCoordinator <: Subsystem
+    id::Symbol
+end
+
+function build_env!(sc::SalvoCoordinator, w::World)
+    e    = w.entities[sc.id]
+    c    = e.comp
+    mids = sort!(Symbol[id for (id, o) in w.entities if o.kind === :missile])   # the interceptor team
+    isempty(mids) && return nothing                          # no interceptors → nothing to coordinate
+
+    # Each interceptor's truth time-to-go vs its own nearest `:target` (decoy/datalink excluded by kind);
+    # VC_FLOOR-guarded finite (a stretching missile's V_c → 0 can't blow up t_go → no Inf/NaN, convention 6).
+    t_gos = Float64[]
+    for mid in mids
+        m   = w.entities[mid]
+        tgt = _nearest_target(w, m)
+        tgt === nothing && continue                          # a missile with no target contributes no t_go
+        Vc  = -range_rate(tgt.pos - m.pos, tgt.vel - m.vel)  # closing speed (POSITIVE when closing)
+        push!(t_gos, time_to_go(los_range(m.pos, tgt.pos), Vc))
+    end
+    isempty(t_gos) && return nothing
+
+    # FIXED-AT-LAUNCH T_d: latch ONCE on the first build_env! (post-first-integrate — a ~1·dt shift from
+    # the pure-launch state, the only clean option since integrate! runs first; survives `reset` via the
+    # reloaded comp). Republish the shared REMAINING time every tick. `salvo_consensus` = max (the SLOWEST
+    # missile — the only common time all can reach, since a missile can stretch but not shorten). Store a
+    # raw Float64 for the phase-4 read (T_d, w.t both finite ⇒ the difference is finite); the telemetry
+    # copy below is `_finite`-clamped. w.t = (i−1)·dt here (pre-increment), so tick 1 publishes T_d.
+    haskey(c, :salvo_td) || (c[:salvo_td] = salvo_consensus(t_gos))
+    T_d = Float64(c[:salvo_td])
+    w.env[:salvo_t_d] = T_d - w.t
+
+    # Telemetry — SCALARS only (no Array → no `float()`-crash): the shared field + the fixed T_d. The
+    # per-missile ARRIVAL time is NOT stamped here: geometry F is an AIR intercept (target at altitude),
+    # so the missile reaches CPA and COASTS PAST — the `BallisticMissile` :impact (ground, z≤0) fires
+    # only on the later fall, NOT at the intercept. The Δτ metric is therefore the first-CPA time of each
+    # missile's `los_range` stream (already on the wire from `Autopilot.decide!`), computed CONSUMER-side
+    # by the verifier/tests (the slice-10..12 miss-distance discipline; [[ewsim-missile-verifier-sampling]]'s
+    # descending-band first-CPA) — not a core stamp. The coordinator stays single-purpose (publish `salvo_t_d`).
+    tel = get!(() -> Dict{String,Any}(), w.env, :telemetry)
+    sid = String(sc.id)
+    tel["$sid.salvo_t_d"] = _finite_coord(w.env[:salvo_t_d])  # remaining consensus (signed: <0 past T_d)
+    tel["$sid.T_d"]       = _finite(T_d)                      # the fixed launch consensus
     return nothing
 end

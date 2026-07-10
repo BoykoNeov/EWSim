@@ -1199,3 +1199,189 @@ end
         end
     end
 end
+
+# --- slice 14 gate 2: cooperative salvo guidance wired (the capstone, :cooperation) -----------
+# N interceptors share time-to-go over an ideal datalink to arrive SIMULTANEOUSLY (HANDOFF §10 item
+# 13). The `SalvoCoordinator` (phase-2 build_env!, on a `:datalink` node) pools `kind===:missile`
+# t_go into the fixed-at-launch consensus `w.env[:salvo_t_d] = T_d − w.t` (single-writer); each
+# `Autopilot.decide!` (phase 4) reads it under `coop===:salvo` and flies impact-time-control guidance
+# (PN base + a ⟂-LOS impact-time-error feedback that STRETCHES an early missile). autopilot=:ideal,
+# guidance=:pn, NO seeker in every arm (the cooperation lesson isolated as slice 12 isolated APN — no
+# RNG, class 4c). Geometry F (gate-0 FINDINGS): a MOVING target at altitude (an AIR intercept, so the
+# metric is first-CPA time of los_range, NOT the ground :impact — the plan §4 correction), a NEAR
+# missile A (natural t_go≈5.0 s) + a FAR missile B (≈7.4 s) → :solo spreads Δτ≈2.34, :salvo collapses
+# it to ≈0.52 (K_it=0.45) while both still hit.
+@testset "cooperative salvo guidance wired (slice 14, :cooperation)" begin
+    dt = 1.0e-3
+    norm3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+    TGT0 = Vec3(9000.0, 0.0, 4500.0); TGTV = Vec3(-500.0, 0.0, 0.0)
+    MA0  = Vec3(3000.0, 0.0, 3000.0); MB0  = Vec3(0.0, 0.0, 3000.0); SPEED = 750.0
+
+    # geometry-F world: 2 [BallisticMissile, Autopilot] interceptors + a common ConstantVelocity
+    # target + a [SalvoCoordinator] :datalink node. cooperation selects :solo (plain PN) vs :salvo.
+    function salvo_world(; cooperation = :salvo, k_it = 0.45, seed = 7)
+        w = World(seed = seed, fidelity = Dict{Symbol,Symbol}(:guidance => :pn, :autopilot => :ideal,
+                                                              :cooperation => cooperation))
+        gains() = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+            :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0, :kp => 2.0, :ki => 0.0, :kd => 0.0,
+            :tau => 0.3, :a_max => 3000.0, :k_it => k_it)
+        w.entities[:mA] = Entity(:mA, :missile; pos = MA0, vel = SPEED * los_unit(MA0, TGT0), comp = gains())
+        w.entities[:mB] = Entity(:mB, :missile; pos = MB0, vel = SPEED * los_unit(MB0, TGT0), comp = gains())
+        w.entities[:tgt] = Entity(:tgt, :target; pos = TGT0, vel = TGTV, comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+        w.entities[:link] = Entity(:link, :datalink; pos = zero(Vec3), comp = Dict{Symbol,Any}())
+        subs = Subsystem[BallisticMissile(:mA), Autopilot(:mA), BallisticMissile(:mB), Autopilot(:mB),
+                         ConstantVelocity(:tgt), SalvoCoordinator(:link)]
+        return w, subs
+    end
+    # first-CPA time (descending band; [[ewsim-missile-verifier-sampling]]) of each missile's
+    # los_range stream — the honest arrival metric for an AIR intercept (excludes post-CPA re-cross).
+    function fly_taus(w, subs; n = 9000)
+        rA = Float64[]; rB = Float64[]
+        for _ in 1:n
+            tick!(w, subs, dt); empty!(w.events)
+            tel = w.env[:telemetry]
+            push!(rA, get(tel, "mA.los_range", Inf)); push!(rB, get(tel, "mB.los_range", Inf))
+        end
+        cpa(r) = (m = r[1]; im = 1; for i in 2:length(r)
+                      r[i] < m ? (m = r[i]; im = i) : (i - im > 200 && r[i] > m + 100.0 && break); end; (m, im))
+        mA, iA = cpa(rA); mB, iB = cpa(rB)
+        return (τA = iA * dt, τB = iB * dt, Δτ = abs(iA - iB) * dt, missA = mA, missB = mB)
+    end
+
+    @testset "SalvoCoordinator publishes w.env[:salvo_t_d] == max(t_go) − w.t (single-writer, phase 2)" begin
+        w, subs = salvo_world(cooperation = :salvo)
+        tick!(w, subs, dt); empty!(w.events)                  # tick 1: coordinator latches T_d, publishes
+        @test haskey(w.env, :salvo_t_d)
+        # INDEPENDENT recompute of the consensus on the realized (post-tick-1) 2-missile world.
+        tgt = w.entities[:tgt]
+        tgo(m) = time_to_go(los_range(m.pos, tgt.pos), -range_rate(tgt.pos - m.pos, tgt.vel - m.vel))
+        Td = salvo_consensus((tgo(w.entities[:mA]), tgo(w.entities[:mB])))
+        # w.t was 0.0 during tick-1 build_env! (pre-increment) → salvo_t_d == T_d (the far missile B's t_go).
+        @test w.env[:salvo_t_d] ≈ Td atol = 1e-9
+        @test Td ≈ max(tgo(w.entities[:mA]), tgo(w.entities[:mB])) atol = 1e-12   # the SLOWEST sets the pace
+        tel = w.env[:telemetry]
+        @test haskey(tel, "link.salvo_t_d") && haskey(tel, "link.T_d")             # coordinator scalars
+        @test tel["link.T_d"] isa Float64 && tel["link.salvo_t_d"] isa Float64     # SCALARS (no float()-crash)
+    end
+
+    @testset "decide! under :salvo matches impact_time_control_accel; :solo is plain PN (the seam)" begin
+        # :salvo — a_ctrl matches the ITC law on the realized state (the slice-12 decide!-pin shape).
+        w, subs = salvo_world(cooperation = :salvo, k_it = 0.45)
+        tick!(w, subs, dt); empty!(w.events)
+        std = Float64(w.env[:salvo_t_d])
+        for mid in (:mA, :mB)
+            e = w.entities[mid]; tgt = w.entities[:tgt]
+            a_itc = clamp_accel(impact_time_control_accel(e.pos, e.vel, tgt.pos, tgt.vel, std; N = 4.0, K_it = 0.45), 3000.0)
+            @test e.comp[:a_ctrl] ≈ a_itc atol = 1e-9         # :ideal → a_ctrl == a_cmd (the :salvo path)
+        end
+        # :solo — the SAME geometry flies plain PN (the salvo arm is unreachable; byte-identical to slice-10).
+        w2, subs2 = salvo_world(cooperation = :solo)
+        tick!(w2, subs2, dt); empty!(w2.events)
+        for mid in (:mA, :mB)
+            e = w2.entities[mid]; tgt = w2.entities[:tgt]
+            a_pn = clamp_accel(pn_accel(e.pos, e.vel, tgt.pos, tgt.vel; N = 4.0), 3000.0)
+            @test e.comp[:a_ctrl] ≈ a_pn atol = 1e-12         # plain PN, no cooperation term
+        end
+        # and the :salvo command DIFFERS from plain PN for the EARLY near missile (the feedback bites).
+        eA = w.entities[:mA]; tgtA = w.entities[:tgt]
+        a_pnA = clamp_accel(pn_accel(eA.pos, eA.vel, tgtA.pos, tgtA.vel; N = 4.0), 3000.0)
+        @test norm3(eA.comp[:a_ctrl] - a_pnA) > 1.0           # the ITC feedback shaped it away from PN
+    end
+
+    @testset "Δτ(:salvo) ≪ Δτ(:solo) on the wire — the salvo collapses arrival spread (the Lesson)" begin
+        solo  = fly_taus(salvo_world(cooperation = :solo)...)
+        salvo = fly_taus(salvo_world(cooperation = :salvo, k_it = 0.45)...)
+        # the honest baseline: :solo spreads (near hits first), both hit vs the true target.
+        @test solo.Δτ > 2.0                                   # FINDINGS ≈ 2.34 (τA≈5.04, τB≈7.38)
+        @test solo.missA < 5.0 && solo.missB < 5.0
+        # cooperation collapses the spread — and both STILL hit (timing reshaped, not accuracy).
+        @test salvo.Δτ < 1.0                                  # FINDINGS ≈ 0.52 at K=0.45
+        @test salvo.missA < 5.0 && salvo.missB < 5.0
+        @test solo.Δτ / salvo.Δτ > 3.0                        # the ratio (FINDINGS ≈ 4.5×); pin the RATIO
+        # the near missile A STRETCHES (its τ rises toward B's), the far reference B ~unchanged.
+        @test salvo.τA > solo.τA + 1.0                        # A delayed by cooperation
+        @test abs(salvo.τB - solo.τB) < 0.5                   # B (the slowest) flies ~straight
+    end
+
+    @testset "the :solo↔:salvo trajectories DIFFER (not-a-dead-knob, physics-changing, NO RNG)" begin
+        wsolo, ssolo = salvo_world(cooperation = :solo)
+        wsal,  ssal  = salvo_world(cooperation = :salvo)
+        for _ in 1:1500; tick!(wsolo, ssolo, dt); empty!(wsolo.events)
+                          tick!(wsal,  ssal,  dt); empty!(wsal.events); end
+        @test norm3(wsolo.entities[:mA].pos - wsal.entities[:mA].pos) > 10.0   # the near missile moved
+    end
+
+    @testset "miss/CPA is vs the true :target, NEVER the sibling missile or the :datalink node" begin
+        w, _ = salvo_world(cooperation = :salvo)
+        # _nearest_target (radar / autopilot truth / CPA) filters kind===:target → the common target,
+        # NOT the sibling :missile and NOT the :datalink node (the truth-path invariant, per missile).
+        @test EWSim._nearest_target(w, w.entities[:mA]) === w.entities[:tgt]
+        @test EWSim._nearest_target(w, w.entities[:mB]) === w.entities[:tgt]
+        @test w.entities[:link].kind === :datalink            # the node is NEVER :target/:missile
+    end
+
+    @testset "NO w.rng draw under :salvo — the class-4c pin (draw-count invariance is VACUOUS)" begin
+        # truth-fed PN, no seeker/decoy → NO RNG consumer: a tick must NOT advance the Xoshiro stream
+        # (contrast slice-11/13 seekers that draw). Confirms conventions 3/11 do NOT apply here.
+        w, subs = salvo_world(cooperation = :salvo)
+        for _ in 1:50; tick!(w, subs, dt); empty!(w.events); end
+        r0 = copy(w.rng)
+        tick!(w, subs, dt); empty!(w.events)                  # one more tick
+        @test rand(w.rng) == rand(r0)                         # the stream is UNADVANCED (no draw)
+    end
+
+    @testset "loader: a :datalink node arms SalvoCoordinator; k_it knob; rejects bad salvo config" begin
+        base = """
+        name: salvo
+        seed: 7
+        dt_physics: 0.001
+        fidelity: {guidance: pn, autopilot: ideal, cooperation: solo}
+        entities:
+          - id: mA
+            kind: missile
+            pos: [3000.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 750.0
+              elevation_deg: 22.0
+              guidance: {n_pn: 4.0, r_stop: 30.0, a_max: 3000.0, k_it: 0.45}
+          - id: mB
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 750.0
+              elevation_deg: 30.0
+              guidance: {n_pn: 4.0, r_stop: 30.0, a_max: 3000.0, k_it: 0.45}
+          - id: tgt
+            kind: target
+            pos: [9000.0, 0.0, 4500.0]
+            vel: [-500.0, 0.0, 0.0]
+            target: {rcs_m2: 1.0}
+          - id: link
+            kind: datalink
+        """
+        mktempdir() do dir
+            good = joinpath(dir, "good.yaml"); write(good, base)
+            scn = load_scenario(good)
+            # the :datalink node gets a SalvoCoordinator (build_env! only), NO mover (never integrates).
+            @test any(s -> s isa SalvoCoordinator && s.id === :link, scn.subs)
+            @test !any(s -> s isa ConstantVelocity && s.id === :link, scn.subs)
+            @test scn.world.entities[:link].kind === :datalink
+            @test scn.world.entities[:mA].comp[:k_it] == 0.45     # the ITC gain at the CONSUMED key
+            @test get(scn.world.fidelity, :cooperation, :solo) === :solo   # the new key parsed
+            # a defaulted guidance block (no k_it) → the FINDINGS default 0.45.
+            defs = replace(base, ", k_it: 0.45" => "")
+            pd = joinpath(dir, "defs.yaml"); write(pd, defs)
+            @test load_scenario(pd).world.entities[:mA].comp[:k_it] == 0.45
+            # rejects: k_it ≤ 0 (would null / sign-flip the cooperation) is an AUTHORED load error.
+            badk = replace(base, "k_it: 0.45" => "k_it: 0.0"; count = 1)                 # mA's k_it → 0
+            pk = joinpath(dir, "badk.yaml"); write(pk, badk)
+            @test_throws ErrorException load_scenario(pk)
+            # rejects: a :datalink with < 2 :missile interceptors (nothing to coordinate).
+            one = replace(base, r"- id: mB.*?(?=- id: tgt)"s => "")                      # strip the mB block
+            po = joinpath(dir, "one.yaml"); write(po, one)
+            @test_throws ErrorException load_scenario(po)
+        end
+    end
+end
