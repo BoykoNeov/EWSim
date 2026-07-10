@@ -1,15 +1,23 @@
-; Godot 4.7 project — thin spatial client for EWSim.
-; net/seam_test.gd is the headless socket proof; scenes/Sandbox.tscn is the
-; slice-1 step-7 spatial view (radar + target + blips + sliders).
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
 [application]
 
 config/name="EWSim Sandbox"
-config/features=PackedStringArray("4.7")
 run/main_scene="res://scenes/Sandbox.tscn"
+config/features=PackedStringArray("4.7")
 
-[debug]
+[autoload]
 
-settings/stdout/print_fps=false
+GDAIMCPRuntime="*uid://dcne7ryelpxmn"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/gdai-mcp-plugin-godot/plugin.cfg")
