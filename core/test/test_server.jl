@@ -1049,6 +1049,81 @@ end
         @test !haskey(g, :airframe_view) && !haskey(g, :airframe_target)
     end
 
+    @testset "set_fidelity :airframe + live af_cla/af_delta can't crash a tick (slice-17, class 4c)" begin
+        # Slice-17: `:airframe` is a NEW fidelity KEY (contrast slice-15's `:fin` rung). It flows
+        # through the SAME per-key LIVE_FIDELITY_MODES check AUTOMATICALLY (_KNOWN_FIDELITY_KEYS +
+        # set_fidelity derive from it — one-list-no-drift, NO server change). Class 4c: physics-
+        # changing, NO RNG → NO draw-topology → NO introduce-guard (the :fin/:cooperation precedent,
+        # CONTRAST slice-13 :scan). Here the wire write/reject/introduce + the live af_cla/af_delta
+        # slider→tick (a coupled missile) survive; the trajectory change is pinned in test_determinism.
+        dir = mktempdir()
+        cpl = joinpath(dir, "cpl.yaml"); write(cpl, """
+        name: coupling
+        seed: 17
+        dt_physics: 1.0e-3
+        emit_every: 16
+        fidelity: {airframe: pitch_coupled}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 0.0]
+            missile:
+              mass_kg: 100.0
+              speed: 500.0
+              elevation_deg: 40.0
+              cd_area_m2: 0.0
+              airframe: {cma: -0.3, cmd: 0.1, cmq: -150.0, delta: 0.15, cla: 20.0, alpha0: 0.05}
+        knobs:
+          - {target: m1, key: af_cla, min: -5.0, max: 40.0, label: "Cla"}
+          - {target: m1, key: af_delta, min: -0.3, max: 0.3, label: "delta"}
+        """)
+        srv = EWSim.Server(load_scenario(cpl); path = cpl)
+        w = srv.scn.world
+        @test w.fidelity[:airframe] === :pitch_coupled             # the NEW key, scenario default
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "airframe", :value => "point_mass"))
+        @test w.fidelity[:airframe] === :point_mass                # :pitch_coupled→:point_mass — accepted
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "airframe", :value => "pitch_coupled"))
+        @test w.fidelity[:airframe] === :pitch_coupled             # …and back (INTRODUCE-direction) — accepted
+        # a bad rung is REJECTED before it lands (would name an unhandled mode in integrate!).
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "airframe", :value => "sixdof"))
+        # INTRODUCE mid-run on a slice-16 airframe scenario that omitted :airframe is ALLOWED (class 4c).
+        af16 = joinpath(dir, "af16.yaml"); write(af16, """
+        name: af16
+        seed: 16
+        dt_physics: 1.0e-3
+        emit_every: 16
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 0.0]
+            missile:
+              mass_kg: 100.0
+              speed: 500.0
+              elevation_deg: 40.0
+              cd_area_m2: 0.0
+              airframe: {cma: -0.3, cmd: 0.1, cmq: -150.0, delta: 0.15, cla: 20.0, alpha0: 0.05}
+        """)
+        srv2 = EWSim.Server(load_scenario(af16); path = af16)      # airframe params present, NO :airframe fidelity
+        @test !haskey(srv2.scn.world.fidelity, :airframe)
+        EWSim.handle_command!(srv2, Dict(:type => "set_fidelity", :key => "airframe", :value => "pitch_coupled"))
+        @test srv2.scn.world.fidelity[:airframe] === :pitch_coupled
+        # the live af_cla/af_delta sliders (declared knobs) drive set_param → tick with NO crash, incl.
+        # the extremes (negative Cla, a big δ) — the "a live slider can't crash a tick" discipline.
+        for (k, v) in (("af_cla", -5.0), ("af_delta", 0.3), ("af_cla", 40.0), ("af_delta", -0.3))
+            EWSim.handle_command!(srv, Dict(:type => "set_param", :target => "m1", :key => k, :value => v))
+        end
+        ok = true
+        for _ in 1:500
+            tick!(w, srv.scn.subs, srv.scn.dt_physics); empty!(w.events)   # must NOT throw
+            tel = w.env[:telemetry]
+            ok &= all(isfinite, w.entities[:m1].pos) && isfinite(tel["m1.a_lift"]) &&
+                  isfinite(tel["m1.turn_radius_m"])
+            ok || break
+        end
+        @test ok                                                   # coupled tick survives the slider drags
+    end
+
     @testset "set_seed + reset compose into a clean seeded replay" begin
         srv = EWSim.Server(load_scenario(_SCEN_SRV); path = _SCEN_SRV)
         # advance, moving the target off its start

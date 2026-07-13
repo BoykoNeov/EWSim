@@ -161,6 +161,14 @@ const EP_MODES = (:none, :freq_agility, :sidelobe_blanking)
 # `:guidance`/`:autopilot`/`:seeker` (slice-14 pins `guidance=:pn`, `autopilot=:ideal`, no seeker so the
 # ONE button toggles the ONE cooperation lesson). Referencing COOPERATION_MODES (not re-listing) is
 # one-list-no-drift.
+# `:airframe` (slice-17 α→lift→γ coupling; rungs `AIRFRAME_MODES` from airframe.jl) is a NEW fidelity
+# KEY (contrast slice-15's `:fin`, a new RUNG of `:autopilot`) — also class 4c (physics-changing, no
+# RNG). `:point_mass↔:pitch_coupled` CHANGES the trajectory (α generates a body lift that bends the
+# path) but the scenario is truth-fed open-loop with NO seeker → "draw-count invariance" is VACUOUS
+# and there is NO draw-topology to flip → introduce-SAFE, live-settable, NO `set_fidelity` guard (the
+# `:integrator`/`:autopilot`/`:apn`/`:cooperation` precedent). Byte-identity for slices 1–16 is by
+# CONSTRUCTION: the coupled `integrate!` branch is unreachable without BOTH `:af_cma` AND
+# `:airframe===:pitch_coupled` (default `:point_mass`). Referencing AIRFRAME_MODES is one-list-no-drift.
 const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES,
                              ep = EP_MODES, estimator = ESTIMATOR_MODES,
                              deinterleaver = DEINTERLEAVER_MODES,
@@ -169,7 +177,8 @@ const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES,
                              integrator = INTEGRATOR_MODES, autopilot = AUTOPILOT_MODES,
                              guidance = GUIDANCE_MODES, seeker = SEEKER_MODES,
                              discrimination = DISCRIMINATION_MODES,
-                             cooperation = COOPERATION_MODES)
+                             cooperation = COOPERATION_MODES,
+                             airframe = AIRFRAME_MODES)
 
 # A perfect null (F⁴=0, even above the horizon), an antenna on the reflecting plane
 # (h→0), or a below-horizon mask all drive SNR→0, and `lin2db(0) = -Inf` would poison the

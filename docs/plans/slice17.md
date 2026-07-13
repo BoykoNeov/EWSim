@@ -297,9 +297,24 @@ scenario.
       the rk4_rot pin), decoupled limit `Cla=0` inertial ≡ `integrator_step ⊕ airframe_step` BIT-EXACT (`==`, advisor
       #2/#3), steady-turn R=2m/(ρSC_Lα·α)≈5197 m at tight `atol=1e-2` (finite-diff γ̇, NOT ==) + ⟂-lift preserves speed.
       Byte-identity CONFIRMED by the full suite (test_determinism + test_detection golden green), not just reasoned.
-- [ ] **2. Wired** — the coupled `integrate!` branch (gated `:airframe === :pitch_coupled`) + lift telemetry; loader
-      parse+validate `af_cla`; `LIVE_FIDELITY_MODES` gains the `:airframe` KEY (NO re-list, NO set_fidelity guard —
-      class 4c live). test_missile/test_determinism/test_server arms; slices 1–16 byte-identical.
+- [x] **2. Wired** — DONE (2461 tests, +32 gate-2 arms, slices 1–16 byte-identical). `missile.jl`: the coupled
+      `_integrate_coupled!` branch, gated `haskey(:af_cma) && get(w.fidelity,:airframe,:point_mass)===:pitch_coupled`
+      — the point-mass block wrapped VERBATIM in the `else` (advisor: no code-share; point-mass arithmetic
+      bit-identical). JOINT [pos,vel,θ,q] `rk4_coupled` step; θ lazy-init from the PRE-step launch γ (contrast the
+      point-mass `_integrate_airframe!` POST-step seed); force = `total_accel` + `lift_accel` (a_ctrl EXCLUDED —
+      slice-18 guidance coupling, commented); impact clamp DUPLICATED (kept separate for byte-identity); RK4-ONLY
+      (ignores `:integrator` euler — named). **THE STAGE-θ FIX (advisor, load-bearing):** the deriv closure reads
+      the RK4 STAGE `TH`, NEVER the entry θ — pinned by a transient GOLDEN in test_missile (`total_accel+lift_accel+
+      rk4_coupled`, 8 s: pos=(2187.823608281557, 3010.178483035902), θ=1.251491571778638, q=0.06393471230113383;
+      atol 1e-6/1e-9). The entry-θ bug is only ~0.019 m/8 s (measured) — invisible to R (α≈const) & the decoupled
+      test (Cla=0), so ONLY this golden catches it. Lift telemetry (`a_lift`, `turn_radius_m`=V²/a_lift) gated on
+      `:pitch_coupled` NOT af_cma (advisor: else a slice-16 `:point_mass` wire breaks). Loader: `airframe.cla`→
+      `:af_cla`, validate FINITE not sign. `LIVE_FIDELITY_MODES` gains `airframe = AIRFRAME_MODES` (the ONLY plumbing
+      edit — `_KNOWN_FIDELITY_KEYS`/`set_fidelity`/`_validate_fidelity` all derive; NO set_fidelity guard, class 4c).
+      Arms: test_missile (golden, non-dead toggle sep>500 m + ballistic-twin, lift readout Q·S·Cla·α/m, att
+      round-trip, loader cla parse/reject); test_determinism (coupled A-vs-B bit-identical + pristine rng, :point_mass↔
+      :pitch_coupled CHANGES it, introduce-safe both dirs, check-G 25 s unstable→finite through build_env!→_finite);
+      test_server (set_fidelity :airframe write/reject/introduce + live af_cla/af_delta slider→tick survives).
 - [ ] **3. Scenario + Godot + verifiers** — `scenarios/slice17_coupling.yaml` (nonzero trim δ — MANDATORY);
       Sandbox.gd `:airframe` cycler (button BACK, value-guarded) + curved-vs-straight visual; the four proofs
       (verify/ui/smoke/shot); `test_scenario.jl` loader arm. **Re-probe on the emit-grid wire** (convention 10).

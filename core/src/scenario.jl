@@ -458,6 +458,7 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             comp[:af_cmq]    = _f64(get(ab, "cmq", 0.0))               # pitch damping ∂Cm/∂q̄
             comp[:af_alpha0] = _f64(get(ab, "alpha0", 0.0))            # initial angle of attack (rad, the perturbation)
             comp[:af_delta]  = _f64(get(ab, "delta", 0.0))            # open-loop fin deflection (rad; no autopilot this slice)
+            comp[:af_cla]    = _f64(get(ab, "cla", 0.0))              # slice 17: lift-curve slope ∂C_L/∂α (KNOB — the coupling)
             comp[:af_S] > 0 || error("missile '$id': airframe.ref_area_m2 must be > 0 (got $(comp[:af_S]))")
             comp[:af_d] > 0 || error("missile '$id': airframe.ref_len_m must be > 0 (got $(comp[:af_d]))")
             comp[:af_I] > 0 || error("missile '$id': airframe.inertia_kgm2 must be > 0 (got $(comp[:af_I]))")
@@ -466,6 +467,9 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             isfinite(comp[:af_cmq]) || error("missile '$id': airframe.cmq must be finite (got $(comp[:af_cmq]))")
             isfinite(comp[:af_alpha0]) || error("missile '$id': airframe.alpha0 must be finite (got $(comp[:af_alpha0]))")
             isfinite(comp[:af_delta])  || error("missile '$id': airframe.delta must be finite (got $(comp[:af_delta]))")
+            # C_Lα: validate FINITE, NOT sign — a crossing/negative lift slope is a lesson-adjacent
+            # knob (mirrors `cma`); 0 ⇒ decoupled (= slice 16). Only :pitch_coupled reads it.
+            isfinite(comp[:af_cla])    || error("missile '$id': airframe.cla must be finite (got $(comp[:af_cla]))")
         end
     elseif kind === :datalink
         # A cooperative-guidance datalink node (slice 14, the capstone): a NON-PHYSICAL entity (no

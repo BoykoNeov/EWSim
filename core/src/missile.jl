@@ -95,6 +95,16 @@ function integrate!(m::BallisticMissile, w::World, dt::Float64)
     # Once impacted the missile is frozen: no more integration (the readout still republishes
     # in build_env!, so the frame never blanks). The latch makes the :impact event one-shot.
     if !get(c, :impacted, false)
+      # SLICE 17 COUPLING GATE (§11 Tier A): when the missile carries airframe params AND the
+      # `:airframe` fidelity is `:pitch_coupled`, the angle of attack α = θ−γ generates a body
+      # lift ⟂ v that TURNS the flight path — the whole `[pos, vel, θ, q]` state advances JOINTLY
+      # in one `rk4_coupled` step (`_integrate_coupled!`). Else (the DEFAULT `:point_mass` — every
+      # slice-8..16 scenario) the point-mass `integrator_step` + the slice-16 isolated / slice-8
+      # velocity-aligned attitude, TEXTUALLY UNCHANGED below (byte-identity — the coupled branch
+      # is unreachable without BOTH `:af_cma` AND the new fidelity key). Class 4c (no RNG).
+      if haskey(c, :af_cma) && get(w.fidelity, :airframe, :point_mass) === :pitch_coupled
+        _integrate_coupled!(m, e, c, w, mass, rho, cd_area, dt)
+      else
         mode = get(w.fidelity, :integrator, :rk4)
         # GUIDANCE SEAM (slice 9): a GUIDED missile carries a control specific force `:a_ctrl`
         # (a Vec3, written by the Autopilot's phase-4 decide! LAST tick → applied HERE this tick,
@@ -140,7 +150,67 @@ function integrate!(m::BallisticMissile, w::World, dt::Float64)
             # `v→0` hits `quat_from_two_vectors`'s zero-vector guard (→ identity, no NaN).
             e.att = quat_from_two_vectors(Vec3(1.0, 0.0, 0.0), v′)
         end
+      end
     end
+    return nothing
+end
+
+# Slice 17 — the COUPLED pitch-plane integrate! branch (`:airframe === :pitch_coupled`). The
+# angle of attack α = θ−γ generates a body lift ⟂ v (airframe.jl `lift_accel`) that turns the
+# flight path, and the attitude `(θ, q)` evolves under the aero moment — the WHOLE `[pos, vel,
+# θ, q]` state advances JOINTLY in ONE `rk4_coupled` step. The stiff short-period must NOT be
+# operator-split from translation; the coupling IS the mid-step (V, γ) re-evaluation inside each
+# RK4 stage (gate-0 finding). The fin δ is a FIXED authored trim — OPEN-LOOP, no autopilot closes
+# it (guidance→lift coupling via `:a_ctrl` in the joint force is slice 18). RK4-ONLY: this branch
+# does NOT honor the `:integrator` euler rung (the coupled short-period is stiff — euler would be a
+# different, divergent lesson; convention 9 keeps the showcase from mixing them, and it can't
+# crash). NO RNG (class 4c). The `:point_mass` path above is byte-identical to slices 8–16.
+function _integrate_coupled!(m::BallisticMissile, e::Entity, c::Dict{Symbol,Any}, w::World,
+                             mass::Float64, rho::Float64, cd_area::Float64, dt::Float64)
+    # Lazy launch init of the JOINT attitude from the PRE-step (launch) flight-path angle — θ is
+    # part of the jointly-integrated state, so it is seeded BEFORE the step (contrast the
+    # point-mass `_integrate_airframe!`, which seeds from the POST-step v′). Survives reset via
+    # reload; `:af_alpha0` is the authored nose-off-velocity perturbation (default 0).
+    if !haskey(c, :pitch_theta)
+        γ0 = atan(e.vel[3], e.vel[1])
+        c[:pitch_theta] = γ0 + Float64(get(c, :af_alpha0, 0.0))
+        c[:pitch_q]     = 0.0
+    end
+    p = AirframeParams(Float64(c[:af_S]), Float64(c[:af_d]), Float64(c[:af_I]),
+                       Float64(c[:af_cma]), Float64(c[:af_cmd]), Float64(c[:af_cmq]),
+                       rho, Float64(get(c, :af_cla, 0.0)))
+    δ = Float64(get(c, :af_delta, 0.0))
+    θ, q = Float64(c[:pitch_theta]), Float64(c[:pitch_q])
+    # The coupled derivative f(pos, vel, TH, Q) -> (ṗ, v̇, θ̇, q̈). CRITICAL (advisor): the lift AND
+    # the moment read the STAGE pitch `TH` (the RK4 stage argument), NEVER the entry `θ` closed over
+    # above — using the entry θ compiles clean and is only O(dt²) off per step, invisible to the
+    # steady-turn R test (α≈const) and the decoupled test (Cla=0), so the stage-θ wiring is pinned
+    # by a transient golden in test_missile. ṗ = vel; v̇ = the point-mass force (gravity+drag, the
+    # SAME `total_accel` closure) + the lift (⟂ v, α = TH−γ); θ̇ = q (the stage `Q`); q̈ = M/I.
+    f = (P, Vv, TH, Q) -> begin
+        γ = atan(Vv[3], Vv[1])
+        a = total_accel(Vv; rho = rho, cd_area = cd_area, mass = mass) +
+            lift_accel(Vv, TH, mass, p)
+        (Vv, a, Q, pitch_moment(TH - γ, δ, Q, _norm3(Vv), p) / p.I)
+    end
+    p′, v′, θ′, q′ = rk4_coupled(f, e.pos, e.vel, θ, q, dt)
+    if p′[3] ≤ 0.0
+        # Ground impact — the point-mass branch's clamp / freeze / one-shot `:impact` event,
+        # duplicated here (kept SEPARATE from the point-mass code so its arithmetic stays
+        # byte-identical; advisor). θ′/q′ hold the attitude at the impact instant; next tick the
+        # `:impacted` latch skips integration entirely (no further rotation).
+        p′ = Vec3(p′[1], p′[2], 0.0)
+        v′ = zero(Vec3)
+        c[:impacted] = true
+        push!(w.events, Dict{Symbol,Any}(:kind => :impact, :of => m.id))
+    end
+    e.pos = p′
+    e.vel = v′
+    c[:pitch_theta] = θ′
+    c[:pitch_q]     = q′
+    # Nose direction from the integrated pitch θ′ (θ = γ ⇒ identical to velocity-aligned; the
+    # slice-16 convention). The v→0 degenerate rides `quat_from_two_vectors`'s zero guard.
+    e.att = quat_from_two_vectors(Vec3(1.0, 0.0, 0.0), Vec3(cos(θ′), 0.0, sin(θ′)))
     return nothing
 end
 
@@ -215,6 +285,18 @@ function build_env!(m::BallisticMissile, w::World)
         tel["$sid.pitch_q"]     = _finite_coord(q)            # pitch rate (rad/s)
         tel["$sid.omega_sp"]    = _finite(short_period_freq(_norm3(e.vel), p))  # NaN (unstable) → FINITE_CEIL
         tel["$sid.alpha_trim"]  = _finite_coord(trim_alpha(Float64(get(c, :af_delta, 0.0)), p))
+        # SLICE 17 lift readout — shipped ONLY when the COUPLING is LIVE (`:airframe ===
+        # :pitch_coupled`), further-gated INSIDE the af_cma block so a slice-16 `:point_mass` wire
+        # stays byte-identical (lift keys must NOT appear there — the slice-15 fin-key precedent;
+        # lift only physically exists when coupled). |a_lift| = the turn accel; turn radius R =
+        # V²/|a_lift| (α→0 ⇒ |a_lift|→0 ⇒ R→∞ → FINITE_CEIL; the omega_sp NaN path already proves
+        # `_finite` ceils the degenerate). RNG-free, own keys → order-independent.
+        if get(w.fidelity, :airframe, :point_mass) === :pitch_coupled
+            aLm = _norm3(lift_accel(e.vel, θ, mass, p))
+            Vsp = _norm3(e.vel)
+            tel["$sid.a_lift"]        = _finite(aLm)                                  # m/s² (⟂ v)
+            tel["$sid.turn_radius_m"] = _finite(aLm > 0.0 ? Vsp * Vsp / aLm : FINITE_CEIL)
+        end
     end
     return nothing
 end

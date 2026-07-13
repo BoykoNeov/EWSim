@@ -948,4 +948,94 @@ end
         @test reinterpret(UInt64, tn0) == reinterpret(UInt64, tn1)   # introduce :cooperation = no-op
         @test rand(copy(wn1.rng)) == rand(Xoshiro(0))                # ...and the rng stream untouched
     end
+
+    # Slice 17: the α→lift→γ COUPLING swaps in on `:airframe = :point_mass | :pitch_coupled` — a NEW
+    # fidelity KEY (contrast slice-15's `:fin` rung). Class 4c (physics-changing, NO RNG — truth-fed
+    # open-loop, no seeker), so the THREE-claim framing (the slice-8..16 shape, NOT slice-11/13's
+    # draw language): (1) same-config replay bit-identical (pos/vel/θ/q fingerprint, reinterpret —
+    # sign of zero); (2) a mid-run :point_mass→:pitch_coupled toggle CHANGES the trajectory (the
+    # not-a-dead-knob — α generates a lift that bends the path); (3) INTRODUCE-safe both directions
+    # — on a NON-airframe missile (no :af_cma) the key is a no-op (the coupled branch is unreachable
+    # without af_cma), AND a slice-16 airframe missile under the default :point_mass is byte-identical
+    # to never setting the key. PLUS a check-G FINITENESS assertion: a long unstable knob-drag
+    # (Cmα=+0.5, coupled, 25 s) stays finite through the WIRED build_env!→_finite path (gate-0 §G —
+    # no consumer clamp, the wire-clamp suffices).
+    @testset "a coupled airframe: replay bit-identical, NO rng; :airframe toggle CHANGES it (4c); finite" begin
+        function cpl_trace(; airframe = :pitch_coupled, nsteps = 1200, toggle_at = 0, toggle_to = nothing,
+                           start_af = airframe, cma = -0.3, af = true)
+            fid = Dict{Symbol,Symbol}(:integrator => :rk4)
+            start_af === nothing || (fid[:airframe] = start_af)
+            w = World(seed = 0, fidelity = fid)
+            v0 = 500.0; el = deg2rad(40.0)
+            comp = Dict{Symbol,Any}(:mass_kg => 100.0, :cd_area_m2 => 0.0, :rho => 1.225)
+            if af
+                comp[:af_S] = π * 0.1^2; comp[:af_d] = 0.2; comp[:af_I] = 50.0
+                comp[:af_cma] = cma; comp[:af_cmd] = 0.1; comp[:af_cmq] = -150.0
+                comp[:af_alpha0] = 0.05; comp[:af_delta] = 0.15; comp[:af_cla] = 20.0
+            end
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 0.0),
+                vel = Vec3(v0 * cos(el), 0.0, v0 * sin(el)), comp = comp)
+            subs = Subsystem[BallisticMissile(:m1)]
+            trace = Float64[]
+            for i in 1:nsteps
+                (toggle_to !== nothing && i == toggle_at) && (w.fidelity[:airframe] = toggle_to)
+                tick!(w, subs, 1.0e-3)
+                append!(trace, w.entities[:m1].pos); append!(trace, w.entities[:m1].vel)
+                push!(trace, w.entities[:m1].comp[:pitch_theta], w.entities[:m1].comp[:pitch_q])
+                empty!(w.events)
+            end
+            return w, trace
+        end
+        # (1) same-config replay bit-identical, and NO w.rng draw (truth-fed, no seeker → pristine).
+        wa, ta = cpl_trace(); _, tb = cpl_trace()
+        @test ta == tb && reinterpret(UInt64, ta) == reinterpret(UInt64, tb)
+        @test rand(copy(wa.rng)) == rand(Xoshiro(0))                  # class-4c "vacuous" — rng untouched
+
+        # (2) a mid-run :point_mass→:pitch_coupled toggle CHANGES the flight (not-a-dead-knob).
+        _, tk1 = cpl_trace(start_af = :point_mass, toggle_at = 200, toggle_to = :pitch_coupled)
+        _, tk2 = cpl_trace(start_af = :point_mass, toggle_at = 200, toggle_to = :pitch_coupled)
+        @test reinterpret(UInt64, tk1) == reinterpret(UInt64, tk2)
+        _, tnever = cpl_trace(airframe = :point_mass)
+        @test tk1 != tnever                                          # the coupling bent the path
+
+        # (3a) INTRODUCE-safe: on a NON-airframe missile (no :af_cma) introducing :pitch_coupled is a
+        # no-op (the coupled branch needs af_cma) — byte-identical (class-4c live-safety, contrast :scan).
+        function ball_trace(; introduce = false, at = 100, nsteps = 400)
+            w = World(seed = 0, fidelity = Dict(:integrator => :rk4))
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 1000.0), vel = Vec3(300.0, 0, 300.0),
+                comp = Dict{Symbol,Any}(:mass_kg => 100.0, :cd_area_m2 => 0.0, :rho => 1.225))
+            subs = Subsystem[BallisticMissile(:m1)]
+            tr = Float64[]
+            for i in 1:nsteps
+                introduce && i == at && (w.fidelity[:airframe] = :pitch_coupled)
+                tick!(w, subs, 1.0e-3); append!(tr, w.entities[:m1].pos); empty!(w.events)
+            end
+            return tr
+        end
+        @test ball_trace(introduce = true) == ball_trace(introduce = false)
+        # (3b) a slice-16 airframe missile: default :point_mass ≡ never setting the key (byte-identical).
+        _, tdef  = cpl_trace(start_af = nothing)                      # :airframe absent → default :point_mass
+        _, tpm   = cpl_trace(airframe = :point_mass)                  # explicit :point_mass
+        @test reinterpret(UInt64, tdef) == reinterpret(UInt64, tpm)
+
+        # (check-G) long UNSTABLE knob-drag stays finite through the wired build_env!→_finite path.
+        wg, subsg = (let w = World(seed = 0, fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :airframe => :pitch_coupled))
+            v0 = 500.0; el = deg2rad(40.0)
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 0.0),
+                vel = Vec3(v0 * cos(el), 0.0, v0 * sin(el)),
+                comp = Dict{Symbol,Any}(:mass_kg => 100.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                    :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 50.0, :af_cma => +0.5, :af_cmd => 0.1,
+                    :af_cmq => -150.0, :af_alpha0 => 0.1, :af_delta => 0.0, :af_cla => 20.0))
+            (w, Subsystem[BallisticMissile(:m1)])
+        end)
+        finite = true
+        for _ in 1:25000
+            tick!(wg, subsg, 1.0e-3); empty!(wg.events)
+            e = wg.entities[:m1]; tel = wg.env[:telemetry]
+            finite &= all(isfinite, e.pos) && all(isfinite, e.vel) &&
+                      isfinite(e.comp[:pitch_theta]) && isfinite(e.comp[:pitch_q]) &&
+                      isfinite(tel["m1.a_lift"]) && isfinite(tel["m1.turn_radius_m"])
+        end
+        @test finite                                                 # convention 5/6 — no consumer clamp needed
+    end
 end

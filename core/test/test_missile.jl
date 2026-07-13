@@ -1715,3 +1715,133 @@ end
         end
     end
 end
+
+# --- gate 2: the α→lift→γ COUPLING wired into BallisticMissile.integrate! (slice 17, §11 Tier A) --
+# The FIRST rotation→translation coupling: with `:airframe === :pitch_coupled` the angle of attack
+# α = θ−γ generates a body lift ⟂ v that TURNS the flight path (the whole [pos,vel,θ,q] state
+# advances jointly in one rk4_coupled step). The lesson & the false-fidelity guard: a fixed trim
+# δ ≠ 0 bends the path into a climbing turn ≠ the ballistic `:point_mass` twin (the INVERSE of
+# slice-16's posdiff=0). Pinned against the LIVE tick + the gate-0 fine-precision golden. NO RNG
+# (class 4c). The `:point_mass` default keeps every slice-8..16 wire byte-identical.
+@testset "airframe α→lift coupling wired (slice 17, :pitch_coupled)" begin
+    dt = 1.0e-3
+    n3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # The gate-0 showcase airframe: δ=0.15 (MANDATORY nonzero — the non-dead toggle), Cla=20,
+    # Cmα=-0.3 (stable), Cmq=-150 (damped); climbing 500 m/s @ 40°, gravity ON, drag OFF.
+    function cpl_world(; airframe = :pitch_coupled, cla = 20.0, delta = 0.15, cma = -0.3,
+                         cmq = -150.0, alpha0 = 0.05)
+        w = World(seed = 0, fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :airframe => airframe))
+        v0 = 500.0; el = deg2rad(40.0)
+        comp = Dict{Symbol,Any}(:mass_kg => 100.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 50.0,
+                                :af_cma => cma, :af_cmd => 0.1, :af_cmq => cmq,
+                                :af_alpha0 => alpha0, :af_delta => delta, :af_cla => cla)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 0.0),
+                                 vel = Vec3(v0 * cos(el), 0.0, v0 * sin(el)), comp = comp)
+        return w, Subsystem[BallisticMissile(:m1)]
+    end
+
+    @testset "transient GOLDEN — the wired coupled path pins the STAGE-θ closure (advisor)" begin
+        # The ONE assertion that exercises the stage-θ wiring: neither the steady-turn R (α≈const)
+        # nor the decoupled limit (Cla=0) catches a closure reading the ENTRY θ instead of the RK4
+        # stage TH (an ~0.019 m / 8 s error — measured). Pinned to the gate-0 fine-precision golden
+        # (grav on, drag off, δ=0.15, Cla=20, α0=0.05, 8 s @ dt=1e-3), generated with the SAME core
+        # primitives (total_accel + lift_accel + rk4_coupled), stage-θ correct.
+        w, s = cpl_world()
+        for _ in 1:8000; tick!(w, s, dt); empty!(w.events); end
+        e = w.entities[:m1]
+        @test isapprox(e.pos[1], 2187.823608281557; atol = 1e-6)
+        @test isapprox(e.pos[3], 3010.178483035902; atol = 1e-6)
+        @test isapprox(e.comp[:pitch_theta], 1.251491571778638; atol = 1e-9)
+        @test isapprox(e.comp[:pitch_q], 0.06393471230113383; atol = 1e-9)
+    end
+
+    @testset "NON-DEAD toggle — :pitch_coupled CURVES ≠ :point_mass ballistic twin (δ≠0)" begin
+        # δ=0.15 ⇒ the coupled path bends into a climbing turn while the :point_mass twin flies the
+        # ballistic arc — a MEANINGFUL separation (~1155 m, gate-0). A default δ=0 makes both
+        # ballistic → the false-fidelity trap the plan guards against.
+        wc, sc = cpl_world(airframe = :pitch_coupled)
+        wp, sp = cpl_world(airframe = :point_mass)
+        for _ in 1:8000
+            tick!(wc, sc, dt); empty!(wc.events)
+            tick!(wp, sp, dt); empty!(wp.events)
+        end
+        @test n3(wc.entities[:m1].pos - wp.entities[:m1].pos) > 500.0   # the toggle is REAL
+        # the :point_mass twin IS the ballistic arc: p = p0 + v0 t + ½ g t² (pos/vel untouched by α).
+        v0 = 500.0; el = deg2rad(40.0); t = 8.0
+        @test isapprox(wp.entities[:m1].pos[1], v0 * cos(el) * t; atol = 1e-6)
+        @test isapprox(wp.entities[:m1].pos[3], v0 * sin(el) * t - 0.5 * G_ACCEL * t^2; atol = 1e-6)
+    end
+
+    @testset "lift readout — a_lift = Q·S·Cla·α/m, turn radius R = V²/a_lift (coupled-only wire)" begin
+        # Pin the telemetry against the live path (convention 10): a_lift recomputed from the SHIPPED
+        # α & speed. A :point_mass wire must NOT carry the lift keys (byte-identity — the fin-key gate).
+        wc, sc = cpl_world()
+        for _ in 1:1200; tick!(wc, sc, dt); empty!(wc.events); end
+        tel = wc.env[:telemetry]
+        α = tel["m1.alpha"]; V = tel["m1.speed"]
+        Q = 0.5 * 1.225 * V^2
+        @test isapprox(tel["m1.a_lift"], Q * (π * 0.1^2) * 20.0 * abs(α) / 100.0; rtol = 1e-9)
+        @test isapprox(tel["m1.turn_radius_m"], V^2 / tel["m1.a_lift"]; rtol = 1e-9)
+        @test tel["m1.a_lift"] > 0.0 && isfinite(tel["m1.turn_radius_m"])
+        # the :point_mass twin ships the slice-16 rotational keys but NO lift keys (gated on coupled).
+        wp, sp = cpl_world(airframe = :point_mass)
+        tick!(wp, sp, dt); empty!(wp.events)
+        @test haskey(wp.env[:telemetry], "m1.alpha")                  # slice-16 rotational readout present
+        @test !haskey(wp.env[:telemetry], "m1.a_lift")               # …but NO lift keys (coupled-only)
+        @test !haskey(wp.env[:telemetry], "m1.turn_radius_m")
+    end
+
+    @testset "att comes ALIVE on the coupled path — θ round-trips out of att" begin
+        wc, sc = cpl_world()
+        ok = true
+        for _ in 1:600
+            tick!(wc, sc, dt); empty!(wc.events)
+            e = wc.entities[:m1]
+            nose = rotate(e.att, Vec3(1.0, 0.0, 0.0))
+            ok &= isapprox(atan(nose[3], nose[1]), e.comp[:pitch_theta]; atol = 1e-9)
+        end
+        @test ok
+    end
+
+    @testset "loader: airframe.cla parses to :af_cla + rejects non-finite" begin
+        base = """
+        name: cpl
+        seed: 0
+        dt_physics: 0.001
+        fidelity: {airframe: pitch_coupled}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 0.0]
+            missile:
+              mass_kg: 100.0
+              speed: 500.0
+              elevation_deg: 40.0
+              cd_area_m2: 0.0
+              airframe:
+                inertia_kgm2: 50.0
+                cma: -0.3
+                cmd: 0.1
+                cmq: -150.0
+                delta: 0.15
+                cla: 20.0
+        """
+        mktempdir() do dir
+            good = joinpath(dir, "good.yaml"); write(good, base)
+            scn = load_scenario(good)
+            c = scn.world.entities[:m1].comp
+            @test c[:af_cla] == 20.0 && c[:af_delta] == 0.15
+            @test scn.world.fidelity[:airframe] == :pitch_coupled     # the NEW fidelity KEY validates
+            # a negative/crossing Cla is a lesson-adjacent knob (finite, NOT rejected — mirrors cma).
+            neg = replace(base, "cla: 20.0" => "cla: -5.0")
+            pn = joinpath(dir, "neg.yaml"); write(pn, neg)
+            @test load_scenario(pn).world.entities[:m1].comp[:af_cla] == -5.0
+            # rejects: a non-finite Cla (NaN lift → NaN pos → non-finite JSON, convention 6).
+            badcla = replace(base, "cla: 20.0" => "cla: .nan")
+            pb = joinpath(dir, "badcla.yaml"); write(pb, badcla)
+            @test_throws ErrorException load_scenario(pb)
+        end
+    end
+end
