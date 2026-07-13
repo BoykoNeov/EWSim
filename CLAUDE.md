@@ -50,9 +50,10 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–16 COMPLETE & green — 2409 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–16
+**Slices 1–17 COMPLETE & green — 2488 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–17
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
-slice 16 the FIRST HALF of the 6-DOF airframe itself (pitch-plane rotational dynamics).** Full gate-by-gate
+slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
+path-changing `:airframe` toggle).** Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -187,11 +188,40 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   branch is checked FIRST in `_setup_spatial_fid_btn` — value-guard it when slice 17 adds an `:airframe` fidelity
   alongside `af_cma` (else it hides the button slice 17 wants). (2409)
 
+- **Slice 17 (§11 Tier-A, the 6-DOF airframe's SECOND HALF) — the α→lift→γ COUPLING COMPLETE**: the FIRST
+  rotation→translation coupling in the project. Slice 16 made `att` a dynamical output but ISOLATED it (posdiff=0);
+  slice 17 CLOSES the loop — **α = θ−γ generates a body lift ⟂ v that TURNS the flight path** (α→lift→γ̇), and the
+  REAL path-changing `:airframe = point_mass | pitch_coupled` toggle finally lands (slice 16 refused it — the
+  convention-4c false-fidelity trap). OPEN-LOOP (δ a FIXED authored trim — the inner α/g autopilot is slice 18).
+  New `airframe.jl`: `lift_accel` (`(Q·S·Cla·α/m)·(−sinγ,0,cosγ)`; +Cla ⇒ γ̇>0 for α>0 = the #1 SIGN TRAP, pinned
+  by `dot⟂v` AND γ̇-sign), `rk4_coupled` (a FRESH 8-scalar joint `[pos,vel,θ,q]` RK4 — re-evals V,γ mid-stage = the
+  coupling, NOT operator-split), `AIRFRAME_MODES`; `AirframeParams` gains `Cla`. The LESSON & anchor: the
+  STEADY-TURN RADIUS `R = 2m/(ρSC_Lα·α) ≈ 5197 m` (SPEED-INDEPENDENT). `missile.jl` `_integrate_coupled!` gates on
+  `haskey(:af_cma) && :airframe===:pitch_coupled` (point-mass block wrapped VERBATIM in the else — byte-identity).
+  **THE STAGE-θ FIX (advisor, load-bearing):** the deriv closure reads the RK4 STAGE θ (`TH`), NEVER the entry θ —
+  the entry-θ bug is only ~0.019 m/8 s, invisible to the R & decoupled tests, so ONLY a transient GOLDEN catches
+  it. Lift telemetry (a_lift/turn_radius_m) gated on `:pitch_coupled` NOT af_cma (else a slice-16 wire breaks).
+  `LIVE_FIDELITY_MODES` gains `airframe = AIRFRAME_MODES` (the ONLY plumbing edit; NO set_fidelity guard). Class
+  **4c** (physics-changing, NO RNG — "draw-count invariance VACUOUS", the 4th consecutive; live-settable). CLIENT:
+  the `:airframe` cycler comes BACK, REUSING `_fid_kind="airframe"` (the curved-trail + nose/velocity/α drawing all
+  carry over) with the drop VALUE-GUARDED on `_fidelity.has("airframe")` (slice 17 shows it, slice 16 still drops).
+  Scenario `slice17_coupling.yaml` (δ=0.15 MANDATORY nonzero — the non-dead toggle; Cla=20; grav on, drag off): the
+  live wire gives coupled (2187.8,3010.2) vs ballistic (3064.2,2257.3) → posdiff 1155 m; δ→0 straightens to 91 m.
+  Four proofs green (verifier S17V OK: coupled CURVES vs point_mass ballistic posdiff 876 m [the INVERSE of
+  slice-16's 0.0], lift keys coupled-only, replay bit-identical, δ→0 straightens; UI: cycler shows+wraps+set_fidelity,
+  sliders set_param, slice-16 handshake STILL drops the button = value-guard both ways; smoke-load DONE; windowed
+  shot: the CURVED coupled trail + nose leading the cyan v(γ) by the labeled α gap, button "airframe: pitch_coupled").
+  Deferred (NAMED): **slice 18 = the inner α/g autopilot** (invert PN `a_cmd→α_cmd=a_cmd·m/(Q·S·C_Lα)→δ`, the
+  slice-15 δ feeding `Cmδ·δ`; the `a_cmd/Q` divide = a crash-safety Q-floor) + the flight-condition aero g-limit
+  `a_max_aero=Q·S·C_Lα·α_max/m` miss (distinct from slice-10's fixed a_max); induced drag; then bank-to-turn / 3-D
+  (quaternion+ω) → radome/body-rate parasitic loop. (2488)
+
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened
-with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–16 are into the §11 Tier-A
-horizon — slice 15 the actuator/fin half, slice 16 the 6-DOF airframe's FIRST HALF (pitch-plane rotational
-dynamics); what remains is slice 17 (the α/g autopilot + α→lift coupling) then the rest of §11 Tier-A/B/C — most
-concretely the FULL 6-DOF airframe [bank-to-turn / 3-D].)
+with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–17 are into the §11 Tier-A
+horizon — slice 15 the actuator/fin half, slice 16 the 6-DOF airframe's rotational half (pitch-plane θ,q), slice 17
+the α→lift→γ TRANSLATION-COUPLING half (the real path-changing `:airframe` toggle); what remains is slice 18 (the
+inner α/g autopilot + α-limited maneuverability) then the rest of §11 Tier-A/B/C — most concretely the FULL 6-DOF
+airframe [bank-to-turn / 3-D].)
 
 ## Conventions / hard-won disciplines
 

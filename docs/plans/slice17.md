@@ -315,8 +315,17 @@ scenario.
       round-trip, loader cla parse/reject); test_determinism (coupled A-vs-B bit-identical + pristine rng, :point_mass↔
       :pitch_coupled CHANGES it, introduce-safe both dirs, check-G 25 s unstable→finite through build_env!→_finite);
       test_server (set_fidelity :airframe write/reject/introduce + live af_cla/af_delta slider→tick survives).
-- [ ] **3. Scenario + Godot + verifiers** — `scenarios/slice17_coupling.yaml` (nonzero trim δ — MANDATORY);
-      Sandbox.gd `:airframe` cycler (button BACK, value-guarded) + curved-vs-straight visual; the four proofs
-      (verify/ui/smoke/shot); `test_scenario.jl` loader arm. **Re-probe on the emit-grid wire** (convention 10).
-      STATUS.md + CLAUDE.md + HANDOFF (Tier-A coupling half done) + [[ewsim-fin-dynamics-direction]] updated.
-      **Slice 17 COMPLETE.**
+- [x] **3. Scenario + Godot + verifiers** — DONE (2488 tests). `scenarios/slice17_coupling.yaml` (δ=0.15 MANDATORY,
+      Cla=20, `fidelity:{airframe:pitch_coupled}`, grav on/drag off, af_delta+af_cla knobs). `Sandbox.gd`: the
+      `:airframe` cycler BACK, REUSING `_fid_kind="airframe"` (curved-trail + nose/vel/α drawing carry over
+      unchanged — the advisor site-audit showed the α drawing is `_airframe_view`-gated + line-1133 readout keys on
+      `_fid_kind=="airframe"`, so reuse is lowest-risk) with the drop VALUE-GUARDED on `_fidelity.has("airframe")`
+      (`AIRFRAME_RUNGS`, `_on_airframe_pressed`, `_update_fid_btn` show/hide branch). Live-wire probe (convention 10,
+      `temp/slice17_probe/scenprobe.jl`): coupled (2187.8,3010.2) vs ballistic (3064.2,2257.3) → posdiff 1155 m end /
+      876 m frame-max; δ→0 straightens to 91 m (12.7×). FOUR PROOFS GREEN: `slice17_verify.gd` (S17V OK — coupled
+      CURVES/replay 0.0/point_mass ballistic posdiff 876>500/δ→0 straightens 69.5), `slice17_ui_test.gd` (S17UI OK —
+      cycler shows+wraps+set_fidelity, sliders set_param, slice-16 handshake STILL drops = value-guard both ways),
+      `Sandbox.tscn` smoke-load (SERVER_DONE), windowed shot (the CURVED coupled trail + nose leading cyan v(γ) by the
+      labeled α gap, button "airframe: pitch_coupled"). `test_scenario.jl` loader arm (parses the real yaml, af_cla/
+      af_delta consumed+knobs, rejects non-finite cla). STATUS.md + CLAUDE.md + [[ewsim-fin-dynamics-direction]]
+      updated. **Slice 17 COMPLETE.**

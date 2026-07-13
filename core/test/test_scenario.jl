@@ -30,6 +30,7 @@ const _SCEN12 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice12_ap
 const _SCEN13 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice13_decoy.yaml"))
 const _SCEN14 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice14_salvo.yaml"))
 const _SCEN15 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice15_fin.yaml"))
+const _SCEN17 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice17_coupling.yaml"))
 
 # Build the static fixture used by the Bernoulli + seed-dependence checks. λ = 0.03,
 # G = 1e3, F = L = 0 (clean hand-numbers) and R = 9 km put SNR ≈ 17 (Pd ≈ 0.47) —
@@ -1047,6 +1048,52 @@ end
         @test_throws Exception load_scenario(mkfin("delta_max: 0.5", "delta_max: -0.1"))
         @test_throws Exception load_scenario(mkfin("delta_rate_max: 0.4", "delta_rate_max: 0.0"))
         @test_throws Exception load_scenario(mkfin("tau_fin: 0.02", "tau_fin: -1.0"))
+    end
+
+    @testset "loader parses slice17_coupling.yaml (α→lift coupling, spatial view)" begin
+        # The slice-17 showcase: the α→lift→γ COUPLING — the REAL path-changing `:airframe` toggle. Keeps
+        # the SPATIAL view; the client routes the shared button to the point_mass↔pitch_coupled cycler
+        # (the airframe branch, value-guarded — an :airframe fidelity present ⇒ button BACK). RNG-free
+        # (open-loop, no seeker). Cheap insurance: a malformed showcase fails HERE, not downstream.
+        scn = load_scenario(_SCEN17)
+        @test scn.name == "slice17_coupling"
+        # the NEW `:airframe` fidelity KEY DEFAULTS to :pitch_coupled (the showcase opens on the curve).
+        @test scn.world.fidelity[:airframe] === :pitch_coupled
+        # single-lesson: NO other-slice fidelity, no seeker/guidance/cooperation, no view axes.
+        for k in (:propagation, :cfar, :ep, :estimator, :deinterleaver, :raim, :integrator, :autopilot,
+                  :guidance, :seeker, :discrimination, :cooperation)
+            @test !haskey(scn.world.fidelity, k)
+        end
+        @test !any(e -> e.kind in (:radar, :jammer, :clutter, :emitter, :df_sensor, :pulse_emitter, :esm,
+                                   :gps_satellite, :gps_receiver, :datalink, :decoy, :target),
+                   values(scn.world.entities))
+        # exactly one OPEN-LOOP :missile (no target — no guidance this slice); [BallisticMissile] only.
+        missiles = [id for (id, e) in scn.world.entities if e.kind === :missile]
+        @test length(missiles) == 1
+        m = scn.world.entities[missiles[1]]
+        @test any(s -> s isa BallisticMissile, scn.subs)
+        @test !any(s -> s isa Autopilot, scn.subs) && !any(s -> s isa Seeker, scn.subs)
+        # the airframe params land at the CONSUMED comp keys, incl. the NEW :af_cla and the MANDATORY
+        # nonzero trim :af_delta (δ=0 ⇒ dead toggle — the false-fidelity trap the scenario guards against).
+        @test haskey(m.comp, :af_cla) && m.comp[:af_cla] == 20.0
+        @test haskey(m.comp, :af_delta) && m.comp[:af_delta] == 0.15 && m.comp[:af_delta] != 0.0
+        @test haskey(m.comp, :af_cma) && m.comp[:af_cma] == -0.3
+        # the turn levers af_delta + af_cla ARE live sliders (the button is the fidelity, not a knob).
+        keyset = Set(k.key for k in scn.knobs)
+        @test :af_delta in keyset && :af_cla in keyset
+        @test :airframe ∉ keyset
+        @test all(k -> k.key ∉ (:speed, :elevation_deg), scn.knobs)
+        @test any(k -> k.key === :af_delta && k.target === missiles[1], scn.knobs)
+        # C_Lα is validated FINITE (not sign) at load — a NaN would poison the lift → the JSON wire (conv 6).
+        mkbad(field, badval) = begin
+            base = read(_SCEN17, String)
+            f = tempname() * ".yaml"
+            write(f, replace(base, field => badval))
+            f
+        end
+        @test_throws Exception load_scenario(mkbad("cla: 20.0", "cla: .nan"))
+        # a negative C_Lα is NOT rejected (crossing/neg is a lesson-adjacent knob — mirrors cma).
+        @test load_scenario(mkbad("cla: 20.0", "cla: -5.0")).world.entities[:m1].comp[:af_cla] == -5.0
     end
 
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin

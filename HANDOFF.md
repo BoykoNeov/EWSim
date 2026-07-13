@@ -497,13 +497,20 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   static-stability sign lesson). It is ISOLATED (rotation reads V/γ but does NOT feed
   translation this slice — pos byte-identical across the Cmα flip), gated on airframe
   PARAMS-PRESENCE (`:af_cma`) with a handshake `airframe_view` marker — deliberately NOT the
-  `fidelity.airframe = point_mass | 6dof` toggle yet, because a path-bit-identical toggle would
-  name a coupling it can't produce until the α→lift half exists (the convention-4c
-  false-fidelity trap). **The α→lift→γ coupling + the `:airframe` fidelity toggle land NEXT
-  (slice 17, the inner α/g autopilot)**; the fin state δ from slice 15 feeds slice-17's moment
-  equation. What remains DEFERRED beyond slice 17: bank-to-turn (the 3-D quaternion+ω superset)
-  and the radome/body-rate parasitic loop; the α-limited-maneuverability trigger is recorded in
-  `docs/plans/slice15.md` / `slice16.md`.
+  `fidelity.airframe` toggle yet, because a path-bit-identical toggle would name a coupling it
+  can't produce until the α→lift half exists (the convention-4c false-fidelity trap).
+  **[OPENED — slice 17]** the 6-DOF airframe's SECOND HALF landed as the **α→lift→γ COUPLING**
+  (OPEN-LOOP): the angle of attack `α = θ−γ` generates a body lift ⟂ velocity that TURNS the
+  flight path (`lift_accel` + the joint `[pos,vel,θ,q]` `rk4_coupled` step), and the REAL
+  path-changing `fidelity.airframe = point_mass | pitch_coupled` toggle FINALLY LANDS (the
+  coupling now exists for it to name — the trajectory bends under `:pitch_coupled`, is ballistic
+  under `:point_mass`; a pure Tier-A swap, no contract change). The closed-form anchor is the
+  steady-turn radius `R = 2m/(ρ·S·C_Lα·α)`. The fin δ stays a FIXED authored trim (OPEN-LOOP).
+  **What lands NEXT (slice 18): the inner α/g autopilot** — invert PN's `a_cmd → α_cmd → δ` (the
+  fin state δ from slice 15 finally feeds the `Cmδ·δ` moment term) + the flight-condition aero
+  g-limit `a_max_aero = Q·S·C_Lα·α_max/m` (α-limited maneuverability, the trigger recorded in
+  `docs/plans/slice15.md` / `slice16.md`). DEFERRED beyond slice 18: induced drag; bank-to-turn
+  (the 3-D quaternion+ω superset) and the radome/body-rate parasitic loop.
 - **Sibling domains that reuse the shared libs.** IR/EO seekers and IRST (add an IR
   environment channel to `env`, reuse `frames.jl`/`estimation.jl`); communications EW —
   jamming of frequency-hopping / spread-spectrum links — as a parallel to radar EW;

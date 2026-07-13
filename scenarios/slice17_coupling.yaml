@@ -1,0 +1,79 @@
+# slice17_coupling — the α→lift→γ COUPLING (HANDOFF §11 Tier-A, slice 17 gate 3). The FIRST
+# rotation→translation coupling in the project. Slice 16 made `att` (θ, q) a DYNAMICAL output of the
+# aero pitching moment but kept it ISOLATED — rotation read (V, γ) yet did NOT feed back into (pos,
+# vel), so the path was BYTE-IDENTICAL across any Cmα. Slice 17 closes that loop: the angle of attack
+# α = θ−γ generates a body LIFT ⟂ velocity that TURNS the flight path (α → lift → γ̇). This is the
+# coupling the whole slice-16 isolation was BANKED to enable — and where the REAL path-changing
+# `:airframe` fidelity finally lands (slice 16 refused it: a path-bit-identical toggle would name a
+# coupling it couldn't yet produce — the convention-4c false-fidelity trap).
+#
+# THE LESSON (the `:airframe` button — point_mass ↔ pitch_coupled — the REAL toggle):
+#   • :point_mass — the missile flies the BALLISTIC arc (α inert, `att` kinematic velocity-alignment).
+#   • :pitch_coupled — the fixed trim fin δ pitches the nose to a trim α ≈ −(Cmδ/Cmα)·δ; the body lift
+#     L = ½ρV²·S·C_Lα·α acts ⟂ v and BENDS the path into a steady CLIMBING TURN (the trail CURVES).
+#   Flip the button and watch the SAME missile fly straight (ballistic) vs curve (coupled) — a ~1155 m
+#   separation at 8 s (the INVERSE of slice-16's posdiff=0). Drag the δ / C_Lα sliders and the turn
+#   tightens; drive δ→0 and the path STRAIGHTENS (the coupling needs a sustained α to bend the path).
+#
+# CLOSED-FORM ANCHOR (the load-bearing pin): the STEADY-TURN RADIUS R = 2m/(ρ·S·C_Lα·α) —
+# SPEED-INDEPENDENT (lift and required centripetal both scale with V²). Here R ≈ 5197 m at trim.
+# Lift is ⟂ v, so it turns the path WITHOUT changing speed (induced drag DEFERRED — slice 18).
+#
+# NAMED APPROXIMATIONS (§1): pitch plane ONLY (roll/yaw frozen — 3-D waits for bank-to-turn); LINEAR
+# lift-curve slope C_Lα (no stall / nonlinear C_L(α) — α-limited maneuver is slice 18); constant ρ;
+# OPEN-LOOP δ (a FIXED authored trim — no autopilot closes the fin; the inner α/g autopilot is slice
+# 18); lift is drag-free / speed-preserving (⟂ v, exactly as the slice-12 ManeuveringTarget turn).
+#
+# OPEN-LOOP, NO guidance/target — a single missile arcing over, its path bending under the α-driven
+# lift. RNG-FREE (no seeker → no w.rng draw); the seed is inert (kept for format consistency). UNITS
+# (the §1 trifecta): pos/vel SI (m, m/s), Cmα/Cmδ/Cmq/C_Lα in 1/rad, I in kg·m², launch ELEVATION in
+# DEGREES → radians at the loader, α/θ/γ readouts in radians. dt = 1e-3 / emit_every = 16.
+name: slice17_coupling
+seed: 17
+dt_physics: 1.0e-3
+emit_every: 16
+
+# THE `:airframe` fidelity (the REAL slice-17 toggle) — default :pitch_coupled so the showcase OPENS on
+# the curved path (the lesson). Class 4c: physics-changing, NO RNG, live-settable, NO set_fidelity guard
+# (the :integrator/:autopilot/:apn/:cooperation precedent). The client recognizes the airframe view
+# (airframe_view marker, from the airframe params) AND, because an `:airframe` fidelity is present,
+# shows the point_mass↔pitch_coupled cycler back (value-guarded — slice 16 still drops it).
+fidelity: {airframe: pitch_coupled}
+
+entities:
+  # The single missile: launched from the ground CLIMBING at 40° at 500 m/s in the x-z plane, mass 100 kg,
+  # DRAG OFF (one lesson — the only ⟂ force that bends the path is lift, so the turn is a clean circle
+  # perturbed only by gravity). NO `guidance:` block → OPEN-LOOP [BallisticMissile], which owns the
+  # COUPLED integrate! when `:airframe===:pitch_coupled`. The `airframe:` block (slice-16 base + the NEW
+  # cla):
+  #   ref_len_m 0.2 / inertia_kgm2 50 — a representative slender missile.
+  #   cma -0.3 (STABLE) → the nose weathervanes to a trim α; cmd 0.1 (control effectiveness — NOW LIVE
+  #     since δ≠0); cmq -150 (pitch damping → the short-period settles).
+  #   delta 0.15 rad (~8.6°) — the MANDATORY nonzero fin trim: it pitches the nose to α_trim ≈ 0.05 rad
+  #     (2.9°), whose lift bends the path. With δ=0 the toggle would be DEAD (α≈0 → no lift → ballistic —
+  #     the false-fidelity trap); δ≠0 is what makes the coupling REAL.
+  #   cla 20 (NEW — the lift-curve slope ∂C_L/∂α): with δ=0.15 → R ≈ 5197 m.
+  #   alpha0 0.05 — the nose starts AT trim so the path bends from t=0 (a small transient settles under cmq).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 0.0]
+    missile:
+      mass_kg: 100.0
+      speed: 500.0
+      elevation_deg: 40.0
+      cd_area_m2: 0.0
+      rho: 1.225
+      airframe: {ref_len_m: 0.2, inertia_kgm2: 50.0, cma: -0.3, cmd: 0.1, cmq: -150.0, alpha0: 0.05, delta: 0.15, cla: 20.0}
+
+knobs:
+  # THE turn levers (both tighten/loosen the SAME steady-turn lesson R = 2m/(ρSC_Lα·α), convention 9 —
+  # one lesson, driven by the two physical quantities that set α and the lift):
+  #   • af_delta — the fin trim δ. Larger |δ| → larger trim α → tighter turn; δ→0 STRAIGHTENS the path
+  #     (the lever that proves the coupling needs a sustained α). Validated FINITE at load.
+  #   • af_cla — the lift-curve slope C_Lα. Larger → more lift per α → tighter turn; 0 → decoupled (=
+  #     ballistic). A negative/crossing C_Lα is lesson-adjacent (validated FINITE, not sign — mirrors cma).
+  # Both are CONSUMER-read each tick (a live drag can't crash — convention 5); crossing zero is safe (the
+  # lift → 0 there, no divide). The `:airframe` button (point_mass↔pitch_coupled) is the on/off of the
+  # whole coupling; these sliders modulate its strength.
+  - {target: m1, key: af_delta, min: -0.3, max: 0.3, label: "δ fin trim (rad — sets α_trim → turn)"}
+  - {target: m1, key: af_cla, min: -5.0, max: 40.0, label: "C_Lα lift-curve slope (1/rad)"}

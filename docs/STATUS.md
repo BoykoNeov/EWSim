@@ -1937,6 +1937,78 @@ res://net/slice16_verify.gd` (exit 0 = pass). The UI test needs NO server: `… 
 
 ---
 
+**Slice 17 — the α→lift→γ COUPLING: rotation feeds translation (HANDOFF §11 Tier-A, the 6-DOF airframe's
+SECOND half)** — the FIRST rotation→translation coupling in the project (2488 tests). Slice 16 made `att`
+(θ, q) a DYNAMICAL output of the aero pitching moment but kept it ISOLATED — rotation read (V, γ) yet did
+NOT feed back into (pos, vel), so the trajectory was BYTE-IDENTICAL across any Cmα (posdiff=0.0). Slice 17
+CLOSES that loop: the angle of attack **α = θ−γ generates a body lift ⟂ velocity that TURNS the flight
+path** (α→lift→γ̇) — the coupling the whole slice-16 isolation was BANKED to enable, and where the REAL
+path-changing `:airframe = point_mass | pitch_coupled` fidelity finally lands (slice 16 refused it — a
+path-bit-identical toggle would name a coupling it couldn't yet produce; the convention-4c false-fidelity
+trap). SCOPE: pitch-plane ONLY, **OPEN-LOOP** (δ is a FIXED authored trim — no autopilot closes it; that is
+slice 18), COUPLED (the joint `[pos, vel, θ, q]` state integrated in ONE RK4 step).
+
+**Gate 1 — `airframe.jl` primitive (+20 arms).** `AirframeParams` gains `Cla` (lift-curve slope ∂C_L/∂α) as
+its LAST field (byte-identity: slice-16 point_mass never reads it). `lift_accel(vel, θ, mass, p) = (Q·S·Cla·
+α/m)·(−sinγ, 0, cosγ)` — body lift ⟂ v; the `(−sinγ,0,cosγ)` is v̂ rotated +90° in x–z, so +Cla gives γ̇>0
+for α>0 (**the #1 SIGN TRAP**, pinned by BOTH `dot(a_lift,v̂)≈0` AND the γ̇ sign — a double flip survives a
+magnitude-only test). `rk4_coupled(f, pos, vel, θ, q, dt)` — a FRESH generic 8-scalar joint RK4 (NOT a
+composition of rk4_step+rk4_rot); it re-evaluates (V, γ) from the intermediate velocity WITHIN each stage =
+the coupling, NOT operator-split. `const AIRFRAME_MODES = (:point_mass, :pitch_coupled)` before radar.jl
+(one-list). Tests: steady-turn radius **R = 2m/(ρ·S·C_Lα·α) ≈ 5197 m** (isolation, Cmq=0, `atol=1e-2` — the
+load-bearing closed-form anchor, SPEED-INDEPENDENT); lift sign; `rk4_coupled` constant-input exactness; the
+**decoupled limit** `Cla=0` inertial ≡ `integrator_step ⊕ airframe_step` BIT-EXACT (`==`; the slice-16
+1e-15 exactness does NOT transfer under gravity — the joint step re-evals V,γ mid-step).
+
+**Gate 2 — wired (+32 arms).** `missile.jl`'s `_integrate_coupled!` branch, gated `haskey(:af_cma) &&
+get(w.fidelity,:airframe,:point_mass)===:pitch_coupled` — the point-mass block wrapped VERBATIM in the
+`else` (no code-share; the point-mass arithmetic stays bit-identical). Joint step; θ lazy-init from the
+PRE-step launch γ (contrast the point-mass `_integrate_airframe!` POST-step seed); force = `total_accel` +
+`lift_accel` (a_ctrl EXCLUDED — guidance→lift coupling is slice 18); impact clamp DUPLICATED; RK4-ONLY
+(ignores the `:integrator` euler rung — the coupled short-period is stiff). **THE STAGE-θ FIX (advisor,
+load-bearing):** the deriv closure reads the RK4 STAGE `TH`, NEVER the entry θ — the entry-θ bug is only
+~0.019 m/8 s (measured), invisible to the R test (α≈const) and the decoupled test (Cla=0), so ONLY a
+transient GOLDEN catches it (pos=(2187.823608281557, 3010.178483035902), θ=1.251491571778638, q=0.06393471,
+atol 1e-6/1e-9). Lift telemetry `a_lift` / `turn_radius_m`=V²/a_lift gated on `:pitch_coupled` NOT af_cma
+(else a slice-16 point_mass wire breaks). `LIVE_FIDELITY_MODES` gains `airframe = AIRFRAME_MODES` — the ONLY
+plumbing edit (`_KNOWN_FIDELITY_KEYS`/`set_fidelity`/`_validate_fidelity` all derive; NO set_fidelity guard,
+class 4c). Loader parses `airframe.cla`→`:af_cla`, validate FINITE not sign. Arms across test_missile (golden
+stage-θ pin, non-dead toggle sep>500 m + ballistic twin, lift readout, att round-trip), test_determinism
+(coupled A-vs-B bit-identical + pristine rng, :point_mass↔:pitch_coupled CHANGES it, introduce-safe both
+dirs, check-G 25 s unstable→finite through build_env!→_finite), test_server (set_fidelity write/reject/
+introduce + live af_cla/af_delta slider→tick).
+
+**Gate 3 — scenario + Godot + the four proofs.** `scenarios/slice17_coupling.yaml`: ONE open-loop missile,
+`fidelity: {airframe: pitch_coupled}`, `airframe: {…, delta: 0.15 (MANDATORY nonzero — the non-dead toggle),
+cla: 20.0, …}`, gravity ON, drag OFF; the af_delta / af_cla turn levers as knobs. Live-wire probe (convention
+10): coupled end (2187.8, 3010.2) vs ballistic (3064.2, 2257.3) → posdiff 1155 m end / 876 m frame-max;
+δ→0 straightens to 91 m. CLIENT (`Sandbox.gd`): the `:airframe` cycler comes BACK, REUSING `_fid_kind =
+"airframe"` (so the slice-16 curved-trail + nose/velocity/α drawing ALL carry over unchanged) with the drop
+VALUE-GUARDED on `_fidelity.has("airframe")` — slice 17 (fidelity present) shows the point_mass↔pitch_coupled
+cycler; slice 16 (no fidelity) still drops it. Four proofs GREEN: `slice17_verify.gd` (S17V OK — coupled
+CURVES vs point_mass ballistic posdiff 876 m > 500 [the INVERSE of slice-16's 0.0], lift keys coupled-only,
+held-seed replay posdiff 0.0, af_delta→0 straightens 69.5 m); `slice17_ui_test.gd` (S17UI OK — the cycler
+shows + wraps + set_fidelity, the sliders set_param, AND a slice-16 handshake still DROPS the button — the
+value-guard both ways); `Sandbox.tscn` smoke-load (server DONE); the windowed shot (the CURVED coupled trail
++ the nose leading the cyan v(γ) reference by the labeled α gap, button "airframe: pitch_coupled").
+
+**Slice 17 COMPLETE — the α→lift coupling is REAL; the 6-DOF airframe's translation-coupling half is DONE.**
+Class **4c** (physics-changing, NO RNG — truth-fed open-loop, no seeker → "draw-count invariance" VACUOUS;
+the 4th consecutive 4c after 14/15/16; live-settable, NO set_fidelity guard). DEFERRED (NAMED, convention 9):
+**slice 18 = the inner α/g autopilot + α-limited maneuverability** — invert PN's `a_cmd → α_cmd = a_cmd·m/
+(Q·S·C_Lα) → δ` (the slice-15 fin state δ finally does work through the `Cmδ·δ` moment term; the `a_cmd/Q`
+divide is a CRASH-SAFETY Q-floor site), then the flight-condition-dependent aero g-limit `a_max_aero = Q·S·
+C_Lα·α_max/m` miss (less g at low speed / high altitude — distinct from slice-10's fixed kinematic a_max);
+induced drag (`C_Di ∝ C_L²`); then bank-to-turn / 3-D (quaternion+ω) → radome/body-rate parasitic loop.
+Run the slice-17 showcase: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice17_coupling.yaml`,
+then launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-uses the spatial airframe view; cycle the
+`airframe` button point_mass↔pitch_coupled to watch the SAME missile fly ballistic vs curve; drag the δ/C_Lα
+sliders to tighten the turn). Re-run the gate-3 proof headless: start that server, then the console Godot
+`--headless --path clients/godot --script res://net/slice17_verify.gd` (exit 0 = pass). The UI test needs NO
+server: `… --script res://net/slice17_ui_test.gd`.
+
+---
+
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
 (`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0); `rf.jl`

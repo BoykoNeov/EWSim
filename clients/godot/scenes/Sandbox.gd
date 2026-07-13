@@ -177,6 +177,7 @@ const GUIDANCE_RUNGS := ["pursuit", "pn", "apn"]   # slice-10/12 OUTER-law cycle
 const SEEKER_RUNGS := ["raw", "filtered"]    # slice-11 seeker cycler (raw finite-diff ↔ α-β filtered)
 const DISCRIMINATION_RUNGS := ["none", "gated"]   # slice-13 countermeasures cycler (blend-all ↔ α-β predicted-LOS gate)
 const COOPERATION_RUNGS := ["solo", "salvo"]   # slice-14 salvo cycler (uncoordinated PN ↔ impact-time-control)
+const AIRFRAME_RUNGS := ["point_mass", "pitch_coupled"]   # slice-17 α→lift cycler (ballistic ↔ coupled turn)
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
 func _ready() -> void:
@@ -314,7 +315,7 @@ func _setup_spatial_fid_btn() -> void:
 	# else `propagation` (slice 1/2, the binary toggle wired in _build_ui). The disconnect is
 	# guarded so the headless UI tests — which build the button without _build_ui's connect —
 	# don't error, exactly like _enter_cfar_mode.
-	if _airframe_view:
+	if _airframe_view and not _fidelity.has("airframe"):
 		# Slice-16 pitch-plane ROTATIONAL DYNAMICS: the handshake ships airframe_view (from the missile's
 		# airframe params) but NO fidelity — the rotational integrator is gated on PARAMS-PRESENCE, and the
 		# Cmα SLIDER (a knob, auto-built by _build_knobs) is the lesson, not a fidelity button. So there is
@@ -325,7 +326,9 @@ func _setup_spatial_fid_btn() -> void:
 		# lesson is DRAWN (the nose vector off θ vs the velocity vector off γ — their gap is α, the angle of
 		# attack): Cmα<0 WEATHERVANES (α rings toward trim, ω_sp real) vs Cmα>0 TUMBLES (α diverges, ω_sp the
 		# sentinel). The trajectory is BYTE-IDENTICAL across the slider (rotation ⊥ translation — the slice-16
-		# isolation; α→lift coupling is slice 17). Class 4c, RNG-free.
+		# isolation; α→lift coupling is slice 17). Class 4c, RNG-free. VALUE-GUARDED on the `:airframe`
+		# fidelity being ABSENT (the slice-17 CLIENT NOTE): slice 17 ships an `:airframe` fidelity ALONGSIDE
+		# airframe_view, so it falls to the cycler branch below; only the fidelity-LESS slice-16 view drops.
 		_fid_kind = "airframe"
 		if _prop_btn.pressed.is_connected(_on_prop_pressed):
 			_prop_btn.pressed.disconnect(_on_prop_pressed)
@@ -333,6 +336,26 @@ func _setup_spatial_fid_btn() -> void:
 		# Seed extents to fit the ballistic arc (40°/500 m/s → apex ~5 km alt, ~24 km down); they only grow.
 		_x_max = 6000.0
 		_z_max = 3000.0
+	elif _fidelity.has("airframe"):
+		# Slice-17 α→lift→γ COUPLING: the scenario NOW carries an `:airframe` fidelity (point_mass ↔
+		# pitch_coupled) — the REAL path-changing toggle slice 16 deliberately refused (a coupling it
+		# couldn't yet produce). The shared button comes BACK as the airframe cycler. SAME `_fid_kind =
+		# "airframe"` as slice 16 (so the curved-trail + nose/velocity/α drawing at _draw_missile and the
+		# _airframe_view α-vector overlay ALL carry over unchanged — reuse, not a new kind), but the button
+		# is SHOWN + wired to the cycler here (vs hidden in the slice-16 branch above). Under :point_mass
+		# the missile flies the ballistic arc (α inert, att kinematic); under :pitch_coupled α generates a
+		# body lift ⟂ v that bends the path into a climbing turn (the trail CURVES). The δ/Cla sliders (auto
+		# knobs) tighten the turn. Class 4c — physics-changing, NO RNG, live-settable, NO set_fidelity guard.
+		_fid_kind = "airframe"
+		_prop_btn.visible = true
+		if _prop_btn.pressed.is_connected(_on_prop_pressed):
+			_prop_btn.pressed.disconnect(_on_prop_pressed)
+		if not _prop_btn.pressed.is_connected(_on_airframe_pressed):
+			_prop_btn.pressed.connect(_on_airframe_pressed)
+		_prop_btn.tooltip_text = "Cycle airframe (set_fidelity): point_mass ↔ pitch_coupled"
+		# Seed extents to fit the climbing turn (x ~0..3 km, z ~0..4 km); they only grow, so start close.
+		_x_max = 4000.0
+		_z_max = 4000.0
 	elif _fidelity.has("cooperation"):
 		# Slice-14 cooperative salvo (THE CAPSTONE): a `cooperation` fidelity keeps the SPATIAL elevation
 		# view (the salvo engagement is planar in x-z — N interceptors climb, a common target crosses in
@@ -628,9 +651,14 @@ func _update_fid_btn() -> void:
 		"cooperation":
 			_prop_btn.text = "coop: %s" % str(_fidelity.get("cooperation", "?"))
 		"airframe":
-			# Slice-16: no fidelity to cycle — the button is hidden (dropped in _setup_spatial_fid_btn),
-			# the Cmα slider is the lesson. Keep it hidden here too (defensive against a re-show).
-			_prop_btn.visible = false
+			if _fidelity.has("airframe"):
+				# Slice-17 α→lift coupling: the button IS the airframe cycler (point_mass ↔ pitch_coupled).
+				_prop_btn.visible = true
+				_prop_btn.text = "airframe: %s" % str(_fidelity.get("airframe", "?"))
+			else:
+				# Slice-16: no fidelity to cycle — the button is hidden (dropped in _setup_spatial_fid_btn),
+				# the Cmα slider is the lesson. Keep it hidden here too (defensive against a re-show).
+				_prop_btn.visible = false
 		_:
 			_update_prop_btn()
 
@@ -819,6 +847,25 @@ func _on_cooperation_pressed() -> void:
 	var next: String = COOPERATION_RUNGS[(i + 1) % COOPERATION_RUNGS.size()] if i >= 0 else "solo"
 	_fidelity["cooperation"] = next
 	_client.send({"type": "set_fidelity", "key": "cooperation", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
+func _on_airframe_pressed() -> void:
+	# Advance the AIRFRAME rung (point_mass↔pitch_coupled) and tell the core (set_fidelity). Slice-17's
+	# α→lift→γ coupling — the REAL path-changing toggle slice 16 refused. Class 4c — PHYSICS-CHANGING,
+	# NO RNG (the :integrator/:autopilot/:apn/:cooperation shape, NOT slice-13's draw-topology 4b): the
+	# coupled scenario is truth-fed OPEN-LOOP with no seeker, so a :point_mass↔:pitch_coupled flip
+	# CHANGES the trajectory going forward with NO RNG to desync — "draw-count invariance" is VACUOUS.
+	# LIVE-SETTABLE, NO introduce-reject (the CONTRAST to slice-13 :scan): the server's set_fidelity
+	# accepts airframe freely (no draw-topology). Under :pitch_coupled a fixed trim δ builds an α whose
+	# body lift ⟂ v bends the path into a climbing turn (the trail CURVES); under :point_mass the missile
+	# flies the ballistic arc (α inert). The Cla/δ sliders (auto knobs) tighten the turn. The client owns
+	# the displayed rung: badge + button locally (the server applies it silently on the next tick, no reply).
+	var cur := str(_fidelity.get("airframe", "point_mass"))
+	var i := AIRFRAME_RUNGS.find(cur)
+	var next: String = AIRFRAME_RUNGS[(i + 1) % AIRFRAME_RUNGS.size()] if i >= 0 else "point_mass"
+	_fidelity["airframe"] = next
+	_client.send({"type": "set_fidelity", "key": "airframe", "value": next})
 	_render_badge()
 	_update_fid_btn()
 
