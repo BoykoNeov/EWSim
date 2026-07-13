@@ -1551,7 +1551,7 @@ end
         w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 1000.0), vel = vel, comp = comp)
         return w, Subsystem[BallisticMissile(:m1)]
     end
-    afp(c) = AirframeParams(c[:af_S], c[:af_d], c[:af_I], c[:af_cma], c[:af_cmd], c[:af_cmq], c[:rho])
+    afp(c) = AirframeParams(c[:af_S], c[:af_d], c[:af_I], c[:af_cma], c[:af_cmd], c[:af_cmq], c[:rho], get(c, :af_cla, 0.0))
 
     @testset "ISOLATION — rotation does NOT touch (pos,vel): trajectory byte-identical to the twin" begin
         # THE load-bearing property. A stable, an UNSTABLE, and a fin-deflected airframe must ALL

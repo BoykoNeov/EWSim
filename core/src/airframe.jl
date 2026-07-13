@@ -51,6 +51,8 @@ struct AirframeParams
     Cmd::Float64    # control (fin) effectiveness ∂Cm/∂δ, 1/rad
     Cmq::Float64    # pitch damping derivative ∂Cm/∂q̄, 1/rad — <0 DAMPS (q̄ = q·d/2V)
     rho::Float64    # air density, kg/m³ — constant (named approximation, shared with dynamics.jl)
+    Cla::Float64    # lift-curve slope ∂C_L/∂α, 1/rad — slice 17: the α→lift→γ coupling. LAST field
+                    # (byte-identity: slice-16 point_mass never reads it). 0 ⇒ decoupled = slice 16.
 end
 
 # A speed floor for the q̄ = q·d/(2V) nondimensionalization: at V→0 (launch/apex) the pitch
@@ -148,3 +150,75 @@ NaN (the common case; the readout stays 0, not a spurious `_finite` ceiling spik
 degenerate, never consumed live without a stable Cmα).
 """
 trim_alpha(delta::Float64, p::AirframeParams) = delta == 0.0 ? 0.0 : -(p.Cmd / p.Cma) * delta
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SLICE 17 — the α→lift→γ COUPLING (open-loop). The rotation slice 16 BANKED now
+# feeds translation: the angle of attack α = θ−γ generates a body lift ⟂ to the
+# velocity that TURNS the flight path (α→lift→γ̇). This is the FIRST rotation→
+# translation coupling — the reason slice 16 was deliberately ISOLATED (posdiff=0)
+# and this slice is not (the `:point_mass ↔ :pitch_coupled` toggle bends the path).
+# Still OPEN-LOOP: δ is authored/fixed, no autopilot closes it (slice 18).
+# ─────────────────────────────────────────────────────────────────────────────
+
+"""
+    lift_accel(vel, theta, mass, p::AirframeParams) -> Vec3
+
+The body-lift specific force (m/s², a per-mass acceleration) in the pitch plane:
+
+    α = θ − γ,   γ = atan(v_z, v_x)                 (angle of attack, flight-path angle)
+    L = Q·S·C_Lα·α,   Q = ½·ρ·V²                    (lift force, linear in α)
+    a_lift = (L / m)·(−sin γ, 0, cos γ)             (⟂ velocity, in the x–z plane)
+
+The direction `(−sin γ, 0, cos γ)` is `v̂` rotated +90° in the x–z plane, so with
+`C_Lα > 0` a positive α (nose above the velocity) lifts the nose UP → `γ̇ > 0` (the
+#1 sign trap, pinned in test_airframe.jl by BOTH `dot(a_lift, v̂) ≈ 0` AND the γ̇
+sign — a double flip survives a magnitude-only test). Lift is ⟂ v, so it turns the
+path WITHOUT changing speed (the steady-turn radius `R = 2m/(ρ·S·C_Lα·α)` anchor).
+`mass` is the MISSILE's (passed, like V/γ — it is not an airframe constant). At
+`V ≤ _AIRFRAME_V_FLOOR` returns zero (Q→0 already kills it; the ÷0 guard mirrors
+`pitch_moment`'s q̄ floor — a live tick at launch/apex can't crash, convention 5).
+"""
+function lift_accel(vel::Vec3, theta::Float64, mass::Float64, p::AirframeParams)
+    V = _norm3(vel)
+    V ≤ _AIRFRAME_V_FLOOR && return Vec3(0.0, 0.0, 0.0)
+    γ = atan(vel[3], vel[1])
+    α = theta - γ
+    Q = 0.5 * p.rho * V^2
+    L = Q * p.S * p.Cla * α
+    return (L / mass) * Vec3(-sin(γ), 0.0, cos(γ))
+end
+
+"""
+    rk4_coupled(f, pos, vel, theta, q, dt) -> (pos′, vel′, theta′, q′)
+
+One classical 4-stage RK4 step of the JOINT 8-scalar state `[pos, vel, θ, q]`, where
+`f(pos, vel, θ, q) -> (ṗ, v̇, θ̇, q̈)` is the coupled derivative (ṗ = vel, v̇ = the
+force accel INCLUDING lift, θ̇ = q, q̈ = M/I). The coupled sibling of `rk4_rot` /
+`rk4_step` — but a FRESH stepper, not a composition of the two: `f` re-evaluates the
+flight condition (V, γ) from the INTERMEDIATE velocity at every stage, so the moment
+and the lift see each other WITHIN the step. That mid-step re-evaluation IS the α→lift
+coupling — NOT operator-splitting the rotation from the translation (advisor, gate 0).
+
+The decoupled limit is exact: with `C_Lα = 0` and zero translational accel, the vel
+stages are all `vel` (V, γ frozen) → the (θ,q) sub-step reproduces `airframe_step` and
+the (pos,vel) sub-step reproduces `integrator_step(:rk4)` BIT-FOR-BIT (test_airframe.jl
+pins this with `==`). The stage arithmetic is kept unrefactored for that byte-identity.
+"""
+function rk4_coupled(f, pos::Vec3, vel::Vec3, theta::Float64, q::Float64, dt::Float64)
+    a1p, a1v, a1θ, a1q = f(pos,               vel,               theta,               q)
+    a2p, a2v, a2θ, a2q = f(pos + dt/2*a1p, vel + dt/2*a1v, theta + dt/2*a1θ, q + dt/2*a1q)
+    a3p, a3v, a3θ, a3q = f(pos + dt/2*a2p, vel + dt/2*a2v, theta + dt/2*a2θ, q + dt/2*a2q)
+    a4p, a4v, a4θ, a4q = f(pos + dt*a3p,   vel + dt*a3v,   theta + dt*a3θ,   q + dt*a3q)
+    pos′   = pos   + dt/6*(a1p + 2*a2p + 2*a3p + a4p)
+    vel′   = vel   + dt/6*(a1v + 2*a2v + 2*a3v + a4v)
+    theta′ = theta + dt/6*(a1θ + 2*a2θ + 2*a3θ + a4θ)
+    q′     = q     + dt/6*(a1q + 2*a2q + 2*a3q + a4q)
+    return pos′, vel′, theta′, q′
+end
+
+# The `:airframe` fidelity rungs (slice 17) — `:point_mass` (slice 8–16: rotation
+# ISOLATED, `att` velocity-aligned or slice-16 free-flying but not fed back) vs
+# `:pitch_coupled` (α→lift→γ turns the path). Defined here (before radar.jl) so
+# `LIVE_FIDELITY_MODES` and the server's `set_fidelity` reference this ONE list (the
+# one-list-no-drift discipline, convention 7). Class 4c: physics-changing, NO RNG.
+const AIRFRAME_MODES = (:point_mass, :pitch_coupled)

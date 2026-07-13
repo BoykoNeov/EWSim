@@ -75,6 +75,9 @@ export INTEGRATOR_MODES, G_ACCEL
 # aero pitching moment + rotational integrator + the short-period/trim closed forms.
 # `AirframeParams` is an authored-input record (the RadarParams precedent — exported).
 export AirframeParams, pitch_moment, rk4_rot, airframe_step, short_period_freq, trim_alpha
+# Slice 17 (§11 Tier A): the α→lift→γ coupling — body lift ⟂ v + the joint 8-scalar RK4 stepper
+# + the `:airframe = point_mass | pitch_coupled` fidelity list. `AirframeParams` gains `Cla`.
+export lift_accel, rk4_coupled, AIRFRAME_MODES
 # Missile guidance (slice 9): the outer pursuit law + the inner PID autopilot (pure).
 # `AutopilotState` is an INTERNAL state record (the JamContribution/BearingRecord precedent —
 # not exported); `autopilot_init` IS exported (the test constructs the zero state bare).

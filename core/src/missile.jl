@@ -160,7 +160,7 @@ function _integrate_airframe!(e::Entity, c::Dict{Symbol,Any}, v′::Vec3, dt::Fl
     end
     p = AirframeParams(Float64(c[:af_S]), Float64(c[:af_d]), Float64(c[:af_I]),
                        Float64(c[:af_cma]), Float64(c[:af_cmd]), Float64(c[:af_cmq]),
-                       Float64(get(c, :rho, 1.225)))
+                       Float64(get(c, :rho, 1.225)), Float64(get(c, :af_cla, 0.0)))
     δ = Float64(get(c, :af_delta, 0.0))                   # open-loop fin deflection (no autopilot this slice)
     θ, q = Float64(c[:pitch_theta]), Float64(c[:pitch_q])
     θ′, q′ = airframe_step(θ, q, dt; gamma = γ, V = Vspeed, delta = δ, p = p)
@@ -208,7 +208,7 @@ function build_env!(m::BallisticMissile, w::World)
         γ  = atan(e.vel[3], e.vel[1])
         p  = AirframeParams(Float64(c[:af_S]), Float64(c[:af_d]), Float64(c[:af_I]),
                             Float64(c[:af_cma]), Float64(c[:af_cmd]), Float64(c[:af_cmq]),
-                            Float64(get(c, :rho, 1.225)))
+                            Float64(get(c, :rho, 1.225)), Float64(get(c, :af_cla, 0.0)))
         tel["$sid.pitch_theta"] = _finite_coord(θ)
         tel["$sid.gamma"]       = _finite_coord(γ)
         tel["$sid.alpha"]       = _finite_coord(θ - γ)        # angle of attack (rad)

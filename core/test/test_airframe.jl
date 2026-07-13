@@ -24,7 +24,7 @@
 
     # A statically STABLE airframe (Cmα < 0) is the workhorse; unstable/torque-free are spun
     # up per-test with their own params.
-    stable(; Cma = -0.3, Cmd = 0.0, Cmq = 0.0) = AirframeParams(S, d, I, Cma, Cmd, Cmq, ρ)
+    stable(; Cma = -0.3, Cmd = 0.0, Cmq = 0.0, Cla = 0.0) = AirframeParams(S, d, I, Cma, Cmd, Cmq, ρ, Cla)
 
     # A local RK4 driver over a fixed window (γ, V, δ frozen) → (t, θ, q) traces.
     function trace(p; theta0, q0, gamma, delta, T, dt = 1e-4)
@@ -159,9 +159,113 @@
         # These are the values scenario.jl validates > 0 at LOAD (I in the ÷I; V-floor covers V).
         # A well-formed set constructs and evaluates finitely; the guard lives in the loader, but
         # pin here that a zero I would blow the moment equation (documents WHY the loader checks).
-        good = AirframeParams(S, d, I, -0.3, 0.1, -8.0, ρ)
+        good = AirframeParams(S, d, I, -0.3, 0.1, -8.0, ρ, 0.0)
         @test isfinite(pitch_moment(0.05, 0.02, 0.1, V, good))
-        bad = AirframeParams(S, d, 0.0, -0.3, 0.1, -8.0, ρ)     # I = 0 (loader REJECTS this)
+        bad = AirframeParams(S, d, 0.0, -0.3, 0.1, -8.0, ρ, 0.0)     # I = 0 (loader REJECTS this)
         @test !isfinite(pitch_moment(0.05, 0.0, 0.0, V, bad) / bad.I)   # ÷0 → Inf (why the guard exists)
+    end
+
+    # ── SLICE 17 — the α→lift→γ coupling primitives (lift_accel + rk4_coupled) ──
+    # The rotation slice 16 BANKED (θ, q) now feeds translation: α = θ−γ makes a body lift ⟂ v
+    # that turns the flight path. The teeth: the #1 SIGN trap (α>0 ⇒ γ̇>0, pinned BY the ⟂-dot AND
+    # the sign, not magnitude), the decoupled limit (Cla=0 ⇒ joint step ≡ slice-8 + slice-16
+    # steppers BIT-EXACT — the additive-slice guarantee at the primitive level), and the
+    # steady-turn radius R = 2m/(ρSC_Lα·α) closed form (the load-bearing anchor).
+    mag(u) = sqrt(u[1]^2 + u[2]^2 + u[3]^2)
+
+    @testset "slice-17: lift_accel — sign (#1 trap), ⟂ v, magnitude, zero-safe" begin
+        mass = 100.0
+        p = stable(Cma = -0.3, Cla = 20.0)
+        # Level flight (γ=0), α = +0.05 (nose above v): lift points +z (UP) → γ̇ > 0 (the sign).
+        vel = Vec3(V, 0.0, 0.0)
+        aL = lift_accel(vel, 0.05, mass, p)                 # γ = 0 ⇒ α = θ = 0.05
+        @test aL[3] > 0.0                                   # UP — a nose-up α lifts the path up
+        @test aL[1] ≈ 0.0 atol = 1e-12                      # level: no along-track component
+        # ⟂ v to machine eps — level AND climbing (a DOUBLE sign flip survives a magnitude test).
+        @test abs(aL[1]*vel[1] + aL[2]*vel[2] + aL[3]*vel[3]) / V < 1e-9
+        γc = 0.5; velc = Vec3(V*cos(γc), 0.0, V*sin(γc))
+        aLc = lift_accel(velc, γc + 0.05, mass, p)          # climbing, same α = +0.05
+        @test abs(aLc[1]*velc[1] + aLc[2]*velc[2] + aLc[3]*velc[3]) / V < 1e-9
+        # Magnitude = Q·S·C_Lα·α / m (an INDEPENDENT recompute, convention 11).
+        @test mag(aL) ≈ (0.5*ρ*V^2) * S * 20.0 * 0.05 / mass atol = 1e-9
+        # α < 0 flips lift DOWN; α = 0 → exactly zero lift.
+        @test lift_accel(vel, -0.05, mass, p)[3] < 0.0
+        @test lift_accel(vel, 0.0, mass, p) == Vec3(0.0, 0.0, 0.0)
+        # V ≤ floor → zero (Q→0 + the ÷V guard; a launch/apex tick can't crash — convention 5).
+        @test lift_accel(Vec3(0.0, 0.0, 0.0), 0.05, mass, p) == Vec3(0.0, 0.0, 0.0)
+    end
+
+    @testset "slice-17: rk4_coupled generic — constant (force, q̈) integrates EXACTLY" begin
+        # The joint analog of the rk4_rot constant-q̈ pin: RK4 is exact for degree-2 states.
+        # θ(t)=θ0+q0 t+½ q̈ t², q=q0+q̈ t, pos=p0+v0 t+½ a0 t², vel=v0+a0 t.
+        a0 = Vec3(0.3, -0.1, 0.7); qdd = 0.4
+        f = (P, Vv, TH, Q) -> (Vv, a0, Q, qdd)             # ṗ=v, v̇=a0, θ̇=q, q̈=const
+        pos = Vec3(1.0, 2.0, 3.0); vel = Vec3(10.0, 0.0, -5.0); θ = 0.1; q = -0.05
+        dt = 1e-3
+        for _ in 1:1000
+            pos, vel, θ, q = rk4_coupled(f, pos, vel, θ, q, dt)
+        end
+        t = 1.0
+        @test pos ≈ Vec3(1.0, 2.0, 3.0) + Vec3(10.0, 0.0, -5.0)*t + 0.5*a0*t^2 atol = 1e-9
+        @test vel ≈ Vec3(10.0, 0.0, -5.0) + a0*t atol = 1e-11
+        @test θ ≈ 0.1 + (-0.05)*t + 0.5*qdd*t^2 atol = 1e-9
+        @test q ≈ -0.05 + qdd*t atol = 1e-12
+    end
+
+    @testset "slice-17: decoupled limit (Cla=0) ≡ integrator_step ⊕ airframe_step, BIT-EXACT" begin
+        # With Cla=0 AND no translational force, the joint step must reproduce the slice-8
+        # translation stepper AND the slice-16 rotation stepper bit-for-bit — the additive-slice
+        # guarantee at the primitive level. `==`, not atol (advisor): if it ever drifts to 1-ULP
+        # the culprit is expression structure, not physics. ISOLATE to inertial (grav/drag off) —
+        # under gravity the joint re-evaluates V,γ mid-step (the coupling) ⇒ only ≈, not =.
+        p = stable(Cma = -0.3, Cmd = 0.1, Cmq = -150.0, Cla = 0.0)
+        mass = 100.0; δ = 0.15; dt = 1e-3
+        pos0 = Vec3(0.0, 0.0, 0.0); vel0 = Vec3(V*cos(0.4), 0.0, V*sin(0.4))
+        θ0 = 0.4 + 0.1; q0 = 0.0
+        f = (P, Vv, TH, Q) -> begin
+            γ = atan(Vv[3], Vv[1]); Vs = mag(Vv)
+            (Vv, lift_accel(Vv, TH, mass, p), Q, pitch_moment(TH - γ, δ, Q, Vs, p) / p.I)
+        end
+        pj, vj, θj, qj = rk4_coupled(f, pos0, vel0, θ0, q0, dt)
+        # reference: integrator_step (pos/vel, zero accel — Cla=0 ⇒ no lift), airframe_step (θ,q).
+        pr, vr = integrator_step(:rk4, _ -> Vec3(0.0, 0.0, 0.0), pos0, vel0, dt)
+        γ0 = atan(vel0[3], vel0[1]); V0 = mag(vel0)
+        θr, qr = airframe_step(θ0, q0, dt; gamma = γ0, V = V0, delta = δ, p = p)
+        @test pj == pr                                      # translation bit-exact (zero force)
+        @test vj == vr
+        @test θj == θr                                      # rotation bit-exact (V,γ frozen ⇒ ≡ airframe_step)
+        @test qj == qr
+    end
+
+    @testset "slice-17: steady-turn radius R = 2m/(ρ·S·C_Lα·α), ⟂-lift preserves speed" begin
+        # Isolation: gravity/drag OFF, Cmq=0 (clean trim). Init AT equilibrium (θ=γ+α_trim,
+        # q=steady γ̇). Lift ⟂ v bends the path into a CIRCLE of radius R, SPEED-independent (|v|
+        # const). The load-bearing anchor — R is a finite-diff γ̇ ⇒ tight atol, not == (advisor).
+        mass = 100.0; δ = 0.15
+        p = stable(Cma = -0.3, Cmd = 0.1, Cmq = 0.0, Cla = 20.0)
+        α_trim = trim_alpha(δ, p)                           # -(Cmd/Cma)·δ, exact at Cmq=0
+        R_formula = 2*mass / (ρ * S * 20.0 * α_trim)        # ≈ 5196.9 m
+        γ0 = 0.4
+        gdot0 = ((0.5*ρ*V^2) * S * 20.0 * α_trim / mass) / V   # steady γ̇ = a_lift/V
+        θ0 = γ0 + α_trim
+        vel0 = Vec3(V*cos(γ0), 0.0, V*sin(γ0))
+        f = (P, Vv, TH, Q) -> begin
+            γ = atan(Vv[3], Vv[1]); Vs = mag(Vv)
+            (Vv, lift_accel(Vv, TH, mass, p), Q, pitch_moment(TH - γ, δ, Q, Vs, p) / p.I)
+        end
+        pos, vel, θ, q = Vec3(0.0, 0.0, 0.0), vel0, θ0, gdot0
+        dt = 1e-3; T = 10.0; n = round(Int, T/dt)
+        αmin = Inf; αmax = -Inf
+        for _ in 1:n
+            pos, vel, θ, q = rk4_coupled(f, pos, vel, θ, q, dt)
+            α = θ - atan(vel[3], vel[1])
+            αmin = min(αmin, α); αmax = max(αmax, α)
+        end
+        @test αmin ≈ α_trim atol = 1e-4                     # α held at trim ⇒ a STEADY turn
+        @test αmax ≈ α_trim atol = 1e-4
+        @test mag(vel) ≈ V atol = 1e-6                      # lift ⟂ v ⇒ speed preserved
+        γend = atan(vel[3], vel[1])
+        R_meas = V / ((γend - γ0) / T)                      # V / γ̇_measured
+        @test R_meas ≈ R_formula atol = 1e-2                # ≈5197 m; finite-diff ⇒ tight-not-exact
     end
 end
