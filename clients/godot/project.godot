@@ -21,3 +21,7 @@ GDAIMCPRuntime="*uid://dcne7ryelpxmn"
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/gdai-mcp-plugin-godot/plugin.cfg")
+
+[rendering]
+
+environment/defaults/default_clear_color=Color(0.043, 0.055, 0.09, 1)

@@ -2009,6 +2009,34 @@ server: `… --script res://net/slice17_ui_test.gd`.
 
 ---
 
+**Client visual-polish pass (2026-07-14, post-slice-17)** — a cross-cutting DISPLAY-ONLY upgrade of
+`Sandbox.gd` + `project.godot` (dark-navy `default_clear_color`); ZERO physics, ZERO core/scenario/wire
+changes (git touches exactly those two files). Shared chrome: a one-palette set of display consts
+(`COL_*`), the left UI panel in a styled `PanelContainer`, the scalar readout split across up to THREE
+adaptive columns of ~18 rows (`_readout2`/`_readout3`, null-guarded — the salvo view ships ~46 keys and
+one 18-px column ran off the window over the §12 badge; the headless UI-test harnesses build `_readout`
+only and still pass), readout font 18→14. SPATIAL view: `_draw_spatial_backdrop()` (sky gradient +
+ground fill + a labeled km grid off `_nice_step` — the first axis scale this view has had; mapped through
+the same `_world_to_screen` as the markers so the auto-expanding extents stay honest), `_draw_trail()`
+(age-faded polyline, oldest→transparent) for the missile + per-salvo trails, `_draw_missile_body()` (a
+shared silhouette marker — hull + nose cone + tail fins — replacing the bare triangles everywhere,
+including the salvo view). PLOT views (cfar/geoloc/esm/gps): filled `COL_PANEL_BG` panels behind every
+plot rect + the GPS sky disc. AIRFRAME view (slice 16/17) DEEPENED: the α WEDGE (a translucent fan swept
+v(γ)→nose(θ) — the angle of attack drawn AS an angle), arrowheads on the v/lift vectors, the slice-17
+LIFT arrow (length off the core's `a_lift`, on the nose side of v = sign(α)), the STEADY-TURN ARC (the
+core's `turn_radius_m` drawn as a dashed osculating circle through the missile — the R=2m/(ρSC_Lα·α)
+anchor made visible; skipped when R→∞/CEIL), and an α-HISTORY STRIP CHART (bottom-right panel; samples
+the core's `<id>.alpha` per state frame into `_alpha_hist`, display-clamped ±π so a tumble's
+FINITE_CEIL can't wreck the autoscale; dashed cyan `alpha_trim` reference — the slice-16 weathervane
+RINGING about trim vs the pegged tumble trace, as a time series; cleared on reset). Proofs: all 16
+`*_ui_test.gd` GREEN post-change (TOTAL_FAILS=0); four windowed shots eyeballed via the throwaway
+shot-harness recipe (slice 17: curved trail + wedge + lift arrow + turn arc + strip chart; slice 16:
+textbook damped α ringing onto trim, button correctly dropped; slice 2: grid + below-horizon target;
+slice 14: three-column readout fits, per-missile silhouettes + faded trails). Julia core untouched —
+the 2488-test suite is out of scope of this change by construction.
+
+---
+
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
 (`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0); `rf.jl`

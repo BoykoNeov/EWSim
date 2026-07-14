@@ -43,6 +43,20 @@ const PORT := 8765
 const MARGIN := 64.0
 const BLIP_TTL := 1.6            # s a detection blip lingers before fading out
 const TARGET_R := 7.0            # px radius of the target marker
+
+# --- visual palette (draw/UI layer ONLY — display constants, no physics) -------
+# One set of colors shared by every view so the whole client reads as one instrument:
+# a deep-navy sky/backdrop, slightly lighter filled plot panels, low-alpha grids with
+# brighter tick labels. Semantic colors (detected green, threshold orange, decoy ✦,
+# per-missile hues) are unchanged — this palette is chrome, not meaning.
+const COL_BG_TOP := Color(0.035, 0.05, 0.085)        # sky gradient, zenith
+const COL_BG_BOT := Color(0.075, 0.10, 0.14)         # sky gradient, horizon
+const COL_GROUND := Color(0.085, 0.115, 0.085)       # below-the-ground fill strip
+const COL_GROUND_LINE := Color(0.32, 0.44, 0.32)     # the altitude-0 line
+const COL_PANEL_BG := Color(0.065, 0.09, 0.125, 0.92)  # filled plot-panel background
+const COL_PANEL_BORDER := Color(0.30, 0.38, 0.48, 0.85)
+const COL_GRID := Color(1, 1, 1, 0.05)               # in-panel grid lines
+const COL_TICK := Color(1, 1, 1, 0.40)               # axis tick labels
 # preload, NOT `class_name SimClient`: the global class cache isn't built on a
 # headless/fresh load, so a bare type reference fails to resolve there. preload
 # binds the script directly and works in the editor and headless alike.
@@ -62,6 +76,9 @@ var _z_max := 5000.0             # altitude span shown, m (auto-expands)
 # --- UI (built in code so the .tscn stays a trivial root node) ---
 var _status: Label
 var _readout: Label
+var _readout2: Label = null       # extra readout columns — the multi-entity views (salvo) ship ~46
+var _readout3: Label = null       # scalar keys and one column runs off the window. Null in the headless
+                                  # UI-test harnesses (they build _readout only), so always null-guarded.
 var _badge: Label
 var _knob_box: VBoxContainer
 var _play_btn: Button
@@ -165,6 +182,13 @@ var _missile_trail: Array = []    # WORLD [x,y,z] breadcrumbs (mapped through _w
 # S-curve while the far reference flies ~straight (both converge together); under :solo both fly
 # straight-in and one arrives well before the other (the spread).
 var _salvo_trails := {}
+# Airframe view (slice 16/17): a DISPLAY-ONLY α history for the strip chart drawn in the corner of the
+# elevation view — the weathervane RINGING (α oscillating about trim at ω_sp, damped by Cmq) vs the
+# tumble DIVERGENCE is a time-series lesson, so give it a time axis. Samples are the core's `<id>.alpha`
+# telemetry, clamped to ±π for DISPLAY only (a tumbling α runs to the FINITE_CEIL sentinel, which would
+# destroy the chart's autoscale; a pegged trace reads "tumble" just fine). Never fed back anywhere.
+var _alpha_hist: Array = []
+const ALPHA_HIST_MAX := 480       # ~8 s of state frames at the emit cadence
 const INTEGRATOR_RUNGS := ["rk4", "euler"]   # slice-8 integrator cycler (the shared fidelity button)
 const AUTOPILOT_RUNGS := ["ideal", "pid"]    # slice-9 autopilot cycler (the ONE source of truth for the rungs)
 # The autopilot ring is PER-SCENARIO: slice-9 stays the 2-ring :ideal↔:pid (its UI test asserts the
@@ -196,10 +220,23 @@ func _build_ui() -> void:
 	var ui := CanvasLayer.new()
 	add_child(ui)
 
+	# The left control panel rides in a PanelContainer with a translucent dark StyleBox so the
+	# sliders/readout stay legible over whatever the view draws underneath (pure chrome — the
+	# headless UI tests build the inner widgets directly and never touch this wrapper).
+	var panel_box := PanelContainer.new()
+	panel_box.position = Vector2(8, 8)
+	var sbx := StyleBoxFlat.new()
+	sbx.bg_color = Color(0.05, 0.07, 0.10, 0.86)
+	sbx.border_color = COL_PANEL_BORDER
+	sbx.set_border_width_all(1)
+	sbx.set_corner_radius_all(6)
+	sbx.set_content_margin_all(10.0)
+	panel_box.add_theme_stylebox_override("panel", sbx)
+	ui.add_child(panel_box)
+
 	var panel := VBoxContainer.new()
-	panel.position = Vector2(12, 12)
 	panel.add_theme_constant_override("separation", 6)
-	ui.add_child(panel)
+	panel_box.add_child(panel)
 
 	_status = Label.new()
 	panel.add_child(_status)
@@ -228,14 +265,27 @@ func _build_ui() -> void:
 
 	# Live SNR/Pd readout — kept prominent because at the 42 km cold start Pd is
 	# near zero and no blip fires for a while; this is what shows the view is alive.
+	# Font 14 (down from 18): the missile-arc views ship ~20 scalar keys and the taller
+	# panel was running off the bottom of the window (and over the §12 badge). Up to three
+	# columns side-by-side: _update_readout splits long key lists so the salvo view (~46 keys) fits.
+	var readout_row := HBoxContainer.new()
+	readout_row.add_theme_constant_override("separation", 18)
+	panel.add_child(readout_row)
 	_readout = Label.new()
-	_readout.add_theme_font_size_override("font_size", 18)
-	panel.add_child(_readout)
+	_readout.add_theme_font_size_override("font_size", 14)
+	readout_row.add_child(_readout)
+	_readout2 = Label.new()
+	_readout2.add_theme_font_size_override("font_size", 14)
+	readout_row.add_child(_readout2)
+	_readout3 = Label.new()
+	_readout3.add_theme_font_size_override("font_size", 14)
+	readout_row.add_child(_readout3)
 
 	# §12: a visible "<fidelity> approximation" badge in every view. Text is filled
 	# from the handshake's actual fidelity map, never hardcoded.
 	_badge = Label.new()
 	_badge.modulate = Color(1, 1, 1, 0.7)
+	_badge.add_theme_font_size_override("font_size", 12)
 	ui.add_child(_badge)
 	_layout_badge()
 
@@ -954,6 +1004,14 @@ func _spatial_on_state(obj: Dictionary) -> void:
 		_x_max = max(_x_max, absf(float(pos[0])) * 1.08)
 		_z_max = max(_z_max, float(pos[2]) * 1.15)
 
+	# Airframe view (slice 16/17): sample the core's α into the display-only strip-chart history.
+	# Clamped to ±π for DISPLAY (a tumbling α reaches the FINITE_CEIL sentinel — a pegged trace
+	# reads "tumble" without wrecking the autoscale). Never consumed by anything but _draw.
+	if _airframe_view and _missile_id != "" and _telemetry.has(_missile_id + ".alpha"):
+		_alpha_hist.append(clampf(float(_telemetry[_missile_id + ".alpha"]), -PI, PI))
+		if _alpha_hist.size() > ALPHA_HIST_MAX:
+			_alpha_hist.pop_front()
+
 	# Drop a blip at the detected target's current screen position. The event
 	# carries `of` (the target id) but no position; the entity's pos this frame is
 	# within emit_every·dt (~16 ms) of when it fired — close enough for a blip.
@@ -978,6 +1036,9 @@ func _cfar_on_state() -> void:
 func _update_readout() -> void:
 	if _telemetry.is_empty():
 		_readout.text = ""
+		for extra in [_readout2, _readout3]:
+			if extra != null:
+				extra.text = ""
 		return
 	var keys := _telemetry.keys()
 	keys.sort()
@@ -995,7 +1056,20 @@ func _update_readout() -> void:
 			# "0.00" and dialing the integrator looks like a dead button (advisor). Same widget the
 			# Pfa slider already uses; all other views' scalars render unchanged.
 			lines.append("%s: %s" % [k, _fmt(float(v))])
-	_readout.text = "\n".join(lines)
+	# Split a long key list across up to three columns of ~18 rows (the multi-entity salvo view
+	# ships ~46 scalars); short lists stay single-column. The extra columns are null in the
+	# headless UI-test harnesses (they build _readout only), so the split degrades gracefully.
+	var cols: Array = [_readout]
+	for extra in [_readout2, _readout3]:
+		if extra != null:
+			cols.append(extra)
+	var ncols := clampi(int(ceil(lines.size() / 18.0)), 1, cols.size())
+	var rows := int(ceil(float(lines.size()) / float(ncols)))
+	for ci in cols.size():
+		if ci < ncols:
+			cols[ci].text = "\n".join(lines.slice(ci * rows, mini((ci + 1) * rows, lines.size())))
+		else:
+			cols[ci].text = ""
 
 # --- knobs (sliders built from the handshake; drag → set_param) ---------------
 
@@ -1073,6 +1147,7 @@ func _on_reset_pressed() -> void:
 	_blips.clear()
 	_missile_trail.clear()                # start the ballistic trail fresh on the re-launch
 	_salvo_trails.clear()                 # slice-14: clear the per-missile salvo trails on re-launch
+	_alpha_hist.clear()                   # airframe strip chart restarts with the re-launch
 	# `reset` reloads the YAML server-side → propagation reverts to the scenario default,
 	# but the server sends no new handshake. Resync the local fidelity so the badge/button
 	# don't lie about a toggle the reset just undid.
@@ -1116,11 +1191,86 @@ func _draw() -> void:
 	else:
 		_draw_spatial()
 
-func _draw_spatial() -> void:
+func _nice_step(span: float) -> float:
+	# A 1/2/5×10^k grid step so any auto-expanded extent shows ~4–8 labeled ticks (display only).
+	if span <= 0.0:
+		return 1.0
+	var raw := span / 6.0
+	var mag := pow(10.0, floor(log(raw) / log(10.0)))
+	for m in [1.0, 2.0, 5.0]:
+		if raw <= m * mag:
+			return m * mag
+	return 10.0 * mag
+
+func _fmt_km(m: float) -> String:
+	# Compact km tick label: whole km stay integers, sub-km show one decimal.
+	var km := m / 1000.0
+	return ("%.0f" % km) if absf(km - roundf(km)) < 0.05 else ("%.1f" % km)
+
+func _draw_spatial_backdrop() -> void:
+	# The elevation view's scene-setting layer: a vertical sky gradient, a filled ground strip
+	# below altitude 0, and a labeled km grid (downrange along the ground, altitude up the right
+	# edge — the left edge is the UI panel). Pure display; the world→screen mapping is the same
+	# _world_to_screen every marker uses, so the grid is honest about the auto-expanding extents.
 	var vp := get_viewport_rect().size
-	# ground line (altitude 0) for spatial reference
 	var ground_y := (vp.y - MARGIN)
-	draw_line(Vector2(0, ground_y), Vector2(vp.x, ground_y), Color(0.25, 0.35, 0.25), 1.0)
+	draw_polygon(
+		PackedVector2Array([Vector2(0, 0), Vector2(vp.x, 0), Vector2(vp.x, ground_y), Vector2(0, ground_y)]),
+		PackedColorArray([COL_BG_TOP, COL_BG_TOP, COL_BG_BOT, COL_BG_BOT]))
+	draw_rect(Rect2(0, ground_y, vp.x, vp.y - ground_y), COL_GROUND)
+	# downrange ticks (km): faint verticals through the sky + labels in the ground strip
+	var xstep := _nice_step(_x_max)
+	var wx := xstep
+	while wx < _x_max * 0.999:
+		var sx := _world_to_screen([wx, 0.0, 0.0]).x
+		draw_line(Vector2(sx, 0), Vector2(sx, ground_y), COL_GRID, 1.0)
+		draw_string(_font, Vector2(sx - 10, ground_y + 17), _fmt_km(wx), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, COL_TICK)
+		wx += xstep
+	draw_string(_font, Vector2(vp.x - 92, ground_y + 17), "downrange (km)", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, COL_TICK)
+	# altitude ticks (km): faint horizontals + labels on the right edge
+	var zstep := _nice_step(_z_max)
+	var wz := zstep
+	while wz < _z_max * 0.999:
+		var sy := _world_to_screen([0.0, 0.0, wz]).y
+		draw_line(Vector2(0, sy), Vector2(vp.x, sy), COL_GRID, 1.0)
+		draw_string(_font, Vector2(vp.x - 34, sy - 4), _fmt_km(wz), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, COL_TICK)
+		wz += zstep
+	draw_string(_font, Vector2(vp.x - 52, 16), "alt (km)", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, COL_TICK)
+	# the altitude-0 line on top of the fill
+	draw_line(Vector2(0, ground_y), Vector2(vp.x, ground_y), COL_GROUND_LINE, 1.5)
+
+func _draw_trail(world_pts: Array, col: Color, width := 2.0) -> void:
+	# A breadcrumb trail with an age fade (oldest ≈ transparent → newest = the given color), mapped
+	# from WORLD points each draw so it stays correct under the auto-expanding extents.
+	if world_pts.size() < 2:
+		return
+	var pts := PackedVector2Array()
+	var cols := PackedColorArray()
+	var n := world_pts.size()
+	for i in n:
+		pts.append(_world_to_screen(world_pts[i]))
+		var t := float(i) / float(n - 1)
+		cols.append(Color(col.r, col.g, col.b, lerpf(0.04, col.a, t * t)))
+	draw_polyline_colors(pts, cols, width)
+
+func _draw_missile_body(head: Vector2, dir: Vector2, col: Color) -> void:
+	# A small missile silhouette oriented along `dir` (nose cone + hull + two tail fins) — the shared
+	# marker for every missile view. Display only; ~32 px long, built from the screen-space direction.
+	var p := Vector2(-dir.y, dir.x)
+	draw_colored_polygon(PackedVector2Array([
+		head + dir * 16.0,
+		head + dir * 8.0 + p * 3.4,
+		head - dir * 14.0 + p * 3.4,
+		head - dir * 14.0 - p * 3.4,
+		head + dir * 8.0 - p * 3.4]), col)
+	var fin := Color(col.r, col.g, col.b, 0.85)
+	draw_colored_polygon(PackedVector2Array([
+		head - dir * 8.0 + p * 3.0, head - dir * 15.0 + p * 9.0, head - dir * 15.0 + p * 3.0]), fin)
+	draw_colored_polygon(PackedVector2Array([
+		head - dir * 8.0 - p * 3.0, head - dir * 15.0 - p * 9.0, head - dir * 15.0 - p * 3.0]), fin)
+
+func _draw_spatial() -> void:
+	_draw_spatial_backdrop()
 
 	var detected := bool(_telemetry.get(_radar_id + ".detected", false)) if _radar_id != "" else false
 	# §12 watch-item: "below horizon" keys off the `visible` telemetry flag, NOT the
@@ -1204,17 +1354,17 @@ func _draw_spatial() -> void:
 		var r: float = TARGET_R + 18.0 * (b.age / BLIP_TTL)
 		draw_arc(b.pos, r, 0.0, TAU, 32, Color(1.0, 0.55, 0.2, a), 2.0)
 
+	# airframe view (slice 16/17): the α-vs-time strip chart in the corner — the ringing/tumble lesson
+	if _airframe_view and _alpha_hist.size() >= 2:
+		_draw_alpha_strip()
+
 func _draw_missile() -> void:
 	# The flown arc as a faint polyline (mapped from the stored WORLD breadcrumbs each draw, so it
 	# stays correct under the auto-expanding extents), then a marker at the head. The trajectory
 	# SHAPE is the same clean parabola for rk4 vs euler (the euler bow is sub-pixel) — the integrator
 	# lesson lives in the ΔE readout (de_frac), not the drawn curve; the drag lesson IS visible here
 	# (the arc shortens as Cd·A rises). All from telemetry / entity pos — nothing recomputed.
-	if _missile_trail.size() >= 2:
-		var pts := PackedVector2Array()
-		for wp in _missile_trail:
-			pts.append(_world_to_screen(wp))
-		draw_polyline(pts, Color(1.0, 0.75, 0.3, 0.5), 1.5)
+	_draw_trail(_missile_trail, Color(1.0, 0.75, 0.3, 0.7), 2.0)
 	if _missile_trail.is_empty():
 		return
 	var head := _world_to_screen(_missile_trail[-1])
@@ -1246,18 +1396,70 @@ func _draw_missile() -> void:
 		var vel_dir := (vel_tip - head)
 		nose_dir = nose_dir.normalized() if nose_dir.length() > 0.5 else Vector2(1, 0)
 		vel_dir = vel_dir.normalized() if vel_dir.length() > 0.5 else Vector2(1, 0)
+		# slice-17 steady-turn arc: the core's turn_radius_m drawn as the osculating circle the coupled
+		# path is flying (the R = 2m/(ρSC_Lα·α) anchor made visible). The circle center sits R off the
+		# velocity, on the NOSE side of v (sign(α) — where the lift pulls for the scenario's +C_Lα).
+		# WORLD points mapped through _world_to_screen so the anisotropic extents can't distort it into
+		# a lie. Faint + dashed: a reference, not a prediction. Skipped when R runs huge (α→0 → ∞/CEIL).
+		var lift_s := 1.0 if alpha >= 0.0 else -1.0
+		if _telemetry.has(_missile_id + ".turn_radius_m"):
+			var Rt := float(_telemetry[_missile_id + ".turn_radius_m"])
+			if Rt > 100.0 and Rt < 40000.0:
+				var ccx := float(head_w[0]) - Rt * sin(ga) * lift_s
+				var ccz := float(head_w[2]) + Rt * cos(ga) * lift_s
+				var phi0 := atan2(float(head_w[2]) - ccz, float(head_w[0]) - ccx)
+				var seg := 28
+				var sweep := 1.0                    # rad of circle shown, centered on the missile
+				var prev := Vector2.ZERO
+				for k in seg + 1:
+					var phi := phi0 + sweep * (float(k) / seg - 0.5)
+					var pt := _world_to_screen([ccx + Rt * cos(phi), head_w[1], ccz + Rt * sin(phi)])
+					if k > 0 and k % 2 == 1:        # dashed: draw every other segment
+						draw_line(prev, pt, Color(0.45, 1.0, 0.6, 0.35), 1.5)
+					prev = pt
+				draw_string(_font, prev + Vector2(4, -4), "R=%.0f m" % Rt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.45, 1.0, 0.6, 0.6))
+		# the α wedge: a translucent fan swept from the velocity direction to the nose direction —
+		# the angle of attack drawn AS an angle, not just a number. Degenerates to nothing at α≈0.
+		var a0 := vel_dir.angle()
+		var d_a := wrapf(nose_dir.angle() - a0, -PI, PI)
+		if absf(d_a) > 0.005:
+			var steps := maxi(2, int(ceil(absf(d_a) / 0.08)))
+			var fan := PackedVector2Array([head])
+			for k in steps + 1:
+				var a := a0 + d_a * float(k) / steps
+				fan.append(head + Vector2(cos(a), sin(a)) * 30.0)
+			draw_polygon(fan, PackedColorArray([Color(1.0, 0.8, 0.25, 0.16)]))
+			draw_arc(head, 30.0, a0, a0 + d_a, steps + 1, Color(1.0, 0.8, 0.25, 0.55), 1.5)
+		# slice-17 lift arrow: the core's |a_lift| (⟂ v, the path-bending accel) as a green arrow off
+		# the velocity line, on the nose side of v (sign(α), matching the turn-arc center). Length is
+		# a clamped display scale — the number itself lives in the readout.
+		if _telemetry.has(_missile_id + ".a_lift"):
+			var aL := float(_telemetry[_missile_id + ".a_lift"])
+			if aL > 0.05 and aL < 1.0e8:
+				var lift_tip := _world_to_screen([
+					float(head_w[0]) - Lw * sin(ga) * lift_s, head_w[1], float(head_w[2]) + Lw * cos(ga) * lift_s])
+				var lift_dir := (lift_tip - head)
+				lift_dir = lift_dir.normalized() if lift_dir.length() > 0.5 else Vector2(0, -1)
+				var Ll := 14.0 + 34.0 * clampf(aL / 60.0, 0.0, 1.0)
+				var lc := Color(0.45, 1.0, 0.55)
+				var tip := head + lift_dir * Ll
+				var lp := Vector2(-lift_dir.y, lift_dir.x)
+				draw_line(head, tip, lc, 2.0)
+				draw_colored_polygon(PackedVector2Array([
+					tip + lift_dir * 7.0, tip - lift_dir * 2.0 + lp * 4.0, tip - lift_dir * 2.0 - lp * 4.0]), lc)
+				draw_string(_font, tip + lift_dir * 10.0 + Vector2(-14, 0), "lift", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, lc)
 		# velocity (flight-path γ) reference: a faint cyan arrow
 		var vc := Color(0.4, 0.85, 1.0)
-		draw_line(head, head + vel_dir * 52.0, vc, 1.5)
-		draw_string(_font, head + vel_dir * 52.0 + Vector2(4, 0), "v (γ)", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, vc)
-		# nose (body attitude θ): a bright triangle marker — the angle to v IS α
-		var mc := Color(1.0, 0.85, 0.2)
-		var perp := Vector2(-nose_dir.y, nose_dir.x)
-		var nose_head := head + nose_dir * 46.0
-		draw_line(head, nose_head, mc, 2.0)
+		var v_tip := head + vel_dir * 58.0
+		var vp2 := Vector2(-vel_dir.y, vel_dir.x)
+		draw_line(head, v_tip, vc, 1.5)
 		draw_colored_polygon(PackedVector2Array([
-			nose_head + nose_dir * 9.0, nose_head - nose_dir * 6.0 + perp * 5.0, nose_head - nose_dir * 6.0 - perp * 5.0]), mc)
-		draw_string(_font, head + Vector2(11, -10), "%s  α=%.1f°" % [_missile_id, rad_to_deg(alpha)], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, mc)
+			v_tip + vel_dir * 7.0, v_tip - vel_dir * 2.0 + vp2 * 4.0, v_tip - vel_dir * 2.0 - vp2 * 4.0]), vc)
+		draw_string(_font, v_tip + Vector2(6, 2), "v (γ)", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, vc)
+		# the body itself, oriented along θ (the attitude — its angle off the cyan v line IS α)
+		var mc := Color(1.0, 0.85, 0.2)
+		_draw_missile_body(head, nose_dir, mc)
+		draw_string(_font, head + Vector2(14, -14), "%s  α=%.1f°" % [_missile_id, rad_to_deg(alpha)], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, mc)
 		return
 	# nose direction from the last trail segment (screen space); a dot if the segment is too short
 	var dir := Vector2(0, -1)
@@ -1266,10 +1468,8 @@ func _draw_missile() -> void:
 		if d.length() > 0.5:
 			dir = d.normalized()
 	var mc := Color(1.0, 0.85, 0.2)
-	var perp := Vector2(-dir.y, dir.x)
-	draw_colored_polygon(PackedVector2Array([
-		head + dir * 9.0, head - dir * 6.0 + perp * 5.0, head - dir * 6.0 - perp * 5.0]), mc)
-	draw_string(_font, head + Vector2(11, -8), _missile_id, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, mc)
+	_draw_missile_body(head, dir, mc)
+	draw_string(_font, head + Vector2(14, -12), _missile_id, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, mc)
 
 func _draw_guidance_los() -> void:
 	# Slice 9: the line-of-sight from the guided missile to its target — the pursuit steers the velocity
@@ -1344,27 +1544,21 @@ func _draw_salvo() -> void:
 		var mid: String = mids[mi]
 		var col: Color = palette[mi % palette.size()]
 		var tr: Array = _salvo_trails.get(mid, [])
-		# the flown path (the stretched-S vs straight tell), mapped fresh each draw (auto-expand safe)
-		if tr.size() >= 2:
-			var pts := PackedVector2Array()
-			for wp in tr:
-				pts.append(_world_to_screen(wp))
-			draw_polyline(pts, Color(col.r, col.g, col.b, 0.55), 1.5)
+		# the flown path (the stretched-S vs straight tell), age-faded, mapped fresh each draw
+		_draw_trail(tr, Color(col.r, col.g, col.b, 0.7), 2.0)
 		if not _entities.has(mid):
 			continue
 		var head := _world_to_screen(_entities[mid].pos)
 		# faint LOS from this interceptor to the common target (the closing geometry)
 		if have_tgt:
 			draw_line(head, tgt_p, Color(col.r, col.g, col.b, 0.3), 1.0)
-		# nose marker oriented along the last trail segment (a dot if the segment is too short)
+		# missile silhouette oriented along the last trail segment (points up if the segment is too short)
 		var dir := Vector2(0, -1)
 		if tr.size() >= 2:
 			var d := head - _world_to_screen(tr[-2])
 			if d.length() > 0.5:
 				dir = d.normalized()
-		var perp := Vector2(-dir.y, dir.x)
-		draw_colored_polygon(PackedVector2Array([
-			head + dir * 9.0, head - dir * 6.0 + perp * 5.0, head - dir * 6.0 - perp * 5.0]), col)
+		_draw_missile_body(head, dir, col)
 		# per-missile label: id + t_go + range (the arrival-timing readout, from telemetry scalars)
 		var lbl := mid
 		if _telemetry.has(mid + ".t_go"):
@@ -1379,6 +1573,41 @@ func _draw_salvo() -> void:
 			if float(_telemetry.get(mid + ".los_range", 1.0e9)) < 60.0:
 				draw_arc(tgt_p, 12.0, 0.0, TAU, 24, Color(1.0, 0.6, 0.2), 2.0)
 				break
+
+func _draw_alpha_strip() -> void:
+	# Airframe view (slice 16/17): the α time history in a corner panel — the LESSON as a trace.
+	# Cmα<0: α rings about trim at ω_sp, decaying via Cmq (weathervane). Cmα>0: |α| diverges and the
+	# display-clamped trace pegs at ±π (tumble). The dashed cyan line is the core's alpha_trim
+	# telemetry. ALL display: samples are the core's α (clamped in _spatial_on_state), nothing recomputed.
+	var vp := get_viewport_rect().size
+	var rect := Rect2(vp.x - 314.0, vp.y - MARGIN - 120.0, 300.0, 104.0)
+	draw_rect(rect, COL_PANEL_BG)
+	draw_rect(rect, COL_PANEL_BORDER, false, 1.0)
+	draw_string(_font, rect.position + Vector2(6, -5), "α history (rad) — ringing = weathervane, pegged = tumble",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.55))
+	# symmetric autoscale over the visible window (floor keeps a flat α≈0 trace off the rails)
+	var m := 0.02
+	for v in _alpha_hist:
+		m = maxf(m, absf(float(v)))
+	var trim := float(_telemetry.get(_missile_id + ".alpha_trim", 0.0)) if _missile_id != "" else 0.0
+	m = maxf(m, absf(trim)) * 1.15
+	var y0 := rect.position.y + rect.size.y * 0.5
+	draw_line(Vector2(rect.position.x, y0), Vector2(rect.end.x, y0), Color(1, 1, 1, 0.14), 1.0)
+	# trim reference (dashed): where a stable α settles
+	if _missile_id != "" and _telemetry.has(_missile_id + ".alpha_trim"):
+		var ty := y0 - (trim / m) * rect.size.y * 0.5
+		var xx := rect.position.x
+		while xx < rect.end.x - 6.0:
+			draw_line(Vector2(xx, ty), Vector2(xx + 6.0, ty), Color(0.4, 0.85, 1.0, 0.5), 1.0)
+			xx += 12.0
+		draw_string(_font, Vector2(rect.end.x - 32, ty - 3), "trim", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.4, 0.85, 1.0, 0.7))
+	# the trace itself (fills left→right, then scrolls once the window is full)
+	var pts := PackedVector2Array()
+	for i in _alpha_hist.size():
+		var x := rect.position.x + (float(i) / float(ALPHA_HIST_MAX - 1)) * rect.size.x
+		pts.append(Vector2(x, y0 - (float(_alpha_hist[i]) / m) * rect.size.y * 0.5))
+	draw_polyline(pts, Color(1.0, 0.8, 0.25, 0.9), 1.5)
+	draw_string(_font, rect.position + Vector2(6, 13), "±%.2f" % m, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1, 1, 1, 0.4))
 
 # --- CFAR range-power view (slice 3) ------------------------------------------
 # A plot: x = range (the core's static range axis), y = power in dB. Three layers, all from
@@ -1399,7 +1628,8 @@ func _cfar_y(db: float, rect: Rect2) -> float:
 
 func _draw_cfar() -> void:
 	var rect := _cfar_plot_rect()
-	draw_rect(rect, Color(0.2, 0.25, 0.3), false, 1.0)
+	draw_rect(rect, COL_PANEL_BG)
+	draw_rect(rect, COL_PANEL_BORDER, false, 1.0)
 
 	# y grid + dB labels every 10 dB — labels live in the RIGHT gutter; the left edge is the
 	# slider/readout panel (drawing them at x=8 collided with the knob labels, slice-3 fix).
@@ -1502,7 +1732,8 @@ func _draw_plan() -> void:
 	_plan_view = Rect2(PLAN_M, PLAN_M, vp.x - 2.0 * PLAN_M, vp.y - 2.0 * PLAN_M)
 	_plan_b = _plan_bounds()
 	_plan_sc = minf(_plan_view.size.x / _plan_b.size.x, _plan_view.size.y / _plan_b.size.y)
-	draw_rect(_plan_view, Color(0.2, 0.25, 0.3), false, 1.0)
+	draw_rect(_plan_view, COL_PANEL_BG)
+	draw_rect(_plan_view, COL_PANEL_BORDER, false, 1.0)
 
 	# bearing rays first (drawn UNDER the markers): a line from each sensor along its measured
 	# bearing. They cross near the emitter at good geometry and graze near-parallel at bad geometry
@@ -1603,7 +1834,8 @@ func _draw_esm() -> void:
 	_draw_esm_histogram(histo)
 
 func _draw_esm_raster(rect: Rect2) -> void:
-	draw_rect(rect, Color(0.2, 0.25, 0.3), false, 1.0)
+	draw_rect(rect, COL_PANEL_BG)
+	draw_rect(rect, COL_PANEL_BORDER, false, 1.0)
 	draw_string(_font, rect.position + Vector2(2, -6),
 		"TOA raster — intercepted pulses, colored by recovered emitter",
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.6))
@@ -1624,7 +1856,8 @@ func _draw_esm_raster(rect: Rect2) -> void:
 		"time (ms)", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.5))
 
 func _draw_esm_histogram(rect: Rect2) -> void:
-	draw_rect(rect, Color(0.2, 0.25, 0.3), false, 1.0)
+	draw_rect(rect, COL_PANEL_BG)
+	draw_rect(rect, COL_PANEL_BORDER, false, 1.0)
 	draw_string(_font, rect.position + Vector2(2, -6),
 		"difference histogram — peaks at each emitter's PRI (▼ = detected)",
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.6))
@@ -1701,7 +1934,8 @@ func _draw_gps_sky(rect: Rect2) -> void:
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.6))
 	var c := rect.position + rect.size * 0.5
 	var R := minf(rect.size.x, rect.size.y) * 0.46
-	# horizon + elevation rings (30°, 60°) + zenith dot
+	# filled sky disc + horizon + elevation rings (30°, 60°) + zenith dot
+	draw_circle(c, R, COL_PANEL_BG)
 	draw_arc(c, R, 0.0, TAU, 64, Color(1, 1, 1, 0.25), 1.0)
 	for el_ring in [30.0, 60.0]:
 		draw_arc(c, R * (1.0 - el_ring / 90.0), 0.0, TAU, 48, Color(1, 1, 1, 0.10), 1.0)
@@ -1738,7 +1972,8 @@ func _gps_sky_legend(rect: Rect2) -> void:
 	draw_string(_font, Vector2(x + 18, y + 36), "faulted", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.7, 0.4))
 
 func _draw_gps_resid(rect: Rect2) -> void:
-	draw_rect(rect, Color(0.2, 0.25, 0.3), false, 1.0)
+	draw_rect(rect, COL_PANEL_BG)
+	draw_rect(rect, COL_PANEL_BORDER, false, 1.0)
 	draw_string(_font, rect.position + Vector2(2, -6),
 		"range residuals |r| per satellite — the spoofed satellite's bar spikes (the RAIM signature)",
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.6))
