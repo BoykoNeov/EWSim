@@ -2170,6 +2170,46 @@ silhouettes). Julia core untouched — the 2604-test suite is out of scope by co
 
 ---
 
+**Client baked-props pass (2026-07-14, post-slice-18)** — the THIRD cross-cutting DISPLAY-ONLY client
+upgrade (the baked-fx-pass precedent): `fx/props3d.gd`, a baked 3-D PROP & EFFECT library for the
+Node3D views (the slice-18 terrain view today; land-clutter/6-DOF views inherit it), plus the
+`Sandbox.gd` wiring (git touches exactly `fx/props3d.gd` + `Sandbox.gd`; ZERO physics, ZERO
+core/scenario/wire changes). `decorate()` runs a DETERMINISTIC scatter — RNG seeded from the CORE's
+handshake height grid (same scenario → same layout, nothing to desync: pure display) — that surveys a
+22×22 site lattice (height/slope/LOS-corridor distance) and sites: MILITARY (two SAM batteries in
+earth-berm revetments with canted launch tubes + engagement panel, a hilltop search-radar site with a
+SPINNING antenna head + blinking beacon, a 5-tank column road-marching to the SAM site, a truck convoy
+with lit headlights), CIVILIAN (a city of lit-window towers — nearest-filtered emission texture — with
+a night-glow pool + aviation beacon, two villages + water tower, a farm with silo/barn + a
+vertex-colored field patchwork, an oil refinery — tank farm, distillation columns, pipe rack — with a
+BURNING flare stack, a sawtooth factory with smoking chimneys, an airstrip with quonset hangar +
+tower, a 4-turbine wind farm with TURNING rotors, a comms mast with microwave drums), LINES
+(terrain-hugging road ribbons, a power line with sagging catenary wires between pylons, an elevated
+pipeline with supports + pump station), and EFFECTS (GPU-particle fire/smoke reusing the baked
+`glow.tres` as the billboard sprite; a live-fire RANGE — sited FARTHEST from the LOS corridor — with
+craters, charred hulks, and a PERIODIC one-shot explosion: fireball + flash + lingering smoke; a
+burning tank wreck beside the village road). Honesty rails: every prop grounds by bilinear-sampling
+the SAME handshake grid (placement only — the client still never re-tests occlusion); NOTHING TALL
+sites inside the radar↔target keep-out corridor (10% of span around the first-frame LOS), so the
+decoration can never visually contradict the core's `visible` verdict; the HUD line now reads "props
+decorative/not-to-scale (display only)" (§12). Wiring: props build LAZILY on the FIRST state frame
+(the corridor endpoints are only known then), animate from `_process` (spin/blink/boom timers — the
+decorate() contract via node meta), and reset with the scene rebuild. Two hard-won catches: the
+StandardMaterial3D emission operator DEFAULTS TO ADD, so a warm base `emission` color washes the whole
+tower face cream — keep emission BLACK and put the warm tint in the texture's lit pixels only (caught
+on the second windowed shot: towers rendered as glowing lightboxes); and prop scale wants
+`k≈span·scale/70` clamped [0.8, 2.6] — true-scale props are invisible at a 16-km map. Proofs: all 17
+`*_ui_test.gd` GREEN post-change (the slice-18 UI test drives a state frame through `_on_state`, so it
+exercises decorate() headless — the 2-ObjectDB-leak warning predates the pass, verified on HEAD);
+`slice18_verify.gd` GREEN against a live server (the 2500-frame held-seed replay stays bit-identical
+WITH the props building mid-run — display-only proven, not assumed); four windowed shots eyeballed
+(wide: roads/city/glow + "TERRAIN MASKED −203 m" intact; refinery close-up: flare fire + smoke +
+pylon wires + trucks; city close-up: dark towers with blocky lit windows post-fix; range close-up:
+explosion fireball + smoke dome + craters + hulks + turbine rotors on the ridge). Julia core
+untouched — the 2604-test suite is out of scope by construction.
+
+---
+
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
 (`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0); `rf.jl`

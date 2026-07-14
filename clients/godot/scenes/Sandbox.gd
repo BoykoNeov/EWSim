@@ -78,6 +78,13 @@ const FX_THEME: Theme = preload("res://fx/theme.tres")
 const FX_BACKDROP_SHADER: Shader = preload("res://fx/backdrop.gdshader")
 const FX_TERRAIN_SHADER: Shader = preload("res://fx/terrain.gdshader")
 const FX_TERRAIN_ENV: Environment = preload("res://fx/terrain_env.tres")
+# The baked 3-D prop & effect library (fx/props3d.gd): a DETERMINISTIC display-only
+# scatter of military/civilian structures (SAM sites, a spinning search radar, a tank
+# column, a lit city, villages, farm fields, a refinery with a burning flare, a factory,
+# roads/power/pipeline, a wind farm) + GPU-particle fire/smoke/explosions over the
+# terrain view. Grid-seeded RNG (same scenario → same layout); tall props keep OUT of
+# the radar↔target LOS corridor so decoration can't contradict the core's verdict.
+const FX_PROPS := preload("res://fx/props3d.gd")
 const T3D_CONTOUR_M := 50.0       # real-metre interval of the terrain contour lines (HUD-labeled)
 
 var _client
@@ -249,6 +256,15 @@ var _t3d_los_mesh: ImmediateMesh = null
 var _t3d_trail_mesh: ImmediateMesh = null
 var _t3d_line_mat: StandardMaterial3D = null
 var _t3d_trail_pts: Array = []    # Vector3 breadcrumbs (3-D units, display only)
+# fx/props3d.gd decoration state (display only): built lazily on the FIRST state frame
+# (the radar/target positions — the LOS keep-out corridor — are only known then).
+var _t3d_root: Node3D = null      # the 3-D world root the props parent under
+var _t3d_props_done := false      # decorate() ran for this scene build
+var _t3d_props: Node3D = null
+var _t3d_spin: Array = []         # nodes rotating per frame (radar heads, turbine rotors)
+var _t3d_beacons: Array = []      # blinking obstruction lights
+var _t3d_booms: Array = []        # periodic one-shot explosion emitters (the range)
+var _t3d_anim_t := 0.0
 var _cam_yaw := -2.35             # orbit camera state (drag to rotate, wheel to zoom)
 var _cam_pitch := 0.45
 var _cam_dist := 180.0
@@ -756,6 +772,12 @@ func _build_terrain_scene() -> void:
 	_t3d_layer = null
 	_t3d_cam = null
 	_t3d_trail_pts = []
+	_t3d_root = null                  # props state resets with the scene (rebuild = fresh scatter)
+	_t3d_props_done = false
+	_t3d_props = null
+	_t3d_spin = []
+	_t3d_beacons = []
+	_t3d_booms = []
 	if _terrain_n < 2 or _terrain_extent.size() < 4 or _terrain_grid_h.size() < _terrain_n * _terrain_n:
 		return                        # malformed handshake — leave the 2-D HUD alone
 	_t3d_layer = CanvasLayer.new()
@@ -771,6 +793,7 @@ func _build_terrain_scene() -> void:
 	holder.add_child(vp)
 	var root := Node3D.new()
 	vp.add_child(root)
+	_t3d_root = root                  # the props' parent (decorated lazily, first state frame)
 	# camera + the baked fx/terrain_env.tres environment (procedural night-blue sky matching the
 	# 2-D palette, sky ambient, subtle depth fog, filmic tonemap, and a soft glow pass so the
 	# emissive markers / LOS ray / trail bloom) + a warm low key light that casts shadows off the
@@ -899,6 +922,18 @@ func _terrain_on_state(obj: Dictionary) -> void:
 	var t3 := _sim_to_3d(tpos)
 	_t3d_radar.position = r3
 	_t3d_target.position = t3
+	# Baked decorative props (fx/props3d.gd) — built ONCE per scene, lazily HERE because the
+	# radar/target positions (the LOS keep-out corridor) are only known on a state frame.
+	# Pure display: grid-seeded deterministic scatter, grounded on the same handshake grid.
+	if not _t3d_props_done and _t3d_root != null:
+		_t3d_props_done = true
+		var deco: Dictionary = FX_PROPS.decorate(_t3d_root, _terrain_grid_h, _terrain_n,
+				_terrain_extent, Callable(self, "_sim_to_3d"), FX_GLOW,
+				Vector2(float(rpos[0]), float(rpos[1])), Vector2(float(tpos[0]), float(tpos[1])))
+		_t3d_props = deco["root"]
+		_t3d_spin = deco["spinners"]
+		_t3d_beacons = deco["beacons"]
+		_t3d_booms = deco["booms"]
 	# trail breadcrumbs (skip the repeat point — the paused/held frame)
 	if _t3d_trail_pts.is_empty() or _t3d_trail_pts[-1] != t3:
 		_t3d_trail_pts.append(t3)
@@ -939,8 +974,8 @@ func _draw_terrain_hud() -> void:
 		var c := float(_telemetry[_terrain_radar + ".terrain_clearance_m"])
 		draw_string(_font, Vector2(vp.x - 320, 64), "LOS clearance: %+.0f m" % c,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
-	draw_string(_font, Vector2(vp.x - 560, vp.y - 16),
-			"3-D terrain view — vertical ×%.1f (display only) · contours every %.0f m · drag: orbit · wheel: zoom" % [T3D_VEXAG, T3D_CONTOUR_M],
+	draw_string(_font, Vector2(maxf(8.0, vp.x - 740), vp.y - 16),
+			"3-D terrain view — vertical ×%.1f, props decorative/not-to-scale (display only) · contours every %.0f m · drag: orbit · wheel: zoom" % [T3D_VEXAG, T3D_CONTOUR_M],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, COL_TICK)
 
 func _update_t3d_cam() -> void:
@@ -1482,6 +1517,29 @@ func _world_to_screen(pos: Array) -> Vector2:
 	return Vector2(sx, sy)
 
 func _process(dt: float) -> void:
+	# Terrain-view prop animation (fx/props3d.gd contract — all display-only): radar heads
+	# and turbine rotors spin, obstruction beacons blink, the range's one-shot explosion
+	# emitters restart on their timers. No physics, no wire traffic, no redraw needed
+	# (the 3-D SubViewport renders continuously).
+	if _mode == "terrain" and _t3d_props != null and is_instance_valid(_t3d_props):
+		_t3d_anim_t += dt
+		for s in _t3d_spin:
+			if is_instance_valid(s):
+				s.rotate_object_local(s.get_meta("spin_axis", Vector3.UP),
+						float(s.get_meta("spin_rate", 1.0)) * dt)
+		for bcn in _t3d_beacons:
+			if is_instance_valid(bcn):
+				var p := float(bcn.get_meta("blink_period", 1.2))
+				bcn.visible = fmod(_t3d_anim_t, p) < p * 0.55
+		for bm in _t3d_booms:
+			if is_instance_valid(bm):
+				var tl := float(bm.get_meta("boom_t", 3.0)) - dt
+				if tl <= 0.0:
+					for ch in bm.get_children():
+						if ch is GPUParticles3D:
+							ch.restart()
+					tl = float(bm.get_meta("boom_period", 8.0))
+				bm.set_meta("boom_t", tl)
 	var i := _blips.size() - 1
 	var changed := false
 	while i >= 0:
