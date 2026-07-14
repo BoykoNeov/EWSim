@@ -7,9 +7,11 @@ extends RefCounted
 # (RNG seeded from the CORE's handshake height grid, so the same scenario always dresses
 # the same way) siting military structures (SAM batteries inside earth berms, a spinning
 # search-radar site on a hilltop, a tank column + truck convoy on the roads), civilian
-# infrastructure (a city with lit-window towers and a night glow, villages, a farm with
-# a field patchwork, an oil refinery with a burning flare stack, a sawtooth factory with
-# smoking chimneys, an airstrip, roads, a sagging power line, an elevated pipeline, a
+# infrastructure (a city with lit-window towers and a night glow, villages of window-lit
+# houses, a farm with a field patchwork whose palette follows a grid-hash SEASON —
+# spring/summer/autumn/winter, an oil refinery with a burning flare stack, a sawtooth
+# factory with smoking chimneys, an airstrip, roads with looping two-way car traffic, a
+# sagging power line, an elevated pipeline, a
 # wind farm with turning rotors, a comms mast) and GPU-particle EFFECTS (fire, drifting
 # smoke, a periodic range explosion, a burning wreck) onto the terrain the client
 # already meshes. Every prop is grounded by bilinear-sampling that SAME handshake grid —
@@ -23,6 +25,9 @@ extends RefCounted
 #   beacons:  visible = fmod(t, meta "blink_period") < 0.55 * meta "blink_period"
 #   booms:    meta "boom_t" counts down; at 0 restart() every GPUParticles3D child and
 #             re-arm from meta "boom_period" (one-shot fireball + flash + smoke).
+#   cars:     meta "path" is a ground-baked Curve3D, "speed" display-units/s, "off" the
+#             current baked offset — advance off by speed*dt (wrap at get_baked_length()),
+#             place at sample_baked(off), yaw the +X nose toward a point sampled ahead.
 
 static var _mats := {}            # shared material cache (key -> Material; survives rebuilds)
 static var _win_texs: Array = []  # lit-window emission textures (generated once, deterministic)
@@ -30,11 +35,12 @@ static var _win_texs: Array = []  # lit-window emission textures (generated once
 # ---------------------------------------------------------------- entry point ----------
 static func decorate(root: Node3D, grid_h: Array, n: int, extent: Array,
 		to3d: Callable, glow_tex: Texture2D, keep_a: Vector2, keep_b: Vector2) -> Dictionary:
-	var out := {"root": null, "spinners": [], "beacons": [], "booms": []}
+	var out := {"root": null, "spinners": [], "beacons": [], "booms": [], "cars": []}
 	if root == null or n < 2 or extent.size() < 4 or grid_h.size() < n * n:
 		return out
+	var gh := hash(grid_h)
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash(grid_h) ^ (n * 2654435761)   # grid-seeded → same scenario, same layout
+	rng.seed = gh ^ (n * 2654435761)             # grid-seeded → same scenario, same layout
 	var pr := Node3D.new()
 	root.add_child(pr)
 	out["root"] = pr
@@ -47,6 +53,10 @@ static func decorate(root: Node3D, grid_h: Array, n: int, extent: Array,
 		"g": grid_h, "n": n, "e": extent, "to3d": to3d, "out": pr, "rng": rng,
 		"glow": glow_tex, "k": clampf(span_m * upm / 70.0, 0.8, 2.6), "upm": upm,
 		"spin": out["spinners"], "beac": out["beacons"], "boom": out["booms"],
+		"cars": out["cars"],
+		# the SEASON comes off the grid hash (not an rng draw — the scatter sequence is
+		# untouched): same scenario, same season; different terrain, different time of year
+		"season": absi(gh >> 4) % 4,
 	}
 	# ---- site survey: coarse lattice scored by height/slope/LOS-corridor distance ----
 	var keep_r := span_m * 0.10
@@ -120,6 +130,7 @@ static func decorate(root: Node3D, grid_h: Array, n: int, extent: Array,
 		for q in [vill1, vill2, refinery, factory, strip]:
 			if q != null:
 				_ribbon(c, cp, Vector2(q["x"], q["y"]), road_w, Color(0.085, 0.09, 0.105), 2.5, 0.10)
+				_traffic(c, cp, Vector2(q["x"], q["y"]), road_w)   # looping two-way headlights
 		if sam1 != null:
 			var sp := Vector2(sam1["x"], sam1["y"])
 			_ribbon(c, cp, sp, road_w * 0.8, Color(0.10, 0.10, 0.095), 2.5, 0.10)
@@ -133,6 +144,7 @@ static func decorate(root: Node3D, grid_h: Array, n: int, extent: Array,
 	if vill1 != null and farm != null:
 		_ribbon(c, Vector2(vill1["x"], vill1["y"]), Vector2(farm["x"], farm["y"]),
 				road_w * 0.7, Color(0.11, 0.10, 0.085), 2.5, 0.12)
+		_traffic(c, Vector2(vill1["x"], vill1["y"]), Vector2(farm["x"], farm["y"]), road_w * 0.7)
 	if refinery != null:
 		var px: float = refinery["x"]
 		var edge_x := float(extent[0]) if (px - float(extent[0])) < (float(extent[1]) - px) else float(extent[1])
@@ -281,6 +293,28 @@ static func _win_mat(c: Dictionary, v: int) -> StandardMaterial3D:
 	_mats[key] = mat
 	return mat
 
+static func _house_win_mat(c: Dictionary, v: int) -> StandardMaterial3D:
+	# The tower treatment scaled down to a cottage: SAME nearest-filtered emission texs
+	# over the wall albedo, coarser UV tiling (a couple of chunky windows per face) and a
+	# gentler energy — a village glows, it doesn't blaze.
+	var key := "hwin%d" % (v % 3)
+	if _mats.has(key):
+		return _mats[key]
+	if _win_texs.is_empty():
+		for i in 3:
+			_win_texs.append(_win_tex(c["rng"]))
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.34, 0.31, 0.27)
+	mat.roughness = 0.9
+	# emission stays BLACK (ADD operator — see _win_mat); the warmth is in the lit pixels
+	mat.emission_enabled = true
+	mat.emission_energy_multiplier = 1.1
+	mat.emission_texture = _win_texs[v % _win_texs.size()]
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mat.uv1_scale = Vector3(1.3, 1.5, 1.3)
+	_mats[key] = mat
+	return mat
+
 # ---------------------------------------------------------------- particle effects -----
 static func _grad(pts: Array) -> GradientTexture1D:
 	var g := Gradient.new()
@@ -331,6 +365,7 @@ static func _fire(c: Dictionary, parent: Node3D, pos: Vector3, s: float) -> GPUP
 			[0.75, Color(0.9, 0.2, 0.05, 0.45)], [1.0, Color(0.4, 0.05, 0.02, 0.0)]])
 	p.process_material = pm
 	p.draw_pass_1 = _puff_mesh(c, 0.34 * s, true)
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # puffs cast dark blobs
 	parent.add_child(p)
 	return p
 
@@ -362,6 +397,7 @@ static func _smoke(c: Dictionary, parent: Node3D, pos: Vector3, s: float, shade 
 			[1.0, Color(shade * 0.6, shade * 0.6, shade * 0.65, 0.0)]])
 	p.process_material = pm
 	p.draw_pass_1 = _puff_mesh(c, 0.55 * s, false)
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(p)
 	return p
 
@@ -392,6 +428,7 @@ static func _boom_fx(c: Dictionary, parent: Node3D, pos: Vector3, s: float) -> N
 			[0.7, Color(0.85, 0.2, 0.05, 0.5)], [1.0, Color(0.3, 0.05, 0.02, 0.0)]])
 	ball.process_material = bm
 	ball.draw_pass_1 = _puff_mesh(c, 0.5 * s, true)
+	ball.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	nd.add_child(ball)
 	var flash := GPUParticles3D.new()
 	flash.amount = 3
@@ -407,6 +444,7 @@ static func _boom_fx(c: Dictionary, parent: Node3D, pos: Vector3, s: float) -> N
 	fm.color_ramp = _grad([[0.0, Color(1.0, 1.0, 0.92, 1.0)], [1.0, Color(1.0, 0.8, 0.4, 0.0)]])
 	flash.process_material = fm
 	flash.draw_pass_1 = _puff_mesh(c, 3.0 * s, true)
+	flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	nd.add_child(flash)
 	var smk := GPUParticles3D.new()
 	smk.amount = 24
@@ -429,6 +467,7 @@ static func _boom_fx(c: Dictionary, parent: Node3D, pos: Vector3, s: float) -> N
 			[1.0, Color(0.18, 0.17, 0.17, 0.0)]])
 	smk.process_material = sm
 	smk.draw_pass_1 = _puff_mesh(c, 0.7 * s, false)
+	smk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	nd.add_child(smk)
 	return nd
 
@@ -446,7 +485,8 @@ static func _city(c: Dictionary, x: float, y: float, span_x: float) -> void:
 	gm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	gm.albedo_texture = c["glow"]
 	gm.albedo_color = Color(1.0, 0.72, 0.38, 0.15)
-	_mi(c["out"], gq, gm, _gv(c, x, y, 8.0), Vector3(-90, 0, 0))
+	_mi(c["out"], gq, gm, _gv(c, x, y, 8.0), Vector3(-90, 0, 0)).cast_shadow = \
+			GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # an additive glow casts no shadow
 	var nt := 13 + rng.randi_range(0, 5)
 	for i in nt:
 		var a := rng.randf() * TAU
@@ -474,14 +514,10 @@ static func _house(c: Dictionary, x: float, y: float, yaw := 0.0, sc := 1.0) -> 
 	var k: float = c["k"] * sc
 	var rng: RandomNumberGenerator = c["rng"]
 	var s := _site(c, x, y, yaw)
-	_mi(s, _box(0.17 * k, 0.13 * k, 0.24 * k), _m("wall", Color(0.34, 0.31, 0.27)),
+	_mi(s, _box(0.17 * k, 0.13 * k, 0.24 * k), _house_win_mat(c, rng.randi_range(0, 2)),
 			Vector3(0, 0.055 * k, 0))
 	_mi(s, _prism(0.19 * k, 0.09 * k, 0.26 * k), _m("roof", Color(0.26, 0.13, 0.10)),
 			Vector3(0, 0.165 * k, 0))
-	if rng.randf() < 0.45:                          # a lit window, warm against the night
-		_mi(s, _box(0.012 * k, 0.045 * k, 0.06 * k),
-				_m("winlit", Color(1.0, 0.8, 0.5), 0.6, 0.0, Color(1.0, 0.75, 0.42), 1.6),
-				Vector3(0.088 * k, 0.06 * k, 0))
 
 static func _village(c: Dictionary, x: float, y: float, span_x: float) -> void:
 	var rng: RandomNumberGenerator = c["rng"]
@@ -513,11 +549,22 @@ static func _farm(c: Dictionary, x: float, y: float, span_x: float) -> void:
 	cap.is_hemisphere = true
 	_mi(s, cap, _m("silver", Color(0.72, 0.74, 0.78), 0.35, 0.8), Vector3(0.3 * k, 0.42 * k, 0))
 	_house(c, x + span_x * 0.008, y - span_x * 0.006, rng.randf() * TAU)
-	# the field patchwork: one vertex-colored mesh of ground-hugging quads
+	# the field patchwork: one vertex-colored mesh of ground-hugging quads, its palette
+	# picked by the grid-hash SEASON (spring flush → summer crop/gold → autumn stubble →
+	# winter frost-and-plow) — same scenario always farms the same time of year
 	var pw := span_x * 0.028
 	var ph := span_x * 0.020
-	var palette := [Color(0.13, 0.22, 0.10), Color(0.18, 0.26, 0.11), Color(0.30, 0.28, 0.12),
-			Color(0.36, 0.30, 0.14), Color(0.22, 0.17, 0.11)]
+	var seasons := [
+		[Color(0.16, 0.28, 0.11), Color(0.24, 0.34, 0.14), Color(0.30, 0.36, 0.16),   # spring
+				Color(0.13, 0.10, 0.07), Color(0.18, 0.14, 0.09)],
+		[Color(0.13, 0.22, 0.10), Color(0.18, 0.26, 0.11), Color(0.30, 0.28, 0.12),   # summer
+				Color(0.36, 0.30, 0.14), Color(0.22, 0.17, 0.11)],
+		[Color(0.42, 0.32, 0.12), Color(0.44, 0.36, 0.18), Color(0.38, 0.26, 0.10),   # autumn
+				Color(0.30, 0.18, 0.09), Color(0.20, 0.13, 0.08)],
+		[Color(0.55, 0.58, 0.62), Color(0.60, 0.63, 0.68), Color(0.44, 0.47, 0.52),   # winter
+				Color(0.16, 0.15, 0.14), Color(0.24, 0.23, 0.22)],
+	]
+	var palette: Array = seasons[int(c["season"]) % seasons.size()]
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for row in 2:
@@ -537,7 +584,8 @@ static func _farm(c: Dictionary, x: float, y: float, span_x: float) -> void:
 			st.add_vertex(v01)
 	var mesh := st.commit()
 	mesh.surface_set_material(0, _lm())
-	_mi(c["out"], mesh, null, Vector3.ZERO)
+	# ground-hugging strips / wires never cast — at far zoom they smear into shadow acne
+	_mi(c["out"], mesh, null, Vector3.ZERO).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 static func _refinery(c: Dictionary, x: float, y: float) -> void:
 	var k: float = c["k"]
@@ -747,6 +795,51 @@ static func _truck(c: Dictionary, parent: Node3D, local: Vector3, sc := 1.0) -> 
 		_mi(nd, _sph(0.013 * k), _m("lamp", Color(1.0, 0.8, 0.55), 0.6, 0.0, Color(1.0, 0.72, 0.4), 2.0),
 				Vector3(0.16 * k, 0.07 * k, dz * k))
 
+static func _car(c: Dictionary, v: int) -> Node3D:
+	# A civilian car — the nose is LOCAL +X (the traffic contract yaws +X down the road).
+	# Position/rotation belong to the caller's per-frame animation; nothing is set here.
+	var k: float = c["k"] * 0.8
+	var nd := Node3D.new()
+	c["out"].add_child(nd)
+	var paints := [Color(0.30, 0.30, 0.34), Color(0.34, 0.13, 0.10), Color(0.13, 0.17, 0.30)]
+	_mi(nd, _box(0.12 * k, 0.035 * k, 0.055 * k),
+			_m("car%d" % (v % 3), paints[v % 3], 0.5, 0.3), Vector3(0, 0.03 * k, 0))
+	_mi(nd, _box(0.055 * k, 0.028 * k, 0.048 * k), _m("glass", Color(0.08, 0.09, 0.11), 0.3, 0.5),
+			Vector3(-0.008 * k, 0.058 * k, 0))
+	for dz in [-0.018, 0.018]:
+		_mi(nd, _sph(0.009 * k), _m("lamp", Color(1.0, 0.8, 0.55), 0.6, 0.0, Color(1.0, 0.72, 0.4), 2.0),
+				Vector3(0.062 * k, 0.03 * k, dz * k))
+		_mi(nd, _sph(0.007 * k), _m("tail", Color(1.0, 0.2, 0.15), 0.6, 0.0, Color(1.0, 0.10, 0.08), 2.2),
+				Vector3(-0.062 * k, 0.03 * k, dz * k))
+	return nd
+
+static func _traffic(c: Dictionary, a: Vector2, b: Vector2, road_w: float) -> void:
+	# Looping two-way traffic on a road ribbon: ONE car per direction, each on its own
+	# side of the centreline, following a Curve3D baked onto the SAME handshake
+	# heightfield the ribbon hugs. The CALLER animates via the cars contract up top.
+	var rng: RandomNumberGenerator = c["rng"]
+	var L := a.distance_to(b)
+	if L < 1.0:
+		return
+	var dir := (b - a).normalized()
+	var perp := Vector2(-dir.y, dir.x)
+	var steps := maxi(int(L / 150.0), 2)
+	var ci := 0
+	for lane: float in [1.0, -1.0]:
+		var p0 := a if lane > 0.0 else b
+		var p1 := b if lane > 0.0 else a
+		var side := perp * (road_w * 0.22 * lane)   # right-hand traffic, both directions
+		var curve := Curve3D.new()
+		for i in steps + 1:
+			var p := p0.lerp(p1, i / float(steps))
+			curve.add_point(_gv(c, p.x + side.x, p.y + side.y, 3.5))
+		var car := _car(c, rng.randi_range(0, 2) + ci)
+		ci += 1
+		car.set_meta("path", curve)
+		car.set_meta("speed", curve.get_baked_length() / rng.randf_range(28.0, 46.0))
+		car.set_meta("off", rng.randf() * curve.get_baked_length())
+		(c["cars"] as Array).append(car)
+
 static func _column(c: Dictionary, a: Vector2, b: Vector2) -> void:
 	# A tank platoon road-marching toward the SAM site, staggered off the centreline.
 	var rng: RandomNumberGenerator = c["rng"]
@@ -798,7 +891,8 @@ static func _ribbon(c: Dictionary, a: Vector2, b: Vector2, w_m: float, col: Colo
 		prev_r = vr
 	var mesh := st.commit()
 	mesh.surface_set_material(0, _lm())
-	_mi(c["out"], mesh, null, Vector3.ZERO)
+	# ground-hugging strips / wires never cast — at far zoom they smear into shadow acne
+	_mi(c["out"], mesh, null, Vector3.ZERO).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 static func _powerline(c: Dictionary, a: Vector2, b: Vector2) -> void:
 	var k: float = c["k"]
@@ -838,7 +932,8 @@ static func _powerline(c: Dictionary, a: Vector2, b: Vector2) -> void:
 				pv = q
 	var mesh := st.commit()
 	mesh.surface_set_material(0, _lm())
-	_mi(c["out"], mesh, null, Vector3.ZERO)
+	# ground-hugging strips / wires never cast — at far zoom they smear into shadow acne
+	_mi(c["out"], mesh, null, Vector3.ZERO).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 static func _pipeline(c: Dictionary, a: Vector2, b: Vector2) -> void:
 	# An elevated trunk line running from the refinery off the map edge, with supports.
@@ -862,7 +957,8 @@ static func _pipeline(c: Dictionary, a: Vector2, b: Vector2) -> void:
 		prev = v
 	var mesh := st.commit()
 	mesh.surface_set_material(0, _lm())
-	_mi(c["out"], mesh, null, Vector3.ZERO)
+	# ground-hugging strips / wires never cast — at far zoom they smear into shadow acne
+	_mi(c["out"], mesh, null, Vector3.ZERO).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mid := a.lerp(b, 0.5)                       # the pump station
 	var s := _site(c, mid.x, mid.y)
 	_mi(s, _box(0.18 * k, 0.10 * k, 0.14 * k), _m("wall", Color(0.34, 0.31, 0.27)),

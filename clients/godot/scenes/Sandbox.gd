@@ -264,6 +264,8 @@ var _t3d_props: Node3D = null
 var _t3d_spin: Array = []         # nodes rotating per frame (radar heads, turbine rotors)
 var _t3d_beacons: Array = []      # blinking obstruction lights
 var _t3d_booms: Array = []        # periodic one-shot explosion emitters (the range)
+var _t3d_cars: Array = []         # road traffic looping along baked Curve3D paths
+var _t3d_sun: DirectionalLight3D = null   # kept so the shadow range can track the zoom
 var _t3d_anim_t := 0.0
 var _cam_yaw := -2.35             # orbit camera state (drag to rotate, wheel to zoom)
 var _cam_pitch := 0.45
@@ -778,6 +780,8 @@ func _build_terrain_scene() -> void:
 	_t3d_spin = []
 	_t3d_beacons = []
 	_t3d_booms = []
+	_t3d_cars = []
+	_t3d_sun = null
 	if _terrain_n < 2 or _terrain_extent.size() < 4 or _terrain_grid_h.size() < _terrain_n * _terrain_n:
 		return                        # malformed handshake — leave the 2-D HUD alone
 	_t3d_layer = CanvasLayer.new()
@@ -807,8 +811,10 @@ func _build_terrain_scene() -> void:
 	sun.light_color = Color(1.0, 0.93, 0.82)
 	sun.light_energy = 1.15
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 500.0
+	sun.directional_shadow_blend_splits = true    # hide the split seams when zoomed out
+	sun.shadow_blur = 1.6                         # soften map-scale prop shadows a touch
 	root.add_child(sun)
+	_t3d_sun = sun                    # range/opacity are zoom-tracked in _update_t3d_cam
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-22.0, 140.0, 0.0)
 	fill.light_color = Color(0.55, 0.68, 0.95)
@@ -934,6 +940,7 @@ func _terrain_on_state(obj: Dictionary) -> void:
 		_t3d_spin = deco["spinners"]
 		_t3d_beacons = deco["beacons"]
 		_t3d_booms = deco["booms"]
+		_t3d_cars = deco.get("cars", [])
 	# trail breadcrumbs (skip the repeat point — the paused/held frame)
 	if _t3d_trail_pts.is_empty() or _t3d_trail_pts[-1] != t3:
 		_t3d_trail_pts.append(t3)
@@ -984,6 +991,13 @@ func _update_t3d_cam() -> void:
 	var dir := Vector3(cos(_cam_pitch) * cos(_cam_yaw), sin(_cam_pitch), cos(_cam_pitch) * sin(_cam_yaw))
 	_t3d_cam.position = _cam_focus + dir * _cam_dist
 	_t3d_cam.look_at(_cam_focus, Vector3.UP)
+	if _t3d_sun != null:
+		# Shadow tuning tracks the zoom (display only): the shadow-map range follows the
+		# camera so close-in props get crisp shadows instead of spreading the map over a
+		# fixed 500 u, and the opacity eases off at far zoom where sub-pixel prop shadows
+		# would only shimmer against the terrain tint.
+		_t3d_sun.directional_shadow_max_distance = clampf(_cam_dist * 1.8, 100.0, 1200.0)
+		_t3d_sun.shadow_opacity = clampf(1.15 - _cam_dist / 1500.0, 0.45, 1.0)
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Orbit/zoom for the terrain 3-D camera (display only; other views ignore input here).
@@ -1519,8 +1533,9 @@ func _world_to_screen(pos: Array) -> Vector2:
 func _process(dt: float) -> void:
 	# Terrain-view prop animation (fx/props3d.gd contract — all display-only): radar heads
 	# and turbine rotors spin, obstruction beacons blink, the range's one-shot explosion
-	# emitters restart on their timers. No physics, no wire traffic, no redraw needed
-	# (the 3-D SubViewport renders continuously).
+	# emitters restart on their timers, road cars loop along their baked ground curves.
+	# No physics, no wire traffic, no redraw needed (the 3-D SubViewport renders
+	# continuously).
 	if _mode == "terrain" and _t3d_props != null and is_instance_valid(_t3d_props):
 		_t3d_anim_t += dt
 		for s in _t3d_spin:
@@ -1540,6 +1555,18 @@ func _process(dt: float) -> void:
 							ch.restart()
 					tl = float(bm.get_meta("boom_period", 8.0))
 				bm.set_meta("boom_t", tl)
+		for car in _t3d_cars:
+			if is_instance_valid(car):
+				var curve: Curve3D = car.get_meta("path", null)
+				if curve == null or curve.get_baked_length() <= 0.0:
+					continue
+				var ln := curve.get_baked_length()
+				var off := fmod(float(car.get_meta("off", 0.0)) + float(car.get_meta("speed", 1.0)) * dt, ln)
+				car.set_meta("off", off)
+				car.position = curve.sample_baked(off)
+				var ahead: Vector3 = curve.sample_baked(minf(off + 0.4, ln)) - car.position
+				if ahead.length_squared() > 1.0e-8:   # at the wrap point keep the last yaw
+					car.rotation.y = atan2(-ahead.z, ahead.x)
 	var i := _blips.size() - 1
 	var changed := false
 	while i >= 0:

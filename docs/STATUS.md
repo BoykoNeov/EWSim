@@ -2208,6 +2208,31 @@ pylon wires + trucks; city close-up: dark towers with blocky lit windows post-fi
 explosion fireball + smoke dome + craters + hulks + turbine rotors on the ridge). Julia core
 untouched — the 2604-test suite is out of scope by construction.
 
+**Baked-props follow-up (2026-07-14, same day)** — four refinements, same rails (git touches exactly
+`fx/props3d.gd` + `Sandbox.gd`; display-only): (1) HOUSE WINDOW TEXTURES — the city-tower treatment
+scaled to cottages: `_house_win_mat` reuses the SAME nearest-filtered lit-window emission texs over
+the wall albedo at coarser UV tiling (1.3/1.5) and gentler energy (1.1 — a village glows, it doesn't
+blaze); replaces the old single lit-window box. (2) ROAD TRAFFIC — `_traffic` puts looping two-way
+cars on every road ribbon (one per direction, offset ±0.22·road_w off the centreline = right-hand
+traffic), each following a `Curve3D` baked onto the SAME handshake heightfield; the cars contract
+joins spin/blink/boom in the decorate() meta contract (meta `path`/`speed`/`off`; the caller advances
+`off`, wraps at `get_baked_length()`, yaws the +X nose at a point sampled 0.4 u ahead — skipping the
+yaw at the wrap point keeps the car from snapping). Cars are `_car` props: paint-variant body, glass
+cabin, warm headlights + red taillights. (3) SEASONAL FIELD PALETTES — the farm patchwork picks
+spring/summer/autumn/winter off the GRID HASH (`absi(gh>>4)%4`), NOT an rng draw, so the scatter
+sequence — and every previously-eyeballed layout — is untouched; same scenario always farms the same
+time of year. (4) FAR-ZOOM SHADOW TUNING — the sun's `directional_shadow_max_distance` now TRACKS the
+orbit zoom (`clamp(cam_dist·1.8, 100, 1200)` in `_update_t3d_cam`, replacing the fixed 500: ~3×
+crisper close-in) with `shadow_opacity` easing to 0.45 at max zoom-out (sub-pixel prop shadows only
+shimmer), blend-split + `shadow_blur 1.6` at build; and ground-hugging strips/wires (ribbons, field
+patches, catenary wires, pipeline) plus all particle puffs get `cast_shadow OFF` — at far zoom they
+smear into shadow acne / dark blobs. GDScript catch: `:=` cannot infer through an untyped loop
+variable (`for lane in [1.0,-1.0]` → Variant products) — type the loop var or the target. Proofs:
+all 17 UI tests GREEN; `slice18_verify.gd` GREEN vs a live server (2500-frame held-seed replay
+bit-identical with cars/windows/season/shadow changes building mid-run); four windowed shots
+eyeballed (far: framing + shadows intact; mid/close: window-lit houses, a car with taillights on the
+village road — position moved between two captures 3 s apart, confirming the loop animates).
+
 ---
 
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
