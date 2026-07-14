@@ -67,6 +67,18 @@ const COL_TICK := Color(1, 1, 1, 0.40)               # axis tick labels
 # headless/fresh load, so a bare type reference fails to resolve there. preload
 # binds the script directly and works in the editor and headless alike.
 const SimClientScript := preload("res://net/SimClient.gd")
+# --- baked fx resources (res://fx/ — display-only chrome shared by every view, current
+# and future). All text-format resources: a starfield/gradient backdrop shader (rides
+# CanvasLayer -2 behind every view), a radial glow sprite (the _glow halo helper), the
+# one UI theme, the terrain surface shader (slope shading + labeled contour lines over
+# the CORE's height grid), and the 3-D environment (sky/fog/bloom). None of them touch
+# a physics number — they dress what the core already said.
+const FX_GLOW: Texture2D = preload("res://fx/glow.tres")
+const FX_THEME: Theme = preload("res://fx/theme.tres")
+const FX_BACKDROP_SHADER: Shader = preload("res://fx/backdrop.gdshader")
+const FX_TERRAIN_SHADER: Shader = preload("res://fx/terrain.gdshader")
+const FX_TERRAIN_ENV: Environment = preload("res://fx/terrain_env.tres")
+const T3D_CONTOUR_M := 50.0       # real-metre interval of the terrain contour lines (HUD-labeled)
 
 var _client
 var _font: Font
@@ -255,21 +267,30 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_layout_badge)
 
 func _build_ui() -> void:
+	# The shared backdrop (fx/backdrop.gdshader on CanvasLayer -2): the starfield sky every 2-D
+	# view sits on. Behind the Node2D canvas AND behind the terrain 3-D layer (-1), so the 3-D
+	# view's own sky covers it. Pure chrome; sized by anchors so a window resize just works.
+	var bg_layer := CanvasLayer.new()
+	bg_layer.layer = -2
+	add_child(bg_layer)
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bg_mat := ShaderMaterial.new()
+	bg_mat.shader = FX_BACKDROP_SHADER
+	bg.material = bg_mat
+	bg_layer.add_child(bg)
+
 	var ui := CanvasLayer.new()
 	add_child(ui)
 
-	# The left control panel rides in a PanelContainer with a translucent dark StyleBox so the
+	# The left control panel rides in a PanelContainer skinned by the baked fx/theme.tres (the
+	# one instrument-chrome skin — panel stylebox, buttons, sliders, labels, tooltips), so the
 	# sliders/readout stay legible over whatever the view draws underneath (pure chrome — the
 	# headless UI tests build the inner widgets directly and never touch this wrapper).
 	var panel_box := PanelContainer.new()
 	panel_box.position = Vector2(8, 8)
-	var sbx := StyleBoxFlat.new()
-	sbx.bg_color = Color(0.05, 0.07, 0.10, 0.86)
-	sbx.border_color = COL_PANEL_BORDER
-	sbx.set_border_width_all(1)
-	sbx.set_corner_radius_all(6)
-	sbx.set_content_margin_all(10.0)
-	panel_box.add_theme_stylebox_override("panel", sbx)
+	panel_box.theme = FX_THEME
 	ui.add_child(panel_box)
 
 	var panel := VBoxContainer.new()
@@ -323,6 +344,7 @@ func _build_ui() -> void:
 	# from the handshake's actual fidelity map, never hardcoded.
 	_badge = Label.new()
 	_badge.modulate = Color(1, 1, 1, 0.7)
+	_badge.theme = FX_THEME
 	_badge.add_theme_font_size_override("font_size", 12)
 	ui.add_child(_badge)
 	_layout_badge()
@@ -749,21 +771,26 @@ func _build_terrain_scene() -> void:
 	holder.add_child(vp)
 	var root := Node3D.new()
 	vp.add_child(root)
-	# camera + a dark-sky environment matching the 2-D palette + a low sun
+	# camera + the baked fx/terrain_env.tres environment (procedural night-blue sky matching the
+	# 2-D palette, sky ambient, subtle depth fog, filmic tonemap, and a soft glow pass so the
+	# emissive markers / LOS ray / trail bloom) + a warm low key light that casts shadows off the
+	# hills + a faint cool fill from the opposite side so shadowed slopes stay readable.
 	_t3d_cam = Camera3D.new()
-	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = COL_BG_TOP
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.70, 0.75, 0.85)
-	env.ambient_light_energy = 0.6
-	_t3d_cam.environment = env
+	_t3d_cam.environment = FX_TERRAIN_ENV
 	_t3d_cam.far = 4000.0
 	root.add_child(_t3d_cam)
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-38.0, -35.0, 0.0)
-	sun.light_energy = 1.1
+	sun.light_color = Color(1.0, 0.93, 0.82)
+	sun.light_energy = 1.15
+	sun.shadow_enabled = true
+	sun.directional_shadow_max_distance = 500.0
 	root.add_child(sun)
+	var fill := DirectionalLight3D.new()
+	fill.rotation_degrees = Vector3(-22.0, 140.0, 0.0)
+	fill.light_color = Color(0.55, 0.68, 0.95)
+	fill.light_energy = 0.25
+	root.add_child(fill)
 	# the terrain mesh — CORE heights, client-meshed (display only)
 	var ter := MeshInstance3D.new()
 	ter.mesh = _build_terrain_mesh()
@@ -828,10 +855,13 @@ func _build_terrain_mesh() -> ArrayMesh:
 				st.add_vertex(_grid_v(gx, gy))
 	st.generate_normals()
 	var mesh := st.commit()
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 1.0
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	# the baked fx/terrain.gdshader surface: keeps the height-tinted vertex colors as albedo and
+	# adds slope-based rock shading + antialiased elevation contours + noise grain — all DISPLAY.
+	# The contour spacing is authored in REAL metres (T3D_CONTOUR_M, labeled in the HUD) and
+	# converted to display units here, so the vertical exaggeration can't silently re-scale it.
+	var mat := ShaderMaterial.new()
+	mat.shader = FX_TERRAIN_SHADER
+	mat.set_shader_parameter("contour_spacing", T3D_CONTOUR_M * T3D_SCALE * T3D_VEXAG)
 	mesh.surface_set_material(0, mat)
 	return mesh
 
@@ -847,7 +877,7 @@ func _make_t3d_marker(root: Node3D, col: Color) -> Node3D:
 	mat.albedo_color = col
 	mat.emission_enabled = true
 	mat.emission = col
-	mat.emission_energy_multiplier = 0.6
+	mat.emission_energy_multiplier = 1.6   # past the env glow threshold → the marker blooms
 	body.material_override = mat
 	m.add_child(body)
 	return m
@@ -909,8 +939,8 @@ func _draw_terrain_hud() -> void:
 		var c := float(_telemetry[_terrain_radar + ".terrain_clearance_m"])
 		draw_string(_font, Vector2(vp.x - 320, 64), "LOS clearance: %+.0f m" % c,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
-	draw_string(_font, Vector2(vp.x - 460, vp.y - 16),
-			"3-D terrain view — vertical ×%.1f (display only) · drag: orbit · wheel: zoom" % T3D_VEXAG,
+	draw_string(_font, Vector2(vp.x - 560, vp.y - 16),
+			"3-D terrain view — vertical ×%.1f (display only) · contours every %.0f m · drag: orbit · wheel: zoom" % [T3D_VEXAG, T3D_CONTOUR_M],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, COL_TICK)
 
 func _update_t3d_cam() -> void:
@@ -1493,16 +1523,21 @@ func _fmt_km(m: float) -> String:
 	var km := m / 1000.0
 	return ("%.0f" % km) if absf(km - roundf(km)) < 0.05 else ("%.1f" % km)
 
+func _glow(p: Vector2, r: float, col: Color) -> void:
+	# A soft halo under a marker/blip/burst: the baked fx/glow.tres radial sprite, modulated to
+	# the marker's color (alpha = strength). Pure chrome — shared by every 2-D view so all the
+	# glows read as one instrument.
+	draw_texture_rect(FX_GLOW, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, col)
+
 func _draw_spatial_backdrop() -> void:
-	# The elevation view's scene-setting layer: a vertical sky gradient, a filled ground strip
-	# below altitude 0, and a labeled km grid (downrange along the ground, altitude up the right
-	# edge — the left edge is the UI panel). Pure display; the world→screen mapping is the same
-	# _world_to_screen every marker uses, so the grid is honest about the auto-expanding extents.
+	# The elevation view's scene-setting layer: a filled ground strip below altitude 0 and a
+	# labeled km grid (downrange along the ground, altitude up the right edge — the left edge is
+	# the UI panel). The SKY itself is the fx/backdrop.gdshader starfield on CanvasLayer -2 (one
+	# shared backdrop for every view), so nothing opaque is painted above the ground line here.
+	# Pure display; the world→screen mapping is the same _world_to_screen every marker uses, so
+	# the grid is honest about the auto-expanding extents.
 	var vp := get_viewport_rect().size
 	var ground_y := (vp.y - MARGIN)
-	draw_polygon(
-		PackedVector2Array([Vector2(0, 0), Vector2(vp.x, 0), Vector2(vp.x, ground_y), Vector2(0, ground_y)]),
-		PackedColorArray([COL_BG_TOP, COL_BG_TOP, COL_BG_BOT, COL_BG_BOT]))
 	draw_rect(Rect2(0, ground_y, vp.x, vp.y - ground_y), COL_GROUND)
 	# downrange ticks (km): faint verticals through the sky + labels in the ground strip
 	var xstep := _nice_step(_x_max)
@@ -1542,6 +1577,10 @@ func _draw_trail(world_pts: Array, col: Color, width := 2.0) -> void:
 func _draw_missile_body(head: Vector2, dir: Vector2, col: Color) -> void:
 	# A small missile silhouette oriented along `dir` (nose cone + hull + two tail fins) — the shared
 	# marker for every missile view. Display only; ~32 px long, built from the screen-space direction.
+	# The body glow (in the missile's own hue) plus a warm exhaust glow behind the tail come from the
+	# baked fx sprite, so every missile view shares the one look.
+	_glow(head, 22.0, Color(col.r, col.g, col.b, 0.28))
+	_glow(head - dir * 17.0, 9.0, Color(1.0, 0.65, 0.25, 0.55))
 	var p := Vector2(-dir.y, dir.x)
 	draw_colored_polygon(PackedVector2Array([
 		head + dir * 16.0,
@@ -1570,8 +1609,9 @@ func _draw_spatial() -> void:
 		var e = _entities[id]
 		var p := _world_to_screen(e.pos)
 		if e.kind == "radar":
-			# a small upward triangle for the site
+			# a small upward triangle for the site, over a soft site glow
 			var rcol := Color(0.5, 0.8, 1.0)
+			_glow(p, 26.0, Color(rcol.r, rcol.g, rcol.b, 0.35))
 			draw_colored_polygon(
 				PackedVector2Array([p + Vector2(0, -10), p + Vector2(-9, 6), p + Vector2(9, 6)]), rcol)
 			draw_string(_font, p + Vector2(12, 4), id, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, rcol)
@@ -1586,6 +1626,8 @@ func _draw_spatial() -> void:
 				tcol = Color(0.4, 1.0, 0.4)
 			else:
 				tcol = Color(0.75, 0.75, 0.75)
+			# glow tracks the state color (dimmer when masked — the dark-red already says "gone")
+			_glow(p, 20.0, Color(tcol.r, tcol.g, tcol.b, 0.18 if not visible else 0.32))
 			draw_circle(p, TARGET_R, tcol)
 			draw_string(_font, p + Vector2(10, -8), id + tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, tcol)
 		elif e.kind == "jammer":
@@ -1597,6 +1639,7 @@ func _draw_spatial() -> void:
 			var jcol := Color(1.0, 0.35, 0.9)
 			if _radar_id != "" and _entities.has(_radar_id):
 				draw_line(_world_to_screen(_entities[_radar_id].pos), p, Color(1.0, 0.35, 0.9, 0.25), 1.0)
+			_glow(p, 22.0, Color(jcol.r, jcol.g, jcol.b, 0.30))
 			draw_colored_polygon(PackedVector2Array(
 				[p + Vector2(0, -8), p + Vector2(8, 0), p + Vector2(0, 8), p + Vector2(-8, 0)]), jcol)
 			draw_string(_font, p + Vector2(11, 4), id, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, jcol)
@@ -1606,6 +1649,7 @@ func _draw_spatial() -> void:
 			# (`_nearest_target` skips kind :decoy → miss/CPA is always vs the true target); it exists to
 			# SEDUCE the undiscriminated seeker (the :none blend leads the missile toward this glyph).
 			var dcol := Color(1.0, 0.6, 0.15)
+			_glow(p, 20.0, Color(dcol.r, dcol.g, dcol.b, 0.30))
 			draw_colored_polygon(PackedVector2Array([
 				p + Vector2(0, -9), p + Vector2(2.5, -2.5), p + Vector2(9, 0), p + Vector2(2.5, 2.5),
 				p + Vector2(0, 9), p + Vector2(-2.5, 2.5), p + Vector2(-9, 0), p + Vector2(-2.5, -2.5)]), dcol)
@@ -1634,10 +1678,11 @@ func _draw_spatial() -> void:
 	if _fid_kind == "cooperation":
 		_draw_salvo()
 
-	# detection blips: expanding rings that fade over BLIP_TTL
+	# detection blips: expanding rings that fade over BLIP_TTL, over a fading center glow
 	for b in _blips:
 		var a: float = 1.0 - (b.age / BLIP_TTL)
 		var r: float = TARGET_R + 18.0 * (b.age / BLIP_TTL)
+		_glow(b.pos, r + 12.0, Color(1.0, 0.55, 0.2, a * 0.35))
 		draw_arc(b.pos, r, 0.0, TAU, 32, Color(1.0, 0.55, 0.2, a), 2.0)
 
 	# airframe view (slice 16/17): the α-vs-time strip chart in the corner — the ringing/tumble lesson
@@ -1658,6 +1703,7 @@ func _draw_missile() -> void:
 	if impacted:
 		# impact burst: an orange starburst at the ground crossing (the :impact terminal condition)
 		var ic := Color(1.0, 0.5, 0.2)
+		_glow(head, 36.0, Color(ic.r, ic.g, ic.b, 0.55))
 		for k in 8:
 			var a := TAU * float(k) / 8.0
 			draw_line(head, head + Vector2(cos(a), sin(a)) * 10.0, ic, 2.0)
@@ -1937,11 +1983,22 @@ func _draw_cfar() -> void:
 		draw_string(_font, Vector2(gx - 10, rect.end.y + 16), "%.0f" % rng_km, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 1, 0.5))
 	draw_string(_font, Vector2(rect.position.x + rect.size.x * 0.5 - 30, rect.end.y + 32), "range (km)", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.55))
 
-	# profile polyline (what the receiver saw this look)
+	# profile polyline (what the receiver saw this look), over a translucent area fill —
+	# the fill is the SAME per-cell data given visual weight (chrome, nothing recomputed)
 	if _profile_db.size() >= 2:
 		var pts := PackedVector2Array()
 		for i in _profile_db.size():
 			pts.append(Vector2(_cfar_x(i, rect), _cfar_y(float(_profile_db[i]), rect)))
+		# per-segment quads, NOT one big polygon: a 512-point noisy trace routinely fails the
+		# renderer's ear-clipping triangulation ("Invalid polygon data"); each quad is convex
+		# so it always draws. Vertex alpha fades curve → baseline.
+		var top := Color(0.5, 0.8, 1.0, 0.10)
+		var bot := Color(0.5, 0.8, 1.0, 0.0)
+		var base_y := rect.end.y
+		for i in pts.size() - 1:
+			draw_polygon(
+				PackedVector2Array([pts[i], pts[i + 1], Vector2(pts[i + 1].x, base_y), Vector2(pts[i].x, base_y)]),
+				PackedColorArray([top, top, bot, bot]))
 		draw_polyline(pts, Color(0.5, 0.8, 1.0), 1.5)
 
 	# threshold polyline (CORE output — the adaptive curve the rung produced)
@@ -1954,7 +2011,9 @@ func _draw_cfar() -> void:
 	# a marker per detected cell (profile crossed the threshold there)
 	for i in _detections.size():
 		if bool(_detections[i]) and i < _profile_db.size():
-			draw_circle(Vector2(_cfar_x(i, rect), _cfar_y(float(_profile_db[i]), rect)), 3.0, Color(0.4, 1.0, 0.4))
+			var dp := Vector2(_cfar_x(i, rect), _cfar_y(float(_profile_db[i]), rect))
+			_glow(dp, 9.0, Color(0.4, 1.0, 0.4, 0.45))
+			draw_circle(dp, 3.0, Color(0.4, 1.0, 0.4))
 
 	_cfar_legend(rect)
 
@@ -2047,6 +2106,7 @@ func _draw_plan() -> void:
 			draw_string(_font, p + Vector2(9, 4), id, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, c)
 		elif e.kind == "emitter":
 			var c := Color(1.0, 0.55, 0.2)
+			_glow(p, 18.0, Color(c.r, c.g, c.b, 0.30))
 			draw_line(p + Vector2(-7, -7), p + Vector2(7, 7), c, 2.0)
 			draw_line(p + Vector2(-7, 7), p + Vector2(7, -7), c, 2.0)
 			draw_string(_font, p + Vector2(10, 4), id + " (truth)", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, c)
@@ -2074,6 +2134,7 @@ func _draw_plan() -> void:
 			draw_polyline(pts, Color(0.4, 1.0, 0.5, 0.9), 1.5)
 		var fp := _world_to_plan(fx, fy)                              # the fix marker (green +)
 		var fc := Color(0.4, 1.0, 0.5)
+		_glow(fp, 16.0, Color(fc.r, fc.g, fc.b, 0.30))
 		draw_line(fp + Vector2(-7, 0), fp + Vector2(7, 0), fc, 2.0)
 		draw_line(fp + Vector2(0, -7), fp + Vector2(0, 7), fc, 2.0)
 		draw_string(_font, fp + Vector2(9, -6), "fix", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, fc)
@@ -2173,6 +2234,7 @@ func _draw_esm_histogram(rect: Rect2) -> void:
 	for pv in _esm_pri:
 		var tau := float(pv)
 		var x := rect.position.x + clampf(tau / span_us, 0.0, 1.0) * rect.size.x
+		_glow(Vector2(x, rect.position.y + 8.0), 11.0, Color(0.4, 1.0, 0.4, 0.4))
 		draw_colored_polygon(PackedVector2Array([
 			Vector2(x, rect.position.y + 13), Vector2(x - 5, rect.position.y + 3), Vector2(x + 5, rect.position.y + 3)]),
 			Color(0.4, 1.0, 0.4))
@@ -2243,6 +2305,7 @@ func _draw_gps_sky(rect: Rect2) -> void:
 		var p := c + Vector2(r * cos(az), -r * sin(az))
 		var used: bool = bool(_gps_used[i]) if i < _gps_used.size() else true
 		var col := _gps_color(i, used, fault_sat)
+		_glow(p, 13.0, Color(col.r, col.g, col.b, 0.35))
 		draw_circle(p, 5.0, col)
 		draw_string(_font, p + Vector2(7, -6), "sv%d" % (i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, col)
 	_gps_sky_legend(rect)

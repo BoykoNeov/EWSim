@@ -2133,6 +2133,43 @@ pass). The UI test needs NO server: `… --script res://net/slice18_ui_test.gd`.
 
 ---
 
+**Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
+upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
+`clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,
+plus the `Sandbox.gd` wiring (git touches exactly `fx/*` + `Sandbox.gd`; ZERO physics, ZERO
+core/scenario/wire changes). The fx set: `backdrop.gdshader` (the instrument "sky" — vertical
+palette gradient + a twinkling hashed starfield that fades toward the ground + haze + gentle
+vignette; rides a full-rect ColorRect on CanvasLayer −2 behind EVERY view, so a future view inherits
+it by existing), `glow.tres` (a baked radial-falloff GradientTexture2D — the one soft-halo sprite,
+drawn via the new `_glow(p, r, col)` helper under radar/target/jammer/decoy markers, detection blips,
+missile bodies + a faint tail glow, impact bursts, the geoloc emitter/fix, GPS satellites, ESM PRI
+markers, and CFAR detections — every glow in the client is now the same falloff), `theme.tres` (the
+one UI Theme: panel/button/slider/tooltip styleboxes + grabber icons + label colors; applied at the
+`PanelContainer` root + badge, replacing the inline StyleBox — headless UI harnesses build bare
+widgets and are untouched), `terrain.gdshader` (the 3-D surface: keeps the height-tinted VERTEX
+COLORS as albedo — the data path unchanged — and adds slope-based rock shading, fwidth-antialiased
+elevation CONTOURS with a stronger every-5th index line, and value-noise grain; spacing authored in
+REAL metres — `T3D_CONTOUR_M=50` converted through T3D_SCALE·T3D_VEXAG so the exaggeration can't
+silently re-scale it, and the HUD note now says "contours every 50 m" — §12 honesty), and
+`terrain_env.tres` (the baked 3-D Environment: ProceduralSky night-blue matching the 2-D palette,
+sky ambient, subtle depth fog, filmic tonemap, and a glow pass — the emissive markers bumped to 1.6×
+so they bloom; the terrain scene also gains a warm shadow-casting key light + a faint cool fill).
+SPATIAL backdrop change: `_draw_spatial_backdrop` no longer paints an opaque sky polygon — the
+shader layer owns the sky; the ground strip/grid/labels still draw in-canvas off the live
+`_world_to_screen`. CFAR gains a translucent area fill under the profile polyline — drawn as
+PER-SEGMENT convex quads, NOT one polygon: a 512-point noisy trace routinely fails the renderer's
+ear-clipping triangulation ("Invalid polygon data", caught live on the first windowed shot); each
+quad is convex so it always draws (vertex alpha fades curve→baseline; same per-cell data, zero
+recompute). Proofs: all 17 `*_ui_test.gd` GREEN post-change (FAILS: 0 — these load the script, so
+they also prove the five fx resources parse headless); four windowed shots against live servers
+eyeballed via the throwaway shot-harness recipe (slice 18: contour-ringed hills + slope shading +
+procedural-sky horizon + themed panel + "TERRAIN MASKED −201 m" intact; slice 2: starfield sky +
+glowing radar + honest dark-red below-horizon target; slice 3: area-filled clutter block + glowing
+detections + ZERO polygon errors after the quad fix; slice 14: twin salvo arcs + glowing missile
+silhouettes). Julia core untouched — the 2604-test suite is out of scope by construction.
+
+---
+
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
 (`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0); `rf.jl`

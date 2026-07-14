@@ -1,0 +1,36 @@
+[gd_resource type="Environment" load_steps=3 format=3]
+
+; EWSim 3-D environment (fx/) — the baked look for every Node3D view (slice-18
+; terrain today; land clutter / full 6-DOF views later): a procedural night-blue sky
+; matching the 2-D palette (COL_BG_TOP zenith, lighter horizon), sky-sourced ambient,
+; subtle exponential depth fog, filmic tonemapping, and a soft glow pass so the
+; emissive markers / LOS ray / trail bloom gently. PURE CHROME: display only.
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
+sky_top_color = Color(0.03, 0.045, 0.08, 1)
+sky_horizon_color = Color(0.115, 0.165, 0.235, 1)
+sky_curve = 0.12
+ground_bottom_color = Color(0.02, 0.03, 0.045, 1)
+ground_horizon_color = Color(0.1, 0.14, 0.19, 1)
+ground_curve = 0.08
+sun_angle_max = 25.0
+sun_curve = 0.12
+
+[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("sky_mat")
+
+[resource]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 3
+ambient_light_energy = 1.0
+tonemap_mode = 2
+glow_enabled = true
+glow_intensity = 0.55
+glow_strength = 1.0
+glow_bloom = 0.05
+glow_hdr_threshold = 0.88
+fog_enabled = true
+fog_light_color = Color(0.12, 0.16, 0.22, 1)
+fog_density = 0.0016
+fog_sky_affect = 0.12

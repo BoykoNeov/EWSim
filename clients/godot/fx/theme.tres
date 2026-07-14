@@ -1,0 +1,178 @@
+[gd_resource type="Theme" load_steps=14 format=3]
+
+; EWSim shared UI theme (fx/) — the one instrument-chrome skin for every view's
+; controls (buttons, sliders, labels, the control panel, tooltips), baked so current
+; AND future views inherit it by setting `theme` on their root Control. PURE CHROME:
+; display only. Palette matches Sandbox.gd's COL_* constants (deep navy panels, a
+; cyan-blue accent, low-alpha borders).
+
+[sub_resource type="StyleBoxFlat" id="sb_panel"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.05, 0.07, 0.1, 0.86)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3, 0.38, 0.48, 0.85)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="sb_btn_normal"]
+content_margin_left = 10.0
+content_margin_top = 4.0
+content_margin_right = 10.0
+content_margin_bottom = 4.0
+bg_color = Color(0.09, 0.125, 0.175, 0.92)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.32, 0.42, 0.54, 0.7)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="sb_btn_hover"]
+content_margin_left = 10.0
+content_margin_top = 4.0
+content_margin_right = 10.0
+content_margin_bottom = 4.0
+bg_color = Color(0.13, 0.18, 0.25, 0.95)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.45, 0.62, 0.8, 0.9)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="sb_btn_pressed"]
+content_margin_left = 10.0
+content_margin_top = 4.0
+content_margin_right = 10.0
+content_margin_bottom = 4.0
+bg_color = Color(0.1, 0.2, 0.32, 0.97)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.5, 0.75, 1, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="sb_btn_focus"]
+draw_center = false
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.5, 0.75, 1, 0.45)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="sb_slider"]
+content_margin_top = 2.0
+content_margin_bottom = 2.0
+bg_color = Color(0.1, 0.13, 0.18, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3, 0.38, 0.48, 0.5)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="sb_grab_area"]
+content_margin_top = 2.0
+content_margin_bottom = 2.0
+bg_color = Color(0.3, 0.52, 0.75, 0.85)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="sb_grab_area_hl"]
+content_margin_top = 2.0
+content_margin_bottom = 2.0
+bg_color = Color(0.42, 0.68, 0.95, 0.95)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="sb_tooltip"]
+content_margin_left = 8.0
+content_margin_top = 4.0
+content_margin_right = 8.0
+content_margin_bottom = 4.0
+bg_color = Color(0.06, 0.085, 0.12, 0.96)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.4, 0.55, 0.72, 0.8)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="Gradient" id="grad_grabber"]
+offsets = PackedFloat32Array(0.0, 0.62, 0.78, 1.0)
+colors = PackedColorArray(0.88, 0.94, 1, 1, 0.72, 0.84, 0.98, 1, 0.35, 0.48, 0.62, 0.9, 0.35, 0.48, 0.62, 0)
+
+[sub_resource type="GradientTexture2D" id="tex_grabber"]
+gradient = SubResource("grad_grabber")
+width = 14
+height = 14
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[sub_resource type="Gradient" id="grad_grabber_hl"]
+offsets = PackedFloat32Array(0.0, 0.62, 0.78, 1.0)
+colors = PackedColorArray(1, 1, 1, 1, 0.65, 0.85, 1, 1, 0.4, 0.65, 0.95, 0.95, 0.4, 0.65, 0.95, 0)
+
+[sub_resource type="GradientTexture2D" id="tex_grabber_hl"]
+gradient = SubResource("grad_grabber_hl")
+width = 14
+height = 14
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[resource]
+Button/colors/font_color = Color(0.85, 0.9, 0.95, 1)
+Button/colors/font_focus_color = Color(0.9, 0.95, 1, 1)
+Button/colors/font_hover_color = Color(1, 1, 1, 1)
+Button/colors/font_pressed_color = Color(0.65, 0.85, 1, 1)
+Button/font_sizes/font_size = 13
+Button/styles/disabled = SubResource("sb_btn_normal")
+Button/styles/focus = SubResource("sb_btn_focus")
+Button/styles/hover = SubResource("sb_btn_hover")
+Button/styles/normal = SubResource("sb_btn_normal")
+Button/styles/pressed = SubResource("sb_btn_pressed")
+HSlider/icons/grabber = SubResource("tex_grabber")
+HSlider/icons/grabber_disabled = SubResource("tex_grabber")
+HSlider/icons/grabber_highlight = SubResource("tex_grabber_hl")
+HSlider/styles/grabber_area = SubResource("sb_grab_area")
+HSlider/styles/grabber_area_highlight = SubResource("sb_grab_area_hl")
+HSlider/styles/slider = SubResource("sb_slider")
+Label/colors/font_color = Color(0.84, 0.89, 0.95, 1)
+Label/font_sizes/font_size = 13
+PanelContainer/styles/panel = SubResource("sb_panel")
+TooltipLabel/colors/font_color = Color(0.9, 0.94, 1, 1)
+TooltipPanel/styles/panel = SubResource("sb_tooltip")

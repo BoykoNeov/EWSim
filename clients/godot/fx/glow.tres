@@ -1,0 +1,19 @@
+[gd_resource type="GradientTexture2D" load_steps=2 format=3]
+
+; EWSim shared soft-glow sprite (fx/) — a baked radial falloff used as an additive
+; halo under markers, detection blips, and impact bursts in every 2-D view (drawn via
+; Sandbox.gd's _glow helper, modulated to the marker's color). PURE CHROME: display
+; only, no data. Baked as a resource so every current and future view shares the one
+; falloff instead of re-deriving it procedurally.
+
+[sub_resource type="Gradient" id="Gradient_glow"]
+offsets = PackedFloat32Array(0.0, 0.18, 0.45, 0.75, 1.0)
+colors = PackedColorArray(1, 1, 1, 0.9, 1, 1, 1, 0.55, 1, 1, 1, 0.22, 1, 1, 1, 0.06, 1, 1, 1, 0)
+
+[resource]
+gradient = SubResource("Gradient_glow")
+width = 96
+height = 96
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
