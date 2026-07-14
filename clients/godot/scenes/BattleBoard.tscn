@@ -1,0 +1,9 @@
+; 2-D battle / coordinator overview board (display-only theatre — see BattleBoard.gd).
+; Intentionally a bare root node — all UI, terrain tint, and unit rendering are built
+; in BattleBoard.gd, so there is no hand-authored layout to drift out of sync.
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/BattleBoard.gd" id="1_bb"]
+
+[node name="BattleBoard" type="Node2D"]
+script = ExtResource("1_bb")

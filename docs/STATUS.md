@@ -2233,6 +2233,41 @@ bit-identical with cars/windows/season/shadow changes building mid-run); four wi
 eyeballed (far: framing + shadows intact; mid/close: window-lit houses, a car with taillights on the
 village road — position moved between two captures 3 s apart, confirming the loop animates).
 
+**Battle board (2026-07-14, post-slice-18)** — the FOURTH display-only client piece, and the first
+STANDALONE one: `scenes/BattleBoard.tscn` + `scenes/BattleBoard.gd`, a 2-D top-down BATTLE /
+COORDINATOR overview screen — the client-side FACE of the future HANDOFF §11 Tier-C "Decision / C2
+layer". PURE THEATRE, ZERO PHYSICS, ZERO WIRE: the scene never connects to the Julia core; every
+speed/range/Pk is readability-exaggerated choreography and the HUD SAYS SO on-screen (the §12
+display-honesty rule — "DISPLAY-ONLY THEATRE … not core truth (the Tier-C C2 layer will own this)").
+When the C2 slice lands in the core, this board becomes a thin view of it. The board: a 48×32 km
+map (deterministic Gaussian-hill terrain tint, seeded `RNG_SEED=20260714` — same board every
+launch; 8-km grid; a dashed FLOT divider), 12 BLUE assets west (HQ/C2, EW radar + coverage ring,
+SAM battery, 2 tank platoons, artillery, 2×F-16 CAP, 2×F-16 strike, AEW&C, AH-64) vs 8 RED east
+(CP — the objective, 2 SA batteries with THREAT RINGS, EW radar, a patrolling armor company,
+artillery, a MiG-29 CAP, an airfield). All unit glyphs are programmatic `_draw` "assets"
+(NATO-flavored: blue rect / red diamond frames + type marks; heading-oriented aircraft silhouettes
+with velocity leaders; spinning helo rotor; hp pips; wreck ✕), riding the shared `res://fx` chrome
+(backdrop shader, glow, theme). THE COORDINATOR LOOP: left-click / drag-box selects blue;
+right-click ground = MOVE (waypoint flag + dashed path, formation offsets); right-click a red unit
+= ENGAGE (gated by weapon domain — unarmed/wrong-domain refuse with a log line); homing shot
+streaks + boom effects; a roster (live status per unit), a selected-unit card, and a timestamped
+event log; Pause / ×1–×8 time compression / Reset. RED AUTO-DEFENSE makes the rings real: every
+armed red unit engages blue inside its ring (the MiG chases; statics shoot), so the coordinator's
+actual job is SEAD sequencing — aircraft ARC at 90% launch range instead of overflying (standoff
+10 km vs the 13-km SA ring = a survivable but honest exchange; the scripted demo trades the strike
+pair + helo for one SA battery). Blue's ONLY autonomy is the SAM battery self-defending its ring —
+every other blue trigger pull is an order. Proofs: `net/battleboard_ui_test.gd` headless GREEN
+(off-tree instance, no _ready — the slice-16 mock pattern: 12+8 spawn, MOVE closes on the waypoint,
+ENGAGE fires/kills inside the ring then goes idle, unarmed/wrong-domain refuse, red SAM
+auto-engages blue air in its ring, reset restores the board); `BattleBoard.tscn` headless
+smoke-load exit 0; three windowed shots eyeballed (start board with rings/rosters; mid-fight SAM
+duel with streaks + a fresh wreck; late board with R-SAM2's ring GONE and the trade tallied in the
+roster). Julia core untouched — the 2604-test suite out of scope by construction. Run:
+`godot --path clients/godot res://scenes/BattleBoard.tscn` (no server needed). Deferred (NAMED):
+core-owned C2 truth (weapon–target assignment / engagement scheduling — the Tier-C slice this
+screen fronts); terrain-aware movement; EW/sensor-coverage effects on detection (needs the core);
+waypoint queues; save/load of a battle plan.
+
 ---
 
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
