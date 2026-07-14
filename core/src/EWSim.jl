@@ -25,6 +25,7 @@ include("gnss.jl")
 include("frames.jl")
 include("dynamics.jl")
 include("airframe.jl")
+include("terrain.jl")
 include("guidance.jl")
 include("radar.jl")
 include("esm.jl")
@@ -88,6 +89,9 @@ export pn_accel, pn_accel_from_omega, GUIDANCE_MODES
 export pn_accel_augmented
 # Slice 14 (capstone): cooperative salvo — time-to-go + impact-time-control (the :salvo rung).
 export time_to_go, salvo_consensus, impact_time_control_accel, COOPERATION_MODES
+# Slice 18 (§11 Tier A): the authored Gaussian-hill heightfield + sampled-profile LOS
+# occlusion (the :terrain propagation rung's pure primitives + the handshake grid).
+export TerrainParams, terrain_height, terrain_clearance, terrain_los_clear, terrain_grid
 # Slice 15 (§11 Tier A): the rate-limited fin servo (the :fin autopilot rung). `FinState` follows
 # `AutopilotState` (INTERNAL state record — not exported); `fin_actuator_init` IS exported (bare
 # zero-state construction in the test). `AUTOPILOT_MODES` (already exported) gains :fin.

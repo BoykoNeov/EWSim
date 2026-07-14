@@ -20,6 +20,7 @@ using Random
     include("test_frames.jl")
     include("test_missile.jl")
     include("test_airframe.jl")
+    include("test_terrain.jl")
     include("test_guidance.jl")
     include("test_gnss.jl")
     include("test_jamming.jl")
