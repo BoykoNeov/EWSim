@@ -34,9 +34,15 @@ extends Node2D
 #     DOP/error scalars in the readout. The shared fidelity button cycles the raim rung
 #     (off→detect→exclude); a NEW ROW of five error-term toggles (iono/tropo/clock/multipath/noise)
 #     + a fault-bias slider are the error-budget / fault levers. ALL from telemetry.
+#   • "terrain" (slice 18) — the client's FIRST true 3-D view: a Node3D world (behind the 2-D
+#     HUD, CanvasLayer −1) rendering the CORE's handshake height grid as a mesh (never recomputed
+#     here), the radar/target markers, the target trail, and the LOS ray colored by the core's
+#     `<radar>.visible` verdict (green = clear, red = terrain-masked — the pop-up lesson). Drag
+#     to orbit, wheel to zoom. The shared button becomes the 3-RING propagation cycler
+#     (free_space → two_ray → terrain — the fidelity LADDER: no ground → smooth earth → hills).
 # A handshake shipping `range_axis_m` selects "cfar"; one shipping `pri_axis_us` selects "esm";
-# one whose fidelity carries `estimator` selects "geoloc"; one whose fidelity carries `raim` selects
-# "gps"; otherwise "spatial".
+# one shipping `terrain_grid` selects the 3-D "terrain" view; one whose fidelity carries
+# `estimator` selects "geoloc"; one whose fidelity carries `raim` selects "gps"; otherwise "spatial".
 
 const HOST := "127.0.0.1"
 const PORT := 8765
@@ -204,6 +210,38 @@ const COOPERATION_RUNGS := ["solo", "salvo"]   # slice-14 salvo cycler (uncoordi
 const AIRFRAME_RUNGS := ["point_mass", "pitch_coupled"]   # slice-17 α→lift cycler (ballistic ↔ coupled turn)
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
+# --- terrain 3-D view (slice 18): the client's FIRST true 3-D view. Populated only when the
+# handshake ships `terrain_grid` (the range_axis_m-precedent discriminator). A CanvasLayer at
+# layer −1 hosts a SubViewport whose Node3D world renders the CORE's height grid as a mesh
+# (client MESHES core output, never recomputes a height — HANDOFF §1), the radar/target
+# markers, the fading target trail, and the LOS ray colored by the core's `<radar>.visible`
+# verdict. The 2-D HUD (sliders/readout/badge + the propagation button) rides on top unchanged.
+const PROP_RUNGS := ["free_space", "two_ray", "terrain"]   # slice-18: the FULL propagation ladder
+# PER-SCENARIO ring (the _autopilot_rungs precedent): slice 1/2 keep their historical 2-ring
+# free_space↔two_ray toggle (a `terrain` rung there would be a silent no-op — no heightfield);
+# a terrain scenario upgrades to the full 3-ring in _enter_terrain_mode. SLICED from the one
+# const, never re-listed (one-list-no-drift).
+var _prop_rungs: Array = PROP_RUNGS.slice(0, 2)
+const T3D_SCALE := 0.01           # metres → 3-D units (10 km → 100 u; display only)
+const T3D_VEXAG := 2.5            # vertical exaggeration — DISPLAY ONLY, labeled in the HUD (§12)
+var _terrain_n := 0               # handshake grid edge (n×n heights)
+var _terrain_extent: Array = []   # [xmin, xmax, ymin, ymax] (m) — handshake
+var _terrain_grid_h: Array = []   # row-major n² heights (m) — handshake, CORE output
+var _terrain_radar := ""          # radar id whose .visible/.terrain_clearance_m colors the LOS
+var _terrain_target := ""         # target id the LOS ray runs to
+var _t3d_layer: CanvasLayer = null
+var _t3d_cam: Camera3D = null
+var _t3d_radar: Node3D = null
+var _t3d_target: Node3D = null
+var _t3d_los_mesh: ImmediateMesh = null
+var _t3d_trail_mesh: ImmediateMesh = null
+var _t3d_line_mat: StandardMaterial3D = null
+var _t3d_trail_pts: Array = []    # Vector3 breadcrumbs (3-D units, display only)
+var _cam_yaw := -2.35             # orbit camera state (drag to rotate, wheel to zoom)
+var _cam_pitch := 0.45
+var _cam_dist := 180.0
+var _cam_focus := Vector3.ZERO
+
 func _ready() -> void:
 	_font = ThemeDB.fallback_font
 	_build_ui()
@@ -329,6 +367,8 @@ func _on_scenario(obj: Dictionary) -> void:
 		_enter_cfar_mode(obj)
 	elif obj.has("pri_axis_us"):
 		_enter_esm_mode(obj)
+	elif obj.has("terrain_grid"):
+		_enter_terrain_mode(obj)
 	elif _fidelity.has("estimator"):
 		_enter_geoloc_mode(obj)
 	elif _fidelity.has("raim"):
@@ -660,6 +700,242 @@ func _on_raim_pressed() -> void:
 	_render_badge()
 	_update_fid_btn()
 
+func _enter_terrain_mode(obj: Dictionary) -> void:
+	# Slice-18 terrain masking: a handshake shipping the STATIC height grid (terrain_grid — the
+	# range_axis_m analog, LOAD-static by design: hills are not live knobs) flips the client into
+	# the 3-D terrain view. The shared button stays the PROPAGATION cycler but upgrades to the
+	# FULL 3-ring (free_space → two_ray → terrain — the per-scenario-ring precedent from
+	# _autopilot_rungs): every propagation rung is class 4a (draw-invariant, introduce-safe), so
+	# the mid-run cycle never desyncs. The 3-D world is built HERE (idempotent — a load_scenario
+	# between terrain scenes rebuilds fresh, the _build_gps_toggles precedent); all of it is
+	# DISPLAY: the mesh is the core's grid, the LOS verdict is the core's `visible` boolean.
+	_mode = "terrain"
+	_fid_kind = "propagation"
+	_prop_rungs = PROP_RUNGS.duplicate()          # the full ladder (sliced default was 2-ring)
+	_terrain_n = int(obj.get("terrain_n", 0))
+	_terrain_extent = obj.get("terrain_extent_m", [])
+	_terrain_grid_h = obj.get("terrain_grid", [])
+	_terrain_radar = str(obj.get("radar", ""))
+	_terrain_target = str(obj.get("target", ""))
+	if not _prop_btn.pressed.is_connected(_on_prop_pressed):
+		_prop_btn.pressed.connect(_on_prop_pressed)   # guarded for the headless UI test
+	_prop_btn.tooltip_text = "Cycle propagation (set_fidelity): free_space → two_ray → terrain"
+	_build_terrain_scene()
+
+func _sim_to_3d(pos: Array) -> Vector3:
+	# Sim (x, y, z-up; right-handed) → Godot (X, Y-up, Z): X = x, Y = z·exag, Z = −y (keeps the
+	# handedness). The vertical exaggeration is DISPLAY-ONLY (labeled in the HUD) and applies to
+	# markers AND mesh alike, so relative occlusion still reads true.
+	return Vector3(float(pos[0]), float(pos[2]) * T3D_VEXAG, -float(pos[1])) * T3D_SCALE
+
+func _build_terrain_scene() -> void:
+	if _t3d_layer != null and is_instance_valid(_t3d_layer):
+		_t3d_layer.queue_free()
+	_t3d_layer = null
+	_t3d_cam = null
+	_t3d_trail_pts = []
+	if _terrain_n < 2 or _terrain_extent.size() < 4 or _terrain_grid_h.size() < _terrain_n * _terrain_n:
+		return                        # malformed handshake — leave the 2-D HUD alone
+	_t3d_layer = CanvasLayer.new()
+	_t3d_layer.layer = -1             # BEHIND the Node2D canvas + the UI CanvasLayer
+	add_child(_t3d_layer)
+	var holder := SubViewportContainer.new()
+	holder.stretch = true
+	holder.set_anchors_preset(Control.PRESET_FULL_RECT)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE    # orbit input routes via _unhandled_input
+	_t3d_layer.add_child(holder)
+	var vp := SubViewport.new()
+	vp.own_world_3d = true
+	holder.add_child(vp)
+	var root := Node3D.new()
+	vp.add_child(root)
+	# camera + a dark-sky environment matching the 2-D palette + a low sun
+	_t3d_cam = Camera3D.new()
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = COL_BG_TOP
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.70, 0.75, 0.85)
+	env.ambient_light_energy = 0.6
+	_t3d_cam.environment = env
+	_t3d_cam.far = 4000.0
+	root.add_child(_t3d_cam)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-38.0, -35.0, 0.0)
+	sun.light_energy = 1.1
+	root.add_child(sun)
+	# the terrain mesh — CORE heights, client-meshed (display only)
+	var ter := MeshInstance3D.new()
+	ter.mesh = _build_terrain_mesh()
+	root.add_child(ter)
+	# markers: the radar (cyan, on its mast point) + the target (orange)
+	_t3d_radar = _make_t3d_marker(root, Color(0.45, 0.90, 1.00))
+	_t3d_target = _make_t3d_marker(root, Color(1.00, 0.62, 0.20))
+	# the LOS ray + the trail — ImmediateMesh lines, rebuilt each state frame
+	_t3d_line_mat = StandardMaterial3D.new()
+	_t3d_line_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_t3d_line_mat.vertex_color_use_as_albedo = true
+	_t3d_los_mesh = ImmediateMesh.new()
+	var los := MeshInstance3D.new()
+	los.mesh = _t3d_los_mesh
+	root.add_child(los)
+	_t3d_trail_mesh = ImmediateMesh.new()
+	var trail := MeshInstance3D.new()
+	trail.mesh = _t3d_trail_mesh
+	root.add_child(trail)
+	# orbit focus = the terrain center; distance frames the whole extent
+	var cx := (float(_terrain_extent[0]) + float(_terrain_extent[1])) * 0.5
+	var cy := (float(_terrain_extent[2]) + float(_terrain_extent[3])) * 0.5
+	_cam_focus = _sim_to_3d([cx, cy, 0.0])
+	_cam_dist = maxf(float(_terrain_extent[1]) - float(_terrain_extent[0]),
+			float(_terrain_extent[3]) - float(_terrain_extent[2])) * T3D_SCALE * 1.05
+	_update_t3d_cam()
+
+func _grid_h(ix: int, iy: int) -> float:
+	return float(_terrain_grid_h[iy * _terrain_n + ix])
+
+func _grid_v(ix: int, iy: int) -> Vector3:
+	var n := _terrain_n
+	var x := float(_terrain_extent[0]) + ix * (float(_terrain_extent[1]) - float(_terrain_extent[0])) / (n - 1)
+	var y := float(_terrain_extent[2]) + iy * (float(_terrain_extent[3]) - float(_terrain_extent[2])) / (n - 1)
+	return _sim_to_3d([x, y, _grid_h(ix, iy)])
+
+func _terrain_col(t: float) -> Color:
+	# Height ramp (display only): valley green → slope brown → high tan.
+	if t < 0.5:
+		return Color(0.14, 0.24, 0.12).lerp(Color(0.36, 0.30, 0.17), t * 2.0)
+	return Color(0.36, 0.30, 0.17).lerp(Color(0.62, 0.58, 0.48), (t - 0.5) * 2.0)
+
+func _build_terrain_mesh() -> ArrayMesh:
+	# Mesh the handshake grid: two triangles per cell, height-tinted vertex colors, generated
+	# normals. The grid layout (row-major over y then x) is the CORE's `_terrain_info` contract.
+	var n := _terrain_n
+	var h_lo := 1.0e30
+	var h_hi := -1.0e30
+	for v in _terrain_grid_h:
+		h_lo = minf(h_lo, float(v))
+		h_hi = maxf(h_hi, float(v))
+	var span: float = maxf(h_hi - h_lo, 1.0)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var corners := [[0, 0], [1, 0], [1, 1], [0, 0], [1, 1], [0, 1]]
+	for iy in n - 1:
+		for ix in n - 1:
+			for c in corners:
+				var gx: int = ix + c[0]
+				var gy: int = iy + c[1]
+				st.set_color(_terrain_col((_grid_h(gx, gy) - h_lo) / span))
+				st.add_vertex(_grid_v(gx, gy))
+	st.generate_normals()
+	var mesh := st.commit()
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.roughness = 1.0
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_set_material(0, mat)
+	return mesh
+
+func _make_t3d_marker(root: Node3D, col: Color) -> Node3D:
+	var m := Node3D.new()
+	root.add_child(m)
+	var body := MeshInstance3D.new()
+	var sph := SphereMesh.new()
+	sph.radius = 1.1
+	sph.height = 2.2
+	body.mesh = sph
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = col
+	mat.emission_enabled = true
+	mat.emission = col
+	mat.emission_energy_multiplier = 0.6
+	body.material_override = mat
+	m.add_child(body)
+	return m
+
+func _terrain_on_state(obj: Dictionary) -> void:
+	_entities.clear()
+	for e in obj.get("entities", []):
+		var id := str(e.get("id", ""))
+		_entities[id] = {"kind": str(e.get("kind", "")), "pos": e.get("pos", [0, 0, 0])}
+		if _terrain_radar == "" and str(e.get("kind", "")) == "radar":
+			_terrain_radar = id
+		if _terrain_target == "" and str(e.get("kind", "")) == "target":
+			_terrain_target = id
+	if _t3d_layer == null or _t3d_los_mesh == null:
+		return
+	var rpos: Array = _entities.get(_terrain_radar, {}).get("pos", [0, 0, 0])
+	var tpos: Array = _entities.get(_terrain_target, {}).get("pos", [0, 0, 0])
+	var r3 := _sim_to_3d(rpos)
+	var t3 := _sim_to_3d(tpos)
+	_t3d_radar.position = r3
+	_t3d_target.position = t3
+	# trail breadcrumbs (skip the repeat point — the paused/held frame)
+	if _t3d_trail_pts.is_empty() or _t3d_trail_pts[-1] != t3:
+		_t3d_trail_pts.append(t3)
+		if _t3d_trail_pts.size() > MISSILE_TRAIL_MAX:
+			_t3d_trail_pts.pop_front()
+	# the LOS ray — colored by the CORE's verdict (green clear / red terrain-masked); the
+	# client never re-tests the occlusion (HANDOFF §1 — `visible` IS the core's answer)
+	var vis := bool(_telemetry.get(_terrain_radar + ".visible", true))
+	var col := Color(0.30, 1.00, 0.45) if vis else Color(1.00, 0.25, 0.20)
+	_t3d_los_mesh.clear_surfaces()
+	_t3d_los_mesh.surface_begin(Mesh.PRIMITIVE_LINES, _t3d_line_mat)
+	_t3d_los_mesh.surface_set_color(col)
+	_t3d_los_mesh.surface_add_vertex(r3)
+	_t3d_los_mesh.surface_add_vertex(t3)
+	_t3d_los_mesh.surface_end()
+	# the fading trail strip
+	_t3d_trail_mesh.clear_surfaces()
+	if _t3d_trail_pts.size() >= 2:
+		_t3d_trail_mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP, _t3d_line_mat)
+		var np := _t3d_trail_pts.size()
+		for i in np:
+			var a: float = 0.15 + 0.85 * float(i) / float(np - 1)
+			_t3d_trail_mesh.surface_set_color(Color(1.00, 0.62, 0.20, a))
+			_t3d_trail_mesh.surface_add_vertex(_t3d_trail_pts[i])
+		_t3d_trail_mesh.surface_end()
+
+func _draw_terrain_hud() -> void:
+	# The 3-D layer (CanvasLayer −1) renders the world; the 2-D canvas only LABELS it: the
+	# core's LOS verdict + signed clearance (the lesson number) + the §12 display-honesty note.
+	var vp := get_viewport_rect().size
+	var vis := true
+	if _terrain_radar != "":
+		vis = bool(_telemetry.get(_terrain_radar + ".visible", true))
+	var lbl := "LOS CLEAR" if vis else "TERRAIN MASKED"
+	var col := Color(0.30, 1.00, 0.45) if vis else Color(1.00, 0.30, 0.25)
+	draw_string(_font, Vector2(vp.x - 320, 40), lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, col)
+	if _terrain_radar != "" and _telemetry.has(_terrain_radar + ".terrain_clearance_m"):
+		var c := float(_telemetry[_terrain_radar + ".terrain_clearance_m"])
+		draw_string(_font, Vector2(vp.x - 320, 64), "LOS clearance: %+.0f m" % c,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	draw_string(_font, Vector2(vp.x - 460, vp.y - 16),
+			"3-D terrain view — vertical ×%.1f (display only) · drag: orbit · wheel: zoom" % T3D_VEXAG,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, COL_TICK)
+
+func _update_t3d_cam() -> void:
+	if _t3d_cam == null or not _t3d_cam.is_inside_tree():
+		return                        # off-tree in the headless UI harness — orbit is display-only
+	var dir := Vector3(cos(_cam_pitch) * cos(_cam_yaw), sin(_cam_pitch), cos(_cam_pitch) * sin(_cam_yaw))
+	_t3d_cam.position = _cam_focus + dir * _cam_dist
+	_t3d_cam.look_at(_cam_focus, Vector3.UP)
+
+func _unhandled_input(event: InputEvent) -> void:
+	# Orbit/zoom for the terrain 3-D camera (display only; other views ignore input here).
+	if _mode != "terrain" or _t3d_cam == null:
+		return
+	if event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT):
+		_cam_yaw -= event.relative.x * 0.008
+		_cam_pitch = clampf(_cam_pitch + event.relative.y * 0.006, 0.08, 1.45)
+		_update_t3d_cam()
+	elif event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_cam_dist = maxf(_cam_dist * 0.9, 15.0)
+			_update_t3d_cam()
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_cam_dist = minf(_cam_dist * 1.1, 1200.0)
+			_update_t3d_cam()
+
 func _render_badge() -> void:
 	# §12: a visible "<fidelity> approximation" badge, built from the live local fidelity
 	# map (never hardcoded), re-rendered whenever the propagation toggle changes it.
@@ -730,11 +1006,16 @@ func _on_cfar_pressed() -> void:
 	_update_fid_btn()
 
 func _on_prop_pressed() -> void:
-	# Flip the propagation rung and tell the core (set_fidelity — the slice-2 live toggle).
-	# Update the badge + button locally; the server applies it on the next tick with no
-	# reply, so the client owns the displayed state.
+	# Advance the propagation rung round the PER-SCENARIO ring (slice 1/2: the historical
+	# free_space↔two_ray toggle; slice 18: the FULL 3-ring …→terrain) and tell the core
+	# (set_fidelity — the slice-2 live toggle). Every propagation rung is class 4a
+	# (draw-invariant, introduce-safe — a terrain-less world treats :terrain as bit-exact
+	# free space), so a mid-run cycle never desyncs the draw stream. Update the badge +
+	# button locally; the server applies it on the next tick with no reply, so the client
+	# owns the displayed state. On the 2-ring this is behavior-identical to the old flip.
 	var cur := str(_fidelity.get("propagation", "two_ray"))
-	var next := "free_space" if cur == "two_ray" else "two_ray"
+	var i := _prop_rungs.find(cur)
+	var next: String = _prop_rungs[(i + 1) % _prop_rungs.size()] if i >= 0 else "two_ray"
 	_fidelity["propagation"] = next
 	_client.send({"type": "set_fidelity", "key": "propagation", "value": next})
 	_render_badge()
@@ -929,6 +1210,8 @@ func _on_state(obj: Dictionary) -> void:
 		_esm_on_state()
 	elif _mode == "gps":
 		_gps_on_state(obj)
+	elif _mode == "terrain":
+		_terrain_on_state(obj)
 	else:
 		_spatial_on_state(obj)
 	_update_readout()
@@ -1148,6 +1431,7 @@ func _on_reset_pressed() -> void:
 	_missile_trail.clear()                # start the ballistic trail fresh on the re-launch
 	_salvo_trails.clear()                 # slice-14: clear the per-missile salvo trails on re-launch
 	_alpha_hist.clear()                   # airframe strip chart restarts with the re-launch
+	_t3d_trail_pts.clear()                # slice-18: the 3-D target trail restarts with the re-launch
 	# `reset` reloads the YAML server-side → propagation reverts to the scenario default,
 	# but the server sends no new handshake. Resync the local fidelity so the badge/button
 	# don't lie about a toggle the reset just undid.
@@ -1188,6 +1472,8 @@ func _draw() -> void:
 		_draw_esm()
 	elif _mode == "gps":
 		_draw_gps()
+	elif _mode == "terrain":
+		_draw_terrain_hud()      # the 3-D layer draws the world; the canvas only labels it
 	else:
 		_draw_spatial()
 

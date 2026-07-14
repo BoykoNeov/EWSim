@@ -50,10 +50,11 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–17 COMPLETE & green — 2488 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–17
+**Slices 1–18 COMPLETE & green — 2604 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–18
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
-path-changing `:airframe` toggle).** Full gate-by-gate
+path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
+FIRST true 3-D view (a user-directed insertion — the inner autopilot shifted to slice 19).** Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -216,12 +217,46 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   `a_max_aero=Q·S·C_Lα·α_max/m` miss (distinct from slice-10's fixed a_max); induced drag; then bank-to-turn / 3-D
   (quaternion+ω) → radome/body-rate parasitic loop. (2488)
 
+- **Slice 18 (§11 Tier-A "higher fidelity behind existing knobs" — `propagation` is the named seam) — TERRAIN
+  MASKING + the 3-D client view COMPLETE**: the FIRST terrain in the project and the client's FIRST true 3-D view
+  (a USER-DIRECTED insertion 2026-07-14 — the inner α/g autopilot slice17.md slotted as "18" SHIFTS to slice 19,
+  trigger intact). New pure lib `terrain.jl`: an authored ANALYTIC Gaussian-hill heightfield (`h0 + Σ aᵢ·exp(…)`,
+  ZERO RNG — nothing to desync), `terrain_clearance` (SIGNED min ray_z−h over interior samples, endpoints EXCLUDED
+  [a mast can't self-block], fixed `s=i/(n+1)` grid ⇒ bit-exact (p1,p2) SYMMETRY), `terrain_los_clear` (the HARD
+  shadow — knife-edge diffraction is the named rung above), `terrain_grid` (the row-major wire sample; layout
+  pinned vs an ASYMMETRIC terrain — the transpose canary). `PROPAGATION_MODES` gains **:terrain** (free-space link
+  budget + the LOS mask → `(0.0,false)` occluded — the below-horizon-policy shape; **no terrain entity ⇒ bit-exact
+  :free_space**, the mismatched-EP `==` no-op precedent). Class **4a** (draw-invariant — detect_once draws
+  unconditionally, the mask gates booleans; 3-rung RNG-lockstep pinned; introduce-safe, live-settable, NO guard —
+  the FIRST 4a since slice 11, breaking the 14–17 4c streak). Terrain = a NON-PHYSICAL `kind: terrain` entity (the
+  `:datalink` precedent; hills → FLAT `hillK_*` comp keys, ≤1 entity enforced, **LOAD-STATIC** — the handshake grid
+  ships ONCE so hills are NOT live knobs [named deferral]); `_terrain_info` ships grid/extents/ids at handshake —
+  **`terrain_grid` presence is the client's 3-D-view discriminator**. `<radar>.terrain_clearance_m` (signed,
+  `_finite_coord`) is RUNG-gated (the slice-17 lift-keys precedent). NEW general lever: `ConstantVelocity` gains a
+  presence-gated `alt_hold_m` comp (altitude becomes knob-addressable; absent prior ⇒ byte-identical). THE LESSON
+  (probe, live wire, seed 18): the 120-m penetrator is DARK the whole approach behind the 250-m ridge → POP-UP at
+  t=36.72 s / x=4819 m (clearance −208.6→+, SNR floor→50.7 dB, ZERO detections while masked); alt→1000 COLLAPSES
+  the shadow (min clearance +31.4 m); free_space same seed tracks from frame 1 — altitude buys detectability, the
+  clearance SIGN is the verdict. CLIENT: `_enter_terrain_mode` builds a CanvasLayer(−1)/SubViewport Node3D world —
+  the heightmap ArrayMesh (height-tinted vertex colors), emissive markers, the LOS ray colored by the CORE's
+  `visible` verdict (client NEVER re-tests occlusion), fading trail, orbit/zoom camera; sim(x,y,z-up)→Godot(x,
+  z·2.5,−y) with T3D_VEXAG=2.5 DISPLAY-ONLY + HUD-labeled (§12). The shared button = the propagation cycler
+  upgraded to the FULL 3-ring via PER-SCENARIO `_prop_rungs` (the `_autopilot_rungs` precedent, sliced from ONE
+  `PROP_RUNGS` const — slices 1/2 keep the 2-ring, no phantom rung). Four proofs green (S18V: masked start at the
+  exact floor + EXACTLY one transition @ x 4816 + detections only-visible + clearance-sign≡verdict + 2500-frame
+  replay BIT-IDENTICAL through the masked draws + free_space contrast + alt collapse; S18UI: mode/grid/3-ring
+  wraps/set_param/off-tree 3-D build + the plain-handshake 2-ring guard; smoke-load DONE; TWO shots: red ray dying
+  into the crest "TERRAIN MASKED −205 m" vs green ray over it "LOS CLEAR +32 m" detected:YES). Banks the
+  heightfield land CLUTTER needs. Deferred (NAMED): knife-edge diffraction; terrain multipath/clutter; fractal
+  terrain; hill-knob grid re-ship; DF/ESM/seeker terrain occlusion. (2604)
+
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened
-with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–17 are into the §11 Tier-A
+with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–18 are into the §11 Tier-A
 horizon — slice 15 the actuator/fin half, slice 16 the 6-DOF airframe's rotational half (pitch-plane θ,q), slice 17
-the α→lift→γ TRANSLATION-COUPLING half (the real path-changing `:airframe` toggle); what remains is slice 18 (the
-inner α/g autopilot + α-limited maneuverability) then the rest of §11 Tier-A/B/C — most concretely the FULL 6-DOF
-airframe [bank-to-turn / 3-D].)
+the α→lift→γ TRANSLATION-COUPLING half (the real path-changing `:airframe` toggle), slice 18 terrain masking + the
+3-D client view; what remains is slice 19 (the inner α/g autopilot + α-limited maneuverability, shifted from 18 by
+the terrain insertion) then the rest of §11 Tier-A/B/C — most concretely land clutter [terrain banked the
+heightfield] and the FULL 6-DOF airframe [bank-to-turn / 3-D].)
 
 ## Conventions / hard-won disciplines
 

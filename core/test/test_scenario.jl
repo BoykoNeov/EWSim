@@ -1096,6 +1096,37 @@ end
         @test load_scenario(mkbad("cla: 20.0", "cla: -5.0")).world.entities[:m1].comp[:af_cla] == -5.0
     end
 
+    @testset "loader parses slice18_terrain.yaml (terrain masking, 3-D view)" begin
+        # The slice-18 showcase: terrain masking behind the THIRD :propagation rung + the client's
+        # first 3-D view (handshake terrain_grid). Cheap insurance: a malformed showcase fails HERE,
+        # not as a confusing Godot-launch timeout.
+        scn18 = load_scenario(normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice18_terrain.yaml")))
+        @test scn18.name == "slice18_terrain"
+        @test scn18.world.fidelity[:propagation] === :terrain      # the showcase opens masked
+        # single-lesson: ONLY propagation toggled (the one shared-button fidelity — convention 9).
+        for k in (:cfar, :ep, :estimator, :deinterleaver, :raim, :integrator, :autopilot,
+                  :guidance, :seeker, :discrimination, :cooperation, :airframe)
+            @test !haskey(scn18.world.fidelity, k)
+        end
+        # exactly one terrain entity; the hills land at the flat hillK_* keys.
+        ters = [id for (id, e) in scn18.world.entities if e.kind === :terrain]
+        @test length(ters) == 1
+        tc = scn18.world.entities[ters[1]].comp
+        @test tc[:n_hills] == 3 && tc[:hill1_a] == 250.0 && tc[:hill1_x] == 6000.0
+        @test tc[:grid_n] == 65 && tc[:xmax] > tc[:xmin] && tc[:ymax] > tc[:ymin]
+        # the handshake block ships (the client's 3-D-view discriminator) with the full n² grid.
+        tinfo = EWSim._terrain_info(scn18.world)
+        @test tinfo !== nothing && length(tinfo[:terrain_grid]) == 65 * 65
+        @test tinfo[:radar] === :radar1 && tinfo[:target] === :tgt1
+        # the target starts MASKED at its authored altitude (the lesson's opening state) and the
+        # altitude lever is a DECLARED knob writing the alt_hold_m comp the mover pins z to.
+        r = scn18.world.entities[:radar1]; t = scn18.world.entities[:tgt1]
+        @test !terrain_los_clear(EWSim._terrain_params(tc), r.pos, t.pos)
+        @test t.comp[:alt_hold_m] == 120.0
+        @test any(k -> k.key === :alt_hold_m && k.target === :tgt1, scn18.knobs)
+        @test :propagation ∉ Set(k.key for k in scn18.knobs)       # the button, not a slider
+    end
+
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin
         mk(np) = begin
             f = tempname() * ".yaml"

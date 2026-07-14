@@ -2037,6 +2037,102 @@ the 2488-test suite is out of scope of this change by construction.
 
 ---
 
+**Slice 18 — TERRAIN MASKING + the 3-D client view (HANDOFF §11 Tier-A "higher fidelity behind existing
+knobs" — `propagation` is the named seam) — COMPLETE & green (2604 tests).** USER-DIRECTED INSERTION
+(2026-07-14, "work on 3d representation and terrain"): the inner α/g autopilot slice17.md had slotted as
+"slice 18" SHIFTS to **slice 19** with its trigger intact (HANDOFF §11 updated). The FIRST terrain in the
+project and the client's FIRST true 3-D view. Plan: `docs/plans/slice18.md`.
+
+Gate 1 (pure lib, 54 tests): `core/src/terrain.jl` — an authored ANALYTIC heightfield `h(x,y) = h0 +
+Σ aᵢ·exp(−((x−cxᵢ)²+(y−cyᵢ)²)/(2σᵢ²))` (Gaussian hills: closed-form, smooth, ZERO RNG — nothing to
+desync, simpler even than class 4a needs; seeded fractal terrain DEFERRED). `terrain_height`,
+`terrain_clearance` (SIGNED min of ray_z − h over interior samples of the straight segment at
+`los_step_m`; endpoints EXCLUDED — a mast on the ground must not self-block; the fixed fraction grid
+`s = i/(n+1)` makes it bit-exact SYMMETRIC in (p1,p2) — an asymmetric walk would make "who shoots first"
+physical), `terrain_los_clear` (= clearance > 0, the HARD shadow — knife-edge diffraction is the named
+rung above), `terrain_grid` (the row-major n×n wire sample). Test teeth: hand-computed height literals
+(e^(−1/2) at r=σ), LEVEL-ray clearance bit-exact `==`, a PEAK-SAMPLED hill where clearance == z−A exactly
+(blocking sign-exact + monotone across A = z), bit-exact swap symmetry, endpoint exclusion, degenerate
+p1==p2 + sub-step hops never throw, and the grid LAYOUT pinned against an ASYMMETRIC terrain (the
+transpose canary — a mirrored client mesh is silent). WATCH-ITEM (caught by the first run): a TILTED
+ray's minimum of (ray_z − gaussian) sits slightly OFF-peak (linear ray vs quadratic crest), so only the
+LEVEL-ray anchor is exact — the tilted case is bracketed, not pinned.
+
+Gate 2 (wiring, +39 tests): `PROPAGATION_MODES = (:free_space, :two_ray, :terrain)` (the ONE list —
+`LIVE_FIDELITY_MODES`/`set_fidelity` picked it up with zero edits). `_target_snr` gains the `:terrain`
+elseif: free-space link budget + the LOS mask → `(0.0, false)` when occluded (exactly the below-horizon
+policy shape); **no terrain entity ⇒ bit-exact `:free_space`** (the slice-4 mismatched-EP no-op
+precedent, tested `==` over 20 ticks — a live `set_fidelity propagation terrain` on ANY prior scenario
+can neither crash a tick nor move a byte). Class **4a** (draw-invariant: detect_once draws
+unconditionally, the mask gates only booleans — pinned by a 3-rung 50-tick RNG-lockstep test;
+introduce-safe, live-settable, NO set_fidelity guard). Terrain is a NON-PHYSICAL `kind: terrain` entity
+(the `:datalink` precedent — no hooks; `_nearest_target`/the radar sweep skip it): hills authored as a
+YAML list, stored as FLAT SCALAR keys `hillK_a/x/y/s` + `:n_hills` (knob-addressable shape;
+**LOAD-STATIC this slice** — the handshake grid ships once, a live hill slider would silently stale the
+client mesh; hill-knob-with-grid-refresh DEFERRED), load-validated per convention 5 (σ>0, grid_n≥2,
+ordered extents, hills complete per index, ≤1 terrain entity via `_validate_terrain`). `_terrain_info`
+(the `_cfar_axis_info` shape) ships `terrain_grid`/`terrain_n`/`terrain_extent_m`/ids ONCE at handshake —
+**`terrain_grid` presence is the client's 3-D-view discriminator**. Telemetry
+`<radar>.terrain_clearance_m` (signed, `_finite_coord` — a signed readout keeps its sign) is gated on the
+RUNG not entity presence (the slice-17 lift-keys precedent, tested both ways). NEW general lever:
+`ConstantVelocity` gains an OPTIONAL presence-gated `alt_hold_m` comp (pins the mover's z each
+integrate! — makes ALTITUDE knob-addressable; absent everywhere prior ⇒ byte-identical; the `:af_cma`
+presence-gating precedent). CFAR path composes for free (`_target_snr` is shared; a shadowed target's
+profile bump is 0); the clearance READOUT stays point-path-only (convention 9).
+
+Gate 3 (scenario + the 3-D view + four proofs): `scenarios/slice18_terrain.yaml` (seed 18) — a 30 m mast
+radar, a 3-hill ridge (crest A=250 @ x=6 km σ=900; asymmetric ±2.6 km flanks < 20 m on the y=0 LOS),
+a 120 m penetrator inbound at 250 m/s from 14 km. Probe pins (live wire): DARK the whole approach →
+POP-UP t=36.724 s x=4819 m (clearance −208.6 → +, SNR floor −120 → 50.7 dB), ZERO detections while
+masked, first detection t=36.801 s; alt_hold_m→1000 collapses the shadow (min clearance +31.4 m, visible
+every tick); free_space same seed detects from frame 1 (SNR 32.2 dB at spawn). THE LESSON: terrain
+masking / the low-altitude pop-up — altitude buys detectability and vice versa; the SIGNED clearance's
+sign IS the verdict. CLIENT (the first Node3D content): `_enter_terrain_mode` (discriminated on
+`terrain_grid`, checked after range/pri axes) builds a `CanvasLayer(layer=−1)` → `SubViewportContainer`
+→ `SubViewport(own_world_3d)` → heightmap `ArrayMesh` via SurfaceTool (two tris/cell, height-tinted
+vertex colors green→brown→tan, generated normals, CULL_DISABLED), emissive radar(cyan)/target(orange)
+sphere markers, the LOS ray as an ImmediateMesh LINE colored by the CORE's `visible` verdict
+(green/red — the client NEVER re-tests occlusion), a fading trail strip, and an orbit/zoom camera
+(`_unhandled_input`; `_update_t3d_cam` guards `is_inside_tree()` for the off-tree UI harness). Mapping
+sim(x,y,z-up) → Godot(X=x, Y=z·2.5, Z=−y) — T3D_VEXAG=2.5 is DISPLAY-ONLY and labeled in the HUD (§12
+honesty; applied to markers AND mesh so relative occlusion reads true). The shared button stays the
+PROPAGATION cycler but upgrades to the FULL 3-ring via a PER-SCENARIO `_prop_rungs` (the
+`_autopilot_rungs` precedent, SLICED from the one `PROP_RUNGS` const): slice 1/2 keep their historical
+2-ring (no phantom `terrain` rung), `_on_prop_pressed` generalized flip→ring (behavior-identical on the
+2-ring). The 2-D canvas draws only the HUD (LOS CLEAR/TERRAIN MASKED + the signed clearance + the
+vert-exag note). FOUR PROOFS green: `slice18_verify.gd` (S18V OK — handshake grid/extents/ids/fidelity
++ starts masked at the exact wire floor with negative clearance + EXACTLY one masked→visible transition
+with pop-up x in [4300,5300] (live 4816) + detections ONLY while visible + clearance SIGN matches the
+verdict on every frame + every :terrain frame ships the key + 2500-frame held-seed replay BIT-IDENTICAL
+through the masked draws + free_space: all-visible, 488 detections in the window terrain kept dark,
+clearance key GONE + alt 1000: all-visible, min clearance +31.4); `slice18_ui_test.gd` (S18UI OK —
+terrain mode + grid adoption + the 3-D layer builds OFF-TREE + 3-ring wraps
+terrain→free_space→two_ray→terrain each press sending set_fidelity + alt slider set_param + a state
+frame drives markers/LOS + reset resyncs & clears the trail + a PLAIN handshake keeps the 2-ring;
+NB the plain path drives `_on_prop_pressed` directly — its connect lives in `_build_ui`, never run
+off-tree); `Sandbox.tscn` smoke-load (server DONE, no GDScript errors); TWO windowed shots (masked: the
+ridge massif + the RED LOS ray dying into the crest + "TERRAIN MASKED −205 m" + visible:no/snr −120;
+clear after alt→1200 over the wire: the GREEN ray crossing above the ridge + "LOS CLEAR +32 m" +
+detected:YES/pd 1/snr 34.7). `test_scenario.jl` +1 loader testset (23 tests: parses, :terrain default,
+single-lesson fidelity, one terrain entity with the flat hill keys, `_terrain_info` ships the 65² grid,
+the target STARTS masked, alt_hold_m knob declared, propagation not a knob).
+
+**Slice 18 COMPLETE — terrain masks the LOS; the client renders it in 3-D.** Class **4a** (the FIRST
+4a since slice 11 — breaks the 14/15/16/17 4c streak; draw-invariant, introduce-safe, live-settable).
+Terrain BANKS the heightfield that land CLUTTER (§11 Tier-A) needs. DEFERRED (NAMED): knife-edge
+diffraction (the graded-shadow rung above `:terrain`); terrain-composed multipath + land clutter;
+seeded fractal terrain (own Xoshiro at LOAD, never `w.rng`); hill knobs with a handshake grid re-ship;
+terrain occlusion at the DF/ESM/seeker LOS sites (mechanical — the same `terrain_los_clear` call);
+**slice 19 = the inner α/g autopilot + α-limited maneuverability** (the shifted slice-18-as-was).
+Run the slice-18 showcase: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice18_terrain.yaml`,
+then launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-enters the 3-D terrain view; drag to
+orbit, wheel to zoom; drag the altitude slider through ~800 m to watch the LOS ray flip red↔green; cycle
+`prop:` through free_space/two_ray/terrain). Re-run the gate-3 proof headless: start that server, then
+the console Godot `--headless --path clients/godot --script res://net/slice18_verify.gd` (exit 0 =
+pass). The UI test needs NO server: `… --script res://net/slice18_ui_test.gd`.
+
+---
+
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
 (`tools/echo_server.jl` + `clients/godot/net/seam_test.gd`, exit 0); `rf.jl`

@@ -1,0 +1,78 @@
+# slice18_terrain — terrain masking + the 3-D client view (§11 Tier-A, slice 18 gate 3).
+#
+# A LOW-altitude penetrator behind a RIDGE — the classic terrain-masking lesson, and the
+# scenario that lights the client's first true 3-D view (the handshake `terrain_grid` is
+# the discriminator; the client MESHES the core's height grid, never recomputes it).
+#
+#   • Under the default `terrain` rung the target is DARK almost the whole approach: the
+#     6-km ridge (250 m crest) occludes the mast→target line of sight (visible:false,
+#     SNR at the wire floor, a NEGATIVE terrain_clearance_m), until it clears the crest
+#     shadow at ~4.8 km and POPS UP — first detection at ~36.8 s of a 56-s run (probe,
+#     live wire, seed 18: pop-up t=36.724 s, x=4819 m, clearance −208.6 → +, SNR floor
+#     −120 → 50.7 dB; ZERO detections while masked, first detection t=36.801 s).
+#     This is the penetrator's view: terrain masking IS the low-altitude tactic.
+#   • Drag the ALTITUDE knob up (the defender's view): at 1000 m the ray clears the
+#     ridge the whole way (probe: min clearance +31.4 m, visible every tick) — the
+#     shadow window collapses to NOTHING. Altitude buys detectability, and vice versa.
+#   • Toggle the button to `free_space` and the same seed tracks the target from frame 1
+#     (infinite LOS — no ground at all); `two_ray` adds the smooth-earth horizon+lobing
+#     but knows NO hills. The 3-ring IS the fidelity ladder: no ground → smooth ground →
+#     terrain (each a named approximation, HANDOFF §1).
+#
+# The signed LOS clearance `<radar>.terrain_clearance_m` is the number: positive = clear
+# by that many metres, negative = buried. Sign IS the verdict (it flips at the pop-up).
+#
+# This is a striking geometry, not a correctness fixture — the closed-form physics is
+# pinned by test_terrain.jl; here the point is the 3-D visual (the ridge, the LOS ray
+# flipping red→green at the crest shadow's edge, the badge naming the approximation).
+name: slice18_terrain
+seed: 18
+dt_physics: 1.0e-3
+emit_every: 16
+fidelity:
+  propagation: terrain         # free_space | two_ray | terrain — the slice-18 3-ring
+
+entities:
+  - id: radar1
+    kind: radar
+    pos: [0, 0, 30]            # 30 m mast on the flat western plain
+    radar:
+      pt_w:         50000      # 50 kW — SNR ≈ 32 dB at the 14-km spawn (probe): detects WHEN visible
+      gain_db:      35
+      freq_hz:      9.4e9
+      bandwidth_hz: 1.0e6
+      noise_fig_db: 3
+      losses_db:    4
+      pfa:          1.0e-6
+      swerling:     1
+      n_pulses:     1
+      revisit_s:    0.1        # detection look / blip cadence (10 Hz); SNR readout is per-tick
+
+  - id: tgt1
+    kind: target
+    pos: [14000, 0, 120]       # 120 m — under the 250 m crest: dark until the 4.9-km pop-up
+    vel: [-250, 0, 0]          # inbound at 250 m/s (reaches the radar in 56 s)
+    target:
+      rcs_m2: 5.0
+      alt_hold_m: 120          # the LESSON KNOB: pins the mover's z live (drag it up → the
+                               # shadow collapses; down → the whole pass hides)
+
+  - id: ter1
+    kind: terrain
+    terrain:                   # LOAD-STATIC (the handshake grid ships once — no hill knobs)
+      h0: 0
+      grid_n: 65               # the 65×65 handshake mesh the client renders
+      los_step_m: 20
+      xmin: -1000
+      xmax: 15000
+      ymin: -4000
+      ymax: 4000
+      hills:                   # an ASYMMETRIC ridge (the 3-D view reads as a real massif;
+                               # the y=±2.6 km flanks contribute < 20 m on the y=0 LOS)
+        - {a: 250, x: 6000, y: 0,     sigma: 900}    # THE crest — the masking hill
+        - {a: 190, x: 6600, y: 2600,  sigma: 1200}
+        - {a: 210, x: 5400, y: -2600, sigma: 1100}
+
+knobs:                          # client sliders (`propagation` is the button, not a slider)
+  - {target: tgt1, key: alt_hold_m, min: 50,  max: 1500, label: "Target altitude (m)"}
+  - {target: tgt1, key: rcs_m2,     min: 0.5, max: 50,   label: "Target RCS (m²)", log: true}

@@ -506,11 +506,26 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   coupling now exists for it to name — the trajectory bends under `:pitch_coupled`, is ballistic
   under `:point_mass`; a pure Tier-A swap, no contract change). The closed-form anchor is the
   steady-turn radius `R = 2m/(ρ·S·C_Lα·α)`. The fin δ stays a FIXED authored trim (OPEN-LOOP).
-  **What lands NEXT (slice 18): the inner α/g autopilot** — invert PN's `a_cmd → α_cmd → δ` (the
+  **[OPENED — slice 18]** TERRAIN landed as the THIRD `propagation` rung (user-directed insertion
+  2026-07-14, ahead of the inner-autopilot slice): an authored analytic Gaussian-hill heightfield
+  (`terrain.jl`, zero RNG) + a sampled-profile hard LOS shadow behind
+  `fidelity.propagation = free_space | two_ray | terrain` — a pure Tier-A swap, no contract
+  change (class 4a exactly like the first two rungs: the mask gates `(snr, visible)` booleans,
+  never the draw; a terrain-less world treats `:terrain` as bit-exact free space). The scenario
+  ships its static height grid ONCE in the handshake (`terrain_grid` — the `range_axis_m`
+  pattern), which lights the Godot client's FIRST true 3-D view (a Node3D heightmap mesh +
+  the LOS ray flipping green/red on the core's verdict — display only, zero physics). The lesson:
+  terrain masking / the low-altitude pop-up — altitude buys detectability and vice versa
+  (`<radar>.terrain_clearance_m`, a SIGNED clearance whose sign IS the verdict). Terrain also
+  banks the heightfield that land CLUTTER (above) needs. DEFERRED: knife-edge diffraction (the
+  rung above the hard shadow), terrain-composed multipath, seeded fractal terrain, terrain
+  occlusion at the DF/ESM/seeker LOS sites.
+  **What lands NEXT (slice 19): the inner α/g autopilot** — invert PN's `a_cmd → α_cmd → δ` (the
   fin state δ from slice 15 finally feeds the `Cmδ·δ` moment term) + the flight-condition aero
   g-limit `a_max_aero = Q·S·C_Lα·α_max/m` (α-limited maneuverability, the trigger recorded in
-  `docs/plans/slice15.md` / `slice16.md`). DEFERRED beyond slice 18: induced drag; bank-to-turn
-  (the 3-D quaternion+ω superset) and the radome/body-rate parasitic loop.
+  `docs/plans/slice15.md` / `slice16.md`; this was slotted as "slice 18" until the terrain
+  insertion — the trigger is intact, only the number moved). DEFERRED beyond slice 19: induced
+  drag; bank-to-turn (the 3-D quaternion+ω superset) and the radome/body-rate parasitic loop.
 - **Sibling domains that reuse the shared libs.** IR/EO seekers and IRST (add an IR
   environment channel to `env`, reuse `frames.jl`/`estimation.jl`); communications EW —
   jamming of frequency-hopping / spread-spectrum links — as a parallel to radar EW;
