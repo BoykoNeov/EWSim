@@ -116,6 +116,12 @@ function scenario_frame(srv::Server)
     # non-airframe scenario (the keys simply don't appear → the missile view is unchanged).
     afinfo = _airframe_view_info(scn.world)
     afinfo === nothing || merge!(frame, afinfo)
+    # A slice-18 terrain scenario ships its STATIC height grid + extents once here (the
+    # same handshake-once pattern — terrain is LOAD-STATIC by design; hills are not live
+    # knobs). `terrain_grid` presence is the client's 3-D-view discriminator. `nothing`
+    # for a non-terrain scenario (the keys simply don't appear).
+    tinfo = _terrain_info(scn.world)
+    tinfo === nothing || merge!(frame, tinfo)
     return frame
 end
 

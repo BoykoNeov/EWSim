@@ -108,3 +108,232 @@
         @test g[(n - 1) * n + 1] == minimum(g)           # (xmin, ymax) is the far corner
     end
 end
+
+# --- gate 2: the `:terrain` propagation rung + loader + handshake ------------------
+#
+# The wiring contracts (the test_radar propagation-dispatch discipline, extended):
+#   1. an occluded target is masked exactly like below-horizon (visible=false, floored
+#      dB, pd ≈ pfa, SIGNED negative clearance on the wire);
+#   2. a clear target is bit-exact free-space SNR (the rung adds a mask, not a model)
+#      and ships a positive clearance;
+#   3. NO terrain entity ⇒ `:terrain` is a bit-exact `==` free-space NO-OP (the
+#      mismatched-EP precedent — a live toggle on any prior slice moves no byte);
+#   4. the draw stream is rung-independent across all THREE rungs (class 4a: a masked
+#      target still costs its draw — detect_once unconditional);
+#   5. the clearance key is RUNG-gated (a `:free_space` frame from the SAME world ships
+#      no terrain key — the slice-17 lift-keys precedent);
+#   6. the masked frame survives the REAL wire (no Inf/NaN — convention 6);
+#   7. the YAML loader: hills land as flat `hillK_*` keys, every malformed authored
+#      input rejects at LOAD, a second terrain entity rejects (cross-entity check);
+#   8. `_terrain_info` ships the gate-1 grid verbatim + ids; absent terrain → nothing;
+#      and `alt_hold_m` pins the mover's z (the knob-addressable altitude lever).
+
+# Radar mast at (0,0,30), one hill A @ (5000,0) σ=800 mid-path, target at (10000,0,h_t).
+# With los_step 25 a sample lands EXACTLY on the peak (len 10 km ⇒ s-grid hits x=5000),
+# so the masked-case clearance is EXACT: ray_z(5000) − (h0 + A).
+function _terrain_world(; prop = :terrain, seed = 1, h_t = 100.0, hill_a = 200.0,
+                          with_terrain = true, rcs = 1.0)
+    w = World(seed = seed, fidelity = Dict(:propagation => prop))
+    w.entities[:radar1] = Entity(:radar1, :radar; pos = Vec3(0, 0, 30.0),
+        comp = Dict{Symbol,Any}(:pt_w => 1.0e4, :gain_db => 30.0,
+            :freq_hz => EWSim.C_LIGHT / 0.03, :bandwidth_hz => 1.0e6,
+            :noise_fig_db => 0.0, :losses_db => 0.0, :pfa => 1.0e-6, :swerling => 1))
+    w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(10_000.0, 0, h_t),
+        comp = Dict{Symbol,Any}(:rcs_m2 => rcs))
+    if with_terrain
+        w.entities[:ter1] = Entity(:ter1, :terrain;
+            comp = Dict{Symbol,Any}(:h0 => 0.0, :n_hills => 1, :hill1_a => hill_a,
+                :hill1_x => 5000.0, :hill1_y => 0.0, :hill1_s => 800.0,
+                :grid_n => 9, :xmin => -1000.0, :xmax => 11_000.0,
+                :ymin => -3000.0, :ymax => 3000.0, :los_step_m => 25.0))
+    end
+    subs = Subsystem[RadarSensor(:radar1; revisit_s = 0.0), ConstantVelocity(:tgt1)]
+    return w, subs
+end
+
+_tick_tel(w, subs) = (tick!(w, subs, 1.0e-3); state_frame(w)[:telemetry])
+
+@testset "terrain propagation rung (slice 18 gate 2)" begin
+
+    @testset "occluded target is masked (visible=false, floor, negative clearance)" begin
+        # LEVEL ray at z=30 (mast height == target height): the worst sample sits EXACTLY
+        # on the peak ⇒ clearance = 30 − 200 = −170 exact. (A TILTED ray's minimum of
+        # ray_z − gaussian sits slightly OFF-peak — linear ray vs quadratic crest — so the
+        # tilted case below is bracketed, not pinned.)
+        w, subs = _terrain_world(h_t = 30.0, hill_a = 200.0)
+        tel = _tick_tel(w, subs)
+        @test tel["radar1.visible"] == false
+        @test tel["radar1.snr_db"] == EWSim._SNR_DB_FLOOR
+        @test tel["radar1.pd"] ≤ 1.0e-5                       # SNR 0 ⇒ pd ≈ pfa
+        @test tel["radar1.terrain_clearance_m"] ≈ -170.0 atol = 1e-9
+        # tilted ray (target at 100 m): peak-sample value −135 bounds it from above
+        wt, st = _terrain_world(h_t = 100.0, hill_a = 200.0)
+        telt = _tick_tel(wt, st)
+        @test telt["radar1.visible"] == false
+        @test -136.0 < telt["radar1.terrain_clearance_m"] ≤ -135.0
+    end
+
+    @testset "clear target is bit-exact free-space SNR + positive clearance" begin
+        # target at 2 km altitude: ray z at the peak = 30 + 0.5·1970 = 1015 ≫ 200.
+        w, subs = _terrain_world(h_t = 2000.0, hill_a = 200.0)
+        rad = w.entities[:radar1]; tgt = w.entities[:tgt1]
+        rp = EWSim._radar_params(rad.comp)
+        R  = sqrt(sum(abs2, tgt.pos - rad.pos))
+        tel = _tick_tel(w, subs)
+        @test tel["radar1.visible"] == true
+        @test tel["radar1.snr_db"] == lin2db(snr_freespace(rp, 1.0, R))   # bit-exact, not ≈
+        @test tel["radar1.terrain_clearance_m"] > 0.0
+    end
+
+    @testset "NO terrain entity ⇒ :terrain is a bit-exact free-space no-op" begin
+        # The mismatched-EP `==` discipline: a live `set_fidelity propagation terrain` on a
+        # terrain-less scenario must move NO byte — same telemetry, same RNG position.
+        wt, st = _terrain_world(prop = :terrain,    with_terrain = false, seed = 20260714)
+        wf, sf = _terrain_world(prop = :free_space, with_terrain = false, seed = 20260714)
+        for _ in 1:20
+            tick!(wt, st, 1.0e-3); tick!(wf, sf, 1.0e-3)
+        end
+        @test state_frame(wt)[:telemetry] == state_frame(wf)[:telemetry]
+        @test rand(copy(wt.rng)) == rand(copy(wf.rng))
+        @test !haskey(state_frame(wt)[:telemetry], "radar1.terrain_clearance_m")
+    end
+
+    @testset "draw stream is rung-independent across all THREE rungs (class 4a)" begin
+        # The masked terrain geometry is the strongest case: a shadowed target still costs
+        # its draw. All three rungs must leave w.rng at the same stream position.
+        w1, s1 = _terrain_world(prop = :free_space, seed = 20260714)
+        w2, s2 = _terrain_world(prop = :two_ray,    seed = 20260714)
+        w3, s3 = _terrain_world(prop = :terrain,    seed = 20260714)
+        for _ in 1:50
+            tick!(w1, s1, 1.0e-3); tick!(w2, s2, 1.0e-3); tick!(w3, s3, 1.0e-3)
+        end
+        r = rand(copy(w1.rng))
+        @test r == rand(copy(w2.rng))
+        @test r == rand(copy(w3.rng))
+    end
+
+    @testset "the clearance key is RUNG-gated (a free_space frame ships no terrain key)" begin
+        # SAME world (terrain entity present) — only the rung differs. The slice-17
+        # lift-keys precedent: key-presence gates on the RUNG, not on entity presence,
+        # so a prior-slice wire can't grow a key from a stray terrain block.
+        wf, sf = _terrain_world(prop = :free_space)
+        tel = _tick_tel(wf, sf)
+        @test !haskey(tel, "radar1.terrain_clearance_m")
+        wt, st = _terrain_world(prop = :terrain)
+        @test haskey(_tick_tel(wt, st), "radar1.terrain_clearance_m")
+    end
+
+    @testset "masked frame survives the REAL wire (no Inf/NaN)" begin
+        w, subs = _terrain_world(h_t = 100.0, hill_a = 200.0)
+        tick!(w, subs, 1.0e-3)
+        frame = state_frame(w)
+        io = IOBuffer(); write_frame(io, frame); seekstart(io)
+        back = read_frame(io)
+        @test isfinite(back.telemetry[Symbol("radar1.snr_db")])
+        @test isfinite(back.telemetry[Symbol("radar1.terrain_clearance_m")])
+        @test back.telemetry[Symbol("radar1.visible")] == false
+    end
+
+    # --- loader + handshake ---------------------------------------------------------
+
+    _yaml_head = """
+    name: t18
+    seed: 18
+    dt_physics: 1.0e-3
+    emit_every: 4
+    fidelity:
+      propagation: terrain
+    entities:
+      - id: radar1
+        kind: radar
+        pos: [0, 0, 30]
+        radar:
+          pt_w: 10000
+          gain_db: 30
+          freq_hz: 1.0e10
+          bandwidth_hz: 1.0e6
+          noise_fig_db: 0
+          losses_db: 0
+          pfa: 1.0e-6
+          swerling: 1
+      - id: tgt1
+        kind: target
+        pos: [10000, 0, 100]
+        vel: [-200, 0, 0]
+        target:
+          rcs_m2: 1.0
+          alt_hold_m: 100
+    """
+
+    _terrain_block(; sigma = 800.0, grid_n = 9, xmax = 11000.0, step = 25.0, akey = "a") = """
+      - id: ter1
+        kind: terrain
+        terrain:
+          h0: 0
+          grid_n: $(grid_n)
+          los_step_m: $(step)
+          xmin: -1000
+          xmax: $(xmax)
+          ymin: -3000
+          ymax: 3000
+          hills:
+            - {$(akey): 200, x: 5000, y: 0, sigma: $(sigma)}
+            - {a: 90, x: 8000, y: 500, sigma: 400}
+    """
+
+    _load(body) = mktempdir() do dir
+        p = joinpath(dir, "t18.yaml")
+        write(p, body)
+        load_scenario(p)
+    end
+
+    @testset "loader: hills land as flat hillK_* keys; malformed inputs reject at LOAD" begin
+        scn = _load(_yaml_head * _terrain_block())
+        c = scn.world.entities[:ter1].comp
+        @test c[:n_hills] == 2
+        @test c[:hill1_a] == 200.0 && c[:hill1_x] == 5000.0 && c[:hill1_s] == 800.0
+        @test c[:hill2_a] == 90.0  && c[:hill2_y] == 500.0  && c[:hill2_s] == 400.0
+        @test scn.world.entities[:tgt1].comp[:alt_hold_m] == 100.0
+        # each guard fires as a clear LOAD error (never a tick throw):
+        @test_throws ErrorException _load(_yaml_head * _terrain_block(sigma = 0.0))     # σ ≤ 0
+        @test_throws ErrorException _load(_yaml_head * _terrain_block(grid_n = 1))      # grid_n < 2
+        @test_throws ErrorException _load(_yaml_head * _terrain_block(xmax = -1000.0))  # xmax ≤ xmin
+        @test_throws ErrorException _load(_yaml_head * _terrain_block(step = 0.0))      # los_step ≤ 0
+        @test_throws ErrorException _load(_yaml_head * _terrain_block(akey = "amp"))    # incomplete hill
+        # a SECOND terrain entity rejects (the single-heightfield scope)
+        two = _yaml_head * _terrain_block() *
+              replace(_terrain_block(), "id: ter1" => "id: ter2")
+        @test_throws ErrorException _load(two)
+    end
+
+    @testset "handshake: _terrain_info ships the gate-1 grid verbatim + the view ids" begin
+        scn = _load(_yaml_head * _terrain_block())
+        info = EWSim._terrain_info(scn.world)
+        @test info !== nothing
+        @test info[:terrain] === :ter1 && info[:radar] === :radar1 && info[:target] === :tgt1
+        @test info[:terrain_n] == 9
+        @test info[:terrain_extent_m] == [-1000.0, 11_000.0, -3000.0, 3000.0]
+        # the grid is EXACTLY the gate-1 sample of the authored heightfield
+        t = TerrainParams(a = [200.0, 90.0], cx = [5000.0, 8000.0], cy = [0.0, 500.0],
+                          sigma = [800.0, 400.0])
+        @test info[:terrain_grid] == terrain_grid(t, -1000.0, 11_000.0, -3000.0, 3000.0, 9)
+        # `terrain_grid` presence reaches the CLIENT handshake via scenario_frame (the
+        # 3-D-view discriminator), and a terrain-less world ships nothing.
+        frame = scenario_frame(EWSim.Server(scn))
+        @test haskey(frame, :terrain_grid) && frame[:terrain_n] == 9
+        @test EWSim._terrain_info(_terrain_world(with_terrain = false)[1]) === nothing
+    end
+
+    @testset "alt_hold_m pins the mover's z live (the altitude lever)" begin
+        scn = _load(_yaml_head * _terrain_block())
+        w = scn.world
+        for _ in 1:100
+            tick!(w, scn.subs, 1.0e-3)
+        end
+        @test w.entities[:tgt1].pos[3] == 100.0                 # held against vel_z drift
+        @test w.entities[:tgt1].pos[1] < 10_000.0               # x still integrates
+        w.entities[:tgt1].comp[:alt_hold_m] = 900.0             # the live slider write
+        tick!(w, scn.subs, 1.0e-3)
+        @test w.entities[:tgt1].pos[3] == 900.0
+    end
+end

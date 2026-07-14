@@ -111,6 +111,17 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
         comp[:intensity] = _f64(get(tb, "intensity", 1.0))
         comp[:intensity] >= 0 ||
             error("target '$id': intensity must be ≥ 0 (got $(comp[:intensity]))")
+        # Slice 18: an OPTIONAL altitude hold — `alt_hold_m` pins the ConstantVelocity mover's
+        # z each integrate! (radar.jl), making altitude a KNOB-addressable comp key (a raw pos
+        # component is not sliderable). The terrain scenario's lesson lever: drag the target
+        # up/down through the terrain shadow. PRESENCE-gated at the consumer, so a target
+        # without the key (every slice-1..17 scenario) is byte-identical. Load-validated
+        # FINITE (a NaN z → non-finite JSON — convention 6; any finite value is live-safe).
+        if haskey(tb, "alt_hold_m")
+            comp[:alt_hold_m] = _f64(tb["alt_hold_m"])
+            isfinite(comp[:alt_hold_m]) ||
+                error("target '$id': alt_hold_m must be finite (got $(comp[:alt_hold_m]))")
+        end
         # Slice 12: a `maneuver:` sub-block turns the straight-line target into a CURVING one — swap
         # ConstantVelocity → ManeuveringTarget (the augmented-PN foil). `a_lat_mps2`/`turn_sign` land
         # at KNOB-ADDRESSABLE comp keys, read with DEFAULTS at the consumer (a bare block / live
@@ -471,6 +482,47 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # knob (mirrors `cma`); 0 ⇒ decoupled (= slice 16). Only :pitch_coupled reads it.
             isfinite(comp[:af_cla])    || error("missile '$id': airframe.cla must be finite (got $(comp[:af_cla]))")
         end
+    elseif kind === :terrain
+        # An authored heightfield (slice 18): a NON-PHYSICAL entity (no mover, no hooks —
+        # the `:datalink` precedent) whose comp carries the Gaussian-hill terrain the
+        # `:terrain` propagation rung masks LOS against (radar.jl `_world_terrain`) and the
+        # handshake grid is sampled from (`_terrain_info`). Its `kind === :terrain` (NEVER
+        # `:target`) so `_nearest_target` / the radar's target sweep skip it. Hills are
+        # authored as a YAML LIST and stored as FLAT SCALAR keys `hillK_a/x/y/s` + `:n_hills`
+        # (knob-addressable shape; LOAD-STATIC this slice — the handshake grid ships once,
+        # so a live hill slider would silently stale the client mesh; named deferral).
+        # LOAD-validated per convention 5: a σ ≤ 0 divides `terrain_height`, a grid_n < 2
+        # divides the grid step, a degenerate extent flips the mesh — all clear load errors
+        # here, never a throw inside the session's IO/EOF-only catch.
+        haskey(ent, "terrain") || error("terrain entity '$id' has no `terrain:` block")
+        tb = ent["terrain"]
+        comp[:h0]         = _f64(get(tb, "h0", 0.0))
+        comp[:grid_n]     = Int(get(tb, "grid_n", 65))
+        comp[:los_step_m] = _f64(get(tb, "los_step_m", 25.0))
+        isfinite(comp[:h0])      || error("terrain '$id': h0 must be finite (got $(comp[:h0]))")
+        comp[:grid_n] ≥ 2        || error("terrain '$id': grid_n must be ≥ 2 (got $(comp[:grid_n]))")
+        comp[:los_step_m] > 0    || error("terrain '$id': los_step_m must be > 0 (got $(comp[:los_step_m]))")
+        for (k, dflt) in (("xmin", -5000.0), ("xmax", 5000.0), ("ymin", -5000.0), ("ymax", 5000.0))
+            comp[Symbol(k)] = _f64(get(tb, k, dflt))
+        end
+        comp[:xmax] > comp[:xmin] ||
+            error("terrain '$id': xmax must exceed xmin (got $(comp[:xmin])..$(comp[:xmax]))")
+        comp[:ymax] > comp[:ymin] ||
+            error("terrain '$id': ymax must exceed ymin (got $(comp[:ymin])..$(comp[:ymax]))")
+        hills = get(tb, "hills", [])
+        comp[:n_hills] = length(hills)
+        for (k, hb) in enumerate(hills)
+            for (suffix, uk) in (("a", "a"), ("x", "x"), ("y", "y"), ("s", "sigma"))
+                haskey(hb, uk) ||
+                    error("terrain '$id': hill $k missing required key '$uk' (needs a/x/y/sigma)")
+                comp[Symbol("hill$(k)_$suffix")] = _f64(hb[uk])
+            end
+            comp[Symbol("hill$(k)_s")] > 0 ||
+                error("terrain '$id': hill $k sigma must be > 0 (got $(comp[Symbol("hill$(k)_s")]))")
+            isfinite(comp[Symbol("hill$(k)_a")]) ||
+                error("terrain '$id': hill $k a must be finite")
+        end
+        subs = Subsystem[]
     elseif kind === :datalink
         # A cooperative-guidance datalink node (slice 14, the capstone): a NON-PHYSICAL entity (no
         # mover — it never integrates) carrying ONLY the phase-2 `SalvoCoordinator` build_env!. It
@@ -483,7 +535,7 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
     else
         error("unknown entity kind :$kind for '$id' (knows :radar, :target, :decoy, :clutter, " *
               ":jammer, :emitter, :df_sensor, :df_station, :pulse_emitter, :esm, " *
-              ":gps_satellite, :gps_receiver, :missile, :datalink)")
+              ":gps_satellite, :gps_receiver, :missile, :datalink, :terrain)")
     end
     return e, subs
 end
@@ -578,8 +630,22 @@ function load_scenario(path::AbstractString)
     _validate_esm(world)
     _validate_gps(world)
     _validate_missile(world)
+    _validate_terrain(world)
     knobs = _parse_knobs(data, world)
     return Scenario(name, world, subs, knobs, dt_physics, emit_every)
+end
+
+# At most ONE `:terrain` entity (slice 18): `_world_terrain` (radar.jl) and `_terrain_info`
+# (the handshake) both take "the first by sorted id", so a second heightfield would be
+# silently IGNORED by the physics while a student authors hills into it — reject the
+# ambiguity at LOAD (the single-emitter / single-receiver scope precedent). Per-field
+# guards (σ > 0, grid_n ≥ 2, extents ordered, hills complete) already ran in the entity
+# builder; this is the one cross-entity check.
+function _validate_terrain(world::World)
+    n = count(e -> e.kind === :terrain, values(world.entities))
+    n ≤ 1 || error("at most one :terrain entity per scenario (got $n) — " *
+                   "one heightfield is the physics; merge the hills into it")
+    return world
 end
 
 # A `:cfar` scenario must give each radar enough to BUILD the profile + ship the static

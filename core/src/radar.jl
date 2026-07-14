@@ -30,6 +30,15 @@ end
 function integrate!(cv::ConstantVelocity, w::World, dt::Float64)
     e = w.entities[cv.id]
     e.pos = e.pos + e.vel * dt
+    # Slice 18: an OPTIONAL altitude hold — a `comp[:alt_hold_m]` key (a declared knob in a
+    # terrain scenario) pins the mover's z so a LIVE slider can fly the target up/down through
+    # the terrain shadow (the lesson lever; a pos component is not knob-addressable, this key
+    # is). PRESENCE-gated (the `:af_cma` precedent): no key → the two lines above are the
+    # whole mover, bit-identical for every slice-1..17 scenario. Any finite value is safe at
+    # the consumer (a live slider can't crash a tick — convention 5); vel_z stays whatever
+    # was authored (a held z with vel_z = 0 is the natural authoring).
+    haskey(e.comp, :alt_hold_m) &&
+        (e.pos = Vec3(e.pos[1], e.pos[2], Float64(e.comp[:alt_hold_m])))
     return nothing
 end
 
@@ -73,11 +82,40 @@ _range(a::Vec3, b::Vec3) = sqrt(sum(abs2, a - b))
 # 4/3-Earth horizon on ground (rf.jl `two_ray_phase` / `horizon_range`).
 _ground_range(a::Vec3, b::Vec3) = hypot(a[1] - b[1], a[2] - b[2])
 
+# The authored heightfield record off a `:terrain` entity's comp (the `_radar_params`
+# precedent). Hills live as FLAT SCALAR keys `hillK_a/x/y/s` + `:n_hills` (loader-
+# validated complete per index) so the knob machinery could address one later
+# (hill-knob-with-grid-refresh is a named slice-18 deferral — terrain is LOAD-STATIC).
+function _terrain_params(c::AbstractDict)
+    n = Int(get(c, :n_hills, 0))
+    TerrainParams(h0 = Float64(get(c, :h0, 0.0)),
+                  a     = [Float64(c[Symbol("hill$(k)_a")]) for k in 1:n],
+                  cx    = [Float64(c[Symbol("hill$(k)_x")]) for k in 1:n],
+                  cy    = [Float64(c[Symbol("hill$(k)_y")]) for k in 1:n],
+                  sigma = [Float64(c[Symbol("hill$(k)_s")]) for k in 1:n],
+                  los_step_m = Float64(get(c, :los_step_m, 25.0)))
+end
+
+# The world's (single — loader-enforced) `:terrain` entity's heightfield, or `nothing`.
+# Consulted ONLY under the `:terrain` propagation rung, so every other rung's code path
+# is textually untouched (byte-identity for slices 1–17 by construction).
+function _world_terrain(w::World)
+    ids = sort!(Symbol[id for (id, e) in w.entities if e.kind === :terrain])
+    isempty(ids) && return nothing
+    return _terrain_params(w.entities[ids[1]].comp)
+end
+
 # The propagation-fidelity rungs the radar dispatch knows. SINGLE source of truth for
 # both the `_target_snr` dispatch (below) and the server's `set_fidelity` validation
 # (server.jl) — they must not drift, or the wire would accept a value that crashes
-# `tick!` inside `observe!` (HANDOFF §10, slice2 step 2).
-const PROPAGATION_MODES = (:free_space, :two_ray)
+# `tick!` inside `observe!` (HANDOFF §10, slice2 step 2). `:terrain` (slice 18) is the
+# THIRD rung: free-space link budget + a hard terrain-shadow LOS mask (terrain.jl) —
+# class 4a exactly like the first two (the mask gates only `(snr, visible)`; the
+# `detect_once` draw stays unconditional), introduce-safe and live-settable with NO
+# `set_fidelity` guard. On a world with NO `:terrain` entity the rung is bit-exact
+# `:free_space` (the slice-4 mismatched-EP no-op precedent — a live toggle on any
+# slice-1..17 scenario can neither crash a tick nor move a byte).
+const PROPAGATION_MODES = (:free_space, :two_ray, :terrain)
 
 # The CFAR-fidelity rungs the radar dispatch knows. REFERENCES detection.jl's
 # `CFAR_VARIANTS` (the primitives' source of truth) rather than re-listing — the slice-2
@@ -189,20 +227,31 @@ const _SNR_DB_FLOOR = -120.0
 _snr_db_wire(snr_lin::Real) = snr_lin > 0 ? max(lin2db(snr_lin), _SNR_DB_FLOOR) : _SNR_DB_FLOOR
 
 """
-    _target_snr(prop, rp, radar, tgt) -> (snr_lin, visible)
+    _target_snr(prop, rp, radar, tgt, ter=nothing) -> (snr_lin, visible)
 
 Single-target SNR under the active `propagation` fidelity, plus a horizon-visibility
 flag. `:free_space` is infinite-LOS phenomenology (no ground, always visible).
 `:two_ray` adds the flat-earth multipath (`snr_two_ray`, decomposed slant/ground) and
 the 4/3-Earth horizon: a target whose ground range exceeds `horizon_range` has no line
-of sight and is masked to SNR 0 (NOT -Inf — see [`_snr_db_wire`](@ref)). rf.jl stays
-pure phenomenology; the below-horizon POLICY and the degenerate guards live here, per
-HANDOFF §1/§10 and the slice-2 plan.
+of sight and is masked to SNR 0 (NOT -Inf — see [`_snr_db_wire`](@ref)). `:terrain`
+(slice 18) is the free-space link budget + a HARD terrain-shadow mask: an occluded
+LOS (`terrain_los_clear`, terrain.jl) masks to `(0.0, false)` — exactly the
+below-horizon policy shape; `ter` is the world's heightfield (`_world_terrain`,
+looked up ONCE per observe call by the caller and ONLY under this rung), and
+`ter === nothing` (no `:terrain` entity) falls through to bit-exact free space (the
+mismatched-EP no-op precedent — a live rung toggle can never crash a tick). rf.jl /
+terrain.jl stay pure phenomenology; the masking POLICY and the degenerate guards live
+here, per HANDOFF §1/§10 and the slice-2/18 plans.
 """
-function _target_snr(prop::Symbol, rp::RadarParams, radar::Entity, tgt::Entity)
+function _target_snr(prop::Symbol, rp::RadarParams, radar::Entity, tgt::Entity,
+                     ter::Union{Nothing,TerrainParams} = nothing)
     R   = _range(tgt.pos, radar.pos)
     rcs = tgt.comp[:rcs_m2]
     if prop === :free_space
+        return snr_freespace(rp, rcs, R), true
+    elseif prop === :terrain
+        ter === nothing && return snr_freespace(rp, rcs, R), true
+        terrain_los_clear(ter, radar.pos, tgt.pos) || return 0.0, false
         return snr_freespace(rp, rcs, R), true
     elseif prop === :two_ray
         # Heights above the reflecting plane (z=0); clamp ≥0 so a fly-by dipping below the
@@ -397,6 +446,9 @@ function _observe_point!(r::RadarSensor, w::World)
     # (default :free_space). `_target_snr` owns the per-rung physics + the below-horizon
     # policy, and raises the unknown-rung error (HANDOFF §10, slice2 step 2).
     prop = get(w.fidelity, :propagation, :free_space)
+    # The heightfield is consulted ONLY under the `:terrain` rung (slice 18) — every other
+    # rung's path is textually identical to slice 17 (byte-identity; the lookup draws nothing).
+    ter  = prop === :terrain ? _world_terrain(w) : nothing
 
     rp  = _radar_params(radar.comp)
     pfa = Float64(radar.comp[:pfa])
@@ -428,10 +480,11 @@ function _observe_point!(r::RadarSensor, w::World)
     best_snr_th  = -Inf      # ...its THERMAL S/N → js_db (J/S = JNR / SNR_thermal)
     best_pd  = 0.0
     best_visible = true
+    best_pos = w.entities[target_ids[1]].pos   # strongest target's pos → terrain clearance readout
     any_detect = false
     for tid in target_ids
         tgt = w.entities[tid]
-        snr_th, vis = _target_snr(prop, rp, radar, tgt)
+        snr_th, vis = _target_snr(prop, rp, radar, tgt, ter)
         # Raise the interference floor N → N+J: SNR_eff = (S/N)/(1+JNR). With no jammer
         # (jnr_total = 0.0) this is `snr_th / 1.0 === snr_th`, so the detector sees an identical
         # value and the draw stream is untouched. Jamming changes detection BOOLEANS, never the
@@ -444,6 +497,7 @@ function _observe_point!(r::RadarSensor, w::World)
             best_snr_th  = snr_th
             best_pd  = pd
             best_visible = vis
+            best_pos = tgt.pos
         end
         if is_look && detect_once(snr_eff, th, w.rng; swerling = sw, n_pulses = np)
             any_detect = true
@@ -468,6 +522,14 @@ function _observe_point!(r::RadarSensor, w::World)
     tel["$sid.pd"]       = best_pd
     tel["$sid.detected"] = get(radar.comp, :detected, false)
     tel["$sid.visible"]  = best_visible
+    # Slice 18: the SIGNED LOS clearance to the strongest target — the lesson's number
+    # (positive = clears by that many metres, negative = buried; sign IS the verdict).
+    # Shipped ONLY under the `:terrain` rung WITH a heightfield present (the slice-17
+    # lift-keys precedent: key-presence gated on the RUNG, so a non-terrain wire — and
+    # every slice-1..17 scenario — is byte-identical). `_finite_coord`: symmetric clamp,
+    # a signed readout must keep its sign (convention 6).
+    ter === nothing ||
+        (tel["$sid.terrain_clearance_m"] = _finite_coord(terrain_clearance(ter, radar.pos, best_pos)))
     # jnr_db / js_db ship ONLY when this radar actually sees a jammer — so a no-jammer frame is
     # unchanged (slices 1-3). js_db is the dB DIFFERENCE jnr_db − snr_th_db: exactly
     # lin2db(JNR/S) when both are above the floor (log identity), and wire-safe (finite,
@@ -556,6 +618,42 @@ function _cfar_axis_info(w::World)
 end
 
 """
+    _terrain_info(w) -> Union{Dict, Nothing}
+
+The STATIC terrain block a slice-18 scenario ships ONCE in the `scenario` handshake
+(the `_cfar_axis_info` / `_esm_axis_info` / `_airframe_view_info` precedent — it is
+LOAD-STATIC by design; hills are not live knobs, see docs/plans/slice18.md). Ships:
+
+  • `terrain_grid` — the row-major `terrain_n × terrain_n` height sample (metres) the
+    client MESHES — core output, the client never recomputes a height (HANDOFF §1);
+  • `terrain_n` / `terrain_extent_m = [xmin, xmax, ymin, ymax]` — the grid shape;
+  • `terrain` — the terrain entity id; `radar` / `target` — the first (sorted) radar
+    and target ids, so the client knows whose `.visible`/`.terrain_clearance_m`
+    telemetry colors the LOS ray without guessing by kind.
+
+**`terrain_grid` presence is the client's 3-D-view discriminator** (the
+`range_axis_m`→cfar precedent). `nothing` for a non-terrain world (the keys simply
+don't appear). Grid heights are closed-form finite (convention 6 needs no clamp).
+"""
+function _terrain_info(w::World)
+    tids = sort!(Symbol[id for (id, e) in w.entities if e.kind === :terrain])
+    isempty(tids) && return nothing
+    c = w.entities[tids[1]].comp
+    n = Int(c[:grid_n])
+    xmin = Float64(c[:xmin]); xmax = Float64(c[:xmax])
+    ymin = Float64(c[:ymin]); ymax = Float64(c[:ymax])
+    info = Dict{Symbol,Any}(:terrain => tids[1], :terrain_n => n,
+                            :terrain_extent_m => [xmin, xmax, ymin, ymax],
+                            :terrain_grid => terrain_grid(_terrain_params(c),
+                                                          xmin, xmax, ymin, ymax, n))
+    radars  = sort!(Symbol[id for (id, e) in w.entities if e.kind === :radar])
+    targets = sort!(Symbol[id for (id, e) in w.entities if e.kind === :target])
+    isempty(radars)  || (info[:radar]  = radars[1])
+    isempty(targets) || (info[:target] = targets[1])
+    return info
+end
+
+"""
     _observe_cfar!(r::RadarSensor, w)
 
 The CFAR detector: build a range-power profile each look, draw it, and threshold it with
@@ -568,6 +666,11 @@ and the determinism contract.
 function _observe_cfar!(r::RadarSensor, w::World)
     radar = w.entities[r.id]
     prop  = get(w.fidelity, :propagation, :free_space)
+    # Slice 18: terrain masking composes with the CFAR profile exactly as `:propagation`
+    # always has — through `_target_snr` (a shadowed target's bump is 0). Looked up ONLY
+    # under the `:terrain` rung; the clearance READOUT stays point-path-only (the slice-18
+    # scenario is a point-detector lesson — convention 9).
+    ter   = prop === :terrain ? _world_terrain(w) : nothing
     variant = w.fidelity[:cfar]
     variant in CFAR_MODES ||
         error("RadarSensor: cfar fidelity :$variant not implemented " *
@@ -602,7 +705,7 @@ function _observe_cfar!(r::RadarSensor, w::World)
     target_ids = sort!(Symbol[id for (id, e) in w.entities if e.kind === :target])
     for tid in target_ids
         tgt = w.entities[tid]
-        snr, vis = _target_snr(prop, rp, radar, tgt)
+        snr, vis = _target_snr(prop, rp, radar, tgt, ter)
         pd  = pd_analytic(snr, pfa; swerling = sw, n_pulses = np)
         ci  = _range_to_cell(_range(tgt.pos, radar.pos), rstart, dr, ncells)
         if ci != 0
