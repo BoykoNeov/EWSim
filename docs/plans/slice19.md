@@ -149,14 +149,28 @@ g-limit tightens exactly as the endgame demand spikes — the aero cap and the d
 The readout that carries it: **`a_max_aero` vs `a_demand`, on the same axis, both live.** The crossing IS the
 verdict — the analog of slice-18's clearance sign.
 
-**Distinguish it, explicitly, from three caps already in the suite** (the copy-paste false-claim trap —
+**Distinguish it, explicitly, from the caps already in the suite** (the copy-paste false-claim trap —
 these have been conflated before):
 
 | slice | the cap | what it is |
 |---|---|---|
 | 10/12 | `a_max` | an authored **magnitude** clamp — a number the engineer chose |
 | 15 | `k_δ·δ̇_max` | a **jerk/onset-rate** cap — how fast g can build |
+| 15 | `δ_max` | a **deflection** cap — which, through the trim inversion, is an IMPLICIT α ceiling (gate-0 finding: the 4th cap, see the isolation below) |
 | **19** | **`a_max_aero = Q·S·C_Lα·α_max/m`** | a **flight-condition** cap — what the air will give you *right now* |
+
+**GATE-0 MEASURED (V0=700, THE PICK):** point-mass **0.276 m** vs coupled **295.168 m** — a **1069×**
+separation; `aero_sat` binds **59%** of the guided window; `defl_sat == 0`; `a_max` inert.
+**The causal claim, stated as the counterfactual it is (advisor):** *relaxing α_max alone — every other
+cap held — recovers **282 of the 295 m***. NOT "the ceiling contributes 282 m additively": gate 0 proved
+ceiling and dynamics are **NOT additive** (71 + 12 ≠ 253), so an additive decomposition is a false claim.
+
+**The residual ~13 m** (the caps-relaxed twin) is **"the airframe + autopilot dynamic tracking cost"** —
+the irreducible price of steering through a real rotational plant with a finite-bandwidth loop rather
+than an instant one. **It is NOT "short-period lag"** (unearned: 6.3× of ω_sp buys only −10%) and **NOT
+a projection effect** (measured at −0.081 m — refuted). ω_sp and the loop gains are ENTANGLED; neither
+alone dominates. Name it as a §1 approximation of the `:pitch_coupled` plant — it is not a defect, and
+the lesson (95.6% of the miss) survives it intact.
 
 ---
 
@@ -181,6 +195,13 @@ these have been conflated before):
     α loop). Fewer moving parts, but it entangles two fidelity keys' meanings.
   Decide at gate 2 with the gate-0 numbers in hand. **Do not inherit the plan-of-record's assumption that
   one button does this cleanly** — it does not, and the plan should say so.
+  **ADVISOR-AFFIRMED (post-gate-0): take (i)** — button toggles `:airframe` alone, autopilot authored at
+  `:alpha`, satisfying convention 9 (one toggled fidelity). **SPEC THE CROSS-FIDELITY DEPENDENCY
+  EXPLICITLY:** `:alpha`'s behaviour DEPENDS on `:airframe` (a_ctrl under `:point_mass`, δ under
+  `:pitch_coupled`) — the first such dependency in the suite, so it must be written down, not implied.
+  The point_mass reference arm is `:alpha`-in-a_ctrl-mode (≈ `:ideal`); it need only **HIT**, not match
+  any existing slice-10 scenario byte-for-byte — **no conflict with byte-identity**, which is about
+  EXISTING scenarios (a slice-1..18 scenario never sets `:alpha`).
 - **Naming honesty (the `:pitch_coupled`-not-`:sixdof` precedent).** `:alpha` — it is an **α-command**
   autopilot. NOT `:aero` (over-broad), NOT `:sixdof` (still pitch-plane). Carry a named-approximation line.
 - **Class 4c** — physics-changing, NO RNG (truth-fed PN, no seeker in the showcase → "draw-count invariance
@@ -194,11 +215,25 @@ these have been conflated before):
   is the physics). Also: `C_Lα → 0` is a live slider (`af_cla`, min −5 in slice 17!) — a **zero or negative
   C_Lα divides or flips the sign**. Floor/guard the divisor at the consumer; a live drag through zero MUST
   NOT crash a tick.
-- **The isolation, ASSERTED (the slice-15 discipline).** The three caps must be separable and the AERO one
-  must be what binds: pin `a_max` GENEROUS (never binds in the guided window — `saturated == 0`), any fin
-  `δ̇_max` non-binding (`rate_sat == 0`), and `a_max_aero < a_demand` in the miss window. **Assert all three
-  in the verifier**, exactly as slice 15 asserted `fin_defl_sat == 0 && saturated == 0` to prove its rate cap
-  was not a magnitude clamp in a fin costume.
+- **The isolation, ASSERTED — but STRUCTURALLY (GATE-0 CORRECTION; this reverses the plan's first draft).**
+  There are **FOUR caps** here, not three, and the naive slice-15-style `saturated == 0` assertion **FAILS**:
+
+  | cap | value (THE PICK) | status |
+  |---|---|---|
+  | `a_max` (slice 10) | 3000 | **INERT — PROVEN**: `a_max=3000` ≡ `a_max=1e7` **bit-for-bit** (miss + full trajectory, V0 ∈ {500,700,1000}). It clamps **560×** in the guided window and changes NOTHING. |
+  | **`a_max_aero`** | **269.39 @ V0=700** | **THE LESSON** |
+  | **`δ_max` (slice-15's DEFLECTION cap — THE 4th)** | 0.4 | an IMPLICIT α ceiling at ≈`(Cmd/\|Cma\|)·δ_max`. **It silently contaminated gate-0's first causation twin.** |
+  | `δ̇_max` (slice-15's rate cap) | — | not modeled this slice (named deferral) |
+
+  **Why `saturated == 0` fails and must NOT be copied:** the ceiling-limited missile diverges → the LOS
+  rate grows → PN demand escalates to 4856–29935 m/s², genuinely above `a_max`, in the guided window
+  (r > 150 m — NOT an endgame artifact). But every one of those clamps is **inert**: `a_max` clamps
+  `a_cmd` UPSTREAM of the α inversion, and since `a_max_aero < a_max` the clamped `a_perp` still pegs
+  `α_cmd` at ±α_max. **The tighter clamp wins downstream.** Copying slice-15's assertion is the
+  convention-4 copy-paste trap — it was correct THERE because its cap sat downstream of `a_max`.
+  ⇒ **Assert the STRUCTURAL `max(a_max_aero) < a_max`** (here 550 < 3000, 5.5× margin).
+  ⇒ **Assert `defl_sat == 0`** — guaranteed by CONSTRUCTION, not luck: δ_peak is deterministic at
+  launch (α=0, α_cmd pegged) at `(|Cma|/Cmd + k_α)·α_max = 0.2667 < δ_max = 0.4` (33% margin).
 
 ---
 
@@ -304,8 +339,11 @@ Slices 1–18 byte-identical through the include.
   - `test_missile.jl`: a **transient GOLDEN** on the closed-loop coupled path (the slice-17 stage-θ lesson —
     `atol` 1e-6/1e-9; the ONLY thing that catches a subtly-wrong-but-plausible wiring); the **non-dead
     toggle** (`:point_mass` hits, `:pitch_coupled` misses — pinned on miss distance, both directions); the
-    **aero-limit binds** (`aero_sat` set, `saturated == 0`); the δ seam (`:delta_cmd` absent ⇒ `af_delta` ⇒
-    slice-17 bit-identical); loader parse/reject.
+    **aero-limit binds** (`aero_sat` set, `defl_sat == 0`, structural `a_max_aero < a_max` — **NOT**
+    `saturated == 0`); the δ seam (`:delta_cmd` absent ⇒ `af_delta` ⇒ slice-17 bit-identical); loader
+    parse/reject. **The `a_max`-INERTNESS test is cheap and decisive: same scenario at `a_max` = 3000 vs
+    1e7 ⇒ trajectory `==` bit-for-bit** (gate 0 proved it; pin it so a future edit can't quietly make
+    slice-10's clamp load-bearing again).
   - `test_determinism.jl` (the 14/15/16/17 **4c shape**, NOT the 11/13 RNG shape): same-seed bit-identical
     with **NO RNG** on the path (pin `t` AND a per-missile pos sequence); a slice-1..18 scenario
     byte-identical; the `:point_mass ↔ :pitch_coupled` toggle CHANGES the trajectory with no RNG;
@@ -331,14 +369,24 @@ Slices 1–18 byte-identical through the include.
   is the verdict), plus an `aero_sat` tell. **Watch-item:** `_setup_spatial_fid_btn` checks the airframe
   branch FIRST (the slice-16→17→18 value-guard chain) — verify slice 16 STILL drops the button and slice 18's
   terrain branch is untouched.
-- `net/slice19_verify.gd` (drives the real server): `:pitch_coupled` **MISSES** while `:point_mass` **HITS**
-  on the SAME seed/geometry (the headline, as a number); **the isolation asserted** (`aero_sat` set,
-  `saturated == 0`, any `rate_sat == 0` — the slice-15 discipline: prove the AERO cap is what bound);
-  `a_max_aero < a_demand` in the miss window; **THE CAUSATION PROOF (advisor) — the `af_alpha_max` sweep:**
-  raise α_max via `set_param` with **speed HELD** and the miss CLOSES ⇒ the ceiling caused it, not the
-  short-period lag (α_max moves the ceiling ALONE; speed moves ceiling AND ω_sp together, so the speed knob
-  is the *demo* lever, **NOT** the causation proof — gate-0 goal 5); held-seed **replay bit-identical**
-  (RNG-free); `set_fidelity airframe point_mass` ACCEPTED live (4c).
+- `net/slice19_verify.gd` (drives the real server). **EVERY assertion is on FRAME-SAMPLED values —
+  sub-metre is UNREACHABLE on the wire (GATE-0 CORRECTION, blocking):** closing speed at CPA ≈ **1373
+  m/s** and `emit_every=16` ⇒ frames ≈ **22 m apart** near CPA, so a TRUE 0.276 m point-mass CPA is
+  frame-sampled as up to **15.2 m**. The plan's first-draft `pm HITS < 1 m` would FAIL *on a hit* — the
+  exact coarseness [[ewsim-missile-verifier-sampling]] warns of. **Assert the RATIO/SEPARATION:**
+  - `pm_frame < 30` AND `coupled_frame > 250` AND **`ratio > 8×`** (gate-0 measured 33–145× across
+    V0 ∈ [400,1000]; worst 33.3× ⇒ 4× margin). The coupled side samples faithfully (295.186 vs
+    295.168 true) — only the HIT side is coarse.
+  - **the isolation**: `aero_sat` set, **`defl_sat == 0`**, and the **structural `a_max_aero < a_max`**
+    (**NOT** `saturated == 0` — it FAILS; `a_max` clamps 560× INERTLY, see the isolation section).
+  - **THE CAUSATION PROOF — the `af_alpha_max` sweep**: raise α_max via `set_param` with **speed HELD**
+    and the miss closes to **< 20 m** ⇒ the ceiling caused it. Gate-0 confirmed this sweep is clean at
+    the **AUTHORED δ_max = 0.4** (identical to the δ_max=50 sweep to every digit, `defl_sat == 0`
+    throughout) ⇒ **no `set_param(delta_max)` escape hatch needed**. (α_max moves the ceiling ALONE;
+    speed moves ceiling AND ω_sp together, so speed is the *demo* lever, **NOT** the causation proof.)
+  - held-seed **replay bit-identical** (RNG-free); `set_fidelity airframe point_mass` ACCEPTED live (4c).
+  **Re-pin every number against the live wire first** (convention 10) — 295.168 is a PROBE number; the
+  real `decide!`/`integrate!` ordering may shift it. Do NOT hard-code 295 before the wire confirms it.
   `S19V OK`, exit 0. Drain in multiples of `emit_every`; **[[ewsim-missile-verifier-sampling]] applies** —
   exclude post-CPA re-crossings AND the r→0 endgame spike; make the target outrun the missile for a clean
   first CPA.
@@ -389,17 +437,36 @@ Slices 1–18 byte-identical through the include.
 - **THE `a_cmd/Q` DIVIDE IS THE CRASH-SAFETY SITE (convention 5).** Q→0 at launch/apex; `C_Lα→0`/`<0` is a
   LIVE slider (slice-17's `af_cla` min is **−5**). Floor the divisor AND clamp α_cmd. A throw in `decide!`
   lands in the session's IO-only catch and **silently drops the connection**.
-- **THE ISOLATION MUST BE ASSERTED, not assumed (the slice-15 discipline).** `a_max_aero < a_demand < a_max`,
-  `saturated == 0`, `rate_sat == 0`. Otherwise you have shipped slice-10's clamp in an airframe costume and
-  claimed a new lesson — the exact false-claim class conventions 4/11 exist to catch.
-- **BINDING ≠ CAUSING — THE SECOND HALF OF THE ISOLATION (advisor, load-bearing).** The assertions above prove
-  the ceiling BINDS; they do not prove it causes the miss. The coupled airframe also adds a **short-period
-  response lag** the point-mass plant lacks entirely — a **slice-15-class** effect. If the lag is what opens
-  the miss, this slice has renamed slice 15's lesson and the whole three-cap table is a false claim. **The
-  discriminator is `af_alpha_max`, which enters ONLY the α_cmd clamp** (absent from `pitch_moment`,
-  `lift_accel`, `short_period_freq`) — so it moves the ceiling with ω_sp/geometry/approach FIXED. **Speed is
-  confounded** (`ω_sp ∝ √Q` — it moves ceiling AND response-speed together) and must NOT be the causation
-  lever. Gate-0 goal 5; verifier assertion at gate 3.
+- **THE ISOLATION IS STRUCTURAL, NOT `saturated == 0` (GATE-0 CORRECTION — the plan's first draft was
+  WRONG).** Assert `max(a_max_aero) < a_max` + `defl_sat == 0`. `saturated == 0` **FAILS**: `a_max`
+  clamps 560× in the guided window, INERTLY (proven bit-for-bit at `a_max` = 3000 vs 1e7). Copying
+  slice-15's assertion across is itself the convention-4 copy-paste trap. See the isolation table.
+- **THERE IS A FOURTH CAP — `δ_max` — AND IT WILL CONTAMINATE THE CAUSATION TWIN IF YOU LET IT.** Through
+  the trim inversion, δ_max is an IMPLICIT α ceiling at ≈`(Cmd/|Cma|)·δ_max`. Gate 0's first "generous
+  α_max=1.5" twin never got near 1.5 (α_peak 0.52) — δ_max=0.5 capped it, and ~4 of the "12 m lag floor"
+  was δ_max. **Relax α_max AND δ_max together in the twin.** Relaxing the cap under test while leaving
+  another binding is the false-claim trap one level down — it fooled gate 0 for two probes.
+- **BINDING ≠ CAUSING (advisor, load-bearing) — RESOLVED at gate 0, keep the discipline.** The isolation
+  proves the ceiling BINDS, not that it CAUSES the miss; the coupled plant also carries a dynamic
+  tracking cost the point-mass plant lacks (a slice-15-class concern). **The discriminator is
+  `af_alpha_max`, which enters ONLY the α_cmd clamp** (absent from `pitch_moment`, `lift_accel`,
+  `short_period_freq`) — it moves the ceiling with ω_sp/Q/geometry FIXED. **Speed is CONFOUNDED**
+  (`ω_sp ∝ √Q` moves ceiling AND response-speed together) ⇒ demo lever only, never the causation proof.
+  Gate-0 measured: relaxing α_max alone recovers **282 of 295 m (95.6%)**, residual **13 m**.
+- **STATE THE LESSON AS A COUNTERFACTUAL, NOT A DECOMPOSITION (advisor).** "Relaxing α_max alone recovers
+  282 of 295 m" — NOT "the ceiling contributes 282 m". Gate 0 proved ceiling and dynamics are **not
+  additive** (71 + 12 ≠ 253), so "owns/contributes" implies a decomposition that does not hold.
+- **DO NOT CALL THE ~13 m RESIDUAL "SHORT-PERIOD LAG"** — the label is UNEARNED (6.3× of ω_sp buys −10%;
+  it floors at ~12.2, not at the point-mass 0.276). Nor is it the ⟂-v-vs-⟂-LOS projection (measured at
+  −0.081 m — **refuted**, though the along-v̂ component of a_cmd does reach 0.55·|a_cmd|). ω_sp and the
+  loop gains are ENTANGLED; neither alone dominates. Call it **"the airframe + autopilot dynamic tracking
+  cost"** and name it as a §1 approximation.
+- **`k_α`/`k_q` ARE AUTHORED CONSTANTS — NEVER KNOBS.** The α_max clamp bounds the COMMAND; lift uses the
+  ACHIEVED α. A hot loop (k_α=100) lets achieved α overshoot α_max ⇒ transient lift ABOVE `a_max_aero`
+  ⇒ **the ceiling LEAKS** (gate 0: miss collapses 295 → 62.8 m, fin bang-bang at defl_sat=4012). At the
+  authored gains this is moot (α_peak = 0.1369 never even reaches the 0.2 clamp — it is demand-limited),
+  but an exposed gain slider is a live path to eroding the lesson. A true stall would bound the ACHIEVED
+  α — that is the nonlinear `C_L(α)` deferral.
 - **"HIGH ALTITUDE" IS FALSE HERE (finding 3).** ρ is constant. Only V moves Q. Three prior plans say
   otherwise; do not propagate it further, and fix the phrasing in STATUS/HANDOFF at gate 3.
 - **THE "HALVES JOIN" PHRASING IS OVERSOLD (finding 2).** `FinState.δ::Vec3` vs `pitch_moment(delta::Float64)`
@@ -410,9 +477,12 @@ Slices 1–18 byte-identical through the include.
 - **THE OUT-OF-PLANE DISCARD CONSTRAINS THE SCENARIO.** A pitch-plane α autopilot cannot make y-accel. The
   engagement must be planar; a target maneuvering out of plane would be UNFLYABLE by construction (and would
   look like a bug). State it as a §1 named approximation in the scenario header.
-- **THE STAGE-θ LESSON RECURS.** Slice 17's entry-θ bug was ~0.019 m / 8 s — invisible to every test except
-  a transient golden. A closed-loop δ has the same shape of hazard (a plausible-but-wrong stage read). **Ship
-  a transient golden.**
+- **THE STAGE-θ BUG CLASS HAS NO HOME HERE (advisor) — ship the golden anyway, but do not hunt.** δ is
+  computed ONCE per tick in `decide!` and held CONSTANT across the next step's four RK4 stages: it is an
+  EXTERNAL input, not stage-varying state, so slice-17's entry-θ-vs-stage-θ hazard cannot recur for the
+  autopilot. (The lift/moment stage-θ read inside `_integrate_coupled!` is slice-17 code and stays as-is.)
+  Ship a transient golden as cheap insurance against a plausible-but-wrong wiring — just don't burn gate-2
+  effort looking for a stage-θ bug that has nowhere to live.
 - **Verifier sampling** — [[ewsim-missile-verifier-sampling]]: first-descending-band CPA, exclude the r→0
   endgame spike, pin the RATIO not the frame-sampled min, target outruns missile.
 - **The client value-guard is now THREE-way** (16 drops / 17-19 show / 18 terrain-3D). `_setup_spatial_fid_btn`
@@ -459,13 +529,23 @@ Slices 1–18 byte-identical through the include.
 
 ## Task checklist
 
-- [ ] **0. Probe + config pin** (`M:\claud_projects\temp\slice19_probe\`) — the δ law (static inversion vs
-      feedback α-loop + q-damping) & **closed-loop short-period stability**; the **sign chain** arrow by
-      arrow; **the isolation numbers** (`a_max_aero < a_demand < a_max`); **the CAUSATION separation —
-      g-limit vs short-period lag** (a generous-α_max coupled twin must HIT; α_max is the clean knob, speed
-      is confounded via `ω_sp ∝ √Q`); the **speed** Q-lever range (static vs drag-bled — causation proof on
-      STATIC); α_max; byte-identity of slice-17/slice-10 scenarios; NO RNG; the Q→0 / C_Lα≤0 degenerates.
-      Write `FINDINGS.md`. **RE-CONSULT THE ADVISOR with the numbers.** Forward-flag the gate-1/2/3 seams.
+- [x] **0. Probe + config pin** — **DONE** (`M:\claud_projects\temp\slice19_probe\`: `probe.jl`…`probe8.jl`
+      + `FINDINGS.md`; advisor re-consulted, 2 blockers + 5 soft items folded in above). **THE PICK:**
+      geometry = slice-12 base (m1 (0,0,3000) elev 12°, target (6000,0,4200) vel (−800,0,200), `a_lat`=200);
+      mass 140, S=π·0.1², d=0.2, **I=20, Cma=−1.0, Cmd=+3.0, Cmq=−150, Cla=20**; **k_α=1.0, k_q=0.3**
+      (AUTHORED, never knobs); **α_max=0.2, δ_max=0.4, a_max=3000** (inert), V0=700 (knob 400–1200),
+      **drag OFF**, dt=1e-3. **CONFIRMED:** δ law = **`:ff_fb`** (FF trim inversion + feedback — err ~1e-12,
+      ~0% overshoot; `:static` rings 72–96%, `:fb` has the exact 5/6 = slice-9 `1/(1+Kp)` undershoot);
+      closed-loop STABLE across ω_sp ∈ [9.7, 68.7]; the **7-arrow sign chain + mirror** OK; the
+      `a_max_aero ↔ α_max` round-trip exact (2.8e-17); **point-mass 0.276 m vs coupled 295.168 m (1069×)**;
+      **causation: relaxing α_max alone recovers 282 of 295 m (95.6%)**, residual 13.1 m; `aero_sat` 59% of
+      the guided window, `defl_sat`=0, `a_max` INERT (3000 ≡ 1e7 bit-for-bit); all degenerates finite
+      (V→0, C_Lα ≤ 0, Cmδ→0, Cma=+0.5 unstable closed loop 14 s); A-vs-B bit-identical, NO RNG (4c).
+      **FIVE PLAN CORRECTIONS FOLDED IN:** (1) the isolation is STRUCTURAL, `saturated == 0` FAILS;
+      (2) a FOURTH cap `δ_max` contaminated the first causation twin; (3) the residual is NOT
+      "short-period lag" nor a projection effect; (4) the verifier CANNOT assert sub-metre (frame
+      sampling) — assert the ratio; (5) `k_α`/`k_q` must not be knobs (the ceiling leaks via achieved-α
+      overshoot). Drag-bled DEFERRED (works — miss 295→417 — but confounds intra-run).
 - [ ] **1. Primitive** — `airframe.jl`: `alpha_command`, `aero_accel_limit`, the δ law (+ mode consts if
       wiring (i)). Slice-16/17 primitives UNCHANGED. `test_airframe.jl` arms: the sign chain, the
       `a_max_aero` ↔ `α_max` round-trip, the Q floor, `C_Lα ≤ 0`, the clamp binds, trim consistency.
