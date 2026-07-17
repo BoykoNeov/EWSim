@@ -51,9 +51,22 @@ struct AirframeParams
     Cmd::Float64    # control (fin) effectiveness ∂Cm/∂δ, 1/rad
     Cmq::Float64    # pitch damping derivative ∂Cm/∂q̄, 1/rad — <0 DAMPS (q̄ = q·d/2V)
     rho::Float64    # air density, kg/m³ — constant (named approximation, shared with dynamics.jl)
-    Cla::Float64    # lift-curve slope ∂C_L/∂α, 1/rad — slice 17: the α→lift→γ coupling. LAST field
-                    # (byte-identity: slice-16 point_mass never reads it). 0 ⇒ decoupled = slice 16.
+    Cla::Float64    # lift-curve slope ∂C_L/∂α, 1/rad — slice 17: the α→lift→γ coupling. 0 ⇒
+                    # decoupled = slice 16.
+    K::Float64      # slice 20: the LUMPED induced-drag factor (C_Di = K·C_L², dimensionless).
+                    # LAST field (the Cla precedent — slices 16–19 never read it). 0 ⇒ lift is
+                    # DRAG-FREE = slices 17/19's named approximation, and `induced_drag_accel`
+                    # returns EXACTLY zero.
 end
+
+# The 8-arg form — slices 16–19's construction sites (4 in missile.jl, 5 in the tests) keep
+# compiling unchanged with K = 0 (no induced drag). The `Cla` precedent: a new LAST field with
+# a zero default is additive by construction. NOTE this default is NOT what protects
+# byte-identity in the live tick — `_integrate_coupled!` must not CALL the drag term at all
+# unless the key is present (a `0.0*v` can mint `-0.0` and `a - (-0.0)` flips a bit the
+# reinterpret determinism tests catch; advisor). This is a convenience, not the guard.
+AirframeParams(S::Real, d::Real, I::Real, Cma::Real, Cmd::Real, Cmq::Real, rho::Real, Cla::Real) =
+    AirframeParams(S, d, I, Cma, Cmd, Cmq, rho, Cla, 0.0)
 
 # A speed floor for the q̄ = q·d/(2V) nondimensionalization: at V→0 (launch/apex) the pitch
 # damping term is undefined (÷V). Below this, drop the damping contribution to 0 rather than
@@ -393,4 +406,95 @@ function alpha_autopilot_delta(alpha_cmd::Float64, alpha::Float64, q::Float64,
     δ_ff = abs(p.Cmd) < _AIRFRAME_DENOM_FLOOR ? 0.0 : -(p.Cma / p.Cmd) * alpha_cmd
     δ_raw = δ_ff + k_alpha * (alpha_cmd - alpha) - k_q * q
     return (clamp(δ_raw, -delta_max, delta_max), abs(δ_raw) > delta_max)
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SLICE 20 — INDUCED DRAG: **the missile lowers its own ceiling by maneuvering.**
+#
+# Slices 17/19 shipped an EXPLICIT §1 approximation: *"lift is drag-free / speed-preserving
+# (⟂ v)"*. This cashes it. Lift ⟂ v turns the flight path; induced drag ∥ −v̂ SENDS THE
+# INVOICE — and the invoice is paid in the very currency that buys the turn:
+#
+#     pull α → pay K·C_L² in drag → V falls → Q = ½ρV² falls → a_max_aero = Q·S·C_Lα·α_max/m
+#            falls → the ceiling CATCHES the demand → you cannot pull → you miss
+#
+# THE FIRST POSITIVE-FEEDBACK LOOP IN THE PROJECT. Slice 19's ceiling was a flight condition
+# that BINDS; slice 20's is a flight condition YOU DEGRADE BY USING IT. On the showcase wire
+# (gate-0 FINDING 9) the tell is that at K = 0 the ceiling NEVER BINDS ONCE (`aero_sat` 0.0%)
+# and at K = 0.3 it binds 61.1% — with the geometry, the target, α_max and ρ ALL HELD. Nobody
+# lowered the ceiling; the missile lowered it, by turning.
+#
+# ⚠ THE CLAIM IS BOUNDED — READ THIS BEFORE WRITING ANY LESSON LINE (gate-0 FINDING 5, the
+# convention-4 copy-paste false-claim trap): **"bleed → Q → ceiling → miss" is what ANY speed
+# loss does.** Matched on ΔV, a PARASITIC `cd_area` reproduces the induced miss and ceiling
+# almost exactly (45.02 m / 173.2 vs 44.17 m / 176.3). The spiral's DOWNSTREAM is NOT evidence
+# of induced drag. What IS distinctive is the SOURCE of the bill:
+#   • induced  = a CLOSED LOOP — written BY THE MANEUVER (∝ α²), self-inflicted. A straight
+#     fly-out is billed **0.06 m/s** (gate-0 FINDING 4).
+#   • parasitic = an OPEN-LOOP TOLL — set by `cd_area`, arriving whatever you do. The same
+#     straight fly-out is billed **75–136 m/s**.
+# That contrast is the ONLY thing that earns this slice its title, so it ships as a VERIFIER
+# TOOTH (advisor), not as prose.
+#
+# AND NOT THIS (gate-0 FINDING 7, a prediction REFUTED by its own probe): "a harder engagement
+# costs more" is **FALSE** — holding K fixed and hardening the target's maneuver, the
+# attributable bill FALLS (194 → 117 m/s), because a harder-maneuvering target SHORTENS
+# time-of-flight and the α_max clamp caps α anyway. The showcase target does NOT maneuver at
+# all: the missile pays for **its own turn onto the collision course**. Say "the turn you must
+# make to intercept bills you", NEVER "dogfighting costs speed".
+#
+# NAMED APPROXIMATIONS (§1):
+#   • `K` is LUMPED (the `cd_area` = "lumped Cd·A" precedent), NOT decomposed as 1/(π·e·AR).
+#     This airframe's C_Lα = 20/rad is AUTHORED high (slice 17/19's choice), so C_L reaches ≈3
+#     at α = 0.15 and the K that produces a visible spiral is correspondingly large. **Do NOT
+#     quote an implied aspect ratio** — C_Lα is not derived from geometry here, so K =
+#     1/(π·e·AR) would be false precision.
+#   • The polar is QUADRATIC and the lift curve LINEAR (no stall / no C_L roll-off — the
+#     nonlinear C_L(α) deferral), and ρ is CONSTANT (shared with dynamics.jl) ⇒ only V moves Q.
+#   • ZERO-LIFT drag (`C_D0`, i.e. `cd_area`) is a SEPARATE, already-shipped term and the
+#     showcase holds it at 0 — so every m/s the showcase loses is provably bought with α.
+# ─────────────────────────────────────────────────────────────────────────────
+
+"""
+    induced_drag_accel(vel, theta, mass, p::AirframeParams) -> Vec3
+
+**The bill for the lift** — the induced-drag specific force (m/s², a per-mass acceleration):
+
+    α     = θ − γ,   γ = atan(v_z, v_x)          (angle of attack, flight-path angle)
+    C_L   = C_Lα·α                                (the SAME linear lift curve `lift_accel` uses)
+    C_Di  = K·C_L²                                (the induced-drag polar — quadratic in lift)
+    a_ind = −(Q·S·C_Di / m)·v̂,   Q = ½·ρ·V²       (ALONG −v̂ — pure deceleration)
+
+`induced_drag_accel` is `lift_accel`'s COMPANION AND ITS ORTHOGONAL COMPLEMENT: the same α and
+the same `Q·S` build both, but lift acts on `n̂ = (−sin γ, 0, cos γ)` and turns the path at
+constant speed, while this acts on `−v̂` and slows the missile without turning it. The two are
+⟂ BY CONSTRUCTION — pinned in test_airframe.jl by `dot(a_ind, n̂) == 0` AND `dot(a_ind, v̂) < 0`
+(the #1 sign trap: a drag that leaked a ⟂ component would silently become a second, unnamed
+lift, and a magnitude-only test would never see it).
+
+**The bill is EVEN in α** (`C_L²`): turning UP costs exactly what turning DOWN costs, and
+`α = 0` costs EXACTLY ZERO — a straight-flying missile pays NOTHING. That is the whole
+difference from `drag_accel`'s parasitic `cd_area`, which bills a straight flight anyway, and
+it is what makes this term a FEEDBACK rather than a toll (see the section header, FINDING 4/5).
+
+`mass` is the MISSILE's (passed, like V/γ — not an airframe constant), mirroring `lift_accel`.
+Degenerates (a live knob can never crash a tick — convention 5):
+  • `K = 0` ⇒ returns EXACTLY `Vec3(0,0,0)` (the `==` tooth) — lift is drag-free again, i.e.
+    slices 17/19's approximation restored. NOTE: the live tick must still GATE THE CALL on key
+    presence rather than lean on this (`0.0*v` can mint `-0.0`; see the AirframeParams note).
+  • `V ≤ _AIRFRAME_V_FLOOR` (launch/apex): returns zero — Q → 0 kills it anyway, and this is
+    the ÷V guard for the `v̂ = v/V` normalization (the `lift_accel` / `pitch_moment` precedent).
+  • `K < 0` is NOT floored and is NOT degenerate: it would be a drag that ACCELERATES, which is
+    unphysical, so the LOADER rejects it (convention 5's validate-at-LOAD) and the knob's floor
+    is 0 — no consumer branch is spent on it.
+"""
+function induced_drag_accel(vel::Vec3, theta::Float64, mass::Float64, p::AirframeParams)
+    V = _norm3(vel)
+    V ≤ _AIRFRAME_V_FLOOR && return Vec3(0.0, 0.0, 0.0)
+    γ = atan(vel[3], vel[1])
+    α = theta - γ
+    C_L = p.Cla * α
+    Q = 0.5 * p.rho * V^2
+    D = Q * p.S * p.K * C_L^2           # the induced drag FORCE (N) — even in α, ≥ 0 for K ≥ 0
+    return -(D / (mass * V)) * vel      # ALONG −v̂ (v̂ = vel/V) — slows, never turns
 end

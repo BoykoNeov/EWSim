@@ -84,6 +84,13 @@ export lift_accel, rk4_coupled, AIRFRAME_MODES
 # `AirframeParams` gains NO field — α_max and the loop gains are LIMITS, not aero coefficients
 # (they ride in comp and arrive as kwargs).
 export alpha_command, aero_accel_limit, alpha_autopilot_delta
+# Slice 20 (§11 Tier A): INDUCED DRAG — the bill for the lift (C_Di = K·C_L², along −v̂), which
+# cashes slices 17/19's explicit "lift is drag-free / speed-preserving" approximation and closes
+# the project's FIRST positive-feedback loop (pull α → bleed V → Q falls → the ceiling falls).
+# `AirframeParams` gains `K` (LAST field, 0 ⇒ drag-free = slices 17/19). NO new fidelity rung —
+# `af_k_induced` is a KNOB (the slice-16 `af_cma` precedent: a rung must name physics the knob
+# cannot express, and `:free` IS `K = 0`).
+export induced_drag_accel
 # Missile guidance (slice 9): the outer pursuit law + the inner PID autopilot (pure).
 # `AutopilotState` is an INTERNAL state record (the JamContribution/BearingRecord precedent —
 # not exported); `autopilot_init` IS exported (the test constructs the zero state bare).

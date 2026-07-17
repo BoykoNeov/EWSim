@@ -172,6 +172,7 @@
     # steppers BIT-EXACT — the additive-slice guarantee at the primitive level), and the
     # steady-turn radius R = 2m/(ρSC_Lα·α) closed form (the load-bearing anchor).
     mag(u) = sqrt(u[1]^2 + u[2]^2 + u[3]^2)
+    dot3(u, w) = u[1]*w[1] + u[2]*w[2] + u[3]*w[3]     # slice 20 (the ∥/⟂ split); no LinearAlgebra
 
     @testset "slice-17: lift_accel — sign (#1 trap), ⟂ v, magnitude, zero-safe" begin
         mass = 100.0
@@ -506,5 +507,151 @@
         @test rfb.α ≈ α_ss_form atol = 1e-12                # the undershoot IS the closed form
         @test rfb.α ≈ 0.75 * α_cmd atol = 1e-12             # …= 3/4 exactly at these gains
         @test α_cmd - rfb.α > 0.03                          # a REAL error the feedforward kills
+    end
+
+    # ── SLICE 20 — INDUCED DRAG: the bill for the lift (C_Di = K·C_L², along −v̂) ──
+    # The teeth, in the order they'd catch a real bug:
+    #   • K = 0 ⇒ EXACTLY zero (`==`) — slices 17/19's "lift is drag-free" approximation restored,
+    #     and the additivity guarantee for every prior slice.
+    #   • the DIRECTION: ∥ −v̂ and ⟂ n̂ — `induced_drag_accel` is `lift_accel`'s orthogonal
+    #     complement (the #1 sign trap: a leaked ⟂ component would be a second, unnamed lift that
+    #     a magnitude-only test would never see; a sign flip would be a drag that ACCELERATES).
+    #   • EVEN in α (C_L²) — the bill doesn't care WHICH WAY you turn. An odd-in-α slip (dropping
+    #     the square, or `abs`) survives a positive-α-only test.
+    #   • the CLOSED FORM by hand, explicit atol (convention 11 — never rtol-`≈0`).
+    #   • the ⟂/∥ SPLIT vs `lift_accel` on the SAME α — the two terms partition the aero force.
+    afp20(; Cla = 20.0, Kd = 0.0) = AirframeParams(S, d, 20.0, -1.0, 3.0, -150.0, ρ, Cla, Kd)
+
+    @testset "slice-20: K = 0 ⇒ EXACTLY zero (lift is drag-free again — the additivity tooth)" begin
+        # `==`, not `≈`: slices 16–19 must be BIT-identical, and the 8-arg AirframeParams (their
+        # construction site) must default K to 0. A "calibrated to pass" atol would hide a
+        # `-0.0`-shaped regression — the mismatched-EP-no-op precedent (convention 11).
+        vel = Vec3(700.0, 0.0, 0.0)
+        @test induced_drag_accel(vel, 0.15, 140.0, afp20(Kd = 0.0)) == Vec3(0.0, 0.0, 0.0)
+        # The 8-arg form (slices 16–19's sites, VERBATIM) must BE the K = 0 airframe.
+        p8 = AirframeParams(S, d, 20.0, -1.0, 3.0, -150.0, ρ, 20.0)
+        @test p8.K == 0.0
+        @test induced_drag_accel(vel, 0.15, 140.0, p8) == Vec3(0.0, 0.0, 0.0)
+        # α = 0 costs EXACTLY nothing even with K on — THE discriminator vs parasitic `cd_area`,
+        # which bills a straight flight anyway (gate-0 FINDING 4: 0.06 m/s vs 75–136 m/s over the
+        # same fly-out). This is the α²-SOURCE that earns the slice its title.
+        @test induced_drag_accel(vel, 0.0, 140.0, afp20(Kd = 0.3)) == Vec3(0.0, 0.0, 0.0)
+        # …and with NO lift curve there is no lift to bill for, at any α.
+        @test induced_drag_accel(vel, 0.15, 140.0, afp20(Cla = 0.0, Kd = 0.3)) == Vec3(0.0, 0.0, 0.0)
+    end
+
+    @testset "slice-20: DIRECTION — ∥ −v̂, ⟂ n̂ (the #1 trap: drag must SLOW, never TURN)" begin
+        mass = 140.0; p = afp20(Kd = 0.3)
+        # A CLIMBING missile, so a frame slip cannot hide behind γ = 0 (the slice-17 tooth's shape).
+        γc = 0.4; Vc = 700.0
+        vel = Vec3(Vc*cos(γc), 0.0, Vc*sin(γc))
+        aD = induced_drag_accel(vel, γc + 0.12, mass, p)             # α = +0.12
+        v̂ = (1/Vc) * vel
+        n̂ = Vec3(-sin(γc), 0.0, cos(γc))                             # `lift_accel`'s direction
+        @test dot3(aD, v̂) < 0.0                                      # OPPOSES motion — it is DRAG
+        @test dot3(aD, n̂) ≈ 0.0 atol = 1e-12                         # …and turns NOTHING (⟂ n̂)
+        # It is ANTI-parallel to v, exactly: |dot(â, v̂)| = 1.
+        @test dot3((1/mag(aD)) * aD, v̂) ≈ -1.0 atol = 1e-12
+        @test aD[2] == 0.0                                            # pitch plane — no y (§1)
+        # THE ORTHOGONAL COMPLEMENT: on the SAME α, lift is ⟂ v and drag is ∥ v. Together they
+        # partition the aero force — neither can do the other's job.
+        aL = lift_accel(vel, γc + 0.12, mass, p)
+        @test dot3(aL, v̂) ≈ 0.0 atol = 1e-9                          # lift turns, never slows
+        @test dot3(aL, aD) ≈ 0.0 atol = 1e-9                          # …so the two are ⟂
+    end
+
+    @testset "slice-20: EVEN in α (C_L²) — the bill ignores WHICH WAY you turn" begin
+        mass = 140.0; p = afp20(Kd = 0.3); vel = Vec3(700.0, 0.0, 0.0)   # γ = 0 ⇒ α = θ
+        up   = induced_drag_accel(vel,  0.12, mass, p)
+        down = induced_drag_accel(vel, -0.12, mass, p)
+        @test up == down                                              # EVEN — bit-for-bit, not ≈
+        # …while LIFT is ODD in α (it flips) — the pair proves the square is really there. Dropping
+        # the `^2` (or writing `abs`) would make drag odd too and this contrast would collapse.
+        @test lift_accel(vel, 0.12, mass, p)[3] ≈ -lift_accel(vel, -0.12, mass, p)[3] atol = 1e-12
+        # QUADRATIC, not linear: doubling α QUADRUPLES the bill (α² — the polar's whole content).
+        a1 = mag(induced_drag_accel(vel, 0.05, mass, p))
+        a2 = mag(induced_drag_accel(vel, 0.10, mass, p))
+        @test a2 ≈ 4.0 * a1 atol = 1e-9
+    end
+
+    @testset "slice-20: the CLOSED FORM by hand (explicit atol — convention 11)" begin
+        # a_ind = Q·S·K·(C_Lα·α)² / m, hand-computed here from the DEFINITION rather than read off
+        # the implementation. γ = 0 ⇒ v̂ = +x ⇒ the whole bill lands on −x.
+        mass = 140.0; Vt = 700.0; Kd = 0.3; Cla = 20.0; α = 0.12
+        p = afp20(Cla = Cla, Kd = Kd)
+        vel = Vec3(Vt, 0.0, 0.0)
+        Qt = 0.5 * ρ * Vt^2
+        expect = Qt * S * Kd * (Cla * α)^2 / mass                     # ≈ 194.0 m/s²
+        aD = induced_drag_accel(vel, α, mass, p)
+        @test aD[1] ≈ -expect atol = 1e-9                             # −x: pure deceleration
+        @test aD[3] ≈ 0.0 atol = 1e-12
+        @test mag(aD) ≈ expect atol = 1e-9
+        # LINEAR in K (it is a lumped factor, so the knob must scale the bill exactly) …
+        @test mag(induced_drag_accel(vel, α, mass, afp20(Cla = Cla, Kd = 2*Kd))) ≈ 2*expect atol = 1e-9
+        # … and ∝ Q ∝ V² — the coupling that closes the loop: as V bleeds, the bill shrinks too.
+        # (Half the speed ⇒ a QUARTER of the Q ⇒ a quarter of the bill.)
+        @test mag(induced_drag_accel(Vec3(Vt/2, 0.0, 0.0), α, mass, p)) ≈ expect/4 atol = 1e-9
+    end
+
+    @testset "slice-20: degenerates — a live knob can never crash a tick (convention 5)" begin
+        mass = 140.0; p = afp20(Kd = 0.3)
+        # V → 0 (launch/apex): the ÷V in v̂ = v/V is the crash site (the `lift_accel` precedent).
+        @test induced_drag_accel(Vec3(0.0, 0.0, 0.0), 0.15, mass, p) == Vec3(0.0, 0.0, 0.0)
+        @test induced_drag_accel(Vec3(1e-9, 0.0, 0.0), 0.15, mass, p) == Vec3(0.0, 0.0, 0.0)
+        # Everything finite across the knob's shipped range at a plausible flight condition — the
+        # `_finite` wire contract starts here (convention 6: no Inf/NaN can reach JSON).
+        for Kd in (0.0, 0.05, 0.15, 0.3), αt in (-0.2, 0.0, 0.2)
+            a = induced_drag_accel(Vec3(700.0, 0.0, 0.0), αt, mass, afp20(Kd = Kd))
+            @test all(isfinite, (a[1], a[2], a[3]))
+        end
+        # C_Lα < 0 (the slice-17/19 slider reaches −5): lift flips, but the BILL DOES NOT — C_L² is
+        # even in C_Lα too. A negative lift-curve slope still costs you speed to use.
+        @test mag(induced_drag_accel(Vec3(700.0, 0.0, 0.0), 0.12, mass, afp20(Cla = -20.0, Kd = 0.3))) ≈
+              mag(induced_drag_accel(Vec3(700.0, 0.0, 0.0), 0.12, mass, afp20(Cla = 20.0, Kd = 0.3))) atol = 1e-9
+    end
+
+    @testset "slice-20: ⭐ THE SPIRAL, in the primitives — lift ⟂ v holds speed, drag ∥ v eats it" begin
+        # The gate-0 lesson reduced to its smallest honest form (the (V,γ)-frozen technique will
+        # NOT do here — the whole point is that V is NOT frozen). Fly a STEADY-α turn twice: once
+        # with K = 0 (slice 17/19's plant) and once with K > 0, gravity OFF so the ONLY difference
+        # is the bill. Then read `aero_accel_limit` — THE ceiling — at the end of both.
+        mass = 140.0; α = 0.12; V0 = 700.0; dt = 1e-3; T = 3.0
+        function fly(Kd)
+            p = afp20(Kd = Kd)
+            pos, vel = Vec3(0.0, 0.0, 0.0), Vec3(V0, 0.0, 0.0)
+            θ = α                                              # γ = 0 ⇒ hold α by holding θ ≈ γ+α
+            for _ in 1:round(Int, T/dt)
+                f = (P, Vv, TH, Q) -> begin
+                    γ = atan(Vv[3], Vv[1])
+                    aero = lift_accel(Vv, TH, mass, p) + induced_drag_accel(Vv, TH, mass, p)
+                    (Vv, aero, Q, 0.0)                         # q̈ = 0: θ is DRIVEN, not dynamic
+                end
+                # Hold α constant by carrying θ with γ (an ideal autopilot — isolates the drag).
+                pos, vel, _, _ = rk4_coupled(f, pos, vel, θ, 0.0, dt)
+                θ = atan(vel[3], vel[1]) + α
+            end
+            return (V = mag(vel), ceil = aero_accel_limit(mag(vel), mass, afp20(Kd = Kd);
+                                                          alpha_max = 0.2))
+        end
+        free = fly(0.0)       # lift is DRAG-FREE — slices 17/19's named approximation
+        paid = fly(0.3)       # …and now it isn't
+        # The thresholds below are MEASURED on this exact 3 s constant-α turn (free.V = 700.000,
+        # paid.V = 467.30, ratio = 0.4456), then loosened for margin — NOT guessed and NOT
+        # calibrated-to-pass (convention 11: an earlier draft guessed them from the ENGAGEMENT's
+        # numbers and failed; the physics was right and the guesses were wrong).
+        # 1. THE APPROXIMATION THIS SLICE CASHES: with K = 0, a hard 3 s turn is SPEED-FREE.
+        @test free.V ≈ V0 atol = 1e-6                          # measured: 700.0000000000181
+        # 2. THE BILL: the SAME turn, K on, bleeds the missile hard (measured ΔV = 232.7 m/s).
+        @test paid.V < 500.0                                   # measured 467.30
+        @test V0 - paid.V > 200.0                              # measured 232.70 — a THIRD of V0
+        # 3. ⭐ THE SPIRAL: the ceiling FELL — and nobody lowered it. ρ, S, C_Lα, α_max and mass
+        #    are all IDENTICAL between the two arms; ONLY the turn's own bill differs. This is the
+        #    project's first positive feedback: the g you pull is paid for out of the g you can pull.
+        @test free.ceil ≈ aero_accel_limit(V0, mass, afp20(); alpha_max = 0.2) atol = 1e-4
+        @test paid.ceil < 0.5 * free.ceil                      # measured 0.4456 — the ceiling HALVES
+        # 4. …and it fell BECAUSE of the speed, not by some other route: the ceiling ∝ V² EXACTLY.
+        #    This is the tightest tooth in the set (it agrees to ~1e-16) and it is what makes the
+        #    loop a LOOP: the bill is paid in V, and V² is what sets the ceiling.
+        @test paid.ceil / free.ceil ≈ (paid.V / free.V)^2 atol = 1e-12
     end
 end

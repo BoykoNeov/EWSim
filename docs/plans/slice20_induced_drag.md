@@ -158,6 +158,45 @@ Meanwhile at K=0 the ceiling is FLAT (268.5 → 256.7, −4%) where at K=0.2 it 
 
 ---
 
+**FINDING 11 — the SHIPPED config does NOT reverse; the knob max has a 2× margin (advisor).**
+FINDING 6's reversal was measured at 6 km / a_lat 100 — a DIFFERENT engagement. Swept on the
+SHIPPED 9 km / a_lat 0, the miss is monotone ALL THE WAY to K = 2.0 (2810 m): a bled-out
+missile against a non-maneuvering target simply FALLS SHORT, it never gets the lucky ballistic
+pass the 6 km/maneuvering geometry handed it. But the config CONTAMINATES from K ≥ 0.8:
+`defl_sat` explodes (0 → **1289**), `cpa = false` (it never closes at all), and `α_pk` = 0.582
+**overshoots α_max** — the achieved α breaks the clamp, i.e. slice-19's FINDING-14 CEILING
+LEAK. Clean and monotone: **K ∈ [0, 0.6]**. ⇒ **the knob max 0.3 sits at a 2× margin** —
+measured, not assumed.
+
+---
+
+## SETTLED at the gate-0 advisor pass
+
+1. **A KNOB (`af_k_induced`), NOT a fidelity rung — settled.** The principle: *a fidelity rung
+   must name physics the knob cannot express.* `:free` IS `K = 0`, the slider's own minimum, so
+   `:lift_drag = (:free, :induced)` would name nothing the knob already carries — **the
+   slice-16 precedent exactly** (16 refused a rung and shipped `af_cma` as a slider for this
+   reason). Also: the spiral is CONTINUOUS (watching `aero_sat` climb from 0 IS the lesson — a
+   discrete flip throws the animation away); **a two-state button would HIDE the FINDING-6
+   non-monotonicity** while a bounded slider shows the honest approach to the edge; and
+   convention 9 — a button toggling `:airframe` while the lesson lives in a slider is a button
+   that ISN'T the lesson. ⇒ **No new fidelity key. `LIVE_FIDELITY_MODES` untouched.** Client
+   follows slice-16's template (view marker, no cycling button, the slider carries it).
+2. **⭐ THE DISCRIMINATOR SHIPS AS A VERIFIER TOOTH — NOT a watch-item (advisor, load-bearing).**
+   FINDING 5 means **nothing in the headline scenario, on its own, distinguishes this slice
+   from "turn on `cd_area`"**: the `aero_sat` 0→61%, the ceiling collapse and the HIT→MISS are
+   ALL generic speed-loss behaviour. The ONLY thing that makes this slice about *induced* drag
+   is the α²-SOURCE. ⇒ **the gate-3 verifier MUST run the straight fly-out at the shipped K and
+   assert `ΔV ≈ 0`** (a turn-free flight is billed NOTHING) beside the intercept's large ΔV.
+   *"Without the straight-flight tooth, the slice's title is unearned by its tests."* Optionally
+   also ship the matched-ΔV parasitic near-equivalence as an ACKNOWLEDGED BOUNDARY (the
+   mismatched-EP-no-op precedent — a "these agree" that names the claim's limit).
+3. **THE FRAMING (advisor correction).** With a NON-maneuvering target the missile pays for
+   **its own turn onto the collision course**. Say **"the turn you must make to intercept bills
+   you"** — NEVER "dogfighting costs speed" / "chasing a jinking target costs speed" (FINDING 7
+   REFUTED that). Sharper *and* honest: **even against a target doing nothing, your own
+   required maneuver eats the ceiling.**
+
 ## Scope
 
 **IN:** a pure `induced_drag_accel` primitive in `airframe.jl` + tests; a 9th `AirframeParams`
@@ -191,17 +230,10 @@ but is held 0 for the isolation).
 7. **The verifier LOS-GATES its sat/defl window** (FINDING 8) — it must NOT copy slice 19's
    ungated `defl_sat == 0`.
 
-## OPEN — for the gate-0 advisor pass
-
-**Mechanism: a KNOB or a FIDELITY RUNG?** The scenario's contrast (HIT↔MISS) is exactly the
-shape the shared client button carries, but the "off" rung is just `K = 0`, which risks being a
-knob in a button costume. Precedent cuts both ways: slice 17 made `:airframe` a rung though
-`Cla = 0` emulates `:point_mass`; slices 16/19 shipped slider-only lessons. Candidate naming if
-a rung: `:lift_drag = (:free, :induced)` — ":free" names slices 17/19's approximation exactly.
-
 ## The three gates
 
-- [x] **Gate 0** — the spiral hunt. FINDINGS above; lesson NAMED; **advisor pass before gate 1**.
+- [x] **Gate 0** — the spiral hunt. FINDINGS above; lesson NAMED; advisor pass DONE (knob
+      settled; the discriminator promoted to a shipped tooth; the framing corrected).
 - [ ] **Gate 1** — `induced_drag_accel` + `AirframeParams.K` + `test_airframe.jl` teeth: the
       `K = 0` passthrough (`==`), the α² scaling, the −v̂ direction (`dot(a_ind, v̂) < 0` AND
       ⟂-component == 0 — lift's mirror), the α → −α symmetry (the bill is even), explicit
