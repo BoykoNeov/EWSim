@@ -785,6 +785,15 @@ function decide!(a::Autopilot, w::World)
                 # α-loop outputs are ZEROED (no α command was issued — honest, not a computed-but-unused
                 # value), while the ceiling/flight-condition readouts stay REAL: the point-mass plant
                 # crosses `a_max_aero` and HITS ANYWAY, which is exactly the contrast.
+                #
+                # ⚠ SLICE 21 CHANGED WHAT "REAL" MEANS HERE, and it is worth knowing before you wonder:
+                # `_atm_on` requires `:pitch_coupled`, so on a scenario carrying `:af_scale_height` this
+                # arm's `a_max_aero` reports the **ρ₀** ceiling — NOT the ρ(z) one — even under
+                # `:atmosphere === :exponential`. That is the coherent reading (this plant flies constant-ρ
+                # `total_accel`, so ρ₀ IS its flight condition, and the readout must describe the missile
+                # that is flying), and it is unreachable from the slice-21 showcase, which authors
+                # `:pitch_coupled` fixed and puts `:atmosphere` on the button. Slices 16–20 carry no scale
+                # height, so nothing there is affected either way.
                 a_ctrl     = a_cmd
                 alpha_diag = (alpha_cmd = 0.0, delta_cmd = 0.0, aero_sat = false,
                               defl_sat = false, a_max_aero = a_max_aero, q_dyn = q_dyn,

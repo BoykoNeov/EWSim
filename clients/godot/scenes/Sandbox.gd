@@ -237,6 +237,7 @@ const SEEKER_RUNGS := ["raw", "filtered"]    # slice-11 seeker cycler (raw finit
 const DISCRIMINATION_RUNGS := ["none", "gated"]   # slice-13 countermeasures cycler (blend-all ↔ α-β predicted-LOS gate)
 const COOPERATION_RUNGS := ["solo", "salvo"]   # slice-14 salvo cycler (uncoordinated PN ↔ impact-time-control)
 const AIRFRAME_RUNGS := ["point_mass", "pitch_coupled"]   # slice-17 α→lift cycler (ballistic ↔ coupled turn)
+const ATMOSPHERE_RUNGS := ["constant", "exponential"]   # slice-21 atmosphere cycler (authored ρ ↔ ρ₀·exp(−z/H))
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
 # --- terrain 3-D view (slice 18): the client's FIRST true 3-D view. Populated only when the
@@ -455,7 +456,37 @@ func _setup_spatial_fid_btn() -> void:
 	# else `propagation` (slice 1/2, the binary toggle wired in _build_ui). The disconnect is
 	# guarded so the headless UI tests — which build the button without _build_ui's connect —
 	# don't error, exactly like _enter_cfar_mode.
-	if _airframe_view and not _fidelity.has("airframe"):
+	if _fidelity.has("atmosphere"):
+		# Slice-21 THE EXPONENTIAL ATMOSPHERE — **the ceiling you lower by CLIMBING**. The scenario ships
+		# airframe_view + `:airframe` + `:atmosphere`, so it would otherwise be CAPTURED by the airframe
+		# branch below. CHECKED FIRST — BEFORE both airframe branches — ON PURPOSE, and this is the
+		# slice-13/14 rule ("a scenario ships several keys, all but one HELD FIXED; the ONE button must
+		# toggle the LESSON's key, not the held ones" — convention 9), applied for the third time.
+		# `:airframe` is AUTHORED FIXED at :pitch_coupled here: the missile must stay COUPLED for a lift
+		# ceiling to EXIST at all, so it is this slice's REFERENCE ARM, not its contrast. Checking
+		# atmosphere first is also strictly safer than slotting it between the two airframe branches: an
+		# atmosphere scenario that somehow carried NO `:airframe` key would fall into the slice-16 DROP
+		# branch and lose its button entirely.
+		#
+		# Under :constant the missile flies slices 8–20's authored ρ, the ceiling never binds, and it HITS;
+		# under :exponential ρ = ρ₀·exp(−z/H) falls as it CLIMBS, the ceiling collapses to meet the demand,
+		# and it MISSES by ~360 m. The H slider (an auto knob) sets how FAST the air thins. SAME
+		# `_fid_kind` treatment as the airframe view — the aero strip (slice 19), the α strip (16/17) and
+		# the nose-vs-velocity vectors are all gated on `_airframe_view`, so they carry over UNTOUCHED;
+		# only `_draw_missile`'s `_fid_kind` gate needed this kind added. Class 4c — physics-changing, NO
+		# RNG, live-settable, NO set_fidelity guard.
+		_fid_kind = "atmosphere"
+		_prop_btn.visible = true
+		if _prop_btn.pressed.is_connected(_on_prop_pressed):
+			_prop_btn.pressed.disconnect(_on_prop_pressed)
+		if not _prop_btn.pressed.is_connected(_on_atmosphere_pressed):
+			_prop_btn.pressed.connect(_on_atmosphere_pressed)
+		_prop_btn.tooltip_text = "Cycle atmosphere (set_fidelity): constant ↔ exponential"
+		# Seed extents to fit the 22 km / 14 km climbing intercept (vs the airframe view's 4×4 km); they
+		# only grow, so starting at the engagement's own scale just avoids a rescale on the first frames.
+		_x_max = 20000.0
+		_z_max = 15000.0
+	elif _airframe_view and not _fidelity.has("airframe"):
 		# Slice-16 pitch-plane ROTATIONAL DYNAMICS: the handshake ships airframe_view (from the missile's
 		# airframe params) but NO fidelity — the rotational integrator is gated on PARAMS-PRESENCE, and the
 		# Cmα SLIDER (a knob, auto-built by _build_knobs) is the lesson, not a fidelity button. So there is
@@ -1065,6 +1096,11 @@ func _update_fid_btn() -> void:
 			_prop_btn.text = "disc: %s" % str(_fidelity.get("discrimination", "?"))
 		"cooperation":
 			_prop_btn.text = "coop: %s" % str(_fidelity.get("cooperation", "?"))
+		"atmosphere":
+			# Slice-21: the button IS the atmosphere cycler (constant ↔ exponential). Unlike "airframe"
+			# below there is no hidden arm — an atmosphere scenario ALWAYS has something to cycle (the
+			# rung is the lesson), so no visibility branch.
+			_prop_btn.text = "atm: %s" % str(_fidelity.get("atmosphere", "?"))
 		"airframe":
 			if _fidelity.has("airframe"):
 				# Slice-17 α→lift coupling: the button IS the airframe cycler (point_mass ↔ pitch_coupled).
@@ -1286,6 +1322,28 @@ func _on_airframe_pressed() -> void:
 	var next: String = AIRFRAME_RUNGS[(i + 1) % AIRFRAME_RUNGS.size()] if i >= 0 else "point_mass"
 	_fidelity["airframe"] = next
 	_client.send({"type": "set_fidelity", "key": "airframe", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
+func _on_atmosphere_pressed() -> void:
+	# Advance the ATMOSPHERE rung (constant↔exponential) and tell the core (set_fidelity). Slice-21 —
+	# **the live side-by-side IS the punchline**, which is exactly why this is a rung and not a slider:
+	# constant ρ is H = ∞, a LIMIT POINT no H value on the slider reaches, so only this button can show
+	# you the old model. Under :constant the missile flies slices 8–20's authored ρ — its ceiling never
+	# binds ONCE and it HITS (1.95 m); press once and ρ = ρ₀·exp(−z/H) falls as the missile CLIMBS, the
+	# ceiling collapses to meet the demand, and the SAME missile on the SAME geometry MISSES by ~360 m.
+	# Nothing else changed: ρ₀, S, C_Lα, α_max, mass, the target and its jink are all held. Class 4c —
+	# PHYSICS-CHANGING, NO RNG (truth-fed PN, no seeker ⇒ "draw-count invariance" is VACUOUS — do NOT
+	# copy the slice-11/13 draw language). LIVE-SETTABLE, NO introduce-reject (the
+	# :integrator/:autopilot/:apn/:cooperation/:airframe precedent; the CONTRAST is slice-13's :scan).
+	# The rung is INERT without :airframe === :pitch_coupled (ρ(z) reaches the coupled path only) — a
+	# non-issue here, where the scenario authors :pitch_coupled fixed and this button cannot change it.
+	# The client owns the displayed rung: badge + button locally (the server applies it silently, no reply).
+	var cur := str(_fidelity.get("atmosphere", "constant"))
+	var i := ATMOSPHERE_RUNGS.find(cur)
+	var next: String = ATMOSPHERE_RUNGS[(i + 1) % ATMOSPHERE_RUNGS.size()] if i >= 0 else "constant"
+	_fidelity["atmosphere"] = next
+	_client.send({"type": "set_fidelity", "key": "atmosphere", "value": next})
 	_render_badge()
 	_update_fid_btn()
 
@@ -1767,7 +1825,7 @@ func _draw_spatial() -> void:
 
 	# missile (slice 8): the fading trajectory trail + a nose-oriented marker + an impact burst,
 	# on top of the elevation view (drawn only in the missile-view branch, so slice-1/2/4 are untouched)
-	if _fid_kind == "missile" or _fid_kind == "airframe" or _fid_kind == "autopilot" or _fid_kind == "guidance" or _fid_kind == "seeker" or _fid_kind == "discrimination":
+	if _fid_kind == "missile" or _fid_kind == "airframe" or _fid_kind == "atmosphere" or _fid_kind == "autopilot" or _fid_kind == "guidance" or _fid_kind == "seeker" or _fid_kind == "discrimination":
 		_draw_missile()
 	# guided missile (slice 9/10/11): a LOS line missile→target so the guidance geometry reads (the target
 	# marker is drawn by the generic :target branch above; the a_cmd/a_ach/track_gap [slice 9] +
