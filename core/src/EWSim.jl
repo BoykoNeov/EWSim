@@ -85,8 +85,9 @@ export lift_accel, rk4_coupled, AIRFRAME_MODES
 # (they ride in comp and arrive as kwargs).
 export alpha_command, aero_accel_limit, alpha_autopilot_delta
 # Slice 20 (§11 Tier A): INDUCED DRAG — the bill for the lift (C_Di = K·C_L², along −v̂), which
-# cashes slices 17/19's explicit "lift is drag-free / speed-preserving" approximation and closes
-# the project's FIRST positive-feedback loop (pull α → bleed V → Q falls → the ceiling falls).
+# cashes slices 17/19's explicit "lift is drag-free / speed-preserving" approximation: pull α →
+# bleed V → Q falls → the ceiling falls. The project's first DEGENERATIVE SPIRAL — NOT a
+# "positive-feedback loop": the speed bleed is SELF-LIMITING (∝V²α² ⇒ V asymptotes; see airframe.jl).
 # `AirframeParams` gains `K` (LAST field, 0 ⇒ drag-free = slices 17/19). NO new fidelity rung —
 # `af_k_induced` is a KNOB (the slice-16 `af_cma` precedent: a rung must name physics the knob
 # cannot express, and `:free` IS `K = 0`).

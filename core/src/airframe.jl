@@ -418,11 +418,25 @@ end
 #     pull α → pay K·C_L² in drag → V falls → Q = ½ρV² falls → a_max_aero = Q·S·C_Lα·α_max/m
 #            falls → the ceiling CATCHES the demand → you cannot pull → you miss
 #
-# THE FIRST POSITIVE-FEEDBACK LOOP IN THE PROJECT. Slice 19's ceiling was a flight condition
-# that BINDS; slice 20's is a flight condition YOU DEGRADE BY USING IT. On the showcase wire
-# (gate-0 FINDING 9) the tell is that at K = 0 the ceiling NEVER BINDS ONCE (`aero_sat` 0.0%)
-# and at K = 0.3 it binds 61.1% — with the geometry, the target, α_max and ρ ALL HELD. Nobody
-# lowered the ceiling; the missile lowered it, by turning.
+# THE FIRST DEGENERATIVE SPIRAL IN THE PROJECT. Slice 19's ceiling was a flight condition that
+# BINDS; slice 20's is a flight condition YOU DEGRADE BY USING IT. The tell (gate-0 FINDING 9):
+# the ceiling COLLAPSES 8.4× ACROSS ONE RUN (269 → 32 at K = 0.3) where it is FLAT at K = 0
+# (269 → 247, and that 8% is GRAVITY) — with the geometry, the target, α_max, ρ and mass ALL
+# HELD. Nobody lowered the ceiling; the missile lowered it, by turning. `aero_sat` climbing
+# 0.0% → 55% is the CONSEQUENCE of that collapse, not a second measurement of it (it moves on
+# the ceiling AND the demand; the collapse ratio is pure ceiling — advisor).
+#
+# ⚠ SAY IT PRECISELY: **DEGENERATIVE, NOT "POSITIVE FEEDBACK"** (advisor, gate-3 FINDING 12).
+# The SPEED bleed is SELF-LIMITING, not runaway: the bill ∝ Q·α² ∝ V²·α², so as V falls the
+# bleed RATE falls. Measured at K = 0.3: `dV/dt` PEAKS at −88.8 m/s² (t ≈ 4.0) and DECAYS to
+# −35.8 by CPA; `a_induced` peaks at 81.9 and falls to 23.5; V ASYMPTOTES at ≈213 m/s and the
+# ceiling bottoms at ≈25 — NEITHER REACHES ZERO. A positive-feedback loop AMPLIFIES; this
+# physical quantity DECELERATES ITSELF, and a physics-literate reader told "positive feedback"
+# will hear a speed runaway that never happens. The positive sign lives on the GUIDANCE/
+# TRACKING ERROR, and only CONDITIONALLY: below the ceiling PN converges normally (negative
+# feedback — that IS why PN works); once the demand crosses the FALLING ceiling the sign FLIPS,
+# and the maneuvering that should shrink the error instead bleeds the speed that caps the
+# maneuvering. Name the variable, or call it a degenerative (vicious) spiral.
 #
 # ⚠ THE CLAIM IS BOUNDED — READ THIS BEFORE WRITING ANY LESSON LINE (gate-0 FINDING 5, the
 # convention-4 copy-paste false-claim trap): **"bleed → Q → ceiling → miss" is what ANY speed

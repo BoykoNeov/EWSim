@@ -645,8 +645,9 @@
         @test paid.V < 500.0                                   # measured 467.30
         @test V0 - paid.V > 200.0                              # measured 232.70 — a THIRD of V0
         # 3. ⭐ THE SPIRAL: the ceiling FELL — and nobody lowered it. ρ, S, C_Lα, α_max and mass
-        #    are all IDENTICAL between the two arms; ONLY the turn's own bill differs. This is the
-        #    project's first positive feedback: the g you pull is paid for out of the g you can pull.
+        #    are all IDENTICAL between the two arms; ONLY the turn's own bill differs. The g you
+        #    pull is paid for out of the g you can pull — a DEGENERATIVE spiral, NOT a "positive
+        #    feedback loop" (the speed bleed is SELF-LIMITING: ∝V²α² ⇒ V asymptotes; see airframe.jl).
         @test free.ceil ≈ aero_accel_limit(V0, mass, afp20(); alpha_max = 0.2) atol = 1e-4
         @test paid.ceil < 0.5 * free.ceil                      # measured 0.4456 — the ceiling HALVES
         # 4. …and it fell BECAUSE of the speed, not by some other route: the ceiling ∝ V² EXACTLY.

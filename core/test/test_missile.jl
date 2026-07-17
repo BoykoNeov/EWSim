@@ -2220,8 +2220,11 @@ end
 # ── SLICE 20 — INDUCED DRAG WIRED: the missile lowers its own ceiling (§11 Tier A, gate 2) ──
 # The bill for the lift (`C_Di = K·C_L²`, along −v̂) enters `_integrate_coupled!`'s STAGE force, so
 # the SAME α that turns the path also eats the speed that sets the ceiling that limits the turn —
-# the project's FIRST positive-feedback loop, and the cash-in of slices 17/19's explicit "lift is
-# drag-free / speed-preserving" approximation.
+# the project's first DEGENERATIVE SPIRAL, and the cash-in of slices 17/19's explicit "lift is
+# drag-free / speed-preserving" approximation. (NOT a "positive-feedback loop" — the speed bleed is
+# SELF-LIMITING: the bill ∝ V²α², so as V falls the bleed rate falls and V ASYMPTOTES. The positive
+# sign is on the TRACKING ERROR and only once the demand crosses the falling ceiling. airframe.jl
+# carries the full statement.)
 #
 # THE TWO THINGS THIS BLOCK MUST EARN (the rest is gate 3's verifier):
 #   1. ADDITIVITY — key-ABSENT ⇒ the drag arm is unreachable ⇒ slices 16/17/19 bit-identical. The

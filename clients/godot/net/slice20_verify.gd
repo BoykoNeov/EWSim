@@ -7,9 +7,20 @@ extends SceneTree
 # THE LESSON: **the missile lowers its own ceiling by maneuvering.** Slices 17/19 shipped an explicit §1
 # approximation — "lift is drag-free / speed-preserving (⟂ v)". Slice 20 cashes it: lift ⟂ v turns the
 # path, induced drag ∥ −v̂ sends the invoice, and the invoice is paid in the very currency that buys the
-# turn (V sets Q sets `a_max_aero = Q·S·C_Lα·α_max/m`). The project's FIRST POSITIVE-FEEDBACK LOOP.
+# turn (V sets Q sets `a_max_aero = Q·S·C_Lα·α_max/m`). The project's first DEGENERATIVE SPIRAL.
 # Slice 19 moved this ceiling with the ρ knob — a flight condition the ENGINEER dialled. Here the
-# MISSILE moves it, by turning. FIVE phases:
+# MISSILE moves it, by turning.
+#
+# ⚠ "DEGENERATIVE", NOT "POSITIVE FEEDBACK" (gate-3 FINDING 12): the SPEED bleed is SELF-LIMITING
+# (bill ∝ V²α² ⇒ dV/dt peaks at −88.8 then DECAYS to −35.8; V asymptotes at ≈213, the ceiling at ≈25 —
+# neither reaches 0). The positive sign is on the TRACKING ERROR, and only once the demand crosses the
+# falling ceiling. airframe.jl carries the full statement.
+#
+# THE HEADLINE ASSERTION IS `_collapse()` — THE CEILING'S OWN FALL WITHIN ONE RUN — not `aero_sat`.
+# The collapse ratio is PURE CEILING and monotone-safe by construction (more bill → more bleed → lower
+# ceiling; it cannot reverse), which is what evidences "the missile lowers its own CEILING". aero_sat
+# moves on the ceiling AND the demand, so it is asserted as the CONSEQUENCE (advisor). Both ship.
+# FIVE phases:
 #   • PAID        — the default K = 0.15: the ceiling FALLS ACROSS THE APPROACH (269 → 130, a 0.48×
 #                   collapse WITHIN one run) and the miss opens to ≈103 m. The baseline trace.
 #   • PAID_REPLAY — reset + replay the SAME config → the pos trace is BIT-IDENTICAL (class-4c RNG-FREE
@@ -404,7 +415,10 @@ func _pass() -> bool:
 		"COLLAPSES 8.4x WITHIN one run (269 → 32), catches the demand (aero_sat 0% → 55%), and the missile " +
 		"MISSES by 714 m (83x). Nothing that SETS the ceiling moved — ρ, S, C_Lα, α_max and mass are held " +
 		"across every arm. The engagement acquired a constraint it did not have, self-inflicted: the " +
-		"project's FIRST positive-feedback loop. The isolation is re-established under THIS slice's gate " +
+		"project's first DEGENERATIVE SPIRAL — NOT a 'positive-feedback loop' (the speed bleed is " +
+		"SELF-LIMITING, ∝V²α²: dV/dt peaks at −88.8 then decays to −35.8 and V asymptotes at ≈213; the " +
+		"positive sign is on the TRACKING ERROR, and only once the demand crosses the falling ceiling). " +
+		"The isolation is re-established under THIS slice's gate " +
 		"(defl_sat == 0 at ENDGAME_RANGE = 1000, NOT slice-19's 300 — which would COUNT this arm's CPA λ̇ " +
 		"spike at r = 714 > 300 and ship a false claim). NOTE the claim is BOUNDED: bleed → ceiling → miss " +
 		"is what ANY speed loss does (a matched parasitic cd_area reproduces it); that this bill is written " +

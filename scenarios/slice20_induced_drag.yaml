@@ -1,5 +1,5 @@
 # slice20_induced_drag — INDUCED DRAG: **the missile lowers its own ceiling by maneuvering**
-# (HANDOFF §11 Tier-A, slice 20 gate 3). The project's FIRST POSITIVE-FEEDBACK LOOP.
+# (HANDOFF §11 Tier-A, slice 20 gate 3). The project's FIRST DEGENERATIVE SPIRAL.
 #
 # Slices 17/19 shipped an EXPLICIT §1 approximation: *"lift is drag-free / speed-preserving (⟂ v)"*.
 # This scenario cashes it. Lift ⟂ v turns the flight path; induced drag ∥ −v̂ SENDS THE INVOICE —
@@ -8,18 +8,35 @@
 #     pull α → pay K·C_L² in drag → V falls → Q = ½ρV² falls → a_max_aero = Q·S·C_Lα·α_max/m falls
 #            → the ceiling CATCHES the demand → you cannot pull → you miss
 #
+# ⚠ SAY IT PRECISELY — "DEGENERATIVE SPIRAL", **NOT "positive feedback"** (gate-3 FINDING 12). The
+# SPEED bleed is SELF-LIMITING: the bill ∝ Q·α² ∝ V²·α², so as V falls the bleed RATE falls.
+# Measured at K = 0.3: dV/dt PEAKS at −88.8 m/s² (t ≈ 4.0) then DECAYS to −35.8 by CPA; a_induced
+# peaks at 81.9 and falls to 23.5; V ASYMPTOTES at ≈213 m/s and the ceiling bottoms at ≈25 — NEITHER
+# REACHES ZERO. A positive-feedback loop AMPLIFIES; this decelerates itself, and a physics-literate
+# reader told "positive feedback" hears a speed runaway that never happens. The positive sign is on
+# the GUIDANCE/TRACKING ERROR and only CONDITIONALLY: below the ceiling PN converges normally
+# (negative feedback — that IS why PN works); once the demand crosses the FALLING ceiling the sign
+# FLIPS, and the maneuvering that should shrink the error instead bleeds the speed that caps it.
+#
 # SLICE 19 vs SLICE 20 — the one-line difference. Slice 19: the maneuver ceiling is a FLIGHT
 # CONDITION; it binds, and you miss. Slice 20: the ceiling is a flight condition **YOU DEGRADE BY
 # USING IT**. Slice 19 moved this ceiling with the ρ knob — a flight condition the ENGINEER dialled.
 # Here the MISSILE moves it, by turning. Nobody lowered it.
 #
-# THE LESSON KNOB (drag `af_k_induced` and watch, gate-0 FINDING 9 — all LOS-gated):
-#   K = 0.0  → miss   1.27 m (a HIT)   V 663.6   ceiling 242.1   aero_sat  0.0%
-#   K = 0.15 → miss 103.07 m           V 433.3   ceiling 103.2   aero_sat 22.2%   ← ships here
-#   K = 0.30 → miss 714.10 m (a MISS)  V 212.7   ceiling  24.9   aero_sat 61.1%
-# HIT → MISS is 562×; the ceiling collapses 10×. **`aero_sat 0.0% → 61.1%` IS THE HEADLINE**: at
-# K = 0 the aero ceiling NEVER BINDS ONCE — it is not a factor in the engagement at all. The
-# geometry, the target, α_max and ρ are ALL HELD; only K changes.
+# THE LESSON KNOB (drag `af_k_induced` and watch — the FRAME-SAMPLED wire, gate 3, LOS-gated at
+# r > 1000; the ceiling column is its value at the START of the approach → its MINIMUM):
+#   K = 0.0  → miss   8.59 m (a HIT)   V 670   ceiling 269→247 = 0.92× (FLAT)      aero_sat  0/366
+#   K = 0.15 → miss 103.14 m           V 486   ceiling 269→130 = 0.48×             aero_sat 12.7%  ← ships here
+#   K = 0.30 → miss 714.12 m (a MISS)  V 242   ceiling 269→ 32 = 0.12× (COLLAPSE)  aero_sat 55.1%
+#
+# ⭐ THE HEADLINE IS THE CEILING COLLAPSE RATIO (0.92× → 0.12×, an 8.4× fall WITHIN ONE RUN), because
+# it is PURE CEILING and monotone-safe by construction — more bill → more bleed → lower ceiling, it
+# cannot reverse. That is what evidences "the missile lowers its own CEILING". `aero_sat 0/366 →
+# 55.1%` is the CONSEQUENCE (it moves on the ceiling AND the demand, so it is not a second
+# measurement of the ceiling) — and it is a stark one: at K = 0 the aero ceiling NEVER BINDS ONCE, it
+# is not a factor in this engagement at all. The geometry, the target, α_max, ρ and mass are ALL
+# HELD; only K changes. The 0.92× residual at K = 0 is GRAVITY on a climbing missile, not the turn.
+# (The miss is the corroborator, NOT the lead: it is NON-MONOTONE in K in general — see the knob.)
 #
 # ⚠ THE CLAIM IS BOUNDED — DO NOT OVERSTATE IT (gate-0 FINDING 5; the convention-4 copy-paste
 # false-claim trap). **"bleed → ceiling → miss" is what ANY speed loss does** — matched on ΔV, a

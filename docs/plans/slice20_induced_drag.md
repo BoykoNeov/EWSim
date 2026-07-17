@@ -30,13 +30,20 @@ binds, and you miss. **Slice 20: the ceiling is a flight condition YOU DEGRADE B
     pull α → pay K·C_L² in drag → V falls → Q = ½ρV² falls → the ceiling falls
            → the ceiling catches the demand → you cannot pull → you miss
 
-**The FIRST POSITIVE-FEEDBACK LOOP in the project.** And it cashes an approximation slices
-17/19 shipped EXPLICITLY: *"lift is drag-free / speed-preserving (⟂ v)"*. Lift ⟂ v turns the
-path; induced drag ∥ −v̂ sends the invoice.
+**The FIRST DEGENERATIVE SPIRAL in the project.** And it cashes an approximation slices 17/19
+shipped EXPLICITLY: *"lift is drag-free / speed-preserving (⟂ v)"*. Lift ⟂ v turns the path;
+induced drag ∥ −v̂ sends the invoice.
 
-**The headline number is `aero_sat: 0% → 61%`** — with the geometry, the target, α_max and ρ
-ALL HELD, and ONLY K changed. At K=0 the aero ceiling is *not a factor at all* (it never
-binds once in the guided window). Nobody lowered it; the missile lowered it, by turning.
+**The headline is the CEILING COLLAPSE RATIO — 0.92× (flat) → 0.12× (an 8.4× fall) within ONE
+run** — with the geometry, the target, α_max, ρ and mass ALL HELD, and ONLY K changed. It is
+the right lead because it is PURE CEILING and monotone-safe by construction (more bill → more
+bleed → lower ceiling — it cannot reverse), so it is what actually evidences "the missile
+lowers its own CEILING". **`aero_sat 0% → 55%` is the CONSEQUENCE**, not a second measurement
+of the ceiling (it moves on the ceiling AND the demand — advisor) — though a stark one: at K=0
+the ceiling never binds ONCE. **The miss corroborates; it does NOT lead** (it is non-monotone
+in K in general — FINDING 6).
+
+⚠ **SAY IT PRECISELY — see FINDING 12: this is NOT "a positive-feedback loop."**
 
 ---
 
@@ -167,6 +174,31 @@ pass the 6 km/maneuvering geometry handed it. But the config CONTAMINATES from K
 **overshoots α_max** — the achieved α breaks the clamp, i.e. slice-19's FINDING-14 CEILING
 LEAK. Clean and monotone: **K ∈ [0, 0.6]**. ⇒ **the knob max 0.3 sits at a 2× margin** —
 measured, not assumed.
+
+**FINDING 12 — ⭐ "POSITIVE FEEDBACK" IS THE WRONG WORDS; THE BLEED IS SELF-LIMITING (advisor,
+gate-3 pass — caught with the phrase already in 8 shipped sites and heading into 4 docs).**
+The bill ∝ Q·α² ∝ **V²**·α², so as V falls the bleed RATE falls. Measured on the live wire at
+K = 0.3 (`selflimit.jl`):
+
+| t (s) | V | dV/dt | a_induced | ceiling |
+|---|---|---|---|---|
+| 0.8 | 663.3 | −45.9 | 61.1 | 241.9 |
+| 4.0 | 423.4 | **−88.8 (PEAK)** | **81.9 (PEAK)** | 98.6 |
+| 8.0 | 213.1 | **−35.8** | **23.5** | 25.0 |
+
+The bleed rate **peaks at t ≈ 4.0 and then DECAYS**; the bill *shrinks* as the speed falls;
+**V ASYMPTOTES at ≈213 m/s and the ceiling bottoms at ≈25 — NEITHER REACHES ZERO.** A
+positive-feedback loop AMPLIFIES; **this physical quantity decelerates itself**, and a
+physics-literate reader told "positive feedback" hears a speed runaway that never happens.
+(α does RISE, 0.09 → 0.177, as the missile pulls harder to compensate for the lost Q — but the
+V² factor dominates and the bill still falls.)
+
+**Where the positive sign really lives: on the GUIDANCE/TRACKING ERROR, and CONDITIONALLY.**
+Below the ceiling PN converges normally — *negative* feedback, which is exactly why PN works.
+Once the demand crosses the FALLING ceiling the sign FLIPS: the maneuvering that should shrink
+the error instead bleeds the speed that caps the maneuvering. **That conditional flip is both
+more correct and a better lesson than a bare "positive feedback loop."** ⇒ say **DEGENERATIVE
+(vicious) SPIRAL**, or name the variable. Never let a terse summary launder it.
 
 ---
 
