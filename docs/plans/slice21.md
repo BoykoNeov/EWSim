@@ -488,8 +488,17 @@ CLIMBS, demand crossing it, AERO SAT lit).
 ## Task checklist
 
 - [x] Gate 0 — **DONE, 9 probes (F1–F10). The design changed in three places; the rung was
-      REVERSED IN.** Remaining: pin the showcase's robustness window (advisor flag).
-- [ ] Gate 1 — `atmosphere.jl` (+ `ATMOSPHERE_MODES`) + `test_atmosphere.jl` green
-- [ ] Gate 2 — the rung + stage-z closure + loader + knob; byte-identity (key-absent AND
-      `:constant`) + the F5/F6/F9/F10 teeth green
-- [ ] Gate 3 — scenario + the four proofs + the client button routing; STATUS/CLAUDE/HANDOFF as-built
+      REVERSED IN.** The robustness-window flag is **CLOSED, not dropped** (advisor): the verifier's
+      `CONST_HIT_MAX = 30` **IS** the pin — if anyone drifts the scenario to where the twin stops
+      hitting, the CONST arm fails loudly. No extra tooth was needed.
+- [x] Gate 1 — `atmosphere.jl` (+ `ATMOSPHERE_MODES`) + `test_atmosphere.jl` green (3093)
+- [x] Gate 2 — the rung + stage-z closure + loader + knob; byte-identity (key-absent AND
+      `:constant`) + the F5/F6/F9/F10 teeth green (3167)
+- [x] Gate 3 — **DONE (3182 green).** Scenario + the four proofs + the client button routing +
+      STATUS/CLAUDE/HANDOFF as-built + memory. Two CORE changes the verifier's design forced out,
+      both real and neither planned: **`_atm_on` gained a `:pitch_coupled` conjunct** (a LATENT BUG —
+      slice-16's `_integrate_airframe!` INTEGRATES θ/q under `:point_mass` and would have flown ρ(z)
+      while pos/vel flew ρ₀) and the **`rho_air` wire key** (KEY-gated, BOTH rungs — the twin's
+      ρ-factor==1.0 must be on the wire; the alternative was `2·q_dyn/V²` in GDScript). Also: this
+      slice is **NOT zero client code** (unlike 20) — two view-claiming fidelity keys ship together
+      for the first time, so `:atmosphere` is checked FIRST and the value-guard went FIVE-way.

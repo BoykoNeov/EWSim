@@ -2454,6 +2454,221 @@ clients/godot --script res://net/slice20_verify.gd` (exit 0 = pass). The UI test
 
 ---
 
+**Slice 21 — THE EXPONENTIAL ATMOSPHERE: the ceiling you lower by CLIMBING (HANDOFF §11 Tier-A)** — the
+honest completion of slices 19/20's constant-ρ, and the last named deferral of the aero arc's opening trio.
+Plan + the full gate-0 findings in `docs/plans/slice21.md`. **3182 tests green** (2935 → 3093 gate 1 → 3167
+gate 2 → 3182 gate 3); slices 1–20 byte-identical.
+
+Slices 19 and 20 shipped under standing orders to say *"low dynamic pressure (thin air)"* and NEVER
+unqualified *"high altitude"* — because ρ was a number an ENGINEER TYPED, not a consequence of where the
+missile flew, and only V could move `Q = ½ρV²`. Slice 21 makes ρ = ρ₀·exp(−z/H) and the phrase is EARNED:
+**climb → ρ(z) falls → Q falls → `a_max_aero = Q·S·C_Lα·α_max/m` falls → you cannot pull → you miss.** ⚠ THE
+CAVEAT LIFTS ONLY HERE: a slice-19/20 wire carries no `af_scale_height` and runs `:atmosphere = constant`, so
+the OLD language still governs there. Do NOT do a global find/replace.
+
+**THE CAP IS THE SAME ONE (#4) ALL THREE TIMES — 21 gives it a THIRD MOVER, not a new cap:**
+  slice 19: the ceiling is a FLIGHT CONDITION, and it BINDS. **The ENGINEER moves it** (the `rho` knob).
+  slice 20: you DEGRADE IT BY USING IT. **The MISSILE moves it, by TURNING** (the V bleed).
+  slice 21: it is a property of **WHERE YOU FLY**. The missile moves it by CLIMBING — and the climb is not
+            optional: it is the only way to a 14 km target at all.
+
+**⭐ THE HEADLINE IS THE ρ-FACTOR, AND IT FACTORIZES EXACTLY — the thing slice 20 could never do.** Because
+`a_max_aero = ½·ρ(z)·V²·S·|C_Lα|·α_max/m`, the within-run ceiling ratio is IDENTICALLY
+`[ρ(z)/ρ(z₀)]·[V/V₀]²` — an ALGEBRAIC IDENTITY, not an empirical fit — so ALTITUDE and SPEED **separate with
+no residual**. Measured ON THE WIRE at the ceiling-minimum frame, the residual is **EXACTLY 0.0**:
+`ceiling 0.130605318 == rho 0.248319848 × V² 0.525956015`. Slice 20's V-only collapse was not decomposable.
+
+**⭐⭐ AND THE SHARPEST SINGLE FACT — the twin's ρ-factor is EXACTLY 1.0** (`==`, never `≈`). The `:constant`
+arm's ceiling ALSO falls on this climb — by ≈2× (0.524×) — but that is purely the V bleed, i.e. GRAVITY, and
+its model books **100% of it to speed BY DEFINITION**, because it has no z in its ρ at all. ρ(z) reveals the
+4× it could not see. **That is the whole slice in one number**, and it is exactly why `rho_air` is KEY-gated
+and not RUNG-gated: the twin's half of the headline has to BE on the wire.
+
+**GATE 1 — `atmosphere.jl`, the smallest pure lib in the project** (158 tests, `test_atmosphere.jl`).
+`air_density(z; rho0, H) = rho0·exp(−max(z,0)/max(H,_ATM_H_FLOOR))` + `ATMOSPHERE_MODES = (:constant,
+:exponential)`. Both guard sites are REAL crash paths, not ceremony (convention 5): z floored at 0 because an
+RK4 stage legitimately probes z<0 (`exp(−z/H)` at a wild negative z mints Inf → NaN pos → an invalid frame),
+and H floored at 1.0 because **H=0 with z=0 is `0/0` = NaN**. Teeth: the z=0 identity is BIT-EXACT (`==`) —
+which is what lets ONE authored `rho` serve both rungs honestly; the e-folding `ρ(H)/ρ₀ ≡ e⁻¹` at four H (the
+EXTERNAL anchor); strict monotonicity; and **the H→∞ limit APPROACHED-BUT-NEVER-REACHED** (`≈ 1.225 atol=1e-6`
+AND `!= 1.225`) — that tooth was born from a FAILURE (a first draft asserted atol=1e-9 and failed on a
+1.7e-8 residual; real physics, not a bug — the limit is never reached, and **that IS the slice's rung
+argument**, so it now ships as the `!=`).
+
+**★ WHY A RUNG AND NOT A KNOB — the general result, recorded in `atmosphere.jl`'s header because it outlives
+the slice.** The plan originally said no-rung and gate 0 REVERSED it. The suite's real discriminator is **is
+the off-state (a) a distinct code path and (b) NOT knob-reachable?**
+  • KNOB (`af_cma` s16, `af_k_induced` s20): the off-state is an IN-DOMAIN SLIDER VALUE (`K=0` is the
+    slider's own minimum, exact) — continuous, no separate path.
+  • RUNG (`:airframe`, `:propagation`, `:atmosphere`): the off-state is a DISTINCT CODE PATH that NO knob
+    value reaches. Constant ρ is `H = ∞` — a LIMIT POINT (within 1% at 13.6 km needs H ≈ 1.4e6).
+So slice 20's "a `:free` rung IS K=0" reasoning DOES NOT TRANSFER. The tempting refusal — ":constant names no
+physics ρ(z) lacks, only the ABSENCE of a gradient" — was **killed by the advisor**: it is word-for-word what
+`:airframe = point_mass` and `:propagation = free_space` already are, so applied consistently it deletes two
+shipped rungs and cannot be the test. The rung also IS the lesson: the punchline is the live side-by-side.
+
+**GATE 2 — the rung wired, and THE STAGE-z FIX.** The whole slice hinges on an argument that was ALREADY
+THERE: `_integrate_coupled!`'s joint closure has been `f(P, Vv, TH, Q)` since slice 17, and `P` — the RK4
+STAGE POSITION — **was read by nothing**. The atmosphere is what finally reads it, at ZERO contract change.
+Slice 17's stage-θ fix, exactly. Params are REBUILT PER STAGE with the stage ρ, which keeps
+lift/induced/moment MEASUREMENT-AGNOSTIC and z-FREE (§12): the aero lib never learns about altitude, it just
+gets a `p` whose rho is the stage value. The stage ρ also goes to `total_accel`, so the arm is
+self-consistent — one air for all four terms. STRUCTURE (advisor): the else-arm is slices 17/19/20 TEXTUALLY
+VERBATIM and now serves BOTH key-absent AND `:atmosphere === :constant`, so byte-identity is automatic and
+the three-state wrinkle dissolves (never `exp(0)==1` — the `-0.0` trap). Loader: `scale_height_m`
+PRESENCE-gated on the KEY (slices 16/17/19/20 ALL carry airframe blocks, so gating on the BLOCK would grow
+the key on every one), H>0 validated at LOAD and floored at the CONSUMER (both sites required).
+**THE STAGE-z GOLDEN is a HUNT with a MEASURED quarry, not insurance**: the entry-z variant sits
+Δpos_z = 3.039e-3 m away at the pinned tick (atol 1e-6 ⇒ a ~3000× margin), and NOTHING else in the file can
+see it (F9: it moves the miss 0.136 m on a 360 m lesson; ρ-factor/ceiling/twin/leak all survive it).
+
+**GATE 3 — two core changes the verifier's design forced out, both found late and both real:**
+• **`_atm_on` GAINED A THIRD CONJUNCT `:airframe === :pitch_coupled` — a LATENT BUG FIX, not plumbing.**
+  ρ(z) reaches ONLY the coupled path (`_integrate_coupled!` is itself gated on `:pitch_coupled`), so under
+  `:point_mass` the translation flies `total_accel`'s AUTHORED constant ρ whatever the rung says — but the
+  readout sites called `_airframe_rho` unconditionally. The **decisive** case (advisor) is not the readouts:
+  it is **slice-16's `_integrate_airframe!`, which actually INTEGRATES θ/q under `:point_mass`** — it would
+  have advanced rotational state in ρ(z) while pos/vel flew ρ₀. **Half the missile in one atmosphere and half
+  in another.** `atmosphere.jl`'s header already CLAIMED "ρ(z) reaches the COUPLED path only" — true of the
+  integrator, false of the readout; now true of the GATE, the only place it can be true. `:atmosphere` is
+  **INERT without `:pitch_coupled`** — the slice-14 (`:salvo` needs a `:datalink`) / slice-13
+  (`discrimination` needs `:scan`) shape. Pinned `===` on the TRAJECTORY, and no tautology: the missile
+  climbs to ~12.8 km where ρ(z)/ρ₀ ≈ 0.2, so a leak at ANY of the five sites moves θ/q far outside `===`.
+  `atm_world`'s `airframe` kwarg was DEAD until this; it now has a purpose. ⚠ SIDE-EFFECT, DOCUMENTED IN
+  PLACE (advisor — "future-you will wonder"): slice-19's `:point_mass` REFERENCE CEILING now reports the **ρ₀**
+  ceiling under `:exponential`. Coherent (that plant flies constant-ρ `total_accel`, so ρ₀ IS its flight
+  condition) and unreachable from this showcase; slices 16–20 carry no scale height and are unaffected.
+• **NEW WIRE KEY `rho_air`** — the air the missile is actually flying in (kg/m³). KEY-gated on an authored
+  `:af_scale_height` (the slice-20 `a_induced` / slice-15 fin-key precedent) ⇒ slices 16–20 byte-identical.
+  **IT SHIPS UNDER BOTH RUNGS, AND THAT IS LOAD-BEARING** — the KEY is the gate, never the rung (the
+  deliberate contrast with `a_lift`, a produced force that only exists when coupled). Under `:constant` it
+  ships the flat ρ₀ **and that is precisely the lie the slice exposes**. Rung-gating would take the twin's
+  ρ-factor==1.0 off the wire and leave the client to divide `2·q_dyn/V²` — physics in GDScript, which
+  convention 13 forbids. The CORE computes; the client displays. (Also fixed in passing: `q_dyn`'s comment
+  said "½ρV² — the flight condition (only V moves it)". Slice 21 makes that FALSE.)
+
+**⚠ NOT ZERO CLIENT CODE — and the reason is the interesting part.** Slice 20 shipped none because its lesson
+was a SLIDER and it let `:airframe` keep the button. Slice 21's lesson IS a button, and its scenario ALSO
+ships `:airframe: pitch_coupled` (AUTHORED FIXED — the missile must stay coupled for a lift ceiling to EXIST).
+**Two view-claiming fidelity keys in one handshake, a first for this arc.** `_setup_spatial_fid_btn` checks
+`:atmosphere` **FIRST** so the ONE button toggles the LESSON's key and not the HELD one — the slice-13/14
+rule, THIRD occurrence. Checking first (vs slotting between the two airframe branches) is also strictly safer:
+an atmosphere scenario with no `:airframe` key would otherwise fall into the slice-16 DROP branch and lose its
+button entirely. Everything else is REUSE, **proven not asserted**: the aero strip (s19), the α strip (s16/17)
+and the nose-vs-velocity vectors are gated on `_airframe_view` and carry over untouched — only
+`_draw_missile`'s `_fid_kind` gate needed the new kind, and `rho_air` renders through the no-whitelist scalar
+path. New: `ATMOSPHERE_RUNGS`, `_on_atmosphere_pressed`, the `"atmosphere"` label arm, extents seeded 20×15 km.
+
+**THE SHOWCASE — every part LOAD-BEARING, and it is NOT a slice-20 reskin (gate-0 F1–F3):**
+• **A SLOW, DISTANT, HIGH TARGET (22 km / 14 km, −250 m/s).** "Just make it climb" is UNFLYABLE (F1): a
+  700 m/s missile needs ~15 s to climb 6 km, in which a head-on 800 m/s target covers 12 km — "climbs a lot"
+  and "closes fast" are MUTUALLY EXCLUSIVE, and every steep-climb geometry missed by KILOMETRES under BOTH
+  arms (the REACH wall, not the ceiling). Launching high enough to shorten the climb made the TWIN saturate
+  46.6% — that is SLICE 19's lesson, not this one.
+• **THE TARGET JINKS, AND IT MUST (F2 — the finding that killed the first design).** Without a late demand the
+  ρ(z) missile turns EARLY, LOW, in THICK air, arrives on a good collision course, and **by the time it is
+  high and cannot maneuver it NO LONGER NEEDS TO** — measured: a ceiling of 16.5 m/s² (1.7 g) at 16 km and it
+  still only missed by 29 m. PN NULLS LOS RATE, so terminal demand against a straight-flier → 0 BY
+  CONSTRUCTION. **Late demand is STRUCTURAL.**
+• **⚠ SLICE 20 FORBADE A MANEUVERING TARGET — DO NOT COPY THAT RULE (F3).** It existed to attribute the
+  induced-drag BILL. **HERE K = 0: THERE IS NO BILL.** The jink is a DEMAND SOURCE, not the lesson — and the
+  `:constant` twin flies the IDENTICAL geometry against the IDENTICAL jink and HITS, which controls for the
+  target completely. Nor is this slice 12: the twin proves plain PN handles this jink comfortably at sea-level
+  density — its ceiling never binds ONCE.
+• **K = 0 AND cd_area = 0 — THE ISOLATION, and it is total.** Nothing bleeds speed but GRAVITY, and the twin
+  carries the same gravity ⇒ the twin difference is PURE ALTITUDE. (Do NOT switch induced drag on to "compose
+  20 and 21": gate-0 F10 measured the compose at +33% and found it CONFOUNDED — the two arms fly different
+  trajectories, so a scenario number cannot isolate it. The compose ships as CLOSED FORM instead:
+  **`a_ind ∝ 1/Q`** — the SAME turn bills MORE up high — vs an INDEPENDENT recompute `K·m·a_perp²/(Q·S)`, a
+  tooth and a named observation, never the headline (convention 9 — slice 20 already teaches the bill).)
+• **H = 8500 IS EARTH'S ACTUAL SCALE HEIGHT**, not a tuned number: this missile misses because of the
+  atmosphere we live in.
+
+**ONE KNOB `af_scale_height ∈ [6000, 25000]`** — H is not the density (that is ρ₀) but the RATE THE AIR THINS,
+the one DOF no constant ρ has. **The range is MEASURED (F8) and the FLOOR binds**: H=25000 → 6.29 m; H=8500 →
+360.74 m (ships here, and the slider reads BOTH ways from it); H=6000 → 1706.49 m (α_pk 0.194, still 3.0%
+under the clamp); **H ≤ 3000 → THE CEILING LEAKS** (α_pk ≥ 0.2000 BREACHES α_max — slice-19 FINDING 14: the
+clamp bounds the COMMAND, lift uses the ACHIEVED α). The floor sits at 2× that boundary (the slice-20 K
+discipline). NOT KNOBS, deliberately: **ρ₀** (slice 19's lever telling slice 19's story; it scales the WHOLE
+profile and **cannot produce a GRADIENT** — the precise difference this slice exists to show); **α_max**
+(slice 19's causation lever, and it is the very clamp whose LEAK bounds H, so moving it moves the bound);
+**K** (would confound the isolation); **launch/target ALTITUDE** — the obvious knob and a DEAD one (position
+is consumed ONCE at load and `reset` reloads the YAML — slice-19's `speed` finding; **H is the live face of z**).
+**⚠ THE MISS DOES NOT REVERSE IN H, and that prediction was explicitly REFUTED (F7):** slice 20's K reversed
+(a bled-out missile stops trying and coasts into a close pass) because its penalty was SPEED. Thin air costs
+ZERO speed here — only AUTHORITY — so the missile flies fast and STRAIGHT PAST and the miss is monotone across
+the sweep. `[[ewsim-df-ellipse-sigma-monotonicity]]` does NOT apply. (Headline the ρ-factor anyway: it is
+monotone BY CONSTRUCTION, which the miss only happens to be.)
+
+**Class 4c** (physics-changing, NO RNG — truth-fed PN, no seeker ⇒ "draw-count invariance" is VACUOUS; do NOT
+copy slice-11/13 draw language). **The 7th consecutive 4c** (14/15/16/17/19/20). Live-settable, NO
+`set_fidelity` guard (the `:integrator`/`:autopilot`/`:apn`/`:cooperation`/`:airframe` precedent; the CONTRAST
+is slice-13's `:scan`, which flips draw topology and rejects introduction).
+
+**FOUR PROOFS GREEN.** `net/slice21_verify.gd` (S21V OK — four phases: EXP / EXP_REPLAY / CONST / HMAX):
+`:exponential` miss **360.768** frame-sampled, ceiling **239.3→31.3**, ρ **1.0884→0.2703** (ρ-factor **0.248**),
+z_max **12846 m**, aero_sat **673/2626 (25.6%)**; the FACTORIZATION residual **EXACTLY 0.0**; replay posdiff
+**0.0**; `:constant` miss **3.075** (**117×**), ceiling 269.3→141.2 (0.524×), ρ FLAT, **aero_sat 0/2628 — the
+ceiling NEVER BINDS ONCE**, ρ-factor `== 1.0`; H=25000 miss **7.131**, ρ-factor **0.621**; `defl_sat == 0` in
+EVERY arm and `a_max` INERT (3000 ≫ 269). `net/slice21_ui_test.gd` (S21UI OK — the value-guard is **FIVE-WAY**:
+16 drops the button / 17-19-20 keep the airframe cycler / 18 stays 3-D / **21 takes the atm cycler DESPITE
+`_fidelity.has("airframe")`**). `Sandbox.tscn` smoke-loaded headless against a slice-21 server (server `DONE` ⇒
+scene connected, no GDScript errors) + slices 16/17/18/19/20 **re-smoked** (the new `elif` sits ABOVE every
+airframe branch — "I only added a branch above it" is false by one `elif`). Plus the windowed shot.
+
+**⚠ THREE GATE-3 BUGS, ALL IN THE PROOF RATHER THAN THE PHYSICS — worth remembering:**
+1. **`%.2e` IS NOT A GDSCRIPT FORMAT SPECIFIER.** An unknown specifier makes the WHOLE `%` fail SILENTLY and
+   return the literal — so the headline's own number printed as `"%.9f"` on the first GREEN run. Exit 0,
+   number absent. **A number that does not print is not a proof.** (`%g` bit slice 1; this is that class.)
+2. **THE PASS TEXT QUOTED PER-TICK TRUTH (1.95 m, 185×) WHILE THE FILE MEASURES FRAMES (3.075, 117×)** — a
+   false claim in the proof's own output. The header now states the ASYMMETRY: **a MISS samples faithfully**
+   (at CPA the radial rate is zero ⇒ EXP's 360.739 → 360.768, Δ 0.03) while **a HIT samples COARSELY**
+   (~800 m/s closing × 16 ms ⇒ ~13 m between samples, so 1.949 → 3.075). Slice 20 hit this exactly (true
+   1.27 → frame 8.59). Quote FRAME numbers in the verifier; per-tick belongs to `test_missile.jl`.
+3. **A MAGIC-MULTIPLE TOOTH (advisor):** H_MAX's ρ-factor was pinned at `1.5 × EXP_RHOF_MAX` = 0.525, which
+   the actual 0.621 cleared by only 18%. Now pinned against the EXP arm's **MEASURED** ρ-factor (0.621 vs
+   0.248 = 2.5×) — bigger margin AND the honest statement: a deeper atmosphere thins LESS over the SAME climb,
+   and neither number need be known in advance to say it.
+
+**⚠ THE LOS GATE IS 1000 AND H=25000 IS THE KNOB ARM — both MEASURED, not copied
+([[ewsim-missile-verifier-sampling]], THIRD RECURRENCE).** Gate 2 FAILED first at slice-19's 300: the twin
+HITS, so it flies the r→0 endgame where PN's ω→∞ spikes a_cmd and the ceiling blipped 94 ticks; measured,
+those blips lie ENTIRELY within r ∈ [1.9, 362.9] and at r>1000 the count is EXACTLY 0 — which matters because
+`aero_sat == 0` is an ASSERTION, not a hope. And the gate must sit **ABOVE THE LARGEST CPA IN THE SWEEP**:
+H=6000 misses by **1706 m** — a missile that never comes within 1000 m — so a 1000 m gate would exclude
+NOTHING from it while excluding the endgame from every other arm. **H=25000 was chosen for that reason**
+(largest CPA stays 360.8), and the severity direction is not lost: the CORE suite flies H=6000, where every
+tick is available and no gate is needed.
+
+**Convention 10 the hard way, twice.** The gate-2 inert-host tooth first GUESSED `rho_air < 0.6·ρ₀` and failed
+at 0.878 — at 6 s this missile is only ~2.8 km up, where the air is still ~72% of sea level (the 4× collapse
+is a **60-second** story, not a 6-second one). Re-pinned as `rho_air == air_density(z)` — the non-arbitrary
+form, `==` with no tolerance to hide behind. And the probe was proven **BIT-FOR-BIT faithful** to the live path
+(Δ = 0.000e+00 at 2k/10k/20k/30k ticks), which retroactively validates every gate-0 number.
+
+**Slice 21 COMPLETE — constant ρ was lying to you at altitude, and the old model's own ceiling never told it.**
+DEFERRED (NAMED): **ρ(z) on the point-mass/ballistic drag path** (`dynamics.jl`'s steppers take a `v -> a(v)`
+closure with NO position in it; changing that to `(p,v) -> a` touches slice 8's `rk4_step`/`euler_step` — the
+byte-identity surface of EVERY ballistic slice — for a path carrying no altitude lesson: it deserves its own
+slice); a **LAYERED standard atmosphere** (troposphere lapse + stratosphere break — the lumped isothermal `H`
+is to a real ρ(z) profile what `cd_area`'s lumped `Cd·A` is to a real drag polar); **Mach / temperature
+effects** (the aero lib is deliberately Mach-free, so `C_Lα` does NOT vary with altitude here — a real
+interceptor's does); **round-earth / geodetic z**; **nonlinear C_L(α) / true stall** (would bound the ACHIEVED
+α and close the ceiling-leak path that BOUNDS this slice's H floor — now the single most-wanted neighbour);
+**bank-to-turn / 3-D** (quaternion+ω — only there does the out-of-plane discard die), then the **radome/
+body-rate parasitic loop**; a **seeker in the coupled loop** (flips the class back to 4a/RNG-live).
+⚠ NOT this slice: §11's RF **"layered atmosphere / ducting / tropospheric scatter"** lives behind the
+`propagation` knob and is a SEPARATE slice — nothing here touches the radar path.
+Run the slice-21 showcase: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice21_atmosphere.yaml`,
+then launch Godot on `clients/godot`. **Press the button**: `:constant` and the missile HITS (its cyan ceiling
+never binds); `:exponential` and watch the ceiling FALL as it climbs until the orange demand crosses it — same
+missile, same jink, 360 m miss. Drag **H to 25000** and a deep atmosphere forgives; drag it to **6000** and the
+miss opens to 1.7 km. Re-run the gate-3 proof headless: start that server, then the console Godot `--headless
+--path clients/godot --script res://net/slice21_verify.gd` (exit 0 = pass). The UI test needs NO server:
+`… --script res://net/slice21_ui_test.gd`.
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

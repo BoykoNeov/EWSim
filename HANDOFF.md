@@ -538,7 +538,10 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   **ρ IS AUTHORED, NOT DERIVED FROM ALTITUDE** — `rho` is a per-missile constant, so ONLY V moves
   Q on its own and the demo knob is `rho` itself (say "low dynamic pressure (thin air)", NEVER
   unqualified "high altitude"; a `speed` knob would be DEAD — `comp[:speed]` is consumed once at
-  load and read by nothing per-tick).
+  load and read by nothing per-tick). **[SUPERSEDED IN PART BY SLICE 21 — read both]** ρ(z) now
+  exists behind the `atmosphere` rung, so "high altitude" IS earned language **on a scenario that
+  authors an `af_scale_height`**. Slice 19's own showcase does not: it runs `:atmosphere = constant`
+  and every word above still governs it. The `speed`-is-dead finding is untouched and permanent.
   **[OPENED — slice 20] INDUCED DRAG made that ceiling SELF-LOWERING** — the aero arc's first
   feedback, and the cash-in of the approximation 17/19 shipped explicitly ("lift is drag-free /
   speed-preserving ⟂ v"). Lift ⟂ v turns the path; induced drag ∥ −v̂ BILLS it (`C_Di = K·C_L²`),
@@ -566,13 +569,44 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   high `k_α` or low damping, and BOTH peg deflection first — so cap #5 cannot be isolated from cap
   #3 at any setting probed. The general result is worth more than the slice was
   (`docs/plans/slice20.md`).
-  DEFERRED beyond slice 20: the **exponential atmosphere** `ρ(z)=ρ₀·exp(−z/H)` (the honest
-  completion of 19+20's constant-ρ — it would make "high altitude" a REAL lever, but it touches the
-  shared drag path); **nonlinear `C_L(α)` / true stall** (α_max is still a clamp on the COMMAND — a
-  true stall would bound the ACHIEVED α and close the ceiling-leak path); **zero-lift-drag `C_D0`
-  composed with induced** (`cd_area` exists but slice 20 holds it 0 for the isolation);
-  bank-to-turn (the 3-D quaternion+ω superset, where the pitch-plane out-of-plane discard finally
-  dies) and the radome/body-rate parasitic loop.
+  **[OPENED — slice 21] the EXPONENTIAL ATMOSPHERE `ρ(z) = ρ₀·exp(−z/H)`: THE CEILING YOU LOWER BY
+  CLIMBING** — a NEW `atmosphere` fidelity knob (this entry's "new fidelity knobs" clause), no
+  contract change. The honest completion of 19+20's constant-ρ. Slices 19/20 were under standing
+  orders to say "low dynamic pressure (thin air)" and NEVER unqualified "high altitude"; **that
+  caveat now LIFTS — but
+  ONLY where an `af_scale_height` is authored.** A 19/20 wire runs `:atmosphere = constant` and the
+  old language still governs it: do NOT global-find/replace. **NO new cap — the SAME cap #4, a THIRD
+  MOVER**: 19 the ENGINEER moved it (the ρ knob), 20 the MISSILE moved it by TURNING (V bleed), 21 by
+  **WHERE IT FLIES**, and the climb is not optional — it is the only way to a 14 km target.
+  **⭐ The headline FACTORIZES EXACTLY, which slice 20's could not**: the within-run ceiling ratio is
+  IDENTICALLY `[ρ(z)/ρ(z₀)]·[V/V₀]²`, an ALGEBRAIC identity — altitude and speed separate with a
+  residual of **EXACTLY 0.0** on the wire. **⭐⭐ And the twin's ρ-factor is EXACTLY 1.0** (`==`): the
+  `:constant` arm's ceiling also falls (0.524×, GRAVITY bleeding V) and its model books 100% of that
+  to speed BY DEFINITION, because it has no z in its ρ at all. Wire: `:exponential` misses 360.8 m
+  while `:constant` HITS (3.1 m frame / 1.95 truth, 117×) and its ceiling **never binds once**.
+  **Unlike slice 20 this DID need a rung** — `:atmosphere = constant | exponential`, and the
+  discriminator generalizes (it is recorded in `atmosphere.jl`'s header): *is the off-state (a) a
+  distinct code path and (b) NOT knob-reachable?* `K=0` is an in-domain slider value ⇒ knob; constant
+  ρ is `H = ∞`, a LIMIT POINT no slider reaches ⇒ rung. The tempting refusal (":constant names no
+  physics ρ(z) lacks") is word-for-word `point_mass`/`free_space` and would delete two shipped rungs.
+  **`:atmosphere` is INERT without `:airframe = pitch_coupled`** (the slice-13/14 inert-without-host
+  shape): ρ(z) reaches the COUPLED path only.
+  ⚠ **THIS DID NOT FINISH THE ATMOSPHERE — the deferral is structural, not laziness.** The
+  point-mass/ballistic drag path keeps a constant ρ because `dynamics.jl`'s steppers take a
+  `v -> a(v)` closure with **no position in it**; changing that contract to `(p,v) -> a` touches slice
+  8's `rk4_step`/`euler_step` — the byte-identity surface of EVERY ballistic slice — for a path that
+  carries no altitude lesson. It deserves its own slice. ⚠ **NOT the RF "layered atmosphere /
+  ducting" entry above**, which lives behind the `propagation` knob and touches the radar path.
+  DEFERRED beyond slice 21: **nonlinear `C_L(α)` / true stall** — now the NEAREST and most
+  load-bearing candidate (α_max is still a clamp on the COMMAND while lift uses the ACHIEVED α, and
+  that LEAK is what bounds slice 21's H floor at 6000, so closing it would free the knob as well as
+  the physics); ρ(z) on the ballistic path (above); a **LAYERED standard atmosphere** (lapse +
+  stratosphere break — the lumped isothermal `H` is to a real profile what `cd_area`'s lumped `Cd·A`
+  is to a real drag polar); **Mach / temperature** (the aero lib is deliberately Mach-free, so `C_Lα`
+  does not vary with altitude here — a real interceptor's does); round-earth/geodetic z;
+  **zero-lift-drag `C_D0` composed with induced** (`cd_area` exists but 20 and 21 both hold it 0 for
+  the isolation); bank-to-turn (the 3-D quaternion+ω superset, where the pitch-plane out-of-plane
+  discard finally dies) and the radome/body-rate parasitic loop.
 - **Sibling domains that reuse the shared libs.** IR/EO seekers and IRST (add an IR
   environment channel to `env`, reuse `frames.jl`/`estimation.jl`); communications EW —
   jamming of frequency-hopping / spread-spectrum links — as a parallel to radar EW;

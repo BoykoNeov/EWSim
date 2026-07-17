@@ -50,13 +50,14 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–20 COMPLETE & green — 2935 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–20
+**Slices 1–21 COMPLETE & green — 3182 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–21
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
 FIRST true 3-D view (a user-directed insertion — the inner autopilot shifted to slice 19), slice 19 the CLOSED
 INNER LOOP (`a_cmd→α_cmd→δ`) + the flight-condition g-limit, slice 20 INDUCED DRAG — the missile LOWERS ITS OWN
-CEILING by maneuvering.** Full gate-by-gate
+CEILING by maneuvering — and slice 21 the EXPONENTIAL ATMOSPHERE: the ceiling you lower by CLIMBING (ρ(z) at
+last, so "high altitude" is EARNED language and not a caveat).** Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -338,23 +339,78 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   ceiling 269→138, demand crossing at 301, AERO SAT lit). Slices 1–19 byte-identical, proven ON THE WIRE (the
   16/17/19 verifiers reproduce STATUS to the digit). (2935)
 
+- **Slice 21 (§11 Tier-A) — THE EXPONENTIAL ATMOSPHERE: THE CEILING YOU LOWER BY CLIMBING**: the honest completion
+  of 19/20's constant-ρ, and the aero arc's last opening deferral. Slices 19/20 were under STANDING ORDERS to say
+  "low dynamic pressure (thin air)" and NEVER unqualified "high altitude" — ρ was a number an ENGINEER TYPED, not a
+  consequence of where the missile flew, and only V could move `Q = ½ρV²`. Here `ρ = ρ₀·exp(−z/H)` and the phrase is
+  EARNED: **climb → ρ(z) falls → Q falls → `a_max_aero` falls → you cannot pull → you miss** (⚠ THE CAVEAT LIFTS
+  ONLY HERE — a 19/20 wire has no `af_scale_height` and runs `:constant`; no global find/replace). **NO new cap —
+  the SAME cap #4, a THIRD MOVER**: 19 the ENGINEER moved it (the ρ knob), 20 the MISSILE moved it by TURNING (V
+  bleed), 21 by **WHERE IT FLIES** — and the climb is not optional, it is the only way to a 14 km target.
+  **⭐ THE HEADLINE IS THE ρ-FACTOR, AND IT FACTORIZES EXACTLY** — what slice 20 could never do: since
+  `a_max_aero = ½ρ(z)V²·S·|C_Lα|·α_max/m`, the within-run ceiling ratio is IDENTICALLY `[ρ(z)/ρ(z₀)]·[V/V₀]²`, an
+  ALGEBRAIC identity — so ALTITUDE and SPEED separate with **NO residual** (measured ON THE WIRE at the
+  ceiling-min frame: residual **EXACTLY 0.0**). **⭐⭐ THE SHARPEST FACT: the twin's ρ-factor is EXACTLY 1.0** (`==`).
+  The `:constant` arm's ceiling ALSO falls (0.524×) — but that is GRAVITY bleeding V, and its model books **100% of
+  it to speed BY DEFINITION**, because it has no z in its ρ at all. **That is the whole slice in one number**, and
+  it is WHY `rho_air` is KEY-gated not RUNG-gated (the twin's half of the headline must BE on the wire; rung-gating
+  would leave the client dividing `2·q_dyn/V²` — physics in GDScript, convention 13). New pure lib `atmosphere.jl`
+  (the project's SMALLEST — one function + one mode tuple; z floored at 0 and H at 1.0, BOTH real crash paths: an
+  RK4 stage probes z<0 → Inf → NaN pos, and H=0 with z=0 is `0/0`). **★ THE KNOB-vs-RUNG DISCRIMINATOR (the general
+  result, in atmosphere.jl's header because it outlives the slice)**: *is the off-state (a) a distinct code path and
+  (b) NOT knob-reachable?* KNOB (`af_cma`, `af_k_induced`) = an IN-DOMAIN slider value; RUNG (`:airframe`,
+  `:propagation`, `:atmosphere`) = a distinct path no knob reaches. Constant ρ is `H = ∞`, a LIMIT POINT — so slice
+  20's "a `:free` rung IS K=0" does NOT transfer. The tempting refusal (":constant names no physics ρ(z) lacks")
+  was ADVISOR-KILLED: it is word-for-word `point_mass`/`free_space`, so it would delete two shipped rungs.
+  **THE STAGE-z FIX**: the slice hinges on an argument ALREADY THERE — `_integrate_coupled!`'s closure has been
+  `f(P,Vv,TH,Q)` since slice 17 and `P` (the RK4 STAGE POSITION) **was read by nothing**; ρ(z) finally reads it at
+  ZERO contract change (slice 17's stage-θ fix exactly; params REBUILT PER STAGE keep the aero lib z-FREE — it
+  never learns about altitude, it just gets a `p` whose rho is the stage value). Byte-identity STRUCTURAL: the
+  else-arm is 17/19/20 VERBATIM and serves BOTH key-absent AND `:constant` (never `exp(0)==1` — the `-0.0` trap).
+  **`:atmosphere` is INERT without `:pitch_coupled`** (`_atm_on`'s third conjunct — a gate-3 LATENT BUG FIX: ρ(z)
+  reaches the coupled path only, and slice-16's `_integrate_airframe!` would otherwise have INTEGRATED θ/q in ρ(z)
+  while pos/vel flew ρ₀ = half the missile in each atmosphere; the slice-13/14 inert-without-its-host shape).
+  ⚠ **NOT zero client code** (unlike slice 20): the lesson IS a button and the scenario ALSO ships `:airframe:
+  pitch_coupled` HELD — **two view-claiming fidelity keys, a first** — so `_setup_spatial_fid_btn` checks
+  `:atmosphere` FIRST (the slice-13/14 one-button rule, 3rd occurrence); everything else REUSES slice 19's airframe
+  view. Class **4c** (7th consecutive; no RNG ⇒ draw-invariance VACUOUS; live-settable, no guard). ONE knob
+  `af_scale_height ∈ [6000,25000]` (MEASURED: H≤3000 LEAKS α_max — slice-19 FINDING 14; ρ₀/α_max/K DISQUALIFIED and
+  asserted ABSENT; **launch altitude is a DEAD knob** — position is load-only, `reset` reloads the YAML: **H is the
+  live face of z**). ⚠ **The miss does NOT reverse in H — that prediction was REFUTED**: slice 20's K reversed
+  because its penalty was SPEED; thin air costs ZERO speed, only AUTHORITY. Wire (frame-sampled, seed 21, LOS-gated
+  r>1000): `:exponential` miss **360.8** / ceiling 239→31 / ρ-factor **0.248** / aero_sat 25.6% vs `:constant` miss
+  **3.1** (**117×**; per-tick 1.95/185×) / **aero_sat 0/2628 — NEVER BINDS ONCE**; H=25000 → 7.1; `defl_sat` 0 in
+  every arm; replay posdiff 0.0. Four proofs green (S21V; S21UI with a **FIVE-WAY** value-guard; smoke + 16–20
+  re-smoked; shot at the CROSSING — ceiling 81.7 vs demand 83.4, AERO SAT lit). **⚠ Three gate-3 bugs, all in the
+  PROOF not the physics**: `%.2e` is NOT a GDScript specifier (an unknown one makes the WHOLE `%` fail SILENTLY →
+  the headline printed as `"%.9f"` on a GREEN run — *a number that does not print is not a proof*); the pass text
+  QUOTED PER-TICK truth while the file measures FRAMES (**a miss samples faithfully — radial rate is 0 at CPA — but
+  a HIT samples COARSELY**: ~13 m between samples); and a MAGIC-MULTIPLE tooth (now pinned against the EXP arm's
+  MEASURED ρ-factor). (3182)
+
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened
-with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–20 are into the §11 Tier-A
+with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–21 are into the §11 Tier-A
 horizon — slice 15 the actuator/fin half, slice 16 the 6-DOF airframe's rotational half (pitch-plane θ,q), slice 17
 the α→lift→γ TRANSLATION-COUPLING half (the real path-changing `:airframe` toggle), slice 18 terrain masking + the
 3-D client view, slice 19 the CLOSED INNER LOOP (`a_cmd→α_cmd→δ`) + the flight-condition g-limit — which COMPLETES
 the Tier-A "6-DOF airframe + actuator/fin dynamics" entry in the pitch plane (15 = fin, 16 = rotation, 17 = the
-α→lift coupling, 19 = the closed loop) — and slice 20 INDUCED DRAG, which makes that closed loop's ceiling
-SELF-LOWERING (the aero arc's first feedback, and the first slice whose lesson is a KNOB with no button at all).
+α→lift coupling, 19 = the closed loop) — slice 20 INDUCED DRAG, which makes that closed loop's ceiling
+SELF-LOWERING (the aero arc's first feedback, and the first slice whose lesson is a KNOB with no button at all),
+and slice 21 the EXPONENTIAL ATMOSPHERE, which gives that same ceiling a THIRD mover — WHERE THE MISSILE FLIES —
+and CLOSES 19+20's constant-ρ approximation: "high altitude" is now earned language, not a standing caveat.
 **The slice-20 slot was CONTESTED**: the planned SCALAR rate-limited fin inside the coupled loop [the guidance
 limit cycle] is **DEAD, not deferred** — gate 0 killed it in 4 probes (`δ_max` structurally SHADOWS `δ̇_max`: the
 fin only needs to move fast when the command does, which requires high k_α or low damping, and BOTH peg deflection
 first — see `docs/plans/slice20.md`, a worthwhile general result). What remains is the rest of §11 Tier-A/B/C —
 most concretely land clutter [terrain banked the heightfield] and the FULL 6-DOF airframe [bank-to-turn / 3-D,
-where the pitch-plane out-of-plane discard finally dies], with the exponential atmosphere ρ(z) [which would make
-"high altitude" a REAL lever and is the honest completion of 19+20's constant-ρ approximation] and nonlinear
-C_L(α) / true stall [which would bound the ACHIEVED α and close the ceiling-leak path] as the nearest named
-candidates.)
+where the pitch-plane out-of-plane discard finally dies], with **nonlinear C_L(α) / true stall** now the nearest
+named candidate [it would bound the ACHIEVED α and close the ceiling-leak path — the very leak that BOUNDS slice
+21's H floor at 6000, so it is the most load-bearing neighbour the arc has]. ⚠ Slice 21 did NOT finish the
+atmosphere: ρ(z) reaches the COUPLED airframe path ONLY. The point-mass/ballistic drag path keeps a constant ρ
+because `dynamics.jl`'s steppers take a `v -> a(v)` closure with NO position in it, and changing that contract to
+`(p,v) -> a` touches slice 8's `rk4_step`/`euler_step` — the byte-identity surface of EVERY ballistic slice — for a
+path carrying no altitude lesson. A named deferral, and its own slice. Nor is it §11's RF "layered atmosphere /
+ducting" entry, which lives behind the `propagation` knob and touches the radar path — do not conflate them.)
 
 ## Conventions / hard-won disciplines
 
