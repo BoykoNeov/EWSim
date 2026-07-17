@@ -1,6 +1,6 @@
 # Slice 21 — the EXPONENTIAL ATMOSPHERE `ρ(z) = ρ₀·exp(−z/H)` (§11 Tier-A)
 
-**Status: PLANNED (gate 0 not yet run).** The honest completion of slices 19+20's constant-ρ
+**Status: GATE 0 RUN (findings below — they CHANGED the design). Gates 1–3 pending.** The honest completion of slices 19+20's constant-ρ
 approximation — the deferral both of them shipped explicitly, and the one that finally makes
 **"high altitude" a REAL lever** instead of a phrase the docs forbid.
 
@@ -84,6 +84,120 @@ states reach genuinely new physics (⇒ not false fidelity).** The slice-20 K pr
 
 ---
 
+## GATE-0 FINDINGS (9 probes — THE RECORD; read before re-proposing anything here)
+
+Probe: `M:\claud_projects\temp\slice21_probe\` — the REAL exported aero kernels, only the
+~30-line coupled tick loop local, so ρ swaps constant ↔ ρ(z) freely (convention 10: pin against
+the LIVE WIRE at gates 2/3, never against this).
+
+### F1 — "MAKE IT CLIMB" IS UNFLYABLE. The naive geometry DIED (P1/P1b/P1c)
+
+Every steep climbing geometry misses **by kilometres under the TWIN TOO** (twin 4791 m / 8165 m
+/ 4276 m). The miss is the REACH problem, not the ceiling. **The physics is a hard constraint:**
+a 700 m/s missile needs ~15 s to climb 6 km, in which a head-on 800 m/s target covers 12 km — so
+**"climbs a lot" and "closes fast" are MUTUALLY EXCLUSIVE.** Worse, at `z0 = 4000` the twin is
+already saturating 46.6% — **that is SLICE 19's lesson (the ceiling binds), not slice 21's.**
+⇒ The target must be SLOW and DISTANT (a high-altitude recon/bomber — the engagement this lesson
+actually belongs to).
+
+### F2 — ★ THE ρ(z) MISSILE TURNS EARLY, LOW, IN THICK AIR — AND THEN DOESN'T NEED TO (P1d/P1e)
+
+With a slow distant target **everything HITS, both arms, sub-metre**, even with the ρ(z)
+ceiling at **16.5 m/s² (1.7 g)** at 16 km. Why: PN does its turning EARLY (low, thick air, full
+ceiling), arrives on a good collision course, and by the time it is high and cannot maneuver
+**it no longer needs to.** A real insight, and it kills the naive design:
+**⇒ THE LESSON REQUIRES *LATE* DEMAND, AND ONLY A MANEUVERING TARGET SUPPLIES IT.** PN nulls LOS
+rate, so terminal demand against a non-maneuvering target → 0 BY CONSTRUCTION. This is structural,
+not tuning.
+
+### F3 — ★ SLICE 20's "NO MANEUVERING TARGET" RULE DOES **NOT** TRANSFER — AND MUST NOT BE COPIED
+
+Slice 20 forbade a maneuvering target (its FINDING 7). **That rule was about attributing the
+induced-drag BILL** ("the missile pays for its own turn"). **Slice 21 has K = 0: there is no
+bill.** The jink here is a DEMAND SOURCE, not the lesson — and the TWIN flies the IDENTICAL
+geometry against the IDENTICAL jinking target and HITS, which fully controls for it. Slice 21
+**REQUIRES** what slice 20 **FORBADE**, for reasons that do not overlap. (Nor is this slice 12:
+the twin proves plain PN handles this jink comfortably at sea-level density — `sat_c = 0.0%`.)
+
+### F4 — THE SHOWCASE (P1f). Twin HITS and NEVER BINDS; ρ(z) MISSES 185×
+
+`m(0, 1000) elev 25° v700` → `t(22000, 14000) v(−250,0,0)` jinking `a_lat = 40`:
+
+| arm | miss | ceiling at CPA | aero_sat | α_pk | defl_sat |
+|-----|-----:|---------------:|---------:|-----:|---------:|
+| const ρ (TWIN) | **1.95 m** (HIT) | 133.0 | **0.0%** (never binds ONCE) | 0.085 | 0 |
+| ρ(z) H = 8500  | **360.74 m** (185×) | 27.1 | 25.7% | 0.187 | 0 |
+
+`t_cpa ≈ 43.5 s` (a long shot — ~2700 frames at `emit_every = 16`; the slice-18 verifier already
+ran 2500). **H = 8500 m IS EARTH'S ACTUAL SCALE HEIGHT** — the showcase default is the real
+physical value, not a tuned one.
+
+### F5 — ★★ THE CRUX PROBE PASSES: **NO CONSTANT ρ CAN REPRODUCE IT** (P2 — the false-fidelity test)
+
+Sweeping ρ_const ∈ [0.1, 1.225] over the identical geometry:
+
+- **EVERY constant ρ has ceiling spread ≈ 2.03×** — *whatever its value*. That 2.03 = (700/492)²
+  **is the V bleed, i.e. GRAVITY on the climb.**
+- **ρ(z) has spread 8.83×.**
+- A constant tuned to match the MISS (ρ* ≈ 0.42) is **crippled FROM LAUNCH** (ceiling 88 vs
+  ρ(z)'s 239.5) and flies a different trajectory. **It cannot be both 269 at launch and 27 at
+  intercept.** The advisor's "a single constant cannot match both ends" — **MEASURED.**
+
+### F6 — ★★ THE SPREAD FACTORIZES **EXACTLY** — V AND z SEPARATE (P6b). SLICE 20 COULD NOT DO THIS
+
+`a_max_aero = ½·ρ(z)·V²·S·|C_Lα|·α_max/m` ⇒ `ceiling(t)/ceiling(0) ≡ [ρ(z)/ρ(z₀)]·[V/V₀]²` —
+an **IDENTITY, not an empirical fit**. Verified numerically: **residual 1.4e-17 / 0.0.**
+
+| arm | total spread | ρ-factor | V-factor |
+|-----|-------------:|---------:|---------:|
+| const ρ (TWIN) | 0.494 | **1.00000 (EXACTLY)** | 0.494 |
+| ρ(z) H = 8500  | 0.113 | **0.228** | 0.497 |
+| ρ(z) H = 12000 | 0.172 | 0.348 | 0.493 |
+| ρ(z) H = 25000 | 0.297 | 0.603 | 0.493 |
+
+**The V-factor is ≈0.49 in EVERY arm — they all lose the same speed (gravity), so the ENTIRE
+ceiling difference is ALTITUDE.** The advisor warned against an *additive* V-vs-z decomposition;
+this one is **MULTIPLICATIVE and exact by construction**, so the warning is satisfied by a
+stronger route than it asked for. **THE HEADLINE IS THE ρ-FACTOR** (1.000 → 0.228): pure z, no V
+confound, monotone by construction. **The twin's ρ-factor is EXACTLY 1: the constant-ρ model
+attributes 100% of its ceiling loss to speed. ρ(z) reveals the 4.4× it could not see.**
+
+### F7 — ⚠ AN ADVISOR PREDICTION **REFUTED**: there is NO small-H reversal (P3)
+
+The advisor predicted the [[ewsim-df-ellipse-sigma-monotonicity]] reversal at small H (thin air →
+the missile gives up → the miss shrinks). **It does not happen.** The miss is **MONOTONE
+DECREASING in H across the entire sweep**: 6821 m (H=2000) → 360.74 (8500) → 3.81 (40000) → the
+twin's 1.95 as H→∞. **The mechanism is the difference:** slice 20's reversal came from **SPEED
+loss** (a bled-out missile stops trying and coasts into a close pass). **Thin air costs ZERO
+speed here (K=0, cd=0) — it costs only AUTHORITY.** The missile flies fast and straight, right
+past the target. *(A 4 m blip at H 10000→12000 is near-hit frame-sampling noise, not a reversal.)*
+
+### F8 — THE LEAK IS THE BINDING CONSTRAINT (P6a) ⇒ **H ∈ [6000, 25000]**, MEASURED
+
+slice-19 FINDING 14's ceiling leak (α_max bounds the COMMAND; lift uses the ACHIEVED α):
+
+| H | 2000 | 2500 | **3000** | 3500 | 5000 | **6000** | 8500 | 25000 |
+|---|-----:|-----:|-----:|-----:|-----:|-----:|-----:|-----:|
+| α_pk (α_max = 0.2) | 0.2013 | 0.2006 | **0.2000** | 0.1993 | 0.1964 | **0.1940** | 0.1867 | 0.1215 |
+| | ★LEAK | ★LEAK | ★LEAK | ok | ok | ok | ok | ok |
+
+**Leak boundary H = 3000 ⇒ floor 6000 (a 2× margin — the slice-20 K discipline).** `defl_sat == 0`
+EVERYWHERE (the fourth cap provably not standing in). Miss reads BOTH ways from the 8500 default:
+**6000 → 1706 m, 8500 → 360.74 m, 25000 → 6.29 m (a hit).**
+
+### F9 — THE STAGE-z FIX IS INVISIBLE TO STEADY-STATE TESTS (P5) — GOLDEN IT
+
+Entry-z vs stage-z: `max|Δz| = 0.77 m` over 90 s; **the miss moves 0.136 m on a 360 m lesson
+(0.04%)**. Exactly slice-17's entry-θ shape (0.019 m / 8 s). **No steady-state test can catch it.**
+
+### F10 — THE COMPOSE IS REAL BUT MODEST (P6c) ⇒ CLOSED-FORM TOOTH, NOT A SCENARIO DIFF
+
+At K = 0.15 the ρ(z) arm's peak induced bill is 26.97 vs the twin's 20.29 (+33%). Real, but the
+trajectories differ so a scenario diff is confounded. **Ship it as a CLOSED-FORM unit test**
+(`|a_ind| = K·m·a_perp²/(Q·S)`: same `a_perp`, two Q's ⇒ bill ratio ≡ Q₁/Q₂), not a wire number.
+
+---
+
 ## THE LESSON — mirror slice 20's structure exactly
 
 **⭐ THE HEADLINE — the CEILING FACTOR `ρ(z)/ρ₀ = exp(−z/H)`, collapsing WITHIN one run.**
@@ -127,6 +241,44 @@ Substituting the α the autopilot must command, `α = a_perp·m/(Q·S·C_Lα)`, 
 21 — but **convention 9**: slice 20 already teaches the bill, and re-teaching it here muddies the
 new z→ρ→ceiling axis. **Ships as a test tooth (with K > 0) + a named observation. The showcase
 stays on the ceiling factor with K = 0.**
+
+---
+
+## ⚠ THE OPEN QUESTION GATE 0 EXPOSED — THE TWIN IS NOT LIVE-REACHABLE
+
+**The no-rung argument has a hole the slice-20 precedent does not cover, and it is worth stating
+precisely because it cuts against the planned framing (§3 above).**
+
+The precedent test is *"a rung must name physics the knob cannot express — and `:free` IS
+`K = 0`."* That works for slice 20 because **`K = 0` is a legal, exact, IN-DOMAIN slider position
+(the minimum).** The knob genuinely expresses the OFF state.
+
+**For H it is FALSE.** Constant ρ is `H = ∞` — **a limit point, not a slider position. NO finite H
+produces it.** To get within 1% of constant at z = 14 km needs `H ≈ 1.4e6 m` — the slider would
+span six orders of magnitude. So the sentence "the knob already expresses that state" is
+**not true here**, and with it goes the direct slice-20 analogy.
+
+**The practical consequence:** `set_param` sets a value; **it cannot REMOVE a key.** So the
+constant-ρ twin **cannot be an arm of the live wire** the way slice-20's `K = 0` and slice-19's
+`:point_mass` could. A Godot verifier drives ONE server (one scenario) — it has no way to reach it.
+
+**The resolution taken (pending advisor):** keep **NO RUNG**, and put the twin where it actually
+belongs — **`test_missile.jl`, not the wire**:
+- **The TEST owns the twin** (Julia constructs both worlds freely): key-absent ⇒ **byte-identical
+  to slices 19/20** (the master check), plus the F5 "no constant matches the spread" tooth and the
+  F6 exact factorization. This is where byte-identity lives anyway.
+- **The WIRE owns the KNOB**: the lesson reads off the H slider, which spans hit → catastrophic
+  miss (25000 → 6.29 m; 8500 = Earth → 360.74 m; 6000 → 1706 m) and whose **ρ-factor headline is
+  monotone across the whole range** (F6/F7).
+- The `:airframe` button stays THE toggled fidelity (convention 9), as slice 19/20's reference arm.
+
+**Why not just add the rung?** It would buy a live constant-ρ arm — but `:constant` names no
+physics ρ(z) lacks; it names the *absence* of a gradient, which is the OLD model, and the whole
+suite already gates old models on key presence (`af_cma`, `af_k_induced`). Adding a rung to make a
+verifier's life easier is a **test-convenience argument, not a physics one**, and `LIVE_FIDELITY_MODES`
+should not grow on that basis. **But the honest note stands: the slice-20 precedent does NOT
+license the no-rung call here — it has to stand on its own feet, and the argument above is the one
+it stands on.**
 
 ---
 
