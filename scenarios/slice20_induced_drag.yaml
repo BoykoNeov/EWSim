@@ -1,0 +1,176 @@
+# slice20_induced_drag — INDUCED DRAG: **the missile lowers its own ceiling by maneuvering**
+# (HANDOFF §11 Tier-A, slice 20 gate 3). The project's FIRST POSITIVE-FEEDBACK LOOP.
+#
+# Slices 17/19 shipped an EXPLICIT §1 approximation: *"lift is drag-free / speed-preserving (⟂ v)"*.
+# This scenario cashes it. Lift ⟂ v turns the flight path; induced drag ∥ −v̂ SENDS THE INVOICE —
+# and the invoice is paid in the very currency that buys the turn:
+#
+#     pull α → pay K·C_L² in drag → V falls → Q = ½ρV² falls → a_max_aero = Q·S·C_Lα·α_max/m falls
+#            → the ceiling CATCHES the demand → you cannot pull → you miss
+#
+# SLICE 19 vs SLICE 20 — the one-line difference. Slice 19: the maneuver ceiling is a FLIGHT
+# CONDITION; it binds, and you miss. Slice 20: the ceiling is a flight condition **YOU DEGRADE BY
+# USING IT**. Slice 19 moved this ceiling with the ρ knob — a flight condition the ENGINEER dialled.
+# Here the MISSILE moves it, by turning. Nobody lowered it.
+#
+# THE LESSON KNOB (drag `af_k_induced` and watch, gate-0 FINDING 9 — all LOS-gated):
+#   K = 0.0  → miss   1.27 m (a HIT)   V 663.6   ceiling 242.1   aero_sat  0.0%
+#   K = 0.15 → miss 103.07 m           V 433.3   ceiling 103.2   aero_sat 22.2%   ← ships here
+#   K = 0.30 → miss 714.10 m (a MISS)  V 212.7   ceiling  24.9   aero_sat 61.1%
+# HIT → MISS is 562×; the ceiling collapses 10×. **`aero_sat 0.0% → 61.1%` IS THE HEADLINE**: at
+# K = 0 the aero ceiling NEVER BINDS ONCE — it is not a factor in the engagement at all. The
+# geometry, the target, α_max and ρ are ALL HELD; only K changes.
+#
+# ⚠ THE CLAIM IS BOUNDED — DO NOT OVERSTATE IT (gate-0 FINDING 5; the convention-4 copy-paste
+# false-claim trap). **"bleed → ceiling → miss" is what ANY speed loss does** — matched on ΔV, a
+# parasitic `cd_area` reproduces this miss and this ceiling almost exactly (45.02 m / 173.2 vs
+# 44.17 m / 176.3). The spiral's DOWNSTREAM is NOT evidence of INDUCED drag. What IS distinctive is
+# the SOURCE of the bill, and it is pinned as a TEST (test_missile.jl), not asserted in prose:
+#   • induced   = a CLOSED LOOP — written BY THE MANEUVER (∝ α²). A straight fly-out: **0.06 m/s**.
+#   • parasitic = an OPEN-LOOP TOLL — set by cd_area. The same fly-out: **75–136 m/s**.
+#
+# AND NOT THIS (gate-0 FINDING 7 — a prediction REFUTED by its own probe): "a harder engagement
+# costs more" is **FALSE**. Holding K fixed and hardening the target's maneuver, the attributable
+# bill FALLS (194 → 117 m/s) — a jinking target SHORTENS time-of-flight and the α_max clamp caps α
+# anyway. THE TARGET HERE DOES NOT MANEUVER AT ALL, deliberately: **the missile pays for its own
+# turn onto the collision course.** Say "the turn you must make to intercept bills you", NEVER
+# "dogfighting costs speed". Sharper and honest: even against a target doing nothing, your own
+# required maneuver eats the ceiling.
+#
+# THE CAP LANDSCAPE — this slice adds NO new cap; it makes cap #4 MOVE (conventions 4/11):
+#   slice 10/12  a_max        — an authored MAGNITUDE clamp (a number the engineer chose)
+#   slice 15     k_δ·δ̇_max    — a JERK / g-onset-rate cap
+#   slice 15     δ_max        — a DEFLECTION cap (pinned NON-binding here — see the isolation)
+#   slice 19     a_max_aero   — a FLIGHT-CONDITION cap: what the air gives you RIGHT NOW
+#   slice 20     …the same cap #4, now **SELF-LOWERING**. The novelty is the FEEDBACK, not a 5th cap.
+#
+# THE ISOLATION (RE-ESTABLISHED, NOT COPIED — gate-0 FINDING 8): slice 19 pins an UNGATED
+# `defl_sat == 0`, and that assertion CANNOT be copied here. It could only pin it because it MISSES
+# by 295 m and never reaches the endgame; with `r_stop = 0`, PN's ω → ∞ as r → 0 spikes a_cmd to
+# a_max and δ punches δ_max in the last few ticks of any run that actually HITS. The verifier
+# LOS-GATES its window (r > 300 m, t > 0.2 s), where defl_sat == 0 under BOTH arms — so the FOURTH
+# cap is provably not standing in for the lesson. `cd_area_m2: 0.0` keeps the isolation total: every
+# m/s this missile loses was provably bought with α.
+#
+# NO NEW FIDELITY RUNG (settled at the gate-0 advisor pass). A rung must name physics the knob
+# cannot express — and a `:free` rung IS `K = 0`, the slider's own minimum. This is the slice-16
+# `af_cma` precedent: a live KNOB that changes physics without being a fidelity button. The spiral
+# is also CONTINUOUS (watching aero_sat climb from 0 IS the lesson — a discrete flip throws the
+# animation away), and a two-state button would HIDE the non-monotonicity the bounded slider
+# respects. `airframe` stays THE button (the one toggled fidelity, convention 9) as slice 19's
+# REFERENCE ARM: point_mass HITS by fiat, pitch_coupled must earn its g from the air — and now pay
+# for it.
+#
+# Class 4c: physics-changing, NO RNG (truth-fed PN, no seeker → "draw-count invariance" is VACUOUS
+# — do NOT copy the slice-11/13 draw language), live-settable, NO set_fidelity guard (the
+# :integrator/:autopilot/:apn/:cooperation/:airframe precedent). The seed is inert (kept for format
+# consistency). UNITS (the §1 trifecta): pos/vel SI (m, m/s); Cmα/Cmδ/Cmq/C_Lα in 1/rad; K
+# DIMENSIONLESS; I in kg·m²; ρ in kg/m³; launch ELEVATION in DEGREES → radians at the loader;
+# α/θ/δ in radians; a_induced/a_max_aero in SI. dt = 1e-3 / emit_every = 16.
+name: slice20_induced_drag
+seed: 20
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # ONE toggled fidelity (convention 9): `airframe` — slice 19's REFERENCE ARM, kept because the
+  # contrast is what makes "must earn its g from the air" concrete. `guidance` is HELD at :pn and
+  # `autopilot` AUTHORED at :alpha so the plant and the bill are the only variables. Slice 20's own
+  # lesson is the `af_k_induced` SLIDER, not this button (the slice-16 shape).
+  #
+  # THE CROSS-FIDELITY DEPENDENCY (slice 19, the FIRST in the suite — restated, not implied):
+  # `:alpha`'s BEHAVIOUR DEPENDS ON `:airframe`. Under :point_mass it commands `:a_ctrl` by fiat
+  # (and there is no α, so NO induced drag exists — the bill is gated on the coupling too); under
+  # :pitch_coupled it commands a fin δ through the aero inversion and the maneuver accel is MADE BY
+  # LIFT — which is now billed.
+  airframe: pitch_coupled
+  guidance: pn
+  autopilot: alpha
+
+entities:
+  # The interceptor — coupled, guided, and now PAYING FOR ITS TURNS. Slice 19's airframe and
+  # autopilot are reused VERBATIM (α_max 0.2 rad ≈ 11.5° — a DEFENSIBLE stall limit, deliberately
+  # NOT inflated: gate-0 FINDING 3 rejected unpegging via α_max because 0.8 rad = 46° is absurd and
+  # it blips defl_sat off zero. This scenario unpegs by LOWERING THE DEMAND — a 9 km shot at a
+  # non-maneuvering target — so α TRACKS DEMAND instead of sitting on the clamp).
+  #
+  # WHY α MUST TRACK DEMAND (gate-0 FINDING 2 — the trap that killed the first design): at slice
+  # 19's own geometry the α command is PEGGED at the clamp 59% of the run. A pegged command is a
+  # CONSTANT command ⇒ α ≈ const ⇒ K·C_L² ≈ const ⇒ **induced drag degenerates into PARASITIC drag
+  # in a costume** (the false-fidelity trap, 5th occurrence in this arc). Here α_pk runs 0.133 →
+  # 0.177 and NEVER reaches the 0.2 clamp: the loop is demand-limited, and the bill VARIES with the
+  # turn — which is the whole point.
+  #
+  # cd_area_m2 0.0 — parasitic drag OFF. Not laziness: it is THE ISOLATION. With C_D0 = 0 every m/s
+  #   lost is provably bought with α, so the speed trace IS the maneuver's invoice.
+  # k_induced 0.15 — the lumped induced-drag factor, opening MID-RANGE so the slider reads BOTH
+  #   ways (down → the hit, up → the 714 m miss). LUMPED (the `cd_area` = "lumped Cd·A" precedent),
+  #   NOT decomposed as 1/(π·e·AR): this airframe's C_Lα = 20/rad is AUTHORED high, so C_L reaches
+  #   ≈3 at α = 0.15 and the K that shows a spiral is correspondingly large. **Do not quote an
+  #   implied aspect ratio** — C_Lα is not derived from geometry here, so K = 1/(π·e·AR) would be
+  #   false precision. K is authored to the same standard as the rest of this airframe (§1).
+  # a_max 3000 / delta_max 0.4 / k_alpha 1.0 / k_q 0.3 — slice 19's, unchanged. k_alpha/k_q are
+  #   AUTHORED CONSTANTS AND NEVER KNOBS (slice-19 gate-0 FINDING 14: the α_max clamp bounds the
+  #   COMMAND while lift uses the ACHIEVED α, so a hot loop overshoots the clamp and the ceiling
+  #   LEAKS). That matters MORE here: gate-0 FINDING 11 measured exactly that leak at K ≥ 0.8
+  #   (α_pk 0.582 ≫ α_max 0.2, defl_sat 0 → 1289) — which is why the knob stops at 0.3.
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.225
+      guidance: {n_pn: 4.0, a_max: 3000.0, delta_max: 0.4, k_alpha: 1.0, k_q: 0.3}
+      airframe: {ref_len_m: 0.2, inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0, cmq: -150.0, cla: 20.0, alpha_max: 0.2, k_induced: 0.15}
+  # The target — a NON-MANEUVERING aircraft at 9 km (no `maneuver:` block ⇒ plain ConstantVelocity,
+  # the slices-1..11 mover). THE ABSENCE OF A MANEUVER IS LOAD-BEARING, not a simplification:
+  #   • gate-0 FINDING 7 REFUTED "a harder engagement costs more" — a jinking target CONFOUNDS the
+  #     bill through time-of-flight, and the α clamp caps α anyway. A maneuvering target would let a
+  #     reader attribute the bleed to the TARGET. Here there is nobody to blame but the missile.
+  #   • |v| ≈ 825 > 700 ⇒ it OUTRUNS the missile ⇒ a clean FIRST CPA with no curve-back second
+  #     crossing ([[ewsim-missile-verifier-sampling]] — load-bearing for the verifier, not decor).
+  #   • PLANAR in x–z (every y = 0) — the §1 pitch-plane out-of-plane discard would make an
+  #     out-of-plane maneuver unflyable BY CONSTRUCTION and it would read as a bug.
+  - id: t1
+    kind: target
+    pos: [9000.0, 0.0, 4200.0]
+    vel: [-800.0, 0.0, 200.0]
+    target: {rcs_m2: 1.0}
+
+knobs:
+  # ONE knob, deliberately — the lesson is one-dimensional and every other candidate is CONFOUNDED
+  # by the new drag term (the slice-16 single-lesson-slider shape):
+  #
+  # • af_k_induced — THE LEVER, and the ONLY clean one. K enters **only** the drag term, so it moves
+  #   the bill with the geometry, the ceiling's formula, ω_sp, ρ, α_max and mass ALL fixed. That is
+  #   precisely what makes it this slice's causation knob.
+  #
+  #   RANGE [0, 0.3] IS MEASURED, NOT COSMETIC (gate-0 FINDINGS 6 + 11). The miss is NON-MONOTONE in
+  #   K in general — at 6 km against a maneuvering target it PEAKS at K≈0.3 and COLLAPSES to 33 m by
+  #   K=0.8 (the missile bleeds to ~96 m/s, stops trying, and flies ~ballistically into a close pass
+  #   — the exact INVERSE of the lesson; the [[ewsim-df-ellipse-sigma-monotonicity]] pattern, 4th
+  #   occurrence). THIS config does not reverse (a bled-out missile against a non-maneuvering target
+  #   simply falls short) — but it CONTAMINATES from K ≥ 0.8: defl_sat 0 → 1289, cpa never closes,
+  #   and α_pk 0.582 OVERSHOOTS α_max (slice-19's ceiling LEAK). Clean and monotone: K ∈ [0, 0.6].
+  #   The max sits at 0.3 — a **2× margin**, measured.
+  #
+  #   0 is a legal, meaningful position: it is slices 17/19's "lift is drag-free" approximation,
+  #   authored explicitly. The floor is 0 because a NEGATIVE K is a drag that ACCELERATES (rejected
+  #   at load — unlike cma/cla, this limit has no lesson-adjacent negative branch).
+  #
+  # NOT KNOBS, deliberately:
+  # • af_alpha_max — slice 19's CAUSATION lever is DISQUALIFIED here (advisor). There it was clean
+  #   because it touched ONLY the α_cmd clamp; now it ALSO feeds the induced drag through the
+  #   ACHIEVED α (pull harder AND bleed more — two competing effects). It is no longer isolated and
+  #   can never be this slice's counterfactual.
+  # • rho — moves the ceiling AND the bill together (both ∝ ρ): doubly confounded, and it is slice
+  #   19's lever telling slice 19's story (convention 9 — one lesson per scenario).
+  # • cd_area_m2 — the parasitic contrast is REAL but belongs in a CONTROLLED straight-flight
+  #   comparison (the test), not an interactive slider: at matched ΔV over THIS intercept the two
+  #   drags look nearly identical (FINDING 5), so a slider would teach "induced drag is just drag".
+  # • k_alpha/k_q — the ceiling leaks (see above); the geometry; the launch `speed` (consumed ONCE
+  #   at load and read by NOTHING per-tick — it would be a DEAD knob; slice-19's gate-3 finding).
+  - {target: m1, key: af_k_induced, min: 0.0, max: 0.3, label: "K induced-drag factor (C_Di = K·C_L² — THE BILL for the turn)"}

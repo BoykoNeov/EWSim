@@ -2358,6 +2358,48 @@ end
         @test free.gated > 1000 && paid.gated > 1000  # the window is real, not an empty scan
     end
 
+    @testset "⭐ THE DISCRIMINATOR — induced bills the TURN; parasitic bills the FLIGHT" begin
+        # ⚠ THE TOOTH THAT EARNS THIS SLICE ITS TITLE (advisor, load-bearing). Gate-0 FINDING 5:
+        # matched on ΔV, a parasitic `cd_area` reproduces the induced miss AND ceiling almost
+        # exactly (45.02 m / 173.2 vs 44.17 m / 176.3). So the spiral's DOWNSTREAM —
+        # bleed → Q → ceiling → miss — is what ANY speed loss does and is NOT evidence of induced
+        # drag. The ONLY distinctive claim is the SOURCE of the bill, and it lives HERE or nowhere:
+        #   • induced  = a CLOSED LOOP, written BY THE MANEUVER (∝ α²) — self-inflicted.
+        #   • parasitic = an OPEN-LOOP TOLL, set by cd_area — it arrives whatever you do.
+        # Without this test the slice's name is unearned by its suite.
+        #
+        # A STRAIGHT fly-out: the target is parked 400 km away and stationary, so PN's λ̇ ≈ 0, the
+        # missile commands ≈ no α, and it coasts on gravity alone. The ATTRIBUTABLE bill is
+        # `ΔV(drag) − ΔV(no drag)` on the SAME arm — which cancels gravity and time-of-flight (the
+        # confound that REFUTED FINDING 7's demand story; see the header).
+        function coast(; K = nothing, cd = 0.0, T = 4.0)
+            w, s = k_world(K = K)
+            m = w.entities[:m1]
+            m.comp[:cd_area_m2] = cd
+            w.entities[:t1].pos = Vec3(400000.0, 0.0, 3000.0)
+            w.entities[:t1].vel = Vec3(0.0, 0.0, 0.0)
+            V0 = n3(m.vel)
+            for _ in 1:round(Int, T / dt); tick!(w, s, dt); empty!(w.events); end
+            return (dV = V0 - n3(m.vel), α = abs(get(w.env[:telemetry], "m1.alpha", 0.0)))
+        end
+        base   = coast(K = 0.0)
+        ind    = coast(K = 0.3)                  # the SHIPPED knob maximum
+        para   = coast(K = 0.0, cd = 0.02)
+        @test base.α < 0.01                      # it really is flying straight (α ≈ 0)
+        # 1. INDUCED BILLS A STRAIGHT FLIGHT ~NOTHING — α² = 0, so there is nothing to pay for.
+        #    (probed: 0.06 m/s over 4 s, against a 700 m/s missile.)
+        @test ind.dV - base.dV < 1.0
+        # 2. PARASITIC BILLS IT ANYWAY — same flight, same 4 s, no maneuver: ~136 m/s (probed).
+        @test para.dV - base.dV > 50.0
+        # 3. …and they differ by MORE THAN TWO ORDERS OF MAGNITUDE on the same coast. `K` is
+        #    provably NOT `cd_area` in a costume (the convention-4 false-fidelity trap, which this
+        #    arc has now hit five times).
+        @test (para.dV - base.dV) > 50.0 * (ind.dV - base.dV)
+        # 4. THE SAME K, NOW ASKED TO TURN, bills ~450 m/s (fly_k's intercept). The bill is written
+        #    by the MANEUVER, not by the airframe's existence — that IS the closed loop.
+        @test fly_k(K = 0.0).V - fly_k(K = 0.3).V > 200.0
+    end
+
     @testset "the drag is gated on the COUPLING too — :point_mass has no lift to bill for" begin
         # `a_induced` is KEY-gated AND RUNG-gated (inside the `:pitch_coupled` block — the slice-17
         # lift-keys precedent). Under `:point_mass` there is no α and no lift, so a bill would be
