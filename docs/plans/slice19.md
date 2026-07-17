@@ -369,6 +369,17 @@ Slices 1–18 byte-identical through the include.
   is the verdict), plus an `aero_sat` tell. **Watch-item:** `_setup_spatial_fid_btn` checks the airframe
   branch FIRST (the slice-16→17→18 value-guard chain) — verify slice 16 STILL drops the button and slice 18's
   terrain branch is untouched.
+- **⚠ GATE-2 FINDING (advisor) — THE PLOT AND THE FLAG KEY OFF DIFFERENT QUANTITIES. Decide this
+  CONSCIOUSLY at gate 3; it is not in the plan-of-record.** `aero_sat` fires on `|a_perp|` (the ⟂-v
+  PROJECTION) `> a_max_aero`, while `a_demand` is the FULL-magnitude pre-clamp PN demand. Since
+  `|a_perp| ≤ |a_cmd| ≤ |a_dem|`, the sets nest: **`{a_demand > a_max_aero} ⊇ {aero_sat}`** — so a client
+  plotting `a_demand` vs `a_max_aero` reads "ceiling breached" EARLIER and MORE OFTEN than the flag
+  lights (this is exactly why gate 0 measured 59%, not higher — the along-v̂ component reaches 0.55·|a_cmd|
+  and is unproducible by an airframe). Consequences: **(a) the verifier's "ceiling binds" assertion MUST
+  key off `aero_sat`, NEVER a hand-rolled `a_demand > a_max_aero`** (test_missile already does this
+  correctly); **(b)** for the visual crossing to agree with the flag EXACTLY you would have to ship
+  `a_perp` as a 7th key — otherwise accept the plot as ILLUSTRATIVE, NOT EXACT, and say so in the HUD.
+  The shipped telemetry supports either choice.
 - `net/slice19_verify.gd` (drives the real server). **EVERY assertion is on FRAME-SAMPLED values —
   sub-metre is UNREACHABLE on the wire (GATE-0 CORRECTION, blocking):** closing speed at CPA ≈ **1373
   m/s** and `emit_every=16` ⇒ frames ≈ **22 m apart** near CPA, so a TRUE 0.276 m point-mass CPA is

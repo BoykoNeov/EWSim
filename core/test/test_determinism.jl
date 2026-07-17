@@ -1108,10 +1108,20 @@ end
                              toggle_to = :ideal)
         @test reinterpret(UInt64, ti1) == reinterpret(UInt64, ti2)     # deterministic in both directions
 
-        # (4) SLICES 1–18 BYTE-IDENTICAL — the master check. Introducing `:alpha` on a missile with NO
-        # airframe params is not a no-op (it flies a_ctrl like :ideal — that IS the reference arm), so
-        # the byte-identity claim is the OTHER one: a scenario that never SETS `:alpha` is untouched by
-        # this slice existing. `:ideal` on an airframe missile ≡ never having the rung.
+        # (4) A scenario that never SETS `:alpha` is untouched by this slice existing — `:ideal` on an
+        # airframe missile ≡ never having the rung. (Introducing `:alpha` on a params-less missile is
+        # NOT a no-op: it flies a_ctrl like :ideal — that IS the reference arm, by design.)
+        #
+        # NOTE THE LIMIT OF THIS CLAIM (advisor) — do NOT read this testset as the master check, it is
+        # not one: this is A-vs-B determinism and CANNOT prove "slices 1–18 unchanged vs BEFORE slice
+        # 19". That proof is (a) BY CONSTRUCTION — the ONLY edit to a shared execution path is
+        # `_integrate_coupled!`'s `get(c, :af_delta, 0.0)` → `get(c, :delta_cmd, get(c, :af_delta,
+        # 0.0))`, which returns the IDENTICAL Float64 when `:delta_cmd` is absent (a lookup, no
+        # arithmetic ⇒ no 1-ULP path), and the `decide!` restructure is TEXTUALLY PRESERVING for
+        # non-`:alpha` modes (if/elseif/else with unchanged arm bodies + a store guard that is
+        # always-false for them); and (b) the STILL-GREEN PRE-EXISTING goldens — the `_sample_z`
+        # absolute golden and the slice-17 transient golden, which exercises the coupled path directly.
+        # Those are the master check; this is the 4c fingerprint.
         _, tno1 = alpha_trace(autopilot = :ideal, airframe = :pitch_coupled)
         _, tno2 = alpha_trace(autopilot = :ideal, airframe = :pitch_coupled)
         @test reinterpret(UInt64, tno1) == reinterpret(UInt64, tno2)
