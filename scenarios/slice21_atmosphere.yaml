@@ -1,0 +1,189 @@
+# slice21_atmosphere — THE EXPONENTIAL ATMOSPHERE: **the ceiling you lower by CLIMBING**
+# (HANDOFF §11 Tier-A, slice 21 gate 3). The honest completion of slices 19/20's constant-ρ.
+#
+# Slices 19 and 20 were under standing orders to say *"low dynamic pressure (thin air / slow)"* and
+# NEVER unqualified *"high altitude"* — because ρ was a number an engineer typed, not a consequence
+# of where the missile flew. Only V could move Q = ½ρV². Here ρ = ρ₀·exp(−z/H), and the phrase is
+# EARNED:
+#
+#     climb → ρ(z) falls → Q falls → a_max_aero = Q·S·C_Lα·α_max/m falls → you cannot pull → you miss
+#
+# ⚠ THE CAVEAT LIFTS ONLY HERE. A slice-19/20 wire carries no `scale_height_m` and runs
+# `:atmosphere = constant`: its ρ is still authored, and the OLD language still governs there.
+#
+# THE THREE-SLICE ARC, in one line each — the ceiling is the SAME cap (#4) all three times:
+#   slice 19: it is a FLIGHT CONDITION, and it BINDS. The ENGINEER moved it (the `rho` knob).
+#   slice 20: you DEGRADE IT BY USING IT. The MISSILE moved it, by TURNING (V bleed).
+#   slice 21: it is a property of WHERE YOU FLY. The missile moves it by CLIMBING — and the climb
+#             is not optional: it is how you reach the target at all.
+#
+# ⭐ THE HEADLINE IS THE ρ-FACTOR ρ(z)/ρ₀, COLLAPSING **0.889 → 0.203 (4.4×) WITHIN ONE RUN.**
+# It is PURE ALTITUDE with NO speed confound, and monotone by construction (exp cannot reverse).
+# That last part is not luck — it is an ALGEBRAIC IDENTITY, and it is what slice 20 could never do:
+#
+#     a_max_aero = ½·ρ(z)·V²·S·|C_Lα|·α_max/m   ⇒   ceiling(t)/ceiling(0) ≡ [ρ(z)/ρ(z₀)]·[V/V₀]²
+#
+# so ALTITUDE and SPEED separate EXACTLY, with no residual (verified to 1.4e-17). On this run:
+#   • total ceiling spread 8.83×  =  ρ-factor 4.38×  ×  V-factor 2.03×
+#   • THE TWIN's ρ-factor is **EXACTLY 1.0** — the constant-ρ model attributes **100%** of its
+#     ceiling loss to speed (that 2.03× is GRAVITY on the climb). ρ(z) reveals the 4.4× it could
+#     not see. **That is the whole slice in one number.**
+#
+# THE LESSON ON THE WIRE (the `atmosphere` BUTTON — the live side-by-side IS the punchline):
+#   :constant    → miss    1.949 m  (a HIT)   ceiling 269.4 → 133.0   aero_sat  0/42928 — NEVER binds
+#   :exponential → miss  360.739 m  (185×)    ceiling 239.5 →  27.1   aero_sat 12194  ← ships here
+# The old model does not merely mis-predict the miss: it thinks the air at 13.6 km is as thick as
+# at sea level, so its ceiling NEVER BINDS ONCE and the engagement looks EASY. **Constant ρ was
+# lying to you at altitude.**
+#
+# WHY A RUNG AND NOT A KNOB (unlike slice 16's `af_cma` / slice 20's `af_k_induced`). The suite's
+# real discriminator is: **is the off-state (a) a distinct code path and (b) NOT knob-reachable?**
+# `K = 0` is the slider's own minimum — an IN-DOMAIN value, so slice 20 needed no rung. Constant ρ
+# is `H = ∞`: a LIMIT POINT no finite H reaches (within 1% at 13.6 km needs H ≈ 1.4e6). It is also
+# a distinct code path. BOTH criteria say rung. And the tempting refusal — ":constant names no
+# physics ρ(z) lacks, only the ABSENCE of a gradient" — is word-for-word what `:airframe =
+# point_mass` and `:propagation = free_space` already are: applied consistently it deletes two
+# shipped rungs, so it cannot be the test. (Settled at the gate-0 advisor pass; atmosphere.jl's
+# header carries the full argument, because the result outlives this slice.)
+#
+# ⚠ EVERY PART OF THIS ENGAGEMENT IS LOAD-BEARING — IT IS NOT A SLICE-20 RESKIN (gate-0 F1–F3):
+#
+#  • A SLOW, DISTANT, HIGH TARGET. "Just make it climb" is UNFLYABLE (F1): a 700 m/s missile needs
+#    ~15 s to climb 6 km, in which a head-on 800 m/s target covers 12 km — so "climbs a lot" and
+#    "closes fast" are MUTUALLY EXCLUSIVE, and every steep-climb geometry missed by KILOMETRES
+#    under BOTH arms (the REACH wall, not the ceiling). Worse, launching high enough to shorten the
+#    climb made the TWIN saturate 46.6% — that is SLICE 19's lesson, not this one.
+#
+#  • THE TARGET JINKS, AND IT MUST (F2 — the finding that killed the first design). Without a late
+#    demand the ρ(z) missile turns EARLY, LOW, in THICK air, arrives on a good collision course,
+#    and **by the time it is high and cannot maneuver it NO LONGER NEEDS TO** — measured: a ceiling
+#    of 16.5 m/s² (1.7 g) at 16 km, and it still only missed by 29 m. PN NULLS LOS RATE, so
+#    terminal demand against a straight-flier → 0 BY CONSTRUCTION. Late demand is STRUCTURAL.
+#
+#  • ⚠ SLICE 20 FORBADE A MANEUVERING TARGET — **DO NOT COPY THAT RULE HERE** (F3). It existed to
+#    attribute the induced-drag BILL ("the missile pays for its own turn"). **HERE K = 0: THERE IS
+#    NO BILL.** The jink is a DEMAND SOURCE, not the lesson — and the `:constant` twin flies the
+#    IDENTICAL geometry against the IDENTICAL jink and HITS, which controls for the target
+#    completely. Nor is this slice 12 (PN-vs-maneuvering-target): the twin proves plain PN handles
+#    this jink comfortably at sea-level density — its ceiling never binds ONCE.
+#
+#  • K = 0 AND cd_area = 0 — THE ISOLATION, and it is total. Nothing bleeds speed but GRAVITY, and
+#    the twin carries that same gravity, so the twin DIFFERENCE is PURE ALTITUDE. (Do not switch
+#    induced drag on here to "compose 20 and 21": it would confound the one clean thing this
+#    scenario has. The compose ships as a CLOSED-FORM TEST — a_ind ∝ 1/Q, the same turn bills more
+#    up high — precisely because gate-0 F10 found the wire number confounded.)
+#
+# THE CAP LANDSCAPE — this slice adds NO new cap; it gives cap #4 a SECOND way to move:
+#   slice 10/12  a_max        — an authored MAGNITUDE clamp (INERT here: 3000 ≫ the 269 ceiling)
+#   slice 15     k_δ·δ̇_max    — a JERK / g-onset-rate cap (not in this loop)
+#   slice 15     δ_max        — a DEFLECTION cap (pinned NON-binding: defl_sat == 0 under BOTH arms)
+#   slice 19     a_max_aero   — the FLIGHT-CONDITION cap. 20 made it self-lowering via V; 21 makes
+#                               it a function of WHERE YOU FLY. Same cap, a third mover.
+#
+# Class 4c: physics-changing, NO RNG (truth-fed PN, no seeker → "draw-count invariance" is VACUOUS
+# — do NOT copy the slice-11/13 draw language). Live-settable, NO set_fidelity guard (the
+# :integrator/:autopilot/:apn/:cooperation/:airframe precedent). The seed is inert (kept for format
+# consistency). UNITS (the §1 trifecta): pos/vel SI (m, m/s); Cmα/Cmδ/Cmq/C_Lα in 1/rad; H and z in
+# METRES; ρ₀ in kg/m³; launch ELEVATION in DEGREES → radians at the loader; α/θ/δ in radians.
+# dt = 1e-3 / emit_every = 16. NB this is a LONG shot — CPA at t ≈ 43.5 s (~2700 frames): a 22 km
+# climbing intercept takes that long, and the slice-18 verifier already ran 2500 frames.
+name: slice21_atmosphere
+seed: 21
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # ONE toggled fidelity (convention 9): `atmosphere`. THE BUTTON IS THE LESSON — flip it and the
+  # old model HITS while the real atmosphere MISSES, on identical everything else.
+  #
+  # `airframe` is AUTHORED FIXED at :pitch_coupled and is NOT the contrast here (it was slice
+  # 19/20's). The missile must stay COUPLED for a lift ceiling to EXIST at all — under :point_mass
+  # it applies a_ctrl by fiat and there is no ceiling to lower. `guidance` HELD at :pn and
+  # `autopilot` AUTHORED at :alpha, so the AIR is the only variable.
+  #
+  # THE CROSS-FIDELITY DEPENDENCY (slice 19, the FIRST in the suite — restated, not implied):
+  # `:alpha`'s BEHAVIOUR DEPENDS ON `:airframe`. Under :point_mass it commands `:a_ctrl` by fiat;
+  # under :pitch_coupled it commands a fin δ through the aero inversion and the maneuver accel is
+  # MADE BY LIFT — which is what ρ(z) now ceilings.
+  atmosphere: exponential
+  airframe: pitch_coupled
+  guidance: pn
+  autopilot: alpha
+
+entities:
+  # The interceptor — slice 19/20's airframe and autopilot VERBATIM (α_max 0.2 rad ≈ 11.5°, a
+  # DEFENSIBLE stall limit, deliberately NOT inflated). It launches LOW (1 km) and must CLIMB
+  # ~12.6 km to reach the target: the climb is not decoration, it is the only way to the target,
+  # and it is what takes the ceiling away.
+  #
+  # rho 1.225 — under :exponential this is REINTERPRETED as ρ₀, the density AT SEA LEVEL. At z = 0
+  #   the two rungs agree EXACTLY (test_atmosphere.jl pins that with `==`, not `≈`), which is what
+  #   lets one authored number serve both arms honestly.
+  # scale_height_m 8500 — **EARTH'S ACTUAL SCALE HEIGHT.** The showcase default is the REAL
+  #   physical value, not a tuned one: this missile misses because of the atmosphere we live in.
+  # cd_area_m2 0.0 / no k_induced — THE ISOLATION (see the header). Gravity is the only thing that
+  #   bleeds V, and the twin bleeds identically.
+  # a_max 3000 / delta_max 0.4 / k_alpha 1.0 / k_q 0.3 — slice 19's, unchanged. k_alpha/k_q are
+  #   AUTHORED CONSTANTS AND NEVER KNOBS (slice-19 gate-0 FINDING 14: α_max bounds the COMMAND
+  #   while lift uses the ACHIEVED α, so a hot loop overshoots the clamp and the ceiling LEAKS).
+  #   That is exactly what bounds the H knob below.
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 1000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 25.0
+      cd_area_m2: 0.0
+      rho: 1.225
+      guidance: {n_pn: 4.0, a_max: 3000.0, delta_max: 0.4, k_alpha: 1.0, k_q: 0.3}
+      airframe: {ref_len_m: 0.2, inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0, cmq: -150.0, cla: 20.0, alpha_max: 0.2, scale_height_m: 8500.0}
+  # The target — a SLOW, HIGH, JINKING aircraft at 22 km / 14 km (a high-altitude recon/bomber, the
+  # engagement this lesson actually belongs to). PLANAR in x–z (every y = 0) — the §1 pitch-plane
+  # out-of-plane discard would make an out-of-plane maneuver unflyable BY CONSTRUCTION and it would
+  # read as a bug. See the header for why slow (F1, the reach wall) and why jinking (F2/F3).
+  #
+  # a_lat 40 is a WINDOW, and the bound is measured, not decorative: at a_lat = 60 the TWIN misses
+  # too (the demand outruns even a sea-level ceiling → the contrast collapses into slice 19's
+  # lesson), and at a target speed of 400 m/s BOTH arms hit the F1 reach wall and miss by km.
+  - id: t1
+    kind: target
+    pos: [22000.0, 0.0, 14000.0]
+    vel: [-250.0, 0.0, 0.0]
+    target: {rcs_m2: 1.0, maneuver: {a_lat_mps2: 40.0, turn_sign: 1.0}}
+
+knobs:
+  # ONE knob — the SEVERITY of the lesson the button turns on. H is not the density (that is ρ₀);
+  # it is the RATE AT WHICH THE AIR THINS — the one degree of freedom no constant ρ has, and the
+  # reason `:constant` cannot be reached by dragging this slider anywhere.
+  #
+  # It is read EVERY tick by BOTH integrate! and decide! (via `_airframe_rho`), so it is live by
+  # construction — the OPPOSITE of slice-19's DEAD `speed` knob (consumed once at load, read by
+  # nothing, and a no-crash test passed on it). The not-a-dead-knob tripwire ships anyway.
+  #
+  # RANGE [6000, 25000] IS MEASURED (gate-0 F8), and the FLOOR is the binding constraint:
+  #   H = 25000 → miss     6.29 m (nearly a HIT — a deep, slowly-thinning atmosphere forgives)
+  #   H =  8500 → miss   360.74 m  ← EARTH. Ships here, and the slider reads BOTH ways from it.
+  #   H =  6000 → miss  1706.49 m (α_pk 0.194 — still 3.0% under the clamp)
+  #   H ≤  3000 → ★ THE CEILING LEAKS: α_pk ≥ 0.2000 BREACHES α_max (slice-19 FINDING 14 — the
+  #               clamp bounds the COMMAND, lift uses the ACHIEVED α). The floor sits at 2× that
+  #               boundary — the slice-20 K discipline.
+  #
+  # ⚠ THE MISS DOES **NOT** REVERSE IN H, and that prediction was explicitly REFUTED (F7). Slice
+  # 20's K reversed (a bled-out missile stops trying and coasts into a close pass) because its
+  # penalty was SPEED. Thin air costs ZERO speed here — it costs only AUTHORITY, so the missile
+  # flies fast and STRAIGHT PAST: the miss is monotone across the whole sweep. The
+  # [[ewsim-df-ellipse-sigma-monotonicity]] pattern does NOT apply. (Headline the ρ-factor anyway:
+  # it is monotone BY CONSTRUCTION, which the miss only happens to be.)
+  #
+  # NOT KNOBS, deliberately:
+  # • rho (ρ₀) — slice 19's lever telling slice 19's story (convention 9), and it scales the WHOLE
+  #   profile: it moves the ceiling everywhere at once and cannot produce a GRADIENT. That is the
+  #   precise difference this slice exists to show.
+  # • af_alpha_max — slice 19's causation lever, DISQUALIFIED here for slice-20's reason and one
+  #   more: it is the very clamp whose leak bounds H, so moving it moves the bound.
+  # • launch/target ALTITUDE — the obvious knob and a DEAD one: position is consumed ONCE at load
+  #   and `reset` reloads the YAML (slice-19's gate-3 `speed` finding). H is the live face of z.
+  # • k_alpha/k_q — the ceiling leaks (see above); the geometry (the F1 reach wall / the a_lat
+  #   window are one step away on either side).
+  - {target: m1, key: af_scale_height, min: 6000.0, max: 25000.0, label: "H scale height (m) — how FAST the air thins (Earth ≈ 8500)"}
