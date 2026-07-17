@@ -1,5 +1,23 @@
 # Slice 20 — the rate-limited fin INSIDE the coupled loop (§11 Tier-A)
 
+> ## ⛔ GATE-0 VERDICT: **THIS SLICE IS DEAD. DO NOT BUILD IT.**
+>
+> **Gate 0 ran (4 probes, `M:\claud_projects\temp\slice20_probe\`) and killed every candidate —
+> including two the plan pre-named and one the probe invented. There is NO clean window.** The
+> plan below is preserved as the record; the FINDINGS section is the deliverable.
+>
+> **The structural reason (FINDING 7): `δ_max` SHADOWS `δ̇_max` on this plant.** For the rate cap
+> to bind, the fin must need to move fast; it needs to move fast only when the command moves fast
+> (high `k_α` or low damping); **both of those drive `δ_cmd` past `δ_max` first.** The deflection
+> cap always saturates before the rate cap can be the binding constraint — so cap #5 cannot be
+> ISOLATED from cap #3 on this airframe, at any parameter setting probed. The two caps are not
+> independent.
+>
+> Gate 0 did its job: it killed a slice in ~4 probes instead of after a 3-gate build. This is the
+> convention-10 "probe empirically, THEN pin" discipline paying for itself.
+
+
+
 Slice 15 banked a fin state `δ` and shipped an **admission** as its headline: the rate limit
 did NOT open the miss, because point-mass PN is robust to actuator rate limiting — and that
 was precisely WHY the dramatic failure modes (guidance limit cycle, α-limited maneuverability,
@@ -72,7 +90,83 @@ one level up.
 
 ---
 
-## THE LESSON — two candidates, gate 0 arbitrates
+## GATE-0 FINDINGS (4 probes — THE RECORD; read before ever re-proposing this slice)
+
+Probes at `M:\claud_projects\temp\slice20_probe\` (`probe.jl`…`probe4.jl`). All drive the
+**SHIPPED** primitives (`alpha_command` / `alpha_autopilot_delta` / `pitch_moment` /
+`lift_accel` / `rk4_coupled` / `pn_accel`, convention 10) on the slice-19 engagement with the
+pure slew limiter (design 0) inserted. Airframe: `Cmα=-1, Cmδ=3, Cmq=-150, I=20, Cla=20`,
+`ω_sp = 9.71 rad/s`.
+
+**FINDING 1 — design 0 VALIDATED.** `δ̇_max = ∞` (passthrough) reproduces slice 19:
+**miss 294.879 m** vs the shipped **295.168 m**. The ~0.3 m is probe-vs-wire sampling (the probe
+samples every tick, the wire every 16). The pure slew limiter's passthrough claim is sound.
+
+**FINDING 2 — SLICE 19's LESSON *STARVES* SLICE 20's.** At the shipped `α_max = 0.2` the α
+command is **PEGGED at α_max for 62.4%** of the run (slice 19 states 59% — same thing, different
+sampling). **A pegged command is a CONSTANT command, and a slew-rate limit costs nothing when
+tracking a constant** — the fin slews once to the α_max trim and holds. The α loop is
+DEMAND-limited, not RATE-limited. This alone makes slice 19's scenario unusable for slice 20.
+Unpegging (`α_max ≥ 0.8` ⇒ peg_frac 8%) makes the missile HIT (~29 m = `r_stop`).
+
+**FINDING 3 — THE PLANT IS MASSIVELY OVERDAMPED, AND THE FIN FEEDBACK IS WHY.**
+`ζ_aero = 0.104` (Cmq alone) but `ζ_kq = 4.37` at the shipped `k_q = 0.3` ⇒ **ζ_total ≈ 4.47,
+with the k_q fin feedback supplying ~98% of the damping.** A slew limiter on a *gentle
+proportional* loop (`k_α = 1`) around a *massively overdamped* plant makes it SLUGGISH, not
+unstable. **PIO needs loop gain AND rate saturation; this loop has neither the gain nor the
+phase margin deficit.** (Candidates A and B die here: the miss is inert 294.9→272.5 across
+δ̇ ∈ [∞, 0.1], and it moves the WRONG WAY — tightening the limit *helps* by ~22 m.)
+
+**FINDING 4 — CANDIDATE C (the k_α bandwidth ceiling) IS REAL BUT STRUCTURALLY CONFOUNDED.**
+The interaction is dramatic — at `k_α = 30`, an ideal fin (δ̇=∞) **HITS (29.7 m)** while the SAME
+autopilot on a rate-limited fin (δ̇=5) **MISSES BY 298 m**. But `defl_sat` binds **4680 of ~4900
+steps (95%)**: it is a **bang-bang δ_max-saturated fin wearing a rate-limit costume** — the
+convention-4 false-claim trap, 4th occurrence in this arc. The kill is STRUCTURAL, not tunable:
+`δ_peak ≈ (|Cmα|/Cmδ + k_α)·α_max ≈ 45 rad` at those gains vs `δ_max = 0.4`. **A hot k_α ALWAYS
+pegs deflection.** (Realism corroborates: with δ_max = 0.4 rad ≈ 23° — physical — a well-tuned
+k_α is ≈ 2, i.e. exactly the regime where the rate limit is inert. `k_α = 30` is not a "hot"
+autopilot, it is an unrealistic one.)
+
+**FINDING 5 — THE MONOTONICITY REVERSAL RECURS ([[ewsim-df-ellipse-sigma-monotonicity]]).** The
+miss is **NON-MONOTONE in δ̇_max**: at k_α=30 it runs 30.0 → 128.5 → **298.0 (peak at δ̇≈5)** →
+123.0 → **29.5 (a HIT again)** as δ̇ tightens. A near-frozen fin flies the missile ~ballistically
+and it hits by geometry. **This is the third occurrence of this pattern** (slice-5 σθ, slice-19
+ρ — where the miss peaks at ρ≈0.5 and falls below it). Any δ̇ knob would need bounding to a
+proven-monotone region.
+
+**FINDING 6 — THE k_q AXIS (the advisor's redirect): NO CLEAN WINDOW EXISTS.** Sweeping
+`k_q ∈ [0.3 … 0.0]` × `δ̇ ∈ [∞ … 1]` at the shipped `k_α = 1`, against the isolation bar
+(δ̇=∞ stable AND finite δ̇ rings; `defl_sat == 0` EVERYWHERE; monotone):
+
+| regime | `defl_sat` | miss | verdict |
+|---|---|---|---|
+| `k_q ≥ 0.02`, `δ̇ ≥ 2` (ζ_total ≳ 0.4) | **0 ✓** | **INERT (~29.5 m at every δ̇)** | passes the bar, teaches nothing |
+| `k_q ≤ 0.01` or `δ̇ ≤ 1` (ζ_total ≲ 0.25) | **contaminated** | moves (64–130 m) | fails bar 2 |
+| `k_q = 0` (ζ_total = 0.104) | contaminated | — | **RINGS AT δ̇=∞** ⇒ fails bar 1: a RINGY-AUTOPILOT lesson, not a rate-limit one |
+
+**Every cell that shows drama fails the isolation bar; every cell that passes the bar is inert.**
+
+**FINDING 7 — ⭐ THE STRUCTURAL RESULT (why no window can exist): `δ_max` SHADOWS `δ̇_max`.**
+Findings 4 and 6 are the same fact on two axes. For the rate cap to bind, the fin must need to
+move FAST. The fin needs to move fast **only** when the command moves fast — which requires high
+`k_α` (finding 4) or low damping (finding 6). **Both drive `δ_cmd` past `δ_max` before the rate
+cap can be the binding constraint.** And it is self-defeating from the other side too: raising
+control authority `Cmδ` to buy deflection headroom SHRINKS the δ the loop needs, so the rate
+limit matters even less. **On a statically-stable, aero-damped airframe with a properly-tuned α
+loop, cap #5 is not independent of cap #3 — it is shadowed by it.** This is the general result,
+and it is worth more than the slice would have been.
+
+**FINDING 8 — the one clean effect that survives (and its honest ceiling).** In the isolated
+window (`α_max = 0.8`, `k_q = 0.02`, `defl_sat == 0` ∀ δ̇ ≥ 2), the **fin tracking lag** is real,
+monotone and cleanly attributable: `δ_lag = 0` (δ̇=∞) → **0.0899** (δ̇=2). But it **does not
+propagate**: the miss stays ~29.5 m throughout, and even `α_lag` barely moves (0.2051 → 0.2077).
+**The airframe's own short-period dynamics absorb the fin's lag before it reaches the flight
+path.** A lesson whose entire content is "this knob moves a diagnostic that changes nothing"
+is slice 15's headline again, one loop deeper — and shipping it twice in one arc is not a slice.
+
+---
+
+## THE LESSON — two candidates, gate 0 arbitrates *(SUPERSEDED — both DEAD; see FINDINGS)*
 
 **Candidate A — THE GUIDANCE LIMIT CYCLE (the hoped-for headline).** The rate-limited fin cannot
 slew fast enough to serve the α loop; the resulting phase lag turns the inner loop unstable and
@@ -119,13 +213,30 @@ its own scalar state. `guidance.jl`'s `fin_autopilot_step` is **TEXTUALLY UNTOUC
 
 ## Design decisions (advisor-reconciled)
 
+0. **THE SERVO IS A PURE SLEW LIMITER — NO `τ_s` (advisor, load-bearing).**
+
+   ```
+   δ′ = δ + clamp(δ_cmd − δ, ±δ̇_max·dt)
+   ```
+
+   **Why this and not slice 15's `τ_s`-lag-plus-rate-clamp structure:** at `δ̇_max → ∞` a pure
+   slew limiter **IS passthrough** ⇒ slice 19 recovered EXACTLY. A `τ_s` servo at `δ̇_max → ∞`
+   is a first-order **lag**, NOT slice 19's instant δ — slice 15's own equivalence claim was to
+   **`:pid`** (itself a lag), not to a passthrough, so importing its structure here would make
+   the equivalence tooth in gate 1 FALSE, and the tempting fix (quietly setting `τ_s = dt`) is
+   a fudge. Two lags would also muddy the lesson: with no `τ_s`, **the rate limit is the SOLE
+   new effect** — the cleanest possible isolation for "same knob, inert then lethal", and
+   rate-limited feedback is the textbook PIO case regardless.
+
+   ⇒ **There is no `τ_s` anywhere in this slice.** `δ̇_max` is the only new parameter.
+
 1. **The servo steps in `decide!` (phase 4), NOT `integrate!`.** `decide!` computes `δ_cmd` via
    `alpha_autopilot_delta`, steps its scalar servo state, and writes the **ACHIEVED** δ into the
    `:delta_cmd` comp key that `_integrate_coupled!` **already reads** (`missile.jl:201`).
    ⇒ **`_integrate_coupled!` is literally untouched** — the strongest possible byte-identity
    guarantee — and it is consistent with δ already being a **zero-order hold across the RK4
    stages** (the entry reads it once). *Name the tick-rate ZOH as a §1 approximation*: honest at
-   `dt = 1e-3` because `τ_s` and `1/δ̇_max` are ≫ 1 ms.
+   `dt = 1e-3` because `1/δ̇_max` is ≫ 1 ms.
    - **Key-naming wart, accepted deliberately:** `:delta_cmd` then holds the *achieved* δ under
      the servo and the *commanded* δ without it. Keep the key (renaming would touch the
      integrate! seam and forfeit the byte-identity win); document it precisely as **"the
@@ -150,7 +261,9 @@ its own scalar state. `guidance.jl`'s `fin_autopilot_step` is **TEXTUALLY UNTOUC
 6. **Class 4c** (physics-changing, NO RNG — truth-fed PN, no seeker ⇒ "draw-count invariance
    VACUOUS", the 6th consecutive after 14/15/16/17/19). Live-settable, no `set_fidelity` guard.
 7. **Crash-safety (convention 5):** `δ̇_max` is a live slider ⇒ clamp at the consumer
-   (`max(·, _FRAME_EPS)`, the slice-15 precedent); `τ_s > 0` load-validated. No new divide.
+   (`max(·, _FRAME_EPS)`, the slice-15 precedent) + load-validated `> 0` and finite for the
+   authored value. **No new divide** (design 0 — a slew limiter has no `1/τ_s`), so no new
+   floor site.
 
 ---
 
@@ -171,7 +284,8 @@ Questions the probe must answer:
   not binding. **A bang-bang limit cycle may drive δ into `δ_max` and contaminate the claim**
   (cap #3 masquerading as cap #5) — the isolation must be re-established, NOT copied from slice
   19. Same for `max(a_max_aero) < a_max` (269 ≪ 3000).
-- Is `τ_s` (servo time constant) a separate authored constant, and does it need to be non-knob?
+- (**RESOLVED before the probe — design 0:** the servo is a pure slew limiter, no `τ_s`. Probe
+  THAT structure; do not reintroduce a lag to chase a cycle.)
 
 ### 1. `airframe.jl` primitive green (pure, RNG-free, no LinearAlgebra — §9 house style)
 
