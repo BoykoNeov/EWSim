@@ -50,12 +50,13 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–19 COMPLETE & green — 2864 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–19
+**Slices 1–20 COMPLETE & green — 2935 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–20
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
 FIRST true 3-D view (a user-directed insertion — the inner autopilot shifted to slice 19), slice 19 the CLOSED
-INNER LOOP (`a_cmd→α_cmd→δ`) + the flight-condition g-limit.** Full gate-by-gate
+INNER LOOP (`a_cmd→α_cmd→δ`) + the flight-condition g-limit, slice 20 INDUCED DRAG — the missile LOWERS ITS OWN
+CEILING by maneuvering.** Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -293,21 +294,67 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   ρ lever drops the ceiling 0.49× live, the α_max sweep recovers 95.4%; S19UI: the value-guard THREE ways — 16
   drops / 19 shows / 18 stays 3-D; smoke-load + 16/17/18 re-smoked + all 9 prior UI tests green; TWO shots at tick
   4130: coupled los 295.19 / a_cmd 282 vs a_ach 180 / α −7.8° vs point_mass los 3.84 / track_gap 0). Deferred
-  (NAMED): the exponential atmosphere (makes "high altitude" REAL); a SCALAR rate-limited fin inside the coupled
-  loop (slice-15's banked δ → the guidance limit cycle — a slice-20 candidate); induced drag (C_Di ∝ C_L² — the
-  g-bleeds-V-lowers-Q spiral); nonlinear C_L(α)/true stall; bank-to-turn / 3-D (the out-of-plane discard dies
-  only there) → the radome/body-rate parasitic loop; a seeker in the coupled loop (flips back to 4a/RNG-live). (2864)
+  (NAMED at the time — **since RESOLVED, see slice 20**): the exponential atmosphere (makes "high altitude"
+  REAL); a SCALAR rate-limited fin inside the coupled loop (slice-15's banked δ → the guidance limit cycle) —
+  **that candidate is now DEAD, killed at gate 0: `δ_max` SHADOWS `δ̇_max`, `docs/plans/slice20.md`**; induced
+  drag (C_Di ∝ C_L² — the g-bleeds-V-lowers-Q spiral) — **DONE, slice 20**; nonlinear C_L(α)/true stall;
+  bank-to-turn / 3-D (the out-of-plane discard dies only there) → the radome/body-rate parasitic loop (now the
+  empirically-motivated home of the limit cycle); a seeker in the coupled loop (flips back to 4a/RNG-live). (2864)
+
+- **Slice 20 (§11 Tier-A) — INDUCED DRAG: THE MISSILE LOWERS ITS OWN CEILING BY MANEUVERING**: the project's
+  FIRST DEGENERATIVE SPIRAL, cashing an approximation slices 17/19 shipped EXPLICITLY ("lift is drag-free /
+  speed-preserving ⟂ v"). Lift ⟂ v turns the path; **induced drag ∥ −v̂ SENDS THE INVOICE** — `C_Di = K·C_L²`,
+  `a_ind = −(Q·S·K·C_L²/m)·v̂` (`induced_drag_accel`, `lift_accel`'s ORTHOGONAL COMPLEMENT: same α, same Q·S;
+  one turns at constant speed, one slows without turning) — and the invoice is paid in the very currency that
+  buys the turn: **pull α → bleed V → Q falls → `a_max_aero` falls → the ceiling CATCHES the demand → you can't
+  pull → you miss.** Slice 19: the ceiling is a flight condition that BINDS. Slice 20: it is a flight condition
+  **YOU DEGRADE BY USING IT** — slice 19 moved it with the ρ knob (an ENGINEER dialling a flight condition);
+  here the MISSILE moves it, by turning. **NO new cap — it makes cap #4 SELF-LOWERING; the novelty is the
+  FEEDBACK.** **THE HEADLINE IS THE CEILING COLLAPSE RATIO** (0.92× FLAT → **0.12×**, an 8.4× fall WITHIN one
+  run) — pure ceiling and monotone-safe BY CONSTRUCTION, so it is what evidences "lowers its own CEILING";
+  `aero_sat 0/366 → 55.1%` is the CONSEQUENCE (it moves on ceiling AND demand), though a stark one: **at K=0
+  the ceiling NEVER BINDS ONCE.** ρ/S/C_Lα/α_max/mass ALL HELD; only K changed. Wire (frame-sampled, seed 20,
+  LOS-gated at **r > 1000 — NOT slice-19's 300**): K=0 miss 8.59 (HIT) / K=0.15 103.14 / K=0.3 **714.12** (83×);
+  `defl_sat` 0 in every arm; replay posdiff 0.0. **⚠ THE CLAIM IS BOUNDED (the sharpest constraint here):
+  "bleed→ceiling→miss" is what ANY speed loss does — matched on ΔV a parasitic `cd_area` reproduces it (45.02 m
+  /173.2 vs 44.17/176.3) — so ONLY the α²-SOURCE makes it *induced*, and that ships as a TOOTH, not prose**
+  (straight coast: induced <1 m/s vs parasitic >50, a >50× split — `test_missile.jl` "THE DISCRIMINATOR").
+  **⚠ "DEGENERATIVE SPIRAL", NEVER "positive feedback"**: the speed bleed is SELF-LIMITING (bill ∝ V²α² ⇒ dV/dt
+  PEAKS at −88.8 then DECAYS to −35.8; V asymptotes ≈213, ceiling ≈25 — neither reaches 0). The positive sign is
+  on the TRACKING ERROR and only CONDITIONALLY (below the ceiling PN converges — *negative* feedback, which is
+  WHY PN works; past the crossing the sign flips). **⚠ NOT "a harder engagement costs more" — REFUTED** (the
+  attributable bill FALLS 194→117 as the target jinks: shorter ToF + the α clamp). The target does NOT maneuver:
+  **the missile pays for its own turn onto the collision course.** Byte-identity is STRUCTURAL — a SECOND
+  closure gated on `haskey(:af_k_induced)`, the else-arm slice 17/19 VERBATIM (never `+ a_ind` trusting
+  K=0→zero: the `-0.0` trap); loader PRESENCE-gated on the KEY not the BLOCK (16/17/19 all have airframe
+  blocks); K's SIGN validated (a negative K ACCELERATES). **NO new rung** (a rung must name physics the knob
+  can't express; `:free` IS K=0 — the slice-16 `af_cma` precedent); **ONE knob** `af_k_induced ∈ [0, 0.3]`
+  (MEASURED: monotone+clean to 0.6; at K≥0.8 `defl_sat` 0→1289 and α_pk overshoots α_max = slice-19's LEAK ⇒ a
+  2× margin) — **α_max/ρ DISQUALIFIED and asserted ABSENT** (α_max now feeds the bill through the ACHIEVED α ⇒
+  no longer isolated, unlike slice 19 where it touched only the clamp; ρ moves ceiling AND bill). Class **4c**
+  (6th consecutive; no RNG ⇒ draw-invariance VACUOUS). **ZERO new client code** — slice 19's airframe view
+  carries it (the aero strip already plotted the ceiling; it just starts FALLING). Four proofs green (S20V;
+  S20UI 4-way value-guard + exactly ONE slider; smoke; shot at tick 6000 aimed at the CLAIMED branch — cyan
+  ceiling 269→138, demand crossing at 301, AERO SAT lit). Slices 1–19 byte-identical, proven ON THE WIRE (the
+  16/17/19 verifiers reproduce STATUS to the digit). (2935)
 
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened
-with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–19 are into the §11 Tier-A
+with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–20 are into the §11 Tier-A
 horizon — slice 15 the actuator/fin half, slice 16 the 6-DOF airframe's rotational half (pitch-plane θ,q), slice 17
 the α→lift→γ TRANSLATION-COUPLING half (the real path-changing `:airframe` toggle), slice 18 terrain masking + the
 3-D client view, slice 19 the CLOSED INNER LOOP (`a_cmd→α_cmd→δ`) + the flight-condition g-limit — which COMPLETES
 the Tier-A "6-DOF airframe + actuator/fin dynamics" entry in the pitch plane (15 = fin, 16 = rotation, 17 = the
-α→lift coupling, 19 = the closed loop). What remains is the rest of §11 Tier-A/B/C — most concretely land clutter
-[terrain banked the heightfield] and the FULL 6-DOF airframe [bank-to-turn / 3-D, where the pitch-plane
-out-of-plane discard finally dies], with a SCALAR rate-limited fin inside the coupled loop [the guidance limit
-cycle] and induced drag [the g→V→Q→ceiling spiral] as the named slice-20 candidates.)
+α→lift coupling, 19 = the closed loop) — and slice 20 INDUCED DRAG, which makes that closed loop's ceiling
+SELF-LOWERING (the aero arc's first feedback, and the first slice whose lesson is a KNOB with no button at all).
+**The slice-20 slot was CONTESTED**: the planned SCALAR rate-limited fin inside the coupled loop [the guidance
+limit cycle] is **DEAD, not deferred** — gate 0 killed it in 4 probes (`δ_max` structurally SHADOWS `δ̇_max`: the
+fin only needs to move fast when the command does, which requires high k_α or low damping, and BOTH peg deflection
+first — see `docs/plans/slice20.md`, a worthwhile general result). What remains is the rest of §11 Tier-A/B/C —
+most concretely land clutter [terrain banked the heightfield] and the FULL 6-DOF airframe [bank-to-turn / 3-D,
+where the pitch-plane out-of-plane discard finally dies], with the exponential atmosphere ρ(z) [which would make
+"high altitude" a REAL lever and is the honest completion of 19+20's constant-ρ approximation] and nonlinear
+C_L(α) / true stall [which would bound the ACHIEVED α and close the ceiling-leak path] as the nearest named
+candidates.)
 
 ## Conventions / hard-won disciplines
 

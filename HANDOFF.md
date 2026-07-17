@@ -538,13 +538,41 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   **ρ IS AUTHORED, NOT DERIVED FROM ALTITUDE** — `rho` is a per-missile constant, so ONLY V moves
   Q on its own and the demo knob is `rho` itself (say "low dynamic pressure (thin air)", NEVER
   unqualified "high altitude"; a `speed` knob would be DEAD — `comp[:speed]` is consumed once at
-  load and read by nothing per-tick). DEFERRED beyond slice 19: the **exponential atmosphere**
-  `ρ(z)=ρ₀·exp(−z/H)` (the honest completion — it would make "high altitude" a REAL lever, but it
-  touches the shared drag path); a **SCALAR rate-limited fin inside the coupled loop** (where
-  slice-15's banked δ pays off as the guidance limit cycle); **induced drag** (C_Di ∝ C_L² — the
-  pull-g → bleed-V → lower-Q → lower-ceiling spiral); nonlinear `C_L(α)` / true stall; bank-to-turn
-  (the 3-D quaternion+ω superset, where the pitch-plane out-of-plane discard finally dies) and the
-  radome/body-rate parasitic loop.
+  load and read by nothing per-tick).
+  **[OPENED — slice 20] INDUCED DRAG made that ceiling SELF-LOWERING** — the aero arc's first
+  feedback, and the cash-in of the approximation 17/19 shipped explicitly ("lift is drag-free /
+  speed-preserving ⟂ v"). Lift ⟂ v turns the path; induced drag ∥ −v̂ BILLS it (`C_Di = K·C_L²`),
+  and the bill is paid in the very currency that buys the turn: **pull α → bleed V → Q falls → the
+  ceiling falls → it CATCHES the demand → you can't pull → you miss.** Slice 19's ceiling BINDS;
+  slice 20's is a flight condition **you degrade by using it** — 19 moved it with the ρ knob (an
+  engineer dialling), here the MISSILE moves it, by turning. **NO new cap** — cap #4 becomes
+  self-lowering; the novelty is the FEEDBACK. A pure Tier-A swap: **no new fidelity rung at all**
+  (a rung must name physics the knob cannot express, and a `:free` rung IS `K = 0` — the slice-16
+  `af_cma` precedent), so `LIVE_FIDELITY_MODES` is untouched and the lesson is the `af_k_induced`
+  KNOB. Headline = the CEILING COLLAPSE RATIO (0.92× FLAT → 0.12×, 8.4× WITHIN one run — pure
+  ceiling, monotone-safe by construction); `aero_sat 0/366 → 55%` is the CONSEQUENCE, and at K=0
+  the ceiling NEVER BINDS ONCE. **⚠ THE CLAIM IS BOUNDED: "bleed→ceiling→miss" is what ANY speed
+  loss does** — matched on ΔV a parasitic `cd_area` reproduces it — so only the **α²-SOURCE** makes
+  it *induced*, and that ships as a TEST (a straight coast: induced <1 m/s vs parasitic >50), never
+  as prose. **⚠ Say "DEGENERATIVE SPIRAL", never "positive feedback"**: the speed bleed is
+  SELF-LIMITING (∝V²α² ⇒ dV/dt peaks then decays; V asymptotes ≈213, ceiling ≈25 — neither hits 0);
+  the positive sign is on the TRACKING ERROR and only past the crossing. **⚠ NOT "a harder
+  engagement costs more"** (REFUTED: the attributable bill FALLS as the target jinks — shorter ToF
+  + the α clamp). The showcase target does NOT maneuver: the missile pays for its own turn onto the
+  collision course.
+  **A NOTE ON THE SLICE-20 SLOT:** the **SCALAR rate-limited fin inside the coupled loop** listed
+  below was planned, probed, and is **DEAD — do not re-propose it**. `δ_max` structurally SHADOWS
+  `δ̇_max` on this plant: the fin only needs to move fast when the command moves fast, which needs
+  high `k_α` or low damping, and BOTH peg deflection first — so cap #5 cannot be isolated from cap
+  #3 at any setting probed. The general result is worth more than the slice was
+  (`docs/plans/slice20.md`).
+  DEFERRED beyond slice 20: the **exponential atmosphere** `ρ(z)=ρ₀·exp(−z/H)` (the honest
+  completion of 19+20's constant-ρ — it would make "high altitude" a REAL lever, but it touches the
+  shared drag path); **nonlinear `C_L(α)` / true stall** (α_max is still a clamp on the COMMAND — a
+  true stall would bound the ACHIEVED α and close the ceiling-leak path); **zero-lift-drag `C_D0`
+  composed with induced** (`cd_area` exists but slice 20 holds it 0 for the isolation);
+  bank-to-turn (the 3-D quaternion+ω superset, where the pitch-plane out-of-plane discard finally
+  dies) and the radome/body-rate parasitic loop.
 - **Sibling domains that reuse the shared libs.** IR/EO seekers and IRST (add an IR
   environment channel to `env`, reuse `frames.jl`/`estimation.jl`); communications EW —
   jamming of frequency-hopping / spread-spectrum links — as a parallel to radar EW;

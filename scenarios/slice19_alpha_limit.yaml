@@ -52,7 +52,10 @@
 # perfect seeker still lags; a seeker in the coupled loop flips the class back to RNG-live); δ is a
 # scalar through `af_delta`/`:delta_cmd` — slice-15's Vec3 `FinState` rate-limited servo is a
 # DIFFERENT frame and is NOT reused here (the "two Tier-A halves join" phrasing was oversold; a
-# scalar servo inside the coupled loop is the named slice-20 candidate).
+# scalar servo inside the coupled loop was the named slice-20 candidate — **now DEAD, killed at
+# gate 0: `δ_max` structurally SHADOWS `δ̇_max` on this plant, see `docs/plans/slice20.md`**. The
+# slot was refilled by INDUCED DRAG, which makes THIS slice's ceiling self-lowering —
+# `scenarios/slice20_induced_drag.yaml`).
 #
 # `:a_ctrl` STAYS OUT OF THE COUPLED FORCE, DELIBERATELY. Guidance reaches this plant ONLY through δ.
 # Adding the autopilot's fiat control accel back into the joint force would give the missile lift PLUS

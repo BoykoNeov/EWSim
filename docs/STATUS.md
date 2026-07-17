@@ -2291,6 +2291,169 @@ server: `… --script res://net/slice19_ui_test.gd`.
 
 ---
 
+**Slice 20 — INDUCED DRAG: the missile lowers its own ceiling by maneuvering (HANDOFF §11 Tier-A)** — the
+project's FIRST DEGENERATIVE SPIRAL, and the cash-in of an approximation slices 17/19 shipped EXPLICITLY:
+*"lift is drag-free / speed-preserving (⟂ v)"*. Lift ⟂ v turns the flight path; **induced drag ∥ −v̂ sends the
+invoice** — and the invoice is paid in the very currency that buys the turn. Plan + all 12 gate findings:
+`docs/plans/slice20_induced_drag.md`. (The slice-20 SLOT was vacated: `docs/plans/slice20.md` holds the DEAD
+rate-limited-fin candidate, killed at gate 0 because `δ_max` structurally SHADOWS `δ̇_max`.)
+
+    pull α → pay K·C_L² in drag → V falls → Q = ½ρV² falls → a_max_aero = Q·S·C_Lα·α_max/m falls
+           → the ceiling CATCHES the demand → you cannot pull → you miss
+
+**SLICE 19 vs SLICE 20, in one line.** Slice 19: the maneuver ceiling is a FLIGHT CONDITION; it binds, and you
+miss. Slice 20: the ceiling is a flight condition **YOU DEGRADE BY USING IT**. Slice 19 moved this same ceiling
+with the ρ knob — an ENGINEER dialling a flight condition. Here the MISSILE moves it, by turning. This slice
+adds **NO new cap** — it makes slice 19's cap #4 *self-lowering*. The novelty is the FEEDBACK, not a 5th cap.
+
+**THE HEADLINE IS THE CEILING COLLAPSE RATIO, NOT `aero_sat`** (advisor, done-pass): the ceiling's own fall
+WITHIN one run — **0.92× (FLAT) → 0.12× (an 8.4× collapse)** — is PURE CEILING and monotone-safe by
+construction (more bill → more bleed → lower ceiling; it cannot reverse), so it is what actually evidences
+"the missile lowers its own CEILING". `aero_sat 0/366 → 55.1%` is the stated CONSEQUENCE (it moves on the
+ceiling AND the demand, so it is not a second measurement of the ceiling) — though a stark one: **at K=0 the
+aero ceiling NEVER BINDS ONCE**, it is not a factor in the engagement at all. The miss CORROBORATES and does
+NOT lead (it is non-monotone in K in general). Nothing that SETS the ceiling moved: ρ, S, C_Lα, α_max and mass
+are held across every arm; the 0.92× residual at K=0 is GRAVITY on a climbing missile, not the turn.
+
+**⚠ "DEGENERATIVE SPIRAL", NEVER "POSITIVE-FEEDBACK LOOP" (FINDING 12 — an advisor catch with the phrase
+already in 8 shipped sites and heading into 4 docs).** The SPEED bleed is **SELF-LIMITING**: the bill
+∝ Q·α² ∝ **V²**·α², so as V falls the bleed RATE falls. Measured live at K=0.3: `dV/dt` **PEAKS at −88.8 m/s²
+(t≈4.0) then DECAYS to −35.8**; `a_induced` peaks at 81.9 and falls to 23.5; **V ASYMPTOTES at ≈213 and the
+ceiling bottoms at ≈25 — neither reaches 0.** A positive-feedback loop AMPLIFIES; this decelerates itself, and
+a physics-literate reader told "positive feedback" hears a speed runaway that never happens. The positive sign
+lives on the **GUIDANCE/TRACKING ERROR**, and only **CONDITIONALLY**: below the ceiling PN converges normally
+(*negative* feedback — that IS why PN works); once the demand crosses the FALLING ceiling the sign FLIPS and
+the maneuvering that should shrink the error instead bleeds the speed that caps the maneuvering.
+
+**⚠ THE CLAIM IS BOUNDED — the sharpest honesty constraint in this slice (gate-0 FINDING 5).** Matched on ΔV,
+a PARASITIC `cd_area` reproduces this miss AND this ceiling almost exactly (**45.02 m / 173.2 vs 44.17 m /
+176.3**): **"bleed → Q → ceiling → miss" is what ANY speed loss does** and is NOT evidence of induced drag.
+Only the SOURCE of the bill is distinctive — so **the discriminator SHIPS AS A TOOTH, not as prose** (advisor:
+*"without the straight-flight tooth, the slice's title is unearned by its tests"*). `test_missile.jl` "THE
+DISCRIMINATOR" flies a straight coast: induced bills **< 1 m/s**, parasitic bills **> 50** (probed 0.06 vs
+75–136), a **> 50×** separation — while the same K asked to TURN bills ~450 m/s. induced = a CLOSED LOOP
+written BY THE MANEUVER (∝ α²); parasitic = an OPEN-LOOP TOLL that arrives whatever you do.
+
+**AND NOT THIS (FINDING 7 — a prediction REFUTED by its own probe):** "a harder engagement costs more" is
+**FALSE**. Holding K and hardening the target's maneuver, the *attributable* bill **FALLS** (194 → 117 m/s):
+a jinking target SHORTENS time-of-flight and the α_max clamp caps α anyway. **The showcase target does not
+maneuver at all**, deliberately — the missile pays for **its own turn onto the collision course**. Say "the
+turn you must make to intercept bills you"; NEVER "dogfighting costs speed".
+
+**Gate 1** — `airframe.jl` `induced_drag_accel(vel, θ, mass, p)`: `C_L = C_Lα·α`, `C_Di = K·C_L²`,
+`a_ind = −(Q·S·C_Di/m)·v̂`. `lift_accel`'s **COMPANION AND ORTHOGONAL COMPLEMENT** — the same α and the same
+`Q·S` build both, but lift acts on `n̂` and turns at constant speed while this acts on `−v̂` and slows without
+turning. `AirframeParams` gains **`K` as the LAST field** (the slice-17 `Cla` precedent) + an 8-arg outer
+constructor so slices 16–19's nine construction sites compile unchanged at K=0 — a CONVENIENCE, **not** the
+byte-identity guard. Teeth (+40): K=0 ⇒ EXACTLY zero (`==`) and α=0 costs exactly zero even with K on (the
+α²-SOURCE); DIRECTION ∥ −v̂ AND ⟂ n̂ on a CLIMBING missile (a leaked ⟂ component would be a second unnamed
+lift; a sign flip a drag that ACCELERATES — neither survives a magnitude-only test); EVEN in α (`up == down`
+bit-for-bit) contrasted against lift being ODD (the pair proves the square is really there); doubling α
+QUADRUPLES the bill; the closed form by hand; ∝K linear and ∝Q ∝V² (the coupling that closes the loop);
+C_Lα<0 flips the lift but NOT the bill (C_L² is even in C_Lα too). **⭐ THE SPIRAL in the primitives:** the
+same 3 s constant-α turn is SPEED-FREE at K=0 (700.000 — the approximation, cashed) and costs 232.7 m/s at
+K=0.3, the ceiling HALVES (0.4456×) with ρ/S/C_Lα/α_max/mass IDENTICAL, and `ceiling/ceiling ≡ (V/V)²` to
+**~1e-16** — the tightest tooth here, and what makes the loop a LOOP. *Thresholds are MEASURED then loosened:
+a first draft guessed them from the ENGAGEMENT's numbers and failed 3/6 — the physics was right, the guesses
+were wrong (convention 11, live).*
+
+**Gate 2** — `_integrate_coupled!` grows a **SECOND CLOSURE**, reachable only via `haskey(c, :af_k_induced)`;
+the else-arm is slice 17/19 TEXTUALLY VERBATIM. **NOT** `+ induced_drag_accel(...)` trusting K=0→zero
+(advisor): byte-identity is STRUCTURAL — the else-arm cannot differ from slice 19 because it IS slice 19 —
+rather than a property of today's formula plus IEEE zero-sign reasoning (`-0.0 + 0.0 → +0.0`, the trap the
+`:a_ctrl` guard right above it documents). The drag reads the **STAGE α** (`TH − γ`), the slice-17 stage-θ
+catch applied identically. Loader: `airframe.k_induced` → `comp[:af_k_induced]`, **PRESENCE-gated on the KEY**
+(the slice-18 `alt_hold_m` precedent), NOT on the airframe BLOCK — slices 16/17/19 all HAVE airframe blocks,
+so block-gating would grow the key on every one and hand each a drag term (convention 2 dead). Unlike
+`cma`/`cla` (finite-only — a negative lift slope is merely inverted and lesson-adjacent), **K's SIGN is
+validated**: a negative K is a drag that ACCELERATES. `a_induced` telemetry is KEY-gated AND RUNG-gated
+(inside the `:pitch_coupled` block — the slice-17 lift-keys precedent). **`LIVE_FIDELITY_MODES` untouched.**
++26 tests: key-absent replays `===` bit-identical and ships NO `a_induced` (the existing slice-19 golden pins
+only `atol=1e-6` and would SAIL THROUGH a −0.0 flip, so byte-identity got its OWN `===` tooth); the K=0 arm is
+a TRUE no-op, bit-exact vs key-absent (the `==` no-op precedent — which does NOT make the guard redundant, it
+shows the arithmetic agrees TODAY); **NOT-A-DEAD-KNOB asserts MOVEMENT, not absence-of-throw** (slice 19's
+gate 2 PASSED a dead `speed` knob — a no-crash check cannot tell). *The loader fixture initially threw for a
+MISSING TARGET, so both `@test_throws` cases were passing for the wrong reason — the "a test that malforms its
+own fixture proves nothing" trap, hit live.*
+
+**Gate 3** — `scenarios/slice20_induced_drag.yaml`: slice-19's airframe/autopilot **VERBATIM** (α_max 0.2 rad
+≈ 11.5°, physical — deliberately NOT inflated: FINDING 3 rejected unpegging via α_max because 0.8 rad = 46° is
+absurd and blips defl_sat), a **NON-maneuvering** target at 9 km (|v| 825 > 700 ⇒ it OUTRUNS the missile ⇒ a
+clean FIRST CPA), `cd_area_m2: 0` (**the isolation** — every m/s lost is provably bought with α),
+`k_induced: 0.15` opening MID-RANGE so the slider reads both ways. **THE CLIENT NEEDED ZERO EDITS** — slice
+19's airframe view carries it wholesale: `:airframe` in the fidelity routes to the existing cycler branch (as
+slice 19's REFERENCE ARM, since slice 20's lesson is the SLIDER), the aero strip already plotted the core's
+ceiling-vs-demand so the falling ceiling DRAWS ITSELF, and `a_induced` is a scalar so `_update_readout`
+renders it with no whitelist edit. **The frame-sampled wire (S20V):**
+
+| K | miss (frame) | ceiling start→min | aero_sat | a_ind | V_end | defl_sat |
+|---|---|---|---|---|---|---|
+| 0.15 (ships) | 103.139 | 269.4→129.6 (0.481×) | 12.7% | 48.7 | 485.5 | 0 |
+| 0.00 (free) | **8.590** | 269.4→246.8 (**0.916× FLAT**) | **0/366** | 0.0 | 670.0 | 0 |
+| 0.30 (max) | **714.116** | 269.4→**32.1** (**0.119×**) | **55.1%** | 86.0 | 241.7 | 0 |
+
+replay posdiff **0.0**; **83.1×** end to end. **ONE knob** (`af_k_induced ∈ [0, 0.3]`) — α_max and ρ are
+DISQUALIFIED and their absence is ASSERTED: both are CONFOUNDED with the new drag term (α_max now feeds the
+bill through the ACHIEVED α — it can never be this slice's counterfactual, unlike slice 19 where it touched
+only the clamp; ρ moves ceiling AND bill). **K enters ONLY the drag term** — which is what makes it the
+causation lever.
+
+**⭐ `ENDGAME_RANGE = 1000`, NOT slice-19's 300 — load-bearing, a gate-3 finding.** Slice 19's gate excludes
+ITS terminal λ̇ spike only because slice 19 misses by **295 m — i.e. its CPA falls BELOW the gate, by luck of
+the geometry**. Slice 20's KMAX arm misses by **714 m**, so its CPA sits ABOVE a 300 m gate: at CPA the LOS
+rotates fastest ⇒ a_cmd spikes ⇒ α_cmd pegs ⇒ δ punches δ_max, and a 300 m gate COUNTS it (measured:
+`defl_sat = 1` at t=8.016, r=714.1, δ=−0.4). **Copying slice 19's constant would have shipped a FALSE
+isolation.** The gate must exceed the LARGEST CPA in the sweep; 1000 clears 714 by 286 m and costs ~10% of the
+window. `defl_sat == 0` in EVERY arm under it — the isolation RE-ESTABLISHED, never copied.
+
+**The knob range [0, 0.3] is MEASURED (FINDINGS 6 + 11).** The miss is NON-MONOTONE in K in general — at 6 km
+against a maneuvering target it PEAKS at K≈0.3 and COLLAPSES to 33 m by K=0.8 (a bled-out missile stops trying
+and flies ~ballistically into a close pass — the exact INVERSE of the lesson; the
+[[ewsim-df-ellipse-sigma-monotonicity]] pattern, **4th occurrence**). THIS config does not reverse (a bled-out
+missile vs a non-maneuvering target simply falls short) but CONTAMINATES from K ≥ 0.8: `defl_sat` 0 → **1289**,
+CPA never closes, α_pk **0.582 OVERSHOOTS α_max** (slice-19's ceiling LEAK). Clean and monotone to **0.6** ⇒
+the max sits at 0.3, a **2× margin**.
+
+**Four proofs green.** S20V (the five phases above). S20UI (the value-guard FOUR ways — 16 drops / 17-19-20
+show / 18 stays 3-D; **EXACTLY ONE** slider; the strip shows the ceiling FALLING; reset CLEARS the histories —
+*a stale falling trace would read as a spiral that never happened*). Smoke-load → `EWSIM_SERVER_DONE`. **Shot**
+(windowed, tick 6000): aimed at the branch being CLAIMED, not the climax — **cyan ceiling descending 269→138,
+orange demand crossing at 301, red breach band, AERO SAT lit, `defl_sat: 0` visible in the readout**. Tick
+picked by measuring the lit band (5504→7296) and staying clear of the r→0 endgame where the demand hits 12288
+and would flatten the strip's y-scale. *A first verifier draft called `SimClient.stop()` (no such method)
+inside `_teardown`, which runs AFTER `quit(0)` — so it threw, leaked 7 ObjectDB instances, and still exited 0.
+An error that lands past the exit code is exactly the kind that survives.*
+
+**Tests: 2864 → 2935 (+71); slices 1–19 byte-identical.** Proven on the LIVE WIRE, not just in-suite: the
+16/17/19 verifiers reproduce this ledger's own numbers **to the digit** — S19V 295.186 / 3.844 / 76.8× / ρ
+0.49× / 95.4% recovery, S17V posdiff 876.354 / end (2187.8, 3010.2), S16V max|α| 0.15011 / ω_sp 2.4022 /
+posdiff 0.0 — and all 18 UI tests pass.
+
+**Class 4c** (physics-changing, NO RNG — truth-fed PN, no seeker ⇒ "draw-count invariance" is VACUOUS; do NOT
+copy slice-11/13 draw language), live-settable, NO `set_fidelity` guard. The **6th consecutive 4c** (14/15/16/
+17/19). **NO new fidelity rung, settled at the gate-0 advisor pass**: *a rung must name physics the knob cannot
+express*, and a `:free` rung IS `K = 0` — the slider's own minimum. This is the **slice-16 `af_cma` precedent**
+(a live knob that changes physics without being a fidelity button). Also: the spiral is CONTINUOUS (watching
+the ceiling fall IS the lesson — a discrete flip throws the animation away), and a two-state button would HIDE
+the FINDING-6 non-monotonicity a bounded slider respects.
+
+**Slice 20 COMPLETE — the missile lowers its own ceiling, and only the turn is billed for it.** DEFERRED
+(NAMED): the **exponential atmosphere** ρ(z) (makes "high altitude" a REAL lever; it touches the shared drag
+path); **nonlinear C_L(α) / true stall** (α_max is still a hard clamp on the COMMAND — a true stall would bound
+the ACHIEVED α and close the ceiling-leak path this slice's K≥0.8 contamination re-exposed); **zero-lift-drag
+`C_D0` interaction** (`cd_area` exists but is held 0 for the isolation — a scenario with BOTH is the honest
+composition); **bank-to-turn / 3-D** (quaternion+ω — only there does the out-of-plane discard disappear), then
+the **radome/body-rate parasitic loop**; a **seeker in the coupled loop** (flips the class back to 4a/RNG-live).
+The rate-limited fin inside the coupled loop is **DEAD**, not deferred (`docs/plans/slice20.md`).
+Run the slice-20 showcase: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice20_induced_drag.yaml`,
+then launch Godot on `clients/godot`. Watch the **cyan ceiling FALL** as the missile turns: drag **K to 0** and
+it goes flat (the missile hits, and the ceiling never binds once); drag **K to 0.3** and it collapses 8.4× onto
+the demand. Re-run the gate-3 proof headless: start that server, then the console Godot `--headless --path
+clients/godot --script res://net/slice20_verify.gd` (exit 0 = pass). The UI test needs NO server:
+`… --script res://net/slice20_ui_test.gd`.
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,
