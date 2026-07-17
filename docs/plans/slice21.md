@@ -56,6 +56,9 @@ contract change is the entire cost of that slice and should be paid deliberately
   lesson to carry.
 
 ### 3. THE FALSE-FIDELITY TENSION — RESOLVED, AND IT SHIPS AS A TOOTH
+> **⚠ SUPERSEDED IN PART — READ "THE RUNG DECISION" BELOW.** The false-fidelity *analysis* here
+> stands (and gate-0 F5/F6 MEASURED it). The **"NO RUNG" conclusion is REVERSED**: slice 21 ships
+> `fidelity.atmosphere = constant | exponential`. Kept as the record of why.
 
 The sharpest risk in this slice: **is `H` just slice-19's `rho` knob relabeled?** If all H does is
 scale ρ at a fixed altitude then slice 21 IS slice 19 wearing a hat — the false-fidelity trap, and
@@ -244,7 +247,74 @@ stays on the ceiling factor with K = 0.**
 
 ---
 
+## ★ THE RUNG DECISION — `fidelity.atmosphere = constant | exponential` (SETTLED, advisor)
+
+**Gate 0 exposed a hole in the no-rung plan; the advisor then knocked the plan's own principle
+down. SLICE 21 SHIPS A RUNG.** This reverses §3's conclusion. The record:
+
+**What gate 0 found (the hole).** The slice-20 precedent is *"a rung must name physics the knob
+cannot express — and `:free` IS `K = 0`."* That works for slice 20 because **`K = 0` is a legal,
+exact, IN-DOMAIN slider position (the minimum).** **For H it is FALSE:** constant ρ is `H = ∞` —
+**a limit point, not a slider position. NO finite H produces it** (within 1% at z = 14 km needs
+`H ≈ 1.4e6`). And `set_param` sets a value, **it cannot REMOVE a key** ⇒ the twin was not
+reachable on the live wire at all.
+
+**Why the fallback ("no rung; the twin moves into `test_missile.jl`") was WRONG — the advisor's
+catch, and it is decisive.** The plan's reason to refuse the rung was *"`:constant` names no
+physics ρ(z) lacks; it names the ABSENCE of a gradient."* **That is word-for-word the description
+of `:airframe = point_mass` ("no α→lift coupling") and `:propagation = free_space` ("no
+terrain").** The suite already expresses "the absence of the new physics" as a rung, **twice**.
+**Applied consistently the principle DELETES those two rungs — so it cannot be the discriminator.**
+
+**THE DISCRIMINATOR THE SUITE ACTUALLY USES — write this down, it is the general result:**
+
+> **Is the off-state (a) a DISTINCT CODE PATH and (b) NOT KNOB-REACHABLE?**
+> - **KNOB** (`af_cma`, `af_k_induced`): the off-state is an **in-domain slider value** (0),
+>   continuous, **no separate path**.
+> - **RUNG** (`:airframe`, `:propagation`, **`:atmosphere`**): the off-state is a **distinct code
+>   path** and is **not reachable by any knob value**.
+
+Slice 21's constant-ρ is a distinct code path (**the two-closure key-gate — the plan's own design
+decision 4**) **AND** not knob-reachable. **Both criteria say RUNG.** Slice 20's no-rung rested on
+two legs that BOTH fail here: (a) `K = 0` is the slider minimum — `H = ∞` is not; (b) slice 20's
+lesson was CONTINUOUS so a button would hide it — **here the punchline IS the binary**.
+
+**The benefit was MIS-SCOPED (the plan filed it under "verifier convenience" — it is not).**
+HANDOFF frames this slice as **the honest completion of the constant-ρ approximation**: the whole
+lesson is *"constant-ρ was LYING TO YOU at altitude."* **The live side-by-side IS the punchline** —
+flip to the old model → **HIT (1.95 m)**, flip to the real atmosphere → **MISS (360.74 m)**.
+Knob-only **cannot reach the old model** (H-max misses by 6.29 m, not 1.95), so it buries the
+punchline in a Julia unit test and promotes *"dial the planet's scale height"* — pedagogically
+weird, and flagged as such — to the headline.
+
+**THE CONSTRUCTION IS CHEAP — SLICE 17's EXACT STRUCTURE:**
+```
+haskey(c, :af_scale_height) && get(w.fidelity, :atmosphere, :constant) === :exponential
+```
+The **verbatim slice-19/20 else-arm then serves BOTH key-absent AND `:atmosphere === :constant`**,
+so **byte-identity is automatic** and the three-state wrinkle dissolves. `ATMOSPHERE_MODES` lives
+in `atmosphere.jl` (included **before `radar.jl`** — convention 1/7, referenced ONCE by
+`LIVE_FIDELITY_MODES` and `set_fidelity`). **H stays a SEVERITY KNOB, read only on the
+`:exponential` arm.** Class **4c**, live-settable, **NO `set_fidelity` guard** — identical to
+`:airframe`.
+
+**CONVENTION-9 CONSEQUENCE (settled in the same breath): `:atmosphere` is the scenario's ONE
+toggled button.** `:airframe` is **AUTHORED FIXED at `pitch_coupled`** (the missile must stay
+coupled for a ceiling to exist at all). For slice 21 the contrast that matters is
+**constant-vs-ρ(z)**, NOT slice-19's point_mass-vs-coupled. **One button, not two.**
+
+**⚠ THIS KILLS DESIGN DECISION 8 ("zero client code").** The client's `_setup_spatial_fid_btn`
+checks the **airframe branch FIRST**, value-guarded on `_fidelity.has("airframe")` — and slice
+21's scenario HAS `airframe: pitch_coupled` in its fidelity block, so the client would show the
+**airframe** cycler instead of the **atmosphere** one. **This is the slice-16 client note
+recurring** ("value-guard it when a later slice adds a fidelity alongside"). Gate 3 must route the
+shared button to `:atmosphere` when present. **NOT zero client code.**
+
+---
+
 ## ⚠ THE OPEN QUESTION GATE 0 EXPOSED — THE TWIN IS NOT LIVE-REACHABLE
+> **RESOLVED — see "THE RUNG DECISION" above. The rung makes the twin a live arm (the button).**
+> Kept as the record of how the problem was found.
 
 **The no-rung argument has a hole the slice-20 precedent does not cover, and it is worth stating
 precisely because it cuts against the planned framing (§3 above).**
@@ -306,10 +376,15 @@ behind the `propagation` knob — **do not conflate the aero atmosphere with the
 2. **Rebuild `AirframeParams` PER STAGE** rather than threading a `rho` kwarg through six aero
    functions. `AirframeParams` is isbits — a per-stage rebuild is stack-allocated and free. This is
    what keeps decision 1 true.
-3. **NO new fidelity rung. ONE knob: `af_scale_height` (H, metres), presence-gated.** Key absent ⇒
-   constant ρ ⇒ **slices 1–20 byte-identical**. (§3 above for why both halves hold.)
-4. **TWO CLOSURES, gated on `haskey(c, :af_scale_height)`; the else-arm is slice 17/19/20
-   TEXTUALLY VERBATIM.** Do NOT compute `ρ_stage` unconditionally and lean on `exp(0)==1` — the
+3. **A NEW RUNG `fidelity.atmosphere = constant | exponential` (`ATMOSPHERE_MODES`), PLUS the
+   severity knob `af_scale_height` (H, m).** See "THE RUNG DECISION" — the off-state is a distinct
+   code path AND not knob-reachable, so both of the suite's rung criteria are met. The rung is
+   THE BUTTON (the live old-model-HITS vs truth-MISSES side-by-side = the punchline); H is the
+   severity slider on the `:exponential` arm only. `LIVE_FIDELITY_MODES` GAINS `atmosphere`.
+4. **TWO CLOSURES, gated on `haskey(c, :af_scale_height) && get(w.fidelity, :atmosphere,
+   :constant) === :exponential`; the else-arm is slice 17/19/20 TEXTUALLY VERBATIM** — and it
+   therefore serves BOTH key-absent AND `:constant`, so byte-identity is automatic. Do NOT
+   compute `ρ_stage` unconditionally and lean on `exp(0)==1` — the
    slice-20 discipline: `0.0*v` mints `-0.0`, `a + (-0.0)` flips a bit, and the reinterpret
    determinism tests catch it. **Gate on KEY PRESENCE, never on the identity.** (The *test* may
    assert the H→∞ identity; the *live path* may not rely on it.)
@@ -328,8 +403,10 @@ behind the `propagation` knob — **do not conflate the aero atmosphere with the
 7. **Class 4c** — physics-changing, NO RNG (truth-fed PN, no seeker ⇒ **"draw-count invariance" is
    VACUOUS; do NOT copy the slice-11/13 draw language**). Live-settable, **no `set_fidelity`
    guard**. **The 7th consecutive 4c** (14/15/16/17/19/20/21).
-8. **Client: expect ZERO new code** (the slice-20 outcome). Slice 19's aero strip already plots the
-   ceiling; **it just starts falling for a NEW reason.** Confirm, don't assume.
+8. **Client: NOT zero code** (design decision 8 as first planned is DEAD — see the rung decision).
+   Slice 19's aero strip carries the ceiling plot unchanged, but the shared button must route to
+   the `:atmosphere` cycler even though `_fidelity.has("airframe")` is TRUE (the airframe branch
+   is checked FIRST — the slice-16 client note recurring).
 
 ---
 
@@ -357,42 +434,62 @@ slice 20's first design and slice 19's `speed` knob).
 
 ### 1. `atmosphere.jl` primitive green (pure, RNG-free, no LinearAlgebra — the §9 house style)
 
-`air_density(z; rho0, H)`. Closed-form teeth: the z=0 identity (`== rho0`, bit-exact); the
-one-scale-height point (`ρ(H)/ρ₀ == exp(-1)`); **the H→∞ limit ⇒ `== rho0` BIT-EXACT** (the
-no-rung argument, pinned as a test); the negative-z floor (convention 6); monotone-decreasing in z.
-Included **before `missile.jl`** (no mode-const ⇒ no `LIVE_FIDELITY_MODES` ordering constraint).
+`air_density(z; rho0, H)` + `const ATMOSPHERE_MODES = (:constant, :exponential)`. Closed-form
+teeth: the z=0 identity (`== rho0`, bit-exact); the one-scale-height point (`ρ(H)/ρ₀ == exp(-1)`);
+the H→∞ limit ⇒ `== rho0` bit-exact; the negative-z floor (convention 6); monotone-decreasing in z.
+**Included BEFORE `radar.jl`** (convention 1 — it carries a mode-const `LIVE_FIDELITY_MODES` must
+reference ONCE; convention 7's one-list-no-drift).
 
-### 2. Wired — stage-z in the coupled closure + the loader key
+### 2. Wired — the rung + stage-z in the coupled closure + the loader key
 
-The two-closure gate; the per-stage params rebuild; ρ(z) at the decide!/telemetry sites
-(missile.jl ~272, ~320, ~637–645) via `air_density(e.pos[3]; …)`; `scenario.jl` load + validate
-`H > 0` + the knob. **`LIVE_FIDELITY_MODES` UNTOUCHED.** Teeth: **byte-identity when the key is
-absent (the master check)**; the ceiling-factor collapse; the twin; the stage-z transient golden;
-the `a_ind ∝ 1/Q` compose (K > 0).
+The two-closure gate (key AND rung); the per-stage params rebuild; ρ(z) at the decide!/telemetry
+sites (missile.jl ~272, ~320, ~637–645) via `air_density(e.pos[3]; …)` — **each rung-gated too**;
+`scenario.jl` load + validate `H > 0` + the knob; **`LIVE_FIDELITY_MODES` GAINS
+`atmosphere = ATMOSPHERE_MODES`** (the ONLY plumbing edit; NO `set_fidelity` guard — the
+`:airframe` precedent). Teeth: **byte-identity for BOTH key-absent AND `:constant` (the master
+check)**; the F6 exact factorization (ρ-factor × V-factor, and the `:constant` arm's ρ-factor is
+**EXACTLY 1**); the F5 "no constant matches the spread" control; the **stage-z transient golden**
+(F9 — 0.136 m on a 360 m lesson: nothing else can catch it); the closed-form `a_ind ∝ 1/Q` compose
+(F10).
 
 ### 3. Scenario + Godot view + four proofs (convention 14)
 
-`scenarios/slice21_atmosphere.yaml` (K=0, cd_area=0, a CLIMBING intercept); `net/slice21_verify.gd`
-(the ceiling-factor collapse as a number + the twin + held-seed bit-identical replay + the
-not-a-dead-knob H tripwire); `net/slice21_ui_test.gd` (the value-guard — 16 drops the button, 17/19
-show it, 18 stays 3-D, 21 = ? — **confirm at gate 3**); the `Sandbox.tscn` headless smoke-load; the
-windowed shot aimed at the CLAIMED branch (the cyan ceiling falling as the missile CLIMBS).
+`scenarios/slice21_atmosphere.yaml` (K=0, cd_area=0, `airframe: pitch_coupled` AUTHORED FIXED,
+`atmosphere` THE button, a jinking high-altitude target — F3/F4); `net/slice21_verify.gd` (the
+ρ-factor collapse as a number + **the live twin across the rung toggle** (1.95 vs 360.74) +
+held-seed bit-identical replay + the not-a-dead-knob H tripwire); `net/slice21_ui_test.gd` (the
+value-guard, now FIVE ways — 16 drops the button, 17/19 show `airframe`, 18 stays 3-D, **21 must
+show `atmosphere` DESPITE `_fidelity.has("airframe")` being true**); the `Sandbox.tscn` headless
+smoke-load; the windowed shot aimed at the CLAIMED branch (the cyan ceiling falling as the missile
+CLIMBS, demand crossing it, AERO SAT lit).
 
 ---
 
 ## Watch-items
 
-- **The stage-z fix is invisible to steady-state tests** — golden it (§1 above).
+- **The stage-z fix is invisible to steady-state tests** (F9: 0.136 m on a 360 m lesson) — only a
+  TRANSIENT GOLDEN catches it. Read the STAGE `P[3]`, never the entry pos.
 - **The `speed`-trap shape**: assert H MOVES the physics; "nothing threw" is not a test.
-- **The miss reverses at small H** — headline the monotone-safe ceiling factor, not the miss.
-- **Do NOT globally lift the "never say high altitude" caveat** — it lifts only where the key is.
+- **The miss does NOT reverse in H** (F7 — an advisor prediction REFUTED; thin air costs
+  AUTHORITY, not SPEED). Headline the ρ-factor anyway: it is monotone BY CONSTRUCTION.
+- **The α LEAK bounds H at 6000** (F8) — a breach means lift exceeds the ceiling and the lesson
+  erodes. `k_alpha`/`k_q` are NEVER knobs (slice-19 FINDING 14).
+- **Do NOT globally lift the "never say high altitude" caveat** — it lifts ONLY on the
+  `:exponential` arm of a scenario carrying the key. Slices 19/20's wires keep the old language.
 - **Do NOT conflate the aero atmosphere with §11's RF "layered atmosphere/ducting"** (`propagation`).
-- **`a_ind ∝ 1/Q` is a tooth, not the headline** (convention 9).
+- **`a_ind ∝ 1/Q` is a closed-form tooth, not the headline** (convention 9 + F10's confound).
 - **The engagement MUST traverse altitude** or H degenerates into slice-19's ρ knob.
+- **⚠ THE SHOWCASE SITS IN A WINDOW (advisor, for gates 2/3):** `a_lat = 40` works but **60 makes
+  the TWIN miss too** and **`tvx = −400` breaks both arms** (F1's reach wall). **Pin the
+  robustness margin the way H was bounded** — a showcase one step from collapsing is not pinned.
+- **The client button is NOT free** — the airframe branch is checked first and slice 21's fidelity
+  block HAS `airframe`. Route to `:atmosphere`; re-smoke 16/17/18/19/20.
 
 ## Task checklist
 
-- [ ] Gate 0 — P1…P5 probes; the plan's numbers are all PLACEHOLDERS until this lands
-- [ ] Gate 1 — `atmosphere.jl` + `test_atmosphere.jl` green
-- [ ] Gate 2 — the stage-z closure + loader + knob; byte-identity + the teeth green
-- [ ] Gate 3 — scenario + the four proofs; STATUS/CLAUDE/HANDOFF as-built
+- [x] Gate 0 — **DONE, 9 probes (F1–F10). The design changed in three places; the rung was
+      REVERSED IN.** Remaining: pin the showcase's robustness window (advisor flag).
+- [ ] Gate 1 — `atmosphere.jl` (+ `ATMOSPHERE_MODES`) + `test_atmosphere.jl` green
+- [ ] Gate 2 — the rung + stage-z closure + loader + knob; byte-identity (key-absent AND
+      `:constant`) + the F5/F6/F9/F10 teeth green
+- [ ] Gate 3 — scenario + the four proofs + the client button routing; STATUS/CLAUDE/HANDOFF as-built
