@@ -656,3 +656,70 @@
         @test paid.ceil / free.ceil ≈ (paid.V / free.V)^2 atol = 1e-12
     end
 end
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+@testset "atmosphere × aero — the ceiling and the bill are both ρ(z)-borne (slice 21 gate 2)" begin
+    # These are CLOSED-FORM identities on the pure kernels, deliberately NOT scenario diffs.
+    # gate-0 F10 measured the compose on the wire at +33% and found it CONFOUNDED (the two arms
+    # fly different trajectories, so a scenario number cannot isolate it). The algebra can.
+    m = 140.0; S = π * 0.1^2; Cla = 20.0; α_max = 0.2
+    p_at(ρ; K = 0.0) = AirframeParams(S, 0.2, 20.0, -1.0, 3.0, -150.0, ρ, Cla, K)
+    n3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    @testset "the CEILING is LINEAR in ρ(z) — the ρ-factor is exactly the density ratio" begin
+        # `a_max_aero = ½·ρ·V²·S·|C_Lα|·α_max/m` ⇒ at fixed V the ceiling ratio IS ρ₂/ρ₁, with no
+        # residual. This is the identity the F6 factorization rests on: it lets ALTITUDE and SPEED
+        # separate exactly, which slice 20's V-only collapse could never do.
+        V = 600.0
+        for z in (0.0, 3000.0, 8500.0, 14000.0)
+            ρz = air_density(z)
+            @test aero_accel_limit(V, m, p_at(ρz); alpha_max = α_max) /
+                  aero_accel_limit(V, m, p_at(1.225); alpha_max = α_max) ≈ ρz / 1.225 atol = 1e-12
+        end
+        # …and the FULL factorization, both factors moving at once (the headline's algebra)
+        ρ1, ρ2, V1, V2 = 1.225, air_density(13570.0), 700.0, 493.0
+        @test aero_accel_limit(V2, m, p_at(ρ2); alpha_max = α_max) /
+              aero_accel_limit(V1, m, p_at(ρ1); alpha_max = α_max) ≈
+              (ρ2 / ρ1) * (V2 / V1)^2 atol = 1e-12
+    end
+
+    @testset "α FOR A GIVEN g RISES AS THE AIR THINS — 1/ρ (why the thin missile pulls harder)" begin
+        # The inversion `α_cmd = a_perp·m/(Q·S·C_Lα)` ⇒ at fixed demand and speed, α ∝ 1/ρ. This is
+        # what gate-0 SAW on the wire (F2/P1d: the twin pulled α = 0.033 where ρ(z) pulled 0.139 —
+        # 4× — for the SAME maneuver), stated as the identity behind it.
+        V = 600.0; vel = Vec3(V, 0.0, 0.0)
+        a_cmd = Vec3(0.0, 0.0, 40.0)                    # a modest ⟂ demand, far under any clamp
+        α1, s1 = alpha_command(a_cmd, vel, m, p_at(1.225); alpha_max = 10.0)
+        α2, s2 = alpha_command(a_cmd, vel, m, p_at(air_density(14000.0)); alpha_max = 10.0)
+        @test !s1 && !s2                                 # unclamped, so the ratio is the algebra
+        @test α2 / α1 ≈ 1.225 / air_density(14000.0) atol = 1e-9
+        @test α2 > 4.0 * α1                              # thin air ⇒ MUCH more α for the same g
+    end
+
+    @testset "THE COMPOSE (slice 20 → 21) — the SAME turn bills MORE speed up high: a_ind ∝ 1/Q" begin
+        # Substituting the commanded α into the bill:
+        #     |a_ind| = Q·S·K·C_Lα²·α²/m  and  α = a_perp·m/(Q·S·C_Lα)
+        #  ⇒  |a_ind| = K·m·a_perp²/(Q·S)                                   ∝ 1/Q
+        # The induced drag for a GIVEN maneuver is INVERSELY proportional to dynamic pressure — so
+        # thin air makes slice 20's invoice BIGGER, even though Q itself is smaller. A named
+        # observation and a tooth; NOT the headline (convention 9 — slice 20 already teaches the
+        # bill, and re-teaching it here would muddy the z→ρ→ceiling axis).
+        V = 600.0; vel = Vec3(V, 0.0, 0.0); K = 0.15
+        a_perp = 40.0; a_cmd = Vec3(0.0, 0.0, a_perp)
+        function bill(ρ)
+            p = p_at(ρ; K = K)
+            α, sat = alpha_command(a_cmd, vel, m, p; alpha_max = 10.0)
+            @test !sat
+            # fly the airframe AT the commanded α (θ = γ + α; here γ = 0)
+            return n3(induced_drag_accel(vel, α, m, p)), 0.5 * ρ * V^2
+        end
+        b1, Q1 = bill(1.225)
+        b2, Q2 = bill(air_density(14000.0))
+        @test b2 > b1                                    # the SAME turn costs MORE in thin air
+        @test b2 / b1 ≈ Q1 / Q2 atol = 1e-9              # …and EXACTLY as 1/Q
+        # the closed form itself, against an INDEPENDENT recompute (convention 11's different-
+        # algorithm oracle — not a re-typed `induced_drag_accel`)
+        @test b1 ≈ K * m * a_perp^2 / (Q1 * S) atol = 1e-9
+        @test b2 ≈ K * m * a_perp^2 / (Q2 * S) atol = 1e-9
+    end
+end

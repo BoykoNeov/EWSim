@@ -2462,3 +2462,317 @@ end
         end
     end
 end
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+@testset "exponential atmosphere wired (slice 21 — the ceiling you lower by CLIMBING)" begin
+    dt = 1.0e-3
+    n3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # THE GATE-0 PICK (F1–F4). Slice-19/20's airframe VERBATIM, but the ENGAGEMENT is new and
+    # every part of it is load-bearing:
+    #  • a SLOW, DISTANT, HIGH target (22 km out, 14 km up, 250 m/s). F1: "make it climb" is
+    #    UNFLYABLE against a fast target — a 700 m/s missile needs ~15 s to climb 6 km, in which a
+    #    head-on 800 m/s target covers 12 km, so BOTH arms missed by kilometres (the REACH wall,
+    #    not the ceiling). Slow + distant buys the climb the gradient needs.
+    #  • the target JINKS (`a_lat = 40`). F2: without it the ρ(z) missile turns EARLY, LOW, in
+    #    THICK air, arrives on a good collision course, and by the time it is high and cannot
+    #    maneuver IT NO LONGER NEEDS TO — ceiling 16.5 m/s² (1.7 g) at 16 km and it still only
+    #    missed by 29 m. PN nulls LOS rate, so terminal demand against a straight-flier → 0 BY
+    #    CONSTRUCTION. **LATE DEMAND IS STRUCTURAL, and only a maneuvering target supplies it.**
+    #  • ⚠ F3: slice 20 FORBADE a maneuvering target — that rule was about attributing the induced
+    #    BILL ("the missile pays for its own turn"). HERE K = 0: THERE IS NO BILL. Do not copy the
+    #    rule across. The `:constant` twin flies the IDENTICAL geometry against the IDENTICAL jink
+    #    and HITS, which controls for the target completely. Nor is this slice 12: the twin proves
+    #    plain PN handles this jink comfortably at sea-level density (its ceiling never binds ONCE).
+    #  • K = 0 AND cd_area = 0 — THE ISOLATION. Nothing bleeds speed but gravity, and the twin
+    #    carries that same gravity, so the twin difference is PURE ALTITUDE.
+    function atm_world(; H = nothing, atmosphere = :exponential, K = nothing,
+                       rho0 = 1.225, alat = 40.0, airframe = :pitch_coupled)
+        w = World(seed = 21, fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                            :autopilot => :alpha,
+                                                            :airframe => airframe,
+                                                            :atmosphere => atmosphere))
+        el = deg2rad(25.0)
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => rho0,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => 0.2,
+                                :n_pn => 4.0, :a_max => 3000.0, :delta_max => 0.4,
+                                :k_alpha => 1.0, :k_q => 0.3)
+        # PRESENCE, not value, is the gate (the slice-20 `k_induced` shape): `H = nothing` must
+        # leave the key ABSENT, which is what makes slices 8–20 unreachable-by-atmosphere.
+        H === nothing || (comp[:af_scale_height] = H)
+        K === nothing || (comp[:af_k_induced] = K)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 1000.0),
+                                 vel = Vec3(700.0 * cos(el), 0.0, 700.0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(22000.0, 0.0, 14000.0),
+                                 vel = Vec3(-250.0, 0.0, 0.0),
+                                 comp = Dict{Symbol,Any}(:a_lat_mps2 => alat, :turn_sign => 1.0))
+        return w, Subsystem[BallisticMissile(:m1), Autopilot(:m1), ManeuveringTarget(:t1)]
+    end
+
+    # To first CPA ([[ewsim-missile-verifier-sampling]]: first-descending-band, never a global min).
+    #
+    # ⚠ THE LOS GATE IS r > 1000, **NOT** slice-20's TEST value of 300 — and this was MEASURED, not
+    # copied (it failed first run at 300, which is exactly how the memory says this trap presents).
+    # Slice 20's own *wire* used 1000 for this reason and only its Julia test could afford 300.
+    # Here the TWIN HITS (1.949 m), so it flies the full r→0 endgame where PN's ω → ∞ spikes a_cmd
+    # (slice-20 FINDING 8). Its ceiling then blips against that spike — 94 ticks at a 300 m gate.
+    # Those blips are the ARTIFACT, not an aero limit: measured, they lie ENTIRELY within
+    # r ∈ [1.9, 362.9] m, and at r > 1000 the count is EXACTLY 0. The 1000 m gate excludes that
+    # endgame and is a no-op for the missing arms (whose CPAs are 360 m and 1706 m — never closer),
+    # so it cannot flatter them. Slice 19 could assert this UNGATED only because it misses by 295 m
+    # and never enters the regime; a HIT scenario cannot. Do NOT lower this.
+    function fly_atm(; T = 60.0, kw...)
+        w, s = atm_world(; kw...)
+        rmin, prev, closing = Inf, Inf, true
+        aero_sat = 0; defl_sat = 0; gated = 0; t = 0.0
+        α_pk = 0.0; ceil0 = NaN; ceil_end = NaN; ρf0 = NaN; ρf_end = NaN; V0 = NaN; V_end = NaN
+        for _ in 1:round(Int, T / dt)
+            tick!(w, s, dt); empty!(w.events); t += dt
+            m = w.entities[:m1]
+            r = n3(w.entities[:t1].pos - m.pos)
+            closing && r > prev && (closing = false)
+            closing && (rmin = min(rmin, r)); prev = r
+            tel = w.env[:telemetry]
+            if closing
+                cl = get(tel, "m1.a_max_aero", NaN)
+                ρ  = EWSim._airframe_rho(m.comp, w, m.pos[3]) / 1.225
+                isnan(ceil0) && (ceil0 = cl; ρf0 = ρ; V0 = n3(m.vel))
+                ceil_end = cl; ρf_end = ρ; V_end = n3(m.vel)
+                if r > 1000.0 && t > 0.2
+                    gated += 1
+                    get(tel, "m1.aero_sat", 0.0) > 0.5 && (aero_sat += 1)
+                    get(tel, "m1.defl_sat", 0.0) > 0.5 && (defl_sat += 1)
+                    α_pk = max(α_pk, abs(get(tel, "m1.alpha", 0.0)))
+                end
+            end
+            !closing && break
+        end
+        return (miss = rmin, aero_sat = aero_sat, defl_sat = defl_sat, gated = gated, α_pk = α_pk,
+                ceil0 = ceil0, ceil_end = ceil_end, ρf0 = ρf0, ρf_end = ρf_end,
+                V0 = V0, V_end = V_end, w = w, tel = w.env[:telemetry])
+    end
+
+    @testset "ADDITIVITY — key ABSENT ⇒ the ρ(z) arm is unreachable (bit-identical, `===`)" begin
+        # The slice-20 induced-drag / slice-9 `:a_ctrl` precedent: byte-identity BY CONSTRUCTION
+        # (the else-arm is slice 17/19/20's code, TEXTUALLY), never by trusting `exp(0) == 1`.
+        w1, s1 = atm_world(H = nothing); w2, s2 = atm_world(H = nothing)
+        for _ in 1:3000
+            tick!(w1, s1, dt); empty!(w1.events)
+            tick!(w2, s2, dt); empty!(w2.events)
+        end
+        @test w1.entities[:m1].pos === w2.entities[:m1].pos     # class 4c: no RNG, exact replay
+        @test w1.entities[:m1].vel === w2.entities[:m1].vel
+        @test !haskey(w1.entities[:m1].comp, :af_scale_height)  # the key never appears by itself
+    end
+
+    @testset "⭐ BOTH OFF-STATES ARE THE SAME CODE — `:constant` ≡ key-absent, BIT-FOR-BIT" begin
+        # THE RUNG'S CENTRAL STRUCTURAL CLAIM (advisor): the verbatim slice-17/19/20 else-arm
+        # serves BOTH the key-absent world AND `:atmosphere === :constant`, so byte-identity for
+        # every prior slice is automatic and the three-state wrinkle dissolves. A missile carrying
+        # an authored H but running `:constant` must be bit-identical to one with no key at all —
+        # `===`, not a calibrated atol (convention 11's mismatched-EP no-op shape).
+        wa, sa = atm_world(H = nothing)
+        wb, sb = atm_world(H = 8500.0, atmosphere = :constant)
+        for _ in 1:4000
+            tick!(wa, sa, dt); empty!(wa.events)
+            tick!(wb, sb, dt); empty!(wb.events)
+        end
+        @test wa.entities[:m1].pos === wb.entities[:m1].pos
+        @test wa.entities[:m1].vel === wb.entities[:m1].vel
+        @test wa.entities[:m1].comp[:pitch_theta] === wb.entities[:m1].comp[:pitch_theta]
+        # …and H is INERT under `:constant`: a wildly different scale height changes NOTHING.
+        wc, sc = atm_world(H = 2000.0, atmosphere = :constant)
+        for _ in 1:4000; tick!(wc, sc, dt); empty!(wc.events); end
+        @test wa.entities[:m1].pos === wc.entities[:m1].pos
+    end
+
+    @testset "⭐ NOT A DEAD KNOB — H MOVES the physics (the arc's signature failure)" begin
+        # slice-19's gate-3 finding: `comp[:speed]` was consumed ONCE at load and read by NOTHING
+        # per-tick, and a no-crash test PASSED on it. Assert H MOVES a real quantity, never merely
+        # that nothing threw. H is fetched EVERY tick by BOTH integrate! and decide! (via
+        # `_airframe_rho`), so it is live by construction — pin it anyway.
+        lo = fly_atm(H = 6000.0, T = 12.0)      # thins fast ⇒ a LOW ceiling
+        hi = fly_atm(H = 25000.0, T = 12.0)     # thins slowly ⇒ a HIGHER ceiling
+        @test lo.ceil_end < hi.ceil_end
+        @test lo.ρf_end   < hi.ρf_end
+        @test hi.ceil_end / lo.ceil_end > 1.5   # a REAL move, not a rounding wobble
+    end
+
+    @testset "⭐⭐ THE HEADLINE — the ceiling spread FACTORIZES EXACTLY: ρ-factor × V-factor" begin
+        # gate-0 F6, and the reason this slice can do what slice 20 could NOT. Because
+        # `a_max_aero = ½·ρ(z)·V²·S·|C_Lα|·α_max/m`, the within-run ceiling ratio is IDENTICALLY
+        # [ρ(z)/ρ(z₀)]·[V/V₀]² — an ALGEBRAIC IDENTITY, not an empirical fit. So ALTITUDE and
+        # SPEED separate with NO residual, and the ρ-factor is a PURE-z headline with no V confound
+        # (slice 20's collapse ratio could never be decomposed this way — advisor).
+        e = fly_atm(H = 8500.0, T = 60.0)
+        @test (e.ceil_end / e.ceil0) ≈ (e.ρf_end / e.ρf0) * (e.V_end / e.V0)^2 atol = 1e-12
+        # THE ρ-FACTOR COLLAPSES — the lesson, as a number (F4/F6: ≈0.889 → ≈0.203, a 4.4× fall
+        # WITHIN ONE RUN, with ρ₀/α_max/mass/geometry ALL HELD. Nobody lowered it; it CLIMBED).
+        @test e.ρf0   ≈ 0.889 atol = 5e-3
+        @test e.ρf_end < 0.25
+        @test e.ρf0 / e.ρf_end > 3.5
+    end
+
+    @testset "⭐⭐ THE TWIN's ρ-FACTOR IS *EXACTLY* 1 — constant ρ blames SPEED for everything" begin
+        # The sharpest single fact in the slice (F6). The `:constant` arm's ceiling ALSO falls on
+        # this climb — by ≈2×, purely from the V bleed, i.e. GRAVITY — and its model attributes
+        # 100% of that to speed because its ρ-factor is 1.0 BY DEFINITION. ρ(z) reveals the 4.4× it
+        # could not see. `==`, not `≈`: the twin's ρ never moves off ρ₀ by even a bit.
+        c = fly_atm(H = nothing, T = 60.0)
+        @test c.ρf0 == 1.0
+        @test c.ρf_end == 1.0
+        @test (c.ceil_end / c.ceil0) ≈ (c.V_end / c.V0)^2 atol = 1e-12   # ALL of it is speed
+        @test c.ceil_end < c.ceil0                                        # it does fall — gravity
+    end
+
+    @testset "⭐⭐ THE LESSON — the old model HITS, the real atmosphere MISSES (the rung's point)" begin
+        # F4, the live side-by-side that IS the punchline and the reason this is a RUNG and not a
+        # knob (no slider value reaches `:constant` — H = ∞ is a LIMIT POINT, not a position).
+        c = fly_atm(H = nothing,  T = 60.0)     # the OLD model: constant ρ
+        e = fly_atm(H = 8500.0,   T = 60.0)     # the truth: Earth's REAL 8500 m scale height
+        @test c.miss < 10.0                     # HIT  (gate 0: 1.95 m)
+        @test e.miss > 100.0                    # MISS (gate 0: 360.74 m)
+        @test e.miss / c.miss > 50.0            # gate 0: 185×
+        # THE ISOLATION, re-established not copied: across the whole guided approach the twin's
+        # aero ceiling NEVER BINDS ONCE, so nothing in ITS run is aero-limited — the miss is not
+        # "the ceiling binds" (slice 19), it is "the ceiling FELL BECAUSE IT CLIMBED". (Gated at
+        # r > 1000 — see `fly_atm`: the twin's only binds are the r→0 endgame artifact.)
+        @test c.aero_sat == 0
+        @test e.aero_sat > 0
+        # …and the FOURTH cap (slice-15's δ_max) is provably not standing in, under BOTH arms.
+        @test c.defl_sat == 0
+        @test e.defl_sat == 0
+        # …and `a_max` (slice 10/12's authored MAGNITUDE clamp) is INERT: the aero ceiling is far
+        # below it everywhere, so it cannot be what bit (the slice-20 assertion, re-earned).
+        @test e.ceil0 < 3000.0
+        @test c.ceil0 < 3000.0
+    end
+
+    @testset "the α_max clamp does NOT LEAK at the knob's floor (F8 — the bound is MEASURED)" begin
+        # slice-19 FINDING 14: α_max bounds the COMMAND, lift uses the ACHIEVED α, so a hot loop
+        # overshoots and the ceiling LEAKS. F8 measured the breach at H ≤ 3000 (α_pk ≥ 0.2000) and
+        # bounded the knob at 6000 — a 2× margin, the slice-20 K discipline. Pin the FLOOR clean.
+        lo = fly_atm(H = 6000.0, T = 60.0)
+        @test lo.α_pk < 0.2                       # no leak at the knob's minimum
+        @test lo.defl_sat == 0
+        @test lo.miss > 100.0                     # …and the floor is still deep in the lesson
+    end
+
+    @testset "the atmosphere reaches EVERY airframe site — the readout matches the integrator" begin
+        # A hidden inconsistency would be its own bug class: if `decide!` ceilinged against ρ(z)
+        # while `build_env!` reported ω_sp from a constant ρ, the wire would describe a different
+        # missile than the one flying. Pin that the telemetry ρ IS the integrator's ρ, by checking
+        # the published ceiling against `aero_accel_limit` rebuilt from the SAME `_airframe_rho`.
+        w, s = atm_world(H = 8500.0)
+        for _ in 1:6000; tick!(w, s, dt); empty!(w.events); end
+        m = w.entities[:m1]; tel = w.env[:telemetry]
+        ρz = EWSim._airframe_rho(m.comp, w, m.pos[3])
+        @test ρz < 1.225                                   # it HAS climbed into thinner air
+        p = AirframeParams(m.comp[:af_S], m.comp[:af_d], m.comp[:af_I], m.comp[:af_cma],
+                           m.comp[:af_cmd], m.comp[:af_cmq], ρz, m.comp[:af_cla])
+        @test tel["m1.a_max_aero"] ≈
+              aero_accel_limit(n3(m.vel), m.comp[:mass_kg], p; alpha_max = 0.2) atol = 1e-9
+        # and ω_sp (build_env!'s slice-16 readout) is likewise on ρ(z), not ρ₀
+        @test tel["m1.omega_sp"] ≈ short_period_freq(n3(m.vel), p) atol = 1e-9
+    end
+
+    @testset "⭐ THE STAGE-z GOLDEN — the ONLY thing that catches an entry-z read (F9)" begin
+        # THE SLICE-17 STAGE-θ TRAP, RECURRING — and this time the golden is not "insurance", it is
+        # a HUNT with a measured quarry. `_integrate_coupled!`'s closure MUST read the RK4 STAGE
+        # height `P[3]`; reading the ENTRY height `e.pos[3]` compiles clean, is only O(dt²) off per
+        # step, and is INVISIBLE to every other test in this file: gate-0 F9 measured it moving the
+        # miss by 0.136 m on a 360 m lesson (0.04%), leaving the ρ-factor, the ceiling, the
+        # factorization, the twin ratio and the leak bound ALL intact. Nothing but an absolute
+        # golden can see it.
+        #
+        # Generated from the LIVE tick! path at 10 000 ticks (10 s — well into the climb, where ρ(z)
+        # is changing fastest). THE MARGIN IS THE TOOTH (convention 11 — an atol that cannot fail is
+        # a tautology): the entry-z variant, measured at this exact tick, sits
+        #   Δpos_x = 1.778e-3 m, Δpos_z = 3.039e-3 m, Δθ = 1.459e-7 rad
+        # away — so atol 1e-6 on position catches it with a ~3000× margin and atol 1e-9 on θ with
+        # ~150×. If someone "simplifies" the stage read, these fail loudly.
+        w, s = atm_world(H = 8500.0)
+        for _ in 1:10000; tick!(w, s, dt); empty!(w.events); end
+        m = w.entities[:m1]
+        @test isapprox(m.pos[1], 6135.997966610977;            atol = 1e-6)
+        @test isapprox(m.pos[3], 3887.913109564929;            atol = 1e-6)
+        @test isapprox(m.comp[:pitch_theta],  0.335753272378;  atol = 1e-9)
+        @test isapprox(m.comp[:pitch_q],     -0.033490350860;  atol = 1e-9)
+    end
+
+    @testset "degenerates — a live H slider can never crash a tick (convention 5)" begin
+        # The consumer floor inside `air_density` is the second guard site; the loader is the first.
+        # A rogue `set_param` reaching H → 0 (or negative) must not NaN the state: at z = 0 that is
+        # `0/0`, and a NaN ρ propagates into `pos` and ships an invalid frame.
+        for H in (1.0e-12, 0.0, -5000.0, 1.0e12)
+            w, s = atm_world(H = H)
+            for _ in 1:200; tick!(w, s, dt); empty!(w.events); end
+            m = w.entities[:m1]
+            @test all(isfinite, m.pos)
+            @test all(isfinite, m.vel)
+            @test isfinite(m.comp[:pitch_theta])
+            @test isfinite(w.env[:telemetry]["m1.a_max_aero"])
+        end
+    end
+
+    @testset "loader — `scale_height_m` is PRESENCE-gated and its SIGN is validated (convention 5)" begin
+        mktempdir() do dir
+            base = """
+            name: s21
+            seed: 21
+            fidelity: {airframe: pitch_coupled, guidance: pn, autopilot: alpha, atmosphere: exponential}
+            entities:
+              - id: m1
+                kind: missile
+                pos: [0.0, 0.0, 1000.0]
+                missile:
+                  mass_kg: 140.0
+                  speed: 700.0
+                  elevation_deg: 25.0
+                  guidance: {n_pn: 4.0, a_max: 3000.0, delta_max: 0.4}
+                  airframe: {inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0, cmq: -150.0, cla: 20.0, alpha_max: 0.2, scale_height_m: 8500.0}
+              - id: t1
+                kind: target
+                pos: [22000.0, 0.0, 14000.0]
+                vel: [-250.0, 0.0, 0.0]
+                target: {rcs_m2: 1.0, maneuver: {a_lat_mps2: 40.0}}
+            """
+            p = joinpath(dir, "s21.yaml"); write(p, base)
+            # The fixture must LOAD CLEAN first — otherwise the `@test_throws` cases below would
+            # pass for free on an unrelated error (the slice-19 "a test that malforms its own
+            # fixture proves nothing" trap, which slice 20 hit live).
+            @test load_scenario(p).world.entities[:m1].comp[:af_scale_height] == 8500.0
+            # PRESENCE-GATED: no `scale_height_m:` ⇒ NO key ⇒ the ρ(z) arm is unreachable even with
+            # `atmosphere: exponential` set. The slice-20 `k_induced` / slice-18 `alt_hold_m`
+            # precedent, and LOAD-BEARING: slices 16/17/19/20 ALL carry airframe blocks, so gating
+            # on the BLOCK would grow the key on every one of them.
+            noh = replace(base, ", scale_height_m: 8500.0" => "")
+            p2 = joinpath(dir, "s21_noh.yaml"); write(p2, noh)
+            @test !haskey(load_scenario(p2).world.entities[:m1].comp, :af_scale_height)
+            # THE SIGN IS VALIDATED (unlike cma/cla, which have lesson-adjacent negative branches):
+            # H ≤ 0 is an atmosphere that THICKENS with altitude, or a 0/0 at the ground.
+            for bad in ("0.0", "-8500.0")
+                pb = joinpath(dir, "s21_$bad.yaml")
+                write(pb, replace(base, "scale_height_m: 8500.0" => "scale_height_m: $bad"))
+                @test_throws ErrorException load_scenario(pb)
+            end
+            # …and non-finite dies too (a NaN ρ reaches `pos` and ships an invalid frame)
+            pn_ = joinpath(dir, "s21_nan.yaml")
+            write(pn_, replace(base, "scale_height_m: 8500.0" => "scale_height_m: .nan"))
+            @test_throws ErrorException load_scenario(pn_)
+            # the knob addresses a REAL comp key (a knob naming a missing key dies at load — the
+            # mechanism that would have caught slice-19's DEAD `speed` knob had `speed` been live)
+            withknob = base * """
+            knobs:
+              - {target: m1, key: af_scale_height, min: 6000.0, max: 25000.0, label: "H"}
+            """
+            pk = joinpath(dir, "s21_knob.yaml"); write(pk, withknob)
+            sc = load_scenario(pk)
+            @test length(sc.knobs) == 1
+            @test sc.knobs[1].key === :af_scale_height
+        end
+    end
+end

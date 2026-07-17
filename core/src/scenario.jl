@@ -536,6 +536,31 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                 isfinite(comp[:af_k_induced]) ||
                     error("missile '$id': airframe.k_induced must be finite (got $(comp[:af_k_induced]))")
             end
+            # SLICE 21 — THE EXPONENTIAL ATMOSPHERE's scale height (m). PRESENCE-GATED ON THE KEY
+            # for exactly the slice-20 `k_induced` reason: slices 16/17/19/20 all carry airframe
+            # blocks, so gating on the BLOCK would grow the key on every one of them and — together
+            # with the `:atmosphere` rung — put them on a different code path. Only a slice-21 YAML
+            # authors `scale_height_m`.
+            #
+            # Under `:atmosphere === :exponential` the missile's `rho` above is REINTERPRETED as the
+            # SEA-LEVEL reference ρ₀ (at z = 0 the two rungs agree EXACTLY — test_atmosphere.jl pins
+            # that with `==`), and ρ(z) = ρ₀·exp(−z/H) is what every airframe site then reads.
+            #
+            # H > 0 is validated HERE (convention 5's validate-at-LOAD half) AND floored at the
+            # consumer inside `air_density` (the clamp-at-CONSUMER half — H is a LIVE SLIDER). Both
+            # sites are required: H = 0 with z = 0 is `0/0 = NaN`, and a NaN ρ reaches `pos`.
+            # A negative H is an atmosphere that THICKENS with altitude — unphysical, and with no
+            # lesson-adjacent branch (contrast a negative cma/cla), so it dies at load.
+            if haskey(ab, "scale_height_m")
+                comp[:af_scale_height] = _f64(ab["scale_height_m"])
+                comp[:af_scale_height] > 0 ||
+                    error("missile '$id': airframe.scale_height_m must be > 0 — a non-positive " *
+                          "scale height is an atmosphere that thickens with altitude, or a 0/0 " *
+                          "at the ground (got $(comp[:af_scale_height]))")
+                isfinite(comp[:af_scale_height]) ||
+                    error("missile '$id': airframe.scale_height_m must be finite " *
+                          "(got $(comp[:af_scale_height]))")
+            end
         end
     elseif kind === :terrain
         # An authored heightfield (slice 18): a NON-PHYSICAL entity (no mover, no hooks —

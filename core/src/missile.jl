@@ -143,7 +143,7 @@ function integrate!(m::BallisticMissile, w::World, dt::Float64)
         #     into (pos, vel) — the slice-16 ISOLATION (α→lift coupling is slice 17). At θ = γ
         #     (α = 0) this reduces to the velocity-aligned quaternion (same convention).
         if haskey(c, :af_cma)
-            _integrate_airframe!(e, c, v′, dt)
+            _integrate_airframe!(e, c, w, v′, dt)
         else
             # Velocity-aligned attitude (kinematic-only, named approx): body-x along v̂ gives the
             # client a nose direction and exercises `frames.jl` in the live tick; the apex/impact
@@ -182,6 +182,26 @@ end
 # does NOT honor the `:integrator` euler rung (the coupled short-period is stiff — euler would be a
 # different, divergent lesson; convention 9 keeps the showcase from mixing them, and it can't
 # crash). NO RNG (class 4c). The `:point_mass` path above is byte-identical to slices 8–16.
+# --- SLICE 21: the EXPONENTIAL ATMOSPHERE gate (§11 Tier A) -----------------------------------
+# `true` when this missile carries an authored scale height AND the `:atmosphere` rung is live.
+# The ONE place the gate is expressed, so the four ρ-reading airframe sites cannot drift apart
+# (convention 7's one-list-no-drift, applied to a predicate). Slices 8–20 have no
+# `:af_scale_height`, and the rung DEFAULTS to `:constant` — so this is `false` on every prior
+# scenario by BOTH halves, and each caller's else-arm is the prior slice's code TEXTUALLY
+# VERBATIM (byte-identity by construction, not by trusting `exp(0) == 1`; the `-0.0` trap the
+# slice-20 induced-drag gate documents).
+_atm_on(c::Dict{Symbol,Any}, w::World) =
+    haskey(c, :af_scale_height) && get(w.fidelity, :atmosphere, :constant) === :exponential
+
+# The airframe's air density at height `z` — ρ(z) under the live rung, else the authored constant.
+# **Returns the IDENTICAL expression the frozen paths already had when gated off**, which is what
+# makes the four call sites safe to reroute through it. `H` is floored inside `air_density`
+# (convention 5's clamp-at-consumer — it is a live slider).
+_airframe_rho(c::Dict{Symbol,Any}, w::World, z::Float64) =
+    _atm_on(c, w) ? air_density(z; rho0 = Float64(get(c, :rho, 1.225)),
+                                H = Float64(c[:af_scale_height])) :
+                    Float64(get(c, :rho, 1.225))
+
 function _integrate_coupled!(m::BallisticMissile, e::Entity, c::Dict{Symbol,Any}, w::World,
                              mass::Float64, rho::Float64, cd_area::Float64, dt::Float64)
     # Lazy launch init of the JOINT attitude from the PRE-step (launch) flight-path angle — θ is
@@ -217,7 +237,49 @@ function _integrate_coupled!(m::BallisticMissile, e::Entity, c::Dict{Symbol,Any}
     # `a + (-0.0)` flips a bit (`-0.0 + 0.0 → +0.0`) — exactly the trap the `:a_ctrl` guard above
     # documents and the reinterpret determinism tests catch. Same `p`, same δ, same stage-θ
     # discipline; the ONLY difference is the extra force term. Class 4c (no RNG).
-    f = if haskey(c, :af_k_induced)
+    f = if _atm_on(c, w)
+        # ── SLICE 21 — THE EXPONENTIAL-ATMOSPHERE ARM. `ρ` is no longer a number: it is read
+        # PER RK4 STAGE from the STAGE HEIGHT `P[3]`.
+        #
+        # ★ THE STAGE-z FIX (the slice-17 STAGE-θ FIX's exact analog, load-bearing for the same
+        # reason): `P` — the stage position — has been threaded through this closure since slice
+        # 17 and READ BY NOTHING. This is what finally reads it. Using the ENTRY height
+        # (`e.pos[3]`, closed over) instead compiles clean and is only O(dt²) off per step:
+        # gate-0 F9 MEASURED it at max|Δz| = 0.77 m over 90 s, moving the miss 0.136 m on a
+        # 360 m lesson — 0.04%, INVISIBLE to every steady-state test (the ρ-factor, the ceiling
+        # and the miss ratio all survive it). ONLY the transient golden in test_missile.jl
+        # catches it. Do NOT "simplify" this to the entry height.
+        #
+        # The params are REBUILT PER STAGE with the stage ρ (an isbits struct — stack-allocated,
+        # free) rather than threading a `rho` kwarg through six aero functions. That is what
+        # keeps `lift_accel`/`induced_drag_accel`/`pitch_moment` MEASUREMENT-AGNOSTIC AND z-FREE
+        # (§12): the aero lib never learns about altitude, it just gets a `p` whose rho is the
+        # stage value. The stage ρ ALSO goes to `total_accel`, so this arm is fully
+        # self-consistent — parasitic drag, lift, induced drag and the moment all see ONE air.
+        H_sh = Float64(c[:af_scale_height])
+        if haskey(c, :af_k_induced)
+            (P, Vv, TH, Q) -> begin
+                ρs  = air_density(P[3]; rho0 = rho, H = H_sh)      # ← THE STAGE HEIGHT
+                p_s = AirframeParams(p.S, p.d, p.I, p.Cma, p.Cmd, p.Cmq, ρs, p.Cla, p.K)
+                γ = atan(Vv[3], Vv[1])
+                a = total_accel(Vv; rho = ρs, cd_area = cd_area, mass = mass) +
+                    lift_accel(Vv, TH, mass, p_s) + induced_drag_accel(Vv, TH, mass, p_s)
+                (Vv, a, Q, pitch_moment(TH - γ, δ, Q, _norm3(Vv), p_s) / p_s.I)
+            end
+        else
+            (P, Vv, TH, Q) -> begin
+                ρs  = air_density(P[3]; rho0 = rho, H = H_sh)      # ← THE STAGE HEIGHT
+                p_s = AirframeParams(p.S, p.d, p.I, p.Cma, p.Cmd, p.Cmq, ρs, p.Cla, p.K)
+                γ = atan(Vv[3], Vv[1])
+                a = total_accel(Vv; rho = ρs, cd_area = cd_area, mass = mass) +
+                    lift_accel(Vv, TH, mass, p_s)
+                (Vv, a, Q, pitch_moment(TH - γ, δ, Q, _norm3(Vv), p_s) / p_s.I)
+            end
+        end
+    elseif haskey(c, :af_k_induced)
+        # ── SLICES 17/19/20, TEXTUALLY VERBATIM from here down. This arm serves BOTH key-absent
+        # AND `:atmosphere === :constant`, so the rung's OFF state and every prior slice take
+        # literally the same code — byte-identity by construction (advisor).
         (P, Vv, TH, Q) -> begin
             γ = atan(Vv[3], Vv[1])
             a = total_accel(Vv; rho = rho, cd_area = cd_area, mass = mass) +
@@ -260,16 +322,21 @@ end
 # authored initial perturbation `:af_alpha0`, default 0), so the missile can be launched nose
 # off the velocity vector to excite the oscillation. `att` is then set from `θ` (nose along
 # `(cosθ, 0, sinθ)`), the same `quat_from_two_vectors` convention as the velocity-aligned path.
-function _integrate_airframe!(e::Entity, c::Dict{Symbol,Any}, v′::Vec3, dt::Float64)
+function _integrate_airframe!(e::Entity, c::Dict{Symbol,Any}, w::World, v′::Vec3, dt::Float64)
     Vspeed = _norm3(v′)
     γ = atan(v′[3], v′[1])                                # pitch-plane flight-path angle
     if !haskey(c, :pitch_theta)                           # lazy launch init (survives reset via reload)
         c[:pitch_theta] = γ + Float64(get(c, :af_alpha0, 0.0))
         c[:pitch_q]     = 0.0
     end
+    # SLICE 21: ρ(z) under the live `:atmosphere` rung, else the authored constant — the SAME
+    # expression as before when gated off (byte-identical; `w` was threaded in for this). Read at
+    # the POST-step height, matching this path's post-step (V, γ): the slice-16 rotation is
+    # ISOLATED (it cannot move `pos` — posdiff = 0), so there is no stage to resolve here and no
+    # stage-z subtlety. The COUPLED path is where the stage height matters.
     p = AirframeParams(Float64(c[:af_S]), Float64(c[:af_d]), Float64(c[:af_I]),
                        Float64(c[:af_cma]), Float64(c[:af_cmd]), Float64(c[:af_cmq]),
-                       Float64(get(c, :rho, 1.225)), Float64(get(c, :af_cla, 0.0)))
+                       _airframe_rho(c, w, e.pos[3]), Float64(get(c, :af_cla, 0.0)))
     δ = Float64(get(c, :af_delta, 0.0))                   # open-loop fin deflection (no autopilot this slice)
     θ, q = Float64(c[:pitch_theta]), Float64(c[:pitch_q])
     θ′, q′ = airframe_step(θ, q, dt; gamma = γ, V = Vspeed, delta = δ, p = p)
@@ -315,9 +382,12 @@ function build_env!(m::BallisticMissile, w::World)
         θ  = Float64(c[:pitch_theta])
         q  = Float64(c[:pitch_q])
         γ  = atan(e.vel[3], e.vel[1])
+        # SLICE 21: ρ(z) under the live rung, else the authored constant (byte-identical off).
+        # The readout must use the SAME air the integrator flew, or ω_sp / a_lift / turn_radius /
+        # a_induced would describe a different missile than the one on screen.
         p  = AirframeParams(Float64(c[:af_S]), Float64(c[:af_d]), Float64(c[:af_I]),
                             Float64(c[:af_cma]), Float64(c[:af_cmd]), Float64(c[:af_cmq]),
-                            Float64(get(c, :rho, 1.225)), Float64(get(c, :af_cla, 0.0)),
+                            _airframe_rho(c, w, e.pos[3]), Float64(get(c, :af_cla, 0.0)),
                             Float64(get(c, :af_k_induced, 0.0)))   # slice 20: K (readout only here)
         tel["$sid.pitch_theta"] = _finite_coord(θ)
         tel["$sid.gamma"]       = _finite_coord(γ)
@@ -634,7 +704,18 @@ function decide!(a::Autopilot, w::World)
         alpha_coupled = has_af && get(w.fidelity, :airframe, :point_mass) === :pitch_coupled
         if has_af
             mass_af = max(Float64(get(c, :mass_kg, 1.0)), _MISSILE_MASS_FLOOR)
-            rho_af  = Float64(get(c, :rho, 1.225))
+            # SLICE 21 — ρ(z) under the live `:atmosphere` rung, else slice-19/20's authored
+            # constant (the identical expression when gated off ⇒ byte-identical). THIS IS THE
+            # LESSON'S SITE: `a_max_aero = Q·S·C_Lα·α_max/m` with `Q = ½·ρ(z)·V²`, so the ceiling
+            # the α inversion clamps against now FALLS AS THE MISSILE CLIMBS. Slice 19 moved this
+            # ceiling with the `rho` KNOB (an engineer dialling a flight condition) and slice 20
+            # made the missile lower it BY TURNING (V bleed); here the missile lowers it BY
+            # CLIMBING — and unlike slice 20's, this one factorizes EXACTLY: the ceiling ratio is
+            # identically [ρ(z)/ρ(z₀)]·[V/V₀]², so ALTITUDE and SPEED separate with no residual
+            # (gate-0 F6, verified to 1.4e-17). ρ(z) is read at the CURRENT height — phase 4 runs
+            # after phase 1, so `e.pos` is this tick's post-integrate state, the same one
+            # `build_env!` ships.
+            rho_af  = _airframe_rho(c, w, e.pos[3])
             # α_max IS the lesson's ceiling (the α_cmd clamp is `a_max_aero` expressed in code). The
             # AirframeParams construction is DUPLICATED from `_integrate_coupled!`/`build_env!` rather
             # than factored into a shared helper — "duplicate, don't share" (the `fin_autopilot_step`
