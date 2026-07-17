@@ -445,6 +445,25 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             comp[:k_delta]        > 0 || error("missile '$id': guidance.k_delta must be > 0 (got $(comp[:k_delta]))")
             comp[:delta_max]      > 0 || error("missile '$id': guidance.delta_max must be > 0 (got $(comp[:delta_max]))")
             comp[:delta_rate_max] > 0 || error("missile '$id': guidance.delta_rate_max must be > 0 (got $(comp[:delta_rate_max]))")
+            # Slice 19: the inner α-loop's gains (the `:alpha` autopilot rung). Read with DEFAULTS at
+            # the consumer (a bare guidance block can't KeyError a tick) and LOAD-validated for the
+            # AUTHORED values: k_α > 0 (a zero/negative α-error gain would null or invert the loop),
+            # k_q ≥ 0 (0 = no rate damping — legal, just ringier; a NEGATIVE k_q would ANTI-damp the
+            # short period into divergence). `:alpha` REUSES `delta_max` above as its deflection cap —
+            # the same airframe's fin limit in rad; the two rungs never co-run.
+            #
+            # THESE ARE AUTHORED CONSTANTS AND MUST NEVER BE DECLARED AS KNOBS (gate-0 FINDING 14).
+            # The α_max clamp bounds the COMMAND while lift uses the ACHIEVED α, so a hot loop lets
+            # achieved α overshoot the clamp ⇒ transient lift ABOVE `a_max_aero` ⇒ THE CEILING LEAKS
+            # (at k_α=100 the miss collapses 295→63 m and the fin goes bang-bang). At the authored
+            # gains it is moot (α_peak = 0.1369 never reaches the 0.2 clamp — the loop is
+            # demand-limited), but an exposed gain slider is a live path to eroding the lesson. A true
+            # stall would bound the ACHIEVED α — that is the nonlinear C_L(α) deferral. The lesson
+            # sliders are `speed` (the DEMO lever) and `af_alpha_max` (the CAUSATION lever).
+            comp[:k_alpha] = _f64(get(gb, "k_alpha", 1.0))     # α-error gain (NEVER a knob)
+            comp[:k_q]     = _f64(get(gb, "k_q", 0.3))         # pitch-rate damping gain (NEVER a knob)
+            comp[:k_alpha] > 0  || error("missile '$id': guidance.k_alpha must be > 0 (got $(comp[:k_alpha]))")
+            comp[:k_q]     >= 0 || error("missile '$id': guidance.k_q must be ≥ 0 (got $(comp[:k_q]))")
             push!(subs, Autopilot(id))
         end
         # Slice 16 (§11 Tier A): an `airframe:` sub-block gives the missile PITCH-PLANE ROTATIONAL
@@ -470,6 +489,21 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             comp[:af_alpha0] = _f64(get(ab, "alpha0", 0.0))            # initial angle of attack (rad, the perturbation)
             comp[:af_delta]  = _f64(get(ab, "delta", 0.0))            # open-loop fin deflection (rad; no autopilot this slice)
             comp[:af_cla]    = _f64(get(ab, "cla", 0.0))              # slice 17: lift-curve slope ∂C_L/∂α (KNOB — the coupling)
+            # Slice 19: the stall-ish angle-of-attack LIMIT (rad) the `:alpha` autopilot clamps its α
+            # command to — THE LESSON's ceiling, since that clamp IS `a_max_aero = Q·S·C_Lα·α_max/m`
+            # expressed in code. KNOB-ADDRESSABLE and deliberately so: it is the CAUSATION knob (it
+            # enters ONLY the α_cmd clamp — absent from pitch_moment/lift_accel/short_period_freq — so
+            # it moves the ceiling ALONE, with ω_sp/Q/geometry FIXED; speed moves ceiling AND response
+            # together and is the DEMO lever, never the causation proof). Unlike `cma`/`cla` it IS
+            # sign-guarded at load: a LIMIT has no lesson-adjacent negative branch (α_max ≤ 0 would
+            # clamp every command to ~0 and silently freeze the fin), and the consumer floors it too.
+            # A named §1 approximation: a HARD clamp standing in for the lift curve rolling over —
+            # nonlinear C_L(α)/true stall is the deferred next rung.
+            comp[:af_alpha_max] = _f64(get(ab, "alpha_max", 0.2))
+            comp[:af_alpha_max] > 0 ||
+                error("missile '$id': airframe.alpha_max must be > 0 (got $(comp[:af_alpha_max]))")
+            isfinite(comp[:af_alpha_max]) ||
+                error("missile '$id': airframe.alpha_max must be finite (got $(comp[:af_alpha_max]))")
             comp[:af_S] > 0 || error("missile '$id': airframe.ref_area_m2 must be > 0 (got $(comp[:af_S]))")
             comp[:af_d] > 0 || error("missile '$id': airframe.ref_len_m must be > 0 (got $(comp[:af_d]))")
             comp[:af_I] > 0 || error("missile '$id': airframe.inertia_kgm2 must be > 0 (got $(comp[:af_I]))")

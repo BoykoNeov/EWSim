@@ -160,8 +160,25 @@ end
 # flight path, and the attitude `(θ, q)` evolves under the aero moment — the WHOLE `[pos, vel,
 # θ, q]` state advances JOINTLY in ONE `rk4_coupled` step. The stiff short-period must NOT be
 # operator-split from translation; the coupling IS the mid-step (V, γ) re-evaluation inside each
-# RK4 stage (gate-0 finding). The fin δ is a FIXED authored trim — OPEN-LOOP, no autopilot closes
-# it (guidance→lift coupling via `:a_ctrl` in the joint force is slice 18). RK4-ONLY: this branch
+# RK4 stage (gate-0 finding).
+#
+# THE FIN δ (slice 19 CLOSED the loop): read from `:delta_cmd` — the scalar deflection the phase-4
+# `:alpha` autopilot commanded LAST tick (`decide!` → next tick's `integrate!`, the same one-tick
+# delay as `:a_ctrl`) — falling back to slice-17's FIXED authored `af_delta` trim when no autopilot
+# closes it. So a slice-17 OPEN-LOOP scenario has no `:delta_cmd` key → reads `af_delta` → BIT-
+# IDENTICAL; and tick 1 (integrate! precedes the first decide!) likewise flies `af_delta`.
+#
+# `:a_ctrl` STAYS OUT OF THIS FORCE — DELIBERATELY, and the slice-17 comment that once stood here
+# saying otherwise was WRONG (slice-19 finding 1, load-bearing). The whole content of the slice-19
+# lesson is that the achievable maneuver accel IS THE LIFT CEILING `a_max_aero = Q·S·C_Lα·α_max/m`.
+# Adding the autopilot's `:a_ctrl` back into the joint force would give the missile lift PLUS a
+# direct fixed-`a_max` control force: it would over-maneuver, the aero ceiling would NEVER BIND, and
+# the point-mass plant would be silently rebuilt in an airframe costume (the slice-15 k_δ-cancellation
+# / slice-16 false-fidelity trap, THIRD occurrence in this arc). Guidance reaches this plant ONLY
+# through δ. `Autopilot.decide!` does not even persist `:a_ctrl` under `:alpha`+`:pitch_coupled`, so a
+# pure-coupled run never grows the key.
+#
+# RK4-ONLY: this branch
 # does NOT honor the `:integrator` euler rung (the coupled short-period is stiff — euler would be a
 # different, divergent lesson; convention 9 keeps the showcase from mixing them, and it can't
 # crash). NO RNG (class 4c). The `:point_mass` path above is byte-identical to slices 8–16.
@@ -179,7 +196,9 @@ function _integrate_coupled!(m::BallisticMissile, e::Entity, c::Dict{Symbol,Any}
     p = AirframeParams(Float64(c[:af_S]), Float64(c[:af_d]), Float64(c[:af_I]),
                        Float64(c[:af_cma]), Float64(c[:af_cmd]), Float64(c[:af_cmq]),
                        rho, Float64(get(c, :af_cla, 0.0)))
-    δ = Float64(get(c, :af_delta, 0.0))
+    # THE δ SEAM (slice 19): the `:alpha` autopilot's commanded deflection if it ran last tick, else
+    # slice-17's authored open-loop trim (the byte-identity fallback — see the header).
+    δ = Float64(get(c, :delta_cmd, get(c, :af_delta, 0.0)))
     θ, q = Float64(c[:pitch_theta]), Float64(c[:pitch_q])
     # The coupled derivative f(pos, vel, TH, Q) -> (ṗ, v̇, θ̇, q̈). CRITICAL (advisor): the lift AND
     # the moment read the STAGE pitch `TH` (the RK4 stage argument), NEVER the entry `θ` closed over
@@ -468,6 +487,18 @@ function decide!(a::Autopilot, w::World)
             tel["$sid.fin_defl_sat"] = 0.0
             tel["$sid.g_onset"]      = 0.0
         end
+        # Slice-19 α/g keys — never stale (gated on `:autopilot === :alpha` + airframe params, the
+        # SAME condition as the readout below, so a slice-1..18 / non-alpha scenario ships NONE →
+        # byte-identical). Zeroed post-impact / no-target — and honestly so: the missile is frozen
+        # (v = 0), so `q_dyn = ½ρV²` and the ceiling `a_max_aero ∝ V²` genuinely ARE zero.
+        if get(w.fidelity, :autopilot, :ideal) === :alpha && haskey(c, :af_cma)
+            tel["$sid.alpha_cmd"]  = 0.0
+            tel["$sid.delta_cmd"]  = 0.0
+            tel["$sid.a_max_aero"] = 0.0
+            tel["$sid.q_dyn"]      = 0.0
+            tel["$sid.aero_sat"]   = 0.0
+            tel["$sid.defl_sat"]   = 0.0
+        end
         return nothing
     end
 
@@ -549,6 +580,98 @@ function decide!(a::Autopilot, w::World)
     state      = get(c, :ap_state, autopilot_init())::AutopilotState
     a_ach_prev = state.a_ach                                   # slice-15 g-onset readout (pre-step a_ach)
     fin_diag   = nothing                                       # slice-15 fin telemetry (set only when :fin)
+    alpha_diag = nothing                                       # slice-19 α/g telemetry (set only when :alpha)
+    alpha_coupled = false                                      # slice-19: true ⇒ the plant flies δ, NOT :a_ctrl
+    # SLICE-19 α/g SEAM (§11 Tier A) — THE INNER LOOP: `a_cmd → α_cmd → δ`. The outer law's command is
+    # INVERTED THROUGH THE AERO (airframe.jl `alpha_command`) into an angle-of-attack command and thence
+    # a fin deflection (`alpha_autopilot_delta`), so the missile flies its own PN command *through the
+    # airframe* rather than by fiat. Gated on `mode === :alpha` — UNREACHABLE for a slice-1..18 scenario
+    # (`get(w.fidelity,:autopilot,:ideal)` never returns `:alpha`) → the `:fin`/`else` arms below are the
+    # slice-9/10/12/15 arithmetic TEXTUALLY UNCHANGED → byte-identical. Like `:fin` it NEVER routes
+    # through `autopilot_step` (its kernels live in airframe.jl). Every param is fetched INSIDE the
+    # branch (the slice-12/15 fetch-in-branch bit trap) and floored/defaulted at the consumer (a live
+    # slider can't crash a tick — convention 5; the AUTHORED values are LOAD-validated).
+    #
+    # THE CROSS-FIDELITY DEPENDENCY — THE FIRST IN THE SUITE (guidance.jl `AUTOPILOT_MODES` states it
+    # in full): the α loop needs a ROTATIONAL PLANT to fly. With one (`:airframe === :pitch_coupled`
+    # AND airframe params) it commands the fin δ and the maneuver accel is MADE BY LIFT, ceilinged at
+    # `a_max_aero = Q·S·C_Lα·α_max/m` — THE LESSON. Without one the α command has nothing to actuate,
+    # so it degenerates to `:ideal`'s fiat `a_ctrl` capped only by the authored `a_max` — the REFERENCE
+    # ARM that HITS. `:airframe` is therefore the ONE toggled fidelity of the showcase (convention 9),
+    # with the autopilot AUTHORED at `:alpha`.
+    if mode === :alpha
+        has_af        = haskey(c, :af_cma)
+        alpha_coupled = has_af && get(w.fidelity, :airframe, :point_mass) === :pitch_coupled
+        if has_af
+            mass_af = max(Float64(get(c, :mass_kg, 1.0)), _MISSILE_MASS_FLOOR)
+            rho_af  = Float64(get(c, :rho, 1.225))
+            # α_max IS the lesson's ceiling (the α_cmd clamp is `a_max_aero` expressed in code). The
+            # AirframeParams construction is DUPLICATED from `_integrate_coupled!`/`build_env!` rather
+            # than factored into a shared helper — "duplicate, don't share" (the `fin_autopilot_step`
+            # precedent) keeps those frozen paths textually untouched.
+            alpha_max = max(Float64(get(c, :af_alpha_max, 0.2)), _FRAME_EPS)
+            p_af = AirframeParams(Float64(c[:af_S]), Float64(c[:af_d]), Float64(c[:af_I]),
+                                  Float64(c[:af_cma]), Float64(c[:af_cmd]), Float64(c[:af_cmq]),
+                                  rho_af, Float64(get(c, :af_cla, 0.0)))
+            V_af  = _norm3(e.vel)
+            # THE HEADLINE READOUT — computed under BOTH arms (see the telemetry note below): the
+            # ceiling is a FLIGHT-CONDITION PROPERTY of the airframe, true whichever plant is active.
+            a_max_aero = aero_accel_limit(V_af, mass_af, p_af; alpha_max = alpha_max)
+            q_dyn      = 0.5 * rho_af * V_af^2
+            if alpha_coupled
+                # k_α/k_q are AUTHORED CONSTANTS and MUST NEVER BE KNOBS (gate-0 FINDING 14): the α_max
+                # clamp bounds the COMMAND while lift uses the ACHIEVED α, so a hot loop overshoots the
+                # clamp and the ceiling LEAKS (at k_α=100 the miss collapses 295→63 m and the fin goes
+                # bang-bang). NEVER declare a `knobs:` entry targeting `:k_alpha`/`:k_q`. δ_max is
+                # slice-15's DEFLECTION cap REUSED (the same airframe's fin limit in rad; `:alpha` and
+                # `:fin` never co-run) — the FOURTH cap in this plant, pinned NON-binding (`defl_sat == 0`)
+                # so α_max is PROVABLY the one that binds.
+                k_alpha   = Float64(get(c, :k_alpha, 1.0))
+                k_q       = Float64(get(c, :k_q, 0.3))
+                delta_max = max(Float64(get(c, :delta_max, 0.5)), _FRAME_EPS)
+                # The ACHIEVED α = θ−γ from the POST-integrate state (phase 1 < phase 4 — the SAME state
+                # `build_env!` ships as `<sid>.alpha`, which is why no `alpha_ach` key is duplicated here).
+                # `:pitch_theta` is created by `_integrate_coupled!`'s lazy launch init on tick 1, so it
+                # exists by the first decide!; the `get` default (θ = γ ⇒ α = 0) is belt-and-braces.
+                γ_af  = atan(e.vel[3], e.vel[1])
+                θ_af  = Float64(get(c, :pitch_theta, γ_af))
+                α_cmd, aero_sat = alpha_command(a_cmd, e.vel, mass_af, p_af; alpha_max = alpha_max)
+                δ_cmd, defl_sat = alpha_autopilot_delta(α_cmd, θ_af - γ_af,
+                                                        Float64(get(c, :pitch_q, 0.0)), p_af;
+                                                        k_alpha = k_alpha, k_q = k_q,
+                                                        delta_max = delta_max)
+                # THE δ SEAM (the `:a_ctrl` pattern reused): this phase-4 decide! writes the commanded
+                # deflection; the NEXT tick's phase-1 `_integrate_coupled!` reads it — the SAME one-tick
+                # delay as `:a_ctrl`. Absent the key it reads slice-17's authored `af_delta` trim, so a
+                # slice-17 OPEN-LOOP scenario (no Autopilot → no write) stays bit-identical BY
+                # CONSTRUCTION. Tick 1 is likewise flown on `af_delta` (integrate! precedes the first
+                # decide!) — author `af_delta: 0` so tick 1 injects no transient.
+                c[:delta_cmd] = δ_cmd
+                # THE ACHIEVED CONTROL ACCEL IS THE LIFT — that IS the whole content of `a_max_aero`: a
+                # coupled airframe can only make its maneuver accel aerodynamically. Threading it into
+                # the LOCAL `a_ctrl` keeps the slice-9 `a_ach`/`track_gap` keys HONEST (under a binding
+                # ceiling they show the airframe FAILING TO DELIVER, where `a_cmd` would claim perfect
+                # tracking). It is NOT persisted to comp — see the store guard below (finding 1).
+                a_ctrl     = lift_accel(e.vel, θ_af, mass_af, p_af)
+                alpha_diag = (alpha_cmd = α_cmd, delta_cmd = δ_cmd, aero_sat = aero_sat,
+                              defl_sat = defl_sat, a_max_aero = a_max_aero, q_dyn = q_dyn)
+            else
+                # THE REFERENCE ARM (`:point_mass`): no plant to fly ⇒ `:ideal`'s perfect tracking. The
+                # α-loop outputs are ZEROED (no α command was issued — honest, not a computed-but-unused
+                # value), while the ceiling/flight-condition readouts stay REAL: the point-mass plant
+                # crosses `a_max_aero` and HITS ANYWAY, which is exactly the contrast.
+                a_ctrl     = a_cmd
+                alpha_diag = (alpha_cmd = 0.0, delta_cmd = 0.0, aero_sat = false,
+                              defl_sat = false, a_max_aero = a_max_aero, q_dyn = q_dyn)
+            end
+        else
+            # `:alpha` on a missile with NO airframe params at all — degenerate but not a crash: it is
+            # `:ideal` with no aero readout to ship (the keys stay absent; LOAD-static, so not stale).
+            a_ctrl = a_cmd
+        end
+        # Keep the PID plant state WARM (the `:pid`/`:fin` shape) so a live rung toggle away from
+        # `:alpha` is bumpless. `e_int`/`e_prev` are carried untouched — `:alpha` runs no PID.
+        state′ = (a_ach = a_ctrl, e_int = state.e_int, e_prev = state.e_prev)
     # SLICE-15 FIN SEAM: `:fin` = the SAME PID command driving a rate/deflection-limited fin servo
     # (`a = k_δ·δ`; guidance.jl `fin_autopilot_step`). Gated on `mode === :fin` — UNREACHABLE for a
     # slice-1..14 scenario (`get(w.fidelity,:autopilot,:ideal)` never returns `:fin`) → the `else`
@@ -556,7 +679,7 @@ function decide!(a::Autopilot, w::World)
     # bit trap; the PID arithmetic is DUPLICATED into `fin_autopilot_step`, not shared). Fin params
     # fetched INSIDE the branch (the slice-12 fetch-in-branch discipline) and floored at the consumer
     # (a live δ̇_max slider can't crash a tick — convention 5; LOAD-validated >0 for authored inputs).
-    if mode === :fin
+    elseif mode === :fin
         tau_fin        = max(Float64(get(c, :tau_fin, tau)), _FRAME_EPS)        # fin servo τ; default = :pid tau
         k_delta        = max(Float64(get(c, :k_delta, 5000.0)), _FRAME_EPS)     # control effectiveness (divisor >0)
         delta_max      = max(Float64(get(c, :delta_max, 0.5)), _FRAME_EPS)      # deflection limit (rad)
@@ -585,7 +708,17 @@ function decide!(a::Autopilot, w::World)
         a_ctrl = mode === :pid ? a_ach : clamp_accel(a_ach, a_max)
     end
     c[:ap_state] = state′
-    c[:a_ctrl] = a_ctrl
+    # SLICE-19, FINDING 1 (LOAD-BEARING): the COUPLED plant makes its maneuver accel FROM LIFT —
+    # `_integrate_coupled!` reads `:delta_cmd` and NEVER `:a_ctrl`. A fiat control force applied
+    # BESIDE the lift would rebuild the point-mass plant wearing an airframe costume: the missile
+    # would over-maneuver, the aero ceiling would never bind, and the lesson would be silently
+    # deleted (the slice-15 k_δ-cancellation / slice-16 false-fidelity trap, THIRD occurrence).
+    # Persisting the key would be inert TODAY (the coupled path ignores it) but is exactly that
+    # latent trap, so under `:alpha`+`:pitch_coupled` it is NOT PERSISTED AT ALL — a pure-coupled
+    # run NEVER GROWS `:a_ctrl`, a tripwire test_missile asserts (advisor). The LOCAL `a_ctrl` still
+    # carries the achieved lift for the honest `a_ach`/`track_gap` readout below. For
+    # `:ideal`/`:pid`/`:fin` the guard is ALWAYS false ⇒ the store is byte-for-byte as before.
+    alpha_coupled || (c[:a_ctrl] = a_ctrl)
 
     # Telemetry: the slice-9 keys (the tracking GAP) PLUS the slice-10 PN/saturation readouts. The
     # slice-10 lesson is MISS at CPA (isolated at :ideal — the verifier's job) + the saturation the
@@ -626,6 +759,28 @@ function decide!(a::Autopilot, w::World)
         tel["$sid.fin_rate_sat"] = fin_diag.rate_sat ? 1.0 : 0.0         # RATE limit binding? (the lesson flag)
         tel["$sid.fin_defl_sat"] = fin_diag.defl_sat ? 1.0 : 0.0         # DEFLECTION limit binding? (isolation)
         tel["$sid.g_onset"]      = _finite(_norm3(a_ctrl - a_ach_prev) / dt)  # achieved-g build rate (≤ k_δ·δ̇_max)
+    end
+    # Slice-19 α/g diagnostics — SHIPPED WHENEVER `mode === :alpha` AND the missile carries airframe
+    # params (a slice-1..18 / :ideal / :pid / :fin scenario ships NONE → byte-identical wire). All
+    # SCALARS (no Array → no client float() crash), all `_finite`-clamped (convention 6). The ACHIEVED
+    # α is NOT duplicated here — `build_env!` already ships it as `<sid>.alpha` from the same
+    # post-integrate state (one source of truth).
+    #
+    # GATED ON THE RUNG, NOT ON `:pitch_coupled` — the DELIBERATE CONTRAST to slice-17's lift keys
+    # (advisor): `a_lift` is a PRODUCED FORCE that only physically exists when coupled, but
+    # `a_max_aero`/`q_dyn` are FLIGHT-CONDITION PROPERTIES of the airframe, true whichever plant model
+    # is active. Shipping them under BOTH arms is what makes the headline readout work — the client
+    # plots `a_max_aero` vs `a_demand` and THE CROSSING IS THE VERDICT (the analog of slice-18's
+    # clearance sign): under `:point_mass` the demand crosses the ceiling and the missile HITS ANYWAY
+    # (the plant ignores it); under `:pitch_coupled` that same crossing IS the miss. Gating on the rung
+    # also keeps the key SET invariant across the live `:airframe` toggle → no stale keys.
+    if mode === :alpha && alpha_diag !== nothing
+        tel["$sid.alpha_cmd"]  = _finite_coord(alpha_diag.alpha_cmd)  # signed α command (rad); 0 under :point_mass
+        tel["$sid.delta_cmd"]  = _finite_coord(alpha_diag.delta_cmd)  # signed fin deflection (rad); 0 under :point_mass
+        tel["$sid.a_max_aero"] = _finite(alpha_diag.a_max_aero)       # THE HEADLINE: Q·S·|C_Lα|·α_max/m
+        tel["$sid.q_dyn"]      = _finite(alpha_diag.q_dyn)            # ½ρV² — the flight condition (only V moves it)
+        tel["$sid.aero_sat"]   = alpha_diag.aero_sat ? 1.0 : 0.0      # the AERO ceiling binding? (THE LESSON flag)
+        tel["$sid.defl_sat"]   = alpha_diag.defl_sat ? 1.0 : 0.0      # δ_max binding? (the ISOLATION — must stay 0)
     end
     return nothing
 end

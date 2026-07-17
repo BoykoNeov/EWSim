@@ -46,7 +46,28 @@
 #     G-ONSET RATE (`|da_ach/dt| ≤ k_δ·δ̇_max`) — distinct from `:pid`'s τ-lag and slice-10's `a_max`
 #     magnitude cap. The `:fin` branch NEVER routes through `autopilot_step` (a SEPARATE kernel
 #     `fin_autopilot_step` — so `:ideal`/`:pid`'s bytes stay frozen; byte-identity master check).
-const AUTOPILOT_MODES = (:ideal, :pid, :fin)
+#   • `:alpha` — the INNER α/g AUTOPILOT (slice 19, §11 Tier A): the outer law's `a_cmd` is
+#     INVERTED THROUGH THE AERO into an angle-of-attack command and thence a fin deflection
+#     (`a_cmd → α_cmd → δ`, airframe.jl `alpha_command`/`alpha_autopilot_delta`), so the missile
+#     flies its own PN command *through the airframe* instead of by fiat. The lesson is the
+#     FLIGHT-CONDITION g-limit `a_max_aero = Q·S·C_Lα·α_max/m` — a cap that is a PHYSICAL
+#     CONSEQUENCE, not an authored number (contrast `a_max`) and not a rate (contrast `k_δ·δ̇_max`).
+#     Like `:fin` it NEVER routes through `autopilot_step` (its kernels live in airframe.jl), so
+#     `:ideal`/`:pid`/`:fin` keep their bytes frozen.
+#
+#     THE CROSS-FIDELITY DEPENDENCY — THE FIRST IN THE SUITE, so it is written down, not implied
+#     (advisor). `:alpha`'s BEHAVIOUR DEPENDS ON THE `:airframe` FIDELITY, which every other rung
+#     of every other key is independent of:
+#       • `:airframe === :pitch_coupled` → the α loop runs: `decide!` commands a scalar fin δ
+#         (`comp[:delta_cmd]`) and the maneuver accel is MADE BY LIFT, ceiling `a_max_aero`.
+#       • `:airframe === :point_mass` (or no airframe params) → the α loop has no plant to fly:
+#         `decide!` falls back to commanding `comp[:a_ctrl]` directly, i.e. `:ideal`'s perfect
+#         tracking capped only by the authored `a_max`. THIS IS THE REFERENCE ARM of the slice-19
+#         lesson (it HITS), and it is why the showcase's ONE toggled fidelity is `:airframe`
+#         (convention 9) with the autopilot AUTHORED at `:alpha`.
+#     Keeping the rungs orthogonal in the SCENARIO (one button, `:airframe`) is what buys the
+#     clean contrast; the dependency lives HERE, in the one rung that needs a plant to fly.
+const AUTOPILOT_MODES = (:ideal, :pid, :fin, :alpha)
 
 # The guidance-fidelity (OUTER-law) rungs — the SINGLE source of truth for the `:guidance`
 # key (the AUTOPILOT_MODES precedent, defined HERE so radar.jl's `LIVE_FIDELITY_MODES` can

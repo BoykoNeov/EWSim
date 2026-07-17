@@ -592,11 +592,74 @@ Slices 1–18 byte-identical through the include.
       editing `decide!` and `_integrate_coupled!` — `test_determinism` + the `_sample_z` absolute golden
       become the ACTUAL proof, and the fetch-INSIDE-the-`:alpha`-branch discipline is what keeps
       `:ideal`/`:pid`/`:fin` textually identical.
-- [ ] **2. Wired** — the `:alpha` `decide!` branch (fetch-in-branch); the `:delta_cmd` seam in
-      `_integrate_coupled!` (**`a_ctrl` stays out; fix the :164 comment**); `AUTOPILOT_MODES` gains `:alpha`
-      (zero plumbing edits — verify); rung-gated telemetry (`a_max_aero`/`alpha_cmd`/`aero_sat`/…);
-      loader `alpha_max > 0`. Arms: the **transient golden**, the non-dead toggle, the isolation,
-      determinism (4c shape), server live-knob survival (drag `af_cla` through 0/negative).
+- [x] **2. Wired** — **DONE (2720 → 2823 tests, +103; slices 1–18 byte-identical).** `AUTOPILOT_MODES`
+      gains `:alpha` (wiring **(i)**, advisor-affirmed) and **"zero plumbing edits" VERIFIED, not
+      assumed** (advisor watch-item A): the diff touches `guidance.jl` (the tuple + its doc),
+      `missile.jl`, `scenario.jl` and 3 test files — **`radar.jl`/`server.jl` UNTOUCHED**, the new rung
+      flowed through `LIVE_FIDELITY_MODES`→`_KNOWN_FIDELITY_KEYS`→`set_fidelity` on ONE tuple edit
+      (convention 7 held literally). Grepped FIRST for shape-assertions on the tuple
+      (`length`/`[end]`/`[3]`/literal enumerations): **none** — every test keys off `:fin` by NAME, and
+      the reject-test value is `"bangbang"`. (`:alpha` as a comp key is the SEEKER's α-β gain — a
+      different namespace, no collision.) **`FinState` UNTOUCHED** (finding 2).
+      **THE WIRED PATH REPRODUCES GATE 0 EXACTLY** (`temp/slice19_gate2/wired.jl`) — the ordering shift
+      the plan warned of **did not happen**: miss **295.167860288156** (Δ=1.6e-10 = the reference's own
+      rounding), point-mass **0.276114602924875**, ratio **1069×**, aero_sat **2444/4130 = 59.2%**,
+      `defl_sat` **0**, `a_max` clamps **560× INERTLY** (3000 ≡ 1e7 **bit-for-bit**), a_max_aero
+      **269.39** < a_max 3000, α_peak **0.1369**, δ_peak **0.2667**, and the α_max causation sweep
+      recovering **282.049 of 295.168 m = 95.56%**. Gate 1's bridge did its job: primitive-vs-probe was
+      already ruled out, so this was a 2-way confirmation.
+      **FOUR ADVISOR CALLS FOLDED IN (all pre-write):** (1) **the crux** — keep the coupled path
+      `a_ctrl`-FREE but make the readout honest: the `:alpha` branch sets the **LOCAL** `a_ctrl =
+      lift_accel(...)` (so the slice-9 `a_ach`/`track_gap` keys show the airframe FAILING TO DELIVER —
+      a_cmd 227.47 vs a_ach 112.20, gap 118.05 — where `a_cmd` would claim perfect tracking) but
+      **does NOT persist it**: `alpha_coupled || (c[:a_ctrl] = a_ctrl)`. Persisting would be inert
+      TODAY yet is exactly finding 1's latent trap; **"a pure-coupled run never grows `:a_ctrl`" is now
+      a TESTED tripwire**. For `:ideal`/`:pid`/`:fin` the guard is always false ⇒ the store is
+      byte-for-byte as before. (2) **drop `alpha_ach`** — `build_env!` already ships `<sid>.alpha` from
+      the same post-integrate state (one source of truth). (3) **ship `a_max_aero`/`q_dyn` under BOTH
+      arms, gated on the RUNG not on `:pitch_coupled`** — the DELIBERATE contrast to slice-17's lift
+      keys: lift is a PRODUCED FORCE (coupled-only), the ceiling is a FLIGHT-CONDITION PROPERTY true
+      whichever plant is active. It is what makes the headline work (under `:point_mass` the demand
+      crosses the ceiling and the missile HITS ANYWAY) and it keeps the key SET invariant across the
+      live `:airframe` toggle → no stale keys. (4) **`k_alpha`/`k_q` in comp** + load-validate + a loud
+      NEVER-A-KNOB comment (house style; the discipline is the `knobs:` list, which we own).
+      **PLAN GAP FOUND & FIXED:** the telemetry list omitted **`defl_sat`**, which the isolation
+      assertion REQUIRES off the wire ⇒ **7 keys, not 6** (`alpha_cmd`, `delta_cmd`, `a_max_aero`,
+      `q_dyn`, `aero_sat`, `defl_sat`; `alpha_ach` dropped per advisor).
+      **THE CROSS-FIDELITY DEPENDENCY IS WRITTEN DOWN, NOT IMPLIED** (the first in the suite) — spelled
+      out at `AUTOPILOT_MODES` and again at the branch: `:alpha` commands `a_ctrl` under `:point_mass`,
+      δ under `:pitch_coupled`. The stale `missile.jl:164` comment is **FIXED** (it told the next
+      reader to do the one thing that deletes the lesson). Loader: `airframe.alpha_max` → `:af_alpha_max`
+      (default 0.2, **rejects ≤ 0** — unlike cma/cla a LIMIT has no lesson-adjacent negative branch);
+      `guidance.k_alpha` > 0 / `k_q` ≥ 0; **`delta_max` REUSED** from slice 15 (same airframe's fin limit
+      in rad; the two rungs never co-run). **`q_floor` NOT authored** (a plan deviation: the primitive's
+      const default suffices — authoring it adds lesson-eroding surface for zero benefit).
+      **`test_missile.jl` — 11 new testsets (~83 asserts):** the **transient GOLDEN** (2000 ticks,
+      pos/θ/q/δ_cmd @ atol 1e-6/1e-9 — cheap insurance, and per the advisor the slice-17 stage-θ bug
+      class has NO HOME here since δ is an EXTERNAL input held constant across the four RK4 stages, so
+      it was shipped, not hunted); the **non-dead toggle** pinned BOTH directions; the **STRUCTURAL
+      isolation** (`aero_sat > 50%` of the window, `a_max_aero < a_max`, `defl_sat == 0`, δ_peak 0.2667
+      — and **NOT `saturated == 0`**, which FAILS: `c.sat > 100` is ASSERTED to document that a_max
+      clamps 560× inertly); **`a_max` inertness** (3000 ≡ 1e7 via `===`, pos identity — pinned so a
+      future edit can't quietly make slice-10's clamp load-bearing again); **the causation proof** as a
+      **COUNTERFACTUAL** (relax α_max ALONE → 13.12 m, >95% recovered, `defl_sat == 0` throughout so the
+      4th cap can't contaminate it — and `relaxed.miss > 1.0` pins that the ~13 m residual does NOT
+      collapse to the point-mass 0.276); the **δ seam** (open-loop → no `:delta_cmd` → `af_delta`,
+      bit-identical, AND the trim actually flew); the **`:a_ctrl` tripwire**; **telemetry** (an
+      INDEPENDENT recompute of a_max_aero from the shipped speed @ rtol 1e-12, both arms, all scalars,
+      a slice-1..18 wire ships NONE); **no-target/post-impact zeroing** (honest: v=0 ⇒ q_dyn and
+      a_max_aero genuinely ARE 0); **degenerates** (`af_cla` swept 20→1e-12→0→−1e-12→−5 live, V0→0);
+      **`:alpha` sans airframe params ⇒ `:ideal`**; **loader** parse/reject.
+      **`test_determinism.jl` — the 4c shape** (NOT 11/13's draw language): replay bit-identical on a
+      `t`+pos+vel+θ+q fingerprint (`reinterpret` so a ±0.0 flip can't hide), **rng PRISTINE**
+      (`rand(copy(w.rng)) == rand(Xoshiro(19))` — "draw-count invariance" is VACUOUS, the 5th
+      consecutive 4c after 14/15/16/17); not-a-dead-knob on BOTH keys; introduce-safe both directions;
+      the open-loop δ-seam fallback bit-identical. **`test_server.jl`**: the full **4-ring** cycles,
+      `"aero"` rejected, both `:airframe` arms accepted live, and **the crash-safety site** — `af_cla`
+      dragged THROUGH 0 and NEGATIVE plus speed/α_max extremes, 120 ticks each, all finite, no throw.
+      **A test-hygiene catch:** the first loader-reject arm substituted BOTH gain lines, producing
+      duplicate YAML keys — it passed, but a test that malforms its own fixture proves nothing; fixed to
+      one substitution per case.
 - [ ] **3. Scenario + Godot + verifiers** — `scenarios/slice19_alpha_limit.yaml` (PLANAR, the first
       coupled+guided missile, speed as THE demo knob + α_max as THE causation knob); the slice-17 airframe
       view + the `a_max_aero` vs `a_demand` readout; **four proofs** (`slice19_verify.gd` — coupled MISSES /

@@ -1038,4 +1038,104 @@ end
         end
         @test finite                                                 # convention 5/6 — no consumer clamp needed
     end
+
+    # Slice 19: the INNER α/g AUTOPILOT — a new RUNG of the existing `:autopilot` key (`:alpha`, the
+    # slice-15 `:fin` precedent), whose behaviour DEPENDS on `:airframe` (the FIRST cross-fidelity
+    # dependency in the suite: a_ctrl under :point_mass, δ under :pitch_coupled). Class 4c
+    # (physics-changing, NO RNG — truth-fed PN, no seeker), the 5th in the arc after 14/15/16/17, so
+    # the THREE-claim framing again and NOT slice-11/13's draw language: "draw-count invariance" is
+    # VACUOUS here (there is no draw to count — pinned below on a pristine rng).
+    @testset "the α/g autopilot: replay bit-identical, NO rng; the plant toggle CHANGES it (4c)" begin
+        function alpha_trace(; airframe = :pitch_coupled, autopilot = :alpha, nsteps = 1500,
+                               toggle_at = 0, toggle_key = :airframe, toggle_to = nothing,
+                               start_af = airframe, af = true)
+            fid = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn, :autopilot => autopilot)
+            start_af === nothing || (fid[:airframe] = start_af)
+            w = World(seed = 19, fidelity = fid)
+            el = deg2rad(12.0)
+            comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                                    :n_pn => 4.0, :a_max => 3000.0, :delta_max => 0.4,
+                                    :k_alpha => 1.0, :k_q => 0.3,
+                                    :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3)
+            if af
+                comp[:af_S] = π * 0.1^2; comp[:af_d] = 0.2; comp[:af_I] = 20.0
+                comp[:af_cma] = -1.0; comp[:af_cmd] = 3.0; comp[:af_cmq] = -150.0
+                comp[:af_alpha0] = 0.0; comp[:af_delta] = 0.0; comp[:af_cla] = 20.0
+                comp[:af_alpha_max] = 0.2
+            end
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                vel = Vec3(700.0 * cos(el), 0.0, 700.0 * sin(el)), comp = comp)
+            w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 0.0, 4200.0),
+                vel = Vec3(-800.0, 0.0, 200.0),
+                comp = Dict{Symbol,Any}(:a_lat_mps2 => 200.0, :turn_sign => 1.0))
+            subs = Subsystem[BallisticMissile(:m1), Autopilot(:m1), ManeuveringTarget(:t1)]
+            trace = Float64[]
+            for i in 1:nsteps
+                (toggle_to !== nothing && i == toggle_at) && (w.fidelity[toggle_key] = toggle_to)
+                tick!(w, subs, 1.0e-3)
+                # pin `t` AND the per-missile pos sequence (the 4c fingerprint)
+                push!(trace, w.t)
+                append!(trace, w.entities[:m1].pos); append!(trace, w.entities[:m1].vel)
+                push!(trace, w.entities[:m1].comp[:pitch_theta], w.entities[:m1].comp[:pitch_q])
+                empty!(w.events)
+            end
+            return w, trace
+        end
+        # (1) same-config replay bit-identical, and the rng is PRISTINE (the 4c claim — no seeker, no
+        # draw; `reinterpret` so a ±0.0 flip can't hide).
+        wa, ta = alpha_trace(); _, tb = alpha_trace()
+        @test ta == tb && reinterpret(UInt64, ta) == reinterpret(UInt64, tb)
+        @test rand(copy(wa.rng)) == rand(Xoshiro(19))     # NO w.rng consumer — "draw-count" is VACUOUS
+
+        # (2) NOT-A-DEAD-KNOB, both keys. The `:airframe` toggle swaps the whole guidance seam under
+        # `:alpha` (a_ctrl→δ), and the `:autopilot` toggle swaps the inner law under a coupled plant.
+        _, tk1 = alpha_trace(start_af = :point_mass, toggle_at = 300, toggle_to = :pitch_coupled)
+        _, tk2 = alpha_trace(start_af = :point_mass, toggle_at = 300, toggle_to = :pitch_coupled)
+        @test reinterpret(UInt64, tk1) == reinterpret(UInt64, tk2)     # the toggle itself is deterministic
+        _, tnever = alpha_trace(airframe = :point_mass)
+        @test tk1 != tnever                                            # the plant swap MOVED the missile
+        _, tap = alpha_trace(autopilot = :ideal, toggle_at = 300, toggle_key = :autopilot,
+                             toggle_to = :alpha)
+        _, tideal = alpha_trace(autopilot = :ideal)
+        @test tap != tideal                                            # the inner-law swap MOVED it too
+
+        # (3) INTRODUCE-safe BOTH directions (class 4c — no draw topology to flip, so NO
+        # `set_fidelity` guard, the :integrator/:autopilot/:apn/:cooperation/:airframe precedent;
+        # CONTRAST slice-13 `:scan`'s introduce-reject).
+        _, ti1 = alpha_trace(autopilot = :alpha, toggle_at = 300, toggle_key = :autopilot,
+                             toggle_to = :ideal)                       # :alpha → :ideal, live
+        _, ti2 = alpha_trace(autopilot = :alpha, toggle_at = 300, toggle_key = :autopilot,
+                             toggle_to = :ideal)
+        @test reinterpret(UInt64, ti1) == reinterpret(UInt64, ti2)     # deterministic in both directions
+
+        # (4) SLICES 1–18 BYTE-IDENTICAL — the master check. Introducing `:alpha` on a missile with NO
+        # airframe params is not a no-op (it flies a_ctrl like :ideal — that IS the reference arm), so
+        # the byte-identity claim is the OTHER one: a scenario that never SETS `:alpha` is untouched by
+        # this slice existing. `:ideal` on an airframe missile ≡ never having the rung.
+        _, tno1 = alpha_trace(autopilot = :ideal, airframe = :pitch_coupled)
+        _, tno2 = alpha_trace(autopilot = :ideal, airframe = :pitch_coupled)
+        @test reinterpret(UInt64, tno1) == reinterpret(UInt64, tno2)
+        # …and the slice-17 OPEN-LOOP path (no Autopilot at all) never sees `:delta_cmd` → it flies the
+        # authored `af_delta` trim → bit-identical to before this slice existed (the δ-seam fallback).
+        function openloop_trace(; nsteps = 800)
+            w = World(seed = 19, fidelity = Dict{Symbol,Symbol}(:integrator => :rk4,
+                                                                :airframe => :pitch_coupled))
+            el = deg2rad(12.0)
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                vel = Vec3(700.0 * cos(el), 0.0, 700.0 * sin(el)),
+                comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                    :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0, :af_cma => -1.0,
+                    :af_cmd => 3.0, :af_cmq => -150.0, :af_alpha0 => 0.0, :af_delta => 0.15,
+                    :af_cla => 20.0))
+            subs = Subsystem[BallisticMissile(:m1)]
+            tr = Float64[]
+            for _ in 1:nsteps
+                tick!(w, subs, 1.0e-3); append!(tr, w.entities[:m1].pos); empty!(w.events)
+            end
+            return w, tr
+        end
+        wo, to1 = openloop_trace(); _, to2 = openloop_trace()
+        @test reinterpret(UInt64, to1) == reinterpret(UInt64, to2)
+        @test !haskey(wo.entities[:m1].comp, :delta_cmd)   # the closed-loop key never appears
+    end
 end

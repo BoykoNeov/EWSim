@@ -1845,3 +1845,374 @@ end
         end
     end
 end
+
+# --- gate 2: the INNER α/g AUTOPILOT wired — `a_cmd → α_cmd → δ` (slice 19, §11 Tier A) ---------
+# Slice 17 coupled α→lift→γ but left δ an authored FIXED trim: the airframe curved, it did not AIM.
+# Here the `:alpha` autopilot rung INVERTS the outer law's command through the aero and closes the
+# fin every tick, so the missile flies its own PN command THROUGH THE AIRFRAME. The lesson is the
+# FLIGHT-CONDITION g-limit `a_max_aero = Q·S·C_Lα·α_max/m` — the same PN law, the same target: the
+# `:point_mass` arm pulls what it needs by fiat and HITS; the `:pitch_coupled` arm must MAKE its
+# accel from lift, pegs α at α_max, and MISSES.
+#
+# EVERY number below is pinned against the LIVE tick! contract (convention 10 — probed first in
+# `temp/slice19_gate2/wired.jl`, never hand-recomputed), and the wired path reproduces the gate-0
+# probe + the gate-1 bridge EXACTLY (miss 295.167860288156 — no ordering shift). NO RNG (class 4c),
+# so "draw-count invariance" is VACUOUS here — do NOT copy the slice-11/13 draw language.
+@testset "inner α/g autopilot wired (slice 19, :autopilot === :alpha)" begin
+    dt = 1.0e-3
+    n3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # THE PICK (gate-0 FINDINGS): the slice-12 engagement geometry — m1 at (0,0,3000) launched at
+    # elev 12°, a maneuvering target at (6000,0,4200) pulling a_lat=200. mass 140, I=20, Cmα=−1.0
+    # (stable), Cmδ=+3.0, Cmq=−150 (overdamped), Cla=20; k_α=1.0/k_q=0.3 AUTHORED (never knobs);
+    # α_max=0.2, δ_max=0.4, a_max=3000 (INERT — proven below), V0=700, drag OFF. `af_delta = 0` so
+    # TICK 1 — which integrates BEFORE the first decide! writes `:delta_cmd` — injects no transient
+    # (advisor); it is also the slice-17 open-loop byte-identity anchor.
+    function pick_world(; V0 = 700.0, airframe = :pitch_coupled, alpha_max = 0.2, delta_max = 0.4,
+                          a_max = 3000.0, autopilot = :alpha, af_delta = 0.0, cla = 20.0,
+                          guided = true)
+        w = World(seed = 19, fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                            :autopilot => autopilot,
+                                                            :airframe => airframe))
+        el = deg2rad(12.0)
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => af_delta, :af_cla => cla,
+                                :af_alpha_max => alpha_max,
+                                :n_pn => 4.0, :a_max => a_max, :delta_max => delta_max,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 0.0, 4200.0),
+                                 vel = Vec3(-800.0, 0.0, 200.0),
+                                 comp = Dict{Symbol,Any}(:a_lat_mps2 => 200.0, :turn_sign => 1.0))
+        subs = guided ? Subsystem[BallisticMissile(:m1), Autopilot(:m1), ManeuveringTarget(:t1)] :
+                        Subsystem[BallisticMissile(:m1), ManeuveringTarget(:t1)]
+        return w, subs
+    end
+
+    # The engagement to first-CPA. [[ewsim-missile-verifier-sampling]]: take the min over the FIRST
+    # DESCENDING band only (post-CPA re-crossings are not the intercept) and gate the diagnostic
+    # scans at r > 150 m (the r→0 endgame spikes `a_demand` for reasons that are not the lesson).
+    function fly(; T = 14.0, kw...)
+        w, s = pick_world(; kw...)
+        rmin, prev, closing = Inf, Inf, true
+        aero_sat = 0; defl_sat = 0; gated = 0; sat = 0; aa_max = 0.0; α_peak = 0.0; δ_peak = 0.0
+        for _ in 1:round(Int, T / dt)
+            tick!(w, s, dt); empty!(w.events)
+            r = n3(w.entities[:t1].pos - w.entities[:m1].pos)
+            closing && r > prev && (closing = false)
+            closing && (rmin = min(rmin, r)); prev = r
+            tel = w.env[:telemetry]
+            if closing && r > 150.0
+                gated += 1
+                get(tel, "m1.aero_sat", 0.0)  > 0.5 && (aero_sat += 1)
+                get(tel, "m1.defl_sat", 0.0)  > 0.5 && (defl_sat += 1)
+                get(tel, "m1.saturated", 0.0) > 0.5 && (sat += 1)
+                aa_max = max(aa_max, get(tel, "m1.a_max_aero", 0.0))
+                α_peak = max(α_peak, abs(get(tel, "m1.alpha", 0.0)))
+                δ_peak = max(δ_peak, abs(get(tel, "m1.delta_cmd", 0.0)))
+            end
+            !closing && break
+        end
+        return (miss = rmin, aero_sat = aero_sat, defl_sat = defl_sat, gated = gated, sat = sat,
+                aa_max = aa_max, α_peak = α_peak, δ_peak = δ_peak, w = w)
+    end
+
+    @testset "transient GOLDEN — the closed-loop coupled wiring (the plausible-but-wrong catch)" begin
+        # Cheap insurance against a subtly-wrong-but-plausible wiring (a swapped gain, an entry-vs-
+        # stage read, a sign). The advisor notes slice-17's stage-θ bug class has NO HOME here — δ is
+        # computed ONCE per tick in decide! and held CONSTANT across the next step's four RK4 stages
+        # (an EXTERNAL input, not stage-varying state) — so this golden is insurance, not a hunt.
+        # Generated from the LIVE tick! path (temp/slice19_gate2/golden.jl), 2000 ticks into the
+        # closed loop, well inside the guided window.
+        w, s = pick_world()
+        for _ in 1:2000; tick!(w, s, dt); empty!(w.events); end
+        m = w.entities[:m1]
+        @test isapprox(m.pos[1], 1301.66849780737;          atol = 1e-6)
+        @test isapprox(m.pos[3], 3487.19526661747;          atol = 1e-6)
+        @test isapprox(m.comp[:pitch_theta], 0.304261953442594;   atol = 1e-9)
+        @test isapprox(m.comp[:pitch_q], -0.364428404654725;      atol = 1e-9)
+        @test isapprox(m.comp[:delta_cmd], -0.0324528304710964;   atol = 1e-9)
+    end
+
+    @testset "THE LESSON — :point_mass HITS, :pitch_coupled MISSES (the non-dead toggle)" begin
+        # The SAME PN law, the SAME target, the SAME airframe — only the plant model differs. The
+        # point-mass twin applies a_ctrl by fiat (capped at the generous authored a_max) and hits;
+        # the coupled twin must MAKE its accel from lift and cannot. Pinned in BOTH directions
+        # (a one-sided assert would pass if both arms missed).
+        c = fly(airframe = :pitch_coupled)
+        p = fly(airframe = :point_mass)
+        @test isapprox(c.miss, 295.167860288156; atol = 1e-6)   # the aero-limited MISS
+        @test isapprox(p.miss, 0.276114602924875; atol = 1e-9)  # the fiat-plant HIT
+        @test c.miss / p.miss > 1000.0                          # ~1069× separation
+    end
+
+    @testset "THE ISOLATION — STRUCTURAL, *not* `saturated == 0` (the gate-0 correction)" begin
+        # Slice-15's `saturated == 0` assertion MUST NOT be copied here — it FAILS, and copying it
+        # across is itself the convention-4 copy-paste trap (it was correct THERE because that cap sat
+        # downstream of a_max). The ceiling-limited missile diverges → the LOS rate grows → PN's demand
+        # escalates genuinely above a_max in the guided window. But every one of those clamps is INERT:
+        # a_max clamps a_cmd UPSTREAM of the α inversion, and since a_max_aero < a_max the clamped
+        # a_perp STILL pegs α_cmd at ±α_max. The tighter clamp wins downstream.
+        c = fly()
+        @test c.sat > 100                       # a_max DOES clamp (560×) — and does nothing (next testset)
+        # ⇒ assert the STRUCTURAL margin instead: the aero ceiling is far below the magnitude cap.
+        @test c.aa_max < 3000.0                 # max a_max_aero = 269.39 vs a_max = 3000 (11× margin)
+        @test isapprox(c.aa_max, 269.39; atol = 0.01)
+        # THE LESSON FLAG: the aero ceiling BINDS across most of the guided window.
+        @test c.aero_sat > 0.5 * c.gated        # 2444/4130 = 59%
+        # THE FOURTH CAP is provably NOT binding — structural, not luck: δ_peak is deterministic at
+        # launch (α=0, α_cmd pegged) at (|Cmα|/Cmδ + k_α)·α_max = 0.2667 < δ_max = 0.4 (33% margin).
+        # Without this, δ_max would be an IMPLICIT α ceiling contaminating the causation twin below.
+        @test c.defl_sat == 0
+        @test isapprox(c.δ_peak, 0.2667; atol = 1e-3)
+        # α_peak = 0.1369 never even reaches the 0.2 clamp — the ACHIEVED α is demand-limited, which
+        # is why the authored k_α=1.0 does not leak the ceiling (gate-0 FINDING 14).
+        @test isapprox(c.α_peak, 0.1369; atol = 1e-3)
+    end
+
+    @testset "a_max is INERT — 3000 ≡ 1e7 BIT-FOR-BIT (pin it so it can't quietly return)" begin
+        # Cheap and decisive (gate 0 proved it): slice-10's magnitude clamp fires 560× in the guided
+        # window and changes NOTHING, because the tighter aero clamp wins downstream. Pinning it stops
+        # a future edit from silently making a_max load-bearing again and stealing the lesson.
+        a = fly(a_max = 3000.0)
+        b = fly(a_max = 1.0e7)
+        @test a.miss === b.miss                          # === : bit-for-bit, not isapprox
+        @test a.w.entities[:m1].pos === b.w.entities[:m1].pos
+        @test a.sat > 100 && b.sat == 0                  # the clamp fires in a, never in b — same result
+    end
+
+    @testset "THE CAUSATION PROOF — α_max moves the ceiling ALONE (binding ≠ causing)" begin
+        # The isolation proves the ceiling BINDS; it does NOT prove it CAUSES the miss. The coupled
+        # plant also carries a dynamic tracking cost the point-mass plant lacks (a slice-15-class
+        # concern) — either could open the miss, and if it were the LAG this slice would have
+        # relabeled a slice-15 effect as a new lesson (the false-claim class conventions 4/11 exist to
+        # catch). `af_alpha_max` is the CLEAN discriminator: it enters ONLY the α_cmd clamp — absent
+        # from pitch_moment/lift_accel/short_period_freq — so it moves the ceiling with ω_sp, Q and
+        # geometry FIXED. SPEED IS CONFOUNDED (ω_sp ∝ √Q moves ceiling AND response-speed together) ⇒
+        # it is the demo lever, NEVER the causation proof.
+        base = fly(alpha_max = 0.2)
+        relaxed = fly(alpha_max = 1.5)
+        @test isapprox(relaxed.miss, 13.1186763034337; atol = 1e-6)
+        # STATE IT AS A COUNTERFACTUAL, NOT A DECOMPOSITION (advisor): relaxing α_max ALONE — every
+        # other cap held — recovers 282 of 295 m (95.6%). NOT "the ceiling contributes 282 m": gate 0
+        # proved ceiling and dynamics are NOT additive (71 + 12 ≠ 253).
+        @test base.miss - relaxed.miss > 280.0
+        @test (base.miss - relaxed.miss) / base.miss > 0.95
+        @test relaxed.aero_sat < 0.05 * relaxed.gated    # the ceiling stops binding (37/4144)
+        # The twin is UNCONTAMINATED: δ_max (the 4th cap) stays clear at the AUTHORED 0.4 throughout,
+        # so no other cap is silently standing in for the one under test (gate-0's first twin was
+        # fooled exactly here — relaxing the cap under test while another still bound).
+        @test relaxed.defl_sat == 0
+        # The residual ~13 m is "the airframe + autopilot dynamic tracking cost" — the irreducible
+        # price of steering through a real rotational plant with a finite-bandwidth loop. It is NOT
+        # "short-period lag" (UNEARNED: 6.3× of ω_sp buys only −10%) and NOT a projection effect
+        # (measured −0.081 m — REFUTED). Named as a §1 approximation; the lesson survives it intact.
+        @test relaxed.miss > 1.0                          # it does NOT collapse to the point-mass 0.276
+    end
+
+    @testset "THE δ SEAM — no autopilot ⇒ no :delta_cmd ⇒ slice-17's af_delta trim (byte-identity)" begin
+        # `_integrate_coupled!` reads `get(c, :delta_cmd, get(c, :af_delta, 0.0))`. A slice-17
+        # OPEN-LOOP scenario has no Autopilot → nothing ever writes `:delta_cmd` → it reads the
+        # authored trim → bit-identical. Byte-identity BY CONSTRUCTION, not by calibration.
+        w1, s1 = pick_world(af_delta = 0.15, guided = false)
+        w2, s2 = pick_world(af_delta = 0.15, guided = false)
+        for _ in 1:2000
+            tick!(w1, s1, dt); empty!(w1.events)
+            tick!(w2, s2, dt); empty!(w2.events)
+        end
+        @test w1.entities[:m1].pos === w2.entities[:m1].pos          # replay bit-identical (no RNG)
+        @test !haskey(w1.entities[:m1].comp, :delta_cmd)             # the key never appears
+        # …and the open-loop trim ACTUALLY FLEW: δ=0.15 bends the path (not a dead fallback).
+        w0, s0 = pick_world(af_delta = 0.0, guided = false)
+        for _ in 1:2000; tick!(w0, s0, dt); empty!(w0.events); end
+        @test n3(w1.entities[:m1].pos - w0.entities[:m1].pos) > 10.0
+    end
+
+    @testset "THE :a_ctrl TRIPWIRE — a pure-coupled run NEVER grows the key (finding 1)" begin
+        # THE load-bearing design of this slice: the coupled force stays `a_ctrl`-FREE. Adding a fiat
+        # control force beside the lift would let the missile over-maneuver, the aero ceiling would
+        # never bind, and the point-mass plant would be silently rebuilt in an airframe costume (the
+        # slice-15 k_δ-cancellation / slice-16 false-fidelity trap, THIRD occurrence). decide! does
+        # not even PERSIST the key under `:alpha`+`:pitch_coupled`, which makes the invariant testable.
+        c = fly(airframe = :pitch_coupled)
+        @test !haskey(c.w.entities[:m1].comp, :a_ctrl)    # guidance reaches this plant ONLY through δ
+        @test haskey(c.w.entities[:m1].comp, :delta_cmd)
+        # …while the point_mass REFERENCE ARM does exactly the opposite (it flies a_ctrl, no fin).
+        p = fly(airframe = :point_mass)
+        @test haskey(p.w.entities[:m1].comp, :a_ctrl)
+        @test !haskey(p.w.entities[:m1].comp, :delta_cmd)
+    end
+
+    @testset "telemetry — rung-gated; the ceiling ships under BOTH arms (the contrast)" begin
+        w, s = pick_world()
+        for _ in 1:2000; tick!(w, s, dt); empty!(w.events); end
+        tel = w.env[:telemetry]
+        # Pin the headline against an INDEPENDENT recompute from the SHIPPED speed (convention 11 —
+        # a different expression than the source, so a decomposition slip can't round-trip).
+        V = tel["m1.speed"]; Q = 0.5 * 1.225 * V^2
+        @test isapprox(tel["m1.a_max_aero"], Q * (π * 0.1^2) * 20.0 * 0.2 / 140.0; rtol = 1e-12)
+        @test isapprox(tel["m1.q_dyn"], Q; rtol = 1e-12)
+        @test isapprox(tel["m1.a_max_aero"], 264.138155734105; atol = 1e-6)
+        # a_ach is the ACHIEVED LIFT, so the slice-9 keys stay HONEST under a binding ceiling: the
+        # airframe visibly FAILS TO DELIVER (a_cmd would have claimed perfect tracking).
+        @test tel["m1.a_ach"] < tel["m1.a_cmd"]
+        @test tel["m1.track_gap"] > 100.0
+        @test isapprox(tel["m1.a_ach"], 112.198008667199; atol = 1e-6)
+        # every α key is a SCALAR (no Array → no client float() crash) and finite (convention 6).
+        for k in ("m1.alpha_cmd", "m1.delta_cmd", "m1.a_max_aero", "m1.q_dyn", "m1.aero_sat",
+                  "m1.defl_sat")
+            @test tel[k] isa Float64 && isfinite(tel[k])
+        end
+        # THE REFERENCE ARM ships the SAME key set (gated on the RUNG, not on :pitch_coupled — the
+        # deliberate contrast to slice-17's lift keys, which are a produced FORCE). The ceiling is a
+        # flight-condition PROPERTY, true whichever plant is active: under :point_mass the demand
+        # crosses it and the missile HITS ANYWAY. Same key set across the live toggle ⇒ no stale keys.
+        wp, sp = pick_world(airframe = :point_mass)
+        for _ in 1:2000; tick!(wp, sp, dt); empty!(wp.events); end
+        telp = wp.env[:telemetry]
+        @test isapprox(telp["m1.a_max_aero"], 270.045006323127; atol = 1e-6)   # REAL, and ignored
+        @test telp["m1.q_dyn"] > 0.0
+        @test telp["m1.alpha_cmd"] == 0.0 && telp["m1.delta_cmd"] == 0.0       # no α command issued
+        @test telp["m1.aero_sat"] == 0.0 && telp["m1.defl_sat"] == 0.0
+        @test telp["m1.track_gap"] == 0.0                                       # :ideal-perfect tracking
+        # A slice-1..18 wire ships NONE of them (byte-identity — the fin-key precedent).
+        wf, sf = pick_world(autopilot = :ideal)
+        tick!(wf, sf, dt); empty!(wf.events)
+        for k in ("m1.alpha_cmd", "m1.delta_cmd", "m1.a_max_aero", "m1.q_dyn", "m1.aero_sat",
+                  "m1.defl_sat")
+            @test !haskey(wf.env[:telemetry], k)
+        end
+    end
+
+    @testset "no-target / post-impact — the α keys are ZEROED, never stale" begin
+        # A decide! early-return must still publish every key it owns (the readout must not blank or
+        # freeze at a stale value). Zeroing is HONEST here: the missile is frozen (v=0), so q_dyn =
+        # ½ρV² and the ceiling a_max_aero ∝ V² genuinely ARE zero.
+        w, s = pick_world()
+        w.entities[:m1].comp[:impacted] = true
+        tick!(w, s, dt); empty!(w.events)
+        tel = w.env[:telemetry]
+        for k in ("m1.alpha_cmd", "m1.delta_cmd", "m1.a_max_aero", "m1.q_dyn", "m1.aero_sat",
+                  "m1.defl_sat")
+            @test tel[k] == 0.0
+        end
+    end
+
+    @testset "degenerates — a live knob can never crash a tick (convention 5)" begin
+        # THE CRASH-SAFETY SITE of this slice is the `a_cmd/Q` divide. `af_cla` is a LIVE slider whose
+        # slice-17 range reaches −5, so it can be dragged THROUGH ZERO mid-tick; a throw inside
+        # decide! lands in the session's IO/EOF-only catch and SILENTLY DROPS the connection.
+        for cla in (20.0, 1.0, 1e-12, 0.0, -1e-12, -5.0)
+            w, s = pick_world(cla = cla)
+            ok = true
+            for _ in 1:300
+                tick!(w, s, dt); empty!(w.events)
+                m = w.entities[:m1]
+                ok &= all(isfinite, (m.pos[1], m.pos[3], m.vel[1], m.vel[3],
+                                     m.comp[:pitch_theta], m.comp[:pitch_q], m.comp[:delta_cmd]))
+                ok &= all(isfinite, values(filter(kv -> kv[2] isa Float64, w.env[:telemetry])))
+            end
+            @test ok                                   # no NaN/Inf, no throw — at, through and past 0
+        end
+        # C_Lα < 0 is NOT degenerate and NOT floored: the divide by a SIGNED C_Lα flips α_cmd's sign
+        # and `lift ∝ C_Lα·α` puts the lift back where commanded — self-consistent THROUGH zero.
+        wn, sn = pick_world(cla = -20.0)
+        for _ in 1:2000; tick!(wn, sn, dt); empty!(wn.events); end
+        @test wn.env[:telemetry]["m1.a_max_aero"] > 0.0      # the ceiling is a MAGNITUDE (|C_Lα|)
+        # V → 0 (the launch/apex degenerate): the Q floor keeps the divide finite; α_cmd pegs.
+        ws, ss = pick_world(V0 = 0.0)
+        for _ in 1:200; tick!(ws, ss, dt); empty!(ws.events); end
+        @test all(isfinite, (ws.entities[:m1].pos[1], ws.entities[:m1].pos[3]))
+        @test isfinite(ws.env[:telemetry]["m1.alpha_cmd"])
+    end
+
+    @testset "`:alpha` with NO airframe params ⇒ :ideal, no aero keys (degenerate, not a crash)" begin
+        # The rung on a plain point-mass missile: the α command has nothing to actuate, so it
+        # degenerates to :ideal's perfect tracking and ships no aero readout (af-params presence is
+        # LOAD-static, so the keys can't go stale by being absent).
+        w = World(seed = 19, fidelity = Dict{Symbol,Symbol}(:guidance => :pn, :autopilot => :alpha))
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(700.0, 0.0, 0.0),
+                                 comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0,
+                                                         :n_pn => 4.0, :a_max => 3000.0))
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 0.0, 4200.0),
+                                 vel = Vec3(-800.0, 0.0, 200.0))
+        s = Subsystem[BallisticMissile(:m1), Autopilot(:m1)]
+        for _ in 1:100; tick!(w, s, dt); empty!(w.events); end
+        tel = w.env[:telemetry]
+        @test !haskey(tel, "m1.a_max_aero") && !haskey(tel, "m1.alpha_cmd")
+        @test haskey(w.entities[:m1].comp, :a_ctrl)              # it flies a_ctrl, like :ideal
+        @test isapprox(tel["m1.a_ach"], tel["m1.a_cmd"]; rtol = 1e-12)   # perfect tracking
+        @test tel["m1.track_gap"] == 0.0
+    end
+
+    @testset "loader — airframe.alpha_max + the α-loop gains parse & reject" begin
+        base = """
+        name: alim
+        seed: 19
+        dt_physics: 0.001
+        fidelity: {airframe: pitch_coupled, guidance: pn, autopilot: alpha}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 700.0
+              elevation_deg: 12.0
+              cd_area_m2: 0.0
+              guidance:
+                n_pn: 4.0
+                a_max: 3000.0
+                delta_max: 0.4
+                k_alpha: 1.0
+                k_q: 0.3
+              airframe:
+                inertia_kgm2: 20.0
+                cma: -1.0
+                cmd: 3.0
+                cmq: -150.0
+                cla: 20.0
+                alpha_max: 0.2
+          - id: t1
+            kind: target
+            pos: [6000.0, 0.0, 4200.0]
+            vel: [-800.0, 0.0, 200.0]
+            target: {rcs_m2: 1.0, maneuver: {a_lat_mps2: 200.0, turn_sign: 1.0}}
+        """
+        mktempdir() do dir
+            good = joinpath(dir, "good.yaml"); write(good, base)
+            scn = load_scenario(good)
+            c = scn.world.entities[:m1].comp
+            @test c[:af_alpha_max] == 0.2 && c[:k_alpha] == 1.0 && c[:k_q] == 0.3
+            @test c[:delta_max] == 0.4                       # slice-15's cap REUSED by the α loop
+            @test scn.world.fidelity[:autopilot] === :alpha   # the NEW rung validates through the wire
+            # α_max defaults when omitted (a bare airframe block can't KeyError a tick).
+            noam = replace(base, "        alpha_max: 0.2\n" => "")
+            pd = joinpath(dir, "def.yaml"); write(pd, noam)
+            @test load_scenario(pd).world.entities[:m1].comp[:af_alpha_max] == 0.2
+            # REJECTS: unlike cma/cla, a LIMIT has no lesson-adjacent negative branch — α_max ≤ 0
+            # would clamp every command to ~0 and silently freeze the fin.
+            for bad in ("alpha_max: 0.0", "alpha_max: -0.2")
+                pb = joinpath(dir, "bad.yaml"); write(pb, replace(base, "alpha_max: 0.2" => bad))
+                @test_throws ErrorException load_scenario(pb)
+            end
+            # k_α > 0 (a zero/negative α-error gain nulls or inverts the loop); k_q ≥ 0 (0 = no rate
+            # damping is legal, just ringier; NEGATIVE would ANTI-damp the short period into divergence).
+            # One substitution per case — replacing BOTH gain lines would duplicate a YAML key and the
+            # load would throw for the wrong reason (a test that malforms its own fixture proves nothing).
+            for (old, bad) in (("k_alpha: 1.0", "k_alpha: 0.0"), ("k_alpha: 1.0", "k_alpha: -1.0"),
+                               ("k_q: 0.3", "k_q: -0.3"))
+                pb = joinpath(dir, "badg.yaml"); write(pb, replace(base, old => bad))
+                @test_throws ErrorException load_scenario(pb)
+            end
+            # k_q == 0 is ACCEPTED (undamped, not invalid).
+            pz = joinpath(dir, "kq0.yaml"); write(pz, replace(base, "k_q: 0.3" => "k_q: 0.0"))
+            @test load_scenario(pz).world.entities[:m1].comp[:k_q] == 0.0
+        end
+    end
+end

@@ -1124,6 +1124,86 @@ end
         @test ok                                                   # coupled tick survives the slider drags
     end
 
+    @testset "set_fidelity :autopilot :alpha + the live α/g knobs can't crash a tick (slice-19, 4c)" begin
+        # Slice-19: `:alpha` is a NEW VALUE of the existing `:autopilot` key (AUTOPILOT_MODES += :alpha
+        # — the slice-15 `:fin` precedent), so it flows through the SAME per-key LIVE_FIDELITY_MODES
+        # check AUTOMATICALLY: ZERO plumbing edits (_KNOWN_FIDELITY_KEYS / _validate_fidelity /
+        # set_fidelity all derive from that one list — convention 7, one-list-no-drift; VERIFIED, not
+        # assumed). Class 4c: physics-changing, NO RNG → NO draw-topology → NO introduce-guard (the
+        # :fin/:apn/:cooperation/:airframe precedent, CONTRAST slice-13 :scan). The trajectory change
+        # is pinned in test_determinism; here the wire write/reject/introduce + THE CRASH-SAFETY SITE.
+        dir = mktempdir()
+        alim = joinpath(dir, "alim.yaml"); write(alim, """
+        name: alphalimit
+        seed: 19
+        dt_physics: 1.0e-3
+        emit_every: 16
+        fidelity: {airframe: pitch_coupled, guidance: pn, autopilot: alpha}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 700.0
+              elevation_deg: 12.0
+              cd_area_m2: 0.0
+              guidance: {n_pn: 4.0, a_max: 3000.0, delta_max: 0.4, k_alpha: 1.0, k_q: 0.3}
+              airframe: {inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0, cmq: -150.0, cla: 20.0, alpha_max: 0.2}
+          - id: t1
+            kind: target
+            pos: [6000.0, 0.0, 4200.0]
+            vel: [-800.0, 0.0, 200.0]
+            target: {rcs_m2: 1.0, maneuver: {a_lat_mps2: 200.0, turn_sign: 1.0}}
+        knobs:
+          - {target: m1, key: speed,        min: 400.0, max: 1200.0, label: "V0 (m/s)"}
+          - {target: m1, key: af_alpha_max, min: 0.05,  max: 1.5,    label: "alpha_max (rad)"}
+          - {target: m1, key: af_cla,       min: -5.0,  max: 40.0,   label: "Cla"}
+        """)
+        srv = EWSim.Server(load_scenario(alim); path = alim)
+        w = srv.scn.world
+        @test w.fidelity[:autopilot] === :alpha                    # the FOURTH plant rung, scenario default
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "autopilot", :value => "ideal"))
+        @test w.fidelity[:autopilot] === :ideal                    # :alpha→:ideal — accepted (live)
+        EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "autopilot", :value => "alpha"))
+        @test w.fidelity[:autopilot] === :alpha                    # …and back (INTRODUCE-direction) — accepted
+        # cycle the full 4-ring (every step clean — no topology guard anywhere).
+        for v in ("ideal", "pid", "fin", "alpha")
+            EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "autopilot", :value => v))
+            @test w.fidelity[:autopilot] === Symbol(v)
+        end
+        # a bad rung is REJECTED before it lands (it would name an unhandled mode in decide!).
+        @test_throws ErrorException EWSim.handle_command!(srv,
+            Dict(:type => "set_fidelity", :key => "autopilot", :value => "aero"))
+        # THE SHOWCASE BUTTON is `:airframe` (convention 9 — ONE toggled fidelity, autopilot AUTHORED
+        # at :alpha): both arms accepted live, which is the cross-fidelity dependency being exercised.
+        for v in ("point_mass", "pitch_coupled")
+            EWSim.handle_command!(srv, Dict(:type => "set_fidelity", :key => "airframe", :value => v))
+            @test w.fidelity[:airframe] === Symbol(v)
+        end
+        # THE CRASH-SAFETY SITE (convention 5): the `a_cmd/Q` divide. `af_cla` is a LIVE slider whose
+        # range reaches −5 — DRAG IT THROUGH ZERO AND NEGATIVE while the tick runs. A throw inside
+        # decide! lands in the session's IO/EOF-only catch and SILENTLY DROPS the connection, so this
+        # must survive: at C_Lα ≈ 0 there is no lift authority (α_cmd = 0, ceiling saturated — honest,
+        # not a divide); at C_Lα < 0 the signed divide flips α_cmd and stays self-consistent.
+        ok = true
+        for (k, v) in (("af_cla", 20.0), ("af_cla", 1.0e-12), ("af_cla", 0.0), ("af_cla", -1.0e-12),
+                       ("af_cla", -5.0), ("af_alpha_max", 0.05), ("af_alpha_max", 1.5),
+                       ("speed", 400.0), ("speed", 1200.0), ("af_cla", 40.0))
+            EWSim.handle_command!(srv, Dict(:type => "set_param", :target => "m1", :key => k, :value => v))
+            for _ in 1:120
+                tick!(w, srv.scn.subs, srv.scn.dt_physics); empty!(w.events)   # must NOT throw
+                tel = w.env[:telemetry]
+                ok &= all(isfinite, w.entities[:m1].pos) &&
+                      isfinite(tel["m1.a_max_aero"]) && isfinite(tel["m1.q_dyn"]) &&
+                      isfinite(tel["m1.alpha_cmd"]) && isfinite(tel["m1.delta_cmd"])
+                ok || break
+            end
+            ok || break
+        end
+        @test ok                        # the α tick survives every slider drag, incl. C_Lα through 0
+    end
+
     @testset "set_seed + reset compose into a clean seeded replay" begin
         srv = EWSim.Server(load_scenario(_SCEN_SRV); path = _SCEN_SRV)
         # advance, moving the target off its start
