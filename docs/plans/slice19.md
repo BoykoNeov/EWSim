@@ -577,6 +577,21 @@ Slices 1–18 byte-identical through the include.
       LOAD-BEARING: feedback-only settles at the hand-derived `Cmδ·k_α/(Cmδ·k_α−Cmα)` = **3/4 = −25%**
       at the SHIPPED gains (gate-0's 5/6/−16.67% was at ITS probe gains — the docstring now names both),
       a 0.0375-rad gap that the two arms separate by 10 orders of magnitude.
+      **THE GATE-0 BRIDGE (`temp/slice19_probe/bridge.jl`, advisor):** gate 0's numbers came from
+      hand-rolled probe locals; this reruns THE PICK engagement through the **EXPORTED** primitives and
+      reproduces gate 0 EXACTLY — miss **295.167860288** (Δ=1.6e-10 = the reference's own rounding),
+      aero_sat **2444/4130 = 59%**, `defl_sat` **0**, α_peak **0.1369**, δ_peak **0.2667**, a_max_aero
+      **269.39** (< a_max=3000 ⇒ the structural isolation holds), `a_max` 3000 ≡ 1e7 **bit-identical**,
+      and the α_max causation sweep at the authored δ_max=0.4 identical to every digit. **Why it matters
+      at gate 3:** when the live wire differs from 295.168 (the ordering shift the plan warns of),
+      "shipped primitive ≠ probe" is ALREADY RULED OUT — a 2-way diagnosis, not a 3-way one.
+      **BYTE-IDENTITY IS STRUCTURAL HERE, NOT TESTED (advisor — do NOT carry the phrasing into gate 2):**
+      gate 1 appended new symbols and touched ZERO existing execution paths, so nothing that runs could
+      have changed; the green suite proved "no name collision / no load error", NOT "trajectories
+      unchanged" (a golden cannot prove a negative about code nothing calls yet). At **gate 2** —
+      editing `decide!` and `_integrate_coupled!` — `test_determinism` + the `_sample_z` absolute golden
+      become the ACTUAL proof, and the fetch-INSIDE-the-`:alpha`-branch discipline is what keeps
+      `:ideal`/`:pid`/`:fin` textually identical.
 - [ ] **2. Wired** — the `:alpha` `decide!` branch (fetch-in-branch); the `:delta_cmd` seam in
       `_integrate_coupled!` (**`a_ctrl` stays out; fix the :164 comment**); `AUTOPILOT_MODES` gains `:alpha`
       (zero plumbing edits — verify); rung-gated telemetry (`a_max_aero`/`alpha_cmd`/`aero_sat`/…);
