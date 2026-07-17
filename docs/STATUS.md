@@ -2244,11 +2244,19 @@ aero_sat 58.8% → **82.4%** (the demo lever MOVES the physics — the dead-knob
 (S19UI OK — the value-guard **THREE WAYS**: 16 drops the button / 19 shows the cycler / 18 stays 3-D; the
 badge names `autopilot: alpha`; rho/af_alpha_max/af_cla → set_param; the headline samples core telemetry, is
 empty on a slice-17 frame, and clears on reset). Smoke-load DONE (+ 16/17/18 re-smoke-loaded, and all NINE
-prior UI tests re-run green after the `Sandbox.gd` edit). **TWO contrasting windowed shots** at the SAME tick
-4130: coupled `los_range` **295.19**, `a_cmd` 282.43 vs `a_ach` **179.55** (track_gap 247.88 — the airframe
+prior UI tests re-run green after the `Sandbox.gd` edit). **THREE windowed shots.** The contrast pair at the SAME
+tick 4130: coupled `los_range` **295.19**, `a_cmd` 282.43 vs `a_ach` **179.55** (track_gap 247.88 — the airframe
 FAILING to deliver), α **−7.8°** with the lift vector drawn, demand above the ceiling with the red band filling;
 point_mass `los_range` **3.84**, `a_cmd` 299.17 **== `a_ach`** (track_gap **0** — the plant delivers by fiat),
-α ≈ 0. **Shot-harness note:** the client auto-starts realtime on handshake (`_set_running(true)`), so the
+α ≈ 0. **A THIRD shot exists for a reason worth remembering (advisor catch):** BOTH of the pair captured
+`aero_sat: 0` — the coupled one at CPA, where the ⟂-v projection dips back under the ceiling — so they both
+landed on the **else-branch of the only conditional the slice added**, leaving the headline tell (the red border
++ the `AERO SAT` string) unrendered. That is precisely the branch the windowed-shot proof exists to catch, since
+headless skips `_draw` entirely; the data path was already proven (S19V measured it binding 58.8%, S19UI latched
+`_aero_sat_now`) but the PIXELS were not. A mid-approach capture at **tick 2500** closes it: border RED, **AERO
+SAT** lit, `alpha_cmd` **−0.20** pegged exactly at −α_max, `a_cmd` **441.08** vs `a_max_aero` **262.93**
+(track_gap 264.97). **The general lesson: a shot that lands on a conditional's else-branch proves nothing about
+the branch you shipped the slice for.** **Shot-harness note:** the client auto-starts realtime on handshake (`_set_running(true)`), so the
 harness must PAUSE → reset-via-the-button-handler → step a deterministic burst (the first attempt landed ~1.5 s
 PAST CPA); and it must press the fidelity BUTTON rather than send a raw `set_fidelity`, or the physics changes
 while the label/badge stay stale — the first point_mass shot came out labelled "pitch_coupled" while flying the

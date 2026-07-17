@@ -714,10 +714,19 @@ Slices 1–18 byte-identical through the include.
       tripwire]; ALPHA_CAUSE **0.046×**, 95.4% recovered, defl_sat 0). `slice19_ui_test.gd` (S19UI OK —
       the value-guard **THREE ways**: 16 drops / 19 shows / 18 stays 3-D; the headline samples core
       telemetry, is empty on a slice-17 frame, clears on reset). Smoke-load DONE (+ 16/17/18 re-smoked +
-      **all 9 prior UI tests re-run green** after the `Sandbox.gd` edit). **TWO shots @ tick 4130:** coupled
-      `los_range` **295.19**, a_cmd 282.43 vs a_ach **179.55** (track_gap 247.88), α **−7.8°**, demand over
-      the ceiling with the red band filling — vs point_mass `los_range` **3.84**, a_cmd **== a_ach**
-      (track_gap **0**), α≈0. **Shot-harness gotchas (both real, both fixed):** the client auto-starts
+      **all 9 prior UI tests re-run green** after the `Sandbox.gd` edit). **THREE shots.** The pair @ tick
+      4130: coupled `los_range` **295.19**, a_cmd 282.43 vs a_ach **179.55** (track_gap 247.88), α **−7.8°**,
+      demand over the ceiling with the red band filling — vs point_mass `los_range` **3.84**, a_cmd
+      **== a_ach** (track_gap **0**), α≈0. **The THIRD shot is an advisor catch worth carrying forward:**
+      BOTH of the pair captured `aero_sat: 0` (the coupled one at CPA, where the ⟂-v projection dips back
+      under the ceiling), so they both landed on the **else-branch of the ONLY conditional the slice added**
+      — the headline tell (red border + the `AERO SAT` string) went unrendered, which is exactly the branch
+      the windowed shot exists to prove since headless skips `_draw`. The DATA path was already green (S19V
+      58.8% binding, S19UI latches `_aero_sat_now`); the PIXELS were not. Tick **2500** closes it: border
+      RED, **AERO SAT** lit, `alpha_cmd` **−0.20** pegged at −α_max, a_cmd **441.08** vs a_max_aero
+      **262.93**. **GENERAL LESSON: a shot landing on a conditional's else-branch proves nothing about the
+      branch you shipped the slice for — pick the tick from the state you're claiming, not the climax.**
+      **Shot-harness gotchas (both real, both fixed):** the client auto-starts
       realtime on handshake ⇒ PAUSE → reset-via-the-button-handler → deterministic step burst (the first
       attempt landed ~1.5 s PAST CPA); and press the fidelity BUTTON, never a raw `set_fidelity` — the
       first point_mass shot came out **labelled "pitch_coupled" while flying the point-mass plant**, a lying
