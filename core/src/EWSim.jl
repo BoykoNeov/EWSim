@@ -79,6 +79,11 @@ export AirframeParams, pitch_moment, rk4_rot, airframe_step, short_period_freq, 
 # Slice 17 (§11 Tier A): the α→lift→γ coupling — body lift ⟂ v + the joint 8-scalar RK4 stepper
 # + the `:airframe = point_mass | pitch_coupled` fidelity list. `AirframeParams` gains `Cla`.
 export lift_accel, rk4_coupled, AIRFRAME_MODES
+# Slice 19 (§11 Tier A): the INNER α/g autopilot — the aero inversion `a_cmd → α_cmd → δ` +
+# the flight-condition g-limit `a_max_aero = Q·S·C_Lα·α_max/m` (THE lesson's headline readout).
+# `AirframeParams` gains NO field — α_max and the loop gains are LIMITS, not aero coefficients
+# (they ride in comp and arrive as kwargs).
+export alpha_command, aero_accel_limit, alpha_autopilot_delta
 # Missile guidance (slice 9): the outer pursuit law + the inner PID autopilot (pure).
 # `AutopilotState` is an INTERNAL state record (the JamContribution/BearingRecord precedent —
 # not exported); `autopilot_init` IS exported (the test constructs the zero state bare).

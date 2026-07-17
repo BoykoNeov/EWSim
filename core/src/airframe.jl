@@ -222,3 +222,175 @@ end
 # `LIVE_FIDELITY_MODES` and the server's `set_fidelity` reference this ONE list (the
 # one-list-no-drift discipline, convention 7). Class 4c: physics-changing, NO RNG.
 const AIRFRAME_MODES = (:point_mass, :pitch_coupled)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SLICE 19 — the INNER α/g AUTOPILOT (`a_cmd → α_cmd → δ`) + the FLIGHT-CONDITION
+# g-limit. Slice 17 coupled α→lift→γ but left δ an authored FIXED trim: the airframe
+# curved, it did not AIM. Here the outer law's `a_cmd` is INVERTED THROUGH THE AERO
+# into an angle-of-attack command and thence a fin deflection, so the missile flies
+# its own PN command *through the airframe* rather than by fiat.
+#
+# THE LESSON — `a_max_aero = Q·S·C_Lα·α_max/m`. Slices 10/12 capped the missile with a
+# NUMBER (`a_max`, authored by the engineer); slice 15 with a g-ONSET RATE (`k_δ·δ̇_max`).
+# Here the cap is a PHYSICAL CONSEQUENCE: the airframe can only make the lift its dynamic
+# pressure and its stall-limited α allow. Fly at low Q and it cannot pull, no matter what
+# the guidance asks. `alpha_command`'s α_max clamp is not a safety hack bolted on beside
+# the lesson — it IS `a_max_aero` expressed in code (the round-trip is pinned exactly in
+# test_airframe.jl: a demand of exactly `a_max_aero` ⇒ `α_cmd == ±α_max`).
+#
+# THE SIGN CHAIN IS THE #1 TRAP, THIRD OCCURRENCE IN THIS ARC (slice 16 caught it on the
+# moment sign, slice 17 on the lift direction). The chain is now LONGER —
+# `a_perp → α_cmd → δ → M → α → lift → γ̇` — so an EVEN number of flips has more places to
+# hide, and a magnitude-only test would pass. Every arrow is pinned INDIVIDUALLY in
+# test_airframe.jl (gate-0 probe GOAL A), plus the mirror (demand < 0 flips all of them).
+#
+# NAMED APPROXIMATIONS (HANDOFF §1):
+#   • PITCH PLANE ONLY ⇒ any OUT-OF-PLANE component of `a_cmd` is DISCARDED by the signed
+#     projection. A pitch-plane α autopilot cannot make y-accel; this CONSTRAINS the
+#     scenario to a planar engagement (a target maneuvering out of plane would be
+#     unflyable BY CONSTRUCTION and would read as a bug). Bank-to-turn/3-D removes it.
+#   • The α_max clamp bounds the COMMAND, not the ACHIEVED α. Lift uses the ACHIEVED α,
+#     so a hot α-loop can overshoot the clamp transiently and the ceiling LEAKS (gate-0
+#     FINDING 14: at k_α=100 the miss collapses 295→63 m). This is WHY `k_α`/`k_q` are
+#     AUTHORED CONSTANTS AND NEVER KNOBS. A true stall would bound the ACHIEVED α — that
+#     is the nonlinear `C_L(α)` deferral; the hard clamp is its honest stand-in.
+#   • Constant ρ (shared with dynamics.jl) ⇒ **only SPEED moves Q — altitude does NOT**.
+#     Say "low dynamic pressure (slow)", never "high altitude", until an exponential
+#     atmosphere `ρ(z)` exists (the named deferral).
+#   • The rate-limited fin is NOT in this loop (slice-15's `δ̇_max`): δ is commanded and
+#     applied within the tick. Note also that slice-15's `FinState.δ` is a **Vec3** in the
+#     accel frame while `pitch_moment` takes a **scalar** rad — different frames, NOT
+#     literally composable. The halves join CONCEPTUALLY (a fin-commanded coupled
+#     airframe is what slice 15 banked δ for); `FinState` is untouched here.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# The dynamic-pressure floor for the `a_cmd/Q` divide — THE crash-safety site of this
+# slice (convention 5, the `_AIRFRAME_V_FLOOR` precedent). `Q = ½ρV² → 0` at launch/apex
+# ⇒ `α_cmd = a_perp·m/(Q·S·C_Lα)` → Inf → NaN into `pos` → an invalid state frame; and a
+# throw inside `decide!` lands in the session's IO/EOF-only catch and SILENTLY DROPS the
+# connection. Floored, a V→0 tick simply pegs α_cmd at ±α_max (Q tiny ⇒ demand looks
+# infinite ⇒ ask for everything) — honest, and it cannot crash.
+const _AIRFRAME_Q_FLOOR = 1.0e-3
+
+# The divisor floor for `Q·S·C_Lα` — `af_cla` is a LIVE slider whose slice-17 range reaches
+# −5, so it can be dragged THROUGH ZERO while a tick is running. At C_Lα ≈ 0 the airframe
+# has no lift authority at all: the honest answer is α_cmd = 0 with the ceiling SATURATED
+# (a_max_aero = 0 — you cannot pull anything), not a divide-by-zero. Negative C_Lα is NOT
+# degenerate and is NOT floored — see `alpha_command`.
+const _AIRFRAME_DENOM_FLOOR = 1.0e-9
+
+"""
+    aero_accel_limit(V, mass, p::AirframeParams; alpha_max) -> a_max_aero
+
+**THE HEADLINE READOUT of slice 19** — the flight-condition g-limit (m/s²):
+
+    a_max_aero = Q·S·|C_Lα|·α_max / m,   Q = ½·ρ·V²
+
+the largest lift-borne maneuver acceleration the airframe can make at airspeed `V` while
+holding |α| ≤ `alpha_max`. This is the cap that DECIDES the engagement: plotted against
+the outer law's demand, THE CROSSING IS THE VERDICT (the analog of slice-18's clearance
+sign). Distinguish it from the caps already in the suite (the copy-paste false-claim trap,
+convention 4): slice-10/12's `a_max` is an authored MAGNITUDE clamp, slice-15's `k_δ·δ̇_max`
+is a g-ONSET RATE cap; this one is a FLIGHT CONDITION — what the air will give you *right
+now*. With ρ constant (the named approximation), **only V moves it**.
+
+`|C_Lα|` is deliberately the ABSOLUTE value while `alpha_command` divides by the SIGNED
+`C_Lα`: the ceiling is a MAGNITUDE (a negative lift-curve slope still makes lift, it just
+needs the opposite-signed α — `alpha_command` flips α_cmd to suit and the two stay
+self-consistent; gate-0 FINDING 9). NO Q floor here (unlike `alpha_command`): this is a
+pure product with no division — it is finite everywhere on its own, and the true ceiling
+at V→0 genuinely IS zero. Flooring the readout would be a hidden approximation (§1); the
+floor belongs only at the divide.
+"""
+function aero_accel_limit(V::Float64, mass::Float64, p::AirframeParams; alpha_max::Float64)
+    Q = 0.5 * p.rho * V^2
+    return Q * p.S * abs(p.Cla) * alpha_max / mass
+end
+
+"""
+    alpha_command(a_cmd::Vec3, vel::Vec3, mass, p::AirframeParams; alpha_max, q_floor)
+        -> (α_cmd, sat::Bool)
+
+**The inversion of the aero — this ONE function holds the crash-safety AND the lesson.**
+The outer guidance law's acceleration command (a Vec3, already `clamp_accel`-ed at `a_max`)
+becomes the signed angle-of-attack command the inner loop flies:
+
+    γ  = atan(v_z, v_x),   n̂ = (−sin γ, 0, cos γ)     (the lift direction — `lift_accel`'s ⟂)
+    a_perp = dot(a_cmd, n̂)                            (SIGNED; OUT-OF-PLANE DISCARDED — §1)
+    Q_eff  = max(½ρV², q_floor)                       (← the crash-safety floor)
+    α_cmd  = clamp(a_perp·m / (Q_eff·S·C_Lα), ±α_max) (← the clamp IS `a_max_aero`)
+
+`sat` is set when the RAW inversion exceeded ±α_max — the telemetry tell that the aero
+ceiling is BINDING, and exactly equivalent to `|a_perp| > aero_accel_limit(V, …)` (the two
+names agree BY CONSTRUCTION, not by calibration — pinned by the round-trip test).
+
+The projection onto `n̂` is what makes this the INVERSE of `lift_accel`: lift can only act
+⟂ v, so the along-v̂ component of `a_cmd` is unproducible by an airframe (measured at up to
+0.55·|a_cmd| in the engagement — and gate-0 FINDING 3 refuted it as a miss contributor at
+−0.081 m: the projection marginally HELPS).
+
+Degenerates (a live knob can never crash a tick — convention 5):
+  • `V → 0` (launch/apex): the `q_floor` keeps the divide finite; α_cmd pegs at ±α_max.
+  • `C_Lα ≈ 0`: no lift authority ⇒ returns `(0.0, true)` — the ceiling is zero and you are
+    saturated against it. Honest, and no divide.
+  • `C_Lα < 0` (the slider's range reaches −5): NOT degenerate and NOT floored — the divide
+    by a SIGNED `C_Lα` flips α_cmd's sign, and `lift ∝ C_Lα·α` then puts the lift back on
+    +n̂ exactly as commanded. The inversion is self-consistent through zero (FINDING 9).
+"""
+function alpha_command(a_cmd::Vec3, vel::Vec3, mass::Float64, p::AirframeParams;
+                       alpha_max::Float64, q_floor::Float64 = _AIRFRAME_Q_FLOOR)
+    V = _norm3(vel)
+    γ = atan(vel[3], vel[1])
+    n̂ = Vec3(-sin(γ), 0.0, cos(γ))
+    a_perp = a_cmd[1]*n̂[1] + a_cmd[2]*n̂[2] + a_cmd[3]*n̂[3]   # the out-of-plane discard (§1)
+    Q = max(0.5 * p.rho * V^2, q_floor)
+    den = Q * p.S * p.Cla
+    abs(den) < _AIRFRAME_DENOM_FLOOR && return (0.0, true)    # no lift possible ⇒ ceiling 0
+    α_raw = a_perp * mass / den
+    return (clamp(α_raw, -alpha_max, alpha_max), abs(α_raw) > alpha_max)
+end
+
+"""
+    alpha_autopilot_delta(alpha_cmd, alpha, q, p::AirframeParams; k_alpha, k_q, delta_max)
+        -> (δ_cmd, defl_sat::Bool)
+
+The inner α-loop: the fin deflection (rad) that flies the achieved α to `alpha_cmd`. The
+FEEDFORWARD + FEEDBACK law (`:ff_fb`), the gate-0 pick:
+
+    δ_ff = −(Cmα/Cmδ)·α_cmd                     (the EXACT inverse of `trim_alpha`)
+    δ    = clamp(δ_ff + k_α·(α_cmd − α) − k_q·q,  ±δ_max)
+
+The feedforward is slice-17's `trim_alpha` run BACKWARDS — the δ that statically balances
+`Cmδ·δ` against `Cmα·α_cmd` (net pitching moment zero AT the commanded α). The feedback
+corrects the transient and the `−k_q·q` term is the standard inner RATE loop (it damps the
+short-period ring the feedforward alone would leave).
+
+**Why both halves (gate-0 FINDING 4, measured on three airframes):** feedforward ALONE
+(`:static`) has no α error but RINGS at +68…+96% overshoot (only aero damping opposes it);
+feedback ALONE (`:fb`) is damped but UNDERSHOOTS, settling at the closed-form ratio
+`α_ss/α_cmd = Cmδ·k_α/(Cmδ·k_α − Cmα)` — **the slice-9 `1/(1+Kp)` undershoot recurring, one
+loop deeper** (gate 0 measured it at 5/6 = −16.67% with its probe gains; at the SHIPPED
+Cmδ=3, k_α=1 the same form gives 3/4 = −25%, pinned in test_airframe.jl). Together: no
+steady-state error, ~0% overshoot, and stable across ω_sp ∈ [9.7, 68.7] rad/s.
+
+**`k_alpha`/`k_q` are AUTHORED CONSTANTS and MUST NEVER BE KNOBS** (gate-0 FINDING 14): the
+α_max clamp bounds the COMMAND while lift uses the ACHIEVED α, so a hot loop overshoots the
+clamp and leaks lift ABOVE `a_max_aero` — an exposed gain slider is a live path to eroding
+the lesson (at k_α=100 the miss collapses 295→63 m and the fin goes bang-bang).
+
+`defl_sat` reports the δ_max clamp binding — the tell for slice-15's DEFLECTION cap, which
+is a FOURTH cap in this plant and an IMPLICIT α ceiling at ≈`(Cmδ/|Cmα|)·δ_max` (gate-0
+FINDING 2: it silently contaminated the first causation twin). The showcase pins
+`defl_sat == 0` so δ_max is PROVABLY not binding while α_max is — structural, not luck:
+δ_peak is deterministic at launch (α = 0, α_cmd pegged) at `(|Cmα|/Cmδ + k_α)·α_max`.
+`Cmδ ≈ 0` (no fin authority) drops the feedforward rather than dividing by zero.
+"""
+function alpha_autopilot_delta(alpha_cmd::Float64, alpha::Float64, q::Float64,
+                               p::AirframeParams; k_alpha::Float64, k_q::Float64,
+                               delta_max::Float64)
+    # The trim inversion — `trim_alpha(δ) = −(Cmδ/Cmα)·δ` solved for δ. At Cmδ ≈ 0 the fin
+    # has no authority, so no feedforward exists: drop it (the ÷0 guard) rather than blow up.
+    δ_ff = abs(p.Cmd) < _AIRFRAME_DENOM_FLOOR ? 0.0 : -(p.Cma / p.Cmd) * alpha_cmd
+    δ_raw = δ_ff + k_alpha * (alpha_cmd - alpha) - k_q * q
+    return (clamp(δ_raw, -delta_max, delta_max), abs(δ_raw) > delta_max)
+end

@@ -546,10 +546,37 @@ Slices 1–18 byte-identical through the include.
       "short-period lag" nor a projection effect; (4) the verifier CANNOT assert sub-metre (frame
       sampling) — assert the ratio; (5) `k_α`/`k_q` must not be knobs (the ceiling leaks via achieved-α
       overshoot). Drag-bled DEFERRED (works — miss 295→417 — but confounds intra-run).
-- [ ] **1. Primitive** — `airframe.jl`: `alpha_command`, `aero_accel_limit`, the δ law (+ mode consts if
-      wiring (i)). Slice-16/17 primitives UNCHANGED. `test_airframe.jl` arms: the sign chain, the
-      `a_max_aero` ↔ `α_max` round-trip, the Q floor, `C_Lα ≤ 0`, the clamp binds, trim consistency.
-      Slices 1–18 byte-identical.
+- [x] **1. Primitive** — **DONE (2604 → 2720 tests, +116; slices 1–18 byte-identical).** `airframe.jl`
+      gains `aero_accel_limit`, `alpha_command`, `alpha_autopilot_delta` (+ `_AIRFRAME_Q_FLOOR`=1e-3 /
+      `_AIRFRAME_DENOM_FLOOR`=1e-9, the `_AIRFRAME_V_FLOOR` precedent), appended AFTER `AIRFRAME_MODES`;
+      3 exports in `EWSim.jl`. **NO `AirframeParams` field** (α_max/gains are LIMITS → comp/kwargs) and
+      **NO mode const here** — `:alpha` is a gate-2 edit to `AUTOPILOT_MODES` in `guidance.jl`. Every
+      slice-16/17 primitive TEXTUALLY UNCHANGED ⇒ byte-identity is structural (the `_sample_z` golden +
+      `test_determinism` green prove it). **THREE ADVISOR CALLS FOLDED IN (all pre-write):**
+      (1) **do NOT floor `aero_accel_limit`** — it has no division, is finite on its own, and the true
+      ceiling at V→0 genuinely IS zero; flooring the READOUT would be a hidden §1 approximation. The
+      floor belongs only at the two divide sites (`alpha_command`'s Q, `alpha_autopilot_delta`'s Cmδ).
+      Command (safety-floored) and readout (pure formula) stay decoupled; at operating V they agree
+      exactly anyway. (2) **round-trip is `atol=1e-15`, NOT `==`** (α_raw lands ~1 ULP below α_max ⇒ the
+      clamp never engages — gate-0's 2.8e-17). (3) **ship ONLY `:ff_fb`** — no `law::Symbol` selector, no
+      dead `:static`/`:fb` branches. Returns `(δ, defl_sat::Bool)`.
+      **`test_airframe.jl` — 7 new testsets (110 asserts):** the **7-arrow sign chain + mirror +
+      antisymmetry** (each arrow pinned individually — the #1 trap's 3rd occurrence); `a_max_aero`
+      independent recompute + V²/α_max scaling + the **exact round-trip** (`α_cmd ≈ α_max` at a demand
+      of exactly `a_max_aero` ⇒ `sat ⟺ |a_perp| > a_max_aero`, the two names agree BY CONSTRUCTION);
+      **the clamp binds BOTH sides** (advisor: the below-ceiling arm is what fails a stuck-true `sat`);
+      the **out-of-plane discard** pinned as the §1 approximation (a huge y-demand changes NOTHING;
+      γ-invariance catches a frame slip); the **crash-safety degenerates** (V→0, C_Lα=0 ⇒ `(0.0,true)`,
+      **C_Lα<0 self-consistent** — α_cmd flips, lift still lands on +n̂ at the commanded 100.0 m/s²:
+      the tooth that catches a stray `abs` in the command; a 24-case finite sweep); **trim consistency
+      vs slice-16's independently-written `trim_alpha`** (the external anchor — the δ law's steady state
+      round-trips, and `pitch_moment(α_cmd, δ_ss) ≈ 0` = the definition of trim); the **closed-loop α
+      step** (T=6 s / `atol=1e-12` — **PROBED, not guessed**: the shipped k_α=1 is SLOWER than gate-0's
+      k_α=5, so the residual is 1.8e-9 at 4 s but 1.9e-13 by 6 s [floor 2.9e-15 by 8 s] — the plan's
+      "err ~1e-12" did NOT transfer across gains) **+ the `:fb` contrast arm** proving the feedforward is
+      LOAD-BEARING: feedback-only settles at the hand-derived `Cmδ·k_α/(Cmδ·k_α−Cmα)` = **3/4 = −25%**
+      at the SHIPPED gains (gate-0's 5/6/−16.67% was at ITS probe gains — the docstring now names both),
+      a 0.0375-rad gap that the two arms separate by 10 orders of magnitude.
 - [ ] **2. Wired** — the `:alpha` `decide!` branch (fetch-in-branch); the `:delta_cmd` seam in
       `_integrate_coupled!` (**`a_ctrl` stays out; fix the :164 comment**); `AUTOPILOT_MODES` gains `:alpha`
       (zero plumbing edits — verify); rung-gated telemetry (`a_max_aero`/`alpha_cmd`/`aero_sat`/…);

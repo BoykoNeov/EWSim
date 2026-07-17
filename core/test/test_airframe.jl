@@ -268,4 +268,243 @@
         R_meas = V / ((γend - γ0) / T)                      # V / γ̇_measured
         @test R_meas ≈ R_formula atol = 1e-2                # ≈5197 m; finite-diff ⇒ tight-not-exact
     end
+
+    # ── SLICE 19 — the INNER α/g AUTOPILOT: the aero inversion + the flight-condition g-limit ──
+    # Slice 17's δ was a fixed authored trim; here `a_cmd` is INVERTED THROUGH THE AERO into
+    # α_cmd and thence δ. The teeth: the SIGN chain arrow-by-arrow (#1 trap, THIRD occurrence —
+    # the chain is longer now, so an even number of flips has more places to hide and a
+    # magnitude-only test would pass); the `a_max_aero ↔ α_max` ROUND-TRIP (the clamp IS the
+    # limit — the two names must agree by construction, not calibration); the crash-safety
+    # degenerates at the `a_cmd/Q` divide (convention 5 — `af_cla` is a LIVE slider reaching −5);
+    # and the δ law's steady state pinned against slice-16's INDEPENDENTLY-written `trim_alpha`
+    # (an external anchor, convention 11 — not a self-calibrated round-trip).
+    # The gate-0 PICK's airframe (temp/slice19_probe): Cma=−1, Cmd=+3, Cmq=−150, Cla=20, k_α=1,
+    # k_q=0.3, α_max=0.2, mass=140.
+    mass19 = 140.0
+    p19    = stable(Cma = -1.0, Cmd = 3.0, Cmq = -150.0, Cla = 20.0)
+    KA, KQ = 1.0, 0.3
+
+    @testset "slice-19: the SIGN chain, arrow by arrow (#1 trap — a double flip must not hide)" begin
+        # Level flight (γ=0) ⇒ the lift direction n̂ = (−sin0, 0, cos0) = +z. Demand +z (pull UP):
+        # EVERY arrow of `a_perp → α_cmd → δ → M → α → lift → γ̇` must come out POSITIVE. Pinned
+        # individually (gate-0 GOAL A) — asserting only the final γ̇ would survive an even flip.
+        vel = Vec3(V, 0.0, 0.0); n̂ = Vec3(0.0, 0.0, 1.0)
+        a_cmd = Vec3(0.0, 0.0, 100.0)
+        a_perp = a_cmd[1]*n̂[1] + a_cmd[2]*n̂[2] + a_cmd[3]*n̂[3]
+        @test a_perp > 0.0                                          # arrow 1: demand +z
+        α_cmd, sat = alpha_command(a_cmd, vel, mass19, p19; alpha_max = 1.0)
+        @test α_cmd > 0.0                                           # arrow 2: nose ABOVE velocity
+        @test sat == false                                          # α_max generous ⇒ not binding
+        δ, dsat = alpha_autopilot_delta(α_cmd, 0.0, 0.0, p19; k_alpha = KA, k_q = KQ, delta_max = 0.5)
+        @test δ > 0.0                                               # arrow 3: Cma<0, Cmd>0 ⇒ δ>0
+        @test dsat == false
+        @test pitch_moment(0.0, δ, 0.0, V, p19) > 0.0               # arrow 4: NOSE-UP moment
+        aL = lift_accel(vel, α_cmd, mass19, p19)                    # γ=0 ⇒ θ=α_cmd ⇒ α=α_cmd
+        @test aL[1]*n̂[1] + aL[2]*n̂[2] + aL[3]*n̂[3] > 0.0            # arrow 5: lift toward +n̂
+        @test abs(aL[1]*vel[1] + aL[2]*vel[2] + aL[3]*vel[3]) / V < 1e-9   # arrow 6: lift ⟂ v
+        @test (aL[1]*n̂[1] + aL[2]*n̂[2] + aL[3]*n̂[3]) / V > 0.0      # arrow 7: γ̇ > 0 — path chases nose
+        # THE MIRROR: demand −z must flip every arrow. (A sign error that survives BOTH the
+        # forward chain and the mirror has to be an even flip in each — the reason for arrow-wise.)
+        α2, _ = alpha_command(Vec3(0.0, 0.0, -100.0), vel, mass19, p19; alpha_max = 1.0)
+        δ2, _ = alpha_autopilot_delta(α2, 0.0, 0.0, p19; k_alpha = KA, k_q = KQ, delta_max = 0.5)
+        aL2 = lift_accel(vel, α2, mass19, p19)
+        @test α2 < 0.0
+        @test δ2 < 0.0
+        @test pitch_moment(0.0, δ2, 0.0, V, p19) < 0.0
+        @test aL2[3] < 0.0
+        # Antisymmetry: the inversion is LINEAR in the demand (exact, not just sign-flipped).
+        @test α2 ≈ -α_cmd atol = 1e-15
+    end
+
+    @testset "slice-19: a_max_aero closed form + the α_max ROUND-TRIP (the clamp IS the limit)" begin
+        # An INDEPENDENT recompute (different expression grouping — convention 11 catches a
+        # decomposition slip, not a copy of the implementation).
+        αm = 0.2
+        aa = aero_accel_limit(700.0, mass19, p19; alpha_max = αm)
+        @test aa ≈ ((0.5 * ρ * 700.0^2) * S) * (20.0 * αm) / mass19 atol = 1e-9
+        @test aa > 0.0
+        # Scaling laws — the physics the name claims: ∝ V² (via Q) and ∝ α_max (linear).
+        @test aero_accel_limit(1400.0, mass19, p19; alpha_max = αm) ≈ 4 * aa atol = 1e-6
+        @test aero_accel_limit(700.0, mass19, p19; alpha_max = 2αm) ≈ 2 * aa atol = 1e-9
+        # THE ROUND-TRIP: a demand of EXACTLY a_max_aero ⇒ α_cmd is EXACTLY α_max. The two names
+        # agree by construction. `atol`, not `==`: α_raw lands ~1 ULP off α_max (measured 2.8e-17
+        # at gate 0), so the clamp may not engage and the raw value is returned.
+        vel = Vec3(700.0, 0.0, 0.0)
+        α_rt, sat_rt = alpha_command(Vec3(0.0, 0.0, aa), vel, mass19, p19; alpha_max = αm)
+        @test α_rt ≈ αm atol = 1e-15
+        # ⇒ `sat` is EXACTLY the statement `|a_perp| > a_max_aero` — the flag and the readout are
+        # the same fact. Pinned either side of the boundary (not AT it — that is the 1-ULP coin flip).
+        @test alpha_command(Vec3(0.0, 0.0, 1.5aa), vel, mass19, p19; alpha_max = αm)[2] == true
+        @test alpha_command(Vec3(0.0, 0.0, 0.5aa), vel, mass19, p19; alpha_max = αm)[2] == false
+    end
+
+    @testset "slice-19: the α_max clamp binds — BOTH sides (a stuck-true sat must fail)" begin
+        αm = 0.2; vel = Vec3(700.0, 0.0, 0.0)
+        aa = aero_accel_limit(700.0, mass19, p19; alpha_max = αm)
+        # ABOVE the ceiling: pegged at ±α_max EXACTLY (the clamp), sat set.
+        αhi, shi = alpha_command(Vec3(0.0, 0.0, 1.5aa), vel, mass19, p19; alpha_max = αm)
+        @test αhi == αm                                     # `==`: the clamp returns the bound itself
+        @test shi == true
+        αlo, slo = alpha_command(Vec3(0.0, 0.0, -1.5aa), vel, mass19, p19; alpha_max = αm)
+        @test αlo == -αm
+        @test slo == true
+        # BELOW the ceiling: UNCLAMPED (the raw inversion) and sat CLEAR — without this arm a
+        # stuck-true `sat` / an always-clamping bug would pass the binding test alone.
+        αmid, smid = alpha_command(Vec3(0.0, 0.0, 0.5aa), vel, mass19, p19; alpha_max = αm)
+        @test smid == false
+        @test αmid ≈ 0.5 * αm atol = 1e-15                  # linear in the demand ⇒ exactly half
+        @test abs(αmid) < αm
+    end
+
+    @testset "slice-19: the out-of-plane DISCARD (the §1 pitch-plane approximation, pinned)" begin
+        # A pitch-plane α autopilot CANNOT make y-accel: the signed projection onto n̂ (which has
+        # no y component) drops it. Pinned as a named approximation, not left implicit — a target
+        # maneuvering out of plane is UNFLYABLE by construction and must not read as a bug.
+        vel = Vec3(700.0, 0.0, 0.0)
+        α_planar, _ = alpha_command(Vec3(0.0, 0.0, 100.0), vel, mass19, p19; alpha_max = 1.0)
+        α_oop, _    = alpha_command(Vec3(0.0, 5000.0, 100.0), vel, mass19, p19; alpha_max = 1.0)
+        @test α_oop == α_planar                             # a huge y demand changes NOTHING
+        # A PURELY out-of-plane demand ⇒ zero α_cmd (nothing the pitch plane can do about it).
+        @test alpha_command(Vec3(0.0, 5000.0, 0.0), vel, mass19, p19; alpha_max = 1.0)[1] == 0.0
+        # The along-v̂ component is likewise unproducible by lift (⟂ v) — also discarded.
+        @test alpha_command(Vec3(5000.0, 0.0, 0.0), vel, mass19, p19; alpha_max = 1.0)[1] ≈ 0.0 atol = 1e-12
+        # In a CLIMB the projection follows the rotated n̂ = (−sinγ, 0, cosγ) — the frame is the
+        # velocity's, not the world's (a frame slip would show here and nowhere else).
+        γc = 0.5; velc = Vec3(700.0*cos(γc), 0.0, 700.0*sin(γc))
+        n̂c = Vec3(-sin(γc), 0.0, cos(γc))
+        αc, _ = alpha_command(100.0 * n̂c, velc, mass19, p19; alpha_max = 1.0)
+        @test αc ≈ α_planar atol = 1e-12                    # same ⟂ demand, same α — γ-invariant
+        @test alpha_command(100.0 * Vec3(cos(γc), 0.0, sin(γc)), velc, mass19, p19;
+                            alpha_max = 1.0)[1] ≈ 0.0 atol = 1e-12   # along v̂ ⇒ nothing
+    end
+
+    @testset "slice-19: the a_cmd/Q divide — crash-safety degenerates (convention 5)" begin
+        # THE crash-safety site of this slice: `α_cmd = a_perp·m/(Q·S·C_Lα)`. A throw inside
+        # decide! lands in the session's IO/EOF-only catch and SILENTLY DROPS the connection, so
+        # every degenerate must come back finite. (gate-0 GOAL G — all confirmed live.)
+        αm = 0.2
+        # V → 0 (launch/apex): Q→0 ⇒ the floor holds the divide; α_cmd pegs at α_max, sat set.
+        for vel in (Vec3(0.0, 0.0, 0.0), Vec3(1e-9, 0.0, 0.0))
+            α, s = alpha_command(Vec3(0.0, 0.0, 100.0), vel, mass19, p19; alpha_max = αm)
+            @test isfinite(α)
+            @test abs(α) ≤ αm
+            @test s == true                                 # tiny Q ⇒ demand looks infinite
+        end
+        # C_Lα → 0 (the LIVE `af_cla` slider dragged through zero): no lift authority ⇒ α_cmd = 0
+        # and SATURATED (the ceiling is zero — you cannot pull anything). No divide, no Inf.
+        p0 = stable(Cma = -1.0, Cmd = 3.0, Cmq = -150.0, Cla = 0.0)
+        @test alpha_command(Vec3(0.0, 0.0, 100.0), Vec3(700.0, 0.0, 0.0), mass19, p0;
+                            alpha_max = αm) == (0.0, true)
+        @test aero_accel_limit(700.0, mass19, p0; alpha_max = αm) == 0.0
+        # C_Lα < 0 (the slider's range reaches −5) is NOT degenerate: α_cmd FLIPS SIGN and the
+        # lift lands back on +n̂ exactly as commanded — the inversion is self-consistent through
+        # zero (gate-0 FINDING 9). This is why the limit takes |C_Lα| but the command takes the
+        # SIGNED C_Lα; a stray `abs` in the command would break this and nothing else.
+        pn_ = stable(Cma = -1.0, Cmd = 3.0, Cmq = -150.0, Cla = -20.0)
+        vel = Vec3(700.0, 0.0, 0.0)
+        aa_neg = aero_accel_limit(700.0, mass19, pn_; alpha_max = 1.0)
+        @test aa_neg > 0.0                                  # a MAGNITUDE — a negative slope still lifts
+        @test aa_neg ≈ aero_accel_limit(700.0, mass19, p19; alpha_max = 1.0) atol = 1e-9
+        α_neg, _ = alpha_command(Vec3(0.0, 0.0, 100.0), vel, mass19, pn_; alpha_max = 1.0)
+        @test α_neg < 0.0                                   # opposite α for the SAME +z demand
+        @test lift_accel(vel, α_neg, mass19, pn_)[3] > 0.0  # …and the lift still points UP
+        # The realized lift matches the demand either way — the sign convention closes the loop.
+        @test lift_accel(vel, α_neg, mass19, pn_)[3] ≈ 100.0 atol = 1e-9
+        α_pos, _ = alpha_command(Vec3(0.0, 0.0, 100.0), vel, mass19, p19; alpha_max = 1.0)
+        @test lift_accel(vel, α_pos, mass19, p19)[3] ≈ 100.0 atol = 1e-9
+        # Every finite knob combination the sliders can reach stays finite (no NaN escapes).
+        for cla in (20.0, 1e-12, 0.0, -1e-12, -5.0, -20.0), Vk in (0.0, 1.0, 700.0, 2000.0)
+            pk = stable(Cma = -1.0, Cmd = 3.0, Cmq = -150.0, Cla = cla)
+            α, _ = alpha_command(Vec3(0.0, 0.0, 100.0), Vec3(Vk, 0.0, 0.0), mass19, pk; alpha_max = αm)
+            @test isfinite(α)
+            @test isfinite(aero_accel_limit(Vk, mass19, pk; alpha_max = αm))
+        end
+    end
+
+    @testset "slice-19: the δ law — trim consistency vs slice-16's `trim_alpha` (external anchor)" begin
+        # AT the commanded α with zero pitch rate, the feedback terms vanish and the law returns
+        # its FEEDFORWARD — which must be the EXACT inverse of `trim_alpha`, written independently
+        # two slices earlier. Round-tripping through a function this one never calls is a genuine
+        # external anchor (convention 11), not a self-calibration.
+        α_cmd = 0.12
+        δ_ss, ds = alpha_autopilot_delta(α_cmd, α_cmd, 0.0, p19; k_alpha = KA, k_q = KQ, delta_max = 0.5)
+        @test ds == false
+        @test trim_alpha(δ_ss, p19) ≈ α_cmd atol = 1e-15    # δ → α round-trip closes
+        @test δ_ss ≈ -(p19.Cma / p19.Cmd) * α_cmd atol = 1e-15
+        # …and that δ makes the net pitching moment ZERO at α_cmd — the definition of trim.
+        @test pitch_moment(α_cmd, δ_ss, 0.0, V, p19) ≈ 0.0 atol = 1e-9
+        # The feedback arms, isolated: an α BELOW command demands MORE δ; a positive q (nose
+        # already pitching up) demands LESS (the rate loop damps). Signs pinned individually.
+        δ_lo, _ = alpha_autopilot_delta(α_cmd, α_cmd - 0.05, 0.0, p19; k_alpha = KA, k_q = KQ, delta_max = 0.5)
+        @test δ_lo > δ_ss
+        @test δ_lo ≈ δ_ss + KA * 0.05 atol = 1e-12
+        δ_q, _ = alpha_autopilot_delta(α_cmd, α_cmd, 0.4, p19; k_alpha = KA, k_q = KQ, delta_max = 0.5)
+        @test δ_q < δ_ss
+        @test δ_q ≈ δ_ss - KQ * 0.4 atol = 1e-12
+        # δ_max binds ⇒ clamped EXACTLY at the bound and `defl_sat` set (slice-15's DEFLECTION cap
+        # — the FOURTH cap in this plant, and an IMPLICIT α ceiling at ≈(Cmd/|Cma|)·δ_max. The
+        # showcase pins defl_sat == 0 so it is provably NOT binding while α_max is — FINDING 2).
+        δ_c, dc = alpha_autopilot_delta(0.9, 0.0, 0.0, p19; k_alpha = KA, k_q = KQ, delta_max = 0.4)
+        @test δ_c == 0.4
+        @test dc == true
+        @test alpha_autopilot_delta(-0.9, 0.0, 0.0, p19; k_alpha = KA, k_q = KQ, delta_max = 0.4)[1] == -0.4
+        # Cmδ ≈ 0 (no fin authority): the feedforward DROPS rather than dividing by zero — the
+        # feedback survives, δ stays finite. (M = Cmδ·δ = 0 anyway: the fin is simply irrelevant.)
+        p_nofin = stable(Cma = -1.0, Cmd = 0.0, Cmq = -150.0, Cla = 20.0)
+        δ_nf, _ = alpha_autopilot_delta(0.12, 0.0, 0.0, p_nofin; k_alpha = KA, k_q = KQ, delta_max = 0.5)
+        @test isfinite(δ_nf)
+        @test δ_nf ≈ KA * 0.12 atol = 1e-15                 # feedforward gone, feedback remains
+    end
+
+    @testset "slice-19: the CLOSED-LOOP α step — no steady-state error (why :ff_fb won)" begin
+        # The (V,γ)-FROZEN α-step response (the slice-16 isolation reused as a test technique —
+        # it separates the closed-loop rotational dynamics from the engagement). The gate-0 pick's
+        # whole claim: `:ff_fb` settles ON the command, damped. The two halves it beat: feedforward
+        # ALONE rings (+68…+96% overshoot — only aero damping opposes it), feedback ALONE carries a
+        # steady-state undershoot (the arm below pins it against its closed form).
+        # T = 6 s: the shipped gains (k_α=1, k_q=0.3) are SLOWER than the probe's k_α=5, so the
+        # residual is 1.8e-9 at 4 s but 1.9e-13 by 6 s (floor 2.9e-15 by 8 s) — probed, not guessed.
+        pstep = AirframeParams(S, d, 20.0, -1.0, 3.0, -150.0, ρ, 20.0)   # the PICK's I = 20
+        α_cmd = 0.15; γf = 0.0; Vf = 700.0; dt = 1e-3; T19 = 6.0
+
+        # A local (V,γ)-frozen closed-loop driver. `law` is the δ rule under test — the SHIPPED one
+        # for the real arms, a feedback-ONLY stand-in for the contrast arm below.
+        function αstep(law; cmd)
+            θ, q, δ = 0.0, 0.0, 0.0; peak = 0.0
+            for _ in 1:round(Int, T19 / dt)
+                qdd = (th, qq) -> pitch_moment(th - γf, δ, qq, Vf, pstep) / pstep.I
+                θ, q = rk4_rot(qdd, θ, q, dt)
+                peak = max(peak, abs(θ - γf))
+                δ = law(cmd, θ - γf, q)
+            end
+            return (α = θ - γf, q = q, δ = δ, peak = peak)
+        end
+        ff_fb = (cmd, α, q) -> alpha_autopilot_delta(cmd, α, q, pstep;
+                                                     k_alpha = KA, k_q = KQ, delta_max = 0.5)[1]
+
+        r = αstep(ff_fb; cmd = α_cmd)
+        @test r.α ≈ α_cmd atol = 1e-12                      # settles ON command — NO offset
+        @test r.q ≈ 0.0 atol = 1e-12                        # …and at rest, not still ringing
+        @test r.peak ≤ α_cmd * 1.05                         # ~0% overshoot (:static rings to +96%)
+        # The settled δ IS the trim δ — the loop converges onto the feedforward, feedback → 0.
+        @test r.δ ≈ -(pstep.Cma / pstep.Cmd) * α_cmd atol = 1e-12
+        # The command is TRACKED, not merely approached from one side: a NEGATIVE step settles too
+        # (the mirror — an asymmetric law would pass the positive step alone).
+        @test αstep(ff_fb; cmd = -α_cmd).α ≈ -α_cmd atol = 1e-12
+
+        # WHY THE FEEDFORWARD IS LOAD-BEARING, not decoration — the contrast, pinned against an
+        # EXTERNAL closed form (convention 11: hand-derived, not read off the implementation).
+        # Feedback ALONE balances k_α·(α_cmd−α)·Cmδ against Cmα·α, settling at
+        #     α_ss = Cmδ·k_α/(Cmδ·k_α − Cmα)·α_cmd = 3/(3+1) = 3/4 of command — a 25% UNDERSHOOT,
+        # which is **the slice-9 `1/(1+Kp)` undershoot recurring, one loop deeper** (gate-0
+        # FINDING 4 measured the same closed form at ITS probe gains: 5/6 = −16.67%). The shipped
+        # law removes it EXACTLY — that gap (0.0375 rad) is 10 orders of magnitude above the
+        # atol above, so these two arms genuinely separate the laws rather than co-passing.
+        fb_only = (cmd, α, q) -> clamp(KA * (cmd - α) - KQ * q, -0.5, 0.5)
+        rfb = αstep(fb_only; cmd = α_cmd)
+        α_ss_form = pstep.Cmd * KA / (pstep.Cmd * KA - pstep.Cma) * α_cmd
+        @test rfb.α ≈ α_ss_form atol = 1e-12                # the undershoot IS the closed form
+        @test rfb.α ≈ 0.75 * α_cmd atol = 1e-12             # …= 3/4 exactly at these gains
+        @test α_cmd - rfb.α > 0.03                          # a REAL error the feedforward kills
+    end
 end
