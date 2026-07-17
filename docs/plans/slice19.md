@@ -671,11 +671,58 @@ Slices 1–18 byte-identical through the include.
       **A test-hygiene catch:** the first loader-reject arm substituted BOTH gain lines, producing
       duplicate YAML keys — it passed, but a test that malforms its own fixture proves nothing; fixed to
       one substitution per case.
-- [ ] **3. Scenario + Godot + verifiers** — `scenarios/slice19_alpha_limit.yaml` (PLANAR, the first
-      coupled+guided missile, speed as THE demo knob + α_max as THE causation knob); the slice-17 airframe
-      view + the `a_max_aero` vs `a_demand` readout; **four proofs** (`slice19_verify.gd` — coupled MISSES /
-      point_mass HITS + the isolation asserted + **the α_max causation sweep (speed held)** + bit-identical
-      replay; `slice19_ui_test.gd` — the three-way
-      value-guard; the smoke-load; the windowed shot of a saturated α sliding past the target);
-      `test_scenario.jl` loader arm. Update `STATUS.md` + `CLAUDE.md` + HANDOFF §11 +
-      [[ewsim-fin-dynamics-direction]] — **and fix the "high-altitude" phrasing (finding 3).**
+- [x] **3. Scenario + Godot + verifiers** — **DONE (2823 → 2864 tests, +41; slices 1–18 byte-identical).**
+      `scenarios/slice19_alpha_limit.yaml` at THE PICK — it reproduces gate 0 **EXACTLY** through the real
+      `load_scenario → tick!` (miss **295.167860288**, Δ=1.6e-10; aero_sat 2444/4130 = 59.2%; defl_sat 0;
+      a_max_aero 269.39; pm 0.276114603; ratio 1069×; a_max 3000 ≡ 1e7 bit-for-bit; the `:a_ctrl` tripwire
+      holds) ⇒ **the shipped scenario inherits the whole gate-0/1/2 evidence chain, no re-derivation.**
+      **TWO GATE-3 FINDINGS (both advisor-confirmed, the first BLOCKING):**
+      **(15) THE `speed` DEMO KNOB IS DEAD — the plan was wrong.** `comp[:speed]` is consumed ONCE at
+      `scenario.jl:322` to build `e.vel`; **NOTHING reads it per-tick** (`server.jl:227` is the *playback*
+      speed), and `_reload!` rebuilds from YAML on `reset` so set_param-then-reset wipes it too. Gate 0
+      missed it by re-authoring `pick_world(V0=…)` **per run** (never the wire); gate 2 missed it because
+      its drag asserts only *no crash* — **which a dead knob passes**. The **dead-knob face of the
+      false-fidelity class** (k_δ-cancellation / false-fidelity / `a_ctrl`) — **4th in this arc, 1st caught
+      at gate 3.** FIX: **`rho`** is the live Q lever (fetched EVERY tick by both `integrate!` and
+      `decide!` ⇒ **zero new consumer code**); Q ∝ ρ exactly linear; **confounded identically** (ω_sp ∝ √ρ)
+      ⇒ it stays the DEMO lever and α_max the clean CAUSATION knob — the plan's split PRESERVED; and it
+      **cannot break the first-CPA condition**, which a working `speed` knob WOULD have (V0 > 825 ⇒ the
+      missile outruns the 825 m/s target ⇒ post-CPA re-crossing — the dead knob was hiding a 2nd bug).
+      The **tripwire that would have caught it now ships** (verifier + `test_server`: ρ must MOVE
+      `a_max_aero`, not merely fail to throw). `test_server`'s fixture knob swapped `speed`→`rho`.
+      **(16) THE MISS IS NON-MONOTONE IN ρ — below ρ≈0.5 the lesson REVERSES** (peak 378.8 @ ρ=0.50; at
+      ρ=0.1 it misses **245.9 — LESS than the default's 295.2**: with no lift authority it stops *trying*
+      and flies ~ballistically, passing closer). A user dragging there reads "thinner air → smaller miss".
+      **The [[ewsim-df-ellipse-sigma-monotonicity]] pattern recurring** ⇒ the knob is bounded to the
+      MONOTONE region: **ρ ∈ [0.6, 1.3]**, default 1.225 (THE PICK untouched) — physical (7 km ISA → cold
+      sea level), `defl_sat == 0` and `q_flips == 2` throughout (it dips to ω_sp 6.80, **below gate-0's
+      proven-stable 9.7 floor — this probe empirically extends it**; at ρ=0.1 / ω_sp 2.77 the loop DOES
+      start to go: q_flips 2→6, defl_sat 0→1). ρ is never sold as a make-it-hit lever.
+      **THE ADVISOR ALSO CORRECTED THE CAUSATION ASSERTION (fragile as planned):** the plan's `< 20 m`
+      bound is a TRUE-CPA number; frame-sampled it measured **13.579** on the wire vs **16.818** in the
+      Julia probe — a **3.2 m swing on the SAME trajectory** (sampling phase), leaving a `< 20` bound ~3 m
+      of margin against a quantity that moves ~3 m; α_max=0.8 would have been worse still (18.31). ⇒
+      assert the **RELATIVE drop** (`< 0.20×` the coupled miss — measured **0.046×**) at **α_max = 1.5**,
+      mirroring the point-mass `ratio > 8×` side, and pin only after measuring on the wire.
+      **THE PLOT/FLAG MISMATCH (the gate-2 forward-flag) SETTLED CONSCIOUSLY:** keep the wire at 6 keys,
+      accept the HUD crossing as **ILLUSTRATIVE**, and **label it in the HUD** rather than ship `a_perp` as
+      a 7th key; the **FLAG is ground truth** (the verifier asserts `aero_sat`, never a hand-rolled
+      `a_demand > a_max_aero`).
+      **Four proofs green.** `slice19_verify.gd` (S19V OK, exit 0 — SIX phases: COUPLED 295.186 / aero_sat
+      58.8% / defl_sat 0 / structural ceiling < a_max; REPLAY posdiff **0.0** + CPA bit-identical;
+      POINT_MASS 3.844 ⇒ **76.8×**; RHO_LEVER ceiling **0.49×** + aero_sat 58.8→82.4% [the dead-knob
+      tripwire]; ALPHA_CAUSE **0.046×**, 95.4% recovered, defl_sat 0). `slice19_ui_test.gd` (S19UI OK —
+      the value-guard **THREE ways**: 16 drops / 19 shows / 18 stays 3-D; the headline samples core
+      telemetry, is empty on a slice-17 frame, clears on reset). Smoke-load DONE (+ 16/17/18 re-smoked +
+      **all 9 prior UI tests re-run green** after the `Sandbox.gd` edit). **TWO shots @ tick 4130:** coupled
+      `los_range` **295.19**, a_cmd 282.43 vs a_ach **179.55** (track_gap 247.88), α **−7.8°**, demand over
+      the ceiling with the red band filling — vs point_mass `los_range` **3.84**, a_cmd **== a_ach**
+      (track_gap **0**), α≈0. **Shot-harness gotchas (both real, both fixed):** the client auto-starts
+      realtime on handshake ⇒ PAUSE → reset-via-the-button-handler → deterministic step burst (the first
+      attempt landed ~1.5 s PAST CPA); and press the fidelity BUTTON, never a raw `set_fidelity` — the
+      first point_mass shot came out **labelled "pitch_coupled" while flying the point-mass plant**, a lying
+      picture. CLIENT: the slice-17 view REUSED wholesale + the NEW `_draw_aero_strip` (autoscaled on the
+      CEILING ×2.6 — the pre-clamp demand spikes to ~1e4 and would squash the ceiling flat). Docs updated
+      (STATUS / CLAUDE.md / HANDOFF §11 / [[ewsim-fin-dynamics-direction]]) **and the "high-altitude"
+      phrasing fixed (finding 3)** — incl. the two STALE `scenario.jl:462/496` comments that still named
+      `speed` as the demo lever.

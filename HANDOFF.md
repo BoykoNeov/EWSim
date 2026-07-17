@@ -520,12 +520,31 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   banks the heightfield that land CLUTTER (above) needs. DEFERRED: knife-edge diffraction (the
   rung above the hard shadow), terrain-composed multipath, seeded fractal terrain, terrain
   occlusion at the DF/ESM/seeker LOS sites.
-  **What lands NEXT (slice 19): the inner α/g autopilot** — invert PN's `a_cmd → α_cmd → δ` (the
-  fin state δ from slice 15 finally feeds the `Cmδ·δ` moment term) + the flight-condition aero
-  g-limit `a_max_aero = Q·S·C_Lα·α_max/m` (α-limited maneuverability, the trigger recorded in
-  `docs/plans/slice15.md` / `slice16.md`; this was slotted as "slice 18" until the terrain
-  insertion — the trigger is intact, only the number moved). DEFERRED beyond slice 19: induced
-  drag; bank-to-turn (the 3-D quaternion+ω superset) and the radome/body-rate parasitic loop.
+  **[OPENED — slice 19] the INNER α/g AUTOPILOT closed the loop**, COMPLETING this entry's
+  "6-DOF airframe + actuator/fin dynamics and angle-of-attack limits" **in the pitch plane** (15 =
+  fin, 16 = rotation, 17 = the α→lift coupling, **19 = the closed inner loop**). PN's command is
+  inverted through the aero — `a_cmd → α_cmd = a_perp·m/(Q_eff·S·C_Lα) → δ` — so the missile flies
+  its own guidance command THROUGH the airframe instead of by fiat; a pure Tier-A swap behind the
+  EXISTING `autopilot` knob (a 4th rung `:alpha`) and the EXISTING `airframe` toggle, no contract
+  change. The lesson is this entry's named "angle-of-attack limits": the achievable maneuver accel
+  IS the FLIGHT-CONDITION lift ceiling **`a_max_aero = Q·S·C_Lα·α_max/m`** — the same PN law HITS
+  on `:point_mass` (a_ctrl by fiat) and MISSES by 295 m on `:pitch_coupled` (1069×), because the
+  air will not give it the g it asks for. Distinct from every prior cap: slice 10/12's `a_max` is
+  an authored MAGNITUDE clamp, slice 15's `k_δ·δ̇_max` a JERK cap — this is a FLIGHT-CONDITION cap.
+  **The first CROSS-FIDELITY DEPENDENCY in the suite** (`:alpha` commands `a_ctrl` under
+  `:point_mass`, δ under `:pitch_coupled`) — written down, not implied. NB the scalar δ goes
+  through `af_delta`/`:delta_cmd`; slice-15's **Vec3 `FinState` servo is a different frame and is
+  NOT reused** (the "two Tier-A halves join" phrasing was oversold — they join conceptually).
+  **ρ IS AUTHORED, NOT DERIVED FROM ALTITUDE** — `rho` is a per-missile constant, so ONLY V moves
+  Q on its own and the demo knob is `rho` itself (say "low dynamic pressure (thin air)", NEVER
+  unqualified "high altitude"; a `speed` knob would be DEAD — `comp[:speed]` is consumed once at
+  load and read by nothing per-tick). DEFERRED beyond slice 19: the **exponential atmosphere**
+  `ρ(z)=ρ₀·exp(−z/H)` (the honest completion — it would make "high altitude" a REAL lever, but it
+  touches the shared drag path); a **SCALAR rate-limited fin inside the coupled loop** (where
+  slice-15's banked δ pays off as the guidance limit cycle); **induced drag** (C_Di ∝ C_L² — the
+  pull-g → bleed-V → lower-Q → lower-ceiling spiral); nonlinear `C_L(α)` / true stall; bank-to-turn
+  (the 3-D quaternion+ω superset, where the pitch-plane out-of-plane discard finally dies) and the
+  radome/body-rate parasitic loop.
 - **Sibling domains that reuse the shared libs.** IR/EO seekers and IRST (add an IR
   environment channel to `env`, reuse `frames.jl`/`estimation.jl`); communications EW —
   jamming of frequency-hopping / spread-spectrum links — as a parallel to radar EW;

@@ -2133,6 +2133,156 @@ pass). The UI test needs NO server: `… --script res://net/slice18_ui_test.gd`.
 
 ---
 
+**Slice 19 — the inner α/g AUTOPILOT: the airframe flies its own command (HANDOFF §11 Tier-A, the 6-DOF
+arc's closed inner loop)** — the slice that makes the coupled airframe STEER ITSELF, and the FIRST time an
+AERODYNAMIC limit — not a kinematic number — decides whether the missile hits. Slice 17 gave the missile a
+body lift that turns the flight path, but δ was a FIXED authored trim: the airframe curved, it did not AIM.
+Slice 19 closes the inner loop — the PN command is inverted through the aero into an angle-of-attack command
+and thence a fin deflection (**`a_cmd → α_cmd → δ`**) — so the missile flies its own guidance command
+*through the airframe* rather than by fiat. **THE FIRST COUPLED AND GUIDED MISSILE** (slice 17 was open-loop,
+no target). Gates 0–2 and their numbers are in `docs/plans/slice19.md`; this entry is gate 3.
+
+**THE LESSON (the `:airframe` button, the ONE toggled fidelity):** the achievable maneuver accel IS the
+FLIGHT-CONDITION lift ceiling `a_max_aero = Q·S·C_Lα·α_max/m` ≈ **269 m/s²**. The SAME PN law, the SAME
+target: `:point_mass` applies `a_ctrl` by fiat and **HITS (0.276 m true / 3.84 frame-sampled)**;
+`:pitch_coupled` must MAKE its g from lift, the demand exceeds the ceiling for **59%** of the approach
+(`aero_sat` lit), the missile pulls everything the air will give and **MISSES by 295.168 m** — a **1069×**
+spread (76.8× frame-sampled). **The cap is distinct from every cap already in the suite** (the copy-paste
+false-claim trap): slice 10/12's `a_max` is an authored MAGNITUDE clamp, slice 15's `k_δ·δ̇_max` a JERK/onset
+cap and `δ_max` a DEFLECTION cap — slice 19's is a **FLIGHT-CONDITION** cap: what the air will give you *right
+now*. Class **4c** (physics-changing, NO RNG — truth-fed PN, no seeker ⇒ "draw-count invariance" is VACUOUS;
+live-settable, NO `set_fidelity` guard — the 5th 4c after 14/15/16/17, with slice 18's 4a interrupting).
+
+**GATE-3 FINDING 15 (BLOCKING, advisor-confirmed) — the `speed` knob the plan named "THE demo lever" is DEAD
+on the wire.** `comp[:speed]` is written at `scenario.jl:319` and consumed **ONCE at load** (line 322, to build
+`e.vel`); **NOTHING in `core/src/` reads it per-tick** (`server.jl:227` is the unrelated *playback* speed), and
+`_reload!` (`server.jl:70-74`) rebuilds from the YAML on `reset` — so the set_param-then-reset escape hatch
+wipes it too. A live `set_param(speed)` writes a comp key **no consumer reads**. **Why it survived to gate 3:**
+gate 0's V0 sweep re-authored `pick_world(V0=…)` **per run** (a fresh launch each time) and never touched the
+wire; gate 2's `test_server` drags `speed` but asserts only *no crash / finite* — **which a dead knob passes**.
+This is the **dead-knob face of the false-fidelity class** (slice-15 `k_δ`-cancellation, slice-16
+false-fidelity, slice-19 finding 1 `a_ctrl`) — **4th occurrence in this arc, and the first caught at gate 3.**
+**THE FIX: `rho` is the live Q lever** — `rho_af = get(c,:rho,1.225)` is fetched EVERY tick by BOTH `decide!`
+(`missile.jl:607`) and `integrate!` (`:88` → `_integrate_coupled!` → `AirframeParams` → `lift_accel`/
+`pitch_moment`), so declaring it in `knobs:` needed **zero new consumer code**. It is structurally BETTER than
+speed ever was: Q ∝ ρ **exactly linear** (measured 21.991 @ ρ=0.1 → 549.776 @ 2.5 = 25.0× for 25× ρ);
+**confounded identically** (ω_sp ∝ √ρ moves ceiling AND response speed together) so it stays the DEMO lever and
+α_max stays the clean CAUSATION knob — the plan's split preserved; and **it cannot break the first-CPA
+condition** (a working speed knob would have: at V0 > 825 the missile OUTRUNS the target ⇒ post-CPA
+re-crossing, the [[ewsim-missile-verifier-sampling]] hazard — so the dead knob was hiding a second bug).
+**The tripwire that would have caught it, now shipped:** the verifier and `test_server` assert
+`set_param(rho)` **MOVES `a_max_aero`** — not merely that nothing threw.
+
+**GATE-3 FINDING 16 (design-shaping) — the miss is NON-MONOTONE in ρ; below ρ≈0.5 the LESSON REVERSES.** The
+authored sweep peaks at **ρ ≈ 0.50 (378.8 m)** and FALLS below it: at **ρ=0.1 the missile misses by 245.9 m —
+LESS than the default's 295.2**. Honest but lesson-destroying: with almost no lift authority the missile stops
+*trying*, flies ~ballistically, and passes CLOSER than turning hard in the wrong direction; a user dragging
+there reads **"thinner air → smaller miss"**, the exact inverse. **This is the [[ewsim-df-ellipse-sigma-monotonicity]]
+pattern recurring** (slice 5: the ellipse axes are monotone in σθ only at low GDOP). **Same discipline: the knob
+is bounded to the MONOTONE region — ρ ∈ [0.6, 1.3], default 1.225 (THE PICK, untouched).** Physical (0.6 ≈ 7 km
+ISA; 1.3 ≈ the densest real sea-level air), `defl_sat == 0` throughout, and stable throughout (`q_flips == 2`,
+`q_peak ≈ 0.72`) — NB it dips to ω_sp = 6.80 at ρ=0.6, **below gate-0's proven-stable floor of 9.7** (which is
+the PICK's OWN ω_sp), so this probe **empirically extends** it; at ρ=0.1 (ω_sp 2.77) the loop DOES start to go
+(`q_flips` 2→6, `defl_sat` 0→1). ρ is **never** sold as a make-it-hit lever (it never hits; gate 0 found the
+same of speed).
+
+**ρ-AS-KNOB vs FINDING 3 ("high altitude" is FALSE here):** no conflict — it makes the constant-ρ approximation
+**INTERACTIVE** ("the sim won't thin the air as you climb, so thin it yourself") instead of hidden. The
+exponential atmosphere ρ(z)=ρ₀·exp(−z/H) stays DEFERRED (it touches the shared drag path). **Say "low dynamic
+pressure (thin air)", never unqualified "high altitude"** — the phrasing is fixed in the scenario header,
+`scenario.jl:462/496`, CLAUDE.md and HANDOFF §11.
+
+**The shipped scenario reproduces THE PICK EXACTLY through `load_scenario → tick!`** (convention 10 — pinned
+against the live wire, never a hand-recompute): miss **295.167860288** (Δ=1.6e-10 = the reference's own
+rounding), `aero_sat` **2444/4130 = 59.2%**, `defl_sat` **0**, `a_max_aero` **269.3900**, α_peak **0.136882**,
+δ_peak **0.266653**, point_mass **0.276114603**, ratio **1069.0×**, `a_max` 3000 ≡ 1e7 **bit-for-bit**, the
+`:a_ctrl` tripwire holds (a pure-coupled run never grows the key). So the scenario inherits the whole
+gate-0/1/2 evidence chain with no re-derivation.
+
+**`scenarios/slice19_alpha_limit.yaml`** (seed 19, dt 1e-3, emit 16): **PLANAR** (every y=0 — the out-of-plane
+discard is a §1 named approximation that CONSTRAINS the geometry, not a preference: a pitch-plane α autopilot
+cannot make y-accel, so an out-of-plane maneuver would be unflyable by construction and would read as a bug —
+`test_scenario` asserts every pos/vel y is 0). Fidelity `{airframe: pitch_coupled, guidance: pn, autopilot:
+alpha}` — THREE keys, **ONE toggled** (convention 9). Knobs: **rho** (DEMO), **af_alpha_max** (CAUSATION),
+**af_cla** (authority + the C_Lα-through-zero crash site). `k_alpha`/`k_q` are **deliberately NOT knobs** (the
+α_max clamp bounds the COMMAND while lift uses the ACHIEVED α ⇒ a hot loop overshoots and **the ceiling LEAKS**:
+gate 0 measured the miss collapsing 295 → 63 m at k_α=100).
+
+**THE ISOLATION IS STRUCTURAL — `saturated == 0` FAILS and must NOT be copied from slice 15.** `a_max`=3000
+clamps **560×** in the guided window and is **INERT** (proven bit-for-bit vs 1e7): it clamps `a_cmd` UPSTREAM of
+the α inversion, and since `a_max_aero < a_max` the clamped demand STILL pegs `α_cmd` at ±α_max — **the tighter
+clamp wins downstream**. Asserted instead: **max(`a_max_aero`) < `a_max`** (269 < 3000, an 11× margin) and
+**`defl_sat == 0`** (δ_peak 0.2667 < δ_max 0.4, 33% margin, deterministic at launch). **BINDING ≠ CAUSING:** the
+counterfactual is the only thing that licenses the causal claim — relaxing **α_max ALONE** (ρ/speed/geometry
+held; α_max enters ONLY the α_cmd clamp, absent from `pitch_moment`/`lift_accel`/`short_period_freq`) recovers
+**282 of 295 m = 95.4%**. Stated as a COUNTERFACTUAL, never a decomposition (gate 0 proved ceiling and dynamics
+are NOT additive). The residual **~13 m** is **"the airframe + autopilot dynamic tracking cost"** — a §1 named
+approximation of the `:pitch_coupled` plant, NOT "short-period lag" (unearned) and NOT a projection effect
+(refuted at −0.081 m).
+
+**THE PLOT/FLAG DECISION (the gate-2 finding, settled CONSCIOUSLY at gate 3):** `aero_sat` fires on `|a_perp|`
+(the ⟂-v PROJECTION — the only component an airframe can make) while `a_demand` is the FULL-magnitude pre-clamp
+demand, and `|a_perp| ≤ |a_cmd| ≤ |a_dem|` ⇒ the sets NEST, so a HUD plotting demand-vs-ceiling reads "breached"
+EARLIER and MORE OFTEN than the flag lights (the along-v̂ component reaches 0.55·|a_cmd| — which is exactly why
+the flag reads 59%, not more). **The call: keep the wire at 6 keys, accept the plot as ILLUSTRATIVE, and LABEL
+it in the HUD** ("illustrative: flag keys off ⟂v projection") rather than ship `a_perp` as a 7th key. **The FLAG
+is ground truth** — the verifier asserts `aero_sat`, NEVER a hand-rolled `a_demand > a_max_aero`.
+
+**CLIENT** (`Sandbox.gd`, +1 draw fn / +3 vars — zero physics, convention 13): the airframe view carries over
+from slice 17 **wholesale** — `_fid_kind = "airframe"` is REUSED (the curved trail, the nose/velocity/α overlay,
+the cycler all unchanged), since the value-guard already keys on `_fidelity.has("airframe")`. NEW: the headline
+**`_draw_aero_strip()`** — the cyan ceiling vs the orange demand on one axis with the breach band shaded RED and
+the panel border LIGHTING on `aero_sat`. Autoscaled on the CEILING (×2.6), not the demand (the pre-clamp demand
+spikes to ~1e4 in the endgame and would squash the ceiling to a flat line); the demand trace clamps to the panel
+top. Gated on the `a_max_aero` key ⇒ slices 16/17 draw nothing new. Histories clear on reset.
+
+**Four proofs green.** `slice19_verify.gd` (S19V OK, exit 0 — SIX phases): COUPLED miss(frame) **295.186**,
+ceiling [261.94, 269.37], aero_sat **58.8%**, defl_sat 0; COUPLED_REPLAY **posdiff 0.0** + CPA bit-identical
+(class-4c RNG-free); POINT_MASS **3.844** ⇒ ratio **76.8×**; RHO_LEVER ceiling 269.37 → **131.93 = 0.49×** with
+aero_sat 58.8% → **82.4%** (the demo lever MOVES the physics — the dead-knob tripwire); ALPHA_CAUSE miss
+**13.579** = **0.046×** the coupled default, **95.4% recovered**, defl_sat 0 throughout. `slice19_ui_test.gd`
+(S19UI OK — the value-guard **THREE WAYS**: 16 drops the button / 19 shows the cycler / 18 stays 3-D; the
+badge names `autopilot: alpha`; rho/af_alpha_max/af_cla → set_param; the headline samples core telemetry, is
+empty on a slice-17 frame, and clears on reset). Smoke-load DONE (+ 16/17/18 re-smoke-loaded, and all NINE
+prior UI tests re-run green after the `Sandbox.gd` edit). **TWO contrasting windowed shots** at the SAME tick
+4130: coupled `los_range` **295.19**, `a_cmd` 282.43 vs `a_ach` **179.55** (track_gap 247.88 — the airframe
+FAILING to deliver), α **−7.8°** with the lift vector drawn, demand above the ceiling with the red band filling;
+point_mass `los_range` **3.84**, `a_cmd` 299.17 **== `a_ach`** (track_gap **0** — the plant delivers by fiat),
+α ≈ 0. **Shot-harness note:** the client auto-starts realtime on handshake (`_set_running(true)`), so the
+harness must PAUSE → reset-via-the-button-handler → step a deterministic burst (the first attempt landed ~1.5 s
+PAST CPA); and it must press the fidelity BUTTON rather than send a raw `set_fidelity`, or the physics changes
+while the label/badge stay stale — the first point_mass shot came out labelled "pitch_coupled" while flying the
+point-mass plant, a lying picture.
+
+**Tests: 2823 → 2864 (+41); slices 1–18 byte-identical** (`test_determinism` + the `_sample_z` absolute golden
+green). `test_scenario.jl`: the real yaml parses, THE PICK's params land at the consumed keys, the engagement is
+PLANAR, the structural `a_max_aero < a_max` holds, the knobs are rho/af_alpha_max/af_cla with **`speed` asserted
+ABSENT** (the slice-17 precedent at its own `k.key ∉ (:speed, :elevation_deg)` assert), the ρ range is bounded to
+the monotone region, and `alpha_max ≤ 0` / `k_alpha ≤ 0` / `k_q < 0` are rejected. `test_server.jl`: the fixture's
+dead `speed` knob **swapped for `rho`** (advisor-flagged — a no-crash drag of a dead knob is valid but enshrines
+it as "tested"), plus the NEW not-a-dead-knob tripwire (ρ moves the ceiling, exactly linear) and `speed` asserted
+rejected by `set_param` (it is not a declared knob — the guard that makes the dead knob unreachable).
+
+**Slice 19 COMPLETE — the airframe flies its own command, and the air decides whether that is enough.** The
+6-DOF Tier-A arc's inner loop is CLOSED (15 = fin, 16 = rotation, 17 = the α→lift coupling, **19 = the closed
+inner loop**). DEFERRED (NAMED): the **exponential atmosphere** (makes "high altitude" a REAL lever — the honest
+completion of this lesson); the **rate-limited fin INSIDE the coupled loop** (a SCALAR servo, NOT the Vec3
+`FinState` — where slice-15's banked δ finally pays off in the **guidance limit cycle**, a real slice-20
+candidate); **induced drag** (C_Di ∝ C_L² — it composes viciously: pulling g bleeds V → lowers Q → lowers
+`a_max_aero` → a genuine feedback spiral); **nonlinear C_L(α) / true stall** (α_max here is a hard clamp on the
+COMMAND — a true stall would bound the ACHIEVED α and close the ceiling-leak path); **bank-to-turn / 3-D**
+(quaternion+ω — only there does the out-of-plane discard disappear), then the **radome/body-rate parasitic
+loop**; a **seeker in the coupled loop** (flips the class back to 4a/RNG-live — conventions 3/11 re-apply).
+Run the slice-19 showcase: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice19_alpha_limit.yaml`,
+then launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-detects the airframe view). Watch the cyan
+ceiling vs the orange demand: drag **ρ DOWN** to thin the air and the ceiling falls while the demand does not
+(the miss opens); drag **α_max UP** and the miss collapses (the causation proof); cycle the `airframe:` button to
+point_mass and the same PN law hits. Re-run the gate-3 proof headless: start that server, then the console Godot
+`--headless --path clients/godot --script res://net/slice19_verify.gd` (exit 0 = pass). The UI test needs NO
+server: `… --script res://net/slice19_ui_test.gd`.
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

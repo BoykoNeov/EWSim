@@ -1,0 +1,181 @@
+# slice19_alpha_limit — the inner α/g AUTOPILOT and the FLIGHT-CONDITION g-limit (HANDOFF §11
+# Tier-A, slice 19 gate 3). The slice that makes the coupled airframe STEER ITSELF — and the first
+# time an AERODYNAMIC limit, not a kinematic number, decides whether the missile hits. Slice 17 gave
+# the missile a body lift that turns the flight path, but the fin δ was a FIXED authored trim: the
+# airframe curved, it did not AIM. Slice 19 closes the inner loop — the guidance command is inverted
+# through the aero into an angle-of-attack command and thence a fin deflection (a_cmd → α_cmd → δ),
+# so the missile finally flies its own PN command *through the airframe* rather than by fiat.
+#
+# THE FIRST COUPLED **AND** GUIDED MISSILE IN THE PROJECT (slice 17 was open-loop with no target).
+#
+# THE LESSON (the `:airframe` button — point_mass ↔ pitch_coupled — the ONE toggled fidelity):
+#   • :point_mass — the slice-10 plant. The autopilot's control accel `:a_ctrl` is applied BY FIAT,
+#     bounded only by the authored a_max = 3000 (which never binds meaningfully). It pulls whatever
+#     PN asks for and HITS (miss ≈ 0.28 m).
+#   • :pitch_coupled — the maneuver accel must be MADE BY LIFT. The α command is clamped at α_max,
+#     so the achievable accel is capped at the FLIGHT-CONDITION ceiling
+#         a_max_aero = Q·S·C_Lα·α_max/m  ≈ 269 m/s²   (Q = ½ρV² at launch)
+#     PN demands more than that for 59% of the guided approach (`aero_sat` LIT), the missile pulls
+#     everything the air will give it, and it is NOT ENOUGH — it MISSES by ≈ 295 m (a 1069× spread).
+#   Flip the button and watch the SAME PN law, the SAME target, hit vs miss — because one plant can
+#   make its commanded g and the other must earn it from the air.
+#
+# THE CAP IS NOT ANY CAP ALREADY IN THE SUITE (the copy-paste false-claim trap — conventions 4/11):
+#   slice 10/12  a_max          — an authored MAGNITUDE clamp (a number the engineer chose)
+#   slice 15     k_δ·δ̇_max      — a JERK/onset-rate cap (how fast g can build)
+#   slice 15     δ_max          — a DEFLECTION cap (an implicit α ceiling through the trim inversion)
+#   slice 19     a_max_aero     — a FLIGHT-CONDITION cap: what the air will give you RIGHT NOW.
+#
+# THE ISOLATION IS STRUCTURAL, NOT `saturated == 0` (gate-0 correction — do NOT copy slice 15's
+# assertion): a_max=3000 clamps ~560× in the guided window and is INERT (proven bit-for-bit vs
+# a_max=1e7) because it clamps a_cmd UPSTREAM of the α inversion and a_max_aero < a_max means the
+# clamped demand STILL pegs α_cmd at ±α_max — the tighter clamp wins downstream. What IS asserted:
+# max(a_max_aero) = 269 < a_max = 3000 (5.5× margin) and defl_sat == 0 (δ_peak 0.2667 < δ_max 0.4,
+# 33% margin, deterministic at launch) — so the FOURTH cap cannot contaminate the lesson.
+#
+# BINDING ≠ CAUSING. That the ceiling BINDS does not prove it CAUSES the miss (the coupled plant also
+# carries a dynamic tracking cost the instant point-mass plant lacks — a slice-15-class concern). The
+# counterfactual settles it: relaxing **α_max ALONE** (every other cap held, ρ held, geometry held)
+# recovers **282 of the 295 m (95.6%)** → the ceiling caused it. Stated as a COUNTERFACTUAL, never as
+# a decomposition: gate 0 proved ceiling and dynamics are NOT additive (71 + 12 ≠ 253). The residual
+# ~13 m is "the airframe + autopilot DYNAMIC TRACKING COST" — the irreducible price of steering
+# through a real rotational plant with a finite-bandwidth loop instead of an instant one. It is NOT
+# "short-period lag" (unearned: 6.3× of ω_sp buys only −10%) and NOT a projection effect (measured at
+# −0.081 m — refuted). A §1 named approximation of the `:pitch_coupled` plant, not a defect.
+#
+# NAMED APPROXIMATIONS (§1): PITCH PLANE ONLY — a pitch-plane α autopilot can only make x–z accel, so
+# any OUT-OF-PLANE a_cmd component is DISCARDED. THIS CONSTRAINS THE GEOMETRY: the engagement is
+# PLANAR (every y = 0, the target maneuvers in x–z); a target maneuvering out of plane would be
+# UNFLYABLE by construction and would read as a bug. Also: a HARD α_max clamp standing in for the
+# lift curve rolling over (nonlinear C_L(α) / true stall is the next rung); LINEAR C_Lα; CONSTANT ρ
+# (see the rho knob); lift is drag-free / speed-preserving (⟂ v); truth-fed PN (no seeker — even a
+# perfect seeker still lags; a seeker in the coupled loop flips the class back to RNG-live); δ is a
+# scalar through `af_delta`/`:delta_cmd` — slice-15's Vec3 `FinState` rate-limited servo is a
+# DIFFERENT frame and is NOT reused here (the "two Tier-A halves join" phrasing was oversold; a
+# scalar servo inside the coupled loop is the named slice-20 candidate).
+#
+# `:a_ctrl` STAYS OUT OF THE COUPLED FORCE, DELIBERATELY. Guidance reaches this plant ONLY through δ.
+# Adding the autopilot's fiat control accel back into the joint force would give the missile lift PLUS
+# a direct a_max-bounded force: it would over-maneuver, the aero ceiling would NEVER BIND, and the
+# point-mass plant would be silently rebuilt in an airframe costume (the slice-15 k_δ-cancellation /
+# slice-16 false-fidelity trap, THIRD occurrence in this arc). `decide!` does not even persist
+# `:a_ctrl` under `:alpha`+`:pitch_coupled` — a pure-coupled run never grows the key (a tested tripwire).
+#
+# Class 4c: physics-changing, NO RNG (truth-fed PN, no seeker → "draw-count invariance" is VACUOUS —
+# do NOT copy slice-11/13 draw language), live-settable, NO set_fidelity guard (the :integrator/
+# :autopilot/:apn/:cooperation/:airframe precedent; CONTRAST slice-13 :scan's introduce-reject). The
+# seed is inert (kept for format consistency). UNITS (the §1 trifecta): pos/vel SI (m, m/s); Cmα/Cmδ/
+# Cmq/C_Lα in 1/rad; I in kg·m²; ρ in kg/m³; launch ELEVATION in DEGREES → radians at the loader;
+# α/θ/δ readouts in radians; a_max_aero/q_dyn in SI. dt = 1e-3 / emit_every = 16.
+name: slice19_alpha_limit
+seed: 19
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # THREE keys, ONE toggled (convention 9 — one lesson per button): `airframe` is THE BUTTON
+  # (point_mass ↔ pitch_coupled); `guidance` is HELD at :pn and `autopilot` AUTHORED at :alpha so the
+  # plant is the only variable. Default :pitch_coupled → the showcase OPENS on the miss (the lesson).
+  #
+  # THE CROSS-FIDELITY DEPENDENCY — THE FIRST IN THE SUITE, so it is WRITTEN DOWN, not implied:
+  # `:alpha`'s BEHAVIOUR DEPENDS ON `:airframe`. It commands `:a_ctrl` (the slice-9 shape) under
+  # :point_mass, and a fin δ through the aero inversion under :pitch_coupled. That is what lets ONE
+  # button carry the lesson while the autopilot rung stays authored once.
+  airframe: pitch_coupled
+  guidance: pn
+  autopilot: alpha
+
+entities:
+  # The interceptor — coupled AND guided. Launched from z = 3000 m CLIMBING at 12° at 700 m/s in the
+  # x-z plane (the slice-10/11/12 base geometry, so the ONLY new variable is the plant). mass 140 kg,
+  # DRAG OFF (one lesson — and it keeps ρ a PURE Q lever: with cd_area = 0 the density moves lift and
+  # the ceiling ONLY, never a drag force). Both blocks present ⇒ [BallisticMissile (phase-1 coupled
+  # airframe), Autopilot (phase-4 α/g guidance)].
+  #
+  # guidance: n_pn 4 (the PN nav constant — the outer law is slice-10 VERBATIM); a_max 3000 —
+  #   deliberately GENEROUS and PROVEN INERT (the isolation: it must NOT be the binding cap, or this
+  #   is just slice 10 again); delta_max 0.4 — slice-15's DEFLECTION cap REUSED (the same airframe's
+  #   fin limit in rad; :alpha and :fin never co-run), the FOURTH cap, pinned NON-binding.
+  #   k_alpha 1.0 / k_q 0.3 — the inner α-loop's feedforward-trim + rate-damped feedback gains.
+  #   THESE TWO ARE AUTHORED CONSTANTS AND ARE DELIBERATELY **NOT** KNOBS (gate-0 finding): the α_max
+  #   clamp bounds the COMMAND while lift uses the ACHIEVED α, so a hot loop (k_α=100) lets achieved α
+  #   overshoot the clamp ⇒ transient lift ABOVE a_max_aero ⇒ THE CEILING LEAKS (miss collapses
+  #   295 → 63 m, fin bang-bang). A true stall would bound the ACHIEVED α — the nonlinear C_L(α)
+  #   deferral. At the authored gains it is moot (α_peak 0.1369 never reaches the 0.2 clamp — the loop
+  #   is demand-limited), but an exposed gain slider is a live path to eroding the lesson.
+  # airframe: I = 20 kg·m², Cmα = −1.0 (STABLE — the nose weathervanes; ω_sp = 9.71 rad/s at launch),
+  #   Cmδ = +3.0 (control effectiveness — the fin's authority over the moment), Cmq = −150 (pitch
+  #   damping → the short period settles), C_Lα = 20 (the lift-curve slope), alpha_max 0.2 rad (≈11.5°)
+  #   — THE CEILING, a physically defensible stall-ish limit. No `delta:` → the open-loop trim is 0 and
+  #   the autopilot's `:delta_cmd` drives the fin from tick 2 (tick 1 flies δ = 0 — integrate! precedes
+  #   the first decide!).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.225
+      guidance: {n_pn: 4.0, a_max: 3000.0, delta_max: 0.4, k_alpha: 1.0, k_q: 0.3}
+      airframe: {ref_len_m: 0.2, inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0, cmq: -150.0, cla: 20.0, alpha_max: 0.2}
+  # The MANEUVERING target (the slice-12 mover): a curving aircraft at 4.2 km, closing-and-descending
+  # at v[−800, 0, 200] — |v| ≈ 825 > 700, so it OUTRUNS the missile. That is LOAD-BEARING for the
+  # verifier, not decoration: an outrunning target gives a clean FIRST CPA with no curve-back second
+  # crossing ([[ewsim-missile-verifier-sampling]]). a_lat 200 m/s² (~20 g) ⟂ v, turn_sign +1 (the
+  # clean direction — it curves AWAY after the first pass). PLANAR in x-z (the out-of-plane discard).
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 0.0, 4200.0]
+    vel: [-800.0, 0.0, 200.0]
+    target: {rcs_m2: 1.0, maneuver: {a_lat_mps2: 200.0, turn_sign: 1.0}}
+
+knobs:
+  # THE TWO LESSON LEVERS TELL COMPLEMENTARY, DELIBERATELY DIFFERENT STORIES — the split is the whole
+  # "binding ≠ causing" discipline made interactive:
+  #
+  # • rho — THE DEMO LEVER: "the ceiling is a FLIGHT CONDITION." a_max_aero ∝ Q = ½ρV², so dragging ρ
+  #   DOWN thins the air and the ceiling FALLS LIVE (269 → 132 m/s² at ρ=0.6, exactly linear), aero_sat
+  #   climbs 59% → 83%, and the miss OPENS (295 → 376 m). The DRAMATIC read is the a_max_aero readout
+  #   halving in real time, NOT the CPA shift. ρ is CONFOUNDED (ω_sp ∝ √ρ moves the ceiling AND the
+  #   response speed together) ⇒ it is the PHYSICAL-STORY lever and can NEVER be the causation proof —
+  #   that is α_max's job. It is also NOT a make-it-hit lever: it never hits (the tracking-cost floor
+  #   is below it), so drag it DOWN, which is also the only PHYSICAL direction (1.225 IS sea level).
+  #
+  #   RANGE [0.6, 1.3] IS DELIBERATE AND MEASURED (gate-3 probe): the miss is NON-MONOTONE in ρ and
+  #   PEAKS at ρ ≈ 0.50 — below that the missile has so little lift authority it stops trying, flies
+  #   ~ballistically, and passes CLOSER (at ρ=0.1 it misses by 246 m, LESS than the default's 295), so
+  #   a user dragging into that region would read "thinner air → smaller miss" — the exact INVERSE of
+  #   the lesson. The range is bounded to the MONOTONE region (the [[ewsim-df-ellipse-sigma-monotonicity]]
+  #   discipline recurring). 0.6 ≈ 7 km ISA, 1.3 ≈ the densest real sea-level air — nothing unphysical,
+  #   defl_sat stays 0 and the α loop stays damped throughout (below ρ≈0.2 it starts to ring).
+  #
+  #   ρ IS AUTHORED, NOT DERIVED FROM ALTITUDE (§1) — this project's ρ is a per-missile CONSTANT, so
+  #   climbing does NOT thin the air and ONLY V moves Q on its own. This knob makes that approximation
+  #   INTERACTIVE (the sim won't thin the air for you, so thin it yourself) rather than hidden. The
+  #   honest completion — an exponential atmosphere ρ(z) = ρ₀·exp(−z/H), which would make "high
+  #   altitude" a REAL lever — is DEFERRED to its own slice (it touches the shared drag path). Until
+  #   then: say "low dynamic pressure (thin air)", never unqualified "high altitude".
+  #
+  # • af_alpha_max — THE CAUSATION LEVER: "the ceiling CAUSES the miss." α_max enters ONLY the α_cmd
+  #   clamp (it is ABSENT from pitch_moment, lift_accel and short_period_freq), so it moves the ceiling
+  #   ALONE with ω_sp / Q / geometry FIXED — the clean discriminator ρ and speed can never be. Drag it
+  #   up and the miss COLLAPSES (0.2 → 295 m, 0.4 → 88 m, 0.8 → 18 m, 1.5 → 13 m), with defl_sat 0
+  #   throughout so the FOURTH cap can't contaminate the counterfactual. This is slice-12's "raise the
+  #   limit and PN recovers" done cleanly. The floor 0.05 keeps it > 0 (the load guard: a LIMIT has no
+  #   lesson-adjacent negative branch, unlike cma/cla).
+  #
+  # • af_cla — the AUTHORITY lever (lift per unit α) AND the crash-safety site: a_max_aero ∝ C_Lα, and
+  #   the α inversion DIVIDES by it. The range reaches −5 (the slice-17 range, mirroring cma): dragging
+  #   THROUGH ZERO must not crash a tick (convention 5 — a throw in decide! lands in the session's
+  #   IO/EOF-only catch and SILENTLY DROPS the connection). At C_Lα ≈ 0 there is no lift authority
+  #   (α_cmd → 0, ceiling → 0 — honest, not a divide blow-up); at C_Lα < 0 the signed divide flips
+  #   α_cmd and stays self-consistent (the lift still lands on the commanded side).
+  #
+  # NOT KNOBS, deliberately: k_alpha/k_q (the ceiling leaks — see above); the launch `speed` (it is
+  # consumed ONCE at load to build the launch velocity and is read by NOTHING per-tick, so a slider
+  # would be DEAD — ρ is the live Q lever instead; gate-3 finding); the geometry.
+  - {target: m1, key: rho,          min: 0.6,  max: 1.3, label: "ρ air density (kg/m³ — THE flight condition: Q = ½ρV²)"}
+  - {target: m1, key: af_alpha_max, min: 0.05, max: 1.5, label: "α_max stall limit (rad — THE ceiling: a_max_aero ∝ α_max)"}
+  - {target: m1, key: af_cla,       min: -5.0, max: 40.0, label: "C_Lα lift-curve slope (1/rad — lift authority)"}

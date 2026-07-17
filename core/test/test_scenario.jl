@@ -1127,6 +1127,87 @@ end
         @test :propagation ∉ Set(k.key for k in scn18.knobs)       # the button, not a slider
     end
 
+    @testset "loader parses slice19_alpha_limit.yaml (the inner α/g autopilot, spatial view)" begin
+        # The slice-19 showcase: the guidance command inverted through the aero (a_cmd → α_cmd → δ), so
+        # the achievable g IS the flight-condition ceiling `a_max_aero = Q·S·C_Lα·α_max/m`. Keeps the
+        # SPATIAL view and REUSES slice-17's airframe branch (an :airframe fidelity present ⇒ the
+        # point_mass↔pitch_coupled cycler). Cheap insurance: a malformed showcase fails HERE, not as a
+        # confusing Godot-launch timeout.
+        scn19 = load_scenario(normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice19_alpha_limit.yaml")))
+        @test scn19.name == "slice19_alpha_limit"
+        # THREE fidelity keys but ONE toggled button (convention 9): :airframe is the lesson's toggle
+        # (defaulting to the MISS), :guidance/:autopilot are authored-and-held so the plant is the only
+        # variable. `autopilot: alpha` is the FOURTH rung, and its behaviour DEPENDS on :airframe — the
+        # first cross-fidelity dependency in the suite (a_ctrl under :point_mass, δ under :pitch_coupled).
+        @test scn19.world.fidelity[:airframe]  === :pitch_coupled
+        @test scn19.world.fidelity[:autopilot] === :alpha
+        @test scn19.world.fidelity[:guidance]  === :pn
+        for k in (:propagation, :cfar, :ep, :estimator, :deinterleaver, :raim, :integrator,
+                  :seeker, :discrimination, :cooperation)
+            @test !haskey(scn19.world.fidelity, k)
+        end
+        # THE FIRST COUPLED **AND** GUIDED MISSILE (slice 17 was open-loop, no target): both subsystems.
+        missiles19 = [id for (id, e) in scn19.world.entities if e.kind === :missile]
+        @test length(missiles19) == 1
+        m19 = scn19.world.entities[missiles19[1]]
+        @test any(s -> s isa BallisticMissile, scn19.subs) && any(s -> s isa Autopilot, scn19.subs)
+        @test !any(s -> s isa Seeker, scn19.subs)                  # truth-fed PN ⇒ NO RNG (class 4c)
+        @test any(s -> s isa ManeuveringTarget, scn19.subs)
+        # THE ENGAGEMENT IS PLANAR — the out-of-plane discard is a §1 named approximation, not a
+        # preference: a pitch-plane α autopilot CANNOT make y-accel, so a target maneuvering out of
+        # plane would be unflyable by construction and would read as a bug.
+        for e in values(scn19.world.entities)
+            @test e.pos[2] == 0.0 && e.vel[2] == 0.0
+        end
+        # THE PICK's params land at the CONSUMED comp keys (gate 0/1/2 reproduce off exactly these).
+        @test m19.comp[:af_alpha_max] == 0.2 && m19.comp[:af_cla] == 20.0
+        @test m19.comp[:af_cma] == -1.0 && m19.comp[:af_cmd] == 3.0 && m19.comp[:af_I] == 20.0
+        @test m19.comp[:k_alpha] == 1.0 && m19.comp[:k_q] == 0.3
+        @test m19.comp[:delta_max] == 0.4                          # slice-15's cap REUSED (the 4th cap)
+        @test m19.comp[:rho] == 1.225 && m19.comp[:cd_area_m2] == 0.0
+        # THE ISOLATION, STRUCTURALLY AUTHORED: a_max must be GENEROUS enough to be inert — the lesson
+        # is the AERO ceiling, not slice-10's magnitude clamp in an airframe costume. At the authored
+        # ρ/V the ceiling is ≈269 ≪ 3000 (an 11× margin).
+        @test m19.comp[:a_max] == 3000.0
+        @test aero_accel_limit(EWSim._norm3(m19.vel), m19.comp[:mass_kg],
+                               AirframeParams(m19.comp[:af_S], m19.comp[:af_d], m19.comp[:af_I],
+                                              m19.comp[:af_cma], m19.comp[:af_cmd], m19.comp[:af_cmq],
+                                              m19.comp[:rho], m19.comp[:af_cla]);
+                               alpha_max = m19.comp[:af_alpha_max]) < m19.comp[:a_max]
+        # THE KNOBS: `rho` is THE DEMO lever (live — Q = ½ρV², fetched every tick) and `af_alpha_max`
+        # THE CAUSATION lever (it moves the ceiling ALONE). `speed` MUST NOT be a knob: comp[:speed] is
+        # consumed ONCE at load to build the launch velocity and read by NOTHING per-tick, so the
+        # slider the plan called for would have been DEAD (gate-3 finding; the slice-17 precedent at
+        # its own `k.key ∉ (:speed, :elevation_deg)` assert).
+        keyset19 = Set(k.key for k in scn19.knobs)
+        @test :rho in keyset19 && :af_alpha_max in keyset19 && :af_cla in keyset19
+        @test all(k -> k.key ∉ (:speed, :elevation_deg), scn19.knobs)
+        # the gains are NEVER knobs — the α_max clamp bounds the COMMAND while lift uses the ACHIEVED
+        # α, so a hot loop overshoots the clamp and THE CEILING LEAKS (gate-0: miss 295 → 63 m).
+        @test :k_alpha ∉ keyset19 && :k_q ∉ keyset19
+        @test :airframe ∉ keyset19 && :autopilot ∉ keyset19        # the button, not sliders
+        # the ρ knob's range is bounded to the MONOTONE region (gate-3 probe): the miss peaks at
+        # ρ ≈ 0.50 and FALLS below it (at ρ=0.1 the missile misses by LESS than the default — it stops
+        # trying and flies ~ballistically), so a slider reaching there would REVERSE the lesson.
+        rk = scn19.knobs[findfirst(k -> k.key === :rho, scn19.knobs)]
+        @test rk.target === missiles19[1] && rk.min >= 0.55 && rk.max <= 1.31
+        # the causation lever must REACH the relaxed value the verifier/test_missile counterfactual uses.
+        ak = scn19.knobs[findfirst(k -> k.key === :af_alpha_max, scn19.knobs)]
+        @test ak.min > 0.0 && ak.max >= 1.5
+        # alpha_max is sign-guarded at LOAD — unlike cma/cla a LIMIT has no lesson-adjacent negative
+        # branch (α_max ≤ 0 would clamp every command to ~0 and silently freeze the fin).
+        mk19(field, badval) = begin
+            f = tempname() * ".yaml"
+            write(f, replace(read(normpath(joinpath(@__DIR__, "..", "..", "scenarios",
+                                                    "slice19_alpha_limit.yaml")), String), field => badval))
+            f
+        end
+        @test_throws ErrorException load_scenario(mk19("alpha_max: 0.2", "alpha_max: 0.0"))
+        @test_throws ErrorException load_scenario(mk19("alpha_max: 0.2", "alpha_max: -0.1"))
+        @test_throws ErrorException load_scenario(mk19("k_alpha: 1.0", "k_alpha: 0.0"))
+        @test_throws ErrorException load_scenario(mk19("k_q: 0.3", "k_q: -0.1"))
+    end
+
     @testset "n_pulses ≥ 1 loads and is stored; < 1 is rejected (slice 3)" begin
         mk(np) = begin
             f = tempname() * ".yaml"

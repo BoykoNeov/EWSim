@@ -50,11 +50,12 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–18 COMPLETE & green — 2604 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–18
+**Slices 1–19 COMPLETE & green — 2864 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–19
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
-FIRST true 3-D view (a user-directed insertion — the inner autopilot shifted to slice 19).** Full gate-by-gate
+FIRST true 3-D view (a user-directed insertion — the inner autopilot shifted to slice 19), slice 19 the CLOSED
+INNER LOOP (`a_cmd→α_cmd→δ`) + the flight-condition g-limit.** Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -250,13 +251,63 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   heightfield land CLUTTER needs. Deferred (NAMED): knife-edge diffraction; terrain multipath/clutter; fractal
   terrain; hill-knob grid re-ship; DF/ESM/seeker terrain occlusion. (2604)
 
+- **Slice 19 (§11 Tier-A, the 6-DOF arc's CLOSED INNER LOOP) — the inner α/g AUTOPILOT COMPLETE**: the missile
+  finally flies its own PN command *through the airframe* instead of by fiat. Slice 17's fin δ was a FIXED
+  authored trim (the airframe curved, it did not AIM); slice 19 inverts the guidance command through the aero —
+  **`a_cmd → α_cmd = a_perp·m/(Q_eff·S·C_Lα) → δ`** (`alpha_command` + `alpha_autopilot_delta`, the `:ff_fb`
+  feedforward-trim-inversion + rate-damped feedback law) — on the **FIRST COUPLED AND GUIDED missile** in the
+  project (slice 17 was open-loop, no target). THE LESSON: the achievable maneuver accel IS the FLIGHT-CONDITION
+  lift ceiling **`a_max_aero = Q·S·C_Lα·α_max/m` ≈ 269**; the SAME PN law on `:point_mass` applies `a_ctrl` by
+  fiat and **HITS (0.276 m)** while `:pitch_coupled` must MAKE its g from lift, the demand exceeds the ceiling
+  **59%** of the approach, and it **MISSES by 295.168 m (1069×)**. The cap is DISTINCT from every prior one (the
+  copy-paste false-claim trap): 10/12's `a_max` = an authored MAGNITUDE clamp, 15's `k_δ·δ̇_max` = a JERK cap and
+  `δ_max` = a DEFLECTION cap — 19's is a **FLIGHT-CONDITION** cap (what the air gives you *right now*). **The
+  ISOLATION is STRUCTURAL — `saturated == 0` FAILS and must NOT be copied from slice 15**: `a_max` clamps 560×
+  INERTLY (3000 ≡ 1e7 bit-for-bit) because it clamps `a_cmd` UPSTREAM of the α inversion and the tighter clamp
+  wins downstream ⇒ assert `max(a_max_aero) < a_max` (269 ≪ 3000) + `defl_sat == 0` (the FOURTH cap). **BINDING
+  ≠ CAUSING** — the counterfactual licenses the claim: relaxing **α_max ALONE** (it enters ONLY the α_cmd clamp,
+  absent from `pitch_moment`/`lift_accel`/`short_period_freq`) recovers **282 of 295 m = 95.4%**; the ~13 m
+  residual is "the airframe + autopilot DYNAMIC TRACKING COST" (a §1 named approximation — NOT "short-period
+  lag", NOT a projection effect). `:a_ctrl` STAYS OUT of the coupled force (adding it rebuilds the point-mass
+  plant in an airframe costume and deletes the lesson — the 3rd occurrence of that trap); the `:alpha` rung's
+  behaviour DEPENDS on `:airframe` (a_ctrl under `:point_mass`, δ under `:pitch_coupled`) — **the FIRST
+  cross-fidelity dependency in the suite, written down, not implied**.
+  **GATE-3 FINDING (blocking): the planned `speed` demo knob is DEAD** — `comp[:speed]` is consumed ONCE at load
+  to build `e.vel` and read by NOTHING per-tick, and `reset` reloads the YAML; gate 0 swept it by re-authoring
+  per run and gate 2's no-crash drag PASSES on a dead knob (**the dead-knob face of the false-fidelity class —
+  4th in this arc, first caught at gate 3**). **`rho` is the live Q lever** (fetched every tick by BOTH
+  integrate! and decide! ⇒ zero new consumer code; Q ∝ ρ exactly linear; confounded like speed [ω_sp ∝ √ρ] ⇒ DEMO
+  only, α_max stays the causation knob; and unlike speed it can't break the first-CPA condition — a working
+  speed knob at V0 > 825 would outrun the target). Knob **ρ ∈ [0.6, 1.3]** — bounded to the MONOTONE region: the
+  miss PEAKS at ρ≈0.5 and FALLS below it (at ρ=0.1 it misses by LESS than the default — the missile stops trying
+  and flies ballistically), which would REVERSE the lesson (the [[ewsim-df-ellipse-sigma-monotonicity]] pattern
+  recurring). ρ-as-knob makes the constant-ρ approximation INTERACTIVE — **say "low dynamic pressure (thin air)",
+  NEVER unqualified "high altitude"** (ρ is not derived from z; the exponential atmosphere is DEFERRED). The
+  NOT-A-DEAD-KNOB TRIPWIRE now ships (verifier + `test_server` assert ρ MOVES `a_max_aero`, not merely that
+  nothing threw). Class **4c** (physics-changing, NO RNG — truth-fed, no seeker ⇒ "draw-count invariance
+  VACUOUS"; live-settable, NO guard — the 5th 4c after 14/15/16/17). CLIENT: the slice-17 airframe view REUSED
+  wholesale (`_fid_kind="airframe"`) + the NEW headline `_draw_aero_strip` (cyan ceiling vs orange demand, breach
+  band red, border lights on `aero_sat`) — **the plot is ILLUSTRATIVE and says so**: `aero_sat` keys off the ⟂-v
+  PROJECTION while `a_demand` is full-magnitude, so the sets nest (the verifier asserts the FLAG, never a
+  hand-rolled compare). Four proofs green (S19V: 295.186 vs 3.844 = 76.8× frame-sampled, replay posdiff 0.0, the
+  ρ lever drops the ceiling 0.49× live, the α_max sweep recovers 95.4%; S19UI: the value-guard THREE ways — 16
+  drops / 19 shows / 18 stays 3-D; smoke-load + 16/17/18 re-smoked + all 9 prior UI tests green; TWO shots at tick
+  4130: coupled los 295.19 / a_cmd 282 vs a_ach 180 / α −7.8° vs point_mass los 3.84 / track_gap 0). Deferred
+  (NAMED): the exponential atmosphere (makes "high altitude" REAL); a SCALAR rate-limited fin inside the coupled
+  loop (slice-15's banked δ → the guidance limit cycle — a slice-20 candidate); induced drag (C_Di ∝ C_L² — the
+  g-bleeds-V-lowers-Q spiral); nonlinear C_L(α)/true stall; bank-to-turn / 3-D (the out-of-plane discard dies
+  only there) → the radome/body-rate parasitic loop; a seeker in the coupled loop (flips back to 4a/RNG-live). (2864)
+
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened
-with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–18 are into the §11 Tier-A
+with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–19 are into the §11 Tier-A
 horizon — slice 15 the actuator/fin half, slice 16 the 6-DOF airframe's rotational half (pitch-plane θ,q), slice 17
 the α→lift→γ TRANSLATION-COUPLING half (the real path-changing `:airframe` toggle), slice 18 terrain masking + the
-3-D client view; what remains is slice 19 (the inner α/g autopilot + α-limited maneuverability, shifted from 18 by
-the terrain insertion) then the rest of §11 Tier-A/B/C — most concretely land clutter [terrain banked the
-heightfield] and the FULL 6-DOF airframe [bank-to-turn / 3-D].)
+3-D client view, slice 19 the CLOSED INNER LOOP (`a_cmd→α_cmd→δ`) + the flight-condition g-limit — which COMPLETES
+the Tier-A "6-DOF airframe + actuator/fin dynamics" entry in the pitch plane (15 = fin, 16 = rotation, 17 = the
+α→lift coupling, 19 = the closed loop). What remains is the rest of §11 Tier-A/B/C — most concretely land clutter
+[terrain banked the heightfield] and the FULL 6-DOF airframe [bank-to-turn / 3-D, where the pitch-plane
+out-of-plane discard finally dies], with a SCALAR rate-limited fin inside the coupled loop [the guidance limit
+cycle] and induced drag [the g→V→Q→ceiling spiral] as the named slice-20 candidates.)
 
 ## Conventions / hard-won disciplines
 

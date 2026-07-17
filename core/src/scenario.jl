@@ -459,7 +459,9 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # gains it is moot (α_peak = 0.1369 never reaches the 0.2 clamp — the loop is
             # demand-limited), but an exposed gain slider is a live path to eroding the lesson. A true
             # stall would bound the ACHIEVED α — that is the nonlinear C_L(α) deferral. The lesson
-            # sliders are `speed` (the DEMO lever) and `af_alpha_max` (the CAUSATION lever).
+            # sliders are `rho` (the DEMO lever — Q = ½ρV², read every tick) and `af_alpha_max` (the
+            # CAUSATION lever). NOT `speed`: `comp[:speed]` is consumed ONCE below to build the launch
+            # velocity and is read by NOTHING per-tick, so a `speed` knob would be DEAD (gate-3 finding).
             comp[:k_alpha] = _f64(get(gb, "k_alpha", 1.0))     # α-error gain (NEVER a knob)
             comp[:k_q]     = _f64(get(gb, "k_q", 0.3))         # pitch-rate damping gain (NEVER a knob)
             comp[:k_alpha] > 0  || error("missile '$id': guidance.k_alpha must be > 0 (got $(comp[:k_alpha]))")
@@ -493,8 +495,8 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # command to — THE LESSON's ceiling, since that clamp IS `a_max_aero = Q·S·C_Lα·α_max/m`
             # expressed in code. KNOB-ADDRESSABLE and deliberately so: it is the CAUSATION knob (it
             # enters ONLY the α_cmd clamp — absent from pitch_moment/lift_accel/short_period_freq — so
-            # it moves the ceiling ALONE, with ω_sp/Q/geometry FIXED; speed moves ceiling AND response
-            # together and is the DEMO lever, never the causation proof). Unlike `cma`/`cla` it IS
+            # it moves the ceiling ALONE, with ω_sp/Q/geometry FIXED; `rho` moves ceiling AND response
+            # together (ω_sp ∝ √ρ) and is the DEMO lever, never the causation proof). Unlike `cma`/`cla` it IS
             # sign-guarded at load: a LIMIT has no lesson-adjacent negative branch (α_max ≤ 0 would
             # clamp every command to ~0 and silently freeze the fin), and the consumer floors it too.
             # A named §1 approximation: a HARD clamp standing in for the lift curve rolling over —

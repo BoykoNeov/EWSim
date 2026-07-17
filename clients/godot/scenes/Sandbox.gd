@@ -214,6 +214,16 @@ var _salvo_trails := {}
 # destroy the chart's autoscale; a pegged trace reads "tumble" just fine). Never fed back anywhere.
 var _alpha_hist: Array = []
 const ALPHA_HIST_MAX := 480       # ~8 s of state frames at the emit cadence
+# Slice-19 inner α/g autopilot: the HEADLINE readout — the FLIGHT-CONDITION g-ceiling
+# `a_max_aero = Q·S·C_Lα·α_max/m` against the guidance `a_demand`, both live, on one axis. THE CROSSING
+# IS THE VERDICT (the analog of slice-18's clearance sign): where the demand rises above the ceiling the
+# air cannot give the missile the g PN is asking for. DISPLAY-ONLY histories of the core's own scalars —
+# nothing is recomputed here (HANDOFF §1 / convention 13). Present ONLY when the `:alpha` rung ships the
+# keys, so slices 16/17 (airframe_view, no α/g keys) draw nothing new.
+var _ceil_hist: Array = []        # <id>.a_max_aero — the ceiling
+var _demand_hist: Array = []      # <id>.a_demand — the PRE-clamp PN demand
+var _aero_sat_now := false        # <id>.aero_sat — the ceiling-binding tell (lights the panel)
+const AERO_HIST_MAX := 480        # match the α strip's window (~8 s at the emit cadence)
 const INTEGRATOR_RUNGS := ["rk4", "euler"]   # slice-8 integrator cycler (the shared fidelity button)
 const AUTOPILOT_RUNGS := ["ideal", "pid"]    # slice-9 autopilot cycler (the ONE source of truth for the rungs)
 # The autopilot ring is PER-SCENARIO: slice-9 stays the 2-ring :ideal↔:pid (its UI test asserts the
@@ -1374,6 +1384,18 @@ func _spatial_on_state(obj: Dictionary) -> void:
 		if _alpha_hist.size() > ALPHA_HIST_MAX:
 			_alpha_hist.pop_front()
 
+	# Slice-19: sample the g-ceiling vs the demand for the headline strip. Gated on `a_max_aero`, the
+	# rung-gated key the `:alpha` autopilot ships (under BOTH :airframe arms — the ceiling is a
+	# FLIGHT-CONDITION property, true whichever plant is active, which is exactly what makes the
+	# point_mass contrast legible: the demand crosses the ceiling and the missile hits ANYWAY).
+	if _airframe_view and _missile_id != "" and _telemetry.has(_missile_id + ".a_max_aero"):
+		_ceil_hist.append(float(_telemetry[_missile_id + ".a_max_aero"]))
+		_demand_hist.append(float(_telemetry.get(_missile_id + ".a_demand", 0.0)))
+		_aero_sat_now = float(_telemetry.get(_missile_id + ".aero_sat", 0.0)) > 0.5
+		if _ceil_hist.size() > AERO_HIST_MAX:
+			_ceil_hist.pop_front()
+			_demand_hist.pop_front()
+
 	# Drop a blip at the detected target's current screen position. The event
 	# carries `of` (the target id) but no position; the entity's pos this frame is
 	# within emit_every·dt (~16 ms) of when it fired — close enough for a blip.
@@ -1510,6 +1532,9 @@ func _on_reset_pressed() -> void:
 	_missile_trail.clear()                # start the ballistic trail fresh on the re-launch
 	_salvo_trails.clear()                 # slice-14: clear the per-missile salvo trails on re-launch
 	_alpha_hist.clear()                   # airframe strip chart restarts with the re-launch
+	_ceil_hist.clear()                    # slice-19: the g-ceiling/demand headline restarts too
+	_demand_hist.clear()
+	_aero_sat_now = false
 	_t3d_trail_pts.clear()                # slice-18: the 3-D target trail restarts with the re-launch
 	# `reset` reloads the YAML server-side → propagation reverts to the scenario default,
 	# but the server sends no new handshake. Resync the local fidelity so the badge/button
@@ -1774,6 +1799,11 @@ func _draw_spatial() -> void:
 	if _airframe_view and _alpha_hist.size() >= 2:
 		_draw_alpha_strip()
 
+	# airframe view (slice 19): the g-ceiling vs the demand — THE HEADLINE. Only when the `:alpha`
+	# rung ships the keys (slices 16/17 draw nothing new — the strip sits above the α chart).
+	if _airframe_view and _ceil_hist.size() >= 2:
+		_draw_aero_strip()
+
 func _draw_missile() -> void:
 	# The flown arc as a faint polyline (mapped from the stored WORLD breadcrumbs each draw, so it
 	# stays correct under the auto-expanding extents), then a marker at the head. The trajectory
@@ -2025,6 +2055,65 @@ func _draw_alpha_strip() -> void:
 		pts.append(Vector2(x, y0 - (float(_alpha_hist[i]) / m) * rect.size.y * 0.5))
 	draw_polyline(pts, Color(1.0, 0.8, 0.25, 0.9), 1.5)
 	draw_string(_font, rect.position + Vector2(6, 13), "±%.2f" % m, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1, 1, 1, 0.4))
+
+func _draw_aero_strip() -> void:
+	# Slice-19 THE HEADLINE: the FLIGHT-CONDITION g-ceiling `a_max_aero = Q·S·C_Lα·α_max/m` (cyan) against
+	# the guidance `a_demand` (orange), both live on one axis. Where the demand climbs ABOVE the ceiling the
+	# air cannot give the missile the g PN asks for — the region is shaded RED and `aero_sat` lights. That
+	# crossing is the whole slice: slices 10/12 capped the missile with an authored NUMBER (a_max); here the
+	# cap is a physical consequence of the flight condition, and it MOVES (drag ρ down — thinner air — and
+	# the cyan line drops while the orange one does not).
+	#
+	# ⚠ THE PLOT IS ILLUSTRATIVE, NOT EXACT — and the HUD says so. `aero_sat` fires on |a_perp| (the ⟂-v
+	# PROJECTION of the command — the only component an airframe can actually make), while `a_demand` is the
+	# FULL-magnitude pre-clamp demand. Since |a_perp| ≤ |a_cmd| ≤ |a_dem| the sets NEST: the drawn crossing
+	# reads "breached" EARLIER and MORE OFTEN than the flag lights (the along-v̂ component reaches
+	# 0.55·|a_cmd| and is unproducible by any airframe). Shipping `a_perp` as a 7th key would make them
+	# agree exactly; the deliberate call (gate 3) is to keep the wire at 6 keys and LABEL the plot. The
+	# FLAG is the ground truth — which is why the verifier asserts `aero_sat` and never a hand-rolled
+	# `a_demand > a_max_aero`. All values are the core's own scalars; nothing is recomputed here.
+	var vp := get_viewport_rect().size
+	var rect := Rect2(vp.x - 314.0, vp.y - MARGIN - 246.0, 300.0, 104.0)
+	draw_rect(rect, COL_PANEL_BG)
+	# the border LIGHTS while the aero ceiling is binding — the at-a-glance tell
+	draw_rect(rect, Color(1.0, 0.35, 0.3, 0.95) if _aero_sat_now else COL_PANEL_BORDER, false,
+		2.0 if _aero_sat_now else 1.0)
+	draw_string(_font, rect.position + Vector2(6, -5),
+		"g-ceiling vs demand (m/s²) — crossing = the air can't give it" ,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.55))
+	# Autoscale on the CEILING (×2.6), not the demand: the pre-clamp demand spikes to ~1e4 in the endgame
+	# and would squash the ceiling to a flat line at the axis. The demand trace is CLAMPED to the top of
+	# the panel and reads "pegged ≫ ceiling", which is the honest summary of a demand that far above it.
+	var m := 1.0
+	for v in _ceil_hist:
+		m = maxf(m, float(v))
+	m *= 2.6
+	var y_of := func(a: float) -> float:
+		return rect.end.y - clampf(a / m, 0.0, 1.0) * rect.size.y
+	# the SHADED breach band: demand above ceiling (illustrative — see the header)
+	for i in range(1, _ceil_hist.size()):
+		var d: float = float(_demand_hist[i])
+		var c: float = float(_ceil_hist[i])
+		if d <= c:
+			continue
+		var x := rect.position.x + (float(i) / float(AERO_HIST_MAX - 1)) * rect.size.x
+		draw_line(Vector2(x, y_of.call(c)), Vector2(x, y_of.call(d)), Color(1.0, 0.3, 0.25, 0.16), 1.5)
+	var ceil_pts := PackedVector2Array()
+	var dem_pts := PackedVector2Array()
+	for i in _ceil_hist.size():
+		var x := rect.position.x + (float(i) / float(AERO_HIST_MAX - 1)) * rect.size.x
+		ceil_pts.append(Vector2(x, y_of.call(float(_ceil_hist[i]))))
+		dem_pts.append(Vector2(x, y_of.call(float(_demand_hist[i]))))
+	draw_polyline(dem_pts, Color(1.0, 0.62, 0.2, 0.85), 1.5)      # a_demand (PN, pre-clamp)
+	draw_polyline(ceil_pts, Color(0.35, 0.9, 1.0, 0.95), 2.0)     # a_max_aero — THE ceiling
+	draw_string(_font, rect.position + Vector2(6, 13), "%.0f" % m, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1, 1, 1, 0.4))
+	var ceil_now: float = float(_ceil_hist[-1])
+	draw_string(_font, Vector2(rect.position.x + 6, rect.end.y - 5),
+		"a_max_aero %.0f  (illustrative: flag keys off ⟂v projection)" % ceil_now,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.35, 0.9, 1.0, 0.75))
+	if _aero_sat_now:
+		draw_string(_font, Vector2(rect.end.x - 92, rect.position.y + 13), "AERO SAT",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.4, 0.32, 0.95))
 
 # --- CFAR range-power view (slice 3) ------------------------------------------
 # A plot: x = range (the core's static range axis), y = power in dB. Three layers, all from

@@ -1156,7 +1156,7 @@ end
             vel: [-800.0, 0.0, 200.0]
             target: {rcs_m2: 1.0, maneuver: {a_lat_mps2: 200.0, turn_sign: 1.0}}
         knobs:
-          - {target: m1, key: speed,        min: 400.0, max: 1200.0, label: "V0 (m/s)"}
+          - {target: m1, key: rho,          min: 0.6,   max: 1.3,    label: "rho (kg/m3 — the Q lever)"}
           - {target: m1, key: af_alpha_max, min: 0.05,  max: 1.5,    label: "alpha_max (rad)"}
           - {target: m1, key: af_cla,       min: -5.0,  max: 40.0,   label: "Cla"}
         """)
@@ -1189,7 +1189,7 @@ end
         ok = true
         for (k, v) in (("af_cla", 20.0), ("af_cla", 1.0e-12), ("af_cla", 0.0), ("af_cla", -1.0e-12),
                        ("af_cla", -5.0), ("af_alpha_max", 0.05), ("af_alpha_max", 1.5),
-                       ("speed", 400.0), ("speed", 1200.0), ("af_cla", 40.0))
+                       ("rho", 0.6), ("rho", 1.3), ("af_cla", 40.0))
             EWSim.handle_command!(srv, Dict(:type => "set_param", :target => "m1", :key => k, :value => v))
             for _ in 1:120
                 tick!(w, srv.scn.subs, srv.scn.dt_physics); empty!(w.events)   # must NOT throw
@@ -1202,6 +1202,31 @@ end
             ok || break
         end
         @test ok                        # the α tick survives every slider drag, incl. C_Lα through 0
+
+        # THE DEMO KNOB MUST MOVE THE PHYSICS — the tripwire a DEAD knob fails (gate-3 finding).
+        # The plan named `speed` as this scenario's demo lever, but `comp[:speed]` is consumed ONCE at
+        # LOAD (scenario.jl, to build the launch velocity) and read by NOTHING per-tick, so a live
+        # `set_param(speed)` writes a key no consumer reads — and `reset` reloads the YAML, wiping it.
+        # A no-crash drag PASSES on a dead knob, which is exactly how it survived to gate 3. `rho` is
+        # the live Q lever: fetched EVERY tick by both integrate! and decide!, so it moves the ceiling
+        # `a_max_aero = Q·S·C_Lα·α_max/m` ∝ ρ. Assert the CEILING MOVES, not merely that nothing threw.
+        srv2 = EWSim.Server(load_scenario(alim); path = alim)
+        w2 = srv2.scn.world
+        ceil_at = function (rho)
+            EWSim.handle_command!(srv2, Dict(:type => "reset"))
+            EWSim.handle_command!(srv2, Dict(:type => "set_param", :target => "m1", :key => "rho", :value => rho))
+            tick!(srv2.scn.world, srv2.scn.subs, srv2.scn.dt_physics)
+            empty!(srv2.scn.world.events)
+            srv2.scn.world.env[:telemetry]["m1.a_max_aero"]
+        end
+        c_sea, c_thin = ceil_at(1.225), ceil_at(0.6)
+        @test c_sea > 0.0
+        @test c_thin < 0.55 * c_sea             # thinner air ⇒ a LOWER ceiling (measured 0.49×)
+        @test isapprox(c_thin / c_sea, 0.6 / 1.225; rtol = 1e-9)   # …and EXACTLY linear in ρ
+        # …while `speed` is inert on the wire: a live set would change NOTHING (it is not even a
+        # declared knob here — set_param rejects it, the guard that makes the dead knob unreachable).
+        @test_throws ErrorException EWSim.handle_command!(srv2,
+            Dict(:type => "set_param", :target => "m1", :key => "speed", :value => 1200.0))
     end
 
     @testset "set_seed + reset compose into a clean seeded replay" begin
