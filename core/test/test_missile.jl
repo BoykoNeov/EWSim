@@ -2589,6 +2589,76 @@ end
         @test wa.entities[:m1].pos === wc.entities[:m1].pos
     end
 
+    @testset "⭐ INERT WITHOUT ITS HOST — `:atmosphere` needs `:pitch_coupled` (half-a-missile guard)" begin
+        # `_atm_on`'s THIRD conjunct, pinned. ρ(z) reaches ONLY the coupled path: `_integrate_coupled!`
+        # is gated on `:pitch_coupled`, so under `:point_mass` the translation flies `total_accel`'s
+        # AUTHORED constant ρ whatever this rung says. The conjunct makes every OTHER ρ-reading site
+        # revert with it — without it the readouts (and slice-16's rotational `_integrate_airframe!`)
+        # would report ρ(z) while pos/vel flew ρ₀: HALF THE MISSILE IN ONE ATMOSPHERE AND HALF IN
+        # ANOTHER. Inert-without-its-host is the slice-14 (`:salvo` needs a `:datalink`) / slice-13
+        # (`discrimination` needs `:scan`) shape.
+        #
+        # The tooth is `===` on the TRAJECTORY, not on the predicate: under `:point_mass` an
+        # H = 8500 `:exponential` world must be BIT-IDENTICAL to its `:constant` twin — i.e. the rung
+        # is not merely "mostly off", it is unreachable. Note this is a REAL guard and not a
+        # tautology: the missile CLIMBS to ~13 km here, where ρ(z)/ρ₀ ≈ 0.2, so a leak of ρ(z) into
+        # ANY of the five sites would move θ/q (via the pitching moment) far outside `===`.
+        wp, sp = atm_world(H = 8500.0, atmosphere = :exponential, airframe = :point_mass)
+        wq, sq = atm_world(H = 8500.0, atmosphere = :constant,    airframe = :point_mass)
+        for _ in 1:6000
+            tick!(wp, sp, dt); empty!(wp.events)
+            tick!(wq, sq, dt); empty!(wq.events)
+        end
+        @test wp.entities[:m1].pos          === wq.entities[:m1].pos
+        @test wp.entities[:m1].vel          === wq.entities[:m1].vel
+        @test wp.entities[:m1].comp[:pitch_theta] === wq.entities[:m1].comp[:pitch_theta]
+        @test wp.entities[:m1].comp[:pitch_q]     === wq.entities[:m1].comp[:pitch_q]
+        # the readout agrees with the plant it describes: under `:point_mass` the air is ρ₀, EXACTLY
+        @test EWSim._airframe_rho(wp.entities[:m1].comp, wp, wp.entities[:m1].pos[3]) == 1.225
+        @test wp.env[:telemetry]["m1.rho_air"] == 1.225
+        # …and it is the COUPLING that switches it on: the SAME H and the SAME rung, coupled ⇒ ρ(z).
+        # PROBED, THEN PINNED against the live path (convention 10 — a first draft GUESSED
+        # `< 0.6·ρ₀` here and failed at 0.878: at 6 s this missile is only ~2.8 km up, where the air
+        # is still ~72% of sea level. The 4.4× collapse is a 60-SECOND story, not a 6-second one).
+        wc, sc = atm_world(H = 8500.0, atmosphere = :exponential, airframe = :pitch_coupled)
+        for _ in 1:6000; tick!(wc, sc, dt); empty!(wc.events); end
+        # the readout IS ρ(z) at the flown height — the non-arbitrary form of "the coupling switched
+        # it on" (`==`: same expression, same air, no tolerance to hide behind)
+        @test wc.env[:telemetry]["m1.rho_air"] ==
+              air_density(wc.entities[:m1].pos[3]; rho0 = 1.225, H = 8500.0)
+        @test isapprox(wc.env[:telemetry]["m1.rho_air"], 0.878; atol = 1e-3)   # ~2.8 km up
+        @test wc.env[:telemetry]["m1.rho_air"] < 0.95 * 1.225   # …a REAL move off ρ₀, not a wobble
+    end
+
+    @testset "the `rho_air` wire key — KEY-gated, ships under BOTH rungs, matches the integrator" begin
+        # THE KEY IS THE GATE, NEVER THE RUNG — the deliberate contrast with `a_lift` (a produced
+        # force that only exists when coupled). Under `:constant` `rho_air` ships the flat authored
+        # ρ₀, and THAT IS THE POINT: the twin's ρ-factor being EXACTLY 1.0 is half the headline, and
+        # rung-gating would take it off the wire and leave the client to divide `2·q_dyn/V²` —
+        # physics in GDScript, which convention 13 forbids.
+        we, se = atm_world(H = 8500.0, atmosphere = :exponential)
+        wk, sk = atm_world(H = 8500.0, atmosphere = :constant)
+        wn, sn = atm_world(H = nothing)                        # slices 16–20's shape: NO scale height
+        for _ in 1:3000
+            tick!(we, se, dt); empty!(we.events)
+            tick!(wk, sk, dt); empty!(wk.events)
+            tick!(wn, sn, dt); empty!(wn.events)
+        end
+        @test haskey(we.env[:telemetry], "m1.rho_air")         # :exponential ships it…
+        @test haskey(wk.env[:telemetry], "m1.rho_air")         # …and so does :constant (BOTH rungs)
+        # a slice-16..20 wire must NOT grow a key (byte-identity — the a_induced / fin-key precedent)
+        @test !haskey(wn.env[:telemetry], "m1.rho_air")
+        # THE READOUT DESCRIBES THE MISSILE THAT IS FLYING (the four-site funnel's whole purpose):
+        # `rho_air` is EXACTLY the ρ the closure integrated with, at this tick's post-integrate z.
+        m = we.entities[:m1]
+        @test we.env[:telemetry]["m1.rho_air"] == air_density(m.pos[3]; rho0 = 1.225, H = 8500.0)
+        @test wk.env[:telemetry]["m1.rho_air"] == 1.225        # :constant is FLAT — `==`, not `≈`
+        # …and `q_dyn` is built from that SAME ρ (an INDEPENDENT recompute — convention 11's
+        # different-algorithm oracle: ½ρV² from the shipped ρ and the shipped speed).
+        V = we.env[:telemetry]["m1.speed"]
+        @test we.env[:telemetry]["m1.q_dyn"] ≈ 0.5 * we.env[:telemetry]["m1.rho_air"] * V^2 rtol = 1e-12
+    end
+
     @testset "⭐ NOT A DEAD KNOB — H MOVES the physics (the arc's signature failure)" begin
         # slice-19's gate-3 finding: `comp[:speed]` was consumed ONCE at load and read by NOTHING
         # per-tick, and a no-crash test PASSED on it. Assert H MOVES a real quantity, never merely

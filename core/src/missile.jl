@@ -183,15 +183,28 @@ end
 # different, divergent lesson; convention 9 keeps the showcase from mixing them, and it can't
 # crash). NO RNG (class 4c). The `:point_mass` path above is byte-identical to slices 8–16.
 # --- SLICE 21: the EXPONENTIAL ATMOSPHERE gate (§11 Tier A) -----------------------------------
-# `true` when this missile carries an authored scale height AND the `:atmosphere` rung is live.
-# The ONE place the gate is expressed, so the four ρ-reading airframe sites cannot drift apart
-# (convention 7's one-list-no-drift, applied to a predicate). Slices 8–20 have no
-# `:af_scale_height`, and the rung DEFAULTS to `:constant` — so this is `false` on every prior
-# scenario by BOTH halves, and each caller's else-arm is the prior slice's code TEXTUALLY
+# `true` when this missile carries an authored scale height, the `:atmosphere` rung is live, AND
+# the airframe is COUPLED. The ONE place the gate is expressed, so the five ρ-reading airframe
+# sites cannot drift apart (convention 7's one-list-no-drift, applied to a predicate). Slices 8–20
+# have no `:af_scale_height`, and the rung DEFAULTS to `:constant` — so this is `false` on every
+# prior scenario by BOTH halves, and each caller's else-arm is the prior slice's code TEXTUALLY
 # VERBATIM (byte-identity by construction, not by trusting `exp(0) == 1`; the `-0.0` trap the
 # slice-20 induced-drag gate documents).
+#
+# ⭐ THE THIRD CONJUNCT IS NOT DECORATION — `:atmosphere` IS INERT WITHOUT `:pitch_coupled`, the
+# slice-14 (`:salvo` inert without a `:datalink`) / slice-13 (`discrimination` inert without
+# `:scan`) shape. ρ(z) reaches ONLY the coupled path: `_integrate_coupled!` is itself gated on
+# `:pitch_coupled`, so under `:point_mass` the translation flies `total_accel`'s AUTHORED constant
+# ρ no matter what this rung says. Without this conjunct the readouts (and slice-16's rotational
+# `_integrate_airframe!`) would report ρ(z) while pos/vel flew ρ₀ — HALF THE MISSILE IN ONE
+# ATMOSPHERE AND HALF IN ANOTHER, and a readout that describes a different missile than the one on
+# screen is exactly what the four-site `_airframe_rho` funnel exists to prevent. Under
+# `:point_mass` every site reverts to ρ₀ together, which is COHERENT: that plant makes its accel by
+# fiat, so there is no lift ceiling for the air to lower and nothing for ρ(z) to mean.
 _atm_on(c::Dict{Symbol,Any}, w::World) =
-    haskey(c, :af_scale_height) && get(w.fidelity, :atmosphere, :constant) === :exponential
+    haskey(c, :af_scale_height) &&
+    get(w.fidelity, :atmosphere, :constant) === :exponential &&
+    get(w.fidelity, :airframe, :point_mass) === :pitch_coupled
 
 # The airframe's air density at height `z` — ρ(z) under the live rung, else the authored constant.
 # **Returns the IDENTICAL expression the frozen paths already had when gated off**, which is what
@@ -765,7 +778,8 @@ function decide!(a::Autopilot, w::World)
                 # tracking). It is NOT persisted to comp — see the store guard below (finding 1).
                 a_ctrl     = lift_accel(e.vel, θ_af, mass_af, p_af)
                 alpha_diag = (alpha_cmd = α_cmd, delta_cmd = δ_cmd, aero_sat = aero_sat,
-                              defl_sat = defl_sat, a_max_aero = a_max_aero, q_dyn = q_dyn)
+                              defl_sat = defl_sat, a_max_aero = a_max_aero, q_dyn = q_dyn,
+                              rho_air = rho_af)
             else
                 # THE REFERENCE ARM (`:point_mass`): no plant to fly ⇒ `:ideal`'s perfect tracking. The
                 # α-loop outputs are ZEROED (no α command was issued — honest, not a computed-but-unused
@@ -773,7 +787,8 @@ function decide!(a::Autopilot, w::World)
                 # crosses `a_max_aero` and HITS ANYWAY, which is exactly the contrast.
                 a_ctrl     = a_cmd
                 alpha_diag = (alpha_cmd = 0.0, delta_cmd = 0.0, aero_sat = false,
-                              defl_sat = false, a_max_aero = a_max_aero, q_dyn = q_dyn)
+                              defl_sat = false, a_max_aero = a_max_aero, q_dyn = q_dyn,
+                              rho_air = rho_af)
             end
         else
             # `:alpha` on a missile with NO airframe params at all — degenerate but not a crash: it is
@@ -889,9 +904,25 @@ function decide!(a::Autopilot, w::World)
         tel["$sid.alpha_cmd"]  = _finite_coord(alpha_diag.alpha_cmd)  # signed α command (rad); 0 under :point_mass
         tel["$sid.delta_cmd"]  = _finite_coord(alpha_diag.delta_cmd)  # signed fin deflection (rad); 0 under :point_mass
         tel["$sid.a_max_aero"] = _finite(alpha_diag.a_max_aero)       # THE HEADLINE: Q·S·|C_Lα|·α_max/m
-        tel["$sid.q_dyn"]      = _finite(alpha_diag.q_dyn)            # ½ρV² — the flight condition (only V moves it)
+        # ½ρV² — the flight condition. Through slice 20 ONLY V could move it (ρ was a number an
+        # engineer typed); slice 21's `:atmosphere` rung makes ρ = ρ(z) too, so BOTH factors move.
+        tel["$sid.q_dyn"]      = _finite(alpha_diag.q_dyn)
         tel["$sid.aero_sat"]   = alpha_diag.aero_sat ? 1.0 : 0.0      # the AERO ceiling binding? (THE LESSON flag)
         tel["$sid.defl_sat"]   = alpha_diag.defl_sat ? 1.0 : 0.0      # δ_max binding? (the ISOLATION — must stay 0)
+        # SLICE 21 — THE AIR THE MISSILE IS ACTUALLY FLYING IN (kg/m³). KEY-gated on an authored
+        # `:af_scale_height` (the slice-20 `a_induced` / slice-15 fin-key precedent): slices 16–20
+        # carry no scale height, so their wire is byte-identical.
+        #
+        # ⭐ IT SHIPS UNDER **BOTH** RUNGS, AND THAT IS LOAD-BEARING — the KEY is the gate, never the
+        # rung (the deliberate contrast with `a_lift`, which is a produced force that only exists
+        # when coupled). Under `:constant` this is the flat authored ρ₀ **and that is precisely the
+        # lie the slice exposes**: the twin's ρ-factor is EXACTLY 1.0, i.e. the old model attributes
+        # 100% of its ceiling loss to speed. Rung-gating this key would take the twin's half of the
+        # headline off the wire and leave the client to divide `2·q_dyn/V²` — physics in GDScript,
+        # which convention 13 forbids. The CORE computes; the client displays.
+        if haskey(c, :af_scale_height)
+            tel["$sid.rho_air"] = _finite(alpha_diag.rho_air)
+        end
     end
     return nothing
 end

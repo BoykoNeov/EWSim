@@ -45,6 +45,12 @@
 #     `v -> a(v)` closure with NO position in it; changing that contract to `(p, v) -> a` touches
 #     slice 8's `rk4_step`/`euler_step` — the byte-identity surface of every ballistic slice — for
 #     a path that carries no altitude lesson. NAMED DEFERRAL: it deserves its own slice.
+#     ⇒ THE CONSEQUENCE, ENFORCED IN CODE, NOT MERELY DOCUMENTED: `:atmosphere` IS INERT WITHOUT
+#     `:airframe === :pitch_coupled` — missile.jl's `_atm_on` carries that conjunct, so under
+#     `:point_mass` EVERY ρ-reading site (readouts included) reverts to ρ₀ TOGETHER. Without it
+#     the readouts and slice-16's rotational `_integrate_airframe!` would report ρ(z) while pos/vel
+#     flew ρ₀ — half the missile in one atmosphere and half in another. Inert-without-its-host is
+#     the slice-14 (`:salvo` needs a `:datalink`) / slice-13 (`discrimination` needs `:scan`) shape.
 
 # The scale-height floor. `af_scale_height` is a LIVE SLIDER, so it is floored AT THE CONSUMER as
 # well as validated at LOAD (convention 5's two guard sites). This is a genuine crash path, not
