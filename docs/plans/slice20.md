@@ -1,5 +1,10 @@
 # Slice 20 — the rate-limited fin INSIDE the coupled loop (§11 Tier-A)
 
+> **The slice-20 slot was REFILLED by a different lesson: see `slice20_induced_drag.md`**
+> (induced drag — the g-bleeds-V-lowers-Q spiral, a named deferral of slices 17/19). This file
+> remains the record of the DEAD fin candidate. Its probes (`M:\claud_projects\temp\slice20_probe\`)
+> are likewise untouched; induced drag probes under `slice20_drag_probe\`.
+
 > ## ⛔ GATE-0 VERDICT: **THIS SLICE IS DEAD. DO NOT BUILD IT.**
 >
 > **Gate 0 ran (4 probes, `M:\claud_projects\temp\slice20_probe\`) and killed every candidate —
