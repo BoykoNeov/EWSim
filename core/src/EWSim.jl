@@ -25,6 +25,7 @@ include("gnss.jl")
 include("frames.jl")
 include("dynamics.jl")
 include("airframe.jl")
+include("atmosphere.jl")
 include("terrain.jl")
 include("guidance.jl")
 include("radar.jl")
@@ -92,6 +93,14 @@ export alpha_command, aero_accel_limit, alpha_autopilot_delta
 # `af_k_induced` is a KNOB (the slice-16 `af_cma` precedent: a rung must name physics the knob
 # cannot express, and `:free` IS `K = 0`).
 export induced_drag_accel
+# Slice 21 (§11 Tier A): the EXPONENTIAL ATMOSPHERE ρ(z) = ρ₀·exp(−z/H) — the honest completion
+# of slices 19/20's constant-ρ, which makes "high altitude" a REAL lever (the missile's own
+# CLIMB moves Q, and the maneuver ceiling with it) instead of a phrase the docs forbid. Unlike
+# slice 16's `af_cma` / slice 20's `af_k_induced` this DOES get a rung: constant ρ is `H = ∞`, a
+# LIMIT POINT no slider value reaches, and it is a distinct code path (atmosphere.jl's header
+# records the general knob-vs-rung discriminator). `H` is the severity knob on the
+# `:exponential` arm. NOT §11's RF "layered atmosphere/ducting" — that is the `propagation` knob.
+export air_density, ATMOSPHERE_MODES
 # Missile guidance (slice 9): the outer pursuit law + the inner PID autopilot (pure).
 # `AutopilotState` is an INTERNAL state record (the JamContribution/BearingRecord precedent —
 # not exported); `autopilot_init` IS exported (the test constructs the zero state bare).

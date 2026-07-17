@@ -216,7 +216,8 @@ const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES,
                              guidance = GUIDANCE_MODES, seeker = SEEKER_MODES,
                              discrimination = DISCRIMINATION_MODES,
                              cooperation = COOPERATION_MODES,
-                             airframe = AIRFRAME_MODES)
+                             airframe = AIRFRAME_MODES,
+                             atmosphere = ATMOSPHERE_MODES)
 
 # A perfect null (F⁴=0, even above the horizon), an antenna on the reflecting plane
 # (h→0), or a below-horizon mask all drive SNR→0, and `lin2db(0) = -Inf` would poison the
