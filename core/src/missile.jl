@@ -193,9 +193,12 @@ function _integrate_coupled!(m::BallisticMissile, e::Entity, c::Dict{Symbol,Any}
         c[:pitch_theta] = γ0 + Float64(get(c, :af_alpha0, 0.0))
         c[:pitch_q]     = 0.0
     end
+    # `K` (slice 20's induced-drag factor) rides in the params as the LAST field. Building it here
+    # UNCONDITIONALLY is byte-safe: `pitch_moment`/`lift_accel`/`short_period_freq` never read `K`,
+    # so their arithmetic is untouched. What is NOT byte-safe is CALLING the drag term — see below.
     p = AirframeParams(Float64(c[:af_S]), Float64(c[:af_d]), Float64(c[:af_I]),
                        Float64(c[:af_cma]), Float64(c[:af_cmd]), Float64(c[:af_cmq]),
-                       rho, Float64(get(c, :af_cla, 0.0)))
+                       rho, Float64(get(c, :af_cla, 0.0)), Float64(get(c, :af_k_induced, 0.0)))
     # THE δ SEAM (slice 19): the `:alpha` autopilot's commanded deflection if it ran last tick, else
     # slice-17's authored open-loop trim (the byte-identity fallback — see the header).
     δ = Float64(get(c, :delta_cmd, get(c, :af_delta, 0.0)))
@@ -206,11 +209,28 @@ function _integrate_coupled!(m::BallisticMissile, e::Entity, c::Dict{Symbol,Any}
     # steady-turn R test (α≈const) and the decoupled test (Cla=0), so the stage-θ wiring is pinned
     # by a transient golden in test_missile. ṗ = vel; v̇ = the point-mass force (gravity+drag, the
     # SAME `total_accel` closure) + the lift (⟂ v, α = TH−γ); θ̇ = q (the stage `Q`); q̈ = M/I.
-    f = (P, Vv, TH, Q) -> begin
-        γ = atan(Vv[3], Vv[1])
-        a = total_accel(Vv; rho = rho, cd_area = cd_area, mass = mass) +
-            lift_accel(Vv, TH, mass, p)
-        (Vv, a, Q, pitch_moment(TH - γ, δ, Q, _norm3(Vv), p) / p.I)
+    #
+    # SLICE 20 — TWO CLOSURES, NOT ONE WITH A `+ 0` (advisor, load-bearing). The induced-drag arm is
+    # reachable ONLY when the missile carries an authored `:af_k_induced`; the else-arm is slice
+    # 17/19 TEXTUALLY VERBATIM. Adding `+ induced_drag_accel(...)` unconditionally and trusting
+    # K = 0 → zero would NOT be byte-identical: a `0.0*v` can mint `-0.0` components and
+    # `a + (-0.0)` flips a bit (`-0.0 + 0.0 → +0.0`) — exactly the trap the `:a_ctrl` guard above
+    # documents and the reinterpret determinism tests catch. Same `p`, same δ, same stage-θ
+    # discipline; the ONLY difference is the extra force term. Class 4c (no RNG).
+    f = if haskey(c, :af_k_induced)
+        (P, Vv, TH, Q) -> begin
+            γ = atan(Vv[3], Vv[1])
+            a = total_accel(Vv; rho = rho, cd_area = cd_area, mass = mass) +
+                lift_accel(Vv, TH, mass, p) + induced_drag_accel(Vv, TH, mass, p)
+            (Vv, a, Q, pitch_moment(TH - γ, δ, Q, _norm3(Vv), p) / p.I)
+        end
+    else
+        (P, Vv, TH, Q) -> begin
+            γ = atan(Vv[3], Vv[1])
+            a = total_accel(Vv; rho = rho, cd_area = cd_area, mass = mass) +
+                lift_accel(Vv, TH, mass, p)
+            (Vv, a, Q, pitch_moment(TH - γ, δ, Q, _norm3(Vv), p) / p.I)
+        end
     end
     p′, v′, θ′, q′ = rk4_coupled(f, e.pos, e.vel, θ, q, dt)
     if p′[3] ≤ 0.0
@@ -297,7 +317,8 @@ function build_env!(m::BallisticMissile, w::World)
         γ  = atan(e.vel[3], e.vel[1])
         p  = AirframeParams(Float64(c[:af_S]), Float64(c[:af_d]), Float64(c[:af_I]),
                             Float64(c[:af_cma]), Float64(c[:af_cmd]), Float64(c[:af_cmq]),
-                            Float64(get(c, :rho, 1.225)), Float64(get(c, :af_cla, 0.0)))
+                            Float64(get(c, :rho, 1.225)), Float64(get(c, :af_cla, 0.0)),
+                            Float64(get(c, :af_k_induced, 0.0)))   # slice 20: K (readout only here)
         tel["$sid.pitch_theta"] = _finite_coord(θ)
         tel["$sid.gamma"]       = _finite_coord(γ)
         tel["$sid.alpha"]       = _finite_coord(θ - γ)        # angle of attack (rad)
@@ -315,6 +336,15 @@ function build_env!(m::BallisticMissile, w::World)
             Vsp = _norm3(e.vel)
             tel["$sid.a_lift"]        = _finite(aLm)                                  # m/s² (⟂ v)
             tel["$sid.turn_radius_m"] = _finite(aLm > 0.0 ? Vsp * Vsp / aLm : FINITE_CEIL)
+            # SLICE 20 — THE BILL FOR THE LIFT. Shipped ONLY when the missile carries an authored
+            # `:af_k_induced` (KEY-gated) and the coupling is LIVE (RUNG-gated, inside this block) —
+            # the slice-17 lift-keys / slice-15 fin-keys precedent, doubled: a slice-16/17/19 wire
+            # must not grow a key (byte-identity), and induced drag only physically exists where
+            # there is lift to bill for. `a_induced` is the ⟂-complement of `a_lift` — the SAME α
+            # builds both, one turns the path and one eats the speed that lets you turn it.
+            if haskey(c, :af_k_induced)
+                tel["$sid.a_induced"] = _finite(_norm3(induced_drag_accel(e.vel, θ, mass, p)))
+            end
         end
     end
     return nothing

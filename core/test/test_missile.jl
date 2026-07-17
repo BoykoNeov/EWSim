@@ -2216,3 +2216,204 @@ end
         end
     end
 end
+
+# ── SLICE 20 — INDUCED DRAG WIRED: the missile lowers its own ceiling (§11 Tier A, gate 2) ──
+# The bill for the lift (`C_Di = K·C_L²`, along −v̂) enters `_integrate_coupled!`'s STAGE force, so
+# the SAME α that turns the path also eats the speed that sets the ceiling that limits the turn —
+# the project's FIRST positive-feedback loop, and the cash-in of slices 17/19's explicit "lift is
+# drag-free / speed-preserving" approximation.
+#
+# THE TWO THINGS THIS BLOCK MUST EARN (the rest is gate 3's verifier):
+#   1. ADDITIVITY — key-ABSENT ⇒ the drag arm is unreachable ⇒ slices 16/17/19 bit-identical. The
+#      existing slice-19 transient golden pins only `atol = 1e-6`, which a −0.0-scale bit flip would
+#      SAIL THROUGH, so byte-identity gets its OWN `===` tooth here.
+#   2. NOT A DEAD KNOB — the arc's signature failure (slice 19's gate-3 `speed` was consumed once at
+#      load and read by NOTHING per-tick; the fin slice died of a knob shadowed by another cap). K
+#      must MOVE THE PHYSICS, live, and be proven to.
+# Class 4c: physics-changing, NO RNG (truth-fed PN, no seeker) ⇒ "draw-count invariance" is VACUOUS
+# — do NOT copy the slice-11/13 draw language. The 6th consecutive 4c (14/15/16/17/19).
+@testset "induced drag wired (slice 20 — the spiral)" begin
+    dt = 1.0e-3
+    n3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # THE GATE-0 PICK (FINDING 9): slice-19's airframe/autopilot VERBATIM (α_max 0.2 — physical at
+    # ≈11.5°, NOT unpegged by inflating it), against a NON-maneuvering target at 9 km. The target
+    # does not jink: the missile pays for ITS OWN TURN onto the collision course (FINDING 7 REFUTED
+    # "a harder engagement costs more" — never write it). |v_t| = 825 > 700 ⇒ it OUTRUNS the missile
+    # ⇒ a clean FIRST CPA with no curve-back ([[ewsim-missile-verifier-sampling]]). cd_area = 0, so
+    # every m/s lost is provably bought with α (the isolation).
+    function k_world(; K = nothing, airframe = :pitch_coupled, cla = 20.0)
+        w = World(seed = 20, fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                            :autopilot => :alpha,
+                                                            :airframe => airframe))
+        el = deg2rad(12.0)
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => cla,
+                                :af_alpha_max => 0.2,
+                                :n_pn => 4.0, :a_max => 3000.0, :delta_max => 0.4,
+                                :k_alpha => 1.0, :k_q => 0.3)
+        # PRESENCE, not value, is the gate — `K = nothing` must leave the key ABSENT (the loader's
+        # `haskey(ab, "k_induced")` shape), which is what makes slices 16/17/19 unreachable-by-drag.
+        K === nothing || (comp[:af_k_induced] = K)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(700.0 * cos(el), 0.0, 700.0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(9000.0, 0.0, 4200.0),
+                                 vel = Vec3(-800.0, 0.0, 200.0), comp = Dict{Symbol,Any}())
+        return w, Subsystem[BallisticMissile(:m1), Autopilot(:m1), ConstantVelocity(:t1)]
+    end
+
+    # To first CPA. The sat/defl scans are LOS-GATED (r > 300 m, t > 0.2 s) — gate-0 FINDING 8: with
+    # `r_stop = 0` PN's ω→∞ at r→0 spikes a_cmd to a_max and δ punches δ_max in the last few ticks.
+    # Slice 19 could pin an UNGATED `defl_sat == 0` only BECAUSE it misses by 295 m and never enters
+    # that regime; a HIT scenario CANNOT, and must gate. Do NOT copy slice 19's assertion here.
+    function fly_k(; T = 16.0, kw...)
+        w, s = k_world(; kw...)
+        rmin, prev, closing = Inf, Inf, true
+        aero_sat = 0; defl_sat = 0; gated = 0; t = 0.0
+        for _ in 1:round(Int, T / dt)
+            tick!(w, s, dt); empty!(w.events); t += dt
+            r = n3(w.entities[:t1].pos - w.entities[:m1].pos)
+            closing && r > prev && (closing = false)
+            closing && (rmin = min(rmin, r)); prev = r
+            tel = w.env[:telemetry]
+            if closing && r > 300.0 && t > 0.2
+                gated += 1
+                get(tel, "m1.aero_sat", 0.0) > 0.5 && (aero_sat += 1)
+                get(tel, "m1.defl_sat", 0.0) > 0.5 && (defl_sat += 1)
+            end
+            !closing && break
+        end
+        m = w.entities[:m1]
+        return (miss = rmin, V = n3(m.vel), aero_sat = aero_sat, defl_sat = defl_sat,
+                gated = gated, w = w, tel = w.env[:telemetry])
+    end
+
+    @testset "ADDITIVITY — key ABSENT ⇒ the drag arm is unreachable (bit-identical, `===`)" begin
+        # The `:a_ctrl` precedent: byte-identity BY CONSTRUCTION (the else-arm is slice 17/19's code,
+        # textually), not by trusting `K = 0 → zero`. Two absent-key worlds replay bit-identically…
+        w1, s1 = k_world(K = nothing); w2, s2 = k_world(K = nothing)
+        for _ in 1:3000
+            tick!(w1, s1, dt); empty!(w1.events)
+            tick!(w2, s2, dt); empty!(w2.events)
+        end
+        @test w1.entities[:m1].pos === w2.entities[:m1].pos      # class 4c: no RNG, exact replay
+        @test w1.entities[:m1].vel === w2.entities[:m1].vel
+        @test !haskey(w1.entities[:m1].comp, :af_k_induced)      # the key never appears by itself
+        # …and the WIRE is byte-identical: a slice-16/17/19 missile ships NO `a_induced` key (the
+        # slice-15 fin-key / slice-17 lift-key precedent — an absent key, not a zero value).
+        @test !haskey(w1.env[:telemetry], "m1.a_induced")
+        @test haskey(w1.env[:telemetry], "m1.a_lift")            # …while the slice-17 keys DO ship
+    end
+
+    @testset "the K=0 arm is a TRUE no-op — bit-exact vs key-absent (the `==` no-op precedent)" begin
+        # An AUTHORED `k_induced: 0.0` takes the DRAG closure, the absent key takes slice-19's. If
+        # the drag term is honest at K = 0 the two must agree BIT-FOR-BIT — a "calibrated to pass"
+        # atol would hide a −0.0-shaped regression (convention 11, the mismatched-EP no-op shape).
+        # NOTE this does NOT make the `haskey` guard redundant: the guard makes additivity
+        # STRUCTURAL (the else-arm cannot differ from slice 19 — it IS slice 19), where this test
+        # only shows the arithmetic happens to agree TODAY, at K = 0, with this exact formula.
+        wa, sa = k_world(K = nothing); wb, sb = k_world(K = 0.0)
+        for _ in 1:3000
+            tick!(wa, sa, dt); empty!(wa.events)
+            tick!(wb, sb, dt); empty!(wb.events)
+        end
+        @test wa.entities[:m1].pos === wb.entities[:m1].pos
+        @test wa.entities[:m1].vel === wb.entities[:m1].vel
+        @test wb.env[:telemetry]["m1.a_induced"] == 0.0          # …and the bill IS zero, not ε
+    end
+
+    @testset "⭐ NOT A DEAD KNOB — K MOVES the physics (the arc's signature failure)" begin
+        # Slice 19's gate 3 caught `speed` DEAD (consumed once at load, read by NOTHING per-tick) and
+        # gate 2 had PASSED it — a no-crash check passes on a dead knob. So this asserts MOVEMENT,
+        # not absence-of-throw. K is fetched EVERY tick by `_integrate_coupled!`'s stage closure.
+        free = fly_k(K = 0.0)
+        paid = fly_k(K = 0.3)
+        @test paid.V < free.V - 200.0                # the bill is REAL (probed: 663.6 → 212.7 m/s)
+        @test paid.miss > 20.0 * free.miss           # …and it reaches the outcome (1.27 → 714 m)
+        @test paid.tel["m1.a_induced"] > 1.0         # the readout is LIVE, not a constant 0
+        @test free.tel["m1.a_induced"] == 0.0
+    end
+
+    @testset "⭐ THE SPIRAL — the ceiling FALLS, and the missile is what lowered it" begin
+        # THE LESSON, on the live wire. Nothing that sets the ceiling was touched: ρ, S, C_Lα, α_max
+        # and mass are IDENTICAL across the two arms — ONLY K differs. Slice 19 moved this ceiling
+        # with the ρ knob (a flight condition the ENGINEER dialled); here the MISSILE moves it, by
+        # turning. (Slice 19's α_max is DISQUALIFIED as this slice's lever — it now feeds the drag
+        # through the achieved α too, so it is no longer isolated. K enters ONLY the drag term.)
+        free = fly_k(K = 0.0)
+        paid = fly_k(K = 0.3)
+        ceil_free = free.tel["m1.a_max_aero"]
+        ceil_paid = paid.tel["m1.a_max_aero"]
+        @test ceil_paid < 0.4 * ceil_free            # probed 242.1 → 24.9 (a ~10× collapse)
+        # THE HEADLINE (gate-0 FINDING 9): at K=0 the aero ceiling NEVER BINDS ONCE in the guided
+        # window — it is not a factor at all. The missile's own turn brings it down onto itself.
+        @test free.aero_sat == 0                     # 0.0% — nothing to see here…
+        @test paid.aero_sat > 0.4 * paid.gated       # …and now it binds ~61% of the approach
+        # THE ISOLATION, RE-ESTABLISHED not copied (FINDING 8): the FOURTH cap (δ_max) stays clear
+        # under BOTH arms in the LOS-gated window, so it cannot be standing in for the lesson.
+        @test free.defl_sat == 0
+        @test paid.defl_sat == 0
+        @test free.gated > 1000 && paid.gated > 1000  # the window is real, not an empty scan
+    end
+
+    @testset "the drag is gated on the COUPLING too — :point_mass has no lift to bill for" begin
+        # `a_induced` is KEY-gated AND RUNG-gated (inside the `:pitch_coupled` block — the slice-17
+        # lift-keys precedent). Under `:point_mass` there is no α and no lift, so a bill would be
+        # meaningless; the reference arm's wire must stay clean.
+        pm = fly_k(K = 0.3, airframe = :point_mass)
+        @test !haskey(pm.tel, "m1.a_induced")
+        @test !haskey(pm.tel, "m1.a_lift")           # (the slice-17 rung gate, still holding)
+        @test pm.miss < 5.0                          # …and it still HITS by fiat (a_ctrl, no aero)
+    end
+
+    @testset "loader — `k_induced` is PRESENCE-gated and its SIGN is validated (convention 5)" begin
+        mktempdir() do dir
+            base = """
+            name: s20
+            seed: 20
+            fidelity: {airframe: pitch_coupled, guidance: pn, autopilot: alpha}
+            entities:
+              - id: m1
+                kind: missile
+                pos: [0.0, 0.0, 3000.0]
+                missile:
+                  mass_kg: 140.0
+                  speed: 700.0
+                  elevation_deg: 12.0
+                  guidance: {n_pn: 4.0, a_max: 3000.0, delta_max: 0.4}
+                  airframe: {inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0, cmq: -150.0, cla: 20.0, alpha_max: 0.2, k_induced: 0.15}
+              - id: t1
+                kind: target
+                pos: [9000.0, 0.0, 4200.0]
+                vel: [-800.0, 0.0, 200.0]
+                target: {rcs_m2: 1.0}
+            """
+            p = joinpath(dir, "s20.yaml"); write(p, base)
+            # The fixture must LOAD CLEAN first: the `@test_throws` cases below are only meaningful
+            # if the ONLY thing wrong with them is `k_induced` (a guided missile with no target
+            # throws for an unrelated reason and every negative case would pass for free — the
+            # slice-19 "a test that malforms its own fixture proves nothing" trap, hit live here).
+            @test load_scenario(p).world.entities[:m1].comp[:af_k_induced] == 0.15
+            # PRESENCE-GATED: no `k_induced:` ⇒ NO key ⇒ the drag arm is unreachable. This is the
+            # slice-18 `alt_hold_m` precedent and it is LOAD-BEARING — gating on the airframe BLOCK
+            # would grow the key on slices 16/17/19 (they ALL have airframe blocks) and silently
+            # give every one of them a drag term. Convention 2 dead.
+            pn_ = joinpath(dir, "none.yaml")
+            write(pn_, replace(base, ", k_induced: 0.15" => ""))
+            @test !haskey(load_scenario(pn_).world.entities[:m1].comp, :af_k_induced)
+            # 0 is LEGAL (drag-free — slices 17/19's approximation, authored explicitly)…
+            pz = joinpath(dir, "zero.yaml")
+            write(pz, replace(base, "k_induced: 0.15" => "k_induced: 0.0"))
+            @test load_scenario(pz).world.entities[:m1].comp[:af_k_induced] == 0.0
+            # …while a NEGATIVE K is a drag that ACCELERATES — rejected at LOAD. (Contrast cma/cla,
+            # which are validated FINITE only: a negative lift slope is merely inverted and is a
+            # lesson-adjacent knob. There is no such branch for K.)
+            for bad in ("k_induced: -0.1", "k_induced: .nan")
+                pb = joinpath(dir, "bad.yaml"); write(pb, replace(base, "k_induced: 0.15" => bad))
+                @test_throws ErrorException load_scenario(pb)
+            end
+        end
+    end
+end

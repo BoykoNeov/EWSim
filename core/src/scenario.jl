@@ -517,6 +517,25 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # C_Lα: validate FINITE, NOT sign — a crossing/negative lift slope is a lesson-adjacent
             # knob (mirrors `cma`); 0 ⇒ decoupled (= slice 16). Only :pitch_coupled reads it.
             isfinite(comp[:af_cla])    || error("missile '$id': airframe.cla must be finite (got $(comp[:af_cla]))")
+            # SLICE 20 — INDUCED DRAG (`C_Di = K·C_L²`). PRESENCE-GATED on the KEY, not on the
+            # airframe BLOCK (the slice-18 `alt_hold_m` precedent): slices 16/17/19 ALL carry
+            # airframe blocks, so gating on the block would silently grow the key on every one of
+            # them and `_integrate_coupled!` would take the drag arm — convention 2 DEAD. Gating on
+            # `k_induced` being AUTHORED means only a slice-20 YAML grows it.
+            #
+            # UNLIKE cma/cla, the SIGN **is** validated: a negative K is a drag that ACCELERATES —
+            # unphysical with no lesson-adjacent branch (contrast a negative lift slope, which is
+            # merely inverted). Rejecting it at LOAD lets the knob floor at 0 and spends no consumer
+            # branch on it (convention 5's validate-at-LOAD half; the live slider is bounded by its
+            # declared min).
+            if haskey(ab, "k_induced")
+                comp[:af_k_induced] = _f64(ab["k_induced"])
+                comp[:af_k_induced] ≥ 0 ||
+                    error("missile '$id': airframe.k_induced must be ≥ 0 — a negative induced-drag " *
+                          "factor is a drag that ACCELERATES (got $(comp[:af_k_induced]))")
+                isfinite(comp[:af_k_induced]) ||
+                    error("missile '$id': airframe.k_induced must be finite (got $(comp[:af_k_induced]))")
+            end
         end
     elseif kind === :terrain
         # An authored heightfield (slice 18): a NON-PHYSICAL entity (no mover, no hooks —
