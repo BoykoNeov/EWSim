@@ -23,11 +23,12 @@ own INTERIOR PEAK, `C_L(α_stall)`, and no amount of Q buys past it.
 > HARDER turns you LESS *and* costs you MORE. That reversal is new in the suite, and it is why the
 > user chose the true-drop curve over a saturating one (see "The curve-form decision" below).
 >
-> ⚠ **AND CALL IT BY ITS RIGHT NAME: a MANEUVER / CONTROL STALL, *NOT* A DEPARTURE.** See §5 — the
-> pitch MOMENT stays linear in this slice, so ATTITUDE NEVER DEPARTS and there is NO PITCH-UP. The
-> loop that reverses is the **CONTROL loop** (the autopilot chases itself past the peak), not the
-> attitude. Writing "departure"/"pitch-up" here would be the slice-20 "positive feedback" and
-> slice-21 "high altitude" overclaim, third occurrence.
+> ⚠ **TWO REVERSALS, AND THE SECOND ONE COST A DESIGN DECISION — see §5.** A third advisor pass
+> caught that a linear `pitch_moment` CANNOT depart, so "departure"/"pitch-up" was overclaimed
+> (the slice-20 "positive feedback" / slice-21 "high altitude" class, 3rd occurrence). **The user
+> chose to GROW THE SLICE**: `Cm(α)` now breaks too, so BOTH the control loop AND the attitude
+> reverse, and the language is earned — **but ONLY under `:stall` on a scenario authoring the
+> break.** Slice-16–21 wires keep a linear moment and cannot depart. No global find/replace.
 
 ---
 
@@ -121,36 +122,76 @@ CONFOUNDS ITSELF — separation drag makes V diverge between the arms, so `Q` is
 and the tooth stops testing what it claims. (The slice-20 "matched on ΔV" discipline, inverted:
 there the twin had to be matched empirically; here the whole point is that no run is needed.)
 
-### 5. ⚠ THE PITCH MOMENT STAYS LINEAR ⇒ THERE IS NO DEPARTURE AND NO PITCH-UP (§1, load-bearing)
+### 5. ⭐ THE `Cm(α)` BREAK — THE SLICE GREW HERE, BY USER DECISION (2026-07-19)
 
-**Caught at the third advisor pass, with "depart"/"pitch-up" already written into this plan and into
-the question the curve form was chosen from. Read this before writing ANY lesson line.**
+**How this section came to exist.** It originally said the OPPOSITE: that `pitch_moment` stays
+linear, so there is no departure and no pitch-up, and that "departure"/"pitch-up" had to be scrubbed
+from every lesson line (the third advisor pass caught the overclaim with those words already written
+into this plan AND into the question the curve form was chosen from). **The user was shown that
+finding and chose to GROW THE SLICE rather than soften the lesson.** The reasoning below is kept
+because it is exactly what the moment break must now overturn — it is the specification.
 
-`pitch_moment` = `Q·S·d·(Cmα·α + Cmδ·δ + Cmq·q̄)` is **NOT** touched by this slice — only
-`lift_accel`, `induced_drag_accel` and `aero_accel_limit` get the stall curve. The consequence is
-structural, and every destabilization path closes the SAFE way:
-
-- `Cmα < 0` is held THROUGH stall ⇒ there is ALWAYS a restoring moment. The fin trims α up to α_max
-  and is **stable there**.
+**WHY A LINEAR MOMENT CANNOT DEPART** (the structural argument — every path closes the SAFE way):
+- `Cmα < 0` held THROUGH stall ⇒ there is ALWAYS a restoring moment. The fin trims α to α_max and is
+  **stable there**.
 - As V bleeds, `Q` falls ⇒ ω_sp goes sluggish but stays REAL (no sign change).
 - As V bleeds, `q̄ = q·d/(2V)` **RISES** ⇒ **MORE** pitch damping, not less.
 
-⇒ **ATTITUDE NEVER DEPARTS, no matter what lift and drag do.** Pitch-up is a **MOMENT-BREAK**
-phenomenon — it needs `Cm(α)` itself to break — and that is deliberately out of scope here.
+⇒ Under a linear moment, attitude never departs no matter what lift and drag do. **Pitch-up is a
+MOMENT-BREAK phenomenon**: it requires `Cm(α)` itself to break. So the slice takes a **FOURTH forced
+piece**, on top of the three the true-drop curve already forced:
 
-**WHAT IS REAL, AND IT IS STILL THE THING SATURATION LACKS — the CONTROL-LOOP SIGN REVERSAL:**
+    Cm(α) = Cmα·α  BELOW the break, and LOSES ITS RESTORING SLOPE ABOVE it
+            (∂Cm/∂α → 0 and then POSITIVE — the static margin is consumed)
 
-    autopilot sees insufficient g → commands MORE α → past the peak gets LESS lift
-        → sees even less g → commands MORE → pegs at α_max, with C_L(α_max) < C_L_peak
+⭐ **THE CALLBACK THAT MAKES THIS THE RIGHT CALL — SLICE 16'S TUMBLE, NOW SELF-INFLICTED.** Slice 16
+taught the static-stability sign lesson with `af_cma` as an **AUTHORED** value: *`Cmα < 0`
+weathervanes, `Cmα > 0` TUMBLES.* An engineer typed the unstable case. **Slice 22 makes the airframe
+DRIVE ITSELF INTO THAT REGIME BY FLYING THERE** — the same tumble, now a CONSEQUENCE. This is the
+same "who moves it" progression the ceiling got across 19/20/21, applied to STABILITY instead of
+to the ceiling, and it is why the moment break is worth its cost.
 
-The harder it pulls, the worse it gets. That is the "derivative changes sign" lesson, it is genuine,
-and a saturating curve cannot produce it. **Name it a MANEUVER STALL / CONTROL STALL** — *"the
-autopilot chases itself past the peak"* — and put **"the pitch MOMENT stays linear past stall: no
-Cm break, no pitch-up, no attitude departure"** in the §1 named-approximation list of
-`aero_curve.jl`'s header, where a future slice will look for it.
+⭐ **AND `short_period_freq`'s SENTINEL FINALLY FIRES IN FLIGHT.** Slice 16 built the NaN-guard
+(`ω² < 0 ⇒ NaN`, `_finite`-clamped to `FINITE_CEIL`) for an authored `Cmα ≥ 0`, and **it has never
+fired mid-run in the project's history.** Under a moment break it fires **DYNAMICALLY, at the
+moment of departure** — ω_sp is the readout that says "there is no longer an oscillation to have."
+That makes it a headline-grade telemetry channel, not a defensive branch. ⚠ Verify the whole
+`_finite`/wire path actually survives a mid-run NaN (convention 6) — it has never been exercised
+this way.
 
-**The moment-break / true attitude departure is a NAMED DEFERRAL** and a bigger slice: it means a
-nonlinear `Cm(α)` in `pitch_moment`, i.e. touching the function slices 16–21 all built on.
+**BOTH REVERSALS NOW SHIP, AND THEY ARE ONE EVENT — name them in order:**
+1. **The CONTROL-loop reversal** (present even without the moment break): too little g → command
+   MORE α → past the peak get LESS lift → command MORE → peg at α_max with `C_L(α_max) < C_L_peak`.
+2. **The ATTITUDE reversal** (what the break buys): past the break the airframe no longer returns.
+   `trim_alpha` ceases to have a stable solution, ω_sp goes imaginary, and the missile departs.
+
+⚠ **NOW "DEPARTURE" AND "PITCH-UP" ARE EARNED LANGUAGE — but only under the `:stall` rung on a
+scenario that authors the break.** The `:linear` arm and every slice-16–21 wire still have a linear
+moment and CANNOT depart; the slice-21 "high altitude" precedent governs exactly (the caveat lifts
+where the physics lives, and nowhere else). **No global find/replace.**
+
+**THE BLAST RADIUS THIS ADDS — `pitch_moment` IS THE FUNCTION SLICES 16–21 ALL BUILD ON:**
+- Called from `airframe_step` (slice 16), `_integrate_airframe!` (the `:point_mass` rotational path)
+  AND `_integrate_coupled!`'s closure. **Every call site must reach the linear arm TEXTUALLY
+  VERBATIM when the break key is absent** — the #4 multiply-grouping trap applies to
+  `Q * p.S * p.d * (p.Cma * alpha + ...)` with full force. Do NOT refactor the sum.
+- `short_period_freq` and `trim_alpha` both read `p.Cma` and are **LOCAL LINEARIZATIONS** — under a
+  break they are valid only BELOW it. Either evaluate them at the LOCAL slope `∂Cm/∂α|α` or document
+  them as below-break-only. **Decide at gate 0; do not leave it implicit** (they are shipped
+  readouts, and slice 21's `_atm_on` bug was exactly a readout disagreeing with the integrator).
+- **Is `α_break` the SAME angle as `α_stall`?** Physically they are related but NOT identical (a
+  real airframe's moment break and lift peak differ). **Gate-0 decision, and it is one-lesson-vs-
+  knob-sprawl:** defaulting `α_break = α_stall` keeps ONE authored angle and ONE event
+  (convention 9); a second parameter is more honest but doubles the knob surface and lets the two
+  reversals separate in time. **RECOMMEND one angle, with the difference as a §1 named
+  approximation** — but let P2/P3's measured timing decide.
+
+**Departure RECOVERY becomes a first-class question, not a footnote** (gate-0 P3, now upgraded):
+recoverable vs terminal are DIFFERENT lessons and the headline must match whichever happens. With a
+genuine break, terminal is the likely outcome — and if so, **the miss is no longer the metric**
+(a tumbling missile's miss distance is arbitrary). Expect the headline to be a DEPARTURE-ONSET
+quantity (the α or the time at which ∂Cm/∂α crosses zero, and the ω_sp sentinel firing), with the
+miss corroborating at most. Slice 20's "lead with the pure-quantity metric" discipline.
 
 ### 4. THE BYTE-IDENTITY TRAP IS A MULTIPLY GROUPING — do NOT refactor the off-arm
 
@@ -172,11 +213,19 @@ recommendation: one lesson, monotone inverse, no separation term needed, smalles
 the CONTROL-LOOP sign reversal is genuinely new in the suite and a saturating curve cannot produce
 it at all.
 
-⚠ **BUT THE QUESTION IT WAS CHOSEN FROM OVERSOLD IT.** That question described true-drop as buying
-"the dramatic departure/**pitch-up** failure mode." **It does not** — see §5: the pitch moment stays
-linear, so what this slice ships is a MANEUVER/CONTROL stall, not attitude departure. The
-user must confirm that the milder (and honest) lesson is still the one they want, or the slice grows
-to include a `Cm(α)` break. **Resolve before gate 0.**
+⚠ **THE QUESTION IT WAS CHOSEN FROM OVERSOLD IT — AND THE USER CLOSED THE GAP BY GROWING THE
+SLICE (RESOLVED 2026-07-19).** That question described true-drop as buying "the dramatic departure/
+**pitch-up** failure mode," which a linear `pitch_moment` cannot deliver (§5). Offered the choice
+between scrubbing the language and adding a `Cm(α)` break, **the user chose the break.** So the
+slice is now FOUR forced pieces, not three:
+
+    1. the stall curve          C_L peaks at α_stall, then FALLS
+    2. separation drag          keyed on α, EVEN, rising past stall
+    3. α_max > α_stall          the command reaches stall; the physics sets the wall
+    4. the Cm(α) break          the moment loses its restoring slope ⇒ real departure
+
+**Size it honestly at gate 2 and do not let it creep further.** Piece 4 is the one that touches a
+function slices 16–21 all build on; the other three are additive in new code.
 
 **Its true size, made visible here so gate 2 is not a surprise:** true-drop honestly done =
 **stall curve + separation drag + the inverted clamp relationship (#3)**. Every one of those three
@@ -208,8 +257,19 @@ the design may change (slices 19, 20 and 21 were all changed by their gate 0).
   COMMAND path with `k_α`/`k_q` at their SHIPPED authored values — **and must NOT depend on the
   FINDING-14 leak** (verify by checking it survives a gain reduction).
 - **P3 — is the departure RECOVERABLE or TERMINAL?** Both are shippable lessons but they are
-  DIFFERENT lessons and the headline must match the one that happens. (A stable `Cmα` plus the
-  rate-damped inner loop may weathervane back out; the separation drag's V-bleed may not let it.)
+  DIFFERENT lessons and the headline must match the one that happens. With a genuine `Cm(α)` break
+  TERMINAL is likely — and **if it is terminal the MISS IS NOT THE METRIC** (a tumbling missile's
+  miss is arbitrary). Expect a DEPARTURE-ONSET headline instead (the α / the time at which
+  `∂Cm/∂α` crosses zero; the `short_period_freq` sentinel firing) — slice 20's "lead with the
+  pure-quantity metric" discipline.
+- **P3b — `α_break` vs `α_stall`: ONE angle or TWO?** Measure whether the two reversals want to
+  separate in time. RECOMMEND one authored angle (convention 9, one event) with the difference as a
+  §1 approximation; let the measurement overrule that if the single angle makes either reversal
+  invisible.
+- **P3c — does the mid-run NaN survive the wire?** `short_period_freq`'s `ω² < 0 ⇒ NaN` sentinel has
+  NEVER fired mid-run in this project (slice 16 built it for an AUTHORED `Cmα ≥ 0`). Walk the whole
+  `_finite`/`FINITE_CEIL` path with a departure in progress — convention 6, and a genuinely
+  untested branch.
 - **P4 — `K_sep` domain, MEASURED like slice 20's K.** Find the range that is monotone and clean,
   then ship with a ≥2× margin (slice 20's discipline: at K≥0.8 `defl_sat` went 0→1289).
 - **P5 — the CONVENTION-9 SEPARATION.** Hold `cd_area = 0` and keep `K` modest; confirm slice 20's
@@ -230,21 +290,30 @@ the design may change (slices 19, 20 and 21 were all changed by their gate 0).
 
 **Gate 1 — the pure lib.** New `aero_curve.jl` (included BEFORE `radar.jl` so `LIVE_FIDELITY_MODES`
 can reference `AERO_CURVE_MODES` — convention 1). Contents: `lift_coefficient(α, p)` (ODD, peaks at
-α_stall, falls after), `separation_drag_coefficient(α, p)` (EVEN, zero below α_stall), the
-closed-form `cl_peak(p)`, and `const AERO_CURVE_MODES = (:linear, :stall)` (defined ONCE —
-convention 7). Tests: the parity table (C_L odd, both drags even), the closed-form peak, the
-linear-limit agreement as `α_stall → ∞`, the `C_L` consistency tooth (lift and its induced bill use
-the SAME `C_L` — else the turn and the invoice disagree), and the sign chain (this arc's #1 trap,
-now on its FOURTH occurrence: 16 moment sign, 17 lift direction, 19 the a→α→δ→M→α→lift→γ̇ chain).
+α_stall, falls after), `separation_drag_coefficient(α, p)` (EVEN, zero below α_stall),
+`moment_coefficient(α, p)` (the `Cm(α)` break — ODD in α like the linear `Cmα·α` it replaces, losing
+its restoring slope past α_break), the closed-form `cl_peak(p)`, and
+`const AERO_CURVE_MODES = (:linear, :stall)` (defined ONCE — convention 7). Tests: the parity table
+(C_L ODD, both drags EVEN, Cm ODD), the closed-form peak, the linear-limit agreement as
+`α_stall → ∞`, the `C_L` consistency tooth (lift and its induced bill use the SAME `C_L` — else the
+turn and the invoice disagree), **the break tooth (`∂Cm/∂α < 0` below, `> 0` above — pinned by SIGN,
+not magnitude)**, and the sign chain (this arc's #1 trap, now on its FOURTH occurrence: 16 moment
+sign, 17 lift direction, 19 the a→α→δ→M→α→lift→γ̇ chain — and note piece 4 puts this slice back on
+the SAME function slice 16's trap was found in).
 
 **Gate 2 — the wiring.** `lift_accel` and `induced_drag_accel` get presence-gated stall branches
-sharing ONE `C_L(α)`; the new `a_sep` term joins inside `_integrate_coupled!`'s closure (reading the
+sharing ONE `C_L(α)`; **`pitch_moment` gets the `Cm(α)` branch with its linear arm TEXTUALLY
+VERBATIM** (⚠ the highest-risk edit in the slice — three call sites, and it is the function slices
+16–21 all build on); the new `a_sep` term joins inside `_integrate_coupled!`'s closure (reading the
 STAGE state — slice 17's stage-θ and slice 21's stage-z fixes are the precedent, and this term is
 α-dependent so it has the same hazard); `aero_accel_limit` returns the interior peak under the rung;
 `LIVE_FIDELITY_MODES` gains `aero_curve`. Class **4c** (physics-changing, NO RNG — truth-fed PN, no
 seeker ⇒ "draw-count invariance" is VACUOUS; the 8th consecutive 4c; live-settable, NO
 `set_fidelity` guard). ⚠ Check `:aero_curve` INERTNESS without `:pitch_coupled` — slice 21's `_atm_on`
-third-conjunct bug is the direct precedent and it was a LATENT BUG FIX found at gate 3.
+third-conjunct bug is the direct precedent and it was a LATENT BUG FIX found at gate 3. ⚠ **AND NOTE
+THE MOMENT BREAK REACHES FURTHER THAN ρ(z) DID**: `pitch_moment` is live on the `:point_mass`
+rotational path too (`_integrate_airframe!`), so decide DELIBERATELY whether the break applies there
+— slice 21's bug was precisely half the missile in one model and half in another.
 
 **Gate 3 — the four proofs** (convention 14): `slice22_verify.gd`, `slice22_ui_test.gd`, the
 `Sandbox.tscn` headless smoke-load, and a windowed shot aimed at the CLAIMED branch. The client
@@ -267,6 +336,11 @@ value. See [[ewsim-missile-verifier-sampling]] for the LOS range-gate rule.
 - **Hysteresis** — real separation re-attaches at a LOWER α than it separates at. The shipped curve
   is single-valued in α, with no memory.
 - **Roll/yaw departure** — the pitch-plane reduction still holds; a real departure goes
-  out-of-plane. That dies only with bank-to-turn / 3-D.
+  OUT-OF-PLANE, and this slice's departs strictly in-plane. **This is now the sharpest remaining
+  approximation in the slice** (piece 4 makes departure real, and the pitch-plane reduction is what
+  keeps it flat). Dies only with bank-to-turn / 3-D.
+- **DEPARTURE RECOVERY / a spin model** — if P3 finds the departure TERMINAL, this slice ships the
+  onset and not the aftermath. Post-departure rotational behaviour (spin modes, recovery inputs) is
+  a separate model and is NOT smuggled in.
 - **ρ(z) on the ballistic path** (slice 21's deferral, unchanged) and the RF layered
   atmosphere / ducting entry — **do not conflate either with this slice**.
