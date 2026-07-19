@@ -22,6 +22,12 @@ own INTERIOR PEAK, `C_L(α_stall)`, and no amount of Q buys past it.
 > pull harder, get no more. This one is a **DERIVATIVE THAT CHANGES SIGN**: past the peak, pulling
 > HARDER turns you LESS *and* costs you MORE. That reversal is new in the suite, and it is why the
 > user chose the true-drop curve over a saturating one (see "The curve-form decision" below).
+>
+> ⚠ **AND CALL IT BY ITS RIGHT NAME: a MANEUVER / CONTROL STALL, *NOT* A DEPARTURE.** See §5 — the
+> pitch MOMENT stays linear in this slice, so ATTITUDE NEVER DEPARTS and there is NO PITCH-UP. The
+> loop that reverses is the **CONTROL loop** (the autopilot chases itself past the peak), not the
+> attitude. Writing "departure"/"pitch-up" here would be the slice-20 "positive feedback" and
+> slice-21 "high altitude" overclaim, third occurrence.
 
 ---
 
@@ -109,6 +115,43 @@ those three slices stay byte-identical and this is a NEW RUNG'S number, not a re
 same S, same mass, same α_max — only the curve changed. That is what proves slice 22 moved the
 OTHER factor and is not "slice 21 again with a different letter."
 
+⚠ **IT MUST BE A SAME-INPUTS FORMULA COMPARISON, NOT A LIVE RUN-VS-RUN** (advisor): feed IDENTICAL
+`(V, ρ, α_max)` to `aero_accel_limit` under linear vs stall params. As a two-run comparison it
+CONFOUNDS ITSELF — separation drag makes V diverge between the arms, so `Q` is not actually equal
+and the tooth stops testing what it claims. (The slice-20 "matched on ΔV" discipline, inverted:
+there the twin had to be matched empirically; here the whole point is that no run is needed.)
+
+### 5. ⚠ THE PITCH MOMENT STAYS LINEAR ⇒ THERE IS NO DEPARTURE AND NO PITCH-UP (§1, load-bearing)
+
+**Caught at the third advisor pass, with "depart"/"pitch-up" already written into this plan and into
+the question the curve form was chosen from. Read this before writing ANY lesson line.**
+
+`pitch_moment` = `Q·S·d·(Cmα·α + Cmδ·δ + Cmq·q̄)` is **NOT** touched by this slice — only
+`lift_accel`, `induced_drag_accel` and `aero_accel_limit` get the stall curve. The consequence is
+structural, and every destabilization path closes the SAFE way:
+
+- `Cmα < 0` is held THROUGH stall ⇒ there is ALWAYS a restoring moment. The fin trims α up to α_max
+  and is **stable there**.
+- As V bleeds, `Q` falls ⇒ ω_sp goes sluggish but stays REAL (no sign change).
+- As V bleeds, `q̄ = q·d/(2V)` **RISES** ⇒ **MORE** pitch damping, not less.
+
+⇒ **ATTITUDE NEVER DEPARTS, no matter what lift and drag do.** Pitch-up is a **MOMENT-BREAK**
+phenomenon — it needs `Cm(α)` itself to break — and that is deliberately out of scope here.
+
+**WHAT IS REAL, AND IT IS STILL THE THING SATURATION LACKS — the CONTROL-LOOP SIGN REVERSAL:**
+
+    autopilot sees insufficient g → commands MORE α → past the peak gets LESS lift
+        → sees even less g → commands MORE → pegs at α_max, with C_L(α_max) < C_L_peak
+
+The harder it pulls, the worse it gets. That is the "derivative changes sign" lesson, it is genuine,
+and a saturating curve cannot produce it. **Name it a MANEUVER STALL / CONTROL STALL** — *"the
+autopilot chases itself past the peak"* — and put **"the pitch MOMENT stays linear past stall: no
+Cm break, no pitch-up, no attitude departure"** in the §1 named-approximation list of
+`aero_curve.jl`'s header, where a future slice will look for it.
+
+**The moment-break / true attitude departure is a NAMED DEFERRAL** and a bigger slice: it means a
+nonlinear `Cm(α)` in `pitch_moment`, i.e. touching the function slices 16–21 all built on.
+
 ### 4. THE BYTE-IDENTITY TRAP IS A MULTIPLY GROUPING — do NOT refactor the off-arm
 
 `lift_accel` today computes `L = Q * p.S * p.Cla * α`, i.e. `((Q·S)·Cla)·α`. Routing the off-state
@@ -126,8 +169,14 @@ project has already caught this class TWICE (`√(snr/2)` vs `√snr·√½`).
 Two forms were costed. **SATURATING** (C_L → an asymptote, never drops) was the advisor's and my
 recommendation: one lesson, monotone inverse, no separation term needed, smallest blast radius.
 **TRUE-DROP** (C_L peaks, then falls) was **the user's decision**, and it is the better lesson —
-the sign reversal above is genuinely new in the suite, and it ships departure directly instead of
-deferring it.
+the CONTROL-LOOP sign reversal is genuinely new in the suite and a saturating curve cannot produce
+it at all.
+
+⚠ **BUT THE QUESTION IT WAS CHOSEN FROM OVERSOLD IT.** That question described true-drop as buying
+"the dramatic departure/**pitch-up** failure mode." **It does not** — see §5: the pitch moment stays
+linear, so what this slice ships is a MANEUVER/CONTROL stall, not attitude departure. The
+user must confirm that the milder (and honest) lesson is still the one they want, or the slice grows
+to include a `Cm(α)` break. **Resolve before gate 0.**
 
 **Its true size, made visible here so gate 2 is not a surprise:** true-drop honestly done =
 **stall curve + separation drag + the inverted clamp relationship (#3)**. Every one of those three
