@@ -1,8 +1,117 @@
 # Slice 22 — NONLINEAR `C_L(α)` / TRUE STALL: the ceiling the airframe sets (§11 Tier-A)
 
-**Status: PLANNED (gate 0 not yet run). Gates 0–3 pending.** The aero arc's nearest and most
-load-bearing named deferral — carried explicitly by slices 19, 20 and 21, and the one that closes
-the LEAK bounding two shipped knobs.
+**Status: GATE 0 COMPLETE (2026-07-19) — 11 findings, TWO USER DECISIONS TAKEN. Gates 1–3
+pending.** The aero arc's nearest and most load-bearing named deferral — carried explicitly by
+slices 19, 20 and 21, and the one that closes the LEAK bounding two shipped knobs.
+
+---
+
+## ⭐ GATE 0 — WHAT IT SETTLED, AND WHAT IT OVERTURNED
+
+Probes: `M:\claud_projects\temp\slice22_probe\` (`probe.jl`, `p0`, `p0b`, `p1`, `p2`),
+**full numbers in `FINDINGS.md` there.** Read that file before gate 1 — this is the summary.
+
+**THE CORE 3-PIECE SLICE IS VALIDATED and its headline is EXACT:**
+
+    ⭐ at FIXED Q the linear→stall ceiling ratio is IDENTICALLY α_stall/α_max
+       (Q, S, C_Lα, m ALL CANCEL) — measured 471.44 → 269.39 = 0.571428571 vs
+       0.571428571, Δ ≤ 1.1e-16. Slice 21's ρ-factor identity in a NEW LETTER.
+
+Engagement consequence: miss **125.14 → 240.37 (1.92×)**, `aero_sat` 26.3%, `defl_sat == 0`.
+⚠ On SLICE 19's geometry (target 6 km, `a_lat = 200`), NOT slice 20's — F1 found slice 20's
+engagement inert (α_pk 0.085, all arms identical to the centimetre). `a_lat` is a narrow window:
+at 400 both arms miss by >1300 m (the slice-21 REACH WALL recurring).
+
+### ⚠ DECISION 1 (USER, 2026-07-19) — **KNOB, NOT RUNG. The plan's §"rung justification" is DEAD.**
+
+The plan asserted *"linear is `α_stall → ∞`, a LIMIT POINT ⇒ RUNG"* and told gate 0 to verify it.
+**It does not survive (F7).** The achieved α SELF-LIMITS to ~0.24 across the whole viable
+geometry family (the linear arm's α_pk capped at 0.2408 even at `a_lat = 400` — past that is the
+reach wall, not higher α). So α_stall parked anywhere ≥ ~0.25 is linear-in-effect **over all
+reachable states**, not by coincidence of one scenario — measured: at α_stall = 0.25 the miss is
+the linear miss to the printed digit.
+
+**α_stall MOVES A CORNER and the corner can be parked out of reach — exactly slice 16's `af_cma`
+(park it stable, nothing happens), and the OPPOSITE of slice 21's `H`, which cannot be parked
+because altitude is the swept variable.** Also matches precedent: separation drag is a new
+ADDITIVE term, and slice 20 already made a new additive term (`af_k_induced`) a knob.
+
+⇒ **ONE knob `af_alpha_stall`, presence-gated (the slice-20 shape).** NO `:aero_curve` fidelity,
+NO `AERO_CURVE_MODES`, NO `LIVE_FIDELITY_MODES` edit, NO `set_fidelity`, NO button — and so the
+one-button rule's "4th occurrence" in `_setup_spatial_fid_btn` **does not arise**. Likely ZERO
+new client code (slice 19's aero strip already plots the ceiling; it just starts lower —
+slice 20's precedent exactly). **The top of the knob's own range IS the in-scenario linear
+twin**; key ABSENCE stays the bit-exact prior-slices path.
+
+⚠ **THE USER'S CLARIFICATION — "knob now, rung if it EARNS it."** The door stays open, but only
+for the `Cm(α)` break: a slope SIGN FLIP is a distinct code path with **no parking escape**,
+whereas a corner angle always has one. If the break never ships, slice 22 is a knob slice
+permanently. **Do not reopen the rung question for the lift curve** — it was measured and lost.
+
+⚠ And record the meta-point: **the discriminator is a CONVENTION, not a law.** A rung could be
+shipped anyway for the crisp A/B — but it would have to be named a DELIBERATE DEVIATION. The
+discriminator cannot be cited *in support* of a rung here, because it says the opposite.
+
+### ⚠ DECISION 2 (USER, 2026-07-19) — **THE FOURTH PIECE IS REFRAMED: RELAXED STATIC STABILITY.**
+
+Not "the airframe departs" (the framing the slice was grown for on 2026-07-19 morning), and not
+dropped either. **What gate 0 actually found is a better lesson than the tumble**, and it is
+what ships:
+
+    ★ A STATICALLY UNSTABLE AIRFRAME IS PERFECTLY FLYABLE — UNTIL THE AUTOPILOT
+      RUNS OUT OF AUTHORITY. The THRESHOLD is the lesson, not the tumble.
+
+MEASURED (F10, at the balanced two angles α_stall 0.20 / α_break 0.28, α_sat 0.60) — a **SHARP
+cliff between `Cma_post` 4 and 8**, with the controlled-collapse window UNCHANGED across it:
+
+| Cma_post | α_pk | verdict | COLLAPSE | DEPART | dsat |
+|---|---|---|---|---|---|
+| 4.0 | 0.3103 | autopilot **HOLDS** | 0.877 s | 0.717 s | 0 |
+| 8.0 | **2.7779** (159°) | autopilot **LOSES** | 0.877 s | 0.713 s | 0 |
+
+This is real fly-by-wire physics (every modern fighter is statically unstable and flies fine),
+it makes `Cma_post` the natural second slider — **the cliff is what you drag across** — and it
+absorbs F5 (the "nominal, autopilot-held departure" that read as a disappointment is now HALF
+THE LESSON, not a failure). It also keeps slice 16's callback intact and STRENGTHENS it: slice 16
+authored the unstable case; here the airframe *flies into* it **and the autopilot fights back**.
+
+⚠ **THE MISS IS NOT THE METRIC FOR THIS HALF, AND THAT IS FINAL (F4, re-confirmed at F10).**
+Even at full tumble the miss moves **240.37 → 243.67 = +1.4%** — a missile that departs 0.7 s
+before CPA keeps its momentum and lands in much the same place. Headline the THRESHOLD
+(held-vs-lost) and the ω_sp sentinel; the miss corroborates at most. Any lesson line built on
+the miss would actually be measuring the LIFT collapse and mis-attributing it.
+
+### THE OTHER GATE-0 RESULTS THAT CHANGE THE BUILD
+
+- **F3 ⭐ TWO ANGLES, NOT ONE — the plan's "RECOMMEND one angle" is REFUTED.** With
+  `α_break == α_stall` the CONTROLLED lift-collapse window has **literally ZERO width** (0.000 s):
+  the airframe goes unstable at the same α where lift peaks, so it departs before "pull harder,
+  get less lift" is ever visible — and that regime is *what true-drop was chosen for*. Measured
+  optimum **α_break = 0.28** (collapse 0.877 s, then departure 0.717 s). The window is bounded on
+  BOTH sides: below ~0.22 the collapse vanishes, at ≥0.32 the break is never reached.
+- **F9 — a FIFTH forced piece: the DEEP-STALL BOUND `α_sat`.** An unbounded divergent moment ran
+  α to **470 rad** — a numerical artifact, not a tumble. `Cm(α)` needs a THIRD slope (restoring
+  again above α_sat; physically the post-stall body acts as a flat plate), which bounds the
+  divergence into a second high-α equilibrium = **deep-stall lock-in, a real named phenomenon**.
+  It barely moves the miss ⇒ it is a PHYSICALITY/crash-safety fix, not a lesson lever. **Without
+  it a real tumble and a bug are indistinguishable.**
+- **F11 — slice 16's ω_sp NaN sentinel FIRES IN FLIGHT for 0.747 s**, first at t = 3.435. Built
+  for an AUTHORED `Cmα ≥ 0`, never fired mid-run in the project's history. ⚠ NOT yet walked
+  through `_finite`/`FINITE_CEIL` to the wire — **that stays a GATE-2 item** (convention 6).
+- **F2 / P6 — settled GOOD:** `α_max > α_stall` (plan §3's inversion of slice 19) reaches stall
+  by the COMMAND path **at the SHIPPED gains** (k_α 1.0, k_q 0.3), NOT via the FINDING-14 leak;
+  and `defl_sat == 0` in the LOS-gated window in every non-blowup arm.
+
+**Candidate curve shapes as measured (gate 1's spec):** `C_L` ODD, slope `Cla` below α_stall and
+`−k_drop·Cla` above, `cl_peak = Cla·α_stall` closed-form. `C_Dsep` EVEN, `K_sep·max(0,|α|−α_stall)²`,
+exactly 0 below. `Cm_α` ODD with THREE slopes: `Cma` / `Cma_post` / `Cma` (the F9 bound).
+
+**Still unrun from the original probe list:** P4 (`K_sep` domain — every gate-0 run above had
+`K_sep = 0`), P5 (the convention-9 separation from slice 20's induced spiral), P7 (the causation
+counterfactual). ⚠ P7 needs re-scoping: with the reframe there are now TWO causal claims (the
+lift ceiling, and the autopilot-authority threshold) and they need separating.
+
+---
 
 Slices 19–21 gave cap #4 (`a_max_aero`) three movers, and **all three moved `Q`**:
 
@@ -29,6 +138,12 @@ own INTERIOR PEAK, `C_L(α_stall)`, and no amount of Q buys past it.
 > chose to GROW THE SLICE**: `Cm(α)` now breaks too, so BOTH the control loop AND the attitude
 > reverse, and the language is earned — **but ONLY under `:stall` on a scenario authoring the
 > break.** Slice-16–21 wires keep a linear moment and cannot depart. No global find/replace.
+>
+> 🚫 **REFRAMED AT GATE 0 — DECISION 2.** The break SHIPS, but the lesson is **RELAXED STATIC
+> STABILITY** (*an unstable airframe is flyable until the autopilot runs out of authority* — the
+> measured `Cma_post` 4→8 cliff), NOT "it departs". And **the MISS is not the metric for that
+> half** (+1.4% even at full tumble). "Departure"/"pitch-up" describe the far side of the cliff
+> only. Also: no `:stall` rung exists any more — see Decision 1.
 
 ---
 
@@ -185,6 +300,10 @@ where the physics lives, and nowhere else). **No global find/replace.**
   (convention 9); a second parameter is more honest but doubles the knob surface and lets the two
   reversals separate in time. **RECOMMEND one angle, with the difference as a §1 named
   approximation** — but let P2/P3's measured timing decide.
+  🚫 **SUPERSEDED — GATE 0 F3 REFUTED THE ONE-ANGLE RECOMMENDATION.** One angle gives the
+  controlled lift-collapse window **ZERO width**, deleting the very regime true-drop was chosen
+  for. **TWO ANGLES, α_break = 0.28** (measured optimum; window bounded on both sides). The
+  measurement overruled exactly as this paragraph invited it to.
 
 **Departure RECOVERY becomes a first-class question, not a footnote** (gate-0 P3, now upgraded):
 recoverable vs terminal are DIFFERENT lessons and the headline must match whichever happens. With a
@@ -230,6 +349,11 @@ function slices 16–21 all build on; the other three are additive in new code.
 **Its true size, made visible here so gate 2 is not a surprise:** true-drop honestly done =
 **stall curve + separation drag + the inverted clamp relationship (#3)**. Every one of those three
 is FORCED by the choice, none is optional, and all three are additive and gated.
+
+🚫 **SUPERSEDED BY GATE 0 — DECISION 1. The paragraph below is WRONG and is kept only to show
+what was tested.** It predicted `α_stall → ∞` was a limit point ⇒ RUNG; F7 MEASURED the
+off-state at a finite in-domain α_stall ≈ 0.25 ⇒ **KNOB**. The `⚠ VERIFY THIS AT GATE 0` note
+below did its job — the verification FAILED. Do not re-derive; read Decision 1.
 
 **The rung justification is UNCHANGED by the form choice** — apply slice 21's discriminator
 (recorded in `atmosphere.jl`'s header, do not re-derive): *is the off-state (a) a distinct code path
