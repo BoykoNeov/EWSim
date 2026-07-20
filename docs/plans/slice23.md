@@ -424,9 +424,13 @@ BUG). ⚠ **DO NOT let the 3-D moment reach the `:point_mass`/`:pitch_coupled` p
 slice-22 warning ("the moment break reaches further than ρ(z) did"): keep `_integrate_6dof!` the
 sole consumer of the 3-D dynamics.
 
-**Gate 3 — the four proofs** (convention 14): `slice23_verify.gd` (the out-of-plane miss split +
-held-seed bit-identical replay across the `:pitch_coupled ↔ :six_dof` toggle + the reduction golden on
-the wire), `slice23_ui_test.gd` (the `:airframe` cycler now 3-rung; value-guard the 3-D view vs the
+**Gate 3 — the four proofs** (convention 14; AS-DELIVERED): `slice23_verify.gd` (the out-of-plane miss
+split + the `af_cy_beta → 0` CAUSATION lever [degenerates EXACTLY to the discard] + held-seed
+bit-identical replay across the `:pitch_coupled ↔ :six_dof` toggle). ⚠ **The reduction golden is NOT
+in the verifier — it lives in gate 2's `test_missile.jl` as the dt-CONVERGENCE check** (in-plane
+six_dof vs scalar `_integrate_coupled!` must SHRINK O(dt⁴), the advisor's wiring-bug detector): a
+stronger test than a single-atol wire golden, and a wire reduction would be redundant with the
+miss-split's wire coverage. `slice23_ui_test.gd` (the `:airframe` cycler now 3-rung; value-guard the 3-D view vs the
 2-D airframe view vs slice-18's terrain 3-D view — the multi-view discriminator), the `Sandbox.tscn`
 headless smoke-load, and a windowed shot aimed at the CLAIMED branch (the 3-D trail curving OUT of
 the x-z plane toward the out-of-plane target, the nose/lift vectors in 3-D). ⚠ **THE CLIENT NEEDS A
