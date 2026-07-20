@@ -474,6 +474,38 @@ the design deliberately leaves room to grow. They are sorted by **what they cost
 current architecture**, which is the useful question: the more of these land in Tier A,
 the more the core≠front-end / phase-contract / declarative-scenario decisions were worth.
 
+### ⭐ THE DUAL AIM, AND THE AGREED SEQUENCE (user, 2026-07-20)
+
+**EWSim's aim is DUAL: the per-slice teaching lessons AND a complete (mainly AIR-DOMAIN)
+battlefield simulator.** This is "and", not "not" — the slice method is not repudiated, and
+nothing built so far needs undoing (the physics core *is* the sim's engine, built in dependency
+order). But it changes how a gap is GRADED: a teaching aim asks *"does this teach something?"*,
+the sim aim also asks *"is this entity modelled well enough to BE an actor?"* — **FOIL-grade vs
+ACTOR-grade**. The aerodynamically-free `ManeuveringTarget` (Tier-A list below) is the worked
+example: deliberate and load-bearing for slice 20's isolation, but foil-grade for a sim in which
+aircraft are actors.
+
+⚠ **THE TENSION TO WATCH — convention 9 vs the sim aim.** *One lesson per scenario, don't stack
+fidelities that muddy a lesson* pulls the OPPOSITE way from *many actors interacting in one
+scenario*, which is what a battlefield sim IS. Nothing has broken yet only because scenarios have
+stayed small and deliberately isolated. The likely resolution is to SPLIT SCENARIO KINDS —
+**lesson** scenarios stay isolated and keep the four-proof discipline (convention 14), while
+**engagement** scenarios deliberately stack and are validated differently (runs / deterministic /
+plausible, NOT "one number moves 117×"). ⚠ NOT YET DECIDED — recorded as the leading candidate.
+
+**AGREED SEQUENCE — all three, in this order:**
+
+1. **Slice 22 (nonlinear `C_L(α)` / stall)** — gate 0 is already spent; it is missile aero
+   fidelity the sim needs either way.
+2. **SCENARIO SCALE** — the lesson/engagement split above, plus what a bigger scenario needs
+   (sides/teams, spawning, after-action logging).
+3. **ACTOR FIDELITY** — target aerodynamics, N > 2 aircraft, targets that SENSE and REACT rather
+   than fly authored paths.
+
+Scale sits in the MIDDLE deliberately: it is what reveals *which* actor gaps actually bite.
+Building target aerodynamics first risks polishing a foil that a larger scenario would show needs
+reactive behaviour or an RWR far more than it needs a drag polar.
+
 ### Tier A — pure extensions (no contract changes)
 
 These are new `Subsystem` types, new fidelity knobs, or new scenario `kind`s. The tick
