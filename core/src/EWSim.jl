@@ -24,6 +24,7 @@ include("deinterleave.jl")
 include("gnss.jl")
 include("frames.jl")
 include("dynamics.jl")
+include("aero_curve.jl")
 include("airframe.jl")
 include("atmosphere.jl")
 include("terrain.jl")
@@ -101,6 +102,17 @@ export induced_drag_accel
 # records the general knob-vs-rung discriminator). `H` is the severity knob on the
 # `:exponential` arm. NOT §11's RF "layered atmosphere/ducting" — that is the `propagation` knob.
 export air_density, ATMOSPHERE_MODES
+# Slice 22 (§11 Tier A): NONLINEAR AERO — true stall, separation drag and the Cm(α) break, which
+# closes the LINEAR-aero deferral slices 19/20/21 all carried explicitly. The airframe finally
+# sets its own ceiling: C_L PEAKS at α_stall and FALLS, so pulling harder past the stall buys
+# LESS turn. ⭐ The headline is an ALGEBRAIC identity — ceiling ratio ≡ α_stall/α_max, with Q, S,
+# C_Lα and m ALL cancelling (slice 21's ρ-factor in a new letter). ⚠ NO fidelity rung and NO mode
+# tuple, MEASURED not assumed (the plan's rung claim LOST at gate 0): unlike slice 21's `H`, a
+# corner CAN be parked out of reach — α_stall ≥ ~0.25 is linear-in-effect over every reachable
+# state — so slice 21's own knob-vs-rung discriminator returns KNOB, exactly like slice 16's
+# `af_cma` and slice 20's `af_k_induced`. `AirframeParams` is deliberately NOT merged with
+# `AeroCurveParams` (slices 1–21 construct it untouched).
+export AeroCurveParams, lift_coefficient, cl_peak, separation_drag_coefficient, moment_coefficient
 # Missile guidance (slice 9): the outer pursuit law + the inner PID autopilot (pure).
 # `AutopilotState` is an INTERNAL state record (the JamContribution/BearingRecord precedent —
 # not exported); `autopilot_init` IS exported (the test constructs the zero state bare).
