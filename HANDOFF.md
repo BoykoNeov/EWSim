@@ -605,8 +605,16 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   is to a real drag polar); **Mach / temperature** (the aero lib is deliberately Mach-free, so `C_Lα`
   does not vary with altitude here — a real interceptor's does); round-earth/geodetic z;
   **zero-lift-drag `C_D0` composed with induced** (`cd_area` exists but 20 and 21 both hold it 0 for
-  the isolation); bank-to-turn (the 3-D quaternion+ω superset, where the pitch-plane out-of-plane
-  discard finally dies) and the radome/body-rate parasitic loop.
+  the isolation); **AERODYNAMICS FOR THE TARGET** — `ManeuveringTarget` (slice 12) is
+  AERODYNAMICALLY FREE: no mass, no Q, no `C_Lα`, no α, no attitude, no drag; its `a_lat` is
+  DELIVERED BY FIAT, its turn is speed-preserving to machine eps, and nothing caps it, so it has no
+  `a_max_aero` ceiling (19), pays no induced bill (20) and never feels ρ(z) (21). That asymmetry is
+  DELIBERATE — it is what licenses slice 20's "the target does NOT maneuver: the missile pays for its
+  OWN turn" and the convention-9 isolation generally (a constrained target would make an aero miss
+  PARTLY the target's problem, muddying every ceiling lesson in the arc) — but a defensive turn
+  costing the TARGET energy is a genuine lesson of its own, and it is its own slice; bank-to-turn
+  (the 3-D quaternion+ω superset, where the pitch-plane out-of-plane discard finally dies) and the
+  radome/body-rate parasitic loop.
 - **Sibling domains that reuse the shared libs.** IR/EO seekers and IRST (add an IR
   environment channel to `env`, reuse `frames.jl`/`estimation.jl`); communications EW —
   jamming of frequency-hopping / spread-spectrum links — as a parallel to radar EW;

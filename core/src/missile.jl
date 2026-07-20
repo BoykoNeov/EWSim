@@ -478,7 +478,17 @@ end
 # honest `:apn` residual — gravity-comp PN is DEFERRED, HANDOFF §10 / convention 9).
 #
 # NAMED APPROXIMATIONS (HANDOFF §1): a CONSTANT lateral accel (no jink/weave program — a later
-# fidelity step); planar in x-z (the elevation view's plane, no cross-range — the slice-10 precedent).
+# fidelity step); planar in x-z (the elevation view's plane, no cross-range — the slice-10 precedent);
+# and — the one the AERO ARC makes load-bearing — **the target is AERODYNAMICALLY FREE**. It has no
+# mass, no Q, no C_Lα, no α, no attitude, no drag of any kind: `a_lat` is DELIVERED BY FIAT, the turn
+# is speed-preserving to machine eps, and NOTHING caps it. So the target has no `a_max_aero` ceiling
+# (slice 19), pays no induced-drag bill for its turn (slice 20), and never feels ρ(z) (slice 21) —
+# it is the missile-side plant of slices 15–21 with EVERY constraint removed. This is DELIBERATE and
+# it is what licenses slice 20's headline ("the target does NOT maneuver: the missile pays for its
+# OWN turn onto the collision course") and the convention-9 isolation generally — an aerodynamically
+# constrained target would make an aero miss PARTLY the target's problem, muddying every ceiling
+# lesson in the arc. DEFERRED (HANDOFF §11 Tier-A): giving the target its own aero ceiling + energy
+# bleed, so a defensive turn COSTS it — a real lesson, but its own slice, and NOT inside this one.
 
 # The coordinated-turn lateral accel: `a_lat·sign` along the in-plane (x-z) unit ⟂ to v (v̂ rotated
 # +90° in x-z: `(vx,vz) → (−vz,vx)`). At v→0 (or a purely-vertical v) the in-plane speed vanishes →
