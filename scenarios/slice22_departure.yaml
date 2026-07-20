@@ -1,0 +1,234 @@
+# slice22_departure — RELAXED STATIC STABILITY: **flyable until the autopilot runs out of
+# authority** (HANDOFF §11 Tier-A, slice 22 gate 3 — the MOMENT half).
+#
+#     ★ A STATICALLY UNSTABLE AIRFRAME IS PERFECTLY FLYABLE — UNTIL THE AUTOPILOT
+#       RUNS OUT OF AUTHORITY. **THE THRESHOLD IS THE LESSON, NOT THE TUMBLE.**
+#
+# ⚠ THIS IS A REFRAME, AND THE HISTORY MATTERS (gate-0 DECISION 2, USER, 2026-07-19). The slice
+# was GROWN for "the airframe DEPARTS" — an advisor pass had caught that a LINEAR `pitch_moment`
+# structurally CANNOT depart (Cmα < 0 held through stall ⇒ always a restoring moment; as V bleeds
+# ω_sp goes sluggish but stays REAL, and q̄ = q·d/(2V) RISES ⇒ MORE damping, not less), so
+# "departure"/"pitch-up" was OVERCLAIMED — the slice-20 "positive feedback" / slice-21 "high
+# altitude" class, its THIRD occurrence. Offered the choice between scrubbing the language and
+# adding a `Cm(α)` break, **the user chose to GROW THE SLICE.** Then gate 0 measured what the
+# break actually does, and **what it found is a BETTER lesson than the tumble** — so the tumble is
+# the FAR SIDE of the lesson, not the lesson.
+#
+# ⭐ THE CALLBACK THAT MAKES THIS WORTH ITS COST — SLICE 16'S TUMBLE, NOW SELF-INFLICTED. Slice 16
+# taught the static-stability sign lesson with `af_cma` as an **AUTHORED** value: *Cmα < 0
+# weathervanes, Cmα > 0 TUMBLES.* An ENGINEER typed the unstable case. **Here the airframe DRIVES
+# ITSELF INTO THAT REGIME BY FLYING THERE** — the same instability, now a CONSEQUENCE. That is the
+# "who moves it" progression slices 19/20/21 gave the CEILING, applied instead to STABILITY.
+#
+# ⭐ AND SLICE 16's ω_sp SENTINEL FINALLY FIRES IN FLIGHT — FIRST TIME IN PROJECT HISTORY. Slice 16
+# built the `ω² < 0 ⇒ NaN` guard (`_finite`-clamped to FINITE_CEIL) for an AUTHORED `Cmα ≥ 0`, and
+# it had NEVER fired mid-run. Past the break the LOCAL slope is `cma_post > 0`, so it fires
+# DYNAMICALLY, at the moment of departure — the readout that says *there is no longer an
+# oscillation to have*. The whole `_finite`/wire path was walked with a departure in progress
+# (convention 6, gate-0 P3c): it reaches the wire as FINITE_CEIL, never a NaN.
+#
+# ⚠⚠ THE MISS IS **NOT** THE METRIC FOR THIS FILE, AND THAT IS FINAL (gate-0 F4, re-confirmed at
+# F10). Even at full tumble the LIFT file's miss moves only 240.37 → 243.67 = **+1.4%** — a
+# missile that departs 0.7 s before CPA KEEPS ITS MOMENTUM and lands in much the same place. Any
+# lesson line built on the miss would actually be measuring the LIFT collapse and MIS-ATTRIBUTING
+# it. **Headline α_pk and the held-vs-lost verdict; the miss corroborates at most.**
+#
+# ⚠ AND "TIME WITH ω_sp CEILED" IS **NOT** A SEVERITY MEASURE — IT RUNS BACKWARDS (gate-2 G6, and
+# re-measured on THIS wire). The sentinel fires whenever α crosses α_break, INCLUDING when the
+# autopilot comfortably recovers. Worse, the ceiled COUNT **FALLS** as the departure gets more
+# violent — 1007 → 526 → 386 ticks as `cma_post` goes 2 → 8 → 12 — because α blows straight PAST
+# α_sat into the DEEP-STALL RESTORING region where ω_sp is REAL again. That is the deep-stall
+# bound showing up in the readout, and it is HONEST — but a headline of "seconds with no
+# short-period" would read BACKWARDS. **Use the sentinel as the TELL that the break was reached,
+# never as a measure of how bad it got.**
+#
+# ⭐ THE LESSON ON THE WIRE — the `af_cma_post` SLIDER, and **THE CLIFF IS WHAT YOU DRAG ACROSS**
+# (MEASURED at gate 3, k_drop 1.0 / δ_max 1.0). **α IS QUOTED AT A FIXED RANGE (r = 500 m), NOT AT
+# CPA** — see the sampling note below; α_pk lands essentially ON the CPA frame, so a fixed-geometry
+# sample is the honest comparison:
+#
+#   cma_post | α@500m |  α@500m | ω_sp ceiled | miss   | defl_sat | verdict
+#   ---------|--------|---------|-------------|--------|----------|--------------------------------
+#      0.0   | 0.3091 |   17.7° |   0 ← SILENT| 280.54 |    0     | NEUTRAL past the break
+#      4.0   | 0.4314 |   24.7° | 947         | 302.35 |    0     | ⭐ UNSTABLE **AND STILL FLYABLE**
+#      6.0   | 0.6876 |   39.4° | 665         | 333.39 |    0     | slipping
+#      8.0   | 0.9873 |   56.6° | 526         | 371.85 |    0     | autopilot **LOSES** ← SHIPS
+#     10.0   | 1.2579 |   72.1° | 442         | 410.90 |    0     | lost
+#
+# ⭐⭐ **THE LESSON IS THE MIDDLE ROW, NOT THE ENDS.** Read only 0-vs-8 and this file demonstrates
+# "neutral vs lost" — a weaker and DIFFERENT claim than the one that was ratified. At `cma_post 0`
+# the airframe is **NEUTRALLY stable past the break (slope 0), not unstable at all**: the sentinel
+# never fires, and it is the CONTROL, not the lesson. **The lesson is `cma_post ≈ 4`: the ω_sp
+# sentinel FIRES for 947 ticks — nearly a second with NO REAL SHORT-PERIOD MODE, the airframe is
+# genuinely statically unstable — and the autopilot HOLDS IT ANYWAY** (α@500 only 0.43, and the
+# miss is 302 against the 280 baseline: within 8%). **THAT is "statically unstable yet perfectly
+# flyable."** Only past ~6 does the same autopilot, same fin, same gains start losing it.
+# **This is real fly-by-wire physics** — every modern fighter is statically unstable and flies
+# fine, right up until the control authority runs out. The three-point story (SILENT → FIRING BUT
+# HELD → LOST) is what the verifier asserts, precisely so the middle row cannot be dropped.
+#
+# ⚠ WHERE THE DEPARTURE LIVES, AND WHY α IS SAMPLED AT FIXED RANGE. The break is reached at
+# **t = 3.12 s / r = 1474.7 m in EVERY arm** (identical to the metre); the DIVERGENCE then develops
+# between there and CPA, and α_pk lands within a few ms of the CPA frame. Sampling α_pk therefore
+# reads it right where PN's r→0 demand spike lives. That spike is **COMMON MODE** — same geometry,
+# same demand, same everything but the post-break slope — so it cannot explain a 4× spread in α,
+# and `cma_post 0` is the control that proves it. But a FIXED-RANGE sample at r = 500 m sits well
+# past the break (1475 m) and well above the r→0 artifact, so it needs no such argument.
+#   ⚠ AND A LOS GATE OF 1000 WOULD DELETE THIS LESSON: at r > 1000 the arms have barely diverged
+#   (α@1000 spans only 0.297 → 0.399 across the whole knob range). The gate that is correct for the
+#   LIFT file is WRONG here — a measured difference between the two halves, not an oversight.
+#
+# ⭐ AND THE BREAK IS REACHED AT **t = 3.12 s IN EVERY SINGLE ARM** — identical to three digits
+# across the whole sweep. `cma_post` does NOT change WHEN the airframe arrives at the break (the
+# LIFT curve and the geometry drive α there); it changes ONLY WHAT HAPPENS AFTER. That is the
+# cleanest possible statement that this file's knob is a STABILITY knob and not a demand knob,
+# and it is why the two halves of slice 22 are separable at all.
+#
+# ⚠⚠ WHY THIS IS A SEPARATE FILE FROM `slice22_stall.yaml` — A **MEASURED CONFIG CONFLICT**, NOT A
+# CONVENTION-9 PREFERENCE. The two halves need INCOMPATIBLE WIRES:
+#   • the LIFT file needs k_drop 0.7 (gate-2 G2: the value the gate-0 probe measured on; a 1.0
+#     default silently moved its miss 240.37 → 278.11, a 16% shift, with every structural test
+#     still passing) and δ_max 0.4 (slice 19's).
+#   • THIS file needs k_drop 1.0 and δ_max 1.0 — and **at k_drop 0.7 THE CLIFF IS INVISIBLE**:
+#     across cma_post 0 → 8 the peak α moves only 0.286 → 0.379 and the autopilot HOLDS THROUGHOUT
+#     (G2). F10's cliff is NOT a property of the two angles alone.
+# **Do not merge these two files**, and do not copy either one's numbers onto the other's wire.
+#
+# ⚠⚠ δ_max = 1.0 IS LOAD-BEARING, AND IT IS WHY F10's HEADLINE NUMBER IS NOT QUOTED ANYWHERE HERE
+# (gate-2 G9). Gate 0 measured the cliff as 0.31 → **2.7779** (159°) — but that was at δ_max 0.4,
+# where `defl_sat` binds 7/318/387 times across cma_post 4/6/8. **Relieving the cap DROPS α_pk at
+# cma_post 8 from 3.02 to 1.22**, so the deflection cap was AMPLIFYING the divergence, not merely
+# riding along: part of gate 0's own dramatic number was **slice-19 FINDING 2's contamination**.
+# The clean progression is **0.64 → 0.97 → 1.22 — REAL, and MILDER.** ⚠ NEVER QUOTE 2.7779 AS THE
+# DEPARTURE α. (Re-measured at gate 3 to confirm: at δ_max 0.4 this wire gives 0.6426 / 1.5903 /
+# 3.0249 with defl_sat 7 / 322 / 418 — G9 reproduced.)
+# So δ_max 1.0 rad (57°) is an UNPHYSICALLY GENEROUS fin, authored SPECIFICALLY so the deflection
+# cap is PROVABLY not the story (P6: assert `defl_sat == 0`). It is not a realism claim.
+#
+# ⚠ THE DEEP-STALL BOUND `alpha_sat` IS REQUIRED, NOT POLISH (gate-0 F9, and a LOAD invariant).
+# An unbounded divergent moment ran α to **3.8e5 rad** in the probe — a numerical artifact, not a
+# tumble. `Cm(α)` therefore has THREE slopes (`cma` / `cma_post` / `cma` again above α_sat;
+# physically the post-stall body acts as a FLAT PLATE), which bounds the divergence into a second
+# high-α equilibrium = **deep-stall lock-in, a real named phenomenon.** It barely moves the miss ⇒
+# it is a PHYSICALITY/crash-safety piece, not a lesson lever. **Without it a real tumble and a bug
+# are INDISTINGUISHABLE** — which is the epistemic half of why it is mandatory.
+#
+# ⚠ TWO ANGLES, NOT ONE — THE PLAN'S "RECOMMEND ONE ANGLE" WAS REFUTED (gate-0 F3). With
+# `α_break == α_stall` the CONTROLLED lift-collapse window has **literally ZERO width** (0.000 s):
+# the airframe goes unstable at the same α where lift peaks, so it departs before "pull harder,
+# get less lift" is ever visible — and that regime is *what the true-drop curve was chosen for*.
+# Measured optimum **α_break = 0.28** (collapse window 0.877 s, then departure 0.717 s), bounded on
+# BOTH sides: below ~0.22 the collapse vanishes, at ≥ 0.32 the break is never reached.
+#
+# ⚠ NO GLOBAL FIND/REPLACE — "DEPARTURE" AND "PITCH-UP" ARE EARNED **ONLY HERE.** Every slice-16–21
+# wire, and `slice22_stall.yaml` itself, authors a LINEAR moment (`alpha_break` parked at its 1e9
+# default) and CANNOT depart. The slice-21 "high altitude" precedent governs exactly: the caveat
+# lifts where the physics lives, and nowhere else.
+#
+# NAMED DEFERRALS (do not let them leak in): ROLL/YAW DEPARTURE — **the sharpest remaining
+# approximation in this file**: a real departure goes OUT-OF-PLANE and this one departs strictly
+# in-plane. It dies only with bank-to-turn / 3-D. DEPARTURE RECOVERY / a spin model — this file
+# ships the ONSET, not the aftermath. Hysteresis (real separation re-attaches at a LOWER α than it
+# separates at; the shipped curve is single-valued with no memory). Mach/compressibility (the aero
+# lib is deliberately Mach-free). A STALL-AWARE AUTOPILOT (the multivalued past-peak inverse).
+#
+# Class 4c: physics-changing, NO RNG (truth-fed PN, no seeker → "draw-count invariance" is VACUOUS).
+# Live-settable, NO set_fidelity guard. The seed is inert. UNITS: pos/vel SI; Cmα/Cmδ/Cmq/C_Lα and
+# cma_post in 1/rad; α/θ/δ and every authored ANGLE in RADIANS; elevation in DEGREES at the loader.
+name: slice22_departure
+seed: 22
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # NO toggled fidelity (Decision 1 — slice 22 is a KNOB slice). `airframe` AUTHORED FIXED at
+  # :pitch_coupled: `_stall_on`'s third conjunct requires it, and that conjunct is DELIBERATE (the
+  # slice-21 `_atm_on` latent-bug precedent). `pitch_moment` is ALSO live on the :point_mass
+  # rotational path (`_integrate_airframe!`), so without the conjunct a :point_mass wire would
+  # integrate θ/q through a BREAKING moment while pos/vel flew a linear-aero fiat accel — half the
+  # missile in one aerodynamic model and half in another. **`_integrate_airframe!` is untouched by
+  # this slice**, and the moment break therefore reaches the COUPLED path ONLY.
+  integrator: rk4
+  airframe: pitch_coupled
+  guidance: pn
+  autopilot: alpha
+
+entities:
+  # The interceptor — `slice22_stall.yaml`'s airframe with the MOMENT BREAK authored and the two
+  # values the cliff requires (see the header for why each is forced).
+  #
+  # alpha_stall 0.20 / alpha_break 0.28 — TWO ANGLES (F3). The lift peak comes FIRST, so the
+  #   controlled lift-collapse window (0.877 s) is VISIBLE before the airframe goes unstable.
+  # cma_post 8.0 — SHIPS ON THE LOST SIDE OF THE CLIFF (α_pk 70°), so the button-less lesson is
+  #   visible on load and the slider recovers it. Drag to 0 and the autopilot HOLDS at 18°.
+  # alpha_sat 0.60 — the DEEP-STALL BOUND. A LOAD INVARIANT (must exceed alpha_break), not polish.
+  # k_drop 1.0 / delta_max 1.0 — the cliff's two enabling values (G2 / G9). NOT the lift file's.
+  # cd_area_m2 0.0 / no k_induced — the isolation; slice 20's spiral stays out (convention 9).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.225
+      guidance: {n_pn: 4.0, a_max: 3000.0, delta_max: 1.0, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.35
+        alpha_stall: 0.20
+        k_drop: 1.0
+        k_sep: 3.0
+        alpha_break: 0.28
+        cma_post: 8.0
+        alpha_sat: 0.60
+  # The target — slice 19's geometry, IDENTICAL to the lift file's. See that file's note: slice
+  # 20's engagement is INERT for this lesson (α_pk 0.085) and slice 21's is the REACH WALL. Planar
+  # in x–z (the §1 pitch-plane discard).
+  - id: t1
+    kind: target
+    pos: [6000.0, 0.0, 4200.0]
+    vel: [-800.0, 0.0, 200.0]
+    target: {rcs_m2: 1.0, maneuver: {a_lat_mps2: 200.0, turn_sign: 1.0}}
+
+knobs:
+  # ONE knob — **the CLIFF is what you drag across.** cma_post is the POST-BREAK slope ∂Cm/∂α: how
+  # much the airframe PUSHES ITSELF FURTHER once the static margin is consumed. At 0 it is
+  # NEUTRAL past the break (the autopilot holds it at 18° and the ω_sp sentinel NEVER FIRES); wind
+  # it up and the same autopilot, the same fin, the same gains progressively lose the airframe.
+  #
+  # It is read EVERY tick (`_stall_params` is rebuilt per RK4 STAGE inside `_integrate_coupled!`'s
+  # closure), so it is live by construction — the OPPOSITE of slice-19's DEAD `speed` knob. The
+  # not-a-dead-knob tripwire ships anyway.
+  #
+  # RANGE [0.0, 10.0] IS MEASURED AT GATE 3, AND `defl_sat` IS THE BINDING CONSTRAINT:
+  #   cma_post ≤ 10.0 → defl_sat == 0 (measured at 0/2/4/6/8/9/10, and defl_sat is MONOTONE in
+  #                     cma_post, so the WHOLE declared domain is provably clean)
+  #   cma_post  10.5 → defl_sat 65   ★ THE EDGE. δ_max starts binding and would CONTAMINATE the
+  #                     verdict — slice-19 FINDING 2 / gate-2 G3 recurring.
+  # ⚠ THE MARGIN HERE IS ~1.03×, **NOT** SLICE-20's 2×, AND THAT IS STATED RATHER THAN HIDDEN. It
+  # cannot be widened by raising δ_max: 1.0 rad is ALREADY 57°, authored unphysically generous
+  # precisely so the deflection cap is provably not the story. Buying slider headroom with an
+  # absurd fin would trade the P6 assertion for cosmetics. The domain is safe DESPITE the thin
+  # margin because defl_sat is monotone and every reachable value is measured at exactly 0 — the
+  # margin would only matter if the knob could be dragged PAST its declared max, and it cannot.
+  #
+  # NOT KNOBS, deliberately:
+  # • af_alpha_break — moving the break angle moves WHEN the departure starts, confounding it with
+  #   the demand geometry. cma_post moves ONLY what happens after (t_break = 3.12 s in EVERY arm —
+  #   the measurement that proves the separation).
+  # • af_alpha_sat — the deep-stall BOUND. Dragging it is dragging the crash-safety floor; below
+  #   alpha_break it is a LOAD ERROR, and above it the divergence is unbounded (α → 3.8e5).
+  # • af_alpha_stall — the OTHER file's lesson (convention 9). Here it is HELD so the lift collapse
+  #   is a constant background and the MOMENT is the only thing moving.
+  # • delta_max — it is the very cap this file must prove NON-binding (G9). A slider on it would
+  #   let the user silently re-introduce the contamination that corrupted gate 0's headline number.
+  # • k_alpha/k_q — "the autopilot runs out of AUTHORITY" is the lesson; the gains ARE the
+  #   authority, so a slider on them would change the claim rather than illustrate it.
+  - {target: m1, key: af_cma_post, min: 0.0, max: 10.0, label: "Cm_post (1/rad) — post-break slope: 0 = autopilot HOLDS, 8 = LOSES"}

@@ -1,0 +1,261 @@
+# slice22_stall — NONLINEAR C_L(α) / TRUE STALL: **the ceiling the AIRFRAME sets**
+# (HANDOFF §11 Tier-A, slice 22 gate 3 — the LIFT half). The aero arc's nearest and most
+# load-bearing named deferral, carried explicitly by slices 19, 20 and 21.
+#
+# Slices 19–21 gave cap #4 (`a_max_aero = Q·S·C_Lα·α_max/m`) three movers, and **ALL THREE MOVED
+# Q**: the ENGINEER (slice 19's `rho` knob), the MISSILE BY TURNING (slice 20's induced-drag V
+# bleed), the MISSILE BY WHERE IT FLIES (slice 21's ρ(z)). **Slice 22 moves the OTHER FACTOR.**
+# Every one of those slices assumed the lift curve is a STRAIGHT LINE out to α_max — that the
+# airframe will keep trading α for lift forever. It will not. Past α_stall the flow SEPARATES:
+#
+#     C_L PEAKS and then FALLS, and the drag that was negligible in attached flow RISES steeply
+#
+# so the ceiling is not `C_Lα·α_max`; it is the curve's own INTERIOR PEAK, and **no amount of Q
+# buys past it.**
+#
+# ⭐ THE HEADLINE IS AN EXACT IDENTITY — AND IT IS A *FORMULA* TOOTH, NOT A RUN-VS-RUN.
+# At FIXED Q the linear→stall ceiling ratio is IDENTICALLY α_stall/α_max, because Q, S, C_Lα and
+# m ALL CANCEL:
+#
+#     linear:  a_max_aero = Q·S·C_Lα·α_max  / m
+#     stall:   a_max_aero = Q·S·C_L_peak    / m,   C_L_peak = C_L(α_stall) = C_Lα·α_stall
+#     ⇒ ratio ≡ α_stall/α_max   — measured through the loader at gate 3: 471.4352475793185 →
+#                                  269.3915700453249, ratio 0.5714285714285715 vs α_stall/α_max
+#                                  0.5714285714285715. **|Δ| = 0.0 — BIT-FOR-BIT, not merely
+#                                  within tolerance.** Slice 21's ρ-factor identity IN A NEW LETTER
+#                                  (that one also landed at exactly 0.0; both are algebraic).
+#
+# ⚠ THE VERIFIER FEEDS IDENTICAL (V, ρ, α_max) TO `aero_accel_limit` UNDER BOTH PARAM SETS. As a
+# two-run comparison it would CONFOUND ITSELF — separation drag makes V (hence Q) diverge between
+# the arms, so Q is NOT actually equal and the tooth stops testing what it claims. (Slice 20's
+# "matched on ΔV" discipline, INVERTED: there the twin had to be matched empirically; here the
+# whole point is that no run is needed.)
+#
+# ⭐ THE REVERSAL THAT IS NEW IN THE SUITE. Every prior cap in this project is a MAGNITUDE that
+# SATURATES — pull harder, get no more. This one is a **DERIVATIVE THAT CHANGES SIGN**: past the
+# peak, pulling HARDER turns you LESS *and* costs you MORE. That is why the user chose the
+# TRUE-DROP curve over a saturating one; a saturating curve cannot produce the control-loop
+# reversal at all.
+#
+# THE CONTROL-LOOP REVERSAL, in the order it happens:
+#   too little g → the autopilot commands MORE α → past the peak that yields LESS lift →
+#   it commands MORE STILL → it pegs at α_max with `C_L(α_max) < C_L_peak`.
+# The inner loop inverts on the LINEAR `C_Lα` and KEEPS DOING SO — an autopilot carries an
+# internal LINEAR model of its airframe, and a linear inversion that OVER-commands α as the real
+# curve goes concave is precisely **slice-19's command-vs-achieved gap MADE PHYSICAL**. It also
+# sidesteps the MULTIVALUED past-peak inverse (two α give one C_L) — a genuine ambiguity that is
+# never CONSTRUCTED here. ⚠ A stall-aware autopilot inherits it; that is a NAMED deferral.
+#
+# THE LESSON ON THE WIRE (the `af_alpha_stall` SLIDER — there is no button, see below). MEASURED
+# AT GATE 3 THROUGH THE LOADER, on this file as authored (k_sep 3.0), LOS-gated r > 1000:
+#   α_stall PARKED (≥ α_max = 0.35) → miss 125.14 m   ceiling 471.43   post_stall   0/3255
+#   α_stall 0.20  (ships here)      → miss 240.90 m   ceiling 269.39   post_stall 894/3253
+#   α_stall 0.15  (the floor)       → miss 437.38 m   ceiling 202.04   post_stall 937/3260
+# Same Q, same S, same C_Lα, same mass, same α_max. **Only the curve changed.**
+#
+# ⭐ AND THE SHARPEST TOOTH IN THIS FILE — **`aero_sat` FIRES 855/3255 ON THE *PARKED, LINEAR* ARM
+# TOO, so it CANNOT be the stall tell.** It is 26.3% on BOTH arms. That is not a coincidence and
+# not a defect: (gate-2 G10) `aero_sat` keys off the **α_max CLAMP**, which both arms SHARE, while
+# the ceiling that actually moved is the curve's INTERIOR PEAK. So there is a real regime — past
+# the physics ceiling, command not yet pegged — where the demand exceeds `a_max_aero` and
+# `aero_sat` stays 0. **`post_stall` is the discriminator: 0 vs 894, a clean separation.**
+# ⇒ This is exactly why the client's breach indicator keys on `post_stall`, and why `post_stall`
+# is a SEPARATELY-NAMED flag rather than folded into `aero_sat` (which would make the slice-19 flag
+# lie about which cap is doing the work).
+#
+# ⚠ ONE CORRECTION TO AN EARLIER NUMBER:
+#  • The gate-2 G1 teeth (miss 240.37 / 125.14) are measured at **`k_sep = 0`**, and this file
+#    authors `k_sep 3.0`. Through the loader at k_sep 0 it reproduces **240.366 — the tooth, to the
+#    digit**; at the shipped 3.0 it is **240.898**. Separation drag is therefore worth **+0.53 m
+#    (0.22%)** here — G5's "nearly inert" re-confirmed on THIS wire, and the reason it is a
+#    PHYSICALITY term rather than a slider.
+#    ⭐ And the PARKED arm is **125.143 at BOTH k_sep values, bit-for-bit** — because separation
+#    drag is EXACTLY zero below the stall. That is gate-2 G8's `-0.0` fix corroborated on the wire.
+#
+# ⚠ WHY A KNOB AND NOT A RUNG — AND THE PLAN PREDICTED THE OPPOSITE (gate-0 F7, USER DECISION 1).
+# The plan asserted *"linear is `α_stall → ∞`, a LIMIT POINT ⇒ RUNG"* and told gate 0 to VERIFY
+# it. **The verification FAILED, and that is the finding.** The achieved α SELF-LIMITS to ~0.24
+# across the whole viable geometry family (α_pk capped at 0.2408 even at `a_lat = 400`; past that
+# is the REACH WALL, not higher α). So α_stall parked at ≥ 0.25 is linear-in-effect **over every
+# REACHABLE state** — measured: at α_stall = 0.25 the miss is the linear miss TO THE PRINTED
+# DIGIT. Slice 21's own discriminator (*is the off-state (a) a distinct code path and (b) NOT
+# knob-reachable?*) therefore returns **KNOB**: α_stall MOVES A CORNER, and a corner can be PARKED
+# OUT OF REACH — exactly slice 16's `af_cma`, and the OPPOSITE of slice 21's H, which cannot be
+# parked because altitude is the SWEPT variable. ⇒ NO `:aero_curve` fidelity, NO button, and the
+# one-button rule's "4th occurrence" DOES NOT ARISE. **The top of this knob's own range IS the
+# in-scenario linear twin.**
+#   ⚠ Record the meta-point: the discriminator is a CONVENTION, not a law. A rung could be shipped
+#   anyway for the crisp A/B — but it would be a DELIBERATE DEVIATION, and the discriminator could
+#   NOT be cited in support, because here it says the opposite.
+#
+# ⚠ α_max = 0.35 > α_stall = 0.20 — **THIS INVERTS SLICE 19, AND IT IS THE DESIGN** (plan §3).
+# To reach post-stall the ACHIEVED α must exceed α_stall, and there are exactly two routes. Via
+# the LEAK (α_max ≤ α_stall, relying on slice-19 FINDING 14's achieved-α overshoot) is REJECTED —
+# gain-dependent, fragile, and CIRCULAR, since closing that leak is a stated payoff of this very
+# slice. Via the COMMAND (α_max > α_stall) is the design: **the autopilot COMMANDS INTO STALL,
+# α_max becomes a soft high limit, and THE PHYSICS SETS THE WALL.** In slice 19 α_max was the
+# BINDING clamp; here it is deliberately NOT binding. Reached at the SHIPPED gains (k_α 1.0,
+# k_q 0.3), verified NOT to depend on the leak (gate-0 F2/P6).
+#
+# ⚠ SEPARATION DRAG IS MANDATORY, NOT OPTIONAL — AND IT IS NOT A SECOND LESSON. Lift-collapse +
+# drag-rise **IS** what stall is: one phenomenon, one event. A stalled missile that decelerated
+# LESS would not be an approximation, it would be the OPPOSITE of the lesson. It KEYS ON α, NEVER
+# ON C_L (past stall C_L FALLS while the drag must RISE — keying it on C_L would reproduce the
+# very error), is EVEN in α, and acts along −v̂. **Slice 20's induced term is NOT "fixed" here**:
+# `C_Di = K·C_L²` falling past the peak is CORRECT PHYSICS. What was missing is the separation
+# term, legitimately ≈0 in attached flow — which is why slices 17–21 never needed it.
+#   ⚠ AND IT IS NOT A LEVER (gate-2 G5, and this is a correction to any reading of it as one):
+#   sweeping K_sep 0 → 12 moves the miss only 278.11 → 280.60 (~0.9%). It is a PHYSICALITY term.
+#   `k_sep` is NOT a second slider; the TEETH carry it (exactly 0 below the stall, EVEN in α,
+#   along −v̂, moving OPPOSITE to induced drag past the peak).
+#
+# THE ISOLATION — K = 0 and cd_area = 0, so slice 20's induced spiral does NOT compete with this
+# headline (gate-0 P5, convention 9). Nothing bleeds speed but gravity and the SEPARATION term
+# this slice is about. ⚠ And stall × the EXPONENTIAL ATMOSPHERE is a **LOAD ERROR**, not a
+# branch-order outcome: `_integrate_coupled!`'s stall arm is constant-ρ by construction, so a
+# missile carrying both `alpha_stall` and `scale_height_m` is REFUSED at load rather than silently
+# flying a constant-ρ stall with its ρ(z) vanishing without a word.
+#
+# ⚠ THIS FILE AUTHORS A LINEAR MOMENT — IT CANNOT DEPART, AND THAT IS DELIBERATE. `alpha_break`
+# and `alpha_sat` are left at their far-parked defaults, so `Cm(α) = Cmα·α` throughout and the
+# airframe WEATHERVANES the whole way. The RELAXED-STATIC-STABILITY half is a SEPARATE FILE
+# (`slice22_departure.yaml`) because the two halves need INCOMPATIBLE WIRES — it needs k_drop 1.0
+# and δ_max 1.0, and at THIS file's k_drop 0.7 the authority cliff is INVISIBLE (gate-2 G2: α_pk
+# moves only 0.286 → 0.379 across Cma_post 0 → 8 and the autopilot HOLDS throughout). That is a
+# MEASURED config conflict, not a convention-9 preference. **Do not merge these two files.**
+#
+# THE CAP LANDSCAPE — this slice adds NO new cap; it changes WHAT SETS cap #4:
+#   slice 10/12  a_max        — an authored MAGNITUDE clamp (INERT here: 3000 ≫ the 269 ceiling)
+#   slice 15     k_δ·δ̇_max    — a JERK / g-onset-rate cap (not in this loop)
+#   slice 15     δ_max        — a DEFLECTION cap. Pinned NON-binding (`defl_sat == 0`) so the LIFT
+#                               CURVE is PROVABLY what binds. ⚠ That assertion is ARM-SPECIFIC
+#                               (gate-2 G3): it holds here at every α_stall tested, and it BREAKS
+#                               on the departure file at k_drop 1.0 / δ_max 0.4.
+#   slice 19     a_max_aero   — the FLIGHT-CONDITION cap. 19 moved it by ρ, 20 by V, 21 by z; 22
+#                               changes the CURVE that defines it. Same cap, a new author.
+#
+# ⚠ `aero_sat` DOES NOT MEAN "past the ceiling" ANY MORE (gate-2 G10, BY DESIGN). `a_max_aero` now
+# drops to the INTERIOR PEAK while `aero_sat` still keys off the α_max CLAMP — the higher, linear
+# limit. So there is a REAL REGIME, **past the physics ceiling but with the command not yet
+# pegged**, where the demand exceeds `a_max_aero` and `aero_sat` STAYS 0. That is precisely what
+# the `post_stall` key exists for, and it is why the client's aero-strip breach indicator keys on
+# `post_stall`. Slice 19's own note that the strip is ILLUSTRATIVE still applies, and now has a
+# SECOND reason.
+#
+# Class 4c: physics-changing, NO RNG (truth-fed PN, no seeker → "draw-count invariance" is VACUOUS
+# — do NOT copy the slice-11/13 draw language). The 8th consecutive 4c. Live-settable, NO
+# set_fidelity guard. The seed is inert (kept for format consistency). UNITS (the §1 trifecta):
+# pos/vel SI (m, m/s); Cmα/Cmδ/Cmq/C_Lα in 1/rad; α/θ/δ/α_stall/α_break in RADIANS; launch
+# ELEVATION in DEGREES → radians at the loader; ρ in kg/m³. dt = 1e-3 / emit_every = 16.
+name: slice22_stall
+seed: 22
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # NO toggled fidelity this slice — the lesson is a KNOB (Decision 1). `airframe` is AUTHORED
+  # FIXED at :pitch_coupled and is NOT a contrast here (it was slice 19/20's): the missile must
+  # stay COUPLED for a lift ceiling to EXIST at all — under :point_mass it applies a_ctrl by fiat
+  # on a LINEAR-aero model and there is no curve to bend. `_stall_on`'s third conjunct enforces
+  # exactly that, and it is DELIBERATE (the slice-21 `_atm_on` latent-bug precedent): `pitch_moment`
+  # is also live on the :point_mass rotational path, so without the conjunct a :point_mass wire
+  # would integrate θ/q through a BREAKING moment while pos/vel flew a linear-aero fiat accel —
+  # half the missile in one aerodynamic model and half in another.
+  #
+  # THE CROSS-FIDELITY DEPENDENCY (slice 19, the FIRST in the suite — restated, not implied):
+  # `:alpha`'s BEHAVIOUR DEPENDS ON `:airframe`. Under :point_mass it commands `:a_ctrl` by fiat;
+  # under :pitch_coupled it commands a fin δ through the aero inversion and the maneuver accel is
+  # MADE BY LIFT — which is what the stall curve now ceilings.
+  integrator: rk4
+  airframe: pitch_coupled
+  guidance: pn
+  autopilot: alpha
+
+entities:
+  # The interceptor — slice 19/20's airframe VERBATIM except for the two things this slice is
+  # about: `alpha_max` RAISED 0.2 → 0.35 (the plan-§3 inversion — the command must be able to
+  # REACH stall) and the stall block authored.
+  #
+  # alpha_stall 0.20 — THE SHIPPED CORNER. With α_max 0.35 the ceiling ratio is 0.20/0.35 = 4/7
+  #   EXACTLY, which is the headline identity the verifier pins to 1.1e-16.
+  # k_drop 0.7 — the post-stall lift slope as a FRACTION of C_Lα. ⚠ NOT a free shape parameter and
+  #   NOT cosmetic: gate-2 G2 found a 1.0 default silently moved the miss to 278.11 (a 16% shift)
+  #   with every structural test still passing. 0.7 is the value the gate-0 probe measured on, and
+  #   `_stall_params`' default MATCHES it so the two can never drift apart.
+  # k_sep 3.0 — separation drag. MANDATORY (see the header), and deliberately NOT a slider.
+  # cd_area_m2 0.0 / no k_induced — THE ISOLATION (gate-0 P5). Slice 20's spiral stays out.
+  # NO alpha_break / alpha_sat — the moment stays LINEAR. This file cannot depart, on purpose.
+  # a_max 3000 / delta_max 0.4 / k_alpha 1.0 / k_q 0.3 — slice 19's, unchanged. k_alpha/k_q are
+  #   AUTHORED CONSTANTS AND NEVER KNOBS (slice-19 gate-0 FINDING 14: α_max bounds the COMMAND
+  #   while lift uses the ACHIEVED α, so a hot loop overshoots the clamp and the ceiling LEAKS).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.225
+      guidance: {n_pn: 4.0, a_max: 3000.0, delta_max: 0.4, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.35
+        alpha_stall: 0.20
+        k_drop: 0.7
+        k_sep: 3.0
+  # The target — slice 19's geometry, and it is LOAD-BEARING. ⚠ SLICE 20's ENGAGEMENT IS INERT
+  # for this lesson (gate-0 F1: α_pk 0.085, every arm identical to the CENTIMETRE) and slice 21's
+  # is the REACH WALL. `a_lat 200` is a NARROW WINDOW measured on both sides: at 400 BOTH arms miss
+  # by >1300 m (the reach wall again), and the demand must be high enough to drive the command past
+  # α_stall in the first place. PLANAR in x–z (every y = 0) — the §1 pitch-plane out-of-plane
+  # discard would make an out-of-plane maneuver unflyable BY CONSTRUCTION and it would read as a bug.
+  - id: t1
+    kind: target
+    pos: [6000.0, 0.0, 4200.0]
+    vel: [-800.0, 0.0, 200.0]
+    target: {rcs_m2: 1.0, maneuver: {a_lat_mps2: 200.0, turn_sign: 1.0}}
+
+knobs:
+  # ONE knob, and **its own top IS the linear twin** — this is what "knob, not rung" MEANS here.
+  # Drag it to 0.35 (= α_max) and the corner leaves every reachable α: the missile flies the
+  # slice-19/20/21 lift curve and misses by 125 m. Drag it down and the ceiling falls with it,
+  # EXACTLY proportionally (the α_stall/α_max identity), until the missile can no longer make the
+  # g the geometry demands.
+  #
+  # It is read EVERY tick — `_stall_params` is rebuilt per stage inside `_integrate_coupled!`'s
+  # closure AND per tick in `decide!`'s ceiling readout — so it is live by construction, the
+  # OPPOSITE of slice-19's DEAD `speed` knob (consumed once at load, read by nothing, and a
+  # no-crash test PASSED on it). The not-a-dead-knob tripwire ships anyway.
+  #
+  # RANGE [0.15, 0.35] IS MEASURED (gate-2 G4) AND THE FLOOR IS THE BINDING CONSTRAINT. The 0.12 /
+  # 0.10 turn below was measured at gate 2 (k_sep 0); the three in-domain values are gate-3
+  # loader measurements on this file AS AUTHORED (k_sep 3.0), which is why 0.20 reads 240.90 here
+  # and 240.37 in the G1 tooth — see the header's second correction:
+  #   α_stall 0.35 → miss  125.14 m  (= the linear miss TO THE DIGIT — the parked twin)
+  #   α_stall 0.20 → miss  240.90 m  ← ships here, and the slider reads BOTH ways from it
+  #   α_stall 0.15 → miss  437.38 m  (the floor — still monotone, α_pk 0.338 under the 0.35 clamp)
+  #   α_stall 0.12 → miss  552.02 m  (the peak)
+  #   α_stall 0.10 → miss  544.54 m  ★ **IT TURNS.** Past ~0.12 the missile cannot pull AT ALL,
+  #                  flies nearly ballistically, and the miss FALLS — **the lesson REVERSES.**
+  # The floor sits at 0.15, above the measured turn. This is the THIRD occurrence of that pattern
+  # ([[ewsim-df-ellipse-sigma-monotonicity]], then slice-19's ρ) and it is why knob domains in this
+  # project are MEASURED, never assumed.
+  #
+  # NOT KNOBS, deliberately:
+  # • k_sep — measured NEARLY INERT (0.9% over its whole range, gate-2 G5). A slider that does
+  #   nothing visible would teach that separation drag does not matter, which is false and is the
+  #   opposite of why the term is mandatory.
+  # • k_drop — load-bearing for the OTHER file's lesson (G2) and a shape parameter, not a lesson.
+  # • af_alpha_max — it is the DENOMINATOR of the headline identity, so moving it moves the very
+  #   ratio the slice is pinning; and it is slice 19's causation lever telling slice 19's story.
+  # • rho — slice 19's lever (convention 9). It scales Q, which the identity shows CANCELS: it
+  #   cannot move the ceiling RATIO at all, which is the precise point of this slice.
+  # • k_alpha/k_q — the ceiling LEAKS (slice-19 FINDING 14) and the "reached by COMMAND, not by the
+  #   leak" claim in the header is exactly what would break.
+  - {target: m1, key: af_alpha_stall, min: 0.15, max: 0.35, label: "α_stall (rad) — the corner where lift PEAKS (0.35 = α_max = linear)"}

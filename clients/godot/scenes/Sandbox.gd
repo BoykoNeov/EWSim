@@ -223,6 +223,21 @@ const ALPHA_HIST_MAX := 480       # ~8 s of state frames at the emit cadence
 var _ceil_hist: Array = []        # <id>.a_max_aero — the ceiling
 var _demand_hist: Array = []      # <id>.a_demand — the PRE-clamp PN demand
 var _aero_sat_now := false        # <id>.aero_sat — the ceiling-binding tell (lights the panel)
+# SLICE-22 NONLINEAR C_L(α) / TRUE STALL — ⚠ THE BREACH INDICATOR CANNOT KEY ON `aero_sat` ANY MORE
+# (gate-2 G10, and it is BY DESIGN, not a bug to route around). Under an authored stall the ceiling
+# `a_max_aero` drops to the lift curve's INTERIOR PEAK, while `aero_sat` still keys off the **α_max
+# CLAMP** — the higher, LINEAR limit. So there is a real regime, **past the physics ceiling but with
+# the command not yet pegged**, where the demand exceeds the ceiling and `aero_sat` STAYS 0. Keying
+# the indicator on `aero_sat` would UNDER-REPORT the very breach this slice is about.
+# ⭐ GATE 3 MEASURED HOW BADLY: on the shipped wire `aero_sat` is 36.7% on the PARKED (linear) arm
+# and 37.3% on the STALL arm — it BARELY MOVES, because both arms share the same α_max clamp. The
+# discriminator is `post_stall`: **0/3793 parked vs 1461/3820 stalled.** That is the whole reason
+# this key exists.
+# PRESENCE-GATED (the core's own discipline): slices 19/20/21 ship NO `post_stall` key, so
+# `_has_post_stall` stays false there and the panel keeps keying on `aero_sat` EXACTLY as before —
+# this is additive, and those three views are untouched.
+var _post_stall_now := false      # <id>.post_stall — |α| ≥ α_stall: the AIRFRAME is past its peak
+var _has_post_stall := false      # does this wire ship the key at all? (absent on slices 19–21)
 const AERO_HIST_MAX := 480        # match the α strip's window (~8 s at the emit cadence)
 const INTEGRATOR_RUNGS := ["rk4", "euler"]   # slice-8 integrator cycler (the shared fidelity button)
 const AUTOPILOT_RUNGS := ["ideal", "pid"]    # slice-9 autopilot cycler (the ONE source of truth for the rungs)
@@ -1450,6 +1465,10 @@ func _spatial_on_state(obj: Dictionary) -> void:
 		_ceil_hist.append(float(_telemetry[_missile_id + ".a_max_aero"]))
 		_demand_hist.append(float(_telemetry.get(_missile_id + ".a_demand", 0.0)))
 		_aero_sat_now = float(_telemetry.get(_missile_id + ".aero_sat", 0.0)) > 0.5
+		# Slice 22: sample the stall tell alongside it. PRESENCE, not value, is the gate — a slice-19/20/21
+		# wire never ships the key, so `_has_post_stall` stays false and nothing below it changes.
+		_has_post_stall = _telemetry.has(_missile_id + ".post_stall")
+		_post_stall_now = _has_post_stall and float(_telemetry[_missile_id + ".post_stall"]) > 0.5
 		if _ceil_hist.size() > AERO_HIST_MAX:
 			_ceil_hist.pop_front()
 			_demand_hist.pop_front()
@@ -1593,6 +1612,7 @@ func _on_reset_pressed() -> void:
 	_ceil_hist.clear()                    # slice-19: the g-ceiling/demand headline restarts too
 	_demand_hist.clear()
 	_aero_sat_now = false
+	_post_stall_now = false               # slice-22: the stall tell restarts with the re-launch too
 	_t3d_trail_pts.clear()                # slice-18: the 3-D target trail restarts with the re-launch
 	# `reset` reloads the YAML server-side → propagation reverts to the scenario default,
 	# but the server sends no new handshake. Resync the local fidelity so the badge/button
@@ -2130,14 +2150,23 @@ func _draw_aero_strip() -> void:
 	# agree exactly; the deliberate call (gate 3) is to keep the wire at 6 keys and LABEL the plot. The
 	# FLAG is the ground truth — which is why the verifier asserts `aero_sat` and never a hand-rolled
 	# `a_demand > a_max_aero`. All values are the core's own scalars; nothing is recomputed here.
+	#
+	# ⚠ SLICE 22 CHANGED WHICH FLAG LIGHTS THIS PANEL, and the reason is in the state-var comment
+	# above (gate-2 G10): under a stall the ceiling drops to the curve's INTERIOR PEAK while
+	# `aero_sat` still keys off the α_max CLAMP, so `aero_sat` alone UNDER-REPORTS the breach. On a
+	# stall wire the tell is `post_stall` (the airframe is past its lift peak — 0 vs 1461 ticks
+	# across the arms, where `aero_sat` moved only 36.7% → 37.3%). PRESENCE-GATED: slices 19/20/21
+	# ship no `post_stall` key, so `_breach` collapses to `_aero_sat_now` and they are UNCHANGED.
+	var _breach := _post_stall_now if _has_post_stall else _aero_sat_now
 	var vp := get_viewport_rect().size
 	var rect := Rect2(vp.x - 314.0, vp.y - MARGIN - 246.0, 300.0, 104.0)
 	draw_rect(rect, COL_PANEL_BG)
 	# the border LIGHTS while the aero ceiling is binding — the at-a-glance tell
-	draw_rect(rect, Color(1.0, 0.35, 0.3, 0.95) if _aero_sat_now else COL_PANEL_BORDER, false,
-		2.0 if _aero_sat_now else 1.0)
+	draw_rect(rect, Color(1.0, 0.35, 0.3, 0.95) if _breach else COL_PANEL_BORDER, false,
+		2.0 if _breach else 1.0)
 	draw_string(_font, rect.position + Vector2(6, -5),
-		"g-ceiling vs demand (m/s²) — crossing = the air can't give it" ,
+		("g-ceiling vs demand (m/s²) — ceiling = the lift curve's PEAK" if _has_post_stall
+			else "g-ceiling vs demand (m/s²) — crossing = the air can't give it"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.55))
 	# Autoscale on the CEILING (×2.6), not the demand: the pre-clamp demand spikes to ~1e4 in the endgame
 	# and would squash the ceiling to a flat line at the axis. The demand trace is CLAMPED to the top of
@@ -2167,10 +2196,14 @@ func _draw_aero_strip() -> void:
 	draw_string(_font, rect.position + Vector2(6, 13), "%.0f" % m, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1, 1, 1, 0.4))
 	var ceil_now: float = float(_ceil_hist[-1])
 	draw_string(_font, Vector2(rect.position.x + 6, rect.end.y - 5),
-		"a_max_aero %.0f  (illustrative: flag keys off ⟂v projection)" % ceil_now,
+		("a_max_aero %.0f  (= C_L PEAK / m — illustrative, see HUD)" if _has_post_stall
+			else "a_max_aero %.0f  (illustrative: flag keys off ⟂v projection)") % ceil_now,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.35, 0.9, 1.0, 0.75))
-	if _aero_sat_now:
-		draw_string(_font, Vector2(rect.end.x - 92, rect.position.y + 13), "AERO SAT",
+	if _breach:
+		# The label NAMES which flag lit, so the panel can never be read as claiming the other one.
+		# "POST-STALL" = |α| past the lift peak (slice 22); "AERO SAT" = the α_max clamp bound (19–21).
+		draw_string(_font, Vector2(rect.end.x - 92, rect.position.y + 13),
+			"POST-STALL" if _has_post_stall else "AERO SAT",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.4, 0.32, 0.95))
 
 # --- CFAR range-power view (slice 3) ------------------------------------------
