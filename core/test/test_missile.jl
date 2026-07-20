@@ -3096,6 +3096,39 @@ end
         @test lin.ω_ceiled == 0
     end
 
+    @testset "⭐ THE STAGE-θ GOLDEN — the ONLY thing that catches an entry-θ read in the STALL arm" begin
+        # THE SLICE-17 STAGE-θ TRAP, THIRD OCCURRENCE (17 = θ, 21 = z, 22 = θ again in a NEW
+        # closure). ⚠ **SLICE 17'S GOLDEN DOES NOT COVER THIS ONE** (advisor): the stall arm is a
+        # SEPARATE CLOSURE BODY, so slice 17's golden — which exercises the `curve === nothing`
+        # else-arm — never touches these four terms. And this closure has MORE stage-dependent
+        # terms than any before it: lift, induced drag, the moment, AND the brand-new separation
+        # drag, all functions of the stage α = TH − γ.
+        #
+        # Slice 17's own finding is why nothing else can catch it: an entry-θ read compiles clean,
+        # is only O(dt²) off per step, and is invisible to steady-state tests. Everything else in
+        # this testset IS steady-state (miss, ceiling, counts), so relying on the `240.37 ± 0.01`
+        # tooth would be luck-of-the-tolerance rather than design.
+        #
+        # Generated from the LIVE `tick!` path at 5000 ticks (5 s — well post-stall: |α| = 0.259 >
+        # α_stall, `post_stall` lit and `a_sep` non-zero, so the new term is genuinely loaded).
+        # THE MARGIN IS THE TOOTH (convention 11 — an atol that cannot fail is a tautology): the
+        # entry-θ variant, MEASURED at this exact tick by patching the closure and re-running, sits
+        #   Δpos_x = 4.321e-3 m, Δpos_z = 5.177e-2 m, Δθ = 2.434e-6 rad, Δq = 3.948e-5 rad/s
+        # away — so atol 1e-6 on position catches it with a ~5e4× margin and atol 1e-9 on θ with
+        # ~2400×. If someone "simplifies" the stage read to the entry θ, these fail loudly.
+        w, s = stall_world(alpha_stall = 0.20, K = 0.05)
+        for _ in 1:5000; tick!(w, s, dt); empty!(w.events); end
+        m = w.entities[:m1]
+        @test isapprox(m.pos[1], 3119.185660380272;            atol = 1e-6)
+        @test isapprox(m.pos[3], 3472.784157867183;            atol = 1e-6)
+        @test isapprox(m.comp[:pitch_theta], -0.645537288442;  atol = 1e-9)
+        @test isapprox(m.comp[:pitch_q],     -0.400928895281;  atol = 1e-9)
+        # the golden point is only a golden for THIS slice if the stall physics is actually live
+        # there — pin that too, so a future config change cannot quietly move it below the corner
+        @test w.env[:telemetry]["m1.post_stall"] == 1.0
+        @test w.env[:telemetry]["m1.a_sep"] > 0.0
+    end
+
     @testset "loader — the stall keys are PRESENCE-gated, validated, and knob-addressable" begin
         mktempdir() do dir
             AF = "{inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0, cmq: -150.0, cla: 20.0, " *

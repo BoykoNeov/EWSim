@@ -2,7 +2,7 @@
 
 **Status: GATE 0 COMPLETE (2026-07-19) — 11 findings, TWO USER DECISIONS TAKEN.
 GATE 1 COMPLETE (2026-07-20, `aero_curve.jl`, suite 3182 → 4015).
-GATE 2 COMPLETE (2026-07-20, the wiring, suite 4015 → 4174) — 8 findings, THREE of which
+GATE 2 COMPLETE (2026-07-20, the wiring, suite 4015 → 4180) — 10 findings, FIVE of which
 CHANGE WHAT GATE 3 CAN SHIP. Gate 3 pending.** The aero arc's nearest and most load-bearing
 named deferral — carried explicitly by slices 19, 20 and 21, and the one that closes the LEAK
 bounding two shipped knobs.
@@ -11,7 +11,7 @@ bounding two shipped knobs.
 
 ## ⭐ GATE 2 — WHAT THE WIRING SETTLED (2026-07-20)
 
-Probe: `M:\claud_projects\temp\slice22_gate2\` (`probe.jl`, `probe2.jl`). Shipped in
+Probe: `M:\claud_projects\temp\slice22_gate2\` (`probe.jl`, `probe2.jl`, `probe3.jl`, `golden.jl`). Shipped in
 `airframe.jl` (the `_nl` siblings), `missile.jl` (`_stall_on`/`_stall_params` + the leading stall
 closure + the readouts), `scenario.jl` (load validation), `aero_curve.jl` (`moment_slope`).
 
@@ -72,6 +72,34 @@ off-states (`curve === nothing` AND `α_max < α_stall`) through the verbatim li
 (G8) `separation_drag_accel` fell through with `C_Dsep = 0.0` and returned `Vec3(-0.0,-0.0,-0.0)`
 below the stall, not the exact zero it documented — the `-0.0` trap, caught on the first run by
 its own tooth. Fixed with an early exact-zero return. **Neither was reachable by an `≈` test.**
+
+**⭐ G9 — THE G2/G3 TENSION IS RESOLVED, AND RESOLVING IT SHOWS PART OF F10's CLIFF WAS THE
+δ_max CAP.** The cliff needs `k_drop ≈ 1.0`; that is exactly where `defl_sat` binds. Sweeping
+`δ_max` at `k_drop` 1.0 / α_break 0.28 / α_sat 0.60:
+
+| δ_max | α_pk @ Cma_post 4 / 6 / 8 | defl_sat @ 4 / 6 / 8 |
+|---|---|---|
+| 0.4 | 0.642 / 1.580 / **2.926** | 7 / 318 / 387 |
+| 0.6 | 0.641 / 0.970 / 1.677 | 3 / 7 / 310 |
+| 0.8 | 0.641 / 0.970 / 1.229 | 0 / 0 / 5 |
+| **1.0** | **0.641 / 0.970 / 1.229** | **0 / 0 / 0** |
+
+⇒ **`δ_max = 1.0` gives the held-vs-lost progression with `defl_sat == 0` everywhere** — the
+departure headline CAN ship uncontaminated, and gate 3 should author that. ⚠ But note what the
+table also says: **α_pk at `Cma_post` 8 FALLS 2.93 → 1.23 as the deflection cap is relieved**, so
+the δ_max binding was AMPLIFYING the divergence, not merely riding along. **The uncontaminated
+cliff is REAL but MILDER than F10's 0.31 → 2.78** — that figure was measured with δ_max binding
+(slice-19 FINDING 2's contamination, present in gate 0's own numbers). Do not quote 2.7779 as the
+clean departure α; the honest progression is **0.64 → 0.97 → 1.23**.
+
+**⚠ G10 — SLICE 19's `aero_sat ⟺ demand > a_max_aero` EQUIVALENCE IS BROKEN UNDER STALL, BY
+DESIGN (advisor).** `a_max_aero` now drops to the INTERIOR PEAK while `aero_sat` still keys off
+the `α_max` clamp — the higher, linear ceiling. So there is a real regime, **past the physics
+ceiling but with the command not yet pegged**, where the demand exceeds `a_max_aero` and
+`aero_sat` stays 0. That is precisely what `post_stall` exists for. ⇒ **GATE-3 CLIENT NOTE: the
+aero strip's breach indicator must key on `post_stall`, NOT on `aero_sat`**, or it will
+under-report the very breach the slice is about. (Slice 19's own note that the strip is
+ILLUSTRATIVE still applies and now has a second reason.)
 
 ### THE TWO STRUCTURAL DECISIONS TAKEN AT GATE 2
 
