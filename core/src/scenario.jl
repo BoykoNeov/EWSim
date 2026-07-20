@@ -517,6 +517,48 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # C_Lα: validate FINITE, NOT sign — a crossing/negative lift slope is a lesson-adjacent
             # knob (mirrors `cma`); 0 ⇒ decoupled (= slice 16). Only :pitch_coupled reads it.
             isfinite(comp[:af_cla])    || error("missile '$id': airframe.cla must be finite (got $(comp[:af_cla]))")
+            # SLICE 23 — THE 6-DOF SUBSTRATE's extra aero/inertia constants. PRESENCE-GATED per key
+            # (the slice-20 `k_induced` / slice-21 `scale_height_m` precedent): slices 16–22 carry
+            # airframe blocks, so gating on the block would grow these on every one of them; only a
+            # slice-23 YAML authors them. All four ALSO default at the CONSUMER (`_integrate_6dof!` /
+            # the `:six_dof` decide arm read `get(c, :af_…, default)`), because `:airframe` is
+            # live-settable with NO set_fidelity guard (4c): a slice-19..22 scenario can be toggled
+            # to `:six_dof` at runtime without ever having authored these, and a live toggle can't
+            # crash a tick (convention 5). Load validation is the authored-input half of that split.
+            if haskey(ab, "cy_beta")
+                # C_Yβ (yaw side-force slope). FINITE not sign-guarded — like `cla`, a crossing/
+                # negative slope is lesson-adjacent (0 ⇒ no yaw authority = pitch-only). Default (at
+                # the consumer) is `cla` — a symmetric cruciform (§1 named approximation).
+                comp[:af_cy_beta] = _f64(ab["cy_beta"])
+                isfinite(comp[:af_cy_beta]) ||
+                    error("missile '$id': airframe.cy_beta must be finite (got $(comp[:af_cy_beta]))")
+            end
+            if haskey(ab, "inertia_roll_kgm2")
+                comp[:af_I_roll] = _f64(ab["inertia_roll_kgm2"])          # I_xx (roll)
+                comp[:af_I_roll] > 0 ||
+                    error("missile '$id': airframe.inertia_roll_kgm2 must be > 0 (got $(comp[:af_I_roll]))")
+                isfinite(comp[:af_I_roll]) ||
+                    error("missile '$id': airframe.inertia_roll_kgm2 must be finite (got $(comp[:af_I_roll]))")
+            end
+            if haskey(ab, "inertia_yaw_kgm2")
+                comp[:af_I_zz] = _f64(ab["inertia_yaw_kgm2"])             # I_zz (yaw); default I_yy by symmetry
+                comp[:af_I_zz] > 0 ||
+                    error("missile '$id': airframe.inertia_yaw_kgm2 must be > 0 (got $(comp[:af_I_zz]))")
+                isfinite(comp[:af_I_zz]) ||
+                    error("missile '$id': airframe.inertia_yaw_kgm2 must be finite (got $(comp[:af_I_zz]))")
+            end
+            if haskey(ab, "c_roll")
+                # The roll damper coefficient (N·m per rad/s). ≥ 0: a negative damper is ANTI-damping
+                # that spins the airframe up — unphysical for a passive STT damper, no lesson-adjacent
+                # branch (the `k_induced`/`k_sep` sign-guard shape). STT holds `p ≈ 0`; the roll
+                # COMMAND and its finite bandwidth are slice 24's lesson.
+                comp[:af_c_roll] = _f64(ab["c_roll"])
+                comp[:af_c_roll] ≥ 0 ||
+                    error("missile '$id': airframe.c_roll must be ≥ 0 — a negative roll damper is " *
+                          "anti-damping that spins the airframe up (got $(comp[:af_c_roll]))")
+                isfinite(comp[:af_c_roll]) ||
+                    error("missile '$id': airframe.c_roll must be finite (got $(comp[:af_c_roll]))")
+            end
             # SLICE 20 — INDUCED DRAG (`C_Di = K·C_L²`). PRESENCE-GATED on the KEY, not on the
             # airframe BLOCK (the slice-18 `alt_hold_m` precedent): slices 16/17/19 ALL carry
             # airframe blocks, so gating on the block would silently grow the key on every one of

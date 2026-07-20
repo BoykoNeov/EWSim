@@ -1,7 +1,9 @@
 # Slice 23 — 6-DOF SUBSTRATE + SKID-TO-TURN: the out-of-plane engagement (§11 Tier-A)
 
-**Status: GATE 0 COMPLETE (2026-07-20) — findings below; plan HELD on P4/P6/route, one mild
-refutation (P1b). Ready for gate 1.** The FIRST slice of the
+**Status: GATES 0–2 COMPLETE (2026-07-20). Gate 0 findings below; plan HELD on P4/P6/route, one
+mild refutation (P1b). Gate 1 = airframe3d.jl (the frames.jl-reusing pure lib, 27 teeth). Gate 2
+= the wiring (below), 4262 suite green, slices 1–22 byte-identical. Ready for gate 3 (the four
+proofs).** The FIRST slice of the
 bank-to-turn / 3-D arc — the 3-D quaternion+ω superset where "the pitch-plane out-of-plane
 discard finally dies" (HANDOFF §11, and the sharpest remaining approximation named at the close of
 slice 22). Scoped STT-first as a **2-slice arc** (user decision, 2026-07-20, advisor-recommended):
@@ -318,6 +320,69 @@ byte-identical. Enforced at gate 2.
 - **Scenario:** author a low ρ (or large Y) so the STT yaw authority is VISIBLY exercised in the shot.
 
 ---
+
+## Gate 2 — AS-BUILT (run 2026-07-20; +55 tests, 4262 suite green, slices 1–22 byte-identical)
+
+The wiring landed exactly as the gate-0 findings scoped it. Files touched: `missile.jl` (the three
+hooks), `scenario.jl` (loader), `test_missile.jl` (+55). No shared symbol on the radar/detection
+path; the `:pitch_coupled`/`:point_mass` arithmetic is TEXTUALLY VERBATIM.
+
+- **`_integrate_6dof!`** — the `_integrate_coupled!` sibling, reached by a NEW `elseif` in
+  `integrate!` gated `haskey(:af_cma) && :airframe === :six_dof` (the `if`/`else` around it
+  unchanged ⇒ prior scenarios byte-identical). Mints PARALLEL comp keys `:att_q` (Quat) /
+  `:omega_body` (Vec3), never `:pitch_theta`/`:pitch_q`. ONE closure (lift is drag-free this slice —
+  no induced/separation/ρ(z) arm), the joint `f(pos,vel,q,ω)` reading the STAGE q/ω (the slice-17
+  stage-θ / slice-21 stage-z discipline), stepped by `rk4_6dof`. The stage `P` is threaded and read
+  by nothing — the reserved ρ(z)-on-6-DOF seam.
+- **The `:alpha` decide arm** gained an `alpha_6dof` case (inserted `elseif` before the reference
+  arm): `steering_command` (2-plane, resultant clamp) → `alpha_autopilot_delta` per axis →
+  `(:delta_cmd, :delta_yaw_cmd)`. The achieved α/β/ω come from the POST-integrate `:att_q`/
+  `:omega_body`; `defl_sat = defl_p || defl_y` (BOTH fins — the isolation tell); `:a_ctrl` is NOT
+  persisted (`(alpha_coupled || alpha_6dof) || (c[:a_ctrl] = a_ctrl)` — the FINDING-1 trap, 6-DOF).
+  Yaw command readouts (`beta_cmd`, `delta_yaw`) ship via a SEPARATE `sixdof_diag !== nothing` block
+  so a `:pitch_coupled` wire never grows a yaw key.
+- **`build_env!`** gained a SEPARATE `haskey(:att_q)` block (the pitch block's 3-D twin, mutually
+  exclusive on a from-the-start scenario): `pos_y`, `alpha`, `beta`, `omega_{p,q,r}`, the attitude
+  quaternion as 4 SCALARS (`att_q{w,x,y,z}` — convention 13, no Array), `a_lift`, `turn_radius_m`.
+- **Loader** (`scenario.jl`): `cy_beta`/`inertia_roll_kgm2`/`inertia_yaw_kgm2`/`c_roll` PRESENCE-gated
+  per key (slices 16–22 don't grow them) AND consumer-defaulted (`get(c, :af_…, default)`) — because
+  `:airframe` is live-settable (4c), a slice-19..22 scenario can be toggled to `:six_dof` at runtime
+  having authored none of them. Signs validated (I>0, c_roll≥0, cy_beta finite).
+
+### Gate-2 measured numbers (from the LIVE tick! path — temp/slice23_g2_*.jl)
+
+- ⭐ **THE REDUCTION IS TIGHT AND SHRINKS WITH dt (the wiring-bug detector, advisor).** In-plane
+  6-DOF vs scalar `_integrate_coupled!` through the FULL closed tick loop (maneuvering target, ρ₀,
+  3 s): **4.46e-11 m (dt=2e-3) → 2.14e-12 m (dt=1e-3), a ~20.8× fall** — it SHRINKS as dt halves, so
+  the divergence is legitimate scheme difference (quaternion-RK4 vs scalar-θ-RK4), NOT a constant
+  sign/stage/init offset (which would NOT shrink). Below dt=1e-3 it hits the FP-noise floor (~1e-12).
+  ⚠ NOTE the reduction is 0.0 for a STATIC low-ρ target (α stays ~0, the schemes coincide) — the
+  golden MUST use a maneuvering/full-ρ engagement that actually exercises the difference.
+- **P1a STRUCTURAL INVARIANT ON THE WIRE — the #1-sign-trap gate, GREEN AT THE FP FLOOR.** An
+  in-plane 6-DOF run keeps `max|pos_y| = max|omega_p| = max|omega_r| = max|beta| = EXACTLY 0.0` over
+  6000 ticks. Nothing leaks out of plane ⇒ the body↔inertial `rotate` direction and the per-axis ω
+  signs are wired right (the pitch-negated/yaw-not asymmetry from gate 0).
+- ⭐ **THE LESSON (Y=2000 cross-range, ρ=0.3, static aero-free target).** `:pitch_coupled` misses
+  **2002.37 m** with `max|pos_y| = 0.0 EXACTLY` (the y-command FULLY discarded — it never leaves the
+  x-z plane, so the miss ≈ Y is a clean first-CPA); `:six_dof` intercepts to **0.230 m** (pos_y
+  reaches 2000.19 — it TURNED to the cross-range target), β genuinely exercised (β_cmd peak ~0.30).
+  **~8700× separation.** The discard died.
+- **DEGENERATES (convention 5, all confirmed):** INERT without params — a bare `:six_dof` missile is
+  bit-for-bit the `:point_mass` twin and mints NO `:att_q`. LIVE-TOGGLE crash-safe — a scenario with
+  airframe params but NONE of the 6-DOF constants runs on `:six_dof` via consumer defaults, all
+  finite. The `:a_ctrl` TRIPWIRE holds (pure 6-DOF never grows the key; grows BOTH δ keys).
+  Determinism: a 6-DOF missile replays bit-identical (class 4c, no RNG).
+
+### Carried into gate 3
+- Client needs a 3-D view — REUSE slice 18's terrain SubViewport Node3D world (camera/mesh), NOT the
+  2-D side-on airframe view. The `att_q{w,x,y,z}` scalars drive the 3-D nose; `pos_y` is the
+  out-of-plane axis. The `:airframe` cycler is now 3-rung — value-guard the 3-D-airframe view vs the
+  2-D airframe view (slice 16) vs slice-18's terrain 3-D view (the multi-view discriminator).
+- The showcase scenario authors ρ=0.3, a static target at +Y (Y≈2000) — low ρ so the yaw authority
+  is VISIBLY exercised in the shot (gate-0 P2b / gate-2 lesson numbers above).
+- Watch-items: `%.2e` is not a GDScript specifier (slice-21/22 silent-`%`-failure); frame-sampling
+  is ASYMMETRIC (a HIT samples coarsely — the six_dof arm; a MISS faithfully — the pitch arm);
+  magic-multiple teeth pin against MEASURED values.
 
 ## Gates 1–3 (sketch — firmed by gate 0's findings above)
 

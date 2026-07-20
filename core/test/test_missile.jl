@@ -3215,3 +3215,295 @@ end
         end
     end
 end
+
+# --- gate 2: the 6-DOF SUBSTRATE + SKID-TO-TURN wired (slice 23, §11 Tier A) -------------------
+# The 3-D superset. `:airframe === :six_dof` reaches `_integrate_6dof!` (the `_integrate_coupled!`
+# sibling): `att` is a GENUINE quaternion integrated from a body-rate vector, lift is 2-plane
+# (α pitch + β yaw), and the `:alpha` autopilot's `:six_dof` arm inverts the FULL 3-D guidance
+# command onto both body ⟂-v axes — the projection-and-throw-away DIES. THE LESSON: against a
+# target OFF the x-z plane the `:pitch_coupled` plant discards the y-command and misses ≈ Y (it
+# never leaves x-z), while `:six_dof` STT turns to it and intercepts. Class 4c (no RNG — truth-fed
+# PN, no seeker ⇒ "draw-count invariance" is VACUOUS). Slices 8–22 are byte-identical (they never
+# set `:six_dof`, never mint `:att_q`). Goldens from the LIVE tick! path (temp/slice23_g2_*.jl).
+@testset "6-DOF substrate + skid-to-turn wired (slice 23, :airframe === :six_dof)" begin
+    dt = 1.0e-3
+    n3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # THE OUT-OF-PLANE ENGAGEMENT (gate-0 route (a)): the slice-19 airframe, an `:alpha`+`:pn`
+    # missile launched IN the x-z plane, chasing a STATIC aero-free target at cross-range +Y. A low
+    # authored ρ (0.3) exercises the yaw authority VISIBLY (gate-0 P2b). The 6-DOF-only constants
+    # (cy_beta, I_roll, I_zz, c_roll) are authored here; they ALSO default at the consumer (the
+    # live-toggle path below proves that). `af_delta = 0` ⇒ tick 1 (integrates before the first
+    # decide! writes the δ seam) injects no transient.
+    function owp_world(; airframe = :six_dof, Y = 2000.0, rho = 0.3, alpha_max = 0.3,
+                         guided = true, af6 = true)
+        w = World(seed = 23, fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                            :autopilot => :alpha, :airframe => airframe))
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => rho,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => alpha_max,
+                                :n_pn => 4.0, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt)
+        if af6                                             # the 6-DOF constants (else: consumer defaults)
+            comp[:af_cy_beta] = 20.0; comp[:af_I_roll] = 2.0
+            comp[:af_I_zz]    = 20.0; comp[:af_c_roll]  = 50.0
+        end
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, Y, 4200.0),
+                                 vel = zero(Vec3), comp = Dict{Symbol,Any}())
+        subs = guided ? Subsystem[BallisticMissile(:m1), Autopilot(:m1), ConstantVelocity(:t1)] :
+                        Subsystem[BallisticMissile(:m1), ConstantVelocity(:t1)]
+        return w, subs
+    end
+
+    # First-CPA over the FIRST DESCENDING band ([[ewsim-missile-verifier-sampling]]); the miss IS
+    # the cross-range for the discard arm (a static x-z-plane target ⇒ min approach ≥ Y).
+    function fly(; T = 25.0, kw...)
+        w, s = owp_world(; kw...)
+        rmin, prev, closing = Inf, Inf, true
+        maxposy = 0.0; β_peak = 0.0
+        for _ in 1:round(Int, T / dt)
+            tick!(w, s, dt); empty!(w.events)
+            m = w.entities[:m1]
+            r = n3(w.entities[:t1].pos - m.pos)
+            closing && r > prev && (closing = false)
+            closing && (rmin = min(rmin, r)); prev = r
+            maxposy = max(maxposy, abs(m.pos[2]))
+            β_peak  = max(β_peak, abs(get(w.env[:telemetry], "m1.beta_cmd", 0.0)))
+            !closing && break
+        end
+        return (miss = rmin, maxposy = maxposy, β_peak = β_peak, w = w)
+    end
+
+    # THE REDUCTION HARNESS — IN-PLANE (Y = 0), full-ρ, a MANEUVERING target so α stays nonzero and
+    # the two integration SCHEMES (quaternion-RK4 vs scalar-θ-RK4) are actually EXERCISED (a static
+    # low-ρ target barely maneuvers ⇒ the schemes coincide to 0.0, which cannot verify the shrink).
+    function inplane_world(airframe, dtx)
+        w = World(seed = 23, fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                            :autopilot => :alpha, :airframe => airframe))
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => 0.2, :af_cy_beta => 20.0, :af_I_roll => 2.0,
+                                :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => 4.0, :a_max => 3000.0, :delta_max => 0.4,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dtx)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 0.0, 4200.0),
+                                 vel = Vec3(-800.0, 0.0, 200.0),
+                                 comp = Dict{Symbol,Any}(:a_lat_mps2 => 200.0, :turn_sign => 1.0))
+        subs = Subsystem[BallisticMissile(:m1), Autopilot(:m1), ManeuveringTarget(:t1)]
+        return w, subs
+    end
+    function reduction_div(dtx, T)
+        wc, sc = inplane_world(:pitch_coupled, dtx)
+        w6, s6 = inplane_world(:six_dof, dtx)
+        d = 0.0
+        for _ in 1:round(Int, T / dtx)
+            tick!(wc, sc, dtx); empty!(wc.events)
+            tick!(w6, s6, dtx); empty!(w6.events)
+            d = max(d, n3(wc.entities[:m1].pos - w6.entities[:m1].pos))
+        end
+        return d
+    end
+
+    @testset "transient GOLDEN — the closed-loop 6-DOF wiring (the plausible-but-wrong catch)" begin
+        # Cheap insurance against a subtly-wrong-but-plausible wiring (a swapped ω sign, an
+        # entry-vs-stage quaternion read, a pitch/yaw moment-negation slip — airframe3d.jl's #1-sign-
+        # trap surface). 2000 ticks into the closed out-of-plane loop, pins the FULL joint state.
+        w, s = owp_world()
+        for _ in 1:2000; tick!(w, s, dt); empty!(w.events); end
+        m = w.entities[:m1]
+        @test isapprox(m.pos[1], 1361.7751717943997;  atol = 1e-6)
+        @test isapprox(m.pos[2],  121.96186302912966; atol = 1e-6)   # off the x-z plane (the discard died)
+        @test isapprox(m.pos[3], 3270.0786453445403;  atol = 1e-6)
+        @test isapprox(m.comp[:att_q][1],  0.9764647214745897;    atol = 1e-9)
+        @test isapprox(m.comp[:att_q][3], -0.09727277259587536;   atol = 1e-9)
+        @test isapprox(m.comp[:att_q][4],  0.19147642968436993;   atol = 1e-9)
+        @test isapprox(m.comp[:omega_body][3], 0.057752395670428475; atol = 1e-9)  # yaw rate
+        @test isapprox(m.comp[:delta_cmd],     0.004740346051662927;  atol = 1e-9)
+        @test isapprox(m.comp[:delta_yaw_cmd], 0.06624098196440556;   atol = 1e-9)  # the 2nd fin channel
+    end
+
+    @testset "THE REDUCTION — in-plane 6-DOF ≈ scalar pitch_coupled, and it SHRINKS with dt" begin
+        # The reduction is an atol golden, NOT `==` (plan §1): quaternion-RK4 and scalar-θ-RK4 are
+        # DIFFERENT SCHEMES for the same ODE. THE WIRING-BUG DETECTOR (advisor): the divergence must
+        # SHRINK as dt falls. A floor that does NOT shrink is a constant sign/stage/init offset — a
+        # bug — not legitimate scheme difference. Measured: 4.46e-11 (dt=2e-3) → 2.14e-12 (dt=1e-3).
+        d1 = reduction_div(1.0e-3, 3.0)
+        d2 = reduction_div(2.0e-3, 3.0)
+        @test d1 < 1.0e-8                          # the reduction holds TIGHT over a full 3 s engagement
+        @test d2 / d1 > 5.0                        # …and shrinks with dt (measured ~20.8×) ⇒ correct wiring
+    end
+
+    @testset "P1a STRUCTURAL INVARIANT — an in-plane 6-DOF run keeps out-of-plane states at 0" begin
+        # The #1 SIGN TRAP's fifth-occurrence gate (gate-0 P1a): with v_y = 0, target in-plane, roll
+        # = 0, the out-of-plane states (roll rate p, yaw rate r, sideslip β, cross-range y) can only
+        # move if a body↔inertial `rotate` direction or an ω sign is wrong. Gate-0 measured them at
+        # EXACTLY 0.0; the wired path must too.
+        w, s = owp_world(Y = 0.0)
+        mp = 0.0; mr = 0.0; mβ = 0.0; my = 0.0
+        for _ in 1:6000
+            tick!(w, s, dt); empty!(w.events)
+            tel = w.env[:telemetry]
+            mp = max(mp, abs(get(tel, "m1.omega_p", 0.0)))
+            mr = max(mr, abs(get(tel, "m1.omega_r", 0.0)))
+            mβ = max(mβ, abs(get(tel, "m1.beta", 0.0)))
+            my = max(my, abs(w.entities[:m1].pos[2]))
+        end
+        @test mp == 0.0 && mr == 0.0 && mβ == 0.0 && my == 0.0
+    end
+
+    @testset "THE LESSON — :pitch_coupled MISSES ≈ Y (discard), :six_dof HITS (the discard dies)" begin
+        # The SAME PN law, the SAME target off the x-z plane — only the plant differs. `:pitch_coupled`
+        # projects the command onto n̂ = (−sinγ,0,cosγ) and THROWS AWAY the y-part: it never leaves the
+        # x-z plane (max|pos_y| = 0 EXACTLY ⇒ miss ≥ Y, a clean first-CPA), so miss ≈ Y. `:six_dof`
+        # keeps the full 3-D command and steers in two body planes to intercept. Pinned BOTH ways.
+        c = fly(airframe = :pitch_coupled)
+        s = fly(airframe = :six_dof)
+        @test c.maxposy == 0.0                                    # the y-command is FULLY discarded
+        @test isapprox(c.miss, 2002.366251115639; atol = 1e-6)   # ≈ Y (the out-of-plane miss)
+        @test isapprox(s.miss, 0.23039260577585177; atol = 1e-6) # the STT intercept
+        @test s.maxposy > 1990.0                                  # …it TURNED to the cross-range target
+        @test c.miss / s.miss > 1000.0                            # ~8700× separation
+        @test s.β_peak > 0.1                                      # the yaw channel was genuinely exercised
+    end
+
+    @testset "determinism — a 6-DOF missile replays bit-identical (class 4c, no RNG)" begin
+        function trace()
+            w, s = owp_world()
+            ps = Vec3[]
+            for _ in 1:1500; tick!(w, s, dt); empty!(w.events); push!(ps, w.entities[:m1].pos); end
+            ps
+        end
+        @test trace() == trace()                                  # bit-for-bit (reinterpret-equal)
+    end
+
+    @testset "THE :a_ctrl TRIPWIRE — a pure 6-DOF run NEVER grows the key (finding 1, 6-DOF)" begin
+        # The 6-DOF plant makes its accel from 2-plane LIFT; `_integrate_6dof!` reads the δ seam, NEVER
+        # `:a_ctrl`. Persisting it would rebuild the point-mass plant in a costume (the false-fidelity
+        # trap). It flies TWO fin channels, so BOTH δ keys must exist and `:a_ctrl` must not.
+        s = fly(airframe = :six_dof)
+        @test !haskey(s.w.entities[:m1].comp, :a_ctrl)
+        @test haskey(s.w.entities[:m1].comp, :delta_cmd)
+        @test haskey(s.w.entities[:m1].comp, :delta_yaw_cmd)     # the 2nd channel
+    end
+
+    @testset "INERT without airframe params (P8) — bare :six_dof ≡ :point_mass byte-identical" begin
+        # `_integrate_6dof!` is gated on `haskey(:af_cma)`, so a bare missile under `:six_dof` falls to
+        # the point-mass path, mints NO `:att_q`/`:omega_body`, and is bit-for-bit the `:point_mass`
+        # twin (never a KeyError). The params-presence gate, the `_integrate_coupled!` precedent.
+        function bare(airframe)
+            w = World(seed = 1, fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :airframe => airframe))
+            w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 1000.0),
+                                     vel = Vec3(300.0, 0.0, 100.0),
+                                     comp = Dict{Symbol,Any}(:mass_kg => 100.0, :cd_area_m2 => 0.02, :rho => 1.225))
+            s = Subsystem[BallisticMissile(:m1)]
+            for _ in 1:500; tick!(w, s, dt); empty!(w.events); end
+            w.entities[:m1]
+        end
+        b6 = bare(:six_dof); bp = bare(:point_mass)
+        @test b6.pos == bp.pos && b6.vel == bp.vel               # bit-identical to the point-mass twin
+        @test !haskey(b6.comp, :att_q) && !haskey(b6.comp, :omega_body)  # no 3-D state minted
+    end
+
+    @testset "LIVE-TOGGLE crash safety — a scenario w/o 6-DOF params toggled to :six_dof mid-run" begin
+        # `:airframe` is live-settable with NO set_fidelity guard (4c), so a slice-19..22 scenario that
+        # never authored cy_beta/I_roll/I_zz/c_roll can be flipped to `:six_dof` at runtime. The
+        # consumer defaults (`get(c, :af_…, default)`) must keep the tick crash-free (convention 5).
+        w, s = owp_world(af6 = false)                            # airframe params present, 6-DOF ones ABSENT
+        for _ in 1:500; tick!(w, s, dt); empty!(w.events); end   # runs already on :six_dof via defaults
+        m = w.entities[:m1]
+        @test all(isfinite, m.pos) && all(isfinite, m.vel)
+        @test all(isfinite, m.comp[:att_q]) && all(isfinite, m.comp[:omega_body])
+    end
+
+    @testset "gated wire — a :six_dof missile ships the 3-D keys; :pitch_coupled ships NONE of them" begin
+        # Byte-identity: the 6-DOF readouts (pos_y, beta, omega_*, att_q*, delta_yaw) key off `:att_q`
+        # / `sixdof_diag`, minted ONLY by the 6-DOF path — so a slice-19..22 `:pitch_coupled` wire
+        # NEVER grows them, and a `:six_dof` wire NEVER grows `:pitch_theta` (mutually exclusive).
+        w6, s6 = owp_world(airframe = :six_dof)
+        for _ in 1:1500; tick!(w6, s6, dt); empty!(w6.events); end
+        t6 = w6.env[:telemetry]
+        for k in ("m1.pos_y", "m1.beta", "m1.beta_cmd", "m1.omega_p", "m1.omega_q", "m1.omega_r",
+                  "m1.att_qw", "m1.att_qx", "m1.att_qy", "m1.att_qz", "m1.delta_yaw", "m1.a_lift")
+            @test haskey(t6, k) && t6[k] isa Float64 && isfinite(t6[k])   # SCALARS (convention 13)
+        end
+        @test !haskey(t6, "m1.pitch_theta")                     # the scalar pitch key is NOT minted
+        wc, sc = owp_world(airframe = :pitch_coupled)
+        for _ in 1:1500; tick!(wc, sc, dt); empty!(wc.events); end
+        tc = wc.env[:telemetry]
+        for k in ("m1.pos_y", "m1.beta", "m1.beta_cmd", "m1.omega_p", "m1.att_qw", "m1.delta_yaw")
+            @test !haskey(tc, k)                                 # a pitch_coupled wire has NONE of them
+        end
+    end
+
+    @testset "loader — the 6-DOF airframe keys parse to comp + reject bad values" begin
+        base = """
+        name: s23
+        seed: 23
+        dt_physics: 0.001
+        fidelity: {airframe: six_dof, guidance: pn, autopilot: alpha}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 700.0
+              elevation_deg: 12.0
+              cd_area_m2: 0.0
+              guidance: {n_pn: 4.0}
+              airframe:
+                inertia_kgm2: 20.0
+                cma: -1.0
+                cmd: 3.0
+                cla: 20.0
+                alpha_max: 0.3
+                cy_beta: 18.0
+                inertia_roll_kgm2: 2.0
+                inertia_yaw_kgm2: 21.0
+                c_roll: 50.0
+          - id: t1
+            kind: target
+            pos: [6000.0, 2000.0, 4200.0]
+            vel: [0.0, 0.0, 0.0]
+            target: {rcs_m2: 1.0}
+        """
+        mktempdir() do dir
+            good = joinpath(dir, "good.yaml"); write(good, base)
+            scn = load_scenario(good)
+            c = scn.world.entities[:m1].comp
+            @test scn.world.fidelity[:airframe] === :six_dof     # the NEW rung validates through the wire
+            @test c[:af_cy_beta] == 18.0
+            @test c[:af_I_roll]  == 2.0
+            @test c[:af_I_zz]    == 21.0
+            @test c[:af_c_roll]  == 50.0
+            # the 6-DOF keys DEFAULT when omitted (a live `:airframe` toggle of a scenario that never
+            # authored them can't KeyError a tick — convention 5, the consumer-default half).
+            nod = join([l for l in split(base, '\n')
+                        if !any(occursin(k, l) for k in ("cy_beta", "inertia_roll_kgm2",
+                                                         "inertia_yaw_kgm2", "c_roll"))], '\n')
+            pd = joinpath(dir, "def.yaml"); write(pd, nod)
+            @test !haskey(load_scenario(pd).world.entities[:m1].comp, :af_cy_beta)   # absent ⇒ consumer default
+            # REJECTS (each authored input LOAD-validated — convention 5): I_roll ≤ 0, I_zz ≤ 0, a
+            # negative (anti-damping) roll damper, a non-finite yaw slope.
+            for (from, to) in (("inertia_roll_kgm2: 2.0" => "inertia_roll_kgm2: 0.0"),
+                               ("inertia_yaw_kgm2: 21.0" => "inertia_yaw_kgm2: -5.0"),
+                               ("c_roll: 50.0"           => "c_roll: -1.0"),
+                               ("cy_beta: 18.0"          => "cy_beta: .inf"))
+                pb = joinpath(dir, "bad.yaml"); write(pb, replace(base, from => to))
+                @test_throws ErrorException load_scenario(pb)
+            end
+        end
+    end
+end

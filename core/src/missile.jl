@@ -104,6 +104,17 @@ function integrate!(m::BallisticMissile, w::World, dt::Float64)
       # is unreachable without BOTH `:af_cma` AND the new fidelity key). Class 4c (no RNG).
       if haskey(c, :af_cma) && get(w.fidelity, :airframe, :point_mass) === :pitch_coupled
         _integrate_coupled!(m, e, c, w, mass, rho, cd_area, dt)
+      elseif haskey(c, :af_cma) && get(w.fidelity, :airframe, :point_mass) === :six_dof
+        # SLICE 23 6-DOF GATE (§11 Tier A) — the 3-D superset. A NEW rung reaching a NEW branch
+        # (`_integrate_6dof!`), gated identically to `:pitch_coupled` above but on `:six_dof`. The
+        # `att` becomes a GENUINE 3-D quaternion integrated from a body-rate vector ω = (p, q, r)
+        # (parallel comp keys `:att_q`/`:omega_body`, NEVER `:pitch_theta`/`:pitch_q`), and the
+        # guidance command keeps its FULL 3-D direction so lift can point ANYWHERE off v̂ (STT). The
+        # `:pitch_coupled` line above and the `else` below are TEXTUALLY VERBATIM — a slice-8..22
+        # scenario never sets `:six_dof`, never grows the 3-D keys → byte-identical by construction
+        # (the scalar `rk4_coupled` path is UNREACHABLE from a quaternion representation, and vice
+        # versa; the reduction is an atol golden, not `==` — plan §1). Class 4c (no RNG).
+        _integrate_6dof!(m, e, c, w, mass, rho, cd_area, dt)
       else
         mode = get(w.fidelity, :integrator, :rk4)
         # GUIDANCE SEAM (slice 9): a GUIDED missile carries a control specific force `:a_ctrl`
@@ -395,6 +406,91 @@ function _integrate_coupled!(m::BallisticMissile, e::Entity, c::Dict{Symbol,Any}
     return nothing
 end
 
+# Slice 23 — the 6-DOF integrate! branch (`:airframe === :six_dof`). The 3-D superset of
+# `_integrate_coupled!`: the SAME [pos, vel] force integration + gravity/drag, but `att` is now a
+# genuine quaternion advanced from a body-rate vector ω = (p, q, r) under the 3-D rigid-body
+# dynamics (airframe3d.jl `stt_moments` → `body_rate_deriv` → `attitude_kinematics`), and the lift
+# is 2-plane (`lift_accel_3d`: pitch lift ∝ α on n̂_pitch AND yaw side-force ∝ β on n̂_yaw), so the
+# ⟂-v accel can point ANYWHERE off v̂. `_integrate_coupled!`'s `:pitch_theta`/`:pitch_q` are
+# UNTOUCHED — this path mints its OWN `:att_q`/`:omega_body` keys (parallel state), so a
+# slice-16..22 wire is byte-identical (it never reaches here). Class 4c (no RNG).
+#
+# ⚠ THE 2-CHANNEL δ SEAM: the `:alpha` autopilot's `:six_dof` arm (phase-4 decide!) writes BOTH
+# `:delta_cmd` (pitch fin) AND `:delta_yaw_cmd` (yaw fin) LAST tick; this integrate! reads them
+# (the one-tick delay, the `:a_ctrl`/`:delta_cmd` precedent). Absent (slice-17-style open loop or
+# a fresh live toggle) they default to slice-17's authored `:af_delta` / 0 — the byte-identity
+# fallback. NAMED APPROXIMATION (plan §4): lift is drag-free (⟂ v, speed-preserving as slice 17);
+# induced/separation drag and ρ(z) on the 6-DOF path are a later composition, not this slice — so
+# there is ONE closure here, not the four `_integrate_coupled!` carries.
+#
+# ⭐ THE SIGN WIRING is airframe3d.jl's (the #1 SIGN TRAP's FIFTH occurrence) — the pitch aero
+# moment maps to −y (negated), the yaw to +z (not), physical rates α̇=−ω_y, β̇=+ω_z. All of it lives
+# in `stt_moments`; this branch just calls it. The P1a structural invariant (an in-plane run keeps
+# the out-of-plane states at the FP floor) is the gate-1 sign check; the reduction golden (in-plane
+# 6-DOF ≈ scalar `_integrate_coupled!` to a dt-measured atol) is the gate-2 wiring check.
+function _integrate_6dof!(m::BallisticMissile, e::Entity, c::Dict{Symbol,Any}, w::World,
+                          mass::Float64, rho::Float64, cd_area::Float64, dt::Float64)
+    # Lazy launch init of the JOINT attitude from the PRE-step (launch) flight-path angle — like
+    # `_integrate_coupled!`'s θ seed, but as a quaternion (nose along (cosθ₀,0,sinθ₀), the same
+    # `quat_from_two_vectors` convention the pitch path and the gate-0 P1b reduction probe use) and
+    # a zero body-rate. `:af_alpha0` is the authored nose-off-velocity perturbation (default 0).
+    # Survives reset via reload.
+    if !haskey(c, :att_q)
+        γ0 = atan(e.vel[3], e.vel[1])
+        θ0 = γ0 + Float64(get(c, :af_alpha0, 0.0))
+        c[:att_q]      = quat_from_two_vectors(Vec3(1.0, 0.0, 0.0), Vec3(cos(θ0), 0.0, sin(θ0)))
+        c[:omega_body] = zero(Vec3)
+    end
+    # AirframeParams as in `_integrate_coupled!` (the K field rides unread — `lift_accel_3d`/
+    # `stt_moments` never touch it, so its presence is byte-safe). The 6-DOF-only aero/inertia
+    # constants default at the CONSUMER (a live `:airframe` toggle of a slice-19..22 scenario that
+    # never authored them can't crash a tick — convention 5; load validates them WHEN authored).
+    p = AirframeParams(Float64(c[:af_S]), Float64(c[:af_d]), Float64(c[:af_I]),
+                       Float64(c[:af_cma]), Float64(c[:af_cmd]), Float64(c[:af_cmq]),
+                       rho, Float64(get(c, :af_cla, 0.0)), Float64(get(c, :af_k_induced, 0.0)))
+    c_yaw  = Float64(get(c, :af_cy_beta, p.Cla))            # symmetric cruciform default (plan §3)
+    c_roll = Float64(get(c, :af_c_roll, 50.0))             # roll damper (STT holds p≈0; gate-0 P5)
+    Idiag  = Vec3(Float64(get(c, :af_I_roll, p.I)),        # I_xx (roll); default I_yy (roll stays ≈0)
+                  p.I,                                      # I_yy (pitch) = the scalar path's inertia
+                  Float64(get(c, :af_I_zz, p.I)))          # I_zz (yaw) = I_yy by symmetry
+    δp = Float64(get(c, :delta_cmd,     get(c, :af_delta, 0.0)))
+    δy = Float64(get(c, :delta_yaw_cmd, 0.0))
+    q0 = c[:att_q]::Quat
+    ω0 = c[:omega_body]::Vec3
+    # The joint 6-DOF derivative f(pos, vel, q, ω) -> (ṗ, v̇, q̇, ω̇). CRITICAL (the slice-17 stage-θ
+    # / slice-21 stage-z discipline): the lift AND the moment read the STAGE quaternion `Qq` and
+    # stage rate `W` (the RK4 stage arguments), NEVER the entry `q0`/`ω0` closed over above — the
+    # coupling IS the mid-stage re-evaluation (`rk4_6dof` renormalizes q each stage). ṗ = vel;
+    # v̇ = the point-mass force (gravity+drag, the SAME `total_accel` closure) + the 2-plane lift;
+    # q̇ = ½ q ⊗ [0,ω]; ω̇ = I⁻¹(M − ω×Iω). The stage `P` (position) is threaded for the
+    # `rk4_6dof` contract and reserved for a future ρ(z) on this path (slice 21's stage-z seam),
+    # read by nothing this slice — deliberately, lift is constant-ρ (drag-free) here.
+    f = (P, Vv, Qq, W) -> begin
+        a  = total_accel(Vv; rho = rho, cd_area = cd_area, mass = mass) +
+             lift_accel_3d(Vv, Qq, mass, p; c_yaw = c_yaw)
+        q̇  = attitude_kinematics(Qq, W)
+        M  = stt_moments(Qq, Vv, W, δp, δy, p; c_roll = c_roll)
+        ω̇  = body_rate_deriv(W, M, Idiag)
+        (Vv, a, q̇, ω̇)
+    end
+    p′, v′, q′, ω′ = rk4_6dof(f, e.pos, e.vel, q0, ω0, dt)
+    if p′[3] ≤ 0.0
+        # Ground impact — the point-mass / coupled branch clamp / freeze / one-shot `:impact` event,
+        # duplicated here (kept SEPARATE so its arithmetic stays byte-identical; advisor). q′/ω′ hold
+        # the attitude/rate at impact; next tick the `:impacted` latch skips integration entirely.
+        p′ = Vec3(p′[1], p′[2], 0.0)
+        v′ = zero(Vec3)
+        c[:impacted] = true
+        push!(w.events, Dict{Symbol,Any}(:kind => :impact, :of => m.id))
+    end
+    e.pos = p′
+    e.vel = v′
+    c[:att_q]      = q′
+    c[:omega_body] = ω′
+    e.att          = q′                                   # `att` maps body→inertial (airframe3d.jl)
+    return nothing
+end
+
 # Pitch-plane rotational integration (slice 16). Advances the airframe attitude `(θ, q)` in
 # comp under the aero moment (airframe.jl), with the flight condition `(V, γ)` FROZEN over the
 # step — read from the just-integrated velocity `v′`, NOT fed back into it (the isolation). The
@@ -536,6 +632,42 @@ function build_env!(m::BallisticMissile, w::World)
                 tel["$sid.a_sep"] = _finite(_norm3(separation_drag_accel(e.vel, θ, mass, p, curve)))
             end
         end
+    end
+    # SLICE 23 — THE 6-DOF READOUT (a SEPARATE gated block, the slice-16 pitch block's 3-D twin).
+    # Gated on `:att_q` — minted ONLY by `_integrate_6dof!`, so a slice-8..22 wire (no `:att_q`)
+    # ships NONE of these → byte-identical (the pitch block above reads `:pitch_theta`, which a
+    # 6-DOF missile never mints, so the two are mutually exclusive on a from-the-start scenario; a
+    # rare live pitch_coupled→six_dof cross-toggle can leave a STALE `:pitch_theta` block alongside
+    # this fresh one — finite, non-crashing, and not a showcase path). The lesson quantities: the
+    # cross-range `pos_y` (the out-of-plane axis the discard cannot reach), the pitch/yaw incidences
+    # α/β, the body rates (p, q, r), the attitude quaternion (4 SCALARS — convention 13, no Array —
+    # for the client's 3-D nose), and the 2-plane lift magnitude / turn radius. RNG-free, own keys.
+    if haskey(c, :af_cma) && haskey(c, :att_q)
+        qa = c[:att_q]::Quat
+        ω  = get(c, :omega_body, zero(Vec3))::Vec3
+        γ  = atan(e.vel[3], e.vel[1])
+        α, β = body_incidence(qa, e.vel)
+        # Constant-ρ AirframeParams (no atmosphere on the 6-DOF path this slice — named deferral).
+        p6 = AirframeParams(Float64(c[:af_S]), Float64(c[:af_d]), Float64(c[:af_I]),
+                            Float64(c[:af_cma]), Float64(c[:af_cmd]), Float64(c[:af_cmq]),
+                            Float64(get(c, :rho, 1.225)), Float64(get(c, :af_cla, 0.0)),
+                            Float64(get(c, :af_k_induced, 0.0)))
+        c_yaw6 = Float64(get(c, :af_cy_beta, p6.Cla))
+        tel["$sid.pos_y"]   = _finite_coord(e.pos[2])         # the out-of-plane axis (the discard's tell)
+        tel["$sid.gamma"]   = _finite_coord(γ)                # x-z flight-path angle
+        tel["$sid.alpha"]   = _finite_coord(α)                # pitch incidence (rad)
+        tel["$sid.beta"]    = _finite_coord(β)                # sideslip — the NEW angle this slice makes ≠ 0
+        tel["$sid.omega_p"] = _finite_coord(ω[1])             # roll rate (STT holds ≈ 0)
+        tel["$sid.omega_q"] = _finite_coord(ω[2])             # pitch rate
+        tel["$sid.omega_r"] = _finite_coord(ω[3])             # yaw rate
+        tel["$sid.att_qw"]  = _finite_coord(qa[1])            # attitude quaternion [w,x,y,z] (body→inertial)
+        tel["$sid.att_qx"]  = _finite_coord(qa[2])
+        tel["$sid.att_qy"]  = _finite_coord(qa[3])
+        tel["$sid.att_qz"]  = _finite_coord(qa[4])
+        aLm = _norm3(lift_accel_3d(e.vel, qa, mass, p6; c_yaw = c_yaw6))
+        Vsp = _norm3(e.vel)
+        tel["$sid.a_lift"]        = _finite(aLm)                                  # m/s² (⟂ v, 2-plane)
+        tel["$sid.turn_radius_m"] = _finite(aLm > 0.0 ? Vsp * Vsp / aLm : FINITE_CEIL)
     end
     return nothing
 end
@@ -728,6 +860,12 @@ function decide!(a::Autopilot, w::World)
             tel["$sid.q_dyn"]      = 0.0
             tel["$sid.aero_sat"]   = 0.0
             tel["$sid.defl_sat"]   = 0.0
+            # Slice-23 yaw keys — the same never-stale discipline, gated on `:six_dof` so a
+            # `:pitch_coupled` `:alpha` scenario (slices 19–22) ships NONE → byte-identical.
+            if get(w.fidelity, :airframe, :point_mass) === :six_dof
+                tel["$sid.beta_cmd"]  = 0.0
+                tel["$sid.delta_yaw"] = 0.0
+            end
         end
         return nothing
     end
@@ -811,7 +949,9 @@ function decide!(a::Autopilot, w::World)
     a_ach_prev = state.a_ach                                   # slice-15 g-onset readout (pre-step a_ach)
     fin_diag   = nothing                                       # slice-15 fin telemetry (set only when :fin)
     alpha_diag = nothing                                       # slice-19 α/g telemetry (set only when :alpha)
+    sixdof_diag = nothing                                      # slice-23 2-plane yaw telemetry (set only when :six_dof)
     alpha_coupled = false                                      # slice-19: true ⇒ the plant flies δ, NOT :a_ctrl
+    alpha_6dof    = false                                      # slice-23: true ⇒ the 6-DOF plant flies (δp,δy), NOT :a_ctrl
     # SLICE-19 α/g SEAM (§11 Tier A) — THE INNER LOOP: `a_cmd → α_cmd → δ`. The outer law's command is
     # INVERTED THROUGH THE AERO (airframe.jl `alpha_command`) into an angle-of-attack command and thence
     # a fin deflection (`alpha_autopilot_delta`), so the missile flies its own PN command *through the
@@ -832,6 +972,11 @@ function decide!(a::Autopilot, w::World)
     if mode === :alpha
         has_af        = haskey(c, :af_cma)
         alpha_coupled = has_af && get(w.fidelity, :airframe, :point_mass) === :pitch_coupled
+        # SLICE 23 — the SAME `:alpha` autopilot inverting its command through the 6-DOF plant. The
+        # cross-fidelity dependency (slice 19's, extended): `:alpha` under `:six_dof` steers in TWO
+        # body planes (α pitch + β yaw) so the ⟂-v command keeps its FULL 3-D direction — the discard
+        # dies. `:pitch_coupled` (scalar, discards y) and `:point_mass` (fiat) are unchanged below.
+        alpha_6dof    = has_af && get(w.fidelity, :airframe, :point_mass) === :six_dof
         if has_af
             mass_af = max(Float64(get(c, :mass_kg, 1.0)), _MISSILE_MASS_FLOOR)
             # SLICE 21 — ρ(z) under the live `:atmosphere` rung, else slice-19/20's authored
@@ -911,6 +1056,52 @@ function decide!(a::Autopilot, w::World)
                 alpha_diag = (alpha_cmd = α_cmd, delta_cmd = δ_cmd, aero_sat = aero_sat,
                               defl_sat = defl_sat, a_max_aero = a_max_aero, q_dyn = q_dyn,
                               rho_air = rho_af)
+            elseif alpha_6dof
+                # SLICE 23 — THE 2-PLANE STT INVERSION (the discard dies). The guidance command
+                # `a_cmd` is a FULL 3-D Vec3 (`pn_accel`'s natural out-of-plane component survives
+                # `clamp_accel`, which scales magnitude); `steering_command` (airframe3d.jl) resolves
+                # it onto the two body ⟂-v axes and inverts each through the aero — the SAME scalar
+                # `alpha_command` inversion, twice, with NO projection-and-throw-away. The ceiling is
+                # the RESULTANT clamp `hypot(α,β) ≤ α_max` (gate-0 P4): STT REPOINTS the pitch-plane
+                # authority in 3-D, it does not get more of it, so `a_max_aero`/`q_dyn` above are the
+                # SAME single-axis values and `aero_sat` is the resultant tell. k_α/k_q/δ_max are the
+                # slice-19 gains REUSED (NEVER knobs — FINDING 14); C_Yβ defaults to C_Lα (symmetric
+                # cruciform). δ_max is pinned NON-binding (`defl_sat == 0`, now BOTH fins) so the
+                # resultant α_max is provably the cap that binds.
+                k_alpha   = Float64(get(c, :k_alpha, 1.0))
+                k_q       = Float64(get(c, :k_q, 0.3))
+                delta_max = max(Float64(get(c, :delta_max, 0.5)), _FRAME_EPS)
+                c_yaw_af  = Float64(get(c, :af_cy_beta, p_af.Cla))
+                # The ACHIEVED (α, β) and body rate from the POST-integrate 6-DOF state (phase 1 <
+                # phase 4 — the SAME `:att_q`/`:omega_body` `build_env!` ships). `:att_q` is minted by
+                # `_integrate_6dof!`'s lazy init on tick 1, so it exists by the first decide!; the
+                # `get` default (velocity-aligned ⇒ α = β = 0) is belt-and-braces.
+                q_att = get(c, :att_q,
+                            quat_from_two_vectors(Vec3(1.0, 0.0, 0.0), e.vel))::Quat
+                ω_bod = get(c, :omega_body, zero(Vec3))::Vec3
+                α_ach, β_ach = body_incidence(q_att, e.vel)
+                α_cmd, β_cmd, aero_sat = steering_command(a_cmd, e.vel, q_att, mass_af, p_af;
+                                                          alpha_max = alpha_max, c_yaw = c_yaw_af)
+                δp_cmd, defl_p = alpha_autopilot_delta(α_cmd, α_ach, pitch_rate_phys(ω_bod), p_af;
+                                                       k_alpha = k_alpha, k_q = k_q,
+                                                       delta_max = delta_max)
+                δy_cmd, defl_y = alpha_autopilot_delta(β_cmd, β_ach, yaw_rate_phys(ω_bod), p_af;
+                                                       k_alpha = k_alpha, k_q = k_q,
+                                                       delta_max = delta_max)
+                # THE 2-CHANNEL δ SEAM: BOTH fins written for next tick's `_integrate_6dof!` (the
+                # slice-19 `:delta_cmd` pattern, doubled). Tick 1 flies `af_delta`/0 (integrate!
+                # precedes the first decide!) — author `af_delta: 0` so tick 1 injects no transient.
+                c[:delta_cmd]     = δp_cmd
+                c[:delta_yaw_cmd] = δy_cmd
+                # THE ACHIEVED CONTROL ACCEL IS THE 2-PLANE LIFT — keeps `a_ach`/`track_gap` honest
+                # (under a binding ceiling they show the airframe FAILING TO DELIVER). NOT persisted
+                # to comp (the coupled-plant guard below — the slice-19 FINDING 1 trap, now 6-DOF).
+                a_ctrl   = lift_accel_3d(e.vel, q_att, mass_af, p_af; c_yaw = c_yaw_af)
+                defl_sat = defl_p || defl_y                    # BOTH fins (the isolation tell)
+                alpha_diag  = (alpha_cmd = α_cmd, delta_cmd = δp_cmd, aero_sat = aero_sat,
+                               defl_sat = defl_sat, a_max_aero = a_max_aero, q_dyn = q_dyn,
+                               rho_air = rho_af)
+                sixdof_diag = (beta_cmd = β_cmd, delta_yaw = δy_cmd)
             else
                 # THE REFERENCE ARM (`:point_mass`): no plant to fly ⇒ `:ideal`'s perfect tracking. The
                 # α-loop outputs are ZEROED (no α command was issued — honest, not a computed-but-unused
@@ -984,7 +1175,11 @@ function decide!(a::Autopilot, w::World)
     # run NEVER GROWS `:a_ctrl`, a tripwire test_missile asserts (advisor). The LOCAL `a_ctrl` still
     # carries the achieved lift for the honest `a_ach`/`track_gap` readout below. For
     # `:ideal`/`:pid`/`:fin` the guard is ALWAYS false ⇒ the store is byte-for-byte as before.
-    alpha_coupled || (c[:a_ctrl] = a_ctrl)
+    # SLICE 23: the 6-DOF plant makes its accel from 2-plane LIFT (`_integrate_6dof!` reads
+    # `:delta_cmd`/`:delta_yaw_cmd`, NEVER `:a_ctrl`) — the SAME FINDING-1 trap as `:pitch_coupled`,
+    # so it too must not grow `:a_ctrl`. `alpha_6dof` is false on every slice-1..22 path ⇒ the guard
+    # is unchanged for them.
+    (alpha_coupled || alpha_6dof) || (c[:a_ctrl] = a_ctrl)
 
     # Telemetry: the slice-9 keys (the tracking GAP) PLUS the slice-10 PN/saturation readouts. The
     # slice-10 lesson is MISS at CPA (isolated at :ideal — the verifier's job) + the saturation the
@@ -1063,6 +1258,15 @@ function decide!(a::Autopilot, w::World)
         if haskey(c, :af_scale_height)
             tel["$sid.rho_air"] = _finite(alpha_diag.rho_air)
         end
+    end
+    # SLICE 23 — THE YAW-CHANNEL COMMAND READOUTS. Shipped ONLY when the 6-DOF STT arm ran
+    # (`sixdof_diag !== nothing` ⇒ `:six_dof` this tick), so a `:pitch_coupled`/`:point_mass`
+    # `:alpha` wire (slices 19–22) NEVER grows a yaw key → byte-identical (the separate-gated-block
+    # discipline — advisor). `beta_cmd`/`delta_yaw` are the yaw twins of the shared `alpha_cmd`/
+    # `delta_cmd` above; the resultant `aero_sat`/`defl_sat` already shipped in the alpha_diag block.
+    if mode === :alpha && sixdof_diag !== nothing
+        tel["$sid.beta_cmd"]  = _finite_coord(sixdof_diag.beta_cmd)   # signed β command (rad)
+        tel["$sid.delta_yaw"] = _finite_coord(sixdof_diag.delta_yaw)  # signed yaw fin deflection (rad)
     end
     return nothing
 end
