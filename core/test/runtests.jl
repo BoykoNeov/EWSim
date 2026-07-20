@@ -21,6 +21,7 @@ using Random
     include("test_missile.jl")
     include("test_aero_curve.jl")
     include("test_airframe.jl")
+    include("test_airframe3d.jl")
     include("test_atmosphere.jl")
     include("test_terrain.jl")
     include("test_guidance.jl")

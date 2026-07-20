@@ -26,6 +26,7 @@ include("frames.jl")
 include("dynamics.jl")
 include("aero_curve.jl")
 include("airframe.jl")
+include("airframe3d.jl")
 include("atmosphere.jl")
 include("terrain.jl")
 include("guidance.jl")
@@ -121,6 +122,13 @@ export AeroCurveParams, lift_coefficient, cl_peak, separation_drag_coefficient, 
 # the autopilot's inversion stays LINEAR (a stall-aware autopilot is a named deferral).
 export moment_slope, lift_accel_nl, induced_drag_accel_nl, separation_drag_accel, pitch_moment_nl,
        short_period_freq_nl, trim_alpha_nl
+# Slice 23 (§11 Tier A): the 6-DOF SUBSTRATE + SKID-TO-TURN (airframe3d.jl) — the 3-D superset of
+# the pitch-plane airframe. `att` becomes a genuine quaternion integrated from a body-rate ω, the
+# guidance command keeps its full 3-D direction (the pitch-plane "discard" DIES), and STT makes
+# lift in BOTH body planes (α→pitch, β→yaw). `AIRFRAME_MODES` gains `:six_dof`; `AirframeParams`
+# is UNTOUCHED (C_Yβ rides as a kwarg defaulting to C_Lα — symmetric cruciform). Class 4c.
+export body_incidence, body_perp_axes, lift_accel_3d, attitude_kinematics, body_rate_deriv,
+       stt_moments, rk4_6dof, steering_command, pitch_rate_phys, yaw_rate_phys
 # Missile guidance (slice 9): the outer pursuit law + the inner PID autopilot (pure).
 # `AutopilotState` is an INTERNAL state record (the JamContribution/BearingRecord precedent —
 # not exported); `autopilot_init` IS exported (the test constructs the zero state bare).

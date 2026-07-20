@@ -234,7 +234,13 @@ end
 # `:pitch_coupled` (α→lift→γ turns the path). Defined here (before radar.jl) so
 # `LIVE_FIDELITY_MODES` and the server's `set_fidelity` reference this ONE list (the
 # one-list-no-drift discipline, convention 7). Class 4c: physics-changing, NO RNG.
-const AIRFRAME_MODES = (:point_mass, :pitch_coupled)
+#
+# SLICE 23 grows the tuple by ONE — `:six_dof` (the 3-D quaternion+ω substrate + skid-to-turn,
+# airframe3d.jl). `:pitch_coupled` is NOT renamed (advisor): both remain, each byte-frozen for its
+# own scenarios; `:six_dof` reaches a NEW branch (`_integrate_6dof!`), unreachable without BOTH
+# `:af_cma` present AND `:airframe === :six_dof`. Referencing this tuple from `LIVE_FIDELITY_MODES`
+# is already wired (radar.jl) — the tuple just grows.
+const AIRFRAME_MODES = (:point_mass, :pitch_coupled, :six_dof)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SLICE 19 — the INNER α/g AUTOPILOT (`a_cmd → α_cmd → δ`) + the FLIGHT-CONDITION
