@@ -50,14 +50,16 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–21 COMPLETE & green — 3182 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–21
+**Slices 1–22 COMPLETE & green — 4180 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–22
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
 FIRST true 3-D view (a user-directed insertion — the inner autopilot shifted to slice 19), slice 19 the CLOSED
 INNER LOOP (`a_cmd→α_cmd→δ`) + the flight-condition g-limit, slice 20 INDUCED DRAG — the missile LOWERS ITS OWN
-CEILING by maneuvering — and slice 21 the EXPONENTIAL ATMOSPHERE: the ceiling you lower by CLIMBING (ρ(z) at
-last, so "high altitude" is EARNED language and not a caveat).** Full gate-by-gate
+CEILING by maneuvering — slice 21 the EXPONENTIAL ATMOSPHERE: the ceiling you lower by CLIMBING (ρ(z) at
+last, so "high altitude" is EARNED language and not a caveat), and slice 22 NONLINEAR C_L(α) / TRUE STALL —
+the ceiling the AIRFRAME itself sets, which moves the ONE factor of `a_max_aero` that 19/20/21 all left
+alone.** Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -388,24 +390,92 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   a HIT samples COARSELY**: ~13 m between samples); and a MAGIC-MULTIPLE tooth (now pinned against the EXP arm's
   MEASURED ρ-factor). (3182)
 
+- **Slice 22 (§11 Tier-A) — NONLINEAR `C_L(α)` / TRUE STALL: THE CEILING THE AIRFRAME SETS**: slices 19/20/21 gave
+  cap #4 three movers and **ALL THREE MOVED Q** (the engineer's ρ knob; the missile's own turn via V; where it
+  flies via ρ(z)). **Slice 22 moves the OTHER FACTOR** — all three assumed the lift curve is a STRAIGHT LINE out
+  to α_max. Past α_stall the flow SEPARATES: **C_L PEAKS and FALLS**, and the ceiling is the curve's own INTERIOR
+  PEAK — no amount of Q buys past it. **THE REVERSAL IS NEW IN THE SUITE**: every prior cap is a MAGNITUDE that
+  SATURATES; this one is a **DERIVATIVE THAT CHANGES SIGN** — past the peak, pulling HARDER turns you LESS *and*
+  costs you MORE (which is why the user chose true-drop over a saturating curve; a saturating one cannot produce
+  the control-loop reversal at all). ⭐ **THE HEADLINE IS AN EXACT IDENTITY**: at fixed Q the linear→stall ceiling
+  ratio is IDENTICALLY `α_stall/α_max` (Q, S, C_Lα, m ALL CANCEL) — 471.435… → 269.391…, ratio ≡ 4/7 with **|Δ| =
+  0.0 bit-for-bit**, slice 21's ρ-factor identity in a new letter. ⚠ **A SAME-INPUTS FORMULA TOOTH, NEVER a
+  run-vs-run** (separation drag makes V, hence Q, diverge between arms). **KNOB, NOT RUNG — and the plan predicted
+  the OPPOSITE**: it asserted linear was `α_stall → ∞` (a limit point ⇒ rung) and gate 0 **REFUTED** it — the
+  achieved α SELF-LIMITS to ~0.24 over every reachable state, so a finite α_stall ≥ 0.25 is linear-in-effect and
+  **the knob's own TOP is the in-scenario linear twin**; `test_aero_curve.jl` ASSERTS the fidelity's absence.
+  ⚠ **α_max 0.35 > α_stall 0.20 INVERTS SLICE 19**: reaching stall via the FINDING-14 LEAK was REJECTED as
+  gain-dependent and CIRCULAR (closing that leak is this slice's own payoff), so the autopilot **COMMANDS INTO
+  STALL** and THE PHYSICS SETS THE WALL. The inner loop keeps inverting on the LINEAR C_Lα deliberately — it is
+  REALISTIC (an autopilot carries a linear model of its airframe ⇒ **slice-19's command-vs-achieved gap MADE
+  PHYSICAL**) and it SIDESTEPS the multivalued past-peak inverse (a named deferral, not a solved problem).
+  Separation drag is **MANDATORY, not a lever** (measured 0.9% over its whole range — a PHYSICALITY term; the
+  teeth carry it: exactly 0 below stall, EVEN in α, along −v̂, moving OPPOSITE to induced drag past the peak) and
+  **slice 20's induced term is NOT "fixed"** — `C_Di = K·C_L²` falling past the peak is CORRECT physics.
+  **⭐⭐ THE SHARPEST GATE-3 FINDING: `aero_sat` DOES NOT DISCRIMINATE AT ALL** — it fires **53/215 frames on the
+  PARKED LINEAR arm and 53/215 on the STALL arm, the SAME COUNT**, because it keys off the **α_max CLAMP both arms
+  SHARE** while the ceiling that moved is the interior peak. So there is a real regime **past the physics ceiling
+  with the command not yet pegged** where it stays 0. **`post_stall` is the discriminator: EXACTLY 0 vs 56.**
+  ⇒ the ONE client edit (**NOT zero, unlike slice 20**): the aero strip's breach indicator keys on `post_stall`,
+  presence-gated so 19/20/21 are byte-identical; the button stays the AIRFRAME cycler by slice-20's PRECEDENT.
+  **TWO SCENARIOS, and the split is a MEASURED CONFIG CONFLICT** (the lift half needs k_drop 0.7 / δ_max 0.4, the
+  departure half k_drop 1.0 / δ_max 1.0, and at 0.7 the cliff is INVISIBLE) — one verifier auto-detects which.
+  **HALF B = RELAXED STATIC STABILITY**: *a statically unstable airframe is perfectly flyable — UNTIL THE
+  AUTOPILOT RUNS OUT OF AUTHORITY; the THRESHOLD is the lesson, not the tumble.* ⭐⭐ **A THREE-POINT CLAIM WHOSE
+  LESSON IS THE MIDDLE** — 0-vs-8 would show "neutral vs lost", a WEAKER and DIFFERENT claim, because cma_post 0 is
+  **NEUTRAL past the break, not unstable at all** (sentinel SILENT). The lesson is **cma_post 4: the ω_sp sentinel
+  FIRES (60 frames / 947 ticks — genuinely no short-period mode) and the autopilot HOLDS IT ANYWAY** (α@500 0.434,
+  miss 1.078× baseline); only at 8 does it LOSE it (α@500 1.008 = 57.8°). ⭐ **SLICE 16's ω_sp SENTINEL FIRES IN
+  FLIGHT — FIRST TIME IN PROJECT HISTORY** (built for an AUTHORED Cmα ≥ 0; reaches the wire as FINITE_CEIL, never
+  a NaN), and it is **SLICE 16's TUMBLE NOW SELF-INFLICTED** — an engineer typed the unstable case there; here the
+  airframe FLIES ITSELF INTO IT. ⚠ **THE MISS IS NOT THE METRIC for half B** (+1.4% even at full tumble — a
+  missile that departs 0.7 s before CPA keeps its momentum) ⚠ and **"time with ω_sp ceiled" RUNS BACKWARDS**
+  (60 frames at cma_post 4 vs 33 at 8 — α blows past α_sat into the deep-stall RESTORING region), so it is a
+  BOOLEAN tell, never a severity measure. ⚠ **α IS SAMPLED AT FIXED RANGE (500 m), NOT AT CPA** — the break is
+  reached at t=3.12/r=1475 in EVERY arm, α_pk lands ON the CPA frame, and **the lift file's LOS gate of 1000 would
+  DELETE this lesson** (α@1000 spans only 0.297→0.399): the correct gate DIFFERS between the halves. Knob domains
+  MEASURED: `af_alpha_stall ∈ [0.15,0.35]` (the miss TURNS at ≈0.12 and REVERSES — the 3rd occurrence of that
+  pattern) and `af_cma_post ∈ [0,10]` (defl_sat exactly 0 through 10, monotone, first binds 65 at 10.5 — a ~1.03×
+  margin, NOT slice-20's 2×, stated rather than hidden). ⚠ **NEVER quote gate-0's 2.7779 departure α** — it was
+  measured with δ_max 0.4 BINDING, which AMPLIFIED the divergence (relieving it drops α_pk 3.02 → 1.22); the clean
+  progression is 0.64 → 0.97 → 1.22. Class **4c** (8th consecutive; no RNG ⇒ draw-invariance VACUOUS);
+  **INERT without `:pitch_coupled`** (the third conjunct is deliberate — `pitch_moment` is live on the point-mass
+  rotational path, so without it half the missile would fly a breaking moment and half a linear-aero fiat accel);
+  **stall × ρ(z) is a LOAD ERROR**, refused rather than silently branch-ordered. Four proofs green (verifier both
+  halves; UI test with FOUR teeth on the G10 edit incl. the MIRROR case proving a SWITCH not an `or`, + a SIX-WAY
+  value-guard, + all seven prior UI tests re-run; smoke-load both servers; TWO shots — "POST-STALL" lit on the
+  stall wire, and the departure with `omega_sp 1000000000`, the nose 34.2° off velocity, and the trail CURLING
+  BACK ON ITSELF). Deferred (NAMED): a STALL-AWARE AUTOPILOT (the multivalued inverse); HYSTERESIS; Mach;
+  **ROLL/YAW DEPARTURE — the sharpest remaining approximation** (this one departs strictly IN-PLANE; dies only
+  with bank-to-turn / 3-D); DEPARTURE RECOVERY / a spin model (the ONSET ships, not the aftermath). (4180)
+
+
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened
-with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–21 are into the §11 Tier-A
+with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–22 are into the §11 Tier-A
 horizon — slice 15 the actuator/fin half, slice 16 the 6-DOF airframe's rotational half (pitch-plane θ,q), slice 17
 the α→lift→γ TRANSLATION-COUPLING half (the real path-changing `:airframe` toggle), slice 18 terrain masking + the
 3-D client view, slice 19 the CLOSED INNER LOOP (`a_cmd→α_cmd→δ`) + the flight-condition g-limit — which COMPLETES
 the Tier-A "6-DOF airframe + actuator/fin dynamics" entry in the pitch plane (15 = fin, 16 = rotation, 17 = the
 α→lift coupling, 19 = the closed loop) — slice 20 INDUCED DRAG, which makes that closed loop's ceiling
 SELF-LOWERING (the aero arc's first feedback, and the first slice whose lesson is a KNOB with no button at all),
-and slice 21 the EXPONENTIAL ATMOSPHERE, which gives that same ceiling a THIRD mover — WHERE THE MISSILE FLIES —
-and CLOSES 19+20's constant-ρ approximation: "high altitude" is now earned language, not a standing caveat.
+slice 21 the EXPONENTIAL ATMOSPHERE, which gives that same ceiling a THIRD mover — WHERE THE MISSILE FLIES —
+and CLOSES 19+20's constant-ρ approximation ("high altitude" is now earned language, not a standing caveat), and
+slice 22 NONLINEAR C_L(α) / TRUE STALL, which finally moves the OTHER FACTOR: 19/20/21 all moved Q, while all three
+assumed the lift curve runs straight out to α_max. It does not — past α_stall C_L PEAKS AND FALLS, so the ceiling
+is the curve's own INTERIOR PEAK, and the cap stops being a MAGNITUDE THAT SATURATES and becomes a DERIVATIVE THAT
+CHANGES SIGN. Slice 22 also closes the ceiling-LEAK path that BOUNDED slice 21's H floor, and its second half
+(RELAXED STATIC STABILITY) makes slice 16's authored tumble SELF-INFLICTED — the airframe flies itself unstable,
+and slice 16's ω_sp sentinel fires in flight for the first time in the project's history.
 **The slice-20 slot was CONTESTED**: the planned SCALAR rate-limited fin inside the coupled loop [the guidance
 limit cycle] is **DEAD, not deferred** — gate 0 killed it in 4 probes (`δ_max` structurally SHADOWS `δ̇_max`: the
 fin only needs to move fast when the command does, which requires high k_α or low damping, and BOTH peg deflection
 first — see `docs/plans/slice20.md`, a worthwhile general result). What remains is the rest of §11 Tier-A/B/C —
-most concretely land clutter [terrain banked the heightfield] and the FULL 6-DOF airframe [bank-to-turn / 3-D,
-where the pitch-plane out-of-plane discard finally dies], with **nonlinear C_L(α) / true stall** now the nearest
-named candidate [it would bound the ACHIEVED α and close the ceiling-leak path — the very leak that BOUNDS slice
-21's H floor at 6000, so it is the most load-bearing neighbour the arc has]. ⚠ Slice 21 did NOT finish the
+most concretely land clutter [terrain banked the heightfield] and the FULL 6-DOF airframe — **now the nearest and
+most load-bearing named candidate, because slice 22 SHARPENED the case for it twice over**: bank-to-turn / 3-D is
+where the pitch-plane out-of-plane discard finally dies, and slice 22's departure — which is REAL, not authored —
+**departs strictly IN-PLANE, while a real departure goes OUT-OF-PLANE**. That is now the sharpest approximation
+anywhere in the aero arc. [The nonlinear-C_L(α)/true-stall entry that used to sit here is DONE — slice 22 — and it
+did close the ceiling-leak path that bounded slice 21's H floor at 6000.] ⚠ Slice 21 did NOT finish the
 atmosphere: ρ(z) reaches the COUPLED airframe path ONLY. The point-mass/ballistic drag path keeps a constant ρ
 because `dynamics.jl`'s steppers take a `v -> a(v)` closure with NO position in it, and changing that contract to
 `(p,v) -> a` touches slice 8's `rk4_step`/`euler_step` — the byte-identity surface of EVERY ballistic slice — for a

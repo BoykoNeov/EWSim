@@ -1,11 +1,88 @@
 # Slice 22 — NONLINEAR `C_L(α)` / TRUE STALL: the ceiling the airframe sets (§11 Tier-A)
 
-**Status: GATE 0 COMPLETE (2026-07-19) — 11 findings, TWO USER DECISIONS TAKEN.
-GATE 1 COMPLETE (2026-07-20, `aero_curve.jl`, suite 3182 → 4015).
-GATE 2 COMPLETE (2026-07-20, the wiring, suite 4015 → 4180) — 10 findings, FIVE of which
-CHANGE WHAT GATE 3 CAN SHIP. Gate 3 pending.** The aero arc's nearest and most load-bearing
-named deferral — carried explicitly by slices 19, 20 and 21, and the one that closes the LEAK
-bounding two shipped knobs.
+**Status: SLICE COMPLETE (2026-07-20). GATE 0 — 11 findings, TWO USER DECISIONS TAKEN.
+GATE 1 — `aero_curve.jl`, suite 3182 → 4015. GATE 2 — the wiring, suite 4015 → 4180, 10
+findings, FIVE of which changed what gate 3 could ship. GATE 3 — two scenarios + the verifier
++ the UI test + the ONE client edit, four proofs green; THREE MORE FINDINGS (below).** The aero
+arc's nearest and most load-bearing named deferral — carried explicitly by slices 19, 20 and 21,
+and the one that closes the LEAK bounding two shipped knobs. As-built detail: `docs/STATUS.md`.
+
+---
+
+## ⭐ GATE 3 — WHAT SHIPPED, AND THE THREE THINGS IT FOUND (2026-07-20)
+
+Probe: `M:\claud_projects\temp\slice22_gate3\` (`probe.jl`, `wire.jl`, `where.jl`, `fixed.jl`,
+`shot22.gd`). Shipped: `scenarios/slice22_stall.yaml`, `scenarios/slice22_departure.yaml`,
+`clients/godot/net/slice22_verify.gd`, `clients/godot/net/slice22_ui_test.gd`, and ONE edit to
+`Sandbox.gd`'s `_draw_aero_strip`.
+
+**⭐⭐ H1 — TWO SCENARIOS, AND THE SPLIT IS A *MEASURED CONFIG CONFLICT*, NOT CONVENTION 9.** The
+plan (and Decision 2) assumed `Cma_post` would be "the natural second slider" on ONE scenario.
+Gate 2's own G2/G9 already refuted that without saying so: the lift half needs `k_drop 0.7` /
+`δ_max 0.4`, the departure half needs `k_drop 1.0` / `δ_max 1.0`, and **at k_drop 0.7 the
+authority cliff is INVISIBLE** (α_pk moves only 0.286 → 0.379 across Cma_post 0 → 8). They cannot
+share a missile. ONE verifier detects which half from the declared knob — the slice-4
+split-across-scenarios precedent, forced rather than chosen.
+
+**⚠⚠ H2 — `cma_post 12` BREAKS THE ISOLATION, so the knob caps at 10.** Gate 2's G9 verified
+`defl_sat == 0` at δ_max 1.0 for Cma_post 4/6/8 and left 12 unmeasured. Measured here: 12 gives
+`defl_sat` **289**. The edge is between **10.0 (exactly 0)** and **10.5 (65)**, and `defl_sat` is
+MONOTONE in cma_post, so `[0, 10]` is provably clean at every reachable value. ⚠ The margin is
+**~1.03×, NOT slice-20's 2×** — stated in the yaml rather than hidden, and it CANNOT be widened by
+raising δ_max, which is already an unphysical 1.0 rad (57°) authored precisely so the deflection
+cap is provably not the story. Buying slider headroom with an absurd fin would trade the P6
+assertion for cosmetics.
+
+**⭐⭐ H3 — THE DEPARTURE LESSON IS A *THREE-POINT* CLAIM AND ITS LESSON IS THE MIDDLE.** A
+two-point `cma_post` 0-vs-8 check — the obvious design, and the one the plan's F10 table invites —
+demonstrates **"NEUTRAL vs LOST"**, which is a WEAKER and DIFFERENT claim than Decision 2's
+ratified one. At `cma_post 0` the airframe is **NEUTRALLY stable past the break (slope 0), not
+unstable at all**: the ω_sp sentinel NEVER FIRES. It is the CONTROL, not an arm of the lesson.
+**The lesson is `cma_post 4`**: the sentinel FIRES for 947 ticks (60 frames) — nearly a second with
+NO REAL SHORT-PERIOD MODE, so the airframe is genuinely statically unstable — **and the autopilot
+HOLDS IT ANYWAY** (α@500 m only 0.434, miss 302 vs the 280 baseline, within 8%). *That* is
+"statically unstable yet perfectly flyable". The verifier asserts **SILENT → FIRING-BUT-HELD →
+LOST** so the middle point cannot be dropped by a later edit.
+
+**⚠ H4 — α IS SAMPLED AT A FIXED RANGE (500 m), NOT AT CPA, AND THE TWO HALVES NEED DIFFERENT
+GATES.** The break is reached at **t = 3.12 s / r = 1474.7 m in EVERY arm** (identical to the
+metre — `cma_post` changes only what happens AFTER, which is itself the cleanest evidence that it
+is a STABILITY knob and not a demand knob). The divergence then develops between there and CPA,
+and α_pk lands within a few ms OF the CPA frame — exactly where PN's r→0 demand spike lives.
+Worse, **the LIFT file's LOS gate of 1000 DELETES half B's lesson**: at r > 1000 the arms have
+barely diverged (α@1000 spans only 0.297 → 0.399 across the whole knob range). So the correct gate
+DIFFERS between the halves — measured, not assumed ([[ewsim-missile-verifier-sampling]]). A
+fixed-range sample at 500 m sits well past the break and well above the r→0 artifact, needing no
+common-mode argument at all (though the argument holds too: the endgame spike is COMMON MODE
+across arms, and `cma_post 0` is the control that proves it).
+
+**⭐⭐ H5 — `aero_sat` DOES NOT DISCRIMINATE *AT ALL*, AND THE PLAN'S "26.3%" IS NOT A STALL
+CONSEQUENCE.** G10 predicted `aero_sat` would UNDER-report. Measured, it is worse than that: it
+fires **53/215 frames on the PARKED, LINEAR arm and 53/215 on the STALL arm — the SAME COUNT** (the
+plan's 26.3% is a gate-1000 number, and it is the PARKED arm's number too). It keys off the **α_max
+CLAMP that BOTH arms share**, while the ceiling that actually moved is the interior peak.
+**`post_stall` is the discriminator: EXACTLY 0 vs 56 frames.** ⇒ the client edit is not a polish
+item, it is the difference between a panel that reports the slice's phenomenon and one that
+reports something both arms do equally.
+
+**H6 — a k_sep bookkeeping note for anyone quoting the G1 teeth.** Those (miss 240.37 / 125.14) are
+measured at **`k_sep = 0`**; the shipped lift file authors `k_sep 3.0`. Through the loader at
+k_sep 0 it reproduces **240.366 — the tooth, to the digit** — and at 3.0 it is **240.898**, so
+separation drag is worth **+0.53 m (0.22%)** on this engagement (G5's "nearly inert", re-confirmed).
+⭐ And the PARKED arm is **125.143 at BOTH k_sep values, bit-for-bit**, because separation drag is
+EXACTLY zero below the stall — **gate-2 G8's `-0.0` fix corroborated on the live wire.**
+
+**Two proof-harness bugs, both of the "a proof that does not run is not a proof" class** (slice-21
+gate 3's own lesson, recurring): a stale `_sampled_n > 300` copied from slice 21's verifier failed
+on a run where every physics assertion had already passed (slice 21 ran 3000 frames for a 43 s
+climb; this engagement's CPA is at 4.1 s, so the gated window is legitimately ~215); and an
+`await process_frame` inside the shot harness's `SceneTree._process` DEADLOCKED silently —
+returning is what advances the frame — exiting 0 having saved no file.
+
+**WHAT DID *NOT* NEED CHANGING:** `_setup_spatial_fid_btn` is UNTOUCHED. Slice 22 is a knob slice,
+and like slice 20 its scenarios author `:airframe: pitch_coupled`, so the shared button is the
+airframe cycler by ESTABLISHED PRECEDENT. The one-button rule's "4th occurrence" never arose —
+Decision 1 dissolved it.
 
 ---
 

@@ -2669,6 +2669,214 @@ miss opens to 1.7 km. Re-run the gate-3 proof headless: start that server, then 
 
 ---
 
+**Slice 22 — NONLINEAR `C_L(α)` / TRUE STALL: the ceiling the AIRFRAME sets (HANDOFF §11 Tier-A)** — the aero
+arc's nearest and most load-bearing named deferral, carried explicitly by slices 19, 20 and 21, and the one
+that closes the LEAK bounding two shipped knobs. Slices 19–21 gave cap #4 (`a_max_aero`) three movers and
+**ALL THREE MOVED Q** — the ENGINEER (slice 19's `rho` knob), the MISSILE BY TURNING (slice 20's induced-drag
+V bleed), the MISSILE BY WHERE IT FLIES (slice 21's ρ(z)). **Slice 22 moves the OTHER FACTOR.** Every one of
+those slices assumed the lift curve is a STRAIGHT LINE out to `α_max` — that the airframe will keep trading α
+for lift forever. It will not. Past `α_stall` the flow SEPARATES: **`C_L` PEAKS and then FALLS**, and the drag
+that was negligible in attached flow RISES steeply. The ceiling is not `C_Lα·α_max`; it is the curve's own
+INTERIOR PEAK, and **no amount of Q buys past it.**
+
+> **THE LESSON, IN ONE SENTENCE.** Every prior cap in this project is a MAGNITUDE that SATURATES — pull
+> harder, get no more. This one is a **DERIVATIVE THAT CHANGES SIGN**: past the peak, pulling HARDER turns
+> you LESS *and* costs you MORE. That reversal is new in the suite, and it is why the user chose the
+> true-drop curve over a saturating one (a saturating curve cannot produce the control-loop reversal at all).
+
+⭐ **THE HEADLINE IS AN EXACT IDENTITY.** At fixed Q the linear→stall ceiling ratio is IDENTICALLY
+`α_stall/α_max`, because Q, S, C_Lα and m ALL CANCEL: linear `a_max_aero = Q·S·C_Lα·α_max/m`, stall
+`= Q·S·C_L_peak/m` with `C_L_peak = C_Lα·α_stall`. Measured 471.4352475793185 → 269.3915700453249, ratio
+0.5714285714285715 vs 4/7 = 0.5714285714285715 — **|Δ| = 0.0, bit-for-bit.** Slice 21's ρ-factor identity in
+a NEW LETTER (that one also landed at exactly 0.0; both are algebraic, not fitted). ⚠ **IT IS A SAME-INPUTS
+FORMULA TOOTH, NOT A RUN-VS-RUN** — pinned in `test_aero_curve.jl` (coefficient ratio, atol 1e-15) and
+`test_missile.jl` (`aero_accel_limit` linear-vs-stall on IDENTICAL inputs, atol 1e-12). As a two-run
+comparison it would CONFOUND ITSELF: separation drag makes V (hence Q) diverge between the arms.
+
+**KNOB, NOT RUNG — AND THE PLAN PREDICTED THE OPPOSITE (gate-0 F7, USER DECISION 1).** The plan asserted
+*"linear is `α_stall → ∞`, a LIMIT POINT ⇒ RUNG"* and told gate 0 to VERIFY it. **The verification FAILED,
+and that is the finding.** The achieved α SELF-LIMITS to ~0.24 across the whole viable geometry family (α_pk
+capped at 0.2408 even at `a_lat = 400`; past that is the REACH WALL, not higher α), so α_stall parked at
+≥ 0.25 is linear-in-effect **over every REACHABLE state** — at 0.25 the miss is the linear miss TO THE
+PRINTED DIGIT. Slice 21's own discriminator (*is the off-state (a) a distinct code path and (b) NOT
+knob-reachable?*) therefore returns **KNOB**: α_stall MOVES A CORNER, and a corner can be PARKED OUT OF REACH
+— exactly slice 16's `af_cma`, and the OPPOSITE of slice 21's H, which cannot be parked because altitude is
+the SWEPT variable. ⇒ NO `:aero_curve` fidelity, NO button, and the one-button rule's "4th occurrence" DOES
+NOT ARISE. `test_aero_curve.jl` ASSERTS the absence, so adding one later breaks a test on purpose. ⚠ Record
+the meta-point: **the discriminator is a CONVENTION, not a law** — a rung could be shipped anyway for the
+crisp A/B, but it would be a DELIBERATE DEVIATION, and the discriminator could NOT be cited in support.
+
+**Gate 1** — new pure lib `aero_curve.jl`: `lift_coefficient` (ODD, slope `Cla` below α_stall and
+`−k_drop·Cla` above), `separation_drag_coefficient` (EVEN, `K_sep·max(0,|α|−α_stall)²`, EXACTLY 0 below),
+`moment_coefficient` (ODD, THREE slopes `Cma`/`Cma_post`/`Cma` — the F9 deep-stall bound), the closed-form
+`cl_peak`, `moment_slope`. Teeth: the parity table (**C_L ODD, both drags EVEN**), the closed-form peak, the
+linear-limit agreement, the shared-`C_L` consistency tooth (lift and its induced bill use the SAME `C_L` —
+else the turn and the invoice disagree), the break tooth pinned by SIGN not magnitude, and the sign chain
+(this arc's #1 trap on its FOURTH occurrence). Suite 3182 → 4015.
+
+**Gate 2** — the wiring. `lift_accel_nl`/`induced_drag_accel_nl`/`separation_drag_accel` siblings;
+`_stall_on`/`_stall_params` + the leading stall closure in `_integrate_coupled!`; `aero_accel_limit` gains a
+`curve` arm returning the INTERIOR PEAK; loader validation. Suite 4015 → 4180. **TEN findings**, five of
+which changed what gate 3 could ship — the load-bearing ones: **G2** `k_drop` is NOT a free shape parameter
+(a 1.0 default silently moved the miss 240.37 → 278.11, a 16% shift, with every structural test still
+passing) and **at 0.7 the authority cliff is INVISIBLE**; **G5** separation drag is NEARLY INERT on this
+engagement (0.9% over the whole `K_sep` range) so it is a PHYSICALITY term and **NOT a slider**; **G9** the
+cliff needs `δ_max = 1.0` and relieving the cap DROPS α_pk at cma_post 8 from 2.93 to 1.22 — **part of gate
+0's dramatic 2.7779 was slice-19 FINDING 2's contamination, so that number is NEVER quoted**; **G10** slice
+19's `aero_sat ⟺ demand > a_max_aero` equivalence is BROKEN under stall BY DESIGN. **G7/G8 — two bugs, both
+caught by the slice's own `===` teeth, both in code written to avoid exactly them**: a 1-ULP multiply-grouping
+slip INSIDE the function that generalizes the formula (the project's THIRD catch of that class), and
+`separation_drag_accel` returning `Vec3(-0.0,-0.0,-0.0)` instead of the exact zero it documented. **Neither
+was reachable by an `≈` test.**
+
+**Gate 3 — TWO SCENARIOS, AND THE SPLIT IS A MEASURED CONFIG CONFLICT, NOT A CONVENTION-9 PREFERENCE.** The
+two halves need INCOMPATIBLE WIRES: the lift half needs `k_drop 0.7` / `δ_max 0.4`, the departure half needs
+`k_drop 1.0` / `δ_max 1.0`, and at `k_drop 0.7` the cliff is invisible (G2). **Do not merge them.** ONE
+verifier (`slice22_verify.gd`) detects which half from the declared knob and runs the matching phase set.
+
+**HALF A — `slice22_stall.yaml`, knob `af_alpha_stall ∈ [0.15, 0.35]`.** α_max RAISED 0.2 → **0.35 > α_stall
+0.20** — the plan-§3 inversion, and **it INVERTS SLICE 19**: to reach post-stall the ACHIEVED α must exceed
+α_stall, and the route via the LEAK (slice-19 FINDING 14's overshoot) was REJECTED as gain-dependent,
+fragile, and CIRCULAR (closing that leak is a stated payoff of this very slice). Via the COMMAND is the
+design: **the autopilot COMMANDS INTO STALL, α_max becomes a soft high limit, and THE PHYSICS SETS THE
+WALL.** The inner loop keeps inverting on the LINEAR `C_Lα` and that is deliberate on three counts — it is
+REALISTIC (an autopilot carries an internal linear model of its airframe, so a linear inversion that
+OVER-commands α as the real curve goes concave is **slice-19's command-vs-achieved gap MADE PHYSICAL**), it
+SIDESTEPS the MULTIVALUED past-peak inverse (never constructed here; inherited by whoever wants a
+stall-aware autopilot — a NAMED deferral), and it shrinks the blast radius. Wire (frame-sampled, seed 22,
+LOS-gated r > 1000): stall **241.06** vs parked-linear **125.33** (**1.92×**), ceiling **269.37 vs 471.39**,
+the identity residual **0.0 on the wire**, post_stall **56/215 = 26.0%**, `defl_sat` 0 in every arm, replay
+posdiff **0.0**. Floor arm (0.15): miss 437.39, ceiling 202.02.
+
+⭐⭐ **THE SHARPEST GATE-3 FINDING — `aero_sat` DOES NOT DISCRIMINATE AT ALL, AND THE PLAN'S "26.3%" IS NOT A
+STALL CONSEQUENCE.** It fires **53/215 frames on the PARKED, LINEAR arm and 53/215 on the STALL arm — the
+SAME COUNT** — because (G10) it keys off the **α_max CLAMP that BOTH arms share**, while the ceiling that
+actually moved is the interior peak. So there is a real regime, **past the physics ceiling but with the
+command not yet pegged**, where the demand exceeds `a_max_aero` and `aero_sat` stays 0. **`post_stall` is the
+discriminator: EXACTLY 0 vs 56 frames.** That is why it is a SEPARATELY-NAMED flag rather than folded into
+`aero_sat` (which would make the slice-19 flag lie about which cap is doing the work), and it is the entire
+justification for the slice's ONE client edit.
+
+**HALF B — `slice22_departure.yaml`, knob `af_cma_post ∈ [0, 10]` — RELAXED STATIC STABILITY.**
+
+    ★ A STATICALLY UNSTABLE AIRFRAME IS PERFECTLY FLYABLE — UNTIL THE AUTOPILOT RUNS OUT
+      OF AUTHORITY. **THE THRESHOLD IS THE LESSON, NOT THE TUMBLE.**
+
+⚠ A REFRAME (gate-0 DECISION 2). The slice was GROWN for "the airframe DEPARTS" after an advisor pass caught
+that a LINEAR `pitch_moment` structurally CANNOT depart (`Cmα < 0` held through stall ⇒ always a restoring
+moment; as V bleeds ω_sp goes sluggish but stays REAL, and `q̄ = q·d/(2V)` RISES ⇒ MORE damping) — the
+slice-20 "positive feedback" / slice-21 "high altitude" overclaim class, THIRD occurrence. The user chose to
+GROW THE SLICE rather than soften the language; then gate 0 measured what the break actually does, and
+**what it found is a better lesson than the tumble.**
+
+⭐⭐ **AND IT IS A THREE-POINT CLAIM WHOSE LESSON IS THE MIDDLE — a gate-3 finding.** A two-point 0-vs-8 check
+demonstrates "NEUTRAL vs LOST", a **WEAKER and DIFFERENT** claim than the ratified one, because at
+`cma_post 0` the airframe is **NEUTRALLY stable past the break (slope 0), not unstable at all** — the ω_sp
+sentinel never fires. It is the CONTROL. Measured on the wire (α at a FIXED RANGE of 500 m):
+
+| cma_post | α@500m | ω_sp ceiled | miss | defl_sat | verdict |
+|---|---|---|---|---|---|
+| 0.0 | 0.3092 (17.7°) | **0 — SILENT** | 280.58 | 0 | NEUTRAL past the break — the CONTROL |
+| 4.0 | 0.4340 (24.9°) | **60 frames** | 302.36 (**1.078×**) | 0 | ⭐ **UNSTABLE AND STILL FLYABLE** |
+| 8.0 | 1.0081 (57.8°) | 33 frames | 371.93 | 0 | autopilot **LOSES** ← SHIPS |
+
+**The lesson is `cma_post 4`: the sentinel FIRES (60 frames / 947 ticks — nearly a second with NO REAL
+SHORT-PERIOD MODE, so the airframe is genuinely statically unstable) and THE AUTOPILOT HOLDS IT ANYWAY** (α
+only 0.43, miss within 8% of baseline). **That is "statically unstable yet perfectly flyable"** — real
+fly-by-wire physics; every modern fighter is statically unstable and flies fine, right up until the control
+authority runs out. The verifier asserts **SILENT → FIRING-BUT-HELD → LOST** precisely so the middle cannot
+be dropped.
+
+⭐ **SLICE 16'S ω_sp SENTINEL FIRES IN FLIGHT — FIRST TIME IN PROJECT HISTORY**, and it is visible on the
+shot as `omega_sp: 1000000000`. Slice 16 built the `ω² < 0 ⇒ NaN` guard (`_finite`-clamped to `FINITE_CEIL`)
+for an AUTHORED `Cmα ≥ 0`; past the break the LOCAL slope is `cma_post > 0`, so it fires DYNAMICALLY at the
+moment of departure. The whole `_finite`/wire path was walked with a departure in progress (convention 6,
+gate-0 P3c): it reaches the wire as FINITE_CEIL, **never a NaN.** ⭐ **AND IT IS SLICE 16'S TUMBLE, NOW
+SELF-INFLICTED**: slice 16 taught static stability with `af_cma` as an AUTHORED value — an engineer typed
+the unstable case. Here the airframe **DRIVES ITSELF INTO THAT REGIME BY FLYING THERE.**
+
+⚠ **THE MISS IS NOT THE METRIC FOR HALF B, AND THAT IS FINAL** (gate-0 F4/F10): even at full tumble the LIFT
+file's miss moves **+1.4%** — a missile that departs 0.7 s before CPA keeps its momentum and lands in much
+the same place. Any lesson line built on it would be measuring the LIFT collapse and mis-attributing it; it
+corroborates the direction and nothing more. ⚠ **AND "TIME WITH ω_sp CEILED" IS NOT A SEVERITY MEASURE — IT
+RUNS BACKWARDS** (G6, re-measured here): 60 frames at cma_post 4 vs 33 at 8 (per-tick 947 → 526 → 442),
+because α blows straight PAST α_sat into the deep-stall RESTORING region where ω_sp is REAL again. Asserted
+as a BOOLEAN only.
+
+**TWO MORE GATE-3 FINDINGS, both about the measurement window:**
+- ⚠ **`cma_post 12` BREAKS THE ISOLATION** (`defl_sat` 289). The edge is between **10.0 (exactly 0)** and
+  **10.5 (65)**, and `defl_sat` is MONOTONE in cma_post, so the knob ships **[0, 10]** and the WHOLE declared
+  domain is provably clean. ⚠ The margin is **~1.03×, NOT slice-20's 2×** — stated rather than hidden, and it
+  cannot be widened by raising δ_max, which is ALREADY an unphysical 1.0 rad (57°) authored SPECIFICALLY so
+  the deflection cap is provably not the story.
+- ⚠ **α IS SAMPLED AT A FIXED RANGE (500 m), NOT AT CPA, AND THE LIFT FILE'S LOS GATE WOULD DELETE THIS
+  LESSON.** The break is reached at **t = 3.12 s / r = 1474.7 m in EVERY arm** (identical to the metre); the
+  divergence then develops between there and CPA, and α_pk lands within a few ms OF the CPA frame — exactly
+  where PN's r→0 demand spike lives. At the lift file's gate of 1000 the arms have barely diverged (α@1000
+  spans only 0.297 → 0.399 across the whole knob range). **The correct gate DIFFERS between the two halves**
+  — measured, not assumed ([[ewsim-missile-verifier-sampling]]). A fixed-range sample at 500 m sits well past
+  the break and well above the r→0 artifact, so it needs no common-mode argument at all.
+
+**⚠ NOT ZERO CLIENT CODE (unlike slice 20), and the ONE edit is FORCED by G10**: `_draw_aero_strip`'s breach
+indicator now keys on **`post_stall`, not `aero_sat`** (`_breach = _post_stall_now if _has_post_stall else
+_aero_sat_now`), with a "POST-STALL" label and a stall-specific header/footer. **PRESENCE-GATED** — slices
+19/20/21 ship no `post_stall` key, so `_has_post_stall` stays false and they are byte-identical. The shared
+button is the AIRFRAME cycler by **slice-20's ESTABLISHED PRECEDENT** (that scenario also authors
+`:airframe`), so `_setup_spatial_fid_btn` is UNCHANGED.
+
+**Class 4c** (physics-changing, NO RNG — truth-fed PN, no seeker ⇒ "draw-count invariance" is VACUOUS; the
+**8th consecutive 4c**; live-settable, NO `set_fidelity` guard). **INERT without `:pitch_coupled`** —
+`_stall_on`'s third conjunct is DELIBERATE and is this slice's answer to its own gate-2 warning that *the
+moment break reaches FURTHER than ρ(z) did*: `pitch_moment` is ALSO live on the `:point_mass` rotational path
+(`_integrate_airframe!`), so without the conjunct a `:point_mass` wire would integrate θ/q through a BREAKING
+moment while pos/vel flew a linear-aero fiat accel — half the missile in one aerodynamic model and half in
+another, slice 21's `_atm_on` latent bug exactly. **`_integrate_airframe!` is untouched by this slice.**
+**STALL × THE EXPONENTIAL ATMOSPHERE IS A LOAD ERROR, NOT A BRANCH-ORDER OUTCOME** (convention 9): the stall
+arm LEADS `_integrate_coupled!`'s chain so the four prior arms stay textually verbatim (4 closures, not 8) —
+sound only because a missile carrying both `alpha_stall` and `scale_height_m` is REFUSED at load.
+
+**Four proofs green.** `slice22_verify.gd` both halves (exit 0 each): Half A prints the identity residual
+**0.0** on the wire and the 1.92× ratio; Half B prints the three-point progression with `defl_sat 0`
+throughout and both replays bit-identical. `slice22_ui_test.gd` — FOUR teeth on the G10 edit (post_stall
+lights where aero_sat is silent; the MIRROR case does NOT light, proving the indicator **SWITCHED rather
+than gaining an `or`** — an `or` would light the panel for the linear twin and destroy the contrast; a wire
+with no key falls back to aero_sat exactly as before, the additive claim PROVEN not asserted on SHARED draw
+code) plus a **SIX-WAY** value-guard. **All seven prior `*_ui_test.gd` re-run green** (16/17/18/19/20/21) —
+the shared-draw edit provably disturbed nothing. `Sandbox.tscn` headless smoke-load reaches
+`EWSIM_SERVER_DONE` against BOTH servers. TWO windowed shots aimed at the CLAIMED branch: the stall wire with
+**"POST-STALL"** lit (not "AERO SAT"), ceiling 262 flat under a demand of 796 through a red breach band,
+`a_sep 0.84` live and `defl_sat 0`; and the departure caught mid-event — `omega_sp 1000000000` (the sentinel
+ON THE WIRE), the nose cone **34.2° off** the cyan velocity vector, the trail CURLING BACK ON ITSELF, α
+pinned at the −0.60 deep-stall bound, `a_sep 14.02`, and `defl_sat` STILL 0.
+
+**Slice 22 COMPLETE — the ceiling is the airframe's own curve, and an unstable airframe flies fine until it
+doesn't.** ⚠ A gate-3 note for whoever quotes these numbers: the gate-2 G1 teeth (miss 240.37 / 125.14) are
+measured at **`k_sep = 0`** while the shipped file authors `k_sep 3.0`; through the loader at k_sep 0 it
+reproduces **240.366 — the tooth, to the digit** — and at the shipped 3.0 it is **240.898**, so separation
+drag is worth **+0.53 m (0.22%)** here. ⭐ And the PARKED arm is **125.143 at BOTH k_sep values, bit-for-bit**,
+because separation drag is EXACTLY zero below the stall — gate-2 G8's `-0.0` fix corroborated on the wire.
+DEFERRED (NAMED): **a STALL-AWARE AUTOPILOT** (inverting the real curve, with the multivalued past-peak
+inverse that implies — this slice deliberately leaves the inversion linear); **HYSTERESIS** (real separation
+re-attaches at a LOWER α than it separates at; the shipped curve is single-valued in α, with no memory);
+**MACH / compressibility** (the aero lib is deliberately Mach-free, so `α_stall` and `C_Lα` do not vary with
+Mach here — a real interceptor's do); **ROLL/YAW DEPARTURE** — ⚠ **the sharpest remaining approximation in
+the slice**: a real departure goes OUT-OF-PLANE and this one departs strictly in-plane; it dies only with
+bank-to-turn / 3-D; **DEPARTURE RECOVERY / a spin model** (this slice ships the ONSET, not the aftermath —
+post-departure rotational behaviour is a separate model and is NOT smuggled in); **stall × ρ(z)** (refused at
+load today); and slice 21's own **ρ(z) on the ballistic path**.
+Run the slice-22 showcase: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice22_stall.yaml`
+(or `scenarios/slice22_departure.yaml`), then launch Godot on `clients/godot`. **There is no button to press
+— drag the slider.** On the stall file, drag **α_stall to 0.35** and the corner leaves every reachable α: the
+missile flies the slice-19/20/21 lift curve and misses by 125 m; drag it down and the ceiling falls with it
+EXACTLY proportionally until it misses by 437. On the departure file, drag **Cm_post to 0** and the autopilot
+holds the airframe at 17.7° with the ω_sp sentinel silent; wind it to 4 and the sentinel FIRES while the
+autopilot still holds; wind it to 8 and watch the nose come off the velocity vector for good. Re-run the
+gate-3 proof headless: start either server, then the console Godot `--headless --path clients/godot --script
+res://net/slice22_verify.gd` (exit 0 = pass; it auto-detects which half). The UI test needs NO server:
+`… --script res://net/slice22_ui_test.gd`.
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,
