@@ -723,3 +723,224 @@ end
         @test b2 ≈ K * m * a_perp^2 / (Q2 * S) atol = 1e-9
     end
 end
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+@testset "NONLINEAR AERO WIRED — the `_nl` siblings (slice 22 gate 2)" begin
+    # Gate 1 proved the CURVES (aero_curve.jl). These are the WIRING claims: that the accel/moment
+    # functions actually route through those curves, that each LINEAR twin is left untouched, and —
+    # the sharpest check in the slice, which gate 1 explicitly deferred to here — that the turn and
+    # the invoice are billed off ONE `C_L`.
+    m = 140.0; S = π * 0.1^2; Cla = 20.0; V = 600.0
+    afp(; K = 0.0) = AirframeParams(S, 0.2, 20.0, -1.0, 3.0, -150.0, 1.225, Cla, K)
+    # gate-0's balanced pair: α_stall 0.20, α_break 0.28 (F3 — EQUAL angles give the controlled
+    # lift-collapse window ZERO width), α_sat 0.60 (F9's deep-stall bound), Cma_post 8 (past the
+    # authority cliff, which sits between 4 and 8).
+    curve(; as = 0.20, kd = 1.0, ks = 3.0, ab = 0.28, cp = 8.0, asat = 0.60) =
+        AeroCurveParams(as, kd, ks, ab, cp, asat)
+    n3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+    # Fly at a chosen α with γ = 0, so θ IS α and the ⟂ direction is +ẑ (the lift/drag frames stay
+    # trivially separable and every sign below is readable by eye).
+    vel = Vec3(V, 0.0, 0.0); Q = 0.5 * 1.225 * V^2
+    v̂ = Vec3(1.0, 0.0, 0.0); n̂ = Vec3(0.0, 0.0, 1.0)
+
+    @testset "⭐⭐ ONE `C_L`, TWO CONSUMERS — the turn and the invoice cannot disagree" begin
+        # THE SHARPEST CHECK IN THE SLICE (gate 1 named it and deferred it here as a WIRING claim).
+        # `lift_accel_nl` turns the missile on `C_L(α)`; `induced_drag_accel_nl` invoices it for
+        # `K·C_L²`. If they ever routed through different lift curves the missile would turn on one
+        # lift and be billed for another — and NOTHING else in the test set would notice.
+        #
+        # The tooth RECOVERS C_L from each accel INDEPENDENTLY (convention 11's different-algorithm
+        # oracle, not a re-typed call) and demands they agree:
+        #     |a_lift| = Q·S·|C_L|/m       ⇒ |C_L| = |a_lift|·m/(Q·S)
+        #     |a_ind|  = Q·S·K·C_L²/m      ⇒ |C_L| = √(|a_ind|·m/(Q·S·K))
+        K = 0.15; p = afp(K = K)
+        for α in (0.05, 0.15, 0.25, 0.40, 0.55)     # BOTH sides of the stall — the point
+            c = curve()
+            cl_from_lift = n3(lift_accel_nl(vel, α, m, p, c)) * m / (Q * S)
+            cl_from_bill = sqrt(n3(induced_drag_accel_nl(vel, α, m, p, c)) * m / (Q * S * K))
+            @test cl_from_lift ≈ cl_from_bill atol = 1e-12
+            # …and both equal the LIBRARY curve — so neither is a private re-derivation.
+            @test cl_from_lift ≈ abs(lift_coefficient(α, Cla, c)) atol = 1e-12
+        end
+        # THE TOOTH HAS TEETH: past the stall the shared curve is genuinely FAR from the linear one,
+        # so an `_nl` that silently used `Cla*α` would be CAUGHT here, not merely tolerated.
+        @test abs(lift_coefficient(0.40, Cla, curve())) < 0.6 * abs(Cla * 0.40)
+    end
+
+    @testset "⭐ THE CONTROL-LOOP REVERSAL — past the peak, pulling HARDER turns you LESS" begin
+        # What is NEW in the suite. Every prior cap is a MAGNITUDE that saturates (pull harder, get
+        # no more); this one is a DERIVATIVE THAT CHANGES SIGN. Pinned as a reversal in the ACHIEVED
+        # turn accel, which is the quantity the lesson is actually about.
+        p = afp(); c = curve()
+        aL(α) = n3(lift_accel_nl(vel, α, m, p, c))
+        @test aL(0.10) < aL(0.20)                     # below the stall: more α ⇒ MORE turn
+        @test aL(0.30) < aL(0.20)                     # past it: more α ⇒ LESS turn (the reversal)
+        @test aL(0.40) < aL(0.30)                     # …and it keeps falling
+        # the peak is exactly AT the stall, and it is `cl_peak` (the closed form the headline rests on)
+        @test aL(0.20) ≈ Q * S * cl_peak(Cla, c) / m atol = 1e-9
+    end
+
+    @testset "the PARKED knob is BIT-EXACT vs the linear twins (`===`, the F7 off-state)" begin
+        # The knob-vs-rung argument would BEG THE QUESTION on a calibrated tolerance: the claim is
+        # that a parked corner IS the linear path, so it is pinned with `===` on the returned Vec3s
+        # and the raw moment (convention 11's mismatched-EP `==` no-op shape).
+        K = 0.15; p = afp(K = K)
+        parked = curve(as = 5.0, ab = 6.0, asat = 7.0)   # every corner far above any reachable α
+        for α in (-0.18, -0.05, 0.0, 0.05, 0.18)
+            @test lift_accel_nl(vel, α, m, p, parked) === lift_accel(vel, α, m, p)
+            @test induced_drag_accel_nl(vel, α, m, p, parked) === induced_drag_accel(vel, α, m, p)
+            @test pitch_moment_nl(α, 0.1, 0.5, V, p, parked) === pitch_moment(α, 0.1, 0.5, V, p)
+            # …and the NEW additive term contributes EXACTLY nothing (not "nearly nothing")
+            @test separation_drag_accel(vel, α, m, p, parked) === Vec3(0.0, 0.0, 0.0)
+        end
+    end
+
+    @testset "SEPARATION DRAG — EVEN in α, exactly 0 below the stall, and it never turns you" begin
+        p = afp(); c = curve()
+        # EXACTLY zero below (the byte-identity story depends on exact, not small)
+        @test separation_drag_accel(vel, 0.19, m, p, c) === Vec3(0.0, 0.0, 0.0)
+        @test separation_drag_accel(vel, -0.19, m, p, c) === Vec3(0.0, 0.0, 0.0)
+        a_sep = separation_drag_accel(vel, 0.35, m, p, c)
+        @test n3(a_sep) > 0.0
+        # ALONG −v̂: it slows, never turns. A drag leaking a ⟂ component would be a second, unnamed
+        # LIFT — the #1 sign trap's shape, and a magnitude-only test would never see it.
+        @test a_sep[1]*n̂[1] + a_sep[2]*n̂[2] + a_sep[3]*n̂[3] == 0.0
+        @test a_sep[1]*v̂[1] + a_sep[2]*v̂[2] + a_sep[3]*v̂[3] < 0.0
+        # EVEN in α — up and down stall identically (mirrors induced drag's parity)
+        @test separation_drag_accel(vel, -0.35, m, p, c) === a_sep
+        # the closed form vs an INDEPENDENT recompute (a different algorithm, not a re-typed call)
+        @test n3(a_sep) ≈ Q * S * (3.0 * (0.35 - 0.20)^2) / m atol = 1e-12
+    end
+
+    @testset "⭐ THE TWO DRAGS MOVE OPPOSITE WAYS PAST THE PEAK — they are distinct physics" begin
+        # Plan §2, and the reason the separation term is MANDATORY rather than optional: slice 20's
+        # induced term FALLING past the peak is CORRECT PHYSICS (induced drag genuinely does fall
+        # with lift²), so it is NOT "fixed" here. What was missing is a term that RISES. A stalled
+        # missile that decelerated LESS would be the OPPOSITE of the lesson.
+        p = afp(K = 0.15); c = curve()
+        ind(α) = n3(induced_drag_accel_nl(vel, α, m, p, c))
+        sep(α) = n3(separation_drag_accel(vel, α, m, p, c))
+        @test ind(0.30) < ind(0.20)          # induced FALLS as C_L collapses
+        @test ind(0.45) < ind(0.30)
+        @test sep(0.30) > sep(0.20)          # separation CLIMBS
+        @test sep(0.45) > sep(0.30)
+        # …and past the peak the NEW term is what dominates the bill (else the lesson inverts)
+        @test sep(0.45) > ind(0.45)
+    end
+
+    @testset "⭐ THE MOMENT BREAK — pinned BY SIGN (the #1 trap's 4th occurrence, same function)" begin
+        # `pitch_moment_nl` puts this arc's signature trap back INSIDE the exact function slice 16
+        # found it in. Getting the break backwards would make an unstable airframe SELF-RIGHT —
+        # deleting the second lesson entirely — while passing any magnitude-based check. So: SIGN.
+        p = afp(); c = curve()
+        Mnl(α) = pitch_moment_nl(α, 0.0, 0.0, V, p, c)     # δ = q = 0 ⇒ the static term alone
+        # BELOW the break: RESTORING (M opposes α) — slice 16's stable airframe, unchanged
+        @test Mnl(0.10) < 0.0
+        @test Mnl(-0.10) > 0.0
+        # ABOVE it: DIVERGING (M pushes α further out) — the static margin is consumed
+        @test Mnl(0.40) > 0.0
+        @test Mnl(-0.40) < 0.0
+        # the slope itself, the quantity the sign claim is really about
+        @test moment_slope(0.10, -1.0, c) < 0.0
+        @test moment_slope(0.40, -1.0, c) > 0.0
+        # ⚠ AND THE DEEP-STALL BOUND (F9): above α_sat it is RESTORING AGAIN, which is what turns an
+        # unbounded numerical blow-up (α → 3.8e5 in the probe) into a SECOND HIGH-α EQUILIBRIUM.
+        # Without it a real tumble and a bug are indistinguishable.
+        @test moment_slope(0.80, -1.0, c) < 0.0
+        # ODD in α — the control/damping terms untouched, so the static term still mirrors exactly
+        @test pitch_moment_nl(0.4, 0.0, 0.0, V, p, c) ≈
+              -pitch_moment_nl(-0.4, 0.0, 0.0, V, p, c) atol = 1e-12
+    end
+
+    @testset "⭐⭐ THE HEADLINE — the ceiling ratio is IDENTICALLY α_stall/α_max (Q, S, C_Lα, m cancel)" begin
+        # ⚠ A SAME-INPUTS FORMULA COMPARISON, NEVER A RUN-VS-RUN (advisor, plan §3). Two live arms
+        # would confound this: separation drag makes V — hence Q — diverge between them, so a
+        # scenario diff would stop testing what it claims. Feeding IDENTICAL (V, ρ, α_max) to the two
+        # arms of ONE function is exactly what makes the identity EXACT rather than approximate.
+        p = afp()
+        for (as, α_max) in ((0.20, 0.35), (0.20, 0.30), (0.15, 0.25), (0.10, 0.40))
+            c = curve(as = as)
+            lin   = aero_accel_limit(V, m, p; alpha_max = α_max)
+            stall = aero_accel_limit(V, m, p; alpha_max = α_max, curve = c)
+            @test stall / lin ≈ as / α_max atol = 1e-14
+        end
+        # …and the cancellation is REAL, not a coincidence of these constants: sweep C_Lα, ρ and mass
+        # and the ratio does not move at all.
+        for Cla2 in (5.0, 20.0, 80.0), ρ2 in (0.3, 1.225), m2 in (50.0, 140.0)
+            p2 = AirframeParams(S, 0.2, 20.0, -1.0, 3.0, -150.0, ρ2, Cla2, 0.0)
+            c2 = curve(as = 0.20)
+            @test aero_accel_limit(V, m2, p2; alpha_max = 0.35, curve = c2) /
+                  aero_accel_limit(V, m2, p2; alpha_max = 0.35) ≈ 0.20 / 0.35 atol = 1e-14
+        end
+    end
+
+    @testset "the ceiling's `curve` arm — INTERIOR peak, and a parked knob returns the linear value" begin
+        p = afp()
+        # α_max BELOW the stall ⇒ the stall is unreachable ⇒ the max over the clamp interval is AT
+        # the clamp, i.e. the slice-19/20/21 formula. The F7 off-state showing up in the readout too.
+        # ⚠ `===`, not a tolerance: this arm must route through the VERBATIM linear expression, and
+        # an `≈` here would have silently accepted the 1-ULP multiply-grouping slip that the live
+        # parked-knob tooth caught (plan §4's trap, inside `aero_accel_limit` itself).
+        @test aero_accel_limit(V, m, p; alpha_max = 0.10, curve = curve(as = 0.20)) ===
+              aero_accel_limit(V, m, p; alpha_max = 0.10)
+        # the default keyword IS the verbatim linear line (every slice-19/20/21 call site)
+        @test aero_accel_limit(V, m, p; alpha_max = 0.2, curve = nothing) ===
+              aero_accel_limit(V, m, p; alpha_max = 0.2)
+        # and the interior peak is `cl_peak`, in CLOSED FORM — never a numeric search
+        @test aero_accel_limit(V, m, p; alpha_max = 0.35, curve = curve(as = 0.20)) ≈
+              Q * S * cl_peak(Cla, curve(as = 0.20)) / m atol = 1e-9
+    end
+
+    @testset "⭐ THE ω_sp SENTINEL FIRES AT DEPARTURE — the local-slope readouts (F11)" begin
+        # The second lesson's HEADLINE TELEMETRY, not a defensive branch. Slice 16 built the
+        # `ω² < 0 ⇒ NaN` guard for an AUTHORED `Cmα ≥ 0` and it has NEVER fired mid-run in this
+        # project's history. On the LOCAL slope it fires DYNAMICALLY, the moment α crosses the break.
+        p = afp(); c = curve()
+        @test !isnan(short_period_freq_nl(V, 0.10, p, c))     # below: a real oscillation exists
+        @test short_period_freq_nl(V, 0.10, p, c) ≈ short_period_freq(V, p) atol = 1e-12
+        @test isnan(short_period_freq_nl(V, 0.40, p, c))      # PAST THE BREAK: no frequency exists
+        @test isnan(short_period_freq_nl(V, -0.40, p, c))     # …and it is EVEN in α
+        @test !isnan(short_period_freq_nl(V, 0.80, p, c))     # deep stall: restoring again (F9)
+        # ⚠ CONVENTION 6 — the NaN must reach the wire as a FINITE number. This is the path that has
+        # never been exercised mid-run; walking it here is the unit half of gate 3's P3c.
+        @test EWSim._finite(short_period_freq_nl(V, 0.40, p, c)) == FINITE_CEIL
+        @test isfinite(EWSim._finite(short_period_freq_nl(V, 0.40, p, c)))
+        # ⚠ USING THE CONSTANT `Cma` HERE WOULD REPORT A HEALTHY AIRFRAME MID-DEPARTURE — a readout
+        # describing a different missile than the one on screen (slice 21's `_atm_on` bug class).
+        # That is the whole reason the `_nl` sibling exists, so pin the DISAGREEMENT.
+        @test !isnan(short_period_freq(V, p))                 # the OLD readout is oblivious
+    end
+
+    @testset "`trim_alpha_nl` — the local slope, so the trim FLIPS SIGN past the break" begin
+        p = afp(); c = curve()
+        # below the break: the slice-16/17 trim, unchanged
+        @test trim_alpha_nl(0.1, 0.05, p, c) ≈ trim_alpha(0.1, p) atol = 1e-14
+        # past it the local slope is POSITIVE ⇒ the reported trim flips: the balance point that used
+        # to ATTRACT now REPELS. The honest reading, and it matches ω_sp going NaN alongside it.
+        @test sign(trim_alpha_nl(0.1, 0.40, p, c)) == -sign(trim_alpha(0.1, p))
+        # δ = 0 ⇒ EXACTLY 0.0, whatever the slope (the linear twin's degenerate, preserved)
+        @test trim_alpha_nl(0.0, 0.40, p, c) === 0.0
+        # both readouts take their slope from the ONE `moment_slope`, so they cannot drift apart
+        # (with Cmδ = 3 > 0 and a POSITIVE local slope, `−(Cmδ/slope)·δ` is NEGATIVE — the flip)
+        @test isnan(short_period_freq_nl(V, 0.40, p, c)) && trim_alpha_nl(0.1, 0.40, p, c) < 0.0
+    end
+
+    @testset "degenerates — a live stall knob can never crash a tick (convention 5)" begin
+        p = afp(K = 0.15); c = curve()
+        # V → 0 (launch/apex): every ÷V guard holds, and the ceiling genuinely IS zero there
+        slow = Vec3(1e-12, 0.0, 0.0)
+        @test lift_accel_nl(slow, 0.3, m, p, c) === Vec3(0.0, 0.0, 0.0)
+        @test induced_drag_accel_nl(slow, 0.3, m, p, c) === Vec3(0.0, 0.0, 0.0)
+        @test separation_drag_accel(slow, 0.3, m, p, c) === Vec3(0.0, 0.0, 0.0)
+        @test aero_accel_limit(0.0, m, p; alpha_max = 0.2, curve = c) == 0.0
+        # a huge α (the deep-stall tumble — α ≈ 159° at gate-0's Cma_post = 8) stays finite everywhere
+        for α in (2.7779, -2.7779, 10.0)
+            @test isfinite(n3(lift_accel_nl(vel, α, m, p, c)))
+            @test isfinite(n3(separation_drag_accel(vel, α, m, p, c)))
+            @test isfinite(pitch_moment_nl(α, 0.1, 0.5, V, p, c))
+            @test isfinite(EWSim._finite(short_period_freq_nl(V, α, p, c)))
+        end
+        # k_drop = 0 (lift FLATLINES past the stall rather than dropping) is in-domain and finite
+        @test isfinite(n3(lift_accel_nl(vel, 0.5, m, p, curve(kd = 0.0))))
+    end
+end

@@ -561,6 +561,93 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                     error("missile '$id': airframe.scale_height_m must be finite " *
                           "(got $(comp[:af_scale_height]))")
             end
+            # SLICE 22 — NONLINEAR AERO / TRUE STALL. PRESENCE-GATED on `alpha_stall` (the slice-20
+            # `k_induced` / slice-21 `scale_height_m` precedent): slices 16/17/19/20/21 all carry
+            # airframe blocks, so only a slice-22 YAML authors this corner and every prior wire is
+            # byte-identical. There is NO fidelity rung — gate-0 F7 measured the off-state as
+            # in-domain KNOB PARKING (`alpha_stall ≥ alpha_max` ⇒ linear over every reachable α),
+            # so slice 21's own discriminator returns KNOB. `alpha_stall` and `cma_post` are the two
+            # LESSON SLIDERS (the ceiling, and the relaxed-static-stability authority cliff); the
+            # rest is authored shape.
+            if haskey(ab, "alpha_stall")
+                # ⚠ ONE LESSON PER SCENARIO, ENFORCED AT LOAD, NOT BY BRANCH ORDER (convention 9;
+                # advisor). `_integrate_coupled!` takes the stall arm BEFORE the exponential-
+                # atmosphere arm, so a missile authoring both would silently fly a constant-ρ stall
+                # and its ρ(z) would vanish without a word — the slice-21 `_atm_on` latent-bug class
+                # exactly. Refuse the combination here instead: it is not a supported physics
+                # pairing (stall × ρ(z) is a named deferral), and a scenario that asks for it is
+                # asking for a lesson neither slice ships.
+                haskey(ab, "scale_height_m") &&
+                    error("missile '$id': airframe.alpha_stall and airframe.scale_height_m are " *
+                          "MUTUALLY EXCLUSIVE — slice 22's stall arm is constant-ρ and would " *
+                          "silently override ρ(z) (convention 9: one lesson per scenario)")
+                comp[:af_alpha_stall] = _f64(ab["alpha_stall"])
+                # > 0 and finite: the corner is an ANGLE, and a non-positive one would put the whole
+                # airframe permanently post-stall at α = 0 (lift falling from the origin). Parking it
+                # HIGH is the documented off-state — parking it at or below zero is not a lesson.
+                comp[:af_alpha_stall] > 0 ||
+                    error("missile '$id': airframe.alpha_stall must be > 0 " *
+                          "(got $(comp[:af_alpha_stall]))")
+                isfinite(comp[:af_alpha_stall]) ||
+                    error("missile '$id': airframe.alpha_stall must be finite " *
+                          "(got $(comp[:af_alpha_stall]))")
+                # The post-stall lift slope as a FRACTION of C_Lα. ≥ 0: a negative k_drop would make
+                # lift RESUME GROWING past the stall — the opposite of the phenomenon, and it would
+                # invert the ceiling the whole slice is about (`cl_peak` would stop being the peak).
+                # DEFAULT 0.7 = GATE 0's MEASURED OPERATING POINT, and it is load-bearing rather
+                # than cosmetic: at 0.7 the gate-2 wiring reproduces the probe's whole table TO THE
+                # DIGIT (parked 125.14, stall 240.37, ceilings 471.44 → 269.39, Cma_post 8 → 243.67).
+                # ⚠ k_drop is NOT a free shape parameter — it is load-bearing for the DEPARTURE half:
+                # at 1.0 the same break sends α_pk to 3.02 rad (a real tumble) where at 0.7 it only
+                # reaches 0.38 and the autopilot holds. `_stall_params`' default MUST match this one.
+                comp[:af_k_drop] = _f64(get(ab, "k_drop", 0.7))
+                comp[:af_k_drop] ≥ 0 ||
+                    error("missile '$id': airframe.k_drop must be ≥ 0 — a negative post-stall " *
+                          "slope is lift that RESUMES GROWING past the stall " *
+                          "(got $(comp[:af_k_drop]))")
+                isfinite(comp[:af_k_drop]) ||
+                    error("missile '$id': airframe.k_drop must be finite (got $(comp[:af_k_drop]))")
+                # Separation drag. ≥ 0 for the `k_induced` reason: a negative K_sep is a drag that
+                # ACCELERATES. 0 is legal and meaningful (the lift lesson with no post-stall bill).
+                comp[:af_k_sep] = _f64(get(ab, "k_sep", 0.0))
+                comp[:af_k_sep] ≥ 0 ||
+                    error("missile '$id': airframe.k_sep must be ≥ 0 — a negative separation-drag " *
+                          "factor is a drag that ACCELERATES (got $(comp[:af_k_sep]))")
+                isfinite(comp[:af_k_sep]) ||
+                    error("missile '$id': airframe.k_sep must be finite (got $(comp[:af_k_sep]))")
+                # THE MOMENT BREAK (relaxed static stability). Defaults park it FAR out of reach, so
+                # authoring `alpha_stall` ALONE gives the LIFT lesson with a LINEAR moment and NO
+                # departure — the two lessons are separately authorable, which is what keeps
+                # convention 9 satisfiable in one scenario file.
+                comp[:af_alpha_break] = _f64(get(ab, "alpha_break", 1.0e9))
+                comp[:af_cma_post]    = _f64(get(ab, "cma_post", 0.0))
+                comp[:af_alpha_sat]   = _f64(get(ab, "alpha_sat", 2.0e9))
+                comp[:af_alpha_break] > 0 ||
+                    error("missile '$id': airframe.alpha_break must be > 0 " *
+                          "(got $(comp[:af_alpha_break]))")
+                isfinite(comp[:af_alpha_break]) ||
+                    error("missile '$id': airframe.alpha_break must be finite " *
+                          "(got $(comp[:af_alpha_break]))")
+                isfinite(comp[:af_cma_post]) ||
+                    error("missile '$id': airframe.cma_post must be finite " *
+                          "(got $(comp[:af_cma_post]))")
+                # ⚠ THE DEEP-STALL BOUND IS REQUIRED, NOT POLISH (gate-0 F9). Above `alpha_sat` the
+                # moment is RESTORING again, which bounds a divergence into a second high-α
+                # equilibrium (deep-stall lock-in — a real phenomenon). WITHOUT that bound a
+                # divergent linear-in-α moment grows without limit and α ran to 383497 rad in the
+                # probe: a convention-6 crash path (the wire cannot carry it) AND an epistemic one —
+                # it makes a genuine tumble INDISTINGUISHABLE FROM A BUG. So `alpha_sat` above
+                # `alpha_break` is a LOAD invariant, not a suggestion.
+                comp[:af_alpha_sat] > comp[:af_alpha_break] ||
+                    error("missile '$id': airframe.alpha_sat must be > alpha_break — without the " *
+                          "deep-stall bound above the break the divergence is UNBOUNDED (α → 3.8e5 " *
+                          "in the gate-0 probe), which is both a crash path and a tumble " *
+                          "indistinguishable from a bug (got alpha_sat=$(comp[:af_alpha_sat]), " *
+                          "alpha_break=$(comp[:af_alpha_break]))")
+                isfinite(comp[:af_alpha_sat]) ||
+                    error("missile '$id': airframe.alpha_sat must be finite " *
+                          "(got $(comp[:af_alpha_sat]))")
+            end
         end
     elseif kind === :terrain
         # An authored heightfield (slice 18): a NON-PHYSICAL entity (no mover, no hooks —

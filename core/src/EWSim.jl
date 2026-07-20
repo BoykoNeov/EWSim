@@ -113,6 +113,14 @@ export air_density, ATMOSPHERE_MODES
 # `af_cma` and slice 20's `af_k_induced`. `AirframeParams` is deliberately NOT merged with
 # `AeroCurveParams` (slices 1–21 construct it untouched).
 export AeroCurveParams, lift_coefficient, cl_peak, separation_drag_coefficient, moment_coefficient
+# Slice 22 gate 2 — the LOCAL ∂Cm/∂α (the ONE source both readout linearizations take their slope
+# from) and the NONLINEAR-AERO SIBLINGS. Each `_nl` twin branches AROUND its linear original, which
+# is left TEXTUALLY VERBATIM (the multiply-grouping byte-identity trap this project has caught
+# twice). `separation_drag_accel` is the NEW additive post-stall term — mandatory, not optional:
+# lift-collapse + drag-rise IS what stall is. ⚠ `alpha_command` is deliberately NOT in this list —
+# the autopilot's inversion stays LINEAR (a stall-aware autopilot is a named deferral).
+export moment_slope, lift_accel_nl, induced_drag_accel_nl, separation_drag_accel, pitch_moment_nl,
+       short_period_freq_nl, trim_alpha_nl
 # Missile guidance (slice 9): the outer pursuit law + the inner PID autopilot (pure).
 # `AutopilotState` is an INTERNAL state record (the JamContribution/BearingRecord precedent —
 # not exported); `autopilot_init` IS exported (the test constructs the zero state bare).

@@ -233,3 +233,25 @@ function moment_coefficient(alpha::Float64, Cma::Float64, c::AeroCurveParams)
     end
     return alpha < 0.0 ? -mag : mag
 end
+
+"""
+    moment_slope(alpha, Cma, c::AeroCurveParams) -> ∂Cm/∂α |α
+
+The LOCAL static-stability slope of [`moment_coefficient`](@ref) at `alpha` — `Cma` below
+`α_break`, `Cma_post` between `α_break` and `α_sat`, `Cma` again above (the F9 bound).
+
+**EVEN in α** (the derivative of an ODD function), so it branches on `|α|` alone and carries no
+sign — the parity table's fourth row, and a tooth in its own right.
+
+⚠ **THIS EXISTS SO TWO SHIPPED READOUTS CANNOT DRIFT FROM THE INTEGRATOR** (slice 21's `_atm_on`
+bug was exactly a readout describing a different missile than the one flying). `short_period_freq`
+and `trim_alpha` are LOCAL LINEARIZATIONS: both read the constant `p.Cma`, which is correct only
+BELOW the break. Past it they would report a real `ω_sp` and a finite trim for an airframe that
+has NO oscillation and NO trim — silently deleting the second lesson's headline telemetry, since
+**the ω_sp NaN sentinel firing IS how departure is read out** (F11). Their `_nl` siblings in
+airframe.jl take their slope from here, so the moment the integrator diverges, the readouts say so.
+"""
+function moment_slope(alpha::Float64, Cma::Float64, c::AeroCurveParams)
+    a = abs(alpha)
+    return a < c.alpha_break ? Cma : (a < c.alpha_sat ? c.Cma_post : Cma)
+end

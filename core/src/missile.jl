@@ -215,6 +215,46 @@ _airframe_rho(c::Dict{Symbol,Any}, w::World, z::Float64) =
                                 H = Float64(c[:af_scale_height])) :
                     Float64(get(c, :rho, 1.225))
 
+# --- SLICE 22: the NONLINEAR-AERO (TRUE STALL) gate (§11 Tier A) -------------------------------
+# `true` when this missile carries an authored stall corner AND the airframe is COUPLED. The ONE
+# place the gate is expressed (the `_atm_on` precedent — convention 7's one-list-no-drift applied
+# to a predicate), so the integrator and every readout cannot drift apart.
+#
+# ⚠ THERE IS NO RUNG HERE, AND THAT IS MEASURED, NOT AN OVERSIGHT. The plan's gate-2 sketch says
+# "`LIVE_FIDELITY_MODES` gains `aero_curve`" — **that sketch is STALE and contradicts its own
+# Decision 1**: gate-0 F7 REFUTED the rung claim (the plan asserted linear was `α_stall → ∞`, a
+# limit point). The achieved α SELF-LIMITS to ~0.24 across the whole viable geometry family, so an
+# α_stall parked at ≥ 0.25 is linear-in-effect over EVERY REACHABLE STATE — the off-state IS
+# knob-reachable, so slice 21's own discriminator returns KNOB (the `af_cma`/`af_k_induced` shape).
+# So: KEY-gated, no `AERO_CURVE_MODES`, no `set_fidelity`, no button. `test_aero_curve.jl` ASSERTS
+# their absence, so adding one later is a deliberate act that breaks a test.
+#
+# ⭐ THE `:pitch_coupled` CONJUNCT IS A DELIBERATE DECISION, NOT INHERITED BOILERPLATE (advisor).
+# The plan warns (§gate 2) that **the moment break reaches FURTHER than ρ(z) did**: `pitch_moment`
+# is live on the `:point_mass` rotational path too (`_integrate_airframe!`), so without this
+# conjunct a `:point_mass` wire would integrate θ/q through a BREAKING moment while pos/vel flew a
+# linear-aero fiat accel — half the missile in one aerodynamic model and half in another, which is
+# EXACTLY slice 21's `_atm_on` latent bug. Under `:point_mass` every site reverts to linear
+# together, which is coherent: that plant makes its accel by fiat, so there is no lift ceiling for
+# a stall to lower and nothing for the curve to mean. `_integrate_airframe!` is therefore
+# UNTOUCHED by this slice.
+_stall_on(c::Dict{Symbol,Any}, w::World) =
+    haskey(c, :af_alpha_stall) &&
+    get(w.fidelity, :airframe, :point_mass) === :pitch_coupled
+
+# The authored nonlinear-aero shape (aero_curve.jl). Defaults keep every field in its documented
+# domain if a scenario authors only the corner: `k_drop = 1` (lift falls as fast as it rose),
+# `K_sep = 0` (no separation bill), and — critically — `α_break`/`α_sat` default ABOVE the stall,
+# so authoring `alpha_stall` ALONE gives the LIFT lesson with a LINEAR moment (no departure). The
+# two lessons are separately authorable; the LOADER validates every field (convention 5).
+_stall_params(c::Dict{Symbol,Any}) =
+    AeroCurveParams(Float64(c[:af_alpha_stall]),
+                    Float64(get(c, :af_k_drop, 0.7)),
+                    Float64(get(c, :af_k_sep, 0.0)),
+                    Float64(get(c, :af_alpha_break, 1.0e9)),
+                    Float64(get(c, :af_cma_post, 0.0)),
+                    Float64(get(c, :af_alpha_sat, 2.0e9)))
+
 function _integrate_coupled!(m::BallisticMissile, e::Entity, c::Dict{Symbol,Any}, w::World,
                              mass::Float64, rho::Float64, cd_area::Float64, dt::Float64)
     # Lazy launch init of the JOINT attitude from the PRE-step (launch) flight-path angle — θ is
@@ -250,7 +290,34 @@ function _integrate_coupled!(m::BallisticMissile, e::Entity, c::Dict{Symbol,Any}
     # `a + (-0.0)` flips a bit (`-0.0 + 0.0 → +0.0`) — exactly the trap the `:a_ctrl` guard above
     # documents and the reinterpret determinism tests catch. Same `p`, same δ, same stage-θ
     # discipline; the ONLY difference is the extra force term. Class 4c (no RNG).
-    f = if _atm_on(c, w)
+    #
+    # SLICE 22 — THE STALL ARM LEADS, AND THE FOUR ARMS BELOW IT ARE UNTOUCHED. Adding stall as a
+    # SECOND DIMENSION would have doubled 4 closures to 8; as a LEADING branch it adds ONE and every
+    # prior arm stays textually verbatim (advisor). ⚠ That is only sound because **stall × the
+    # exponential atmosphere is RULED OUT AT LOAD, not by branch order** — a missile carrying both
+    # `af_alpha_stall` and `af_scale_height` is a LOAD ERROR (convention 9: one lesson per scenario;
+    # and a silent precedence here would be the slice-21 `_atm_on` latent-bug class exactly). So the
+    # stall arm is constant-ρ by construction, `p` and the curve are built ONCE outside the closure,
+    # and there is no per-stage params rebuild to get wrong.
+    #
+    # Induced drag is included UNCONDITIONALLY in this arm (contrast the two arms below, which must
+    # split on `haskey(:af_k_induced)`). There is no byte-identity to preserve on a path NO PRIOR
+    # SLICE CAN REACH, so the `-0.0` hazard that forces the split down there does not arise; with
+    # `K = 0` the term is EXACTLY `Vec3(0,0,0)` and the arithmetic is deterministic either way.
+    f = if _stall_on(c, w)
+        curve = _stall_params(c)
+        # ⚠ EVERY TERM READS THE STAGE PITCH `TH`, NEVER the entry θ — slice 17's stage-θ fix, and
+        # the NEW separation term carries the SAME hazard because it too is α-dependent (plan gate
+        # 2). All four aero terms below are functions of the stage α = TH − γ.
+        (P, Vv, TH, Q) -> begin
+            γ = atan(Vv[3], Vv[1])
+            a = total_accel(Vv; rho = rho, cd_area = cd_area, mass = mass) +
+                lift_accel_nl(Vv, TH, mass, p, curve) +
+                induced_drag_accel_nl(Vv, TH, mass, p, curve) +
+                separation_drag_accel(Vv, TH, mass, p, curve)
+            (Vv, a, Q, pitch_moment_nl(TH - γ, δ, Q, _norm3(Vv), p, curve) / p.I)
+        end
+    elseif _atm_on(c, w)
         # ── SLICE 21 — THE EXPONENTIAL-ATMOSPHERE ARM. `ρ` is no longer a number: it is read
         # PER RK4 STAGE from the STAGE HEIGHT `P[3]`.
         #
@@ -406,8 +473,34 @@ function build_env!(m::BallisticMissile, w::World)
         tel["$sid.gamma"]       = _finite_coord(γ)
         tel["$sid.alpha"]       = _finite_coord(θ - γ)        # angle of attack (rad)
         tel["$sid.pitch_q"]     = _finite_coord(q)            # pitch rate (rad/s)
-        tel["$sid.omega_sp"]    = _finite(short_period_freq(_norm3(e.vel), p))  # NaN (unstable) → FINITE_CEIL
-        tel["$sid.alpha_trim"]  = _finite_coord(trim_alpha(Float64(get(c, :af_delta, 0.0)), p))
+        # SLICE 22 — the nonlinear curve, or `nothing` on every prior wire. `_stall_on` already
+        # requires `:pitch_coupled`, so this is `nothing` throughout the block below on a slice-16
+        # `:point_mass` scenario and each else-arm is the prior code TEXTUALLY VERBATIM.
+        curve = _stall_on(c, w) ? _stall_params(c) : nothing
+        α_ach = θ - γ
+        # ⭐ THE LOCAL-SLOPE READOUTS (advisor, and half the slice's headline). Under a BREAKING
+        # moment these two must be evaluated at `∂Cm/∂α|α`, not the constant `Cma`: past `α_break`
+        # the local slope is `Cma_post > 0`, so **ω_sp goes NaN AT THE MOMENT OF DEPARTURE** — the
+        # readout that says *there is no longer an oscillation to have*, and the first time slice
+        # 16's sentinel has ever fired mid-run in this project (F11: 0.747 s from t = 3.435). Left
+        # on the constant `Cma` they would report a healthy real ω_sp and a finite trim for a
+        # DEPARTED airframe — a readout describing a different missile than the one on screen,
+        # which is slice 21's `_atm_on` bug class precisely. The NaN rides `_finite` → FINITE_CEIL
+        # (convention 6, walked with a departure in progress at gate 3 — a genuinely untested path).
+        tel["$sid.omega_sp"]    = _finite(curve === nothing ?
+                                          short_period_freq(_norm3(e.vel), p) :
+                                          short_period_freq_nl(_norm3(e.vel), α_ach, p, curve))
+        tel["$sid.alpha_trim"]  = _finite_coord(curve === nothing ?
+                                          trim_alpha(Float64(get(c, :af_delta, 0.0)), p) :
+                                          trim_alpha_nl(Float64(get(c, :af_delta, 0.0)), α_ach, p, curve))
+        # POST-STALL — a SEPARATELY-NAMED FLAG, deliberately NOT folded into `aero_sat` (plan §1,
+        # advisor). `aero_sat` means *the α_max clamp bound*, and under this slice α_max is
+        # deliberately NOT the binding limit — the physics sets the wall. Conflating them would
+        # make the slice-19 flag lie about which cap is doing the work. KEY-gated (absent on every
+        # prior wire), and read off the ACHIEVED α — the whole lesson lives on the achieved side.
+        if curve !== nothing
+            tel["$sid.post_stall"] = abs(α_ach) ≥ curve.alpha_stall ? 1.0 : 0.0
+        end
         # SLICE 17 lift readout — shipped ONLY when the COUPLING is LIVE (`:airframe ===
         # :pitch_coupled`), further-gated INSIDE the af_cma block so a slice-16 `:point_mass` wire
         # stays byte-identical (lift keys must NOT appear there — the slice-15 fin-key precedent;
@@ -415,7 +508,11 @@ function build_env!(m::BallisticMissile, w::World)
         # V²/|a_lift| (α→0 ⇒ |a_lift|→0 ⇒ R→∞ → FINITE_CEIL; the omega_sp NaN path already proves
         # `_finite` ceils the degenerate). RNG-free, own keys → order-independent.
         if get(w.fidelity, :airframe, :point_mass) === :pitch_coupled
-            aLm = _norm3(lift_accel(e.vel, θ, mass, p))
+            # SLICE 22 — the SAME `lift_coefficient` the integrator turned on (the consistency
+            # discipline extended to the readout: a strip plotting a lift the missile did not make
+            # is the slice-21 readout-vs-integrator bug in another costume).
+            aLm = _norm3(curve === nothing ? lift_accel(e.vel, θ, mass, p) :
+                                             lift_accel_nl(e.vel, θ, mass, p, curve))
             Vsp = _norm3(e.vel)
             tel["$sid.a_lift"]        = _finite(aLm)                                  # m/s² (⟂ v)
             tel["$sid.turn_radius_m"] = _finite(aLm > 0.0 ? Vsp * Vsp / aLm : FINITE_CEIL)
@@ -426,7 +523,17 @@ function build_env!(m::BallisticMissile, w::World)
             # there is lift to bill for. `a_induced` is the ⟂-complement of `a_lift` — the SAME α
             # builds both, one turns the path and one eats the speed that lets you turn it.
             if haskey(c, :af_k_induced)
-                tel["$sid.a_induced"] = _finite(_norm3(induced_drag_accel(e.vel, θ, mass, p)))
+                tel["$sid.a_induced"] = _finite(_norm3(curve === nothing ?
+                                          induced_drag_accel(e.vel, θ, mass, p) :
+                                          induced_drag_accel_nl(e.vel, θ, mass, p, curve)))
+            end
+            # SLICE 22 — SEPARATION DRAG, the post-stall bill. Shipped alongside `a_induced` so the
+            # client can show the two moving OPPOSITE ways past the peak: induced FALLS as `C_L`
+            # collapses (slice 20's term, still CORRECT past stall — it is not "fixed" here) while
+            # this one CLIMBS. That contrast is how the two are told apart, and it is why the
+            # separation term is MANDATORY rather than optional (plan §2).
+            if curve !== nothing
+                tel["$sid.a_sep"] = _finite(_norm3(separation_drag_accel(e.vel, θ, mass, p, curve)))
             end
         end
     end
@@ -750,7 +857,17 @@ function decide!(a::Autopilot, w::World)
             V_af  = _norm3(e.vel)
             # THE HEADLINE READOUT — computed under BOTH arms (see the telemetry note below): the
             # ceiling is a FLIGHT-CONDITION PROPERTY of the airframe, true whichever plant is active.
-            a_max_aero = aero_accel_limit(V_af, mass_af, p_af; alpha_max = alpha_max)
+            # SLICE 22 — under an authored stall the ceiling is the lift curve's INTERIOR PEAK, not
+            # its linear extrapolation to the clamp (`aero_accel_limit`'s `curve` arm). `_stall_on`
+            # requires `:pitch_coupled`, so the `:point_mass` REFERENCE ARM still reports the LINEAR
+            # ceiling (advisor) — the same coherence slice 21 chose for ρ₀: that plant makes its
+            # accel by fiat on a linear-aero model, and the readout must describe the missile that
+            # is actually flying. ⚠ The α_stall/α_max headline identity is a SAME-INPUTS FORMULA
+            # tooth in the tests, NEVER a comparison of these two live arms — separation drag makes
+            # V (hence Q) diverge between them, so a run-vs-run would confound itself (plan §3).
+            curve_af   = _stall_on(c, w) ? _stall_params(c) : nothing
+            a_max_aero = aero_accel_limit(V_af, mass_af, p_af; alpha_max = alpha_max,
+                                          curve = curve_af)
             q_dyn      = 0.5 * rho_af * V_af^2
             if alpha_coupled
                 # k_α/k_q are AUTHORED CONSTANTS and MUST NEVER BE KNOBS (gate-0 FINDING 14): the α_max
@@ -786,7 +903,11 @@ function decide!(a::Autopilot, w::World)
                 # the LOCAL `a_ctrl` keeps the slice-9 `a_ach`/`track_gap` keys HONEST (under a binding
                 # ceiling they show the airframe FAILING TO DELIVER, where `a_cmd` would claim perfect
                 # tracking). It is NOT persisted to comp — see the store guard below (finding 1).
-                a_ctrl     = lift_accel(e.vel, θ_af, mass_af, p_af)
+                # SLICE 22 — the achieved accel is the lift the NONLINEAR curve actually made. Left
+                # on the linear twin, `a_ach`/`track_gap` would credit the airframe with lift it did
+                # not produce past the stall — the exact dishonesty this key exists to prevent.
+                a_ctrl     = curve_af === nothing ? lift_accel(e.vel, θ_af, mass_af, p_af) :
+                                                    lift_accel_nl(e.vel, θ_af, mass_af, p_af, curve_af)
                 alpha_diag = (alpha_cmd = α_cmd, delta_cmd = δ_cmd, aero_sat = aero_sat,
                               defl_sat = defl_sat, a_max_aero = a_max_aero, q_dyn = q_dyn,
                               rho_air = rho_af)

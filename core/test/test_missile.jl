@@ -2846,3 +2846,339 @@ end
         end
     end
 end
+
+# ═════════════════════════════════════════════════════════════════════════════════════════════
+@testset "TRUE STALL wired (slice 22 gate 2 — the airframe sets its own ceiling)" begin
+    dt = 1.0e-3
+    n3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # THE GATE-0 PICK (F1): **SLICE 19's geometry, NOT slice 20's.** F1 measured slice 20's
+    # engagement INERT for this slice — α_pk 0.085, every arm identical to the centimetre — because
+    # a non-maneuvering target never demands enough g to reach the stall. Slice 19's maneuvering
+    # target at 6 km with `a_lat = 200` does. ⚠ `a_lat` is a NARROW window: at 400 BOTH arms miss by
+    # >1300 m (the slice-21 REACH WALL recurring), so do not "harden" this target.
+    #
+    # ⚠ `α_max = 0.35 > α_stall = 0.20` — THE DESIGN, AND IT INVERTS SLICE 19 (plan §3). Post-stall
+    # must be reached by the COMMAND path, NOT by slice-19 FINDING 14's achieved-α leak above the
+    # clamp: a headline built on the leak is CIRCULAR, since closing that leak is a stated payoff of
+    # this very slice. So α_max is deliberately NOT the binding limit here — THE PHYSICS SETS THE
+    # WALL — and `k_α`/`k_q` stay at their SHIPPED authored values (F2/P6).
+    function stall_world(; alpha_stall = nothing, k_drop = 0.7, k_sep = 3.0, alpha_break = 1.0e9,
+                           cma_post = 0.0, alpha_sat = 2.0e9, airframe = :pitch_coupled,
+                           alpha_max = 0.35, K = nothing)
+        w = World(seed = 22, fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                            :autopilot => :alpha,
+                                                            :airframe => airframe))
+        el = deg2rad(12.0)
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => alpha_max,
+                                :n_pn => 4.0, :a_max => 3000.0, :delta_max => 0.4,
+                                :k_alpha => 1.0, :k_q => 0.3)
+        # PRESENCE, not value, is the gate (the slice-20 `k_induced` / slice-21 `scale_height_m`
+        # shape): `alpha_stall = nothing` must leave the key ABSENT, which is what makes slices
+        # 16–21 unreachable-by-stall.
+        if alpha_stall !== nothing
+            comp[:af_alpha_stall] = alpha_stall
+            comp[:af_k_drop]      = k_drop
+            comp[:af_k_sep]       = k_sep
+            comp[:af_alpha_break] = alpha_break
+            comp[:af_cma_post]    = cma_post
+            comp[:af_alpha_sat]   = alpha_sat
+        end
+        K === nothing || (comp[:af_k_induced] = K)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(700.0 * cos(el), 0.0, 700.0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 0.0, 4200.0),
+                                 vel = Vec3(-800.0, 0.0, 200.0),
+                                 comp = Dict{Symbol,Any}(:a_lat_mps2 => 200.0, :turn_sign => 1.0))
+        return w, Subsystem[BallisticMissile(:m1), Autopilot(:m1), ManeuveringTarget(:t1)]
+    end
+
+    # To first CPA ([[ewsim-missile-verifier-sampling]]: the FIRST DESCENDING band only, never a
+    # global min). The diagnostic scans are LOS-gated at r > 300 — the r→0 endgame spikes `a_demand`
+    # for reasons that are not the lesson, and both arms here MISS by ≫ 300, so the gate cannot
+    # flatter either of them.
+    function fly_stall(; T = 14.0, kw...)
+        w, s = stall_world(; kw...)
+        rmin, prev, closing = Inf, Inf, true
+        aero_sat = 0; defl_sat = 0; post_stall = 0; gated = 0; t = 0.0
+        α_pk = 0.0; ceil0 = NaN; ceil_min = Inf; ω_ceiled = 0
+        for _ in 1:round(Int, T / dt)
+            tick!(w, s, dt); empty!(w.events); t += dt
+            m = w.entities[:m1]
+            r = n3(w.entities[:t1].pos - m.pos)
+            closing && r > prev && (closing = false)
+            closing && (rmin = min(rmin, r)); prev = r
+            tel = w.env[:telemetry]
+            if closing
+                cl = get(tel, "m1.a_max_aero", NaN)
+                isnan(ceil0) && (ceil0 = cl)
+                ceil_min = min(ceil_min, cl)
+                get(tel, "m1.omega_sp", 0.0) ≥ FINITE_CEIL && (ω_ceiled += 1)
+                if r > 300.0 && t > 0.2
+                    gated += 1
+                    get(tel, "m1.aero_sat", 0.0)   > 0.5 && (aero_sat += 1)
+                    get(tel, "m1.defl_sat", 0.0)   > 0.5 && (defl_sat += 1)
+                    get(tel, "m1.post_stall", 0.0) > 0.5 && (post_stall += 1)
+                    α_pk = max(α_pk, abs(get(tel, "m1.alpha", 0.0)))
+                end
+            end
+            !closing && break
+        end
+        return (miss = rmin, aero_sat = aero_sat, defl_sat = defl_sat, post_stall = post_stall,
+                gated = gated, α_pk = α_pk, ceil0 = ceil0, ceil_min = ceil_min,
+                ω_ceiled = ω_ceiled, w = w, tel = w.env[:telemetry])
+    end
+
+    @testset "ADDITIVITY — key ABSENT ⇒ the stall arm is unreachable (bit-identical, `===`)" begin
+        # The slice-20/21 precedent: byte-identity BY CONSTRUCTION (the stall arm LEADS the branch
+        # chain and the four arms below it are slice 17/19/20/21's code TEXTUALLY), never by
+        # trusting a coefficient to vanish.
+        w1, s1 = stall_world(alpha_stall = nothing); w2, s2 = stall_world(alpha_stall = nothing)
+        for _ in 1:3000
+            tick!(w1, s1, dt); empty!(w1.events)
+            tick!(w2, s2, dt); empty!(w2.events)
+        end
+        @test w1.entities[:m1].pos === w2.entities[:m1].pos     # class 4c: no RNG, exact replay
+        @test w1.entities[:m1].vel === w2.entities[:m1].vel
+        @test !haskey(w1.entities[:m1].comp, :af_alpha_stall)   # the key never appears by itself
+        # …and no slice-22 key reaches the wire on a prior-slice missile
+        tel = w1.env[:telemetry]
+        @test !haskey(tel, "m1.post_stall")
+        @test !haskey(tel, "m1.a_sep")
+    end
+
+    @testset "⭐⭐ THE PARKED KNOB *IS* THE LINEAR PATH, BIT-FOR-BIT — the knob-vs-rung claim" begin
+        # THE STRUCTURAL HEART OF DECISION 1, pinned on the WIRE rather than argued. Gate 0 F7
+        # REFUTED the plan's rung claim (it asserted linear was `α_stall → ∞`, a LIMIT POINT): a
+        # CORNER can be PARKED OUT OF REACH, unlike slice 21's `H` where altitude is the swept
+        # variable. So the off-state is knob-reachable and slice 21's own discriminator returns KNOB.
+        #
+        # ⚠ `===`, NOT a calibrated atol — a tolerance would BEG THE QUESTION. The claim is that a
+        # parked corner IS the linear path, and it is only worth anything if it is exact.
+        wa, sa = stall_world(alpha_stall = nothing)
+        wb, sb = stall_world(alpha_stall = 5.0, alpha_break = 6.0, alpha_sat = 7.0)
+        for _ in 1:4000
+            tick!(wa, sa, dt); empty!(wa.events)
+            tick!(wb, sb, dt); empty!(wb.events)
+        end
+        @test wa.entities[:m1].pos === wb.entities[:m1].pos
+        @test wa.entities[:m1].vel === wb.entities[:m1].vel
+        @test wa.entities[:m1].comp[:pitch_theta] === wb.entities[:m1].comp[:pitch_theta]
+        # …and the CEILING readout parks with it (the interior peak degenerates to the clamp value)
+        @test wa.env[:telemetry]["m1.a_max_aero"] === wb.env[:telemetry]["m1.a_max_aero"]
+    end
+
+    @testset "⭐ INERT WITHOUT ITS HOST — stall needs `:pitch_coupled` (the half-a-missile guard)" begin
+        # `_stall_on`'s THIRD CONJUNCT, and a DELIBERATE decision rather than copied boilerplate
+        # (advisor): the plan warns that **the moment break reaches FURTHER than ρ(z) did** —
+        # `pitch_moment` is live on the `:point_mass` rotational path too (`_integrate_airframe!`),
+        # so without this conjunct a `:point_mass` wire would integrate θ/q through a BREAKING moment
+        # while pos/vel flew a linear-aero fiat accel. HALF THE MISSILE IN ONE AERODYNAMIC MODEL AND
+        # HALF IN ANOTHER — slice 21's `_atm_on` latent bug, exactly. Under `:point_mass` every site
+        # reverts together, which is coherent: that plant makes its accel by fiat, so there is no
+        # lift ceiling for a stall to lower and nothing for the curve to mean.
+        wa, sa = stall_world(alpha_stall = nothing, airframe = :point_mass)
+        wb, sb = stall_world(alpha_stall = 0.20, alpha_break = 0.28, cma_post = 8.0,
+                             alpha_sat = 0.60, airframe = :point_mass)
+        for _ in 1:4000
+            tick!(wa, sa, dt); empty!(wa.events)
+            tick!(wb, sb, dt); empty!(wb.events)
+        end
+        # the TRAJECTORY is the tooth, not the predicate — an aggressive break authored and INERT
+        @test wa.entities[:m1].pos === wb.entities[:m1].pos
+        @test wa.entities[:m1].vel === wb.entities[:m1].vel
+        @test wa.entities[:m1].comp[:pitch_theta] === wb.entities[:m1].comp[:pitch_theta]
+        # …and the `:point_mass` REFERENCE ARM reports the LINEAR ceiling (advisor): the readout must
+        # describe the missile that is actually flying, which is slice 21's ρ₀ coherence reused.
+        @test wa.env[:telemetry]["m1.a_max_aero"] === wb.env[:telemetry]["m1.a_max_aero"]
+        @test !haskey(wb.env[:telemetry], "m1.post_stall")   # no stall keys where there is no stall
+    end
+
+    @testset "⭐ NOT A DEAD KNOB — α_stall MOVES the physics (the arc's signature failure)" begin
+        # The slice-19 `speed` trap (a knob consumed ONCE at load and read by NOTHING per tick, which
+        # a no-crash test passes happily). This asserts the knob reaches the per-tick physics: the
+        # trajectory MUST diverge, and it must diverge in the direction the lesson claims.
+        parked = fly_stall(alpha_stall = 5.0, alpha_break = 6.0, alpha_sat = 7.0)
+        stalled = fly_stall(alpha_stall = 0.20)
+        @test parked.miss != stalled.miss
+        @test stalled.miss > parked.miss              # the ceiling fell ⇒ the miss OPENS
+        @test stalled.post_stall > 0                  # …and the missile genuinely went post-stall
+        @test parked.post_stall == 0                  # while the parked twin never does
+        # ⚠ THE ISOLATION (P6, and slice-19 FINDING 2's recurrence): commanding α_max ABOVE α_stall
+        # means commanding LARGER α than any prior slice, and `δ_peak ≈ (|Cmα|/Cmδ + k_α)·α_max`
+        # scales with it. A δ_max that BOUND would make this "slice 15's deflection cap in a stall
+        # costume" — the FOURTH cap masquerading as the lesson.
+        @test stalled.defl_sat == 0
+        @test parked.defl_sat == 0
+    end
+
+    @testset "⭐⭐ THE WIRING *IS* THE GATE-0 PROBE — the table reproduced TO THE DIGIT" begin
+        # The slice-21 discipline ("the 16/17/19 verifiers reproduce STATUS to the digit") applied to
+        # a gate-0 probe: the whole design rests on numbers measured OUTSIDE the engine, so gate 2's
+        # job is not merely "something changed" but "the wired physics is the physics that was
+        # probed". Any drift — a curve wired to the wrong α, a coefficient in the wrong term, the
+        # stall arm reached at the wrong stage — moves these.
+        #
+        # ⚠ THIS TOOTH IS WHY `k_drop` DEFAULTS TO 0.7: the probe's operating point. At 1.0 the same
+        # engagement misses by 278.11 instead — a 16% shift that would have quietly stranded every
+        # number the plan is written around, while every structural test still passed.
+        parked = fly_stall(alpha_stall = 5.0, alpha_break = 6.0, alpha_sat = 7.0, k_sep = 0.0)
+        stalled = fly_stall(alpha_stall = 0.20, k_sep = 0.0)
+        @test parked.miss  ≈ 125.14 atol = 0.01      # F8's linear arm
+        @test stalled.miss ≈ 240.37 atol = 0.01      # …and the stall arm (1.92× — the consequence)
+        @test parked.ceil0  ≈ 471.44 atol = 0.05     # the ceilings the ⭐ identity is stated on
+        @test stalled.ceil0 ≈ 269.39 atol = 0.05
+        # ⚠ AND THE PARKING OFF-STATE IS EMPIRICAL, NOT ARGUED (F7 — the knob-vs-rung claim's other
+        # half): a FINITE α_stall at 0.25 is linear-in-effect because the achieved α self-limits to
+        # ~0.24 over every reachable state. This is the measurement that KILLED the plan's rung
+        # justification, so it is pinned rather than recounted.
+        for as in (0.25, 0.30, 0.35)
+            @test fly_stall(alpha_stall = as, k_sep = 0.0).miss ≈ 125.14 atol = 0.01
+        end
+        @test parked.α_pk ≈ 0.2412 atol = 0.001      # the self-limit itself
+    end
+
+    @testset "⭐ THE CEILING IS THE CURVE'S INTERIOR PEAK — on the wire, not just in the formula" begin
+        # The readout must agree with `aero_accel_limit`'s `curve` arm at the state it shipped, or
+        # the client's aero strip plots a ceiling the missile does not have (slice 21's
+        # readout-vs-integrator discipline).
+        r = fly_stall(alpha_stall = 0.20)
+        m = r.w.entities[:m1]
+        p = AirframeParams(π * 0.1^2, 0.2, 20.0, -1.0, 3.0, -150.0, 1.225, 20.0, 0.0)
+        c = AeroCurveParams(0.20, 0.7, 3.0, 1.0e9, 0.0, 2.0e9)
+        @test r.tel["m1.a_max_aero"] ≈
+              aero_accel_limit(n3(m.vel), 140.0, p; alpha_max = 0.35, curve = c) atol = 1e-9
+        # …and it is BELOW the linear ceiling by the headline ratio α_stall/α_max (Q cancels because
+        # BOTH sides are evaluated at the SAME shipped V — a same-inputs comparison, not run-vs-run)
+        @test r.tel["m1.a_max_aero"] /
+              aero_accel_limit(n3(m.vel), 140.0, p; alpha_max = 0.35) ≈ 0.20 / 0.35 atol = 1e-12
+    end
+
+    @testset "the stall wire keys — KEY-gated, and the readouts match the integrator" begin
+        r = fly_stall(alpha_stall = 0.20, K = 0.05)
+        m = r.w.entities[:m1]
+        θ = Float64(m.comp[:pitch_theta])
+        p = AirframeParams(π * 0.1^2, 0.2, 20.0, -1.0, 3.0, -150.0, 1.225, 20.0, 0.05)
+        c = AeroCurveParams(0.20, 0.7, 3.0, 1.0e9, 0.0, 2.0e9)
+        @test haskey(r.tel, "m1.post_stall")
+        @test haskey(r.tel, "m1.a_sep")
+        # every aero readout is the NONLINEAR one — a strip plotting a lift the missile did not make
+        # is the readout-vs-integrator bug in another costume
+        @test r.tel["m1.a_lift"]    ≈ n3(lift_accel_nl(m.vel, θ, 140.0, p, c)) atol = 1e-9
+        @test r.tel["m1.a_induced"] ≈ n3(induced_drag_accel_nl(m.vel, θ, 140.0, p, c)) atol = 1e-9
+        @test r.tel["m1.a_sep"]     ≈ n3(separation_drag_accel(m.vel, θ, 140.0, p, c)) atol = 1e-9
+        # `post_stall` is a SEPARATELY-NAMED FLAG, deliberately NOT folded into `aero_sat` (plan §1,
+        # advisor): `aero_sat` means *the α_max clamp bound*, and under this slice α_max is
+        # deliberately NOT the binding limit. Conflating them would make the slice-19 flag lie about
+        # which cap is doing the work.
+        γ = atan(m.vel[3], m.vel[1])
+        @test r.tel["m1.post_stall"] == (abs(θ - γ) ≥ 0.20 ? 1.0 : 0.0)
+    end
+
+    @testset "⭐ THE ω_sp SENTINEL FIRES IN FLIGHT — first time in project history (F11, P3c)" begin
+        # Slice 16 built the `ω² < 0 ⇒ NaN` guard for an AUTHORED `Cmα ≥ 0`; it has NEVER fired
+        # mid-run. With a real moment break the airframe FLIES ITSELF into the unstable regime and
+        # the sentinel fires DYNAMICALLY — the readout that says *there is no longer an oscillation
+        # to have*. ⚠ CONVENTION 6: it must reach the wire as FINITE_CEIL, never a NaN (a NaN in the
+        # JSON drops the connection). This walks that path with a departure in progress.
+        broke = fly_stall(alpha_stall = 0.20, alpha_break = 0.28, cma_post = 8.0, alpha_sat = 0.60)
+        @test broke.ω_ceiled > 0                        # the sentinel FIRED, mid-flight
+        @test isfinite(broke.tel["m1.omega_sp"])        # …and the wire stayed finite throughout
+        @test isfinite(broke.tel["m1.alpha_trim"])
+        @test broke.α_pk > 0.28                         # the airframe reached the break by itself
+        # a LINEAR moment (no break authored) cannot depart — the sentinel stays silent, and slices
+        # 16–21's wires keep that behaviour (the slice-21 "no global find/replace" precedent)
+        lin = fly_stall(alpha_stall = 0.20)
+        @test lin.ω_ceiled == 0
+    end
+
+    @testset "loader — the stall keys are PRESENCE-gated, validated, and knob-addressable" begin
+        mktempdir() do dir
+            AF = "{inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0, cmq: -150.0, cla: 20.0, " *
+                 "alpha_max: 0.35, alpha_stall: 0.20}"
+            base = """
+            name: s22
+            seed: 22
+            fidelity: {airframe: pitch_coupled, guidance: pn, autopilot: alpha}
+            entities:
+              - id: m1
+                kind: missile
+                pos: [0.0, 0.0, 3000.0]
+                missile:
+                  mass_kg: 140.0
+                  speed: 700.0
+                  elevation_deg: 12.0
+                  guidance: {n_pn: 4.0, a_max: 3000.0, delta_max: 0.4}
+                  airframe: $AF
+              - id: t1
+                kind: target
+                pos: [6000.0, 0.0, 4200.0]
+                vel: [-800.0, 0.0, 200.0]
+                target: {rcs_m2: 1.0, maneuver: {a_lat_mps2: 200.0}}
+            """
+            mk(af) = begin
+                p = joinpath(dir, "s22_$(hash(af)).yaml")
+                write(p, replace(base, AF => af)); p
+            end
+            # ⚠ THE FIXTURE MUST LOAD CLEAN FIRST — otherwise every `@test_throws` below passes for
+            # free on an unrelated error (the slice-19 "a test that malforms its own fixture proves
+            # nothing" trap, which slice 20 hit live).
+            @test load_scenario(mk(AF)).world.entities[:m1].comp[:af_alpha_stall] == 0.20
+            # PRESENCE: no `alpha_stall` ⇒ no key at all (slices 16–21 stay byte-identical). This is
+            # LOAD-BEARING: those slices ALL carry airframe blocks, so gating on the BLOCK rather
+            # than the KEY would grow the key on every one of them.
+            @test !haskey(load_scenario(mk("{cma: -1.0, cmd: 3.0, cla: 20.0}")
+                                        ).world.entities[:m1].comp, :af_alpha_stall)
+            # …and authoring it brings the whole shape, with the documented defaults
+            c = load_scenario(mk(AF)).world.entities[:m1].comp
+            @test c[:af_alpha_stall] == 0.20
+            # 0.7 is GATE 0's operating point, not a round number: the shipped default is what makes
+            # the wiring reproduce the probe's table to the digit (see the reproduction tooth above).
+            # `_stall_params`' default must match it — pinned here because a drift between the two
+            # would be silent (the loader default only applies to YAML-built worlds).
+            @test c[:af_k_drop] == 0.7 && c[:af_k_sep] == 0.0
+            # ⚠ THE DEFAULTS PARK THE BREAK OUT OF REACH — authoring `alpha_stall` ALONE gives the
+            # LIFT lesson with a LINEAR moment and NO departure. The two lessons are separately
+            # authorable, which is what keeps convention 9 satisfiable in one scenario file.
+            @test c[:af_alpha_break] > 100.0 && c[:af_cma_post] == 0.0
+            @test c[:af_alpha_sat] > c[:af_alpha_break]
+            # SIGNS + the domain invariants (convention 5's validate-at-LOAD half)
+            @test_throws ErrorException load_scenario(mk("{cla: 20.0, alpha_stall: 0.0}"))
+            @test_throws ErrorException load_scenario(mk("{cla: 20.0, alpha_stall: -0.2}"))
+            @test_throws ErrorException load_scenario(mk("{cla: 20.0, alpha_stall: 0.2, k_drop: -0.5}"))
+            @test_throws ErrorException load_scenario(mk("{cla: 20.0, alpha_stall: 0.2, k_sep: -1.0}"))
+            # ⚠ THE DEEP-STALL BOUND IS A LOAD INVARIANT, NOT A SUGGESTION (F9): without a restoring
+            # slope above the break the divergence is UNBOUNDED (α ran to 383497 rad in the probe) —
+            # a convention-6 crash path AND an epistemic one, since it makes a genuine tumble
+            # indistinguishable from a bug.
+            @test_throws ErrorException load_scenario(
+                mk("{cla: 20.0, alpha_stall: 0.2, alpha_break: 0.6, alpha_sat: 0.3}"))
+            # ⚠ ONE LESSON PER SCENARIO, ENFORCED AT LOAD (convention 9; advisor). The stall arm
+            # LEADS `_integrate_coupled!`'s branch chain, so a missile authoring BOTH stall and a
+            # scale height would silently fly a constant-ρ stall and its ρ(z) would vanish without a
+            # word — the slice-21 `_atm_on` latent-bug class. Refuse the pairing instead of letting
+            # branch order decide it.
+            @test_throws ErrorException load_scenario(
+                mk("{cla: 20.0, alpha_stall: 0.2, scale_height_m: 8500.0}"))
+            # …and the two LESSON SLIDERS address real comp keys (the mechanism that would have
+            # caught slice-19's DEAD `speed` knob had `speed` been live)
+            brk = "{inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0, cmq: -150.0, cla: 20.0, " *
+                  "alpha_max: 0.35, alpha_stall: 0.20, alpha_break: 0.28, cma_post: 8.0, " *
+                  "alpha_sat: 0.60}"
+            p = joinpath(dir, "s22_knob.yaml")
+            write(p, replace(base, AF => brk) * """
+            knobs:
+              - {target: m1, key: af_alpha_stall, min: 0.15, max: 0.35, label: "α_stall"}
+              - {target: m1, key: af_cma_post, min: 0.0, max: 8.0, label: "Cmα post"}
+            """)
+            sc = load_scenario(p)
+            @test length(sc.knobs) == 2
+            @test sc.knobs[1].key === :af_alpha_stall
+            @test sc.knobs[2].key === :af_cma_post
+        end
+    end
+end

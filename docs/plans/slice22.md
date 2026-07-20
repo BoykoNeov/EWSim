@@ -1,8 +1,96 @@
 # Slice 22 — NONLINEAR `C_L(α)` / TRUE STALL: the ceiling the airframe sets (§11 Tier-A)
 
-**Status: GATE 0 COMPLETE (2026-07-19) — 11 findings, TWO USER DECISIONS TAKEN. Gates 1–3
-pending.** The aero arc's nearest and most load-bearing named deferral — carried explicitly by
-slices 19, 20 and 21, and the one that closes the LEAK bounding two shipped knobs.
+**Status: GATE 0 COMPLETE (2026-07-19) — 11 findings, TWO USER DECISIONS TAKEN.
+GATE 1 COMPLETE (2026-07-20, `aero_curve.jl`, suite 3182 → 4015).
+GATE 2 COMPLETE (2026-07-20, the wiring, suite 4015 → 4174) — 8 findings, THREE of which
+CHANGE WHAT GATE 3 CAN SHIP. Gate 3 pending.** The aero arc's nearest and most load-bearing
+named deferral — carried explicitly by slices 19, 20 and 21, and the one that closes the LEAK
+bounding two shipped knobs.
+
+---
+
+## ⭐ GATE 2 — WHAT THE WIRING SETTLED (2026-07-20)
+
+Probe: `M:\claud_projects\temp\slice22_gate2\` (`probe.jl`, `probe2.jl`). Shipped in
+`airframe.jl` (the `_nl` siblings), `missile.jl` (`_stall_on`/`_stall_params` + the leading stall
+closure + the readouts), `scenario.jl` (load validation), `aero_curve.jl` (`moment_slope`).
+
+**⭐⭐ G1 — THE WIRING *IS* THE GATE-0 PROBE, REPRODUCED TO THE DIGIT.** Parked/absent miss
+**125.14**, stall (α_stall 0.20) **240.37**, ceilings **471.44 → 269.39**, `Cma_post` 8 → **243.67
+(+1.4%)**, the ω_sp sentinel first firing at **t = 3.436** (F11 measured 3.435 — one tick). The
+F7 parking off-state reproduces too: α_stall ∈ {0.25, 0.30, 0.35} ALL give **125.14 exactly**,
+with α_pk **0.2412** (F7's 0.2408). Pinned as a tooth — the slice-21 "reproduce STATUS to the
+digit" discipline applied to a probe, since the whole design rests on numbers measured outside
+the engine.
+
+**⚠⚠ G2 — `k_drop` IS LOAD-BEARING FOR THE DEPARTURE HALF, AND GATE 0 NEVER ISOLATED IT.** The
+probe ran `k_drop = 0.7`; that is now the shipped default (a 1.0 default silently moved the miss
+to 278.11, a 16% shift, with every structural test still passing). **At 0.7, F10's AUTHORITY
+CLIFF DOES NOT APPEAR at the balanced angles:** across `Cma_post` 0 → 8 with α_stall 0.20 /
+α_break 0.28 / α_sat 0.60, α_pk moves only **0.286 → 0.379** and the autopilot HOLDS throughout.
+At `k_drop = 1.0` the same sweep gives **0.31 → 0.64 → 1.59 → 3.02** — the cliff. ⇒ **F10's table
+is NOT a property of the two angles alone**, and gate 3's departure scenario must author
+`k_drop` deliberately. Do not copy F10's numbers onto a 0.7 wire.
+
+**⚠ G3 — P6's `defl_sat == 0` IS ARM-SPECIFIC, NOT A SLICE-WIDE INVARIANT.** It holds on the LIFT
+arm at every α_stall tested, and on the departure arm at `k_drop` 0.7. It **BREAKS** on the
+departure arm at `k_drop` 1.0: `defl_sat` goes 0 → 7 → 322 → 418 → 613 across `Cma_post`
+4/6/8/12. So the configuration that produces the cliff is also the one where δ_max starts
+binding — exactly slice-19 FINDING 2's shape. Gate 3 must assert `defl_sat` per arm and, if it
+ships the cliff, either show δ_max non-binding at its chosen point or NAME the contamination.
+
+**⚠ G4 — THE α_stall KNOB DOMAIN IS BOUNDED BY MONOTONICITY (the 3rd occurrence of that
+pattern).** At `k_drop` 0.7 the miss rises 125.14 → 552.02 as α_stall falls 0.35 → 0.12, then
+**FALLS to 544.54 at 0.10**. The [[ewsim-df-ellipse-sigma-monotonicity]] / slice-19-ρ pattern
+recurring: past the turn the missile stops being able to pull at all and the lesson REVERSES.
+**Ship `af_alpha_stall ∈ [0.15, 0.35]`** — margin above the measured 0.12 turn, top = α_max =
+the in-scenario linear twin (Decision 1).
+
+**⚠ G5 — SEPARATION DRAG IS NEARLY INERT ON THIS ENGAGEMENT, AND MUST NOT BE SOLD AS A LEVER
+(P4, answered).** Sweeping `K_sep` 0 → 12 moves the miss only **278.11 → 280.60** (~0.9%); the
+ceiling floor moves 262.1 → 256.0. It is monotone and clean across the whole range — there is no
+domain to bound — but it is a PHYSICALITY term, not a lesson knob. That is consistent with plan
+§2 (it is MANDATORY because a stalled missile that decelerated LESS would be the opposite of the
+lesson), and it means **`K_sep` is NOT a second slider**. The teeth carry it instead: exactly 0
+below the stall, EVEN in α, along −v̂, and moving OPPOSITE to induced drag past the peak.
+
+**⚠ G6 — "TIME WITH ω_sp CEILED" IS NOT A MONOTONE DEPARTURE INDICATOR (a readout subtlety F11
+could not see).** The sentinel fires whenever α crosses α_break — including when the autopilot
+comfortably recovers (it fires at `Cma_post` = 2, α_pk 0.29). Worse, the ceiled COUNT *falls* as
+the departure gets more violent (1007 → 365 ticks as `Cma_post` goes 2 → 12 at `k_drop` 1.0),
+because α blows straight past α_sat into F9's deep-stall RESTORING region where ω_sp is real
+again. **That is the deep-stall bound showing up in the readout, and it is honest** — but a gate-3
+headline of "seconds with no short-period" would read BACKWARDS. Headline the α_pk / held-vs-lost
+verdict; use the sentinel as the *tell that the break was reached*, not as a severity measure.
+
+**G7 / G8 — TWO BUGS, BOTH CAUGHT BY THE SLICE'S OWN `===` TEETH, BOTH IN CODE WRITTEN TO AVOID
+EXACTLY THEM.** (G7) `aero_accel_limit`'s new `curve` arm computed the PARKED ceiling as
+`(Q·S)·(Cla·α_max)` where the linear line is `((Q·S)·Cla)·α_max` — **1 ULP** (461.65182004425594
+vs 461.651820044256), plan §4's multiply-grouping trap appearing INSIDE the function that
+generalizes the formula, and this project's THIRD catch of that class. Fixed by routing both
+off-states (`curve === nothing` AND `α_max < α_stall`) through the verbatim linear expression.
+(G8) `separation_drag_accel` fell through with `C_Dsep = 0.0` and returned `Vec3(-0.0,-0.0,-0.0)`
+below the stall, not the exact zero it documented — the `-0.0` trap, caught on the first run by
+its own tooth. Fixed with an early exact-zero return. **Neither was reachable by an `≈` test.**
+
+### THE TWO STRUCTURAL DECISIONS TAKEN AT GATE 2
+
+- **`_stall_on` = `haskey(:af_alpha_stall) && :airframe === :pitch_coupled`** — the third conjunct
+  is DELIBERATE (advisor), and it is the answer to this plan's own gate-2 warning that *the moment
+  break reaches FURTHER than ρ(z) did*. `pitch_moment` is live on the `:point_mass` rotational path
+  (`_integrate_airframe!`); without the conjunct a `:point_mass` wire would integrate θ/q through a
+  BREAKING moment while pos/vel flew a linear-aero fiat accel — half the missile in one aerodynamic
+  model and half in another, slice 21's `_atm_on` latent bug exactly. **`_integrate_airframe!` is
+  untouched by this slice.**
+- **STALL × THE EXPONENTIAL ATMOSPHERE IS A LOAD ERROR, NOT A BRANCH-ORDER OUTCOME** (convention 9;
+  advisor). The stall arm LEADS `_integrate_coupled!`'s chain so the four prior arms stay textually
+  verbatim (4 closures, not 8) — but that is only sound because a missile carrying both
+  `alpha_stall` and `scale_height_m` is REFUSED at load. Otherwise it would silently fly a
+  constant-ρ stall with its ρ(z) vanishing without a word.
+
+⚠ **THE GATE-2 SKETCH BELOW IS STALE WHERE IT SAYS `LIVE_FIDELITY_MODES` GAINS `aero_curve`** — it
+contradicts its own Decision 1 (advisor). No rung shipped, and `test_aero_curve.jl` ASSERTS the
+absence, so adding one later breaks a test on purpose.
 
 ---
 

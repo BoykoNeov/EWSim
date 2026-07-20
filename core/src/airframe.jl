@@ -314,10 +314,241 @@ self-consistent; gate-0 FINDING 9). NO Q floor here (unlike `alpha_command`): th
 pure product with no division — it is finite everywhere on its own, and the true ceiling
 at V→0 genuinely IS zero. Flooring the readout would be a hidden approximation (§1); the
 floor belongs only at the divide.
+
+⚠ **SLICE 22 GENERALIZED THE `curve` ARM AND LEFT THIS ONE ALONE.** With an `AeroCurveParams`
+the ceiling is the lift curve's INTERIOR PEAK, not its value at the clamp — see the `curve`
+keyword below. `curve === nothing` (the default, and every slice-19/20/21 call site) takes the
+line above TEXTUALLY VERBATIM.
 """
-function aero_accel_limit(V::Float64, mass::Float64, p::AirframeParams; alpha_max::Float64)
+function aero_accel_limit(V::Float64, mass::Float64, p::AirframeParams; alpha_max::Float64,
+                          curve::Union{Nothing,AeroCurveParams} = nothing)
     Q = 0.5 * p.rho * V^2
-    return Q * p.S * abs(p.Cla) * alpha_max / mass
+    # ⚠ BOTH OFF-STATES TAKE THE VERBATIM LINEAR LINE, AND THE SECOND ONE IS NOT OPTIONAL. A parked
+    # knob (`α_stall > α_max` ⇒ the stall is unreachable) is mathematically the linear ceiling, but
+    # computing it as `Q·S·cl_max/m` groups the multiply as `(Q·S)·(Cla·α_max)` where the line below
+    # is `((Q·S)·Cla)·α_max` — a 1-ULP difference, which the parked-knob `===` tooth CAUGHT on the
+    # wire (461.65182004425594 vs 461.651820044256). That is plan §4's multiply-grouping trap
+    # appearing inside the very function that was supposed to be safe from it, and the third time
+    # this project has caught the class. The knob-vs-rung argument rests on the parked state being
+    # EXACTLY the linear path, so it must route through EXACTLY the linear expression.
+    (curve === nothing || alpha_max < curve.alpha_stall) &&
+        return Q * p.S * abs(p.Cla) * alpha_max / mass
+    # ── SLICE 22 — THE CEILING IS THE CURVE'S OWN INTERIOR PEAK.
+    #
+    # Slices 19–21 extrapolated the LINEAR curve out to the clamp: `a_max_aero = Q·S·|C_Lα|·α_max/m`
+    # assumes the airframe keeps trading α for lift all the way to α_max. It does not. Past
+    # `α_stall` `C_L` FALLS, so the largest lift available over `|α| ≤ α_max` is attained INSIDE the
+    # interval, at `α_stall`, and no amount of Q buys past it:
+    #
+    #     a_max_aero = Q·S·C_L_peak/m,   C_L_peak = max_{|α| ≤ α_max} |C_L(α)|
+    #
+    # ⭐ SUBSTITUTING `cl_peak = C_Lα·α_stall` GIVES THE SLICE'S HEADLINE, AN ALGEBRAIC IDENTITY:
+    # the stall/linear ceiling ratio is IDENTICALLY `α_stall/α_max` — Q, S, C_Lα and m ALL CANCEL
+    # (gate-0 F8, Δ ≤ 1.1e-16). That is slice 21's ρ-factor identity in a NEW LETTER, and it is why
+    # the headline is pinned as a SAME-INPUTS FORMULA comparison and never as a run-vs-run (advisor,
+    # plan §3): separation drag makes V diverge between two live arms, so a two-run comparison would
+    # not actually be holding Q equal and would stop testing what it claims.
+    #
+    # CLOSED FORM, NOT A NUMERIC SEARCH (the anchor the tests pin). `C_L` rises to `α_stall` and
+    # falls after, so the max over `|α| ≤ α_max` is attained at `α_stall` — reachable here by
+    # construction, since the unreachable case already returned above.
+    return Q * p.S * abs(cl_peak(p.Cla, curve)) / mass
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SLICE 22 — TRUE STALL: the NONLINEAR-AERO SIBLINGS. Each is the `_nl` twin of a linear
+# function above, and **the linear original is left TEXTUALLY VERBATIM** rather than
+# refactored to route through a shared helper (plan §4, the byte-identity trap): today
+# `lift_accel` computes `((Q·S)·Cla)·α`, and `Q·S·_cl(α)` is `(Q·S)·(Cla·α)` — a DIFFERENT
+# multiply grouping and a possible 1-ULP shift, in a project whose absolute `_sample_z`
+# golden and determinism tests are bit-exact and which has already caught this class TWICE
+# (`√(snr/2)` vs `√snr·√½`). The stall path branches AROUND the linear arm; it never
+# rewrites it.
+#
+# ⚠ ONE `C_L`, TWO CONSUMERS — THE SHARPEST CHECK IN THE SLICE. `lift_accel_nl` (the turn)
+# and `induced_drag_accel_nl` (slice 20's `K·C_L²` bill) MUST route through the SAME
+# `lift_coefficient`. If they diverge the missile turns on one lift and is invoiced for
+# another, and nothing else in the test set notices. Pinned in test_airframe.jl — a WIRING
+# claim, which is why gate 1 explicitly deferred it to here.
+#
+# ⚠ THE AUTOPILOT'S INVERSION IS DELIBERATELY *NOT* HERE. `alpha_command` still inverts the
+# LINEAR `C_L = C_Lα·α` and is UNCHANGED (plan §1). That is the design, not an omission: an
+# autopilot carries an internal LINEAR model of its airframe, so a linear inversion that
+# OVER-commands α as the real curve goes concave is slice-19's command-vs-achieved gap MADE
+# PHYSICAL — and it sidesteps the MULTIVALUED past-peak inverse (two α give one C_L), which
+# would author a genuine ambiguity surface into a first stall slice. A stall-aware autopilot
+# is a NAMED DEFERRAL, not a thing this slice quietly did.
+# ─────────────────────────────────────────────────────────────────────────────
+
+"""
+    lift_accel_nl(vel, theta, mass, p::AirframeParams, c::AeroCurveParams) -> Vec3
+
+[`lift_accel`](@ref) on the NONLINEAR lift curve — identical in every respect except that
+`C_L` comes from [`lift_coefficient`](@ref) instead of `C_Lα·α`:
+
+    L = Q·S·C_L(α),   a_lift = (L/m)·(−sin γ, 0, cos γ)
+
+so past `α_stall` **pulling HARDER turns you LESS**. That derivative sign change is what is
+new in the suite: every prior cap in this project is a MAGNITUDE that saturates (pull harder,
+get no more); this one REVERSES.
+
+Same ⟂-v direction, same `_AIRFRAME_V_FLOOR` guard, same sign convention as the linear twin
+(`C_Lα > 0`, `α > 0` ⇒ `γ̇ > 0`) — the curve changes the MAGNITUDE of lift, never its
+direction. Below `α_stall` it agrees with `lift_accel` to the bit for a parked knob (F7).
+"""
+function lift_accel_nl(vel::Vec3, theta::Float64, mass::Float64, p::AirframeParams,
+                       c::AeroCurveParams)
+    V = _norm3(vel)
+    V ≤ _AIRFRAME_V_FLOOR && return Vec3(0.0, 0.0, 0.0)
+    γ = atan(vel[3], vel[1])
+    α = theta - γ
+    Q = 0.5 * p.rho * V^2
+    L = Q * p.S * lift_coefficient(α, p.Cla, c)
+    return (L / mass) * Vec3(-sin(γ), 0.0, cos(γ))
+end
+
+"""
+    induced_drag_accel_nl(vel, theta, mass, p::AirframeParams, c::AeroCurveParams) -> Vec3
+
+[`induced_drag_accel`](@ref) on the NONLINEAR lift curve — the SAME `C_Di = K·C_L²` polar,
+with `C_L` from the SAME [`lift_coefficient`](@ref) `lift_accel_nl` turns on (the consistency
+tooth).
+
+⚠ **SLICE 20'S TERM IS CORRECT PAST STALL AND IS NOT "FIXED" HERE** (plan §2 — the framing
+that would have oversized this slice). Induced drag genuinely DOES fall with lift², so this
+term FALLING as `C_L` collapses is right physics, not a bug. What was missing is
+[`separation_drag_accel`](@ref), which was legitimately ≈0 in attached flow (hence slices
+17–21 never needed it) and RISES steeply past the stall. The two are ADDITIVE and move
+OPPOSITE ways past the peak — that is how you tell them apart, and it is a tooth.
+"""
+function induced_drag_accel_nl(vel::Vec3, theta::Float64, mass::Float64, p::AirframeParams,
+                               c::AeroCurveParams)
+    V = _norm3(vel)
+    V ≤ _AIRFRAME_V_FLOOR && return Vec3(0.0, 0.0, 0.0)
+    γ = atan(vel[3], vel[1])
+    α = theta - γ
+    C_L = lift_coefficient(α, p.Cla, c)
+    Q = 0.5 * p.rho * V^2
+    D = Q * p.S * p.K * C_L^2
+    return -(D / (mass * V)) * vel
+end
+
+"""
+    separation_drag_accel(vel, theta, mass, p::AirframeParams, c::AeroCurveParams) -> Vec3
+
+**The post-stall bill** — the separation-drag specific force (m/s²):
+
+    C_Dsep = K_sep·max(0, |α| − α_stall)²        (EVEN in α, EXACTLY 0 below the stall)
+    a_sep  = −(Q·S·C_Dsep/m)·v̂                   (ALONG −v̂ — slows, never turns)
+
+A NEW ADDITIVE term, not a correction to an old one. Below `α_stall` it returns EXACTLY
+`Vec3(0,0,0)` — not "small" — which is what lets a parked knob leave slices 17–21's drag bill
+untouched to the bit.
+
+**IT IS MANDATORY, NOT OPTIONAL, AND IT IS NOT A SECOND LESSON** (plan §2). Lift-collapse +
+drag-rise **IS** what stall is: one phenomenon, one event — *pull past the peak → less lift AND
+more drag*. Convention 9 is satisfied because there is one toggled thing, not two. A stalled
+missile that decelerated LESS would be the OPPOSITE of the lesson.
+
+Direction: `−v̂`, like induced drag, so the ⟂/∥ decomposition of the whole aero stays clean —
+lift is the ONLY term that turns the path. Same `_AIRFRAME_V_FLOOR` ÷V guard.
+"""
+function separation_drag_accel(vel::Vec3, theta::Float64, mass::Float64, p::AirframeParams,
+                               c::AeroCurveParams)
+    V = _norm3(vel)
+    V ≤ _AIRFRAME_V_FLOOR && return Vec3(0.0, 0.0, 0.0)
+    γ = atan(vel[3], vel[1])
+    α = theta - γ
+    # ⚠ THE BELOW-STALL ARM RETURNS THE EXACT ZERO VECTOR, AND THE EARLY RETURN IS WHY IT CAN.
+    # Falling through with `C_Dsep = 0.0` gives `-(0.0/(m·V))·vel` = `Vec3(-0.0,-0.0,-0.0)`, NOT
+    # `Vec3(0,0,0)` — the `-0.0` trap this project documents at the slice-20 induced-drag gate,
+    # caught here by its own `===` tooth on the first run. It is harmless in the sum (`a + (-0.0)`
+    # is `a`), but a term that claims to contribute EXACTLY nothing below the stall must actually
+    # do so, or the parked-knob byte-identity argument rests on a value that is not what it says.
+    C_Dsep = separation_drag_coefficient(α, c)
+    C_Dsep == 0.0 && return Vec3(0.0, 0.0, 0.0)
+    Q = 0.5 * p.rho * V^2
+    D = Q * p.S * C_Dsep
+    return -(D / (mass * V)) * vel
+end
+
+"""
+    pitch_moment_nl(alpha, delta, q, V, p::AirframeParams, c::AeroCurveParams) -> M
+
+[`pitch_moment`](@ref) with the `Cmα·α` static term replaced by the THREE-SLOPE
+[`moment_coefficient`](@ref) — **relaxed static stability**. The control (`Cmδ·δ`) and damping
+(`Cmq·q̄`) terms and the `_AIRFRAME_V_FLOOR` q̄ guard are unchanged.
+
+⚠ **THIS IS THE HIGHEST-RISK EDIT IN THE SLICE AND IT IS WHY IT IS A SEPARATE FUNCTION.**
+`pitch_moment` is the function slices 16–21 ALL build on, live at THREE call sites
+(`airframe_step`, `_integrate_airframe!`, `_integrate_coupled!`'s closure). Its sum is NOT
+refactored — the linear arm above is byte-for-byte what it always was, and the plan's #4
+multiply-grouping trap applies to `Q*p.S*p.d*(p.Cma*alpha + ...)` with full force.
+
+⚠ **AND THIS PUTS THE ARC'S #1 SIGN TRAP BACK INSIDE THE EXACT FUNCTION SLICE 16 FOUND IT IN**
+(4th occurrence: 16 = the moment sign, 17 = the lift direction, 19 = the a→α→δ→M→α→lift→γ̇
+chain). The break is therefore pinned BY SIGN — `∂Cm/∂α < 0` below `α_break`, `> 0` above —
+never by magnitude: getting it backwards would make an unstable airframe SELF-RIGHT, deleting
+the second lesson entirely while passing any magnitude-based check.
+
+THE LESSON THIS CARRIES IS **NOT** "IT TUMBLES" (gate-0 Decision 2, and the miss is NOT its
+metric — +1.4% even at full tumble): a statically unstable airframe is PERFECTLY FLYABLE until
+the autopilot runs out of authority. The THRESHOLD is the lesson — a sharp cliff between
+`Cma_post` 4 (holds) and 8 (loses) — which is real fly-by-wire physics.
+"""
+function pitch_moment_nl(alpha::Float64, delta::Float64, q::Float64, V::Float64,
+                         p::AirframeParams, c::AeroCurveParams)
+    Q = 0.5 * p.rho * V^2
+    qbar = V > _AIRFRAME_V_FLOOR ? q * p.d / (2.0 * V) : 0.0
+    return Q * p.S * p.d * (moment_coefficient(alpha, p.Cma, c) + p.Cmd * delta + p.Cmq * qbar)
+end
+
+"""
+    short_period_freq_nl(V, alpha, p::AirframeParams, c::AeroCurveParams) -> ω_sp
+
+[`short_period_freq`](@ref) evaluated at the **LOCAL** static-stability slope
+[`moment_slope`](@ref)`(α, Cmα, c)` instead of the constant `p.Cma`.
+
+⭐ **THIS IS WHAT MAKES SLICE 16'S NaN SENTINEL FIRE IN FLIGHT — the second lesson's HEADLINE
+TELEMETRY, not a defensive branch.** Slice 16 built the `ω² < 0 ⇒ NaN` guard for an AUTHORED
+`Cmα ≥ 0` and it has never fired mid-run in the project's history. Past `α_break` the local
+slope is `Cma_post > 0`, so `ω²` goes negative and ω_sp becomes NaN **dynamically, at the moment
+of departure**: the readout that says *there is no longer an oscillation to have*. Gate 0 F11
+measured it firing for 0.747 s starting at t = 3.435.
+
+⚠ Using the CONSTANT `p.Cma` here would report a healthy real ω_sp for a departed airframe —
+a readout describing a different missile than the one on screen, which is precisely slice 21's
+`_atm_on` bug class. The NaN is `_finite`-clamped to `FINITE_CEIL` at the wire (convention 6);
+that path is walked with a departure in progress at gate 3 (P3c), since it has never been
+exercised this way.
+"""
+function short_period_freq_nl(V::Float64, alpha::Float64, p::AirframeParams, c::AeroCurveParams)
+    Q = 0.5 * p.rho * V^2
+    ω² = -moment_slope(alpha, p.Cma, c) * Q * p.S * p.d / p.I
+    return ω² < 0.0 ? NaN : sqrt(ω²)
+end
+
+"""
+    trim_alpha_nl(delta, alpha, p::AirframeParams, c::AeroCurveParams) -> α_trim
+
+[`trim_alpha`](@ref) at the **LOCAL** slope, the [`short_period_freq_nl`](@ref) treatment
+applied to the other shipped linearization (both take their slope from the ONE
+[`moment_slope`](@ref), so the two readouts cannot drift from each other or from the
+integrator).
+
+`α_trim = −(Cmδ/∂Cm∂α|α)·δ`. Past `α_break` the local slope is POSITIVE, so the reported trim
+FLIPS SIGN — the honest reading: the balance point that used to attract now REPELS. `δ = 0`
+returns EXACTLY `0.0` (the linear twin's degenerate, unchanged), and a local slope crossing 0
+gives `±Inf`, `_finite`-clampable.
+
+⚠ A LOCAL LINEARIZATION IS ALL THIS IS. The three-slope `Cm` can have a SECOND balance point
+above `α_sat` (deep-stall lock-in — F9's high-α equilibrium); this readout does not search for
+it. Naming that is cheaper than pretending a single closed-form trim still describes the whole
+curve.
+"""
+function trim_alpha_nl(delta::Float64, alpha::Float64, p::AirframeParams, c::AeroCurveParams)
+    delta == 0.0 && return 0.0
+    return -(p.Cmd / moment_slope(alpha, p.Cma, c)) * delta
 end
 
 """
