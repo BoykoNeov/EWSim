@@ -341,9 +341,16 @@ path; the `:pitch_coupled`/`:point_mass` arithmetic is TEXTUALLY VERBATIM.
   persisted (`(alpha_coupled || alpha_6dof) || (c[:a_ctrl] = a_ctrl)` — the FINDING-1 trap, 6-DOF).
   Yaw command readouts (`beta_cmd`, `delta_yaw`) ship via a SEPARATE `sixdof_diag !== nothing` block
   so a `:pitch_coupled` wire never grows a yaw key.
-- **`build_env!`** gained a SEPARATE `haskey(:att_q)` block (the pitch block's 3-D twin, mutually
-  exclusive on a from-the-start scenario): `pos_y`, `alpha`, `beta`, `omega_{p,q,r}`, the attitude
-  quaternion as 4 SCALARS (`att_q{w,x,y,z}` — convention 13, no Array), `a_lift`, `turn_radius_m`.
+- **`build_env!`** gained a SEPARATE 6-DOF block (the pitch block's 3-D twin): `pos_y`, `alpha`,
+  `beta`, `omega_{p,q,r}`, the attitude quaternion as 4 SCALARS (`att_q{w,x,y,z}` — convention 13, no
+  Array), `a_lift`, `turn_radius_m`. ⚠ **BOTH rotational blocks are RUNG-GATED, not key-gated
+  (advisor — the slice-21 `_atm_on` latent-bug class caught at gate 2).** `:att_q`/`:pitch_theta` are
+  never deleted, so a 3-rung `:airframe` CROSS-TOGGLE would leave the stale block firing on a frozen
+  attitude and (being appended later) OVERWRITE the fresh readout. The six_dof block now requires
+  `:airframe === :six_dof` and the pitch block `!== :six_dof`, so they are mutually exclusive on the
+  LIVE rung; `w.env` is emptied each tick ⇒ a complete fix, no key-deletion. Byte-identical for
+  slices 8–22 (never `:six_dof`). A LIVE-CROSS-TOGGLE test pins both directions (no stale key
+  survives the cycle).
 - **Loader** (`scenario.jl`): `cy_beta`/`inertia_roll_kgm2`/`inertia_yaw_kgm2`/`c_roll` PRESENCE-gated
   per key (slices 16–22 don't grow them) AND consumer-defaulted (`get(c, :af_…, default)`) — because
   `:airframe` is live-settable (4c), a slice-19..22 scenario can be toggled to `:six_dof` at runtime

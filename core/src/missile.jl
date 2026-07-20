@@ -554,7 +554,13 @@ function build_env!(m::BallisticMissile, w::World)
     # attack — the headline; → α_trim if stable, diverges if unstable), q (pitch rate), and the
     # short-period frequency ω_sp (NaN-safe → _finite). All derived from the post-integrate
     # state, RNG-free, own keys → order-independent (the build_env! contract).
-    if haskey(c, :af_cma) && haskey(c, :pitch_theta)
+    # ⚠ THE `!== :six_dof` MIRROR GUARD (advisor): `:pitch_theta` is likewise never deleted, so after
+    # a `:pitch_coupled → :six_dof` toggle it would linger and this block would ship STALE pitch-only
+    # keys (`pitch_theta`/`omega_sp`/`alpha_trim`/…) on a 6-DOF wire. Gating it OFF under `:six_dof`
+    # keeps the two rotational readouts mutually exclusive on the live rung. Byte-identical for slices
+    # 8–22 (never `:six_dof`, so the added conjunct is always true).
+    if haskey(c, :af_cma) && haskey(c, :pitch_theta) &&
+       get(w.fidelity, :airframe, :point_mass) !== :six_dof
         θ  = Float64(c[:pitch_theta])
         q  = Float64(c[:pitch_q])
         γ  = atan(e.vel[3], e.vel[1])
@@ -642,7 +648,16 @@ function build_env!(m::BallisticMissile, w::World)
     # cross-range `pos_y` (the out-of-plane axis the discard cannot reach), the pitch/yaw incidences
     # α/β, the body rates (p, q, r), the attitude quaternion (4 SCALARS — convention 13, no Array —
     # for the client's 3-D nose), and the 2-plane lift magnitude / turn radius. RNG-free, own keys.
-    if haskey(c, :af_cma) && haskey(c, :att_q)
+    # ⚠ RUNG-GATED, NOT merely `haskey(:att_q)` (advisor — the slice-21 `_atm_on` latent-bug class):
+    # `:att_q` is minted by `_integrate_6dof!` and NEVER deleted, so after the 3-rung `:airframe`
+    # cycler leaves `:six_dof` this block would keep firing on a FROZEN attitude and — being appended
+    # AFTER the pitch block — OVERWRITE the fresh scalar `alpha`/`gamma`/`a_lift` with garbage from a
+    # stale `att_q` (a readout describing a different missile than the one flying). Gating on the LIVE
+    # rung makes it fire ONLY while `:six_dof` is actually active; `w.env` is emptied each tick so this
+    # is a COMPLETE fix (no key-deletion needed). Byte-identical for slices 8–22 (they never reach
+    # `:six_dof`). The pitch block above carries the mirror `!== :six_dof` guard for the same reason.
+    if haskey(c, :af_cma) && haskey(c, :att_q) &&
+       get(w.fidelity, :airframe, :point_mass) === :six_dof
         qa = c[:att_q]::Quat
         ω  = get(c, :omega_body, zero(Vec3))::Vec3
         γ  = atan(e.vel[3], e.vel[1])

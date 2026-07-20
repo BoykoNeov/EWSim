@@ -3427,6 +3427,31 @@ end
         @test all(isfinite, m.comp[:att_q]) && all(isfinite, m.comp[:omega_body])
     end
 
+    @testset "LIVE CROSS-TOGGLE — no STALE readout survives the :airframe cycle (the _atm_on class)" begin
+        # The 3-rung `:airframe` button is the whole A/B, so a six_dof↔pitch_coupled cross-toggle IS a
+        # showcase path. `:att_q`/`:pitch_theta` are never deleted, so WITHOUT the rung-gate on the two
+        # build_env! blocks the stale block would fire on a frozen attitude and overwrite the fresh
+        # readout (advisor — the slice-21 `_atm_on` latent-bug class). Both directions must be clean.
+        sixk = ("m1.pos_y", "m1.beta", "m1.omega_p", "m1.att_qw", "m1.att_qz", "m1.delta_yaw")
+        pitk = ("m1.pitch_theta", "m1.omega_sp", "m1.alpha_trim")
+        # six_dof → pitch_coupled: the 6-DOF-only keys must be GONE, the scalar keys present.
+        w, s = owp_world(airframe = :six_dof)
+        for _ in 1:400; tick!(w, s, dt); empty!(w.events); end
+        w.fidelity[:airframe] = :pitch_coupled
+        for _ in 1:5; tick!(w, s, dt); empty!(w.events); end
+        t = w.env[:telemetry]
+        for k in sixk; @test !haskey(t, k); end                 # no stale 6-DOF key on the scalar wire
+        @test haskey(t, "m1.pitch_theta") && isfinite(t["m1.alpha"])   # the fresh scalar readout stands
+        # pitch_coupled → six_dof: the pitch-only keys must be GONE, the 3-D keys present.
+        w2, s2 = owp_world(airframe = :pitch_coupled)
+        for _ in 1:400; tick!(w2, s2, dt); empty!(w2.events); end
+        w2.fidelity[:airframe] = :six_dof
+        for _ in 1:5; tick!(w2, s2, dt); empty!(w2.events); end
+        t2 = w2.env[:telemetry]
+        for k in pitk; @test !haskey(t2, k); end                # no stale pitch-only key on the 6-DOF wire
+        @test haskey(t2, "m1.att_qw") && haskey(t2, "m1.beta")  # the fresh 3-D readout stands
+    end
+
     @testset "gated wire — a :six_dof missile ships the 3-D keys; :pitch_coupled ships NONE of them" begin
         # Byte-identity: the 6-DOF readouts (pos_y, beta, omega_*, att_q*, delta_yaw) key off `:att_q`
         # / `sixdof_diag`, minted ONLY by the 6-DOF path — so a slice-19..22 `:pitch_coupled` wire
