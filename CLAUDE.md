@@ -50,16 +50,18 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–22 COMPLETE & green — 4180 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–22
+**Slices 1–23 COMPLETE & green — 4276 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–23
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
 FIRST true 3-D view (a user-directed insertion — the inner autopilot shifted to slice 19), slice 19 the CLOSED
 INNER LOOP (`a_cmd→α_cmd→δ`) + the flight-condition g-limit, slice 20 INDUCED DRAG — the missile LOWERS ITS OWN
 CEILING by maneuvering — slice 21 the EXPONENTIAL ATMOSPHERE: the ceiling you lower by CLIMBING (ρ(z) at
-last, so "high altitude" is EARNED language and not a caveat), and slice 22 NONLINEAR C_L(α) / TRUE STALL —
+last, so "high altitude" is EARNED language and not a caveat), slice 22 NONLINEAR C_L(α) / TRUE STALL —
 the ceiling the AIRFRAME itself sets, which moves the ONE factor of `a_max_aero` that 19/20/21 all left
-alone.** Full gate-by-gate
+alone — and slice 23 the 6-DOF SUBSTRATE + SKID-TO-TURN: the OUT-OF-PLANE ENGAGEMENT, where the pitch plane's
+out-of-plane DISCARD (unflyable BY CONSTRUCTION since slice 19) finally intercepts — `att` becomes a genuine 3-D
+quaternion and STT makes lift in TWO body planes at once, the FIRST slice of the bank-to-turn / 3-D arc.** Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -449,9 +451,44 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   **ROLL/YAW DEPARTURE — the sharpest remaining approximation** (this one departs strictly IN-PLANE; dies only
   with bank-to-turn / 3-D); DEPARTURE RECOVERY / a spin model (the ONSET ships, not the aftermath). (4180)
 
+- **Slice 23 (§11 Tier-A, the FIRST slice of the bank-to-turn / 3-D arc) — 6-DOF SUBSTRATE + SKID-TO-TURN: THE
+  OUT-OF-PLANE ENGAGEMENT**: cashes the sharpest approximation the whole aero arc carried. Since slice 19,
+  `alpha_command` PROJECTS the guidance command onto the in-plane direction `n̂ = (−sinγ, 0, cosγ)` and **DISCARDS
+  the out-of-plane component** — a target off the x–z plane was *unflyable BY CONSTRUCTION*. Slice 23 makes `att` a
+  GENUINE 3-D quaternion integrated from a body-rate vector `ω = (p, q, r)` (NEW comp keys `:att_q`/`:omega_body`,
+  PARALLEL to `:pitch_theta`/`:pitch_q`), keeps the guidance command's FULL 3-D direction, and adds a SKID-TO-TURN
+  autopilot that makes lift in BOTH body planes at once (α → pitch lift, β → yaw side-force). **THE LESSON: a
+  pitch-plane airframe can only pull g in the plane it is already in; STT makes lift in two body planes at once —
+  and the out-of-plane target that was unflyable becomes a hit.** New pure lib `airframe3d.jl` (reuses frames.jl's
+  quaternion algebra). Gate-0 (8 probes) HELD the plan: **P4 → the RESULTANT clamp `hypot(α,β) ≤ α_max`** (the
+  total maneuver-g ceiling is the SAME `a_max_aero` as the pitch plane — STT REPOINTS the authority in 3-D, it does
+  not get MORE); include the ω×Iω term; a static cross-range target (the discard's miss ≈ Y is clean). One new
+  load-bearing finding: **the pitch/yaw MOMENT SIGN is NOT symmetric** (physical nose-up is a −y body rotation but
+  nose-toward-+y is a +z, so the pitch moment is NEGATED onto −y and the yaw is not, `α̇ = −ω_y`, `β̇ = +ω_z` — the
+  #1 SIGN TRAP's 5th occurrence). `:airframe` gains a THIRD rung `:six_dof` (the A/B: `:pitch_coupled` discards and
+  misses, `:six_dof` STT intercepts). Wire (Y=2000 cross-range, ρ=0.3, static aero-free target): `:pitch_coupled`
+  miss **2002.37 m** with `max|pos_y| = 0.0 EXACTLY` (fully discarded — never leaves x–z) vs `:six_dof` **0.230 m**
+  with `max|y| → 2720` (it TURNED); ~8700× (frame-sampled 399.6×). The CAUSATION lever `af_cy_beta → 0` kills the
+  yaw authority and DEGENERATES the STT plant EXACTLY back to the discard. The reduction golden must SHRINK with dt
+  (the advisor's wiring-bug detector — 4.46e-11 → 2.14e-12, ~20.8×, not `==`). ⚠ A gate-2 ADVISOR CATCH — the
+  slice-21 `_atm_on` latent-bug class recurring: the `build_env!` six_dof readout block was first key-gated on
+  `haskey(:att_q)`, which is never deleted, so a cross-toggle off `:six_dof` fired the stale block on a FROZEN
+  attitude; FIXED by rung-gating BOTH rotational blocks on the LIVE `:airframe`. CLIENT: a NEW handshake
+  discriminator `airframe_6dof` (a missile carrying authored `:af_cy_beta`) upgrades to a TRUE 3-D view REUSING
+  slice-18's terrain SubViewport machinery (`_mode = "airframe3d"`) MINUS the heightfield; the `:airframe` cycler
+  is now 3-RING via a PER-SCENARIO `_airframe_rungs` (slice 17/19 stay 2-ring — six_dof is a dead rung there). Class
+  **4c** (9th consecutive — truth-fed PN, no seeker ⇒ "draw-count invariance" VACUOUS; live-settable, no
+  set_fidelity guard). Four proofs green (verifier: the discard/hit miss split + af_cy_beta→0 causation + replay
+  bit-identical; UI: the 3-D routing + 3-ring cycler + FIVE-way multi-view value-guard + all seven prior UI tests
+  re-run; smoke-load; TWO contrasting shots — the six_dof trail CURVING out of the plane vs the pitch_coupled
+  STRAIGHT trail, "cross-range +1024 m" vs "+0 m"). Slices 1–22 byte-identical. Deferred (NAMED): **slice 24 =
+  BANK-TO-TURN + roll-lag** (the same substrate, α-only lift + a finite-bandwidth roll autopilot, the `:steering`
+  rung); aero+inertial cross-coupling / departure; a SEEKER in the 6-DOF loop; an out-of-plane MANEUVERING target;
+  induced/separation drag + ρ(z) on the 6-DOF path. (4276)
+
 
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened
-with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–22 are into the §11 Tier-A
+with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–23 are into the §11 Tier-A
 horizon — slice 15 the actuator/fin half, slice 16 the 6-DOF airframe's rotational half (pitch-plane θ,q), slice 17
 the α→lift→γ TRANSLATION-COUPLING half (the real path-changing `:airframe` toggle), slice 18 terrain masking + the
 3-D client view, slice 19 the CLOSED INNER LOOP (`a_cmd→α_cmd→δ`) + the flight-condition g-limit — which COMPLETES
@@ -469,13 +506,17 @@ and slice 16's ω_sp sentinel fires in flight for the first time in the project'
 **The slice-20 slot was CONTESTED**: the planned SCALAR rate-limited fin inside the coupled loop [the guidance
 limit cycle] is **DEAD, not deferred** — gate 0 killed it in 4 probes (`δ_max` structurally SHADOWS `δ̇_max`: the
 fin only needs to move fast when the command does, which requires high k_α or low damping, and BOTH peg deflection
-first — see `docs/plans/slice20.md`, a worthwhile general result). What remains is the rest of §11 Tier-A/B/C —
-most concretely land clutter [terrain banked the heightfield] and the FULL 6-DOF airframe — **now the nearest and
-most load-bearing named candidate, because slice 22 SHARPENED the case for it twice over**: bank-to-turn / 3-D is
-where the pitch-plane out-of-plane discard finally dies, and slice 22's departure — which is REAL, not authored —
-**departs strictly IN-PLANE, while a real departure goes OUT-OF-PLANE**. That is now the sharpest approximation
-anywhere in the aero arc. [The nonlinear-C_L(α)/true-stall entry that used to sit here is DONE — slice 22 — and it
-did close the ceiling-leak path that bounded slice 21's H floor at 6000.] ⚠ Slice 21 did NOT finish the
+first — see `docs/plans/slice20.md`, a worthwhile general result). **The FULL 6-DOF airframe is now UNDERWAY:
+slice 23 OPENED the bank-to-turn / 3-D arc with the 6-DOF substrate + SKID-TO-TURN — the pitch-plane out-of-plane
+discard finally dies (the out-of-plane target, unflyable BY CONSTRUCTION since slice 19, now intercepts). Scoped
+STT-first as a 2-slice arc: slice 24 = BANK-TO-TURN + roll-lag (the same substrate, α-only lift + a
+finite-bandwidth roll autopilot, the `:steering = (:skid_to_turn, :bank_to_turn)` rung — against the out-of-plane
+maneuver, BTT misses where STT hit) is the NEXT named candidate.** Slice 23's departure note: it departs strictly
+IN-PLANE and its target is STATIC; the AERO + INERTIAL CROSS-COUPLING / DEPARTURE that makes a real BTT airframe
+go OUT-OF-PLANE during a hard roll (non-diagonal I, Clβ/Cnp/Clr, the radome/body-rate parasitic loop) is a later
+lesson (diagonal I + symmetric cruciform + coordinated flight keep 23/24 clean). What else remains of §11
+Tier-A/B/C: land clutter [terrain banked the heightfield], the radome slice (needs a SEEKER in the 6-DOF loop →
+class flips back to 4a/RNG-live). ⚠ Slice 21 did NOT finish the
 atmosphere: ρ(z) reaches the COUPLED airframe path ONLY. The point-mass/ballistic drag path keeps a constant ρ
 because `dynamics.jl`'s steppers take a `v -> a(v)` closure with NO position in it, and changing that contract to
 `(p,v) -> a` touches slice 8's `rk4_step`/`euler_step` — the byte-identity surface of EVERY ballistic slice — for a

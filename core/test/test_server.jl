@@ -1032,6 +1032,9 @@ end
         @test isempty(f[:fidelity])                              # NO fidelity — the params-presence gate
         @test any(k -> k[:key] === :af_cma, f[:knobs])           # the Cmα slider is exposed (the lesson lever)
         @test !haskey(f, :range_axis_m) && !haskey(f, :pri_axis_us)   # not a cfar/esm view
+        # SLICE 23 — a slice-16..22 airframe scenario authors NO `cy_beta`, so it does NOT ship the
+        # 3-D-airframe discriminator (the client stays in the 2-D airframe view).
+        @test !haskey(f, :airframe_6dof)
         # a NON-airframe missile (slice 8, no `airframe:` block) ships NO marker (the gate is params-presence)
         b = joinpath(dir, "ballistic.yaml"); write(b, """
         name: ballistic_test
@@ -1047,6 +1050,29 @@ end
         """)
         g = EWSim.scenario_frame(EWSim.Server(load_scenario(b); path = b))
         @test !haskey(g, :airframe_view) && !haskey(g, :airframe_target)
+        # SLICE 23 — a missile carrying an authored `cy_beta` (6-DOF intent) SHIPS the `airframe_6dof`
+        # discriminator, so the client enters the 3-D out-of-plane view + the 3-ring airframe cycler.
+        s6 = joinpath(dir, "sixdof.yaml"); write(s6, """
+        name: sixdof_test
+        seed: 23
+        dt_physics: 1.0e-3
+        emit_every: 16
+        fidelity: {airframe: pitch_coupled, guidance: pn, autopilot: alpha}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 700.0
+              elevation_deg: 12.0
+              guidance: {n_pn: 4.0}
+              airframe: {cma: -1.0, cmd: 3.0, cla: 20.0, alpha_max: 0.3, cy_beta: 20.0}
+          - {id: t1, kind: target, pos: [6000.0, 2000.0, 4200.0], vel: [0.0, 0.0, 0.0], target: {rcs_m2: 1.0}}
+        """)
+        h = EWSim.scenario_frame(EWSim.Server(load_scenario(s6); path = s6))
+        @test h[:airframe_view] === true && h[:airframe_6dof] === true   # the 3-D-airframe discriminator
+        @test h[:airframe_target] == "m1"
     end
 
     @testset "set_fidelity :airframe + live af_cla/af_delta can't crash a tick (slice-17, class 4c)" begin

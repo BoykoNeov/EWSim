@@ -1,0 +1,160 @@
+# slice23_out_of_plane — the 6-DOF SUBSTRATE + SKID-TO-TURN: the out-of-plane engagement
+# (HANDOFF §11 Tier-A, slice 23 gate 3). The 3-D superset where "the pitch-plane out-of-plane
+# discard finally dies" — the sharpest approximation named at the close of slice 22.
+#
+# Slices 16–22 built a complete PITCH-PLANE airframe: the missile makes its maneuver g from lift
+# in ONE plane (x–z) and `alpha_command` (slice 19) PROJECTS the guidance command onto the in-plane
+# direction n̂ = (−sinγ, 0, cosγ) and DISCARDS the out-of-plane component. A target maneuvering out
+# of the x–z plane is therefore UNFLYABLE BY CONSTRUCTION — a stated approximation the whole arc
+# carried (slice 19 §1: "any OUT-OF-PLANE a_cmd component is DISCARDED"). Slice 23 cashes it: `att`
+# becomes a genuine 3-D quaternion integrated from a body-rate vector ω = (p, q, r), the guidance
+# command keeps its FULL 3-D direction, and a SKID-TO-TURN autopilot makes lift in BOTH body planes
+# at once (α → pitch lift, β → yaw side-force), so the ⟂-v accel can point ANYWHERE off v̂.
+#
+# THE LESSON (the `:airframe` button — now THREE rungs, point_mass ↔ pitch_coupled ↔ six_dof —
+# with ONE toggled between the two that matter):
+#   • :pitch_coupled — the slice-16..22 plant. It projects the command onto the x–z plane and THROWS
+#     AWAY the cross-range (y) part, so it never leaves the launch plane (max|pos_y| = 0 EXACTLY) and
+#     flies straight past the target sitting off to the side. MISS ≈ Y = 2000 m (the cross-range
+#     offset IS the miss — a clean first-CPA in x–z).
+#   • :six_dof — the 3-D plant. It keeps the full 3-D command, resolves it onto the two body ⟂-v
+#     axes, and YAWS to point its lift at the target. It INTERCEPTS (miss ≈ 0.23 m), the sideslip β
+#     genuinely exercised (β_cmd peaks ~0.30 = α_max at this low ρ). ~8700× separation.
+#   Flip the button and watch the SAME PN law, the SAME target off the x–z plane — a pitch-plane
+#   airframe can only pull g in the plane it is already in; a real interceptor turns in 3-D.
+#
+# > THE LESSON, IN ONE SENTENCE. A pitch-plane airframe can only pull g in the plane it is already
+# > in; skid-to-turn makes lift in TWO body planes at once — and the out-of-plane target that was
+# > unflyable by construction becomes a hit.
+#
+# THE TARGET IS STATIC AND OFF THE PLANE (gate-0 route (a), advisor): a static aero-free target at
+# cross-range +Y makes the `:pitch_coupled` miss CLEAN BY CONSTRUCTION — the missile stays at y = 0
+# (it discards every y-command) and the target sits at y = Y, so the minimum approach is EXACTLY Y
+# (a well-defined first-CPA in x–z), NOT a muddied 3-D CPA. The target stays AERODYNAMICALLY FREE
+# (no ceiling, no bleed — the missile.jl named approximation): the lesson is the MISSILE's steering,
+# not a target-aero contest. An out-of-plane MANEUVERING target is slice 24's sharper foil.
+#
+# WHY A LOW ρ (0.3, NOT sea level): at sea level the engagement is EASY (the STT plant barely has to
+# work — α_pk ≈ 0.025 from gravity alone). A low authored ρ makes the yaw authority VISIBLY exercised
+# in the shot: at ρ = 0.3 the STT plant yaws HARD (β_pk ≈ 0.30) while the pitch plant flies straight
+# past. ρ is a CONSTANT flight condition here (NOT slice 21's `:atmosphere` rung — the ONE toggled
+# fidelity stays `:airframe`); "low dynamic pressure (thin air)", not "high altitude" (§1).
+#
+# THE CAP IS THE SAME `a_max_aero = Q·S·|C_Lα|·α_max/m` as the pitch plane, just REPOINTABLE in 3-D
+# (gate-0 P4: the resultant clamp hypot(α, β) ≤ α_max). STT does not get MORE authority — it POINTS
+# the same authority out of plane. "The discard dies" is pointing, not more g.
+#
+# NAMED APPROXIMATIONS (§1): DIAGONAL inertia (I_xx ≪ I_yy = I_zz); the ω×Iω gyroscopic term IS
+# included (correct rigid-body form, ≈0 at STT's single-axis ω); SYMMETRIC CRUCIFORM (C_Yβ = C_Lα,
+# yaw derivatives = pitch); ROLL held ≈ 0 by a pure damper (STT does not bank — bank-to-turn + the
+# roll-lag lesson is slice 24); lift drag-free (⟂ v, speed-preserving — induced/separation drag and
+# ρ(z) on the 6-DOF path are a later composition); truth-fed PN (no seeker). The AERO + INERTIAL
+# CROSS-COUPLING that makes a real BTT airframe DEPART (non-diagonal I, Clβ/Cnp/Clr, radome) is
+# DEFERRED (slice 24 / the departure lesson).
+#
+# Class 4c: physics-changing, NO RNG (truth-fed PN, no seeker → "draw-count invariance" VACUOUS —
+# the 9th consecutive 4c after 14–22), live-settable, NO set_fidelity guard (the :integrator/
+# :autopilot/:apn/:cooperation/:airframe precedent). The seed is inert (kept for format consistency).
+# UNITS (the §1 trifecta): pos/vel SI (m, m/s); Cmα/Cmδ/Cmq/C_Lα/C_Yβ in 1/rad; I in kg·m²; ρ in
+# kg/m³; launch ELEVATION in DEGREES → radians at the loader; α/β/θ/δ readouts in radians. dt = 1e-3
+# / emit_every = 16.
+name: slice23_out_of_plane
+seed: 23
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # THREE keys, ONE toggled (convention 9 — one lesson per button): `airframe` is THE BUTTON
+  # (now 3-rung point_mass ↔ pitch_coupled ↔ six_dof); `guidance` HELD at :pn and `autopilot`
+  # AUTHORED at :alpha so the plant is the only variable. Default :pitch_coupled → the showcase OPENS
+  # on the MISS (the discard); cycle to :six_dof and it HITS. The cross-fidelity dependency (slice
+  # 19's, extended): `:alpha`'s behaviour DEPENDS on `:airframe` — a_ctrl by fiat under :point_mass,
+  # a scalar fin δ under :pitch_coupled, TWO fins (δ_pitch, δ_yaw) under :six_dof.
+  airframe: pitch_coupled
+  guidance: pn
+  autopilot: alpha
+
+entities:
+  # The interceptor — 6-DOF-capable AND guided. Launched from z = 3000 m CLIMBING at 12° at 700 m/s
+  # IN the x–z plane (the slice-19 base geometry, so the ONLY new variable is the plant + the target's
+  # cross-range). mass 140 kg, DRAG OFF (one lesson — and it keeps ρ a PURE Q lever). Both blocks
+  # present ⇒ [BallisticMissile (phase-1 6-DOF airframe), Autopilot (phase-4 α/β/g guidance)].
+  #
+  # guidance: n_pn 4 (the PN nav constant — the outer law is slice-10 VERBATIM); a_max 3000 —
+  #   GENEROUS (the aero ceiling, not a_max, is what binds); delta_max 0.5 — the fin DEFLECTION cap,
+  #   pinned NON-binding (defl_sat = 0, BOTH fins). k_alpha 1.0 / k_q 0.3 — the inner loop's
+  #   feedforward-trim + rate-damped feedback gains, per axis (AUTHORED CONSTANTS, NOT knobs — the
+  #   slice-19 FINDING-14 ceiling-leak reason).
+  # airframe: I = 20 kg·m² (pitch = yaw by symmetry), Cmα = −1.0 (STABLE — the nose weathervanes),
+  #   Cmδ = +3.0, Cmq = −150 (overdamped), C_Lα = 20 (lift-curve slope), alpha_max 0.3 rad (≈17° —
+  #   THE resultant ceiling hypot(α,β) ≤ α_max). THE 6-DOF-ONLY CONSTANTS: cy_beta 20 (= C_Lα, a
+  #   symmetric cruciform); inertia_roll 2 (I_xx ≪ I_yy — roll is fast); inertia_yaw 20 (= I_yy);
+  #   c_roll 50 (the roll damper — STT holds p ≈ 0). No `delta:` → open-loop trim 0; the autopilot's
+  #   δ_pitch/δ_yaw drive the fins from tick 2 (tick 1 flies δ = 0 — integrate! precedes decide!).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 0.3
+      guidance: {n_pn: 4.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # The STATIC target OFF the x–z plane at cross-range +Y = 2000 m (route (a)). vel = 0 ⇒ the
+  # `:pitch_coupled` first-CPA is EXACTLY Y (the missile never leaves x–z). AERODYNAMICALLY FREE (no
+  # maneuver block — the lesson is the MISSILE's steering). At (6000, 2000, 4200): downrange 6 km,
+  # cross-range 2 km, altitude 4.2 km — the discard flies to (~6000, 0, ~4200) and misses by 2 km;
+  # STT yaws to (6000, 2000, 4200) and hits.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 0.0, 0.0]
+    target: {rcs_m2: 1.0}
+
+knobs:
+  # THE LESSON LEVERS (the slice-19 set, carried onto the 6-DOF plant — same ceiling, now
+  # repointable):
+  #
+  # • rho — THE DEMO LEVER: "the ceiling is a FLIGHT CONDITION." a_max_aero ∝ Q = ½ρV², so dragging ρ
+  #   DOWN thins the air and the yaw authority FALLS: at low ρ the STT plant strains to reach the
+  #   cross-range target, at high ρ it turns easily. The default 0.3 is deliberately low so the yaw is
+  #   VISIBLY exercised. ρ is CONFOUNDED (ω_sp ∝ √ρ) ⇒ the PHYSICAL-STORY lever, never the causation
+  #   proof (that is α_max's job). Range [0.15, 1.0]: at 0.15 the STT plant just barely reaches Y
+  #   (β pegs at α_max); by 1.0 it hits comfortably. Bounded to keep the STT plant in its authority
+  #   (below ~0.12 it can't reach 2 km cross-range at all — the ceiling binds and it misses, which
+  #   would muddy "six_dof HITS"; the [[ewsim-df-ellipse-sigma-monotonicity]] range discipline).
+  #
+  # • af_alpha_max — THE CEILING (now the RESULTANT clamp hypot(α, β) ≤ α_max): the total maneuver-g
+  #   ceiling the STT plant repoints in 3-D. Drag it up and the STT plant reaches farther cross-range
+  #   with margin to spare; drag it toward 0.15 and even the STT plant runs out of authority. It
+  #   enters ONLY the α/β_cmd clamp (absent from pitch_moment/lift_accel/short_period_freq) — the
+  #   causation lever (ω_sp / Q / geometry FIXED). Floor 0.05 keeps it > 0 (a LIMIT has no
+  #   lesson-adjacent negative branch).
+  #
+  # • af_cy_beta — THE YAW-AUTHORITY lever, and the crash-safety site (the C_Lα analog for the yaw
+  #   channel): the side-force per unit β. a_yaw ∝ C_Yβ and the β inversion DIVIDES by it. The range
+  #   reaches −5 (mirroring the slice-17/19 cla range): dragging THROUGH ZERO must not crash a tick
+  #   (convention 5 — a throw in decide! silently drops the connection). At C_Yβ ≈ 0 the yaw channel
+  #   has no authority (β_cmd → 0 — the missile CANNOT turn out of plane, so :six_dof degenerates
+  #   toward the :pitch_coupled MISS — an INSTRUCTIVE degenerate: the yaw authority IS what kills the
+  #   discard); at C_Yβ < 0 the signed divide flips β_cmd and stays self-consistent.
+  #
+  # NOT KNOBS, deliberately: k_alpha/k_q (the ceiling leaks — slice-19 FINDING 14); the launch
+  # `speed` (consumed ONCE at load — a slider would be DEAD; ρ is the live Q lever, slice-19 finding);
+  # the roll damper c_roll and the inertias (STT holds p ≈ 0 — a bank-to-turn roll knob is slice 24's).
+  - {target: m1, key: rho,          min: 0.15, max: 1.0,  label: "ρ air density (kg/m³ — THE flight condition: Q = ½ρV²)"}
+  - {target: m1, key: af_alpha_max, min: 0.05, max: 1.0,  label: "α_max resultant ceiling (rad — hypot(α,β) ≤ α_max)"}
+  - {target: m1, key: af_cy_beta,   min: -5.0, max: 40.0, label: "C_Yβ yaw side-force slope (1/rad — the OUT-OF-PLANE authority)"}

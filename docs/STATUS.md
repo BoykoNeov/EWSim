@@ -2877,6 +2877,101 @@ res://net/slice22_verify.gd` (exit 0 = pass; it auto-detects which half). The UI
 
 ---
 
+**Slice 23 — 6-DOF SUBSTRATE + SKID-TO-TURN: the out-of-plane engagement (HANDOFF §11 Tier-A)** — the FIRST
+slice of the bank-to-turn / 3-D arc, and the slice that cashes **the sharpest approximation the whole aero arc
+carried**: since slice 19, `alpha_command` PROJECTS the guidance command onto the in-plane direction
+`n̂ = (−sinγ, 0, cosγ)` and **DISCARDS the out-of-plane component**, so a target off the x–z plane was
+*unflyable BY CONSTRUCTION*. Slice 23 makes `att` a genuine 3-D quaternion integrated from a body-rate vector
+`ω = (p, q, r)`, keeps the guidance command's FULL 3-D direction, and adds a SKID-TO-TURN autopilot that makes
+lift in BOTH body planes at once (α → pitch lift, β → yaw side-force). **THE LESSON, IN ONE SENTENCE:** a
+pitch-plane airframe can only pull g in the plane it is already in; skid-to-turn makes lift in two body planes
+at once — and the out-of-plane target that was unflyable becomes a hit. Scoped STT-first as a **2-slice arc**
+(slice 24 = BANK-TO-TURN + roll-lag, the same substrate, α-only lift + a roll autopilot). Class **4c** (9th
+consecutive — truth-fed PN, no seeker ⇒ "draw-count invariance" VACUOUS; live-settable, NO set_fidelity guard).
+
+Gate 0 (8 empirical probes, `temp/slice23_gate0/`) settled the design; findings in `docs/plans/slice23.md`.
+Plan HELD on its live overturn candidates — **P4 → the RESULTANT clamp** (`hypot(α,β) ≤ α_max`: the total
+maneuver-g ceiling is the SAME `a_max_aero` as the pitch plane, just REPOINTABLE in 3-D — "the discard dies" =
+pointing the same authority out of plane, not getting MORE of it); **P6 → include the ω×Iω gyroscopic term**
+(exactly 0.0 at STT's single-axis ω); **route → (a) static cross-range offset** (`:pitch_coupled` misses
+EXACTLY Y with `max|pos_y| = 0.0`, STT hits). One mild refutation: **P1b** — the in-plane reduction is TIGHT
+(~3e-12 m over 2 s), not loose. One new load-bearing finding: **the pitch/yaw moment sign is NOT symmetric** —
+under `rotate`, physical nose-up (α+) is a −y body rotation but nose-toward-+y (β+) is a +z body rotation, so
+the pitch aero moment is NEGATED onto −y and the yaw is NOT, with physical rates `α̇ = −ω_y`, `β̇ = +ω_z`
+(feeding +ω_y to the pitch loop DIVERGES it — the #1 SIGN TRAP's FIFTH occurrence).
+
+Gate 1 (`airframe3d.jl`, the frames.jl-reusing pure lib, +27 teeth): `body_perp_axes`/`body_incidence` (reduce
+EXACTLY to `lift_accel` in-plane, bit-for-bit), `lift_accel_3d` (2-plane ⟂-v lift), `attitude_kinematics`,
+`body_rate_deriv` (diagonal I + ω×Iω), `stt_moments` (the pitch/yaw sign asymmetry), `rk4_6dof`
+(qnormalize-per-stage), `steering_command` (the 2-plane STT inversion + resultant clamp). `AIRFRAME_MODES` grows
+`:six_dof` (one line; `:pitch_coupled` NOT renamed); `AirframeParams` UNTOUCHED (C_Yβ rides as a kwarg
+defaulting to C_Lα — a symmetric cruciform).
+
+Gate 2 (the wiring, +66 tests): **`_integrate_6dof!`** (the `_integrate_coupled!` sibling, a NEW `elseif` in
+`integrate!` gated `haskey(:af_cma) && :airframe === :six_dof`; the `if`/`else` around it VERBATIM). Mints
+PARALLEL comp keys `:att_q` (Quat) / `:omega_body` (Vec3), never `:pitch_theta`/`:pitch_q`. ONE joint
+`f(pos,vel,q,ω)` closure reading the STAGE q/ω (the slice-17 stage-θ discipline), stepped by `rk4_6dof`; lift is
+drag-free this slice (no induced/separation/ρ(z) arm — a named deferral). **The `:alpha` decide arm** gained an
+`alpha_6dof` case: `steering_command` (2-plane, resultant clamp) → `alpha_autopilot_delta` per axis →
+`(:delta_cmd, :delta_yaw_cmd)`; `:a_ctrl` NOT persisted (the FINDING-1 trap, 6-DOF); `defl_sat = defl_p ||
+defl_y` (both fins). **`build_env!`** gained a SEPARATE 6-DOF readout block (`pos_y`, `alpha`, `beta`,
+`omega_{p,q,r}`, the attitude quaternion as 4 SCALARS `att_q{w,x,y,z}` — convention 13, `a_lift`,
+`turn_radius_m`). **Loader** (`scenario.jl`): `cy_beta`/`inertia_roll`/`inertia_yaw`/`c_roll` PRESENCE-gated per
+key AND consumer-defaulted (`:airframe` is live-settable — a slice-19..22 scenario can be toggled to `:six_dof`
+mid-run having authored none of them; convention 5's both halves).
+⚠ **A gate-2 ADVISOR CATCH — the slice-21 `_atm_on` latent-bug class recurring**: the six_dof readout block was
+first gated on `haskey(:att_q)`, but `:att_q` is never deleted, so after the 3-rung cycler leaves `:six_dof`
+the stale block fired on a FROZEN attitude and OVERWROTE the fresh scalar readout. FIXED by rung-gating BOTH
+rotational blocks on the LIVE `:airframe` (six_dof requires `=== :six_dof`, pitch requires `!== :six_dof`) —
+byte-identity-safe (prior slices never reach `:six_dof`); a LIVE-CROSS-TOGGLE test pins both directions.
+Gate-2 measured (live tick! path): **THE REDUCTION is tight AND shrinks with dt** (in-plane six_dof vs scalar
+`_integrate_coupled!` = 4.46e-11 m at dt=2e-3 → 2.14e-12 at dt=1e-3, ~20.8× — legitimate scheme difference, not
+a constant offset — the advisor's wiring-bug detector); **P1a on the wire** (an in-plane run keeps
+pos_y/omega_p/omega_r/beta at EXACTLY 0.0); **THE LESSON** (Y=2000, ρ=0.3): `:pitch_coupled` miss 2002.37,
+max|y|=0.0 (fully discarded) vs `:six_dof` 0.230, max|y|→2000.19 (it turned) — ~8700×; inert-without-params ≡
+`:point_mass` byte-identical; live-toggle crash-safe; the `:a_ctrl` tripwire holds; 4c bit-identical replay.
+
+Gate 3 (the FOUR proofs, convention 14): a NEW handshake discriminator `airframe_6dof` (`_airframe_view_info`
+ships it when a missile carries an authored `:af_cy_beta` — key-gated, so slices 16–22 never ship it) upgrades
+the client from the 2-D airframe overlay to a TRUE 3-D view. (1) **`slice23_verify.gd`** (S23V OK, exit 0) —
+FIVE phases on the live server: `:pitch_coupled` misses ≈ Y (frame-sampled **2002.37**, `max|y| == 0.0` — the
+discard, read from the state-frame ENTITY pos, full 3-D on every wire); held-seed replay BIT-IDENTICAL (posdiff
+0.0); `:six_dof` INTERCEPTS (frame **5.01**; true 0.230 — sub-metre unreachable at emit_every 16, the
+[[ewsim-missile-verifier-sampling]] asymmetry) and TURNS (`max|y| → 2720`), a **399.6×** separation; and the
+CAUSATION lever — `set_param af_cy_beta → 0` KILLS the yaw authority and the STT plant DEGENERATES EXACTLY back
+to the discard (miss 2002.37, `max|y| == 0.0`), so the out-of-plane authority did not merely correlate with the
+hit, it CAUSED it. (2) **`slice23_ui_test.gd`** (S23UI OK) — the 3-D view routing + the 3-RING airframe cycler
+(point_mass → pitch_coupled → six_dof, each press → set_fidelity) + the FIVE-way multi-view value-guard (16
+drops the button / 17–19 keep the 2-RING cycler [six_dof is a DEAD rung there] / 18 stays terrain-3-D / 21
+keeps the atmosphere cycler / 23 → airframe3d); all seven prior airframe/terrain UI tests (16–22) re-run GREEN.
+(3) the `Sandbox.tscn` headless SMOKE-LOAD (server `DONE` ⇒ the scene connected + built the airframe3d view, no
+parse error). (4) TWO contrasting WINDOWED shots — **`:six_dof`** the cyan trail CURVING out of the launch plane
+toward the +Y target ("SKID-TO-TURN — turning in 3-D", cross-range +1024 m, β +3.3°, the full 6-DOF telemetry
+panel) vs **`:pitch_coupled`** a STRAIGHT trail with the target off to the side ("PITCH-PLANE — out-of-plane
+DISCARDED", cross-range **+0 m**); the two readout panels differ EXACTLY as designed (pitch_coupled ships
+pitch_theta/omega_sp/alpha_trim; six_dof ships att_q/beta/omega_p·q·r/pos_y), corroborating the rung-gated
+telemetry on the live wire with no stale keys. **The CLIENT 3-D view** reuses slice-18's terrain SubViewport
+Node3D world (camera/env/markers/trail `_t3d_*` machinery) MINUS the heightfield ("duplicate, don't share"
+keeps the byte-frozen terrain path untouched): a new `_mode = "airframe3d"` with `_enter_airframe3d_mode` /
+`_build_airframe3d_scene` / `_airframe3d_on_state` / `_draw_airframe3d_hud`, a wireframe launch-plane floor for
+depth, and the nose vector from `att_q` (Godot Quaternion (x,y,z,w) from the core's [w,x,y,z], the direction
+axis-swapped but NOT scaled). The full suite is green; slices 1–22 byte-identical.
+Run the slice-23 showcase: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice23_out_of_plane.yaml`,
+then launch Godot on `clients/godot`. **Cycle the airframe button** point_mass → pitch_coupled → **six_dof** and
+watch the trail go from a straight in-plane line (the discard) to a 3-D curve onto the cross-range target (the
+hit); drag **C_Yβ to 0** and the STT plant loses its yaw authority and misses like the pitch plane. Re-run the
+gate-3 proof headless: start the server, then the console Godot `--headless --path clients/godot --script
+res://net/slice23_verify.gd` (exit 0 = pass). The UI test needs NO server: `… --script res://net/slice23_ui_test.gd`.
+DEFERRED (NAMED): **BANK-TO-TURN + the roll-lag lesson = SLICE 24** (the same substrate, α-only lift + a
+finite-bandwidth roll autopilot, the `:steering = (:skid_to_turn, :bank_to_turn)` rung — against the
+out-of-plane maneuver, BTT misses where STT hit); **AERO + INERTIAL CROSS-COUPLING / DEPARTURE** (non-diagonal
+I, Clβ/Cnp/Clr, the radome / body-rate parasitic loop — diagonal I + symmetric cruciform + coordinated flight
+keep 23/24 clean); **ASYMMETRIC AERO** (C_Yβ ≠ C_Lα); an **OUT-OF-PLANE MANEUVERING TARGET** (slice 24's sharper
+foil — this slice's target is static); a **SEEKER in the 6-DOF loop** (flips the class back to 4a / RNG-live);
+induced/separation drag and ρ(z) on the 6-DOF path (a later composition).
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

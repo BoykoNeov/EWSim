@@ -140,6 +140,13 @@ var _fid_kind := "propagation"
 # draw. `att` is a DYNAMICAL output now (Cmα<0 weathervanes / Cmα>0 tumbles), read off the θ/γ telemetry.
 var _airframe_view := false        # handshake airframe_view (slice 16) — the rotational-dynamics overlay
 var _airframe_target := ""         # the missile id carrying the airframe params (handshake)
+# Slice-23 6-DOF: a handshake `airframe_6dof` marker (a missile carrying :af_cy_beta) upgrades the 2-D
+# airframe overlay to a terrain-style 3-D view (the out-of-plane trail) + the 3-ring cycler. The 3-D
+# scene reuses the slice-18 _t3d_* SubViewport machinery (camera/env/markers/trail), minus the terrain.
+var _airframe_6dof := false        # handshake airframe_6dof — the 3-D-airframe discriminator
+var _af3d_missile := ""            # the interceptor id (the trail source)
+var _af3d_target := ""             # the target id (the +Y off-plane marker)
+var _af3d_nose_mesh: ImmediateMesh = null   # the nose-direction vector (from att_q), coupled/six_dof only
 const EP_RUNGS := ["none", "freq_agility", "sidelobe_blanking"]
 const EST_RUNGS := ["pseudolinear", "ml"]   # slice-5 estimator cycler (the §12 badge button)
 const CFAR_Y_LO := -15.0          # bottom of the dB axis (noise floor ≈ 0 dB; deep nulls clamp)
@@ -252,6 +259,9 @@ const SEEKER_RUNGS := ["raw", "filtered"]    # slice-11 seeker cycler (raw finit
 const DISCRIMINATION_RUNGS := ["none", "gated"]   # slice-13 countermeasures cycler (blend-all ↔ α-β predicted-LOS gate)
 const COOPERATION_RUNGS := ["solo", "salvo"]   # slice-14 salvo cycler (uncoordinated PN ↔ impact-time-control)
 const AIRFRAME_RUNGS := ["point_mass", "pitch_coupled"]   # slice-17 α→lift cycler (ballistic ↔ coupled turn)
+# Slice-23 6-DOF: the airframe cycler is PER-SCENARIO (the _autopilot_rungs precedent). Slice 17/19
+# keep the 2-ring; a slice-23 (airframe_6dof) scenario upgrades to the 3-ring in _enter_airframe3d_mode.
+var _airframe_rungs: Array = AIRFRAME_RUNGS.duplicate()
 const ATMOSPHERE_RUNGS := ["constant", "exponential"]   # slice-21 atmosphere cycler (authored ρ ↔ ρ₀·exp(−z/H))
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
@@ -278,6 +288,7 @@ var _t3d_layer: CanvasLayer = null
 var _t3d_cam: Camera3D = null
 var _t3d_radar: Node3D = null
 var _t3d_target: Node3D = null
+var _t3d_missile: Node3D = null   # slice-23 3-D airframe view: the interceptor marker (cyan)
 var _t3d_los_mesh: ImmediateMesh = null
 var _t3d_trail_mesh: ImmediateMesh = null
 var _t3d_line_mat: StandardMaterial3D = null
@@ -425,6 +436,9 @@ func _on_scenario(obj: Dictionary) -> void:
 	# lands in the spatial branch below; _setup_spatial_fid_btn reads these to drop the button.
 	_airframe_view = bool(obj.get("airframe_view", false))
 	_airframe_target = str(obj.get("airframe_target", ""))
+	# Slice-23 3-D-airframe discriminator (a missile carrying :af_cy_beta) — recognized alongside
+	# airframe_view; the dispatch below routes it to the 3-D view BEFORE the 2-D airframe branch.
+	_airframe_6dof = bool(obj.get("airframe_6dof", false))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -435,6 +449,13 @@ func _on_scenario(obj: Dictionary) -> void:
 		_enter_esm_mode(obj)
 	elif obj.has("terrain_grid"):
 		_enter_terrain_mode(obj)
+	elif _airframe_view and _airframe_6dof:
+		# Slice-23 6-DOF: the out-of-plane engagement needs a TRUE 3-D view (the pitch plane's
+		# out-of-plane discard is invisible in the 2-D side-on airframe view). Recognized BEFORE the
+		# 2-D airframe branch in _setup_spatial_fid_btn (the slice-21/22 "check the new one first"
+		# precedent) and BEFORE terrain would be a different 3-D view (the multi-view discriminator:
+		# terrain_grid → slice-18 terrain 3-D, airframe_6dof → this).
+		_enter_airframe3d_mode(obj)
 	elif _fidelity.has("estimator"):
 		_enter_geoloc_mode(obj)
 	elif _fidelity.has("raim"):
@@ -1023,6 +1044,201 @@ func _terrain_on_state(obj: Dictionary) -> void:
 			_t3d_trail_mesh.surface_add_vertex(_t3d_trail_pts[i])
 		_t3d_trail_mesh.surface_end()
 
+# --- slice-23 3-D AIRFRAME view: the out-of-plane engagement ------------------------------------
+# The pitch plane's out-of-plane discard is INVISIBLE in the 2-D side-on airframe view (both plants
+# look identical from the side — the difference is entirely in y). So a 6-DOF scenario gets a TRUE
+# 3-D view, reusing slice-18's terrain SubViewport machinery (_sim_to_3d / _make_t3d_marker /
+# _update_t3d_cam / the _t3d_* line meshes) MINUS the terrain heightfield/props. Under :pitch_coupled
+# the trail stays FLAT in the x–z plane (the discard); cycle to :six_dof and the SAME PN law YAWS the
+# trail OUT toward the +Y target (the discard dies). Pure display — every position is the core's.
+func _enter_airframe3d_mode(obj: Dictionary) -> void:
+	_mode = "airframe3d"
+	_fid_kind = "airframe"                          # reuse the airframe cycler kind (button/badge/label)
+	_airframe_rungs = AIRFRAME_RUNGS + ["six_dof"]  # the 3-ring, built FROM the const (no re-list)
+	_af3d_missile = _airframe_target                # the interceptor (handshake) — the trail source
+	_af3d_target = ""                               # resolved from the first :target on the first state
+	if _prop_btn.pressed.is_connected(_on_prop_pressed):
+		_prop_btn.pressed.disconnect(_on_prop_pressed)
+	if not _prop_btn.pressed.is_connected(_on_airframe_pressed):
+		_prop_btn.pressed.connect(_on_airframe_pressed)   # guarded for the headless UI test
+	_prop_btn.visible = true
+	_prop_btn.tooltip_text = "Cycle airframe (set_fidelity): point_mass → pitch_coupled → six_dof"
+	_build_airframe3d_scene()
+
+func _build_airframe3d_scene() -> void:
+	# The slice-18 _build_terrain_scene scaffolding, duplicated MINUS the terrain mesh + props
+	# ("duplicate, don't share" keeps the byte-frozen terrain path untouched). A SubViewport Node3D
+	# world: the baked night-sky env, a key + fill light, the interceptor (cyan) + target (orange)
+	# markers, the missile→target LOS line, the fading trail, and the nose-direction vector.
+	if _t3d_layer != null and is_instance_valid(_t3d_layer):
+		_t3d_layer.queue_free()
+	_t3d_layer = null
+	_t3d_cam = null
+	_t3d_trail_pts = []
+	_t3d_root = null
+	_t3d_sun = null
+	_t3d_layer = CanvasLayer.new()
+	_t3d_layer.layer = -1                           # BEHIND the Node2D canvas + the UI CanvasLayer
+	add_child(_t3d_layer)
+	var holder := SubViewportContainer.new()
+	holder.stretch = true
+	holder.set_anchors_preset(Control.PRESET_FULL_RECT)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_t3d_layer.add_child(holder)
+	var vp := SubViewport.new()
+	vp.own_world_3d = true
+	holder.add_child(vp)
+	var root := Node3D.new()
+	vp.add_child(root)
+	_t3d_root = root
+	_t3d_cam = Camera3D.new()
+	_t3d_cam.environment = FX_TERRAIN_ENV           # the shared night-blue sky/glow env
+	_t3d_cam.far = 6000.0
+	root.add_child(_t3d_cam)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-42.0, -38.0, 0.0)
+	sun.light_color = Color(1.0, 0.93, 0.82)
+	sun.light_energy = 1.1
+	root.add_child(sun)
+	_t3d_sun = sun
+	var fill := DirectionalLight3D.new()
+	fill.rotation_degrees = Vector3(-20.0, 135.0, 0.0)
+	fill.light_color = Color(0.55, 0.68, 0.95)
+	fill.light_energy = 0.28
+	root.add_child(fill)
+	# a faint ground reference plane at z = 0 (the launch-plane floor — a subtle grid gives the eye
+	# a horizon so the out-of-plane curve reads as depth, not a wobble).
+	_af3d_add_floor(root)
+	_t3d_missile = _make_t3d_marker(root, Color(0.45, 0.90, 1.00))   # interceptor (cyan)
+	_t3d_target = _make_t3d_marker(root, Color(1.00, 0.62, 0.20))    # target (orange, off the plane)
+	_t3d_line_mat = StandardMaterial3D.new()
+	_t3d_line_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_t3d_line_mat.vertex_color_use_as_albedo = true
+	_t3d_los_mesh = ImmediateMesh.new()
+	var los := MeshInstance3D.new()
+	los.mesh = _t3d_los_mesh
+	root.add_child(los)
+	_t3d_trail_mesh = ImmediateMesh.new()
+	var trail := MeshInstance3D.new()
+	trail.mesh = _t3d_trail_mesh
+	root.add_child(trail)
+	_af3d_nose_mesh = ImmediateMesh.new()
+	var nose := MeshInstance3D.new()
+	nose.mesh = _af3d_nose_mesh
+	root.add_child(nose)
+	# Orbit focus = the engagement midpoint; a 3/4 view (azimuth off the downrange axis + elevated)
+	# so BOTH the downrange run (godot +X) AND the cross-range curve into godot −Z are legible —
+	# looking straight down either axis would make the out-of-plane curve edge-on and invisible.
+	_cam_focus = _sim_to_3d([3100.0, 1050.0, 3700.0])
+	_cam_dist = 88.0
+	_cam_yaw = 2.36
+	_cam_pitch = 0.70
+	_update_t3d_cam()
+
+func _af3d_add_floor(root: Node3D) -> void:
+	# A dim wireframe grid on the sim z = 0 plane (display only) — a horizon reference so the
+	# out-of-plane curve reads as depth. 12×12 lines over the engagement footprint.
+	var m := ImmediateMesh.new()
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.vertex_color_use_as_albedo = true
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var mi := MeshInstance3D.new()
+	mi.mesh = m
+	root.add_child(mi)
+	var x0 := -1000.0; var x1 := 7500.0; var y0 := -3200.0; var y1 := 3200.0
+	var col := Color(0.30, 0.42, 0.55, 0.22)
+	m.surface_begin(Mesh.PRIMITIVE_LINES, mat)
+	for k in 13:
+		var xx: float = x0 + (x1 - x0) * float(k) / 12.0
+		m.surface_set_color(col); m.surface_add_vertex(_sim_to_3d([xx, y0, 0.0]))
+		m.surface_set_color(col); m.surface_add_vertex(_sim_to_3d([xx, y1, 0.0]))
+		var yy: float = y0 + (y1 - y0) * float(k) / 12.0
+		m.surface_set_color(col); m.surface_add_vertex(_sim_to_3d([x0, yy, 0.0]))
+		m.surface_set_color(col); m.surface_add_vertex(_sim_to_3d([x1, yy, 0.0]))
+	m.surface_end()
+
+func _airframe3d_on_state(obj: Dictionary) -> void:
+	_entities.clear()
+	for e in obj.get("entities", []):
+		var id := str(e.get("id", ""))
+		_entities[id] = {"kind": str(e.get("kind", "")), "pos": e.get("pos", [0, 0, 0])}
+		if _af3d_missile == "" and str(e.get("kind", "")) == "missile":
+			_af3d_missile = id
+		if _af3d_target == "" and str(e.get("kind", "")) == "target":
+			_af3d_target = id
+	if _t3d_layer == null or _t3d_los_mesh == null:
+		return
+	var mpos: Array = _entities.get(_af3d_missile, {}).get("pos", [0, 0, 0])
+	var tpos: Array = _entities.get(_af3d_target, {}).get("pos", [0, 0, 0])
+	var m3 := _sim_to_3d(mpos)
+	var t3 := _sim_to_3d(tpos)
+	_t3d_missile.position = m3
+	_t3d_target.position = t3
+	# trail breadcrumbs (skip the repeat point on a paused/held frame)
+	if _t3d_trail_pts.is_empty() or _t3d_trail_pts[-1] != m3:
+		_t3d_trail_pts.append(m3)
+		if _t3d_trail_pts.size() > MISSILE_TRAIL_MAX:
+			_t3d_trail_pts.pop_front()
+	# the missile→target LOS line (cyan)
+	_t3d_los_mesh.clear_surfaces()
+	_t3d_los_mesh.surface_begin(Mesh.PRIMITIVE_LINES, _t3d_line_mat)
+	_t3d_los_mesh.surface_set_color(Color(0.45, 0.90, 1.00, 0.55))
+	_t3d_los_mesh.surface_add_vertex(m3)
+	_t3d_los_mesh.surface_set_color(Color(1.00, 0.62, 0.20, 0.55))
+	_t3d_los_mesh.surface_add_vertex(t3)
+	_t3d_los_mesh.surface_end()
+	# the fading cyan trail — FLAT in x–z under :pitch_coupled, CURVING out toward +Y under :six_dof
+	_t3d_trail_mesh.clear_surfaces()
+	if _t3d_trail_pts.size() >= 2:
+		_t3d_trail_mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP, _t3d_line_mat)
+		var np := _t3d_trail_pts.size()
+		for i in np:
+			var a: float = 0.15 + 0.85 * float(i) / float(np - 1)
+			_t3d_trail_mesh.surface_set_color(Color(0.45, 0.90, 1.00, a))
+			_t3d_trail_mesh.surface_add_vertex(_t3d_trail_pts[i])
+		_t3d_trail_mesh.surface_end()
+	# the NOSE vector (the airframe's pointing direction) — six_dof ships att_q as 4 scalars
+	# [w,x,y,z]; Godot's Quaternion is (x,y,z,w). Rotate body-x by it → the nose in the SIM/inertial
+	# frame, then map to a godot DIRECTION with the axis swap (x, z, −y) but NO scale/exag (a
+	# direction, not a position). Absent (pitch_coupled ships no att_q) ⇒ no nose vector drawn.
+	_af3d_nose_mesh.clear_surfaces()
+	var tel: Dictionary = _telemetry
+	if tel.has(_af3d_missile + ".att_qw"):
+		var q := Quaternion(float(tel[_af3d_missile + ".att_qx"]), float(tel[_af3d_missile + ".att_qy"]),
+				float(tel[_af3d_missile + ".att_qz"]), float(tel[_af3d_missile + ".att_qw"]))
+		var nose_sim := q * Vector3(1.0, 0.0, 0.0)
+		var nose_dir := Vector3(nose_sim.x, nose_sim.z, -nose_sim.y).normalized()
+		_af3d_nose_mesh.surface_begin(Mesh.PRIMITIVE_LINES, _t3d_line_mat)
+		_af3d_nose_mesh.surface_set_color(Color(1.00, 0.95, 0.55))
+		_af3d_nose_mesh.surface_add_vertex(m3)
+		_af3d_nose_mesh.surface_set_color(Color(1.00, 0.95, 0.55))
+		_af3d_nose_mesh.surface_add_vertex(m3 + nose_dir * 9.0)
+		_af3d_nose_mesh.surface_end()
+
+func _draw_airframe3d_hud() -> void:
+	# The 3-D layer renders the world; the 2-D canvas only LABELS it (the terrain-view discipline).
+	# The headline: the plant, the cross-range miss (los_range), and the out-of-plane excursion.
+	var vp := get_viewport_rect().size
+	var rung := str(_fidelity.get("airframe", "point_mass"))
+	var is6 := rung == "six_dof"
+	var lbl := "SKID-TO-TURN — turning in 3-D" if is6 else ("PITCH-PLANE — out-of-plane DISCARDED" if rung == "pitch_coupled" else "POINT-MASS reference")
+	var col := Color(0.45, 0.90, 1.00) if is6 else Color(1.00, 0.62, 0.30)
+	draw_string(_font, Vector2(vp.x - 430, 40), lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, col)
+	if _af3d_missile != "" and _telemetry.has(_af3d_missile + ".los_range"):
+		draw_string(_font, Vector2(vp.x - 430, 66), "range to target: %.0f m" % float(_telemetry[_af3d_missile + ".los_range"]),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	var mpos: Array = _entities.get(_af3d_missile, {}).get("pos", [0, 0, 0])
+	if mpos.size() >= 2:
+		draw_string(_font, Vector2(vp.x - 430, 88), "cross-range (out of plane): %+.0f m" % float(mpos[1]),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	if is6 and _telemetry.has(_af3d_missile + ".beta"):
+		draw_string(_font, Vector2(vp.x - 430, 110), "sideslip β: %+.1f°" % rad_to_deg(float(_telemetry[_af3d_missile + ".beta"])),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	draw_string(_font, Vector2(maxf(8.0, vp.x - 760), vp.y - 16),
+			"3-D airframe view — vertical ×%.1f (display only) · cyan trail = interceptor, orange = target off the x–z plane · drag: orbit · wheel: zoom" % T3D_VEXAG,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, COL_TICK)
+
 func _draw_terrain_hud() -> void:
 	# The 3-D layer (CanvasLayer −1) renders the world; the 2-D canvas only LABELS it: the
 	# core's LOS verdict + signed clearance (the lesson number) + the §12 display-honesty note.
@@ -1056,8 +1272,9 @@ func _update_t3d_cam() -> void:
 		_t3d_sun.shadow_opacity = clampf(1.15 - _cam_dist / 1500.0, 0.45, 1.0)
 
 func _unhandled_input(event: InputEvent) -> void:
-	# Orbit/zoom for the terrain 3-D camera (display only; other views ignore input here).
-	if _mode != "terrain" or _t3d_cam == null:
+	# Orbit/zoom for the 3-D camera — terrain (slice 18) AND airframe3d (slice 23) both use the
+	# _t3d_cam orbit (display only; other views ignore input here).
+	if (_mode != "terrain" and _mode != "airframe3d") or _t3d_cam == null:
 		return
 	if event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT):
 		_cam_yaw -= event.relative.x * 0.008
@@ -1332,9 +1549,12 @@ func _on_airframe_pressed() -> void:
 	# body lift ⟂ v bends the path into a climbing turn (the trail CURVES); under :point_mass the missile
 	# flies the ballistic arc (α inert). The Cla/δ sliders (auto knobs) tighten the turn. The client owns
 	# the displayed rung: badge + button locally (the server applies it silently on the next tick, no reply).
+	# PER-SCENARIO ring (_airframe_rungs): the slice-17/19 2-ring point_mass↔pitch_coupled, or the
+	# slice-23 3-ring point_mass→pitch_coupled→six_dof (set in _enter_airframe3d_mode). six_dof there
+	# is a DEAD rung (no 6-DOF params) so the 2-ring scenarios never expose it.
 	var cur := str(_fidelity.get("airframe", "point_mass"))
-	var i := AIRFRAME_RUNGS.find(cur)
-	var next: String = AIRFRAME_RUNGS[(i + 1) % AIRFRAME_RUNGS.size()] if i >= 0 else "point_mass"
+	var i := _airframe_rungs.find(cur)
+	var next: String = _airframe_rungs[(i + 1) % _airframe_rungs.size()] if i >= 0 else "point_mass"
 	_fidelity["airframe"] = next
 	_client.send({"type": "set_fidelity", "key": "airframe", "value": next})
 	_render_badge()
@@ -1374,6 +1594,8 @@ func _on_state(obj: Dictionary) -> void:
 		_gps_on_state(obj)
 	elif _mode == "terrain":
 		_terrain_on_state(obj)
+	elif _mode == "airframe3d":
+		_airframe3d_on_state(obj)
 	else:
 		_spatial_on_state(obj)
 	_update_readout()
@@ -1692,6 +1914,8 @@ func _draw() -> void:
 		_draw_gps()
 	elif _mode == "terrain":
 		_draw_terrain_hud()      # the 3-D layer draws the world; the canvas only labels it
+	elif _mode == "airframe3d":
+		_draw_airframe3d_hud()   # the 3-D layer draws the world; the canvas only labels it
 	else:
 		_draw_spatial()
 

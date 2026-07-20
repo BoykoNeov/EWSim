@@ -707,7 +707,14 @@ function _airframe_view_info(w::World)
     missiles = sort!(Symbol[id for (id, e) in w.entities
                             if e.kind === :missile && haskey(e.comp, :af_cma)])
     isempty(missiles) && return nothing
-    return Dict{Symbol,Any}(:airframe_view => true, :airframe_target => String(missiles[1]))
+    # SLICE 23 — the 3-D-airframe DISCRIMINATOR (the terrain_grid / range_axis_m precedent). A missile
+    # carrying an authored `:af_cy_beta` (the 6-DOF-only key — key-gated at load, so slices 16–22 never
+    # have it) declares 6-DOF intent: the client upgrades the 2-D airframe overlay to the terrain-style
+    # 3-D view (the out-of-plane trail) and the `:airframe` cycler to the 3-ring point_mass ↔
+    # pitch_coupled ↔ six_dof. `false`/absent on every slice-16..22 wire ⇒ they keep the 2-D view.
+    info = Dict{Symbol,Any}(:airframe_view => true, :airframe_target => String(missiles[1]))
+    any(haskey(w.entities[m].comp, :af_cy_beta) for m in missiles) && (info[:airframe_6dof] = true)
+    return info
 end
 
 # --- the MANEUVERING TARGET: a curving phase-1 mover (slice 12, HANDOFF §10 item 10) ----------
