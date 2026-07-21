@@ -129,6 +129,13 @@ export moment_slope, lift_accel_nl, induced_drag_accel_nl, separation_drag_accel
 # is UNTOUCHED (C_Yβ rides as a kwarg defaulting to C_Lα — symmetric cruciform). Class 4c.
 export body_incidence, body_perp_axes, lift_accel_3d, attitude_kinematics, body_rate_deriv,
        stt_moments, rk4_6dof, steering_command, pitch_rate_phys, yaw_rate_phys
+# Slice 24 (§11 Tier A): BANK-TO-TURN + roll-lag — the steering law that must ROLL to point its
+# single lift plane before it can turn. STT (slice 23) points lift in two planes at once; BTT makes
+# lift in ONE plane (α only, β→0 coordinated) and banks with FINITE bandwidth τ_roll → against the
+# same out-of-plane target BTT MISSES where STT hit. `STEERING_MODES = (:skid_to_turn, :bank_to_turn)`
+# is the NEW `:steering` rung (inert without `:airframe:six_dof`); τ_roll the knob; ζ = 1 the sole-
+# lever approximation. `AirframeParams` UNTOUCHED (I_xx/τ_roll ride in comp, arrive as kwargs). 4c.
+export STEERING_MODES, bank_angle, steering_bank_command, btt_roll_moment, btt_moments
 # Missile guidance (slice 9): the outer pursuit law + the inner PID autopilot (pure).
 # `AutopilotState` is an INTERNAL state record (the JamContribution/BearingRecord precedent —
 # not exported); `autopilot_init` IS exported (the test constructs the zero state bare).

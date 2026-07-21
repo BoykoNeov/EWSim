@@ -220,3 +220,175 @@ function steering_command(a_cmd::Vec3, vel::Vec3, q::Quat, mass::Float64, p::Air
     end
     return (α_raw, β_raw, false)
 end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SLICE 24 — BANK-TO-TURN + ROLL-LAG: the steering law that must bank before it turns.
+#
+# Slice 23's SKID-TO-TURN makes maneuver lift in TWO body planes at once (α → pitch lift, β → yaw
+# side-force), so its ⟂-v accel points ANYWHERE off v̂ with no roll — it turns the instant the
+# guidance command asks. BANK-TO-TURN makes lift in only ONE body plane (α on the body pitch axis;
+# β is actively driven to ≈ 0 — COORDINATED FLIGHT) and must ROLL the body so that single lift plane
+# contains the demanded lift. Roll has a FINITE bandwidth τ_roll, so the time spent banking is time
+# not turning: against the SAME out-of-plane target STT hit, BTT MISSES (gate-0: STT 0.23 vs BTT
+# τ_roll=1.0 → 372 m). τ_roll → 0 recovers STT; τ_roll large saturates toward the pitch-plane DISCARD
+# miss (≈ the cross-range offset). This is the 3-D arc's payoff — "you must bank before you turn."
+#
+# THE `:steering` RUNG (slice-23 §2 reserved it): both laws run on the `:six_dof` plant, the ONLY
+# variable is the steering law. `:steering` is INERT without `:airframe === :six_dof` (the scalar
+# plant has no roll DOF) — the cross-fidelity dependency, written not implied (the slice-19 shape).
+# Class 4c (10th consecutive — truth-fed PN, no seeker ⇒ draw-count invariance VACUOUS).
+#
+# NAMED APPROXIMATIONS (HANDOFF §1):
+#   • ζ = 1 (CRITICALLY-DAMPED roll loop) is what makes τ_roll the SOLE lever — the roll-angle
+#     dynamics are a clean 2nd-order in one time constant, so the miss is a clean function of τ_roll
+#     alone. A real roll autopilot's damping ratio and actuator lag differ (a 2nd roll knob is
+#     deferred). I_xx (roll inertia) MUST stay a NON-knob — it sits inside the roll-loop gain.
+#   • The finite bandwidth lives in a MOMENT (M_x → ṗ → q̇ → bank), NOT a kinematic bank-angle lag —
+#     the substrate-consistent choice (the roll autopilot produces a torque the 6-DOF integrates).
+#   • The COLD-START face: the missile launches wings-level and the lesson is the ~90° roll it must
+#     make to point lift cross-range. The SUSTAINED-TRACKING face (a maneuvering demand rotating
+#     faster than the roll loop follows — an out-of-plane maneuvering target) is DEFERRED (slice-23
+#     §5's route (b)). Both are real BTT physics; this slice ships the cold-start face.
+#   • The ω×Iω gyroscopic term (airframe3d.jl `body_rate_deriv`) is INCLUDED and, at BTT's real roll
+#     rates under coordinated flight, IMMATERIAL to the miss (gate-0 PROBE D2: ≤ 3% at lesson τ) —
+#     because the RATES stay small in the slow-roll regime, NOT because the diagonal-I cross-
+#     coefficients are small (they are ~0.9). The aero+inertial cross-coupling that CAUSES a real
+#     BTT departure (non-diagonal I, sustained large p, Clβ/Cnp/Clr, radome) is the deferred lesson.
+
+# The steering-law fidelity rung tuple — ONE list (convention 7); `LIVE_FIDELITY_MODES` (radar.jl)
+# and the server's `set_fidelity` REFERENCE this, never re-list it. `:skid_to_turn` is slice 23's
+# (and the default — a slice-1..23 scenario never sets `:steering`, so the STT path is byte-frozen).
+const STEERING_MODES = (:skid_to_turn, :bank_to_turn)
+
+# The ⟂-v BANK REFERENCE frame: û_ref = world-up projected ⟂ v (= n̂_pitch at zero bank, exactly
+# (−sin γ, 0, cos γ) in the x–z plane), ŵ_ref = v̂ × û_ref (the right-hand horizontal ⟂-v axis). Bank
+# angle φ is measured in this plane (φ = 0 ⇒ wings level, body up = world up). A near-vertical v (û
+# degenerate) falls back to world-x projected ⟂ v — a live tick can't crash (convention 5).
+function _bank_frame(vhat::Vec3)
+    zref = Vec3(0.0, 0.0, 1.0)
+    u = zref - _dot(zref, vhat) * vhat
+    nu = _norm3(u)
+    if nu < _AIRFRAME_DENOM_FLOOR
+        xref = Vec3(1.0, 0.0, 0.0)
+        u = xref - _dot(xref, vhat) * vhat
+        nu = _norm3(u)
+    end
+    uref = nu > _AIRFRAME_DENOM_FLOOR ? u / nu : Vec3(0.0, 0.0, 1.0)
+    wref = _cross(vhat, uref)
+    return uref, wref
+end
+
+"""
+    bank_angle(q::Quat, vel::Vec3) -> φ
+
+The airframe BANK angle `φ` (roll about the velocity vector, rad, in [−π, π]): the body "up" axis
+projected ⟂ v (`n̂_pitch`) measured against the [`_bank_frame`](@ref) reference (`φ = atan(n̂_pitch·ŵ,
+n̂_pitch·û)`). `φ = 0` is WINGS LEVEL (body up = world up); a bank-to-turn missile rolls to `|φ| ≈ 90°`
+to point its single lift plane cross-range. SHARED by [`steering_bank_command`](@ref) (the roll
+COMMAND) and the client bank readout, so the sign lives in exactly one place (convention 7 — the #1
+SIGN TRAP's 6th occurrence, pinned by the in-plane invariant: an in-plane engagement keeps `φ ≡ 0`).
+Zero-speed guard returns `0.0` (apex / launch — a live tick can't crash, convention 5).
+"""
+function bank_angle(q::Quat, vel::Vec3)
+    V = _norm3(vel)
+    V < _AIRFRAME_V_FLOOR && return 0.0
+    vhat = vel / V
+    uref, wref = _bank_frame(vhat)
+    np, _ = body_perp_axes(q, vhat)
+    return atan(_dot(np, wref), _dot(np, uref))
+end
+
+"""
+    steering_bank_command(a_cmd::Vec3, vel::Vec3, q::Quat, mass, p::AirframeParams;
+                          alpha_max, q_floor = _AIRFRAME_Q_FLOOR) -> (φ_cmd, α_cmd, sat)
+
+The BANK-TO-TURN command inversion — the single-lift-plane counterpart of [`steering_command`](@ref)
+(which resolves the demand onto TWO body planes). The guidance command `a_cmd` (a full 3-D Vec3) is
+projected onto the plane ⟂ v; the demanded lift direction `L̂` fixes the BANK, and its magnitude `L`
+the (signed) angle of attack:
+
+    a_perp = a_cmd − (a_cmd·v̂)·v̂,   L = ‖a_perp‖,   L̂ = a_perp/L
+    φ_L    = atan(L̂·ŵ_ref, L̂·û_ref)                         (bank to align +n̂_pitch with L̂, α>0)
+    α_cmd  = clamp(sgn·L·m/(Q_eff·S·C_Lα), ±alpha_max),  Q_eff = max(½ρV², q_floor)
+
+⭐ REVERSIBLE LIFT + NEAREST-REPRESENTATION bank (gate-0 PROBE F/G — the load-bearing law): the same
+physical ⟂-v lift is `(bank φ_L, α > 0)` OR `(bank φ_L ± π, α < 0)`. Pick whichever bank is the
+SHORTER roll from the CURRENT bank `bank_angle(q, vel)`, so an IN-PLANE "pull down" command flips α's
+sign (no 180° roll) and a ~90° cross-range bank COMMITS by continuity (no chatter at the ±90° reversal
+singularity). `sat` is set when the demand exceeds the aero ceiling `a_max_aero = Q·S·|C_Lα|·α_max/m`
+(the SAME single-axis ceiling as slices 19/23 — β ≈ 0 ⇒ the resultant IS |α|; BTT gets no more or less
+authority than STT, it just can't POINT it without rolling). Degenerates mirror `steering_command`:
+`V → 0` pegs Q at the floor; a ~0 lift slope drops α to 0. The #1 SIGN TRAP's 6th occurrence — the
+bank/α sign pair pinned by the in-plane structural invariant.
+"""
+function steering_bank_command(a_cmd::Vec3, vel::Vec3, q::Quat, mass::Float64, p::AirframeParams;
+                               alpha_max::Float64, q_floor::Float64 = _AIRFRAME_Q_FLOOR)
+    V = _norm3(vel)
+    vhat = V > _AIRFRAME_V_FLOOR ? vel / V : Vec3(1.0, 0.0, 0.0)
+    a_perp = a_cmd - _dot(a_cmd, vhat) * vhat
+    L = _norm3(a_perp)
+    uref, wref = _bank_frame(vhat)
+    L̂ = L > _AIRFRAME_DENOM_FLOOR ? a_perp / L : uref
+    φ_L = atan(_dot(L̂, wref), _dot(L̂, uref))              # bank to align +n̂_pitch with L̂ (α > 0)
+    # NEAREST-REPRESENTATION: choose (φ_L, +1) vs (wrap(φ_L+π), −1) by the shorter roll from φ_now.
+    φ_now = bank_angle(q, vel)
+    φ_alt = wrap_angle(φ_L + π)
+    dL = abs(wrap_angle(φ_L  - φ_now))
+    dA = abs(wrap_angle(φ_alt - φ_now))
+    φ_cmd, sgn = dL <= dA ? (φ_L, 1.0) : (φ_alt, -1.0)
+    Q   = max(0.5 * p.rho * V^2, q_floor)
+    den = Q * p.S * p.Cla
+    α_raw = abs(den) < _AIRFRAME_DENOM_FLOOR ? 0.0 : sgn * L * mass / den   # signed single-plane α
+    sat = abs(α_raw) > alpha_max
+    return (φ_cmd, clamp(α_raw, -alpha_max, alpha_max), sat)
+end
+
+"""
+    btt_roll_moment(φ, φ_cmd, p_roll, I_xx, τ_roll) -> M_x
+
+The ROLL autopilot moment (N·m) for bank-to-turn: a critically-damped (ζ = 1) 2nd-order bank-angle
+controller whose ONLY lever is `τ_roll` (the roll time constant, s), with natural frequency
+`ω_n = 1/τ_roll`:
+
+    M_x = I_xx·( ω_n²·wrap(φ_cmd − φ) − 2·ω_n·p_roll )
+
+giving `φ̈ ≈ ω_n²·(φ_cmd − φ) − 2·ω_n·φ̇` (a settling time ~4–5·τ_roll). This REPLACES slice 23's pure
+roll damper `−c_roll·p` (STT holds `p ≈ 0`; here the autopilot COMMANDS the bank). `I_xx` sits in the
+gain, so it MUST stay a NON-knob (else it confounds τ_roll — the slice-19 FINDING-14 discipline); ζ = 1
+is the named approximation making τ_roll the sole lever (§header). The bank error is `wrap_angle`d to
+the ±π branch so the shorter roll direction is always taken.
+"""
+function btt_roll_moment(φ::Float64, φ_cmd::Float64, p_roll::Float64, I_xx::Float64, τ_roll::Float64)
+    ωn = 1.0 / τ_roll
+    return I_xx * (ωn^2 * wrap_angle(φ_cmd - φ) - 2.0 * ωn * p_roll)
+end
+
+"""
+    btt_moments(q, vel, ω, δp, δy, φ_cmd, p::AirframeParams; I_xx, τ_roll) -> Vec3
+
+The body-axis aerodynamic + control moment `M_body = (M_x, M_y, M_z)` (N·m) for the BANK-TO-TURN
+airframe — the [`stt_moments`](@ref) sibling with an IDENTICAL pitch/yaw aero (the arithmetic is
+DUPLICATED, not shared, so `stt_moments` stays byte-frozen — "duplicate, don't share") and the ROLL
+channel swapped from the pure damper to the [`btt_roll_moment`](@ref) autopilot:
+
+    M_pitch_phys = Q·S·d·(Cmα·α + Cmδ·δp + Cmq·q̄_phys),   q̄_phys = α̇·d/(2V),  α̇ = −ω_y
+    M_yaw_phys   = Q·S·d·(Cmα·β + Cmδ·δy + Cmq·r̄_phys),   r̄_phys = β̇·d/(2V),  β̇ = +ω_z
+    M_body       = ( btt_roll_moment(φ, φ_cmd, p, I_xx, τ_roll),  −M_pitch_phys,  +M_yaw_phys )
+
+⚠ THE SAME ± ASYMMETRY as `stt_moments`: physical nose-up is a −y body rotation but nose-+y is a +z
+rotation, so the pitch aero moment is negated onto −y and the yaw maps to +z un-negated (the gate-0
+sign finding). Roll is now the autopilot (bank COMMAND), not the STT damper. The `_AIRFRAME_V_FLOOR`
+q̄/r̄ guard is `stt_moments`' (a live tick at apex can't crash).
+"""
+function btt_moments(q::Quat, vel::Vec3, ω::Vec3, δp::Float64, δy::Float64, φ_cmd::Float64,
+                     p::AirframeParams; I_xx::Float64, τ_roll::Float64)
+    V = _norm3(vel)
+    α, β = body_incidence(q, vel)
+    Q  = 0.5 * p.rho * V^2
+    qbp = V > _AIRFRAME_V_FLOOR ? pitch_rate_phys(ω) * p.d / (2.0 * V) : 0.0
+    rbp = V > _AIRFRAME_V_FLOOR ? yaw_rate_phys(ω)   * p.d / (2.0 * V) : 0.0
+    M_pitch_phys = Q * p.S * p.d * (p.Cma * α + p.Cmd * δp + p.Cmq * qbp)
+    M_yaw_phys   = Q * p.S * p.d * (p.Cma * β + p.Cmd * δy + p.Cmq * rbp)
+    M_x = btt_roll_moment(bank_angle(q, vel), φ_cmd, ω[1], I_xx, τ_roll)
+    return Vec3(M_x, -M_pitch_phys, M_yaw_phys)
+end

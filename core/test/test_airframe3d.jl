@@ -146,4 +146,134 @@
         @test isfinite(s[1]) && isfinite(s[2])
         @test qnormalize(Quat(0.,0.,0.,0.)) == Quat(1.,0.,0.,0.)   # identity fallback
     end
+
+    # ── SLICE 24 — BANK-TO-TURN + roll-lag ────────────────────────────────────────────────────
+    # A representative climbing airframe at low ρ (the showcase flight condition — the STT plant
+    # works, so a BTT roll lag can visibly cost the intercept). Teeth mirror gate-0 PROBES F/G/B.
+    STEER_MODE_LIST = STEERING_MODES
+
+    @testset "bank_angle: wings-level ≡ 0; a roll about v̂ reads that bank (#1 sign trap 6th)" begin
+        V0=700.0; el=deg2rad(12.0); v = V0*Vec3(cos(el),0.0,sin(el))
+        qlvl = att_pitch(el)                                     # nose along v, body-up = world-up ⟂ v
+        @test isapprox(bank_angle(qlvl, v), 0.0; atol=1e-12)     # wings level
+        vh = v/norm3(v)
+        qroll = qmul(quat_from_axis_angle(vh, π/3), qlvl)        # roll +60° about v̂
+        @test isapprox(bank_angle(qroll, v), π/3; atol=1e-9)     # reads the bank, signed
+        @test isapprox(bank_angle(qmul(quat_from_axis_angle(vh,-π/3),qlvl), v), -π/3; atol=1e-9)
+    end
+
+    @testset "steering_bank_command: NEAREST-REPRESENTATION reversible lift (PROBE F/G)" begin
+        p = par(0.3); αmax=0.30; V0=700.0; el=deg2rad(12.0)
+        v = V0*Vec3(cos(el),0.0,sin(el)); qlvl = att_pitch(el)
+        # in-plane UP demand ⇒ bank 0, α > 0
+        φ,α,_ = steering_bank_command(Vec3(0.,0.,300.), v, qlvl, MASS, p; alpha_max=αmax)
+        @test isapprox(φ, 0.0; atol=1e-6) && α > 0.0
+        # in-plane DOWN demand ⇒ bank 0 (NOT ±π — the fix), α < 0 (reversible lift, no 180° roll)
+        φ,α,_ = steering_bank_command(Vec3(0.,0.,-300.), v, qlvl, MASS, p; alpha_max=αmax)
+        @test isapprox(φ, 0.0; atol=1e-6) && α < 0.0
+        # cross-range +y demand ⇒ |bank| ≈ 90°, α carries the (positive) demand
+        φ,α,_ = steering_bank_command(Vec3(0.,300.,0.), v, qlvl, MASS, p; alpha_max=αmax)
+        @test isapprox(abs(φ), π/2; atol=1e-6) && α > 0.0
+        # COMMITMENT (no chatter at ±90°): already rolled to −90°, a +y demand STAYS near −90°
+        vh = v/norm3(v); q90 = qmul(quat_from_axis_angle(vh, -π/2), qlvl)
+        φ,_,_ = steering_bank_command(Vec3(0.,300.,0.), v, q90, MASS, p; alpha_max=αmax)
+        @test isapprox(φ, -π/2; atol=1e-6)                       # nearest rep = stay, not flip to +90°
+        # sat: demand above the ceiling sets sat; below clears it
+        Q = 0.5*0.3*V0^2; aero = Q*S*abs(Cla)*αmax/MASS
+        @test steering_bank_command(Vec3(0.,2*aero,0.), v, qlvl, MASS, p; alpha_max=αmax)[3] == true
+        @test steering_bank_command(Vec3(0.,0.3*aero,0.), v, qlvl, MASS, p; alpha_max=αmax)[3] == false
+    end
+
+    @testset "steering_bank_command decomposition ≡ demanded ⟂-v lift when banked (τ→0 recovery)" begin
+        # At the commanded bank AND α, the single-plane lift (Q·S/m)·C_Lα·α·n̂_pitch(φ) must reproduce
+        # the demanded ⟂-v accel (direction AND magnitude) — the same ⟂-v vector STT makes in two
+        # planes. The causation license in kernel form: instant roll ⇒ BTT ≡ STT (gate-0 PROBE B).
+        p = par(0.3); αmax=0.30; V0=700.0; el=deg2rad(12.0)
+        v = V0*Vec3(cos(el),0.0,sin(el)); qlvl = att_pitch(el); vh=v/norm3(v)
+        a_dem = Vec3(0.0, 120.0, 40.0)                           # a below-ceiling out-of-plane demand
+        a_perp = a_dem - dot3(a_dem,vh)*vh
+        φ,α,sat = steering_bank_command(a_dem, v, qlvl, MASS, p; alpha_max=αmax)
+        @test sat == false
+        # n̂_pitch at bank φ = û_ref rotated by φ about v̂ (the bank_angle convention, reconstructed)
+        uref = Vec3(0.,0.,1.) - dot3(Vec3(0.,0.,1.),vh)*vh; uref = uref/norm3(uref)
+        wref = Vec3(vh[2]*uref[3]-vh[3]*uref[2], vh[3]*uref[1]-vh[1]*uref[3], vh[1]*uref[2]-vh[2]*uref[1])
+        np = cos(φ)*uref + sin(φ)*wref
+        Q = 0.5*0.3*V0^2
+        a_made = (Q*S/MASS)*Cla*α*np                             # single-plane pitch lift at (φ, α)
+        @test isapprox(a_made, a_perp; atol=1e-6)                # BTT reproduces the STT ⟂-v vector
+    end
+
+    @testset "btt_roll_moment: ζ=1 bank autopilot — sign + exact form" begin
+        Ix=2.0; τ=0.8; ωn=1/τ
+        @test btt_roll_moment(0.0, 0.5, 0.0, Ix, τ) > 0.0        # +Δφ error ⇒ roll toward command
+        @test btt_roll_moment(0.5, 0.5, 0.0, Ix, τ) == 0.0       # no error, no rate ⇒ no moment
+        @test btt_roll_moment(0.0, 0.0, 2.0, Ix, τ) < 0.0        # rolling with no error ⇒ damps
+        @test isapprox(btt_roll_moment(0.1, 0.4, 0.7, Ix, τ),
+                       Ix*(ωn^2*(0.4-0.1) - 2*ωn*0.7); atol=1e-12)
+    end
+
+    @testset "btt_moments ≡ stt_moments pitch/yaw (duplicate-not-share); roll swapped" begin
+        p = par(); q = att_pitch(0.05); v = 800.0*Vec3(1.,0.,0.); ω = Vec3(0.3,0.2,0.1)
+        Ms = stt_moments(q, v, ω, 0.05, 0.02, p; c_roll=50.0)
+        Mb = btt_moments(q, v, ω, 0.05, 0.02, 0.0, p; I_xx=Idiag[1], τ_roll=0.8)
+        @test isapprox(Mb[2], Ms[2]; atol=1e-12) && isapprox(Mb[3], Ms[3]; atol=1e-12)  # pitch/yaw identical
+        @test Mb[1] != Ms[1]                                     # roll: autopilot ≠ damper
+        @test isapprox(Mb[1], btt_roll_moment(bank_angle(q,v), 0.0, ω[1], Idiag[1], 0.8); atol=1e-12)
+    end
+
+    # A local CLOSED-LOOP STT/BTT driver (guidance → steering law → δ/φ_cmd → moments → integrate) —
+    # the gate-3 verifier's unit shadow. Static aero-free target; returns (cpa, maxy, p_pk, bank_pk, β_pk).
+    function run_cl(; plant, τ_roll=1.0, tpos, rho=0.3, tmax=12.0, dt=1e-3, αmax=0.30)
+        # SHOWCASE airframe (the overdamped params of scenarios/slice24 — Cmq=−150, not the sea-level
+        # slender-missile `par()`, whose light damping oscillates the closed loop). Idiag_s = (I_xx=2,
+        # I_yy=I_zz=20). This reproduces the gate-0 numbers (STT hits, slow BTT misses).
+        Cla_s=20.0; p = AirframeParams(π*0.1^2, 0.2, 20.0, -1.0, 3.0, -150.0, rho, Cla_s)
+        Idiag_s=Vec3(2.0, 20.0, 20.0); c_roll=50.0
+        mass=MASS; kα=1.0; kq=0.3; δmax=0.5; a_max=3000.0
+        pos=Vec3(0.,0.,3000.); V0=700.0; el=deg2rad(12.0); vel=V0*Vec3(cos(el),0.,sin(el))
+        q=att_pitch(el); ω=zero(Vec3); δp=0.0; δy=0.0; φcmd=0.0
+        min_r=Inf; maxy=0.0; p_pk=0.0; bank_pk=0.0; β_pk=0.0
+        for _ in 1:round(Int,tmax/dt)
+            f=(P,Vv,Q,W)->begin
+                a = total_accel(Vv;rho=rho,cd_area=0.0,mass=mass)+lift_accel_3d(Vv,Q,mass,p;c_yaw=Cla_s)
+                M = plant===:stt ? stt_moments(Q,Vv,W,δp,δy,p;c_roll=c_roll) :
+                                   btt_moments(Q,Vv,W,δp,δy,φcmd,p;I_xx=Idiag_s[1],τ_roll=τ_roll)
+                (Vv, a, attitude_kinematics(Q,W), body_rate_deriv(W,M,Idiag_s))
+            end
+            pos,vel,q,ω = rk4_6dof(f,pos,vel,q,ω,dt)
+            a_cmd = clamp_accel(pn_accel(pos,vel,tpos,zero(Vec3);N=4.0), a_max)
+            αa,βa = body_incidence(q,vel)
+            if plant===:stt
+                αc,βc,_ = steering_command(a_cmd,vel,q,mass,p;alpha_max=αmax,c_yaw=Cla)
+                δp,_ = alpha_autopilot_delta(αc,αa,pitch_rate_phys(ω),p;k_alpha=kα,k_q=kq,delta_max=δmax)
+                δy,_ = alpha_autopilot_delta(βc,βa,yaw_rate_phys(ω),p;k_alpha=kα,k_q=kq,delta_max=δmax)
+            else
+                φcmd,αc,_ = steering_bank_command(a_cmd,vel,q,mass,p;alpha_max=αmax)
+                δp,_ = alpha_autopilot_delta(αc,αa,pitch_rate_phys(ω),p;k_alpha=kα,k_q=kq,delta_max=δmax)
+                δy,_ = alpha_autopilot_delta(0.0,βa,yaw_rate_phys(ω),p;k_alpha=kα,k_q=kq,delta_max=δmax)
+            end
+            r=norm3(tpos-pos); min_r=min(min_r,r); maxy=max(maxy,abs(pos[2]))
+            p_pk=max(p_pk,abs(ω[1])); bank_pk=max(bank_pk,abs(bank_angle(q,vel))); β_pk=max(β_pk,abs(βa))
+        end
+        return (cpa=min_r, maxy=maxy, p_pk=p_pk, bank_pk=bank_pk, β_pk=β_pk)
+    end
+
+    @testset "in-plane ⇒ NO roll (PROBE F); out-of-plane ⇒ ROLLS (the complement, advisor)" begin
+        inp = run_cl(plant=:btt, τ_roll=0.8, tpos=Vec3(6000.,0.,4200.))
+        @test inp.p_pk < 1e-12 && inp.maxy < 1e-9 && inp.bank_pk < 1e-12   # a law that never rolls passes THIS...
+        oop = run_cl(plant=:btt, τ_roll=0.8, tpos=Vec3(6000.,2000.,4200.))
+        @test oop.p_pk > 0.1 && oop.maxy > 500.0 && oop.bank_pk > deg2rad(60)  # ...so pin that it DOES roll
+    end
+
+    @testset "τ_roll→0 recovers STT; slow τ_roll MISSES (the A/B in miniature, PROBE B/H)" begin
+        tp = Vec3(6000.,2000.,4200.)
+        stt  = run_cl(plant=:stt, tpos=tp)
+        fast = run_cl(plant=:btt, τ_roll=0.01, tpos=tp)
+        slow = run_cl(plant=:btt, τ_roll=1.0,  tpos=tp)
+        @test stt.cpa < 5.0                                     # STT hits
+        @test fast.cpa < 20.0                                   # instant roll ≈ STT (causation license)
+        @test slow.cpa > 50.0                                   # slow roll MISSES (the roll lag bites)
+        @test slow.cpa > 10*fast.cpa                            # decisive separation
+        @test slow.β_pk < 0.15 && stt.β_pk > 0.20               # BTT β regulated→0 vs STT β COMMANDED
+    end
 end
