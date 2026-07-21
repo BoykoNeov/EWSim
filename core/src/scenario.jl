@@ -559,6 +559,19 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                 isfinite(comp[:af_c_roll]) ||
                     error("missile '$id': airframe.c_roll must be finite (got $(comp[:af_c_roll]))")
             end
+            # SLICE 24 — THE ROLL TIME CONSTANT τ_roll (s), the bank-to-turn knob. PRESENCE-GATED on
+            # the KEY (the `c_roll`/`k_induced` precedent): only a slice-24 YAML authors it, and it
+            # ALSO defaults at the consumer (`_integrate_6dof!` reads `get(c, :af_tau_roll, 1.0)`) so
+            # a slice-19..23 scenario toggled to `:bank_to_turn` at runtime can't crash (4c, no guard).
+            # Validated > 0: a zero/negative time constant is a ÷0 in the roll-loop gain (ω_n = 1/τ),
+            # no lesson-adjacent branch — reject at LOAD (the `c_roll`/`inertia` sign-guard shape).
+            if haskey(ab, "tau_roll")
+                comp[:af_tau_roll] = _f64(ab["tau_roll"])
+                comp[:af_tau_roll] > 0 ||
+                    error("missile '$id': airframe.tau_roll must be > 0 (roll time constant; got $(comp[:af_tau_roll]))")
+                isfinite(comp[:af_tau_roll]) ||
+                    error("missile '$id': airframe.tau_roll must be finite (got $(comp[:af_tau_roll]))")
+            end
             # SLICE 20 — INDUCED DRAG (`C_Di = K·C_L²`). PRESENCE-GATED on the KEY, not on the
             # airframe BLOCK (the slice-18 `alt_hold_m` precedent): slices 16/17/19 ALL carry
             # airframe blocks, so gating on the block would silently grow the key on every one of

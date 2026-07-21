@@ -1,0 +1,135 @@
+# slice24_bank_to_turn — BANK-TO-TURN + ROLL-LAG: the steering law that must bank before it turns
+# (HANDOFF §11 Tier-A, slice 24 gate 3). The SECOND slice of the bank-to-turn / 3-D arc, on the 6-DOF
+# substrate slice 23 built.
+#
+# Slice 23's SKID-TO-TURN makes maneuver lift in BOTH body planes at once (α → pitch lift, β → yaw
+# side-force), so its ⟂-v accel points ANYWHERE off v̂ with NO roll — it turns the instant the guidance
+# command asks, and the out-of-plane target intercepts. BANK-TO-TURN makes lift in only ONE body plane
+# (α on the body pitch axis; β is actively driven to ≈ 0 — COORDINATED flight) and must ROLL the body
+# so that single lift plane contains the demanded lift. Roll has a FINITE bandwidth τ_roll, so the time
+# spent banking is time not turning: against the SAME out-of-plane target STT hit, BTT MISSES.
+#
+# THE LESSON (the `:steering` button — TWO rungs, skid_to_turn ↔ bank_to_turn, on the HELD `:six_dof`
+# plant; the ONE toggled fidelity, convention 9):
+#   • :bank_to_turn (default — the showcase OPENS on the MISS) — the missile launches WINGS-LEVEL and
+#     must roll ~90° to point its single lift plane at the cross-range target; with a τ_roll = 1.0 s
+#     roll time constant it is still pointing lift the OLD way for a large fraction of the ~9 s flight,
+#     so it MISSES by ~372 m (it DOES turn — it reaches ~2820 m cross-range of the 2924 STT reaches —
+#     just LATE). "You must bank before you turn."
+#   • :skid_to_turn — slice 23's plant. Lift in two planes at once, no roll needed → it INTERCEPTS
+#     (miss ≈ 0.23 m). ~1600× separation.
+#   Flip the button and watch the SAME PN law, the SAME target off the x–z plane, the SAME 6-DOF plant
+#   — the ONLY change is HOW the lift is pointed: instantly (STT) vs by rolling with a lag (BTT).
+#
+# > THE LESSON, IN ONE SENTENCE. Skid-to-turn points its lift anywhere instantly; bank-to-turn must
+# > ROLL to point its single lift plane first — and with finite roll bandwidth the time spent banking
+# > is time not turning, so against an out-of-plane target BTT misses where STT hit.
+#
+# τ_roll IS THE KNOB (af_tau_roll): drag it → 0 and BTT recovers STT (both hit — the CAUSATION proof:
+# the miss is caused by the roll LAG, because removing the lag removes it, gate-0 PROBE B); drag it up
+# and the miss saturates toward the pitch-plane DISCARD (≈ the cross-range offset). ζ = 1 (critically
+# damped roll loop) is the named approximation that makes τ_roll the SOLE lever (§1); I_xx (roll
+# inertia) is a NON-knob — it sits inside the roll-loop gain (a slice-19 FINDING-14-shaped confound).
+#
+# THE TARGET IS STATIC AND OFF THE PLANE (route (a), the COLD-START face — the missile launches
+# wings-level and the lesson is the ~90° roll it must make): the same clean geometry slice 23 used. The
+# SUSTAINED-TRACKING face (a maneuvering demand rotating faster than the roll loop follows — an
+# out-of-plane maneuvering target) is a NAMED DEFERRAL (slice-23 §5's route (b)), NOT a refutation —
+# both are real BTT physics. The target stays AERODYNAMICALLY FREE (the lesson is the MISSILE's steering).
+#
+# WHY A LOW ρ (0.3): the STT plant works (so a BTT roll lag can visibly COST the intercept) and the
+# yaw/bank authority is VISIBLY exercised — the missile banks HARD in the shot. ρ is a CONSTANT flight
+# condition (NOT slice 21's `:atmosphere` rung); "low dynamic pressure (thin air)", not "high altitude".
+#
+# NAMED APPROXIMATIONS (§1): ζ = 1 roll loop (τ_roll the sole lever); the finite bandwidth is a MOMENT
+# (M_x → ṗ → bank), not a kinematic lag; DIAGONAL inertia + the ω×Iω gyroscopic term INCLUDED and
+# measured IMMATERIAL at BTT's real roll rates (gate-0 PROBE D2 — the rates stay small under coordinated
+# flight in the slow-roll regime; the aero+inertial cross-coupling that CAUSES a real BTT departure is
+# the deferred lesson); SYMMETRIC CRUCIFORM; lift drag-free; truth-fed PN (no seeker).
+#
+# Class 4c: physics-changing, NO RNG (truth-fed PN, no seeker → "draw-count invariance" VACUOUS — the
+# 10th consecutive 4c after 14–23), live-settable, NO set_fidelity guard. The seed is inert (kept for
+# format consistency). UNITS (§1 trifecta): pos/vel SI; angles rad; τ_roll in s; I in kg·m²; ρ in
+# kg/m³; launch ELEVATION in DEGREES → radians at the loader. dt = 1e-3 / emit_every = 16.
+name: slice24_bank_to_turn
+seed: 24
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # THREE airframe/steering keys, ONE toggled (convention 9): `steering` is THE BUTTON (skid_to_turn ↔
+  # bank_to_turn); `airframe` HELD at :six_dof (the plant both laws run on); `guidance` :pn and
+  # `autopilot` :alpha so the STEERING LAW is the only variable. Default :bank_to_turn → the showcase
+  # OPENS on the MISS; cycle to :skid_to_turn and it HITS. THE CROSS-FIDELITY DEPENDENCY (the slice-19
+  # shape, now steering-on-airframe): `:steering` is INERT without `:airframe === :six_dof` — the scalar
+  # plant has no roll DOF; STT/BTT are meaningless there.
+  airframe: six_dof
+  steering: bank_to_turn
+  guidance: pn
+  autopilot: alpha
+
+entities:
+  # The interceptor — 6-DOF AND guided. Launched from z = 3000 m CLIMBING at 12° at 700 m/s IN the x–z
+  # plane (wings-level — the COLD-START geometry). mass 140 kg, DRAG OFF. Both blocks present ⇒
+  # [BallisticMissile (phase-1 6-DOF airframe), Autopilot (phase-4 α/β/g guidance)].
+  #
+  # airframe: the slice-23 set + `tau_roll: 1.0` (THE KNOB — the roll time constant, s). I = 20 (pitch =
+  #   yaw), Cmα = −1.0 (STABLE), Cmδ = +3.0, Cmq = −150 (overdamped — the clean loop), C_Lα = 20,
+  #   alpha_max 0.3. THE 6-DOF CONSTANTS: cy_beta 20 (= C_Lα); inertia_roll 2 (I_xx ≪ I_yy — roll is
+  #   fast, but τ_roll SETS the roll bandwidth, not I_xx); inertia_yaw 20; c_roll 50 (the STT damper —
+  #   INERT under :bank_to_turn, where the τ_roll autopilot replaces it).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 0.3
+      guidance: {n_pn: 4.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+        tau_roll: 1.0
+  # The STATIC target OFF the x–z plane at cross-range +Y = 2000 m (route (a)). vel = 0. AERODYNAMICALLY
+  # FREE. At (6000, 2000, 4200): downrange 6 km, cross-range 2 km, altitude 4.2 km — :bank_to_turn banks
+  # LATE and misses ~372 m; :skid_to_turn yaws immediately and hits.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 0.0, 0.0]
+    target: {rcs_m2: 1.0}
+
+knobs:
+  # • af_tau_roll — THE LESSON LEVER (the roll time constant, s): drag → 0.1 and BTT rolls fast enough
+  #   to point its lift in time (recovers the STT hit — the CAUSATION proof); drag → 2.0 and the roll
+  #   is so sluggish the miss saturates toward the pitch-plane DISCARD (≈ Y = 2000 m). Range [0.1, 2.0],
+  #   the monotone region (gate-0 PROBE G: monotone-increasing and saturating at ≈Y, no reversal; below
+  #   ~0.1 it is sub-meter-hit territory). This is the ONLY causation knob (ζ = 1 and I_xx held).
+  #
+  # • rho — THE FLIGHT-CONDITION DEMO lever (Q = ½ρV²): the aero authority both plants make their lift
+  #   with. Higher ρ → more lift authority once banked; it does NOT change the roll BANDWIDTH (τ_roll
+  #   sets that). CONFOUNDED (moves the aero everywhere) ⇒ the PHYSICAL-story lever, never the causation
+  #   proof (that is τ_roll's job). Range [0.2, 1.0] — bounded so the STT reference still HITS.
+  #
+  # • af_alpha_max — THE CEILING (the resultant clamp): the maneuver-g both plants share. Drag up and
+  #   both reach farther; drag toward 0.05 and even STT runs out of authority. It enters ONLY the α/β_cmd
+  #   clamp (the slice-19 causation-lever shape, but here τ_roll is the slice's causation knob).
+  #
+  # NOT KNOBS, deliberately: k_alpha/k_q (the ceiling leaks — slice-19 FINDING 14); the launch `speed`
+  # (consumed ONCE at load — a slider would be DEAD; and it would lengthen the flight and EVAPORATE the
+  # cold-start lesson — plan §5); I_xx / c_roll (roll-loop gain / the inert STT damper — plan §3); ζ (the
+  # critically-damped roll loop is FIXED so τ_roll is the sole lever).
+  - {target: m1, key: af_tau_roll,  min: 0.1,  max: 2.0,  label: "τ_roll roll time constant (s — THE roll-lag lever; →0 recovers STT)"}
+  - {target: m1, key: rho,          min: 0.2,  max: 1.0,  label: "ρ air density (kg/m³ — the flight condition Q = ½ρV²)"}
+  - {target: m1, key: af_alpha_max, min: 0.05, max: 1.0,  label: "α_max resultant ceiling (rad — hypot(α,β) ≤ α_max)"}

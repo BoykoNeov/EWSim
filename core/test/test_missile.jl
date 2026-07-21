@@ -3532,3 +3532,232 @@ end
         end
     end
 end
+
+# --- gate 2: BANK-TO-TURN + roll-lag wired (slice 24, §11 Tier A) -------------------------------
+# The `:steering = (:skid_to_turn, :bank_to_turn)` rung on the HELD `:six_dof` plant. `:bank_to_turn`
+# swaps the STT roll damper for the τ_roll bank autopilot (airframe3d.jl `btt_moments`) and the decide
+# arm for `steering_bank_command` (single-plane α + a bank command, β→0). Against the SAME static
+# out-of-plane target STT hits, BTT MISSES (it must roll ~90° to point its lift cross-range, and the
+# roll lags). `:steering` is INERT without `:airframe:six_dof`; default `:skid_to_turn` ⇒ slice 23
+# byte-frozen. Class 4c. Goldens from the LIVE tick! path (temp/slice24_gate0/wire_measure.jl).
+@testset "bank-to-turn + roll-lag wired (slice 24, :steering === :bank_to_turn)" begin
+    dt = 1.0e-3
+    n3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # The slice-24 world — the slice-23 owp geometry + `:steering` + `:af_tau_roll`. `steering = nothing`
+    # ⇒ NO `:steering` key in fidelity (the byte-identity default proof); a Symbol ⇒ set it.
+    function btt_world(; steering = :bank_to_turn, τ_roll = 1.0, Y = 2000.0, airframe = :six_dof)
+        fid = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                  :autopilot => :alpha, :airframe => airframe)
+        steering !== nothing && (fid[:steering] = steering)
+        w = World(seed = 24, fidelity = fid)
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 0.3,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => 0.3, :af_cy_beta => 20.0, :af_I_roll => 2.0,
+                                :af_I_zz => 20.0, :af_c_roll => 50.0, :af_tau_roll => τ_roll,
+                                :n_pn => 4.0, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, Y, 4200.0),
+                                 vel = zero(Vec3), comp = Dict{Symbol,Any}())
+        return w, Subsystem[BallisticMissile(:m1), Autopilot(:m1), ConstantVelocity(:t1)]
+    end
+    function fly(; T = 25.0, kw...)
+        w, s = btt_world(; kw...)
+        rmin, prev, closing = Inf, Inf, true; maxy = 0.0; bank_pk = 0.0
+        for _ in 1:round(Int, T / dt)
+            tick!(w, s, dt); empty!(w.events)
+            m = w.entities[:m1]; r = n3(w.entities[:t1].pos - m.pos)
+            closing && r > prev && (closing = false)
+            closing && (rmin = min(rmin, r)); prev = r
+            maxy = max(maxy, abs(m.pos[2]))
+            bank_pk = max(bank_pk, abs(get(w.env[:telemetry], "m1.bank_deg", 0.0)))
+            !closing && break
+        end
+        return (miss = rmin, maxy = maxy, bank_pk = bank_pk, w = w)
+    end
+
+    @testset "BYTE-IDENTITY — default (no :steering key) ≡ :skid_to_turn ≡ slice-23 :six_dof" begin
+        # The default is `:skid_to_turn` (plan §1), so a world with NO `:steering` key and one that
+        # sets it EXPLICITLY to `:skid_to_turn` must be bit-for-bit identical, AND both must reproduce
+        # slice 23's STT miss EXACTLY — the master additive check (the STT path is textually verbatim).
+        function trace(steering)
+            w, s = btt_world(; steering = steering); ps = Vec3[]
+            for _ in 1:1500; tick!(w, s, dt); empty!(w.events); push!(ps, w.entities[:m1].pos); end
+            ps
+        end
+        @test trace(nothing) == trace(:skid_to_turn)             # the default is byte-safe
+        st = fly(steering = :skid_to_turn)
+        @test isapprox(st.miss, 0.23039260577585177; atol = 1e-9)  # === slice-23's :six_dof STT miss
+    end
+
+    @testset "THE LESSON — :bank_to_turn MISSES (roll lag), :skid_to_turn HITS" begin
+        # The SAME PN law, the SAME target off the x-z plane, the SAME 6-DOF plant — only the STEERING
+        # law differs. STT points lift in two planes at once → intercept. BTT (τ_roll = 1.0) launches
+        # wings-level and must roll ~90° to point its single lift plane cross-range; the roll lags, so it
+        # is still pointing lift the OLD way for a large part of the flight → miss ~372 m. It DOES turn
+        # (maxy well past 0 — not the pitch-plane discard), just LATE.
+        b = fly(steering = :bank_to_turn, τ_roll = 1.0)
+        s = fly(steering = :skid_to_turn)
+        @test isapprox(b.miss, 371.7948191626971;  atol = 1e-6)  # the roll-lag miss (live-wire golden)
+        @test isapprox(s.miss, 0.23039260577585177; atol = 1e-6) # the STT intercept
+        @test b.miss / s.miss > 1000.0                           # ~1600× separation
+        @test b.maxy > 1500.0                                    # BTT TURNED (late) — not the ≈0 discard
+    end
+
+    @testset "τ_roll → 0 RECOVERS STT (the CAUSATION lever); large τ_roll SATURATES toward Y" begin
+        # The miss is caused by the roll LAG: remove the lag (τ_roll → 0, instant bank) and BTT recovers
+        # the STT hit (gate-0 PROBE B). Dial τ_roll up and the roll is too sluggish to point lift in time
+        # — the miss saturates toward the pitch-plane DISCARD (≈ Y = 2000 m), NO reversal (PROBE G).
+        fast = fly(steering = :bank_to_turn, τ_roll = 0.01)
+        slow = fly(steering = :bank_to_turn, τ_roll = 2.0)
+        @test isapprox(fast.miss, 0.13295162494180615; atol = 1e-6)  # instant roll ≈ STT (causation)
+        @test fast.miss < 1.0                                        # recovered the hit
+        @test isapprox(slow.miss, 1535.4860854585859; atol = 1e-6)   # saturating toward Y = 2000
+        @test slow.miss > fly(steering=:bank_to_turn, τ_roll=1.0).miss  # monotone in τ_roll (no reversal)
+    end
+
+    @testset "IN-PLANE INVARIANT under :bank_to_turn — Y=0 ⇒ no roll, no drift (#1 sign trap 6th)" begin
+        # The bank/α sign pair (airframe3d.jl): an in-plane target needs NO bank, so BTT must keep the
+        # bank ≡ 0, the roll rate p ≡ 0, and never leave the x-z plane. A flipped sign would induce a
+        # spurious roll. Gate-0 PROBE F measured them at EXACTLY 0.0.
+        w, s = btt_world(steering = :bank_to_turn, Y = 0.0)
+        mp = 0.0; my = 0.0; mbank = 0.0
+        for _ in 1:6000
+            tick!(w, s, dt); empty!(w.events); tel = w.env[:telemetry]
+            mp = max(mp, abs(get(tel, "m1.omega_p", 0.0)))
+            mbank = max(mbank, abs(get(tel, "m1.bank_deg", 0.0)))
+            my = max(my, abs(w.entities[:m1].pos[2]))
+        end
+        @test mp == 0.0 && my == 0.0 && mbank == 0.0
+    end
+
+    @testset "transient GOLDEN — the closed-loop BTT wiring (the plausible-but-wrong catch)" begin
+        # 2000 ticks into the closed out-of-plane BTT loop — pins the FULL joint state + the bank seam
+        # (a swapped roll-moment sign, a stale φ_cmd, an entry-vs-stage read would move these).
+        w, s = btt_world(steering = :bank_to_turn)
+        for _ in 1:2000; tick!(w, s, dt); empty!(w.events); end
+        m = w.entities[:m1]
+        @test isapprox(m.pos[1], 1385.3290466659; atol = 1e-6)
+        @test isapprox(m.pos[2],   32.0823302655; atol = 1e-6)
+        @test isapprox(m.pos[3], 3146.3104297288; atol = 1e-6)
+        @test isapprox(m.comp[:att_q][1],  0.843799662995; atol = 1e-9)
+        @test isapprox(m.comp[:omega_body][1], 0.600555650922; atol = 1e-9)  # roll rate (BTT banks!)
+        @test isapprox(m.comp[:phi_cmd],       2.179253044118; atol = 1e-9)  # the bank command seam
+        @test isapprox(m.comp[:delta_yaw_cmd], -0.009269785031; atol = 1e-9)
+    end
+
+    @testset "gated wire — :bank_to_turn ships bank_deg/phi_cmd; :skid_to_turn ships NEITHER" begin
+        # The bank readouts key off `:steering === :bank_to_turn` (RUNG-gated, the slice-23 precedent),
+        # so a slice-16..23 / STT wire is byte-identical (never grows them).
+        wb, sb = btt_world(steering = :bank_to_turn)
+        for _ in 1:800; tick!(wb, sb, dt); empty!(wb.events); end
+        tb = wb.env[:telemetry]
+        @test haskey(tb, "m1.bank_deg") && tb["m1.bank_deg"] isa Float64 && isfinite(tb["m1.bank_deg"])
+        @test haskey(tb, "m1.phi_cmd")  && tb["m1.phi_cmd"] isa Float64
+        ws, ss = btt_world(steering = :skid_to_turn)
+        for _ in 1:800; tick!(ws, ss, dt); empty!(ws.events); end
+        ts = ws.env[:telemetry]
+        @test !haskey(ts, "m1.bank_deg") && !haskey(ts, "m1.phi_cmd")   # STT wire has NEITHER
+        @test haskey(ts, "m1.beta_cmd")                                 # …but keeps the six_dof yaw keys
+    end
+
+    @testset "LIVE CROSS-TOGGLE — no STALE bank readout survives the :steering cycle" begin
+        # `:phi_cmd` is minted by the BTT decide arm and never deleted; without the RUNG-gate the
+        # bank_deg/phi_cmd block would keep firing on the STT wire after a bank_to_turn→skid_to_turn
+        # toggle (the slice-21 `_atm_on` latent-bug class). `w.env` is emptied each tick ⇒ the rung-gate
+        # is a complete fix. Both directions clean.
+        wb, sb = btt_world(steering = :bank_to_turn)
+        for _ in 1:400; tick!(wb, sb, dt); empty!(wb.events); end
+        wb.fidelity[:steering] = :skid_to_turn
+        for _ in 1:5; tick!(wb, sb, dt); empty!(wb.events); end
+        tb = wb.env[:telemetry]
+        @test !haskey(tb, "m1.bank_deg") && !haskey(tb, "m1.phi_cmd")   # no stale bank key on the STT wire
+        @test haskey(tb, "m1.beta_cmd")                                 # the fresh STT readout stands
+        ws, ss = btt_world(steering = :skid_to_turn)
+        for _ in 1:400; tick!(ws, ss, dt); empty!(ws.events); end
+        ws.fidelity[:steering] = :bank_to_turn
+        for _ in 1:5; tick!(ws, ss, dt); empty!(ws.events); end
+        @test haskey(ws.env[:telemetry], "m1.bank_deg")                 # the fresh bank readout appears
+    end
+
+    @testset "INERT without :six_dof — :bank_to_turn on :pitch_coupled ≡ :skid_to_turn (no roll DOF)" begin
+        # The cross-fidelity dependency (plan §1): `:steering` reaches a branch ONLY on the 6-DOF path.
+        # On `:pitch_coupled` the scalar plant has no roll DOF, so `:bank_to_turn` is a NO-OP — bit-for-bit
+        # the `:skid_to_turn` (i.e. slice-22) trajectory.
+        function trace(steering)
+            w, s = btt_world(; steering = steering, airframe = :pitch_coupled); ps = Vec3[]
+            for _ in 1:1200; tick!(w, s, dt); empty!(w.events); push!(ps, w.entities[:m1].pos); end
+            ps
+        end
+        @test trace(:bank_to_turn) == trace(:skid_to_turn)       # steering inert off the 6-DOF plant
+    end
+
+    @testset "determinism — a BTT missile replays bit-identical (class 4c, no RNG)" begin
+        function trace()
+            w, s = btt_world(steering = :bank_to_turn); ps = Vec3[]
+            for _ in 1:1500; tick!(w, s, dt); empty!(w.events); push!(ps, w.entities[:m1].pos); end
+            ps
+        end
+        @test trace() == trace()
+    end
+
+    @testset "loader — tau_roll parses to comp + rejects τ ≤ 0; the :steering rung validates" begin
+        base = """
+        name: s24
+        seed: 24
+        dt_physics: 0.001
+        fidelity: {airframe: six_dof, steering: bank_to_turn, guidance: pn, autopilot: alpha}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 700.0
+              elevation_deg: 12.0
+              cd_area_m2: 0.0
+              guidance: {n_pn: 4.0}
+              airframe:
+                inertia_kgm2: 20.0
+                cma: -1.0
+                cmd: 3.0
+                cla: 20.0
+                alpha_max: 0.3
+                cy_beta: 20.0
+                inertia_roll_kgm2: 2.0
+                inertia_yaw_kgm2: 20.0
+                c_roll: 50.0
+                tau_roll: 0.8
+          - id: t1
+            kind: target
+            pos: [6000.0, 2000.0, 4200.0]
+            vel: [0.0, 0.0, 0.0]
+            target: {rcs_m2: 1.0}
+        """
+        mktempdir() do dir
+            good = joinpath(dir, "good.yaml"); write(good, base)
+            scn = load_scenario(good)
+            @test scn.world.fidelity[:steering] === :bank_to_turn    # the NEW rung validates through the wire
+            @test scn.world.entities[:m1].comp[:af_tau_roll] == 0.8
+            # tau_roll DEFAULTS when omitted (a live :steering toggle of a scenario that never authored
+            # it can't KeyError a tick — consumer default 1.0).
+            nod = join([l for l in split(base, '\n') if !occursin("tau_roll", l)], '\n')
+            pd = joinpath(dir, "def.yaml"); write(pd, nod)
+            @test !haskey(load_scenario(pd).world.entities[:m1].comp, :af_tau_roll)
+            # REJECTS τ ≤ 0 (÷0 in the roll-loop gain ω_n = 1/τ) and a non-finite τ; and a bogus rung.
+            for (from, to) in (("tau_roll: 0.8" => "tau_roll: 0.0"),
+                               ("tau_roll: 0.8" => "tau_roll: -0.5"),
+                               ("tau_roll: 0.8" => "tau_roll: .inf"),
+                               ("steering: bank_to_turn" => "steering: wobble_to_turn"))
+                pb = joinpath(dir, "bad.yaml"); write(pb, replace(base, from => to))
+                @test_throws ErrorException load_scenario(pb)
+            end
+        end
+    end
+end

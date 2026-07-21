@@ -457,6 +457,17 @@ function _integrate_6dof!(m::BallisticMissile, e::Entity, c::Dict{Symbol,Any}, w
     δy = Float64(get(c, :delta_yaw_cmd, 0.0))
     q0 = c[:att_q]::Quat
     ω0 = c[:omega_body]::Vec3
+    # SLICE 24 — the STEERING law selects the ROLL channel. `:bank_to_turn` swaps the STT roll damper
+    # (`stt_moments`' `−c_roll·p`) for the τ_roll bank autopilot (airframe3d.jl `btt_moments`), reading
+    # the bank COMMAND `:phi_cmd` written by LAST tick's decide! (the `:delta_cmd` seam's sibling; tick
+    # 1 defaults to 0 ⇒ wings-level, no roll). Default `:skid_to_turn` ⇒ `stt_moments` VERBATIM (slice
+    # 23 byte-frozen — a slice-1..23 wire never sets `:steering`). `:steering` is INERT without
+    # `:six_dof` (this branch IS the 6-DOF path; the scalar plant has no roll DOF — plan §1). τ_roll
+    # clamped > 0 at the consumer (a live slider can't crash — convention 5; the AUTHORED value is
+    # load-validated). I_xx (roll inertia) sits in the roll-loop gain — a NON-knob (plan §3).
+    steering = get(w.fidelity, :steering, :skid_to_turn)
+    τ_roll   = max(Float64(get(c, :af_tau_roll, 1.0)), _FRAME_EPS)
+    φ_cmd    = Float64(get(c, :phi_cmd, 0.0))
     # The joint 6-DOF derivative f(pos, vel, q, ω) -> (ṗ, v̇, q̇, ω̇). CRITICAL (the slice-17 stage-θ
     # / slice-21 stage-z discipline): the lift AND the moment read the STAGE quaternion `Qq` and
     # stage rate `W` (the RK4 stage arguments), NEVER the entry `q0`/`ω0` closed over above — the
@@ -469,7 +480,9 @@ function _integrate_6dof!(m::BallisticMissile, e::Entity, c::Dict{Symbol,Any}, w
         a  = total_accel(Vv; rho = rho, cd_area = cd_area, mass = mass) +
              lift_accel_3d(Vv, Qq, mass, p; c_yaw = c_yaw)
         q̇  = attitude_kinematics(Qq, W)
-        M  = stt_moments(Qq, Vv, W, δp, δy, p; c_roll = c_roll)
+        M  = steering === :bank_to_turn ?
+             btt_moments(Qq, Vv, W, δp, δy, φ_cmd, p; I_xx = Idiag[1], τ_roll = τ_roll) :
+             stt_moments(Qq, Vv, W, δp, δy, p; c_roll = c_roll)
         ω̇  = body_rate_deriv(W, M, Idiag)
         (Vv, a, q̇, ω̇)
     end
@@ -683,6 +696,14 @@ function build_env!(m::BallisticMissile, w::World)
         Vsp = _norm3(e.vel)
         tel["$sid.a_lift"]        = _finite(aLm)                                  # m/s² (⟂ v, 2-plane)
         tel["$sid.turn_radius_m"] = _finite(aLm > 0.0 ? Vsp * Vsp / aLm : FINITE_CEIL)
+        # SLICE 24 — the BANK readouts, gated on `:bank_to_turn` (RUNG-gated, the slice-23 six_dof-block
+        # precedent — so a slice-16..23 / `:skid_to_turn` wire is byte-identical; `w.env` is emptied each
+        # tick, no stale key survives a cross-toggle). `bank_deg` is the client's roll indicator (STT
+        # holds ≈ 0; BTT rolls to ~±90° to point its single lift plane cross-range); `phi_cmd` the command.
+        if get(w.fidelity, :steering, :skid_to_turn) === :bank_to_turn
+            tel["$sid.bank_deg"] = _finite_coord(rad2deg(bank_angle(qa, e.vel)))
+            tel["$sid.phi_cmd"]  = _finite_coord(get(c, :phi_cmd, 0.0))
+        end
     end
     return nothing
 end
@@ -1102,14 +1123,33 @@ function decide!(a::Autopilot, w::World)
                             quat_from_two_vectors(Vec3(1.0, 0.0, 0.0), e.vel))::Quat
                 ω_bod = get(c, :omega_body, zero(Vec3))::Vec3
                 α_ach, β_ach = body_incidence(q_att, e.vel)
-                α_cmd, β_cmd, aero_sat = steering_command(a_cmd, e.vel, q_att, mass_af, p_af;
-                                                          alpha_max = alpha_max, c_yaw = c_yaw_af)
-                δp_cmd, defl_p = alpha_autopilot_delta(α_cmd, α_ach, pitch_rate_phys(ω_bod), p_af;
-                                                       k_alpha = k_alpha, k_q = k_q,
-                                                       delta_max = delta_max)
-                δy_cmd, defl_y = alpha_autopilot_delta(β_cmd, β_ach, yaw_rate_phys(ω_bod), p_af;
-                                                       k_alpha = k_alpha, k_q = k_q,
-                                                       delta_max = delta_max)
+                # SLICE 24 — the STEERING law. `:bank_to_turn` makes lift in ONE plane (α only) and
+                # BANKS to point it: `steering_bank_command` returns the bank command `φ_cmd` (→ the
+                # roll autopilot in next tick's `_integrate_6dof!`, the `:delta_cmd` seam's sibling) and
+                # the SIGNED single-plane α; the yaw channel drives β → 0 (COORDINATED flight, NOT "STT
+                # minus β" — plan §2). Default `:skid_to_turn` ⇒ the slice-23 STT inversion VERBATIM
+                # (β COMMANDED in two planes). `:steering` is inert without `:six_dof` (this arm).
+                if get(w.fidelity, :steering, :skid_to_turn) === :bank_to_turn
+                    φ_cmd, α_cmd, aero_sat = steering_bank_command(a_cmd, e.vel, q_att, mass_af, p_af;
+                                                                   alpha_max = alpha_max)
+                    β_cmd = 0.0
+                    c[:phi_cmd] = φ_cmd
+                    δp_cmd, defl_p = alpha_autopilot_delta(α_cmd, α_ach, pitch_rate_phys(ω_bod), p_af;
+                                                           k_alpha = k_alpha, k_q = k_q,
+                                                           delta_max = delta_max)
+                    δy_cmd, defl_y = alpha_autopilot_delta(0.0, β_ach, yaw_rate_phys(ω_bod), p_af;
+                                                           k_alpha = k_alpha, k_q = k_q,
+                                                           delta_max = delta_max)
+                else
+                    α_cmd, β_cmd, aero_sat = steering_command(a_cmd, e.vel, q_att, mass_af, p_af;
+                                                              alpha_max = alpha_max, c_yaw = c_yaw_af)
+                    δp_cmd, defl_p = alpha_autopilot_delta(α_cmd, α_ach, pitch_rate_phys(ω_bod), p_af;
+                                                           k_alpha = k_alpha, k_q = k_q,
+                                                           delta_max = delta_max)
+                    δy_cmd, defl_y = alpha_autopilot_delta(β_cmd, β_ach, yaw_rate_phys(ω_bod), p_af;
+                                                           k_alpha = k_alpha, k_q = k_q,
+                                                           delta_max = delta_max)
+                end
                 # THE 2-CHANNEL δ SEAM: BOTH fins written for next tick's `_integrate_6dof!` (the
                 # slice-19 `:delta_cmd` pattern, doubled). Tick 1 flies `af_delta`/0 (integrate!
                 # precedes the first decide!) — author `af_delta: 0` so tick 1 injects no transient.
