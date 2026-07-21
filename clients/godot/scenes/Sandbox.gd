@@ -263,6 +263,12 @@ const AIRFRAME_RUNGS := ["point_mass", "pitch_coupled"]   # slice-17 α→lift c
 # keep the 2-ring; a slice-23 (airframe_6dof) scenario upgrades to the 3-ring in _enter_airframe3d_mode.
 var _airframe_rungs: Array = AIRFRAME_RUNGS.duplicate()
 const ATMOSPHERE_RUNGS := ["constant", "exponential"]   # slice-21 atmosphere cycler (authored ρ ↔ ρ₀·exp(−z/H))
+# Slice-24 BANK-TO-TURN: the STEERING cycler on the HELD :six_dof plant. skid_to_turn (slice 23 — lift
+# in two planes at once, no roll) ↔ bank_to_turn (lift in ONE plane, ROLL to point it with a finite
+# τ_roll lag). Shown when the handshake fidelity carries `steering` (the airframe cycler is dropped —
+# convention 9, ONE toggled fidelity: airframe is HELD :six_dof). The cross-fidelity dependency: this
+# rung is inert without :airframe:six_dof (the scalar plant has no roll DOF).
+const STEERING_RUNGS := ["skid_to_turn", "bank_to_turn"]
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
 # --- terrain 3-D view (slice 18): the client's FIRST true 3-D view. Populated only when the
@@ -1053,16 +1059,27 @@ func _terrain_on_state(obj: Dictionary) -> void:
 # trail OUT toward the +Y target (the discard dies). Pure display — every position is the core's.
 func _enter_airframe3d_mode(obj: Dictionary) -> void:
 	_mode = "airframe3d"
-	_fid_kind = "airframe"                          # reuse the airframe cycler kind (button/badge/label)
-	_airframe_rungs = AIRFRAME_RUNGS + ["six_dof"]  # the 3-ring, built FROM the const (no re-list)
 	_af3d_missile = _airframe_target                # the interceptor (handshake) — the trail source
 	_af3d_target = ""                               # resolved from the first :target on the first state
 	if _prop_btn.pressed.is_connected(_on_prop_pressed):
 		_prop_btn.pressed.disconnect(_on_prop_pressed)
-	if not _prop_btn.pressed.is_connected(_on_airframe_pressed):
-		_prop_btn.pressed.connect(_on_airframe_pressed)   # guarded for the headless UI test
+	# SLICE 24 — if the scenario carries a `steering` fidelity, the shared button is the STEERING cycler
+	# (skid_to_turn ↔ bank_to_turn) with :airframe HELD :six_dof (convention 9 — the slice-21/22
+	# two-view-claiming-keys precedent, "check the NEW key first"). Otherwise it is the slice-23 airframe
+	# 3-ring cycler. The 3-D view + trail/nose drawing are shared either way (the bank is a NEW thing to
+	# draw on the same scene). VALUE-GUARDED: a slice-23 wire (no `steering`) keeps the airframe cycler.
+	if _fidelity.has("steering"):
+		_fid_kind = "steering"
+		if not _prop_btn.pressed.is_connected(_on_steering_pressed):
+			_prop_btn.pressed.connect(_on_steering_pressed)   # guarded for the headless UI test
+		_prop_btn.tooltip_text = "Cycle steering (set_fidelity): skid_to_turn → bank_to_turn"
+	else:
+		_fid_kind = "airframe"                      # reuse the airframe cycler kind (button/badge/label)
+		_airframe_rungs = AIRFRAME_RUNGS + ["six_dof"]  # the 3-ring, built FROM the const (no re-list)
+		if not _prop_btn.pressed.is_connected(_on_airframe_pressed):
+			_prop_btn.pressed.connect(_on_airframe_pressed)   # guarded for the headless UI test
+		_prop_btn.tooltip_text = "Cycle airframe (set_fidelity): point_mass → pitch_coupled → six_dof"
 	_prop_btn.visible = true
-	_prop_btn.tooltip_text = "Cycle airframe (set_fidelity): point_mass → pitch_coupled → six_dof"
 	_build_airframe3d_scene()
 
 func _build_airframe3d_scene() -> void:
@@ -1214,16 +1231,36 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 		_af3d_nose_mesh.surface_add_vertex(m3)
 		_af3d_nose_mesh.surface_set_color(Color(1.00, 0.95, 0.55))
 		_af3d_nose_mesh.surface_add_vertex(m3 + nose_dir * 9.0)
+		# SLICE 24 — the LIFT AXIS (body "up" = q·(0,0,1)): where the single lift plane points. This makes
+		# the BANK visible — under bank_to_turn the missile ROLLS this axis toward the cross-range target,
+		# and the roll LAGS. A second segment in the same nose mesh (magenta). Drawn on any 6-DOF wire; it
+		# only reads differently once the airframe banks (β≈0 STT keeps it ≈vertical, BTT rolls it over).
+		var up_sim := q * Vector3(0.0, 0.0, 1.0)
+		var up_dir := Vector3(up_sim.x, up_sim.z, -up_sim.y).normalized()
+		_af3d_nose_mesh.surface_set_color(Color(1.00, 0.45, 0.85))
+		_af3d_nose_mesh.surface_add_vertex(m3)
+		_af3d_nose_mesh.surface_set_color(Color(1.00, 0.45, 0.85))
+		_af3d_nose_mesh.surface_add_vertex(m3 + up_dir * 7.0)
 		_af3d_nose_mesh.surface_end()
 
 func _draw_airframe3d_hud() -> void:
 	# The 3-D layer renders the world; the 2-D canvas only LABELS it (the terrain-view discipline).
 	# The headline: the plant, the cross-range miss (los_range), and the out-of-plane excursion.
 	var vp := get_viewport_rect().size
-	var rung := str(_fidelity.get("airframe", "point_mass"))
-	var is6 := rung == "six_dof"
-	var lbl := "SKID-TO-TURN — turning in 3-D" if is6 else ("PITCH-PLANE — out-of-plane DISCARDED" if rung == "pitch_coupled" else "POINT-MASS reference")
-	var col := Color(0.45, 0.90, 1.00) if is6 else Color(1.00, 0.62, 0.30)
+	# SLICE 24 — a steering scenario labels the STEERING law (skid_to_turn ↔ bank_to_turn); a slice-23
+	# scenario labels the airframe rung. Both share this 3-D view (value-guarded on the `steering` key).
+	var lbl := ""
+	var col := Color(0.45, 0.90, 1.00)
+	var is_bank := false
+	if _fidelity.has("steering"):
+		is_bank = str(_fidelity.get("steering", "skid_to_turn")) == "bank_to_turn"
+		lbl = "BANK-TO-TURN — banking to turn (roll lag)" if is_bank else "SKID-TO-TURN — lift in two planes, no roll"
+		col = Color(1.00, 0.62, 0.30) if is_bank else Color(0.45, 0.90, 1.00)
+	else:
+		var rung := str(_fidelity.get("airframe", "point_mass"))
+		var is6 := rung == "six_dof"
+		lbl = "SKID-TO-TURN — turning in 3-D" if is6 else ("PITCH-PLANE — out-of-plane DISCARDED" if rung == "pitch_coupled" else "POINT-MASS reference")
+		col = Color(0.45, 0.90, 1.00) if is6 else Color(1.00, 0.62, 0.30)
 	draw_string(_font, Vector2(vp.x - 430, 40), lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, col)
 	if _af3d_missile != "" and _telemetry.has(_af3d_missile + ".los_range"):
 		draw_string(_font, Vector2(vp.x - 430, 66), "range to target: %.0f m" % float(_telemetry[_af3d_missile + ".los_range"]),
@@ -1232,7 +1269,12 @@ func _draw_airframe3d_hud() -> void:
 	if mpos.size() >= 2:
 		draw_string(_font, Vector2(vp.x - 430, 88), "cross-range (out of plane): %+.0f m" % float(mpos[1]),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
-	if is6 and _telemetry.has(_af3d_missile + ".beta"):
+	# SLICE 24 — the BANK angle (roll about velocity), the roll-lag tell (shipped only on the bank_to_turn
+	# wire). φ ≈ 0 wings-level; the missile must roll to ~±90° to point its single lift plane cross-range.
+	if _telemetry.has(_af3d_missile + ".bank_deg"):
+		draw_string(_font, Vector2(vp.x - 430, 110), "bank φ: %+.0f°  (τ_roll roll lag)" % float(_telemetry[_af3d_missile + ".bank_deg"]),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45))
+	elif _telemetry.has(_af3d_missile + ".beta"):
 		draw_string(_font, Vector2(vp.x - 430, 110), "sideslip β: %+.1f°" % rad_to_deg(float(_telemetry[_af3d_missile + ".beta"])),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
 	draw_string(_font, Vector2(maxf(8.0, vp.x - 760), vp.y - 16),
@@ -1333,6 +1375,11 @@ func _update_fid_btn() -> void:
 			# below there is no hidden arm — an atmosphere scenario ALWAYS has something to cycle (the
 			# rung is the lesson), so no visibility branch.
 			_prop_btn.text = "atm: %s" % str(_fidelity.get("atmosphere", "?"))
+		"steering":
+			# Slice-24: the button IS the steering cycler (skid_to_turn ↔ bank_to_turn). Always something
+			# to cycle (the rung is the lesson), like atmosphere — no visibility branch.
+			_prop_btn.visible = true
+			_prop_btn.text = "steering: %s" % str(_fidelity.get("steering", "?"))
 		"airframe":
 			if _fidelity.has("airframe"):
 				# Slice-17 α→lift coupling: the button IS the airframe cycler (point_mass ↔ pitch_coupled).
@@ -1557,6 +1604,24 @@ func _on_airframe_pressed() -> void:
 	var next: String = _airframe_rungs[(i + 1) % _airframe_rungs.size()] if i >= 0 else "point_mass"
 	_fidelity["airframe"] = next
 	_client.send({"type": "set_fidelity", "key": "airframe", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
+func _on_steering_pressed() -> void:
+	# Advance the STEERING rung (skid_to_turn ↔ bank_to_turn) and tell the core (set_fidelity). Slice-24
+	# BANK-TO-TURN — the payoff of the STT-first arc. Both laws run on the HELD :six_dof plant; the ONLY
+	# variable is HOW the ⟂-v lift is pointed. Under :skid_to_turn the missile makes lift in TWO body
+	# planes at once (no roll) and INTERCEPTS the out-of-plane target (slice 23). Press once → :bank_to_turn
+	# makes lift in ONE plane and must ROLL to point it; with a finite τ_roll the roll LAGS, so the trail
+	# stays flat then banks LATE and MISSES (~372 m at τ_roll = 1.0). Class 4c — PHYSICS-CHANGING, NO RNG
+	# (truth-fed PN, no seeker ⇒ "draw-count invariance" VACUOUS; the :airframe/:atmosphere precedent),
+	# LIVE-SETTABLE (no set_fidelity guard). The τ_roll slider (auto knob) dials the lag: → 0 recovers STT.
+	# The client owns the displayed rung (badge + button locally; the server applies it on the next tick).
+	var cur := str(_fidelity.get("steering", "skid_to_turn"))
+	var i := STEERING_RUNGS.find(cur)
+	var next: String = STEERING_RUNGS[(i + 1) % STEERING_RUNGS.size()] if i >= 0 else "skid_to_turn"
+	_fidelity["steering"] = next
+	_client.send({"type": "set_fidelity", "key": "steering", "value": next})
 	_render_badge()
 	_update_fid_btn()
 
