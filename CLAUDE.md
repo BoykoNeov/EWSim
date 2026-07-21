@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–23 COMPLETE & green — 4276 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–23
+**Slices 1–24 COMPLETE & green — 4335 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–24
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
@@ -59,9 +59,14 @@ INNER LOOP (`a_cmd→α_cmd→δ`) + the flight-condition g-limit, slice 20 INDU
 CEILING by maneuvering — slice 21 the EXPONENTIAL ATMOSPHERE: the ceiling you lower by CLIMBING (ρ(z) at
 last, so "high altitude" is EARNED language and not a caveat), slice 22 NONLINEAR C_L(α) / TRUE STALL —
 the ceiling the AIRFRAME itself sets, which moves the ONE factor of `a_max_aero` that 19/20/21 all left
-alone — and slice 23 the 6-DOF SUBSTRATE + SKID-TO-TURN: the OUT-OF-PLANE ENGAGEMENT, where the pitch plane's
+alone — slice 23 the 6-DOF SUBSTRATE + SKID-TO-TURN: the OUT-OF-PLANE ENGAGEMENT, where the pitch plane's
 out-of-plane DISCARD (unflyable BY CONSTRUCTION since slice 19) finally intercepts — `att` becomes a genuine 3-D
-quaternion and STT makes lift in TWO body planes at once, the FIRST slice of the bank-to-turn / 3-D arc.** Full gate-by-gate
+quaternion and STT makes lift in TWO body planes at once — and slice 24 BANK-TO-TURN + ROLL-LAG: the `:steering`
+rung on the HELD `:six_dof` plant, where BTT makes lift in ONE plane and must ROLL to point it with a finite
+τ_roll bandwidth, so against the SAME out-of-plane target STT hit BTT MISSES (you must bank before you turn) —
+and the gate-3 correction that its miss is a DOWNSTREAM aero-ceiling miss (the roll lag drives the demand into
+the slice-19 ceiling, `aero_sat` 93.2% of the approach vs 0.2% for STT; τ_roll→0 removes both the lag and the
+saturation), NOT the kinematic one-liner.** Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -486,9 +491,43 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   rung); aero+inertial cross-coupling / departure; a SEEKER in the 6-DOF loop; an out-of-plane MANEUVERING target;
   induced/separation drag + ρ(z) on the 6-DOF path. (4276)
 
+- **Slice 24 (§11 Tier-A, the bank-to-turn arc's PAYOFF) — BANK-TO-TURN + ROLL-LAG: the steering law that must
+  bank before it turns.** Slice 23's SKID-TO-TURN makes lift in BOTH body planes at once (α pitch + β yaw) → it
+  points its ⟂-v accel anywhere with NO roll and intercepts the out-of-plane target. BANK-TO-TURN makes lift in
+  ONE plane (α only; β driven → 0, COORDINATED) and must ROLL the body to point it, with a FINITE bandwidth
+  τ_roll → against the SAME target STT hit, BTT MISSES. The `:steering = (:skid_to_turn, :bank_to_turn)` rung on
+  the HELD `:six_dof` plant (the ONE toggled fidelity; INERT without `:airframe:six_dof` — the cross-fidelity
+  dependency, steering-on-airframe). New `airframe3d.jl`: `STEERING_MODES`, `bank_angle` (roll about v̂ — the #1
+  SIGN TRAP's 6th occurrence), `steering_bank_command` (REVERSIBLE-LIFT + NEAREST-REPRESENTATION bank — gate-0
+  killed the naive ±90° flip, which churns 180° in-plane [PROBE F] / chatters at the 90° singularity [PROBE G]),
+  `btt_roll_moment` (the ζ=1 bank autopilot, τ_roll the SOLE lever — I_xx a NON-knob), `btt_moments` (the
+  `stt_moments` sibling — pitch/yaw DUPLICATED, roll swapped). ⭐⭐ **THE GATE-3 MECHANISM CORRECTION (advisor):
+  the BTT miss is a DOWNSTREAM AERO-CEILING miss, NOT the kinematic "time banking is time not turning" — the
+  roll lag leaves the missile behind → the catch-up demand pegs the SAME slice-19 ceiling (`aero_sat` 93.2% of
+  the bank_to_turn approach vs 0.2% for STT; τ_roll→0 removes BOTH the lag AND the saturation, 93.2%→0.2%). The
+  19/23 CONTRAST, precise: the ceiling binds in 19/20/21/22/23/24, but under `:bank_to_turn` it binds BECAUSE
+  the roll lag leaves the missile behind (downstream of the steering law), under 19/23 from the FLIGHT CONDITION
+  itself. Slice 24 adds no new cap — a new UPSTREAM CAUSE that drives demand into the existing cap.** Gate-0
+  (8 probes) forced the nearest-rep law + one framing correction (route (a) static is the COLD-START face; the
+  SUSTAINED-TRACKING face, an out-of-plane MANEUVERING target, is a NAMED DEFERRAL); the ω×Iω term goes LIVE
+  under BTT (p≠0) but is IMMATERIAL to the miss (≤3% — the RATES stay small under coordinated flight, NOT the
+  diagonal-I cross-coefficients [~0.9]). Wire (seed 24, frame-sampled): STT **0.230** (== slice 23 — byte-
+  identical STT path) vs BTT τ_roll=1.0 **371.79** (74× frame / 1614× per-tick, max|y|→2704 — it TURNED, LATE);
+  τ_roll→0.01 RECOVERS **0.133** (causation — the roll LAG caused the miss), τ_roll=2.0 SATURATES **1535**
+  (toward the discard ≈ Y=2000, no reversal); in-plane Y=0 → max|y|=0.0 EXACTLY (the sign invariant). ⚠ The
+  recovery drives `af_tau_roll → 0.01`, BELOW the slider min 0.1 (a headless causation probe, not in-range); a
+  direct `set_param af_tau_roll = 0` stays FINITE (`_FRAME_EPS` floor — convention 6). CLIENT: the slice-24
+  handshake reuses slice 23's 3-D airframe view but routes the button to the STEERING cycler (a within-airframe3d
+  SWITCH, value-guarded so slice 23 keeps the airframe cycler); the HUD labels the steering law + shows bank φ, a
+  magenta lift-axis vector shows the bank. Class **4c** (10th consecutive). Four proofs green (verifier: the miss
+  split + af_tau_roll→0 causation + bit-identical replay; UI: the steering cycler + the slice-23 MIRROR [a SWITCH
+  not an `or`] + a SIX-way value-guard + prior UI tests re-run; smoke-load → `DONE`; TWO shots — BTT bank φ=120°
+  + aero_sat=1 [the shipped branch] vs STT omega_p≈0 + β=6.9° [the else]). Slices 1–23 byte-identical, proven ON
+  THE WIRE (slice23_verify re-run reproduces SIX_DOF 5.011 / ratio 399.6× / CY_ZERO 2002.373). (4335)
+
 
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened
-with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–23 are into the §11 Tier-A
+with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–24 are into the §11 Tier-A
 horizon — slice 15 the actuator/fin half, slice 16 the 6-DOF airframe's rotational half (pitch-plane θ,q), slice 17
 the α→lift→γ TRANSLATION-COUPLING half (the real path-changing `:airframe` toggle), slice 18 terrain masking + the
 3-D client view, slice 19 the CLOSED INNER LOOP (`a_cmd→α_cmd→δ`) + the flight-condition g-limit — which COMPLETES
@@ -509,14 +548,20 @@ fin only needs to move fast when the command does, which requires high k_α or l
 first — see `docs/plans/slice20.md`, a worthwhile general result). **The FULL 6-DOF airframe is now UNDERWAY:
 slice 23 OPENED the bank-to-turn / 3-D arc with the 6-DOF substrate + SKID-TO-TURN — the pitch-plane out-of-plane
 discard finally dies (the out-of-plane target, unflyable BY CONSTRUCTION since slice 19, now intercepts). Scoped
-STT-first as a 2-slice arc: slice 24 = BANK-TO-TURN + roll-lag (the same substrate, α-only lift + a
-finite-bandwidth roll autopilot, the `:steering = (:skid_to_turn, :bank_to_turn)` rung — against the out-of-plane
-maneuver, BTT misses where STT hit) is the NEXT named candidate.** Slice 23's departure note: it departs strictly
-IN-PLANE and its target is STATIC; the AERO + INERTIAL CROSS-COUPLING / DEPARTURE that makes a real BTT airframe
-go OUT-OF-PLANE during a hard roll (non-diagonal I, Clβ/Cnp/Clr, the radome/body-rate parasitic loop) is a later
-lesson (diagonal I + symmetric cruciform + coordinated flight keep 23/24 clean). What else remains of §11
-Tier-A/B/C: land clutter [terrain banked the heightfield], the radome slice (needs a SEEKER in the 6-DOF loop →
-class flips back to 4a/RNG-live). ⚠ Slice 21 did NOT finish the
+STT-first as a 2-slice arc, and slice 24 = BANK-TO-TURN + roll-lag CLOSED it (the same substrate, single-plane
+lift + a finite-bandwidth roll autopilot, the `:steering = (:skid_to_turn, :bank_to_turn)` rung on the HELD
+`:six_dof` plant — against the SAME out-of-plane target STT hit, BTT MISSES because it must ROLL to point its
+one lift plane and the roll LAGS). ⚠ The slice-24 gate-3 correction (advisor): the BTT miss is a DOWNSTREAM
+aero-ceiling miss — the roll lag leaves the missile behind, the catch-up demand pegs the SAME slice-19 ceiling
+(`aero_sat` 93.2% of the approach vs 0.2% for STT; τ_roll→0 removes BOTH the lag and the saturation) — NOT the
+kinematic "time banking is time not turning" one-liner, and the 19/23 contrast must be written precisely (the
+ceiling binds in both, but under BTT it binds BECAUSE of the roll lag, downstream; under 19/23 from the flight
+condition itself). The NEXT named candidates: SUSTAINED-TRACKING / route (b) — an out-of-plane MANEUVERING
+target (the demand rotating faster than the roll loop follows, a DISTINCT face from slice 24's cold-start), and
+the AERO + INERTIAL CROSS-COUPLING / DEPARTURE that makes a real BTT airframe go OUT-OF-PLANE during a hard roll
+(non-diagonal I, Clβ/Cnp/Clr, the radome/body-rate parasitic loop; diagonal I + symmetric cruciform + coordinated
+flight keep 23/24 clean).** What else remains of §11 Tier-A/B/C: land clutter [terrain banked the heightfield],
+the radome slice (needs a SEEKER in the 6-DOF loop → class flips back to 4a/RNG-live). ⚠ Slice 21 did NOT finish the
 atmosphere: ρ(z) reaches the COUPLED airframe path ONLY. The point-mass/ballistic drag path keeps a constant ρ
 because `dynamics.jl`'s steppers take a `v -> a(v)` closure with NO position in it, and changing that contract to
 `(p,v) -> a` touches slice 8's `rk4_step`/`euler_step` — the byte-identity surface of EVERY ballistic slice — for a

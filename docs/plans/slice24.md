@@ -1,11 +1,14 @@
 # Slice 24 — BANK-TO-TURN + ROLL-LAG: the steering law that must bank before it turns (§11 Tier-A)
 
-**Status: GATE 0 COMPLETE (2026-07-21). Findings below — the plan HELD on the `:steering` rung,
-route (a) static geometry, and the gyro-include decision; ONE design change forced (the BTT command
-is REVERSIBLE-LIFT with NEAREST-REPRESENTATION bank, not a naive ±90° flip), and one framing
-correction (route (a) is the COLD-START face, not a refutation of the maneuver foil — route (b) is a
-named deferral). Ready for gate 1.** The SECOND slice of the bank-to-turn / 3-D arc, on the 6-DOF
-substrate slice 23 built. Scoped as the STT-first arc's payoff:
+**Status: COMPLETE (2026-07-21, all four gates green — 4335 suite, slices 1–23 byte-identical on the
+wire). Gate 0 forced ONE design change (the BTT command is REVERSIBLE-LIFT with NEAREST-REPRESENTATION
+bank, not a naive ±90° flip) and one framing correction (route (a) is the COLD-START face, route (b) a
+named deferral). ⭐ GATE-3 MECHANISM CORRECTION (advisor, load-bearing — see "Gate 3 as-built" below):
+the BTT miss is NOT the pure-kinematic "time banking is time not turning" — it is a DOWNSTREAM
+AERO-CEILING miss (the roll lag leaves the missile behind → the catch-up demand pegs the SAME slice-19
+ceiling `aero_sat` 93.2% of the approach; τ_roll→0 removes BOTH the lag and the saturation).** The
+SECOND slice of the bank-to-turn / 3-D arc, on the 6-DOF substrate slice 23 built. Scoped as the
+STT-first arc's payoff:
 
 - **Slice 23 (done) — 6-DOF substrate + SKID-TO-TURN.** STT makes lift in BOTH body planes at once
   (α pitch + β yaw), roll held ≈ 0, ⟂-v lift points anywhere with NO roll → the out-of-plane target
@@ -251,6 +254,59 @@ the intercept). ⚠ Watch-items: `%.2e` is not a GDScript specifier (slice-21/22
 frame-sampling ASYMMETRY (BTT misses faithfully, STT hits coarsely); magic-multiple teeth pin against
 MEASURED values (τ_roll = 1.0 → 372 m). REUSE slice 23's 3-D SubViewport airframe view (the bank is a
 NEW thing to draw — the nose rolled about the velocity).
+
+---
+
+## Gate 3 — AS-BUILT (run 2026-07-21; the four proofs + the MECHANISM CORRECTION)
+
+The four proofs (convention 14) all green, and slices 1–23 byte-identical ON THE WIRE (slice23_verify
+re-run reproduces SIX_DOF 5.011 / ratio 399.6× / CY_ZERO 2002.373 to the digit). Files: `airframe3d.jl`
+(gate 1), `missile.jl`/`radar.jl`/`scenario.jl` (gate 2), `Sandbox.gd` + `slice24_{verify,ui_test}.gd`
++ `scenarios/slice24_bank_to_turn.yaml` (gate 3).
+
+- **slice24_verify.gd** — bank_to_turn MISSES (frame CPA 371.8, max|y| 2704 — turned LATE) / REPLAY
+  bit-identical (posdiff 0.0) / skid_to_turn HITS (5.01, 74.2× ratio) / af_tau_roll→0.01 RECOVERS the
+  hit (5.33) — the causation lever.
+- **slice24_ui_test.gd** — the `:steering` cycler routing (airframe3d + `_fid_kind=steering`, 2-ring),
+  the MIRROR (slice 23 keeps the airframe cycler — a SWITCH not an `or`), a SIX-way multi-view
+  value-guard, prior UI tests re-run. slice23_ui_test re-run green (no regression from the Sandbox edit).
+- **Sandbox.tscn** headless smoke-load → `EWSIM_SERVER_DONE`; **windowed shot** — BTT bank φ=120° +
+  aero_sat=1 (the shipped branch) vs STT omega_p≈0 + β=6.9° (the else) — both `_draw` branches proven.
+
+### ⭐⭐ THE MECHANISM IS A CHAIN, NOT THE KINEMATIC ONE-LINER (advisor, load-bearing)
+
+The gate-3 shot's OWN telemetry refuted the plan's framing: BTT `a_demand 172.54` vs `a_max_aero 98.64`,
+`aero_sat: 1`, `alpha −0.27` (pegged near −α_max); STT `a_demand 42.15` vs `96.94`, `aero_sat: 0`. So
+the BTT miss is **NOT** the pure-kinematic "time spent banking is time not turning" — it is a
+**DOWNSTREAM AERO-CEILING miss**, a chain:
+
+    roll lag → cross-range lift throttled by sin(φ) while φ slews → the missile falls behind →
+    the catch-up demand OUTRUNS the SAME slice-19/23 ceiling → aero_sat binds → miss
+
+Measured over the approach (`temp/slice24_gate0/mechanism.jl`): **`aero_sat` binds 93.2% of the
+bank_to_turn approach (8876/9525 frames) vs 0.2% for skid_to_turn (14/9199) — and τ_roll→0.01 drops it
+back to 0.2% (19/9200).** The saturation is the CONSEQUENCE of the roll lag.
+
+### ⚠ THE SLICE-19/23 CONTRAST — write it precisely (the copy-paste false-claim trap)
+
+The aero ceiling `a_max_aero = Q·S·|C_Lα|·α_max/m` binds in slices 19, 20, 21, 22, 23 AND 24 — a reader
+comparing the arc WILL ask "another ceiling miss?". The answer, and it is the whole distinction:
+
+> **The ceiling binds in BOTH — but under `:bank_to_turn` it binds BECAUSE the roll lag leaves the
+> missile behind (τ_roll→0 removes the lag AND the saturation, 93.2% → 0.2%), a DOWNSTREAM consequence
+> of the steering law; under slice 19/23 the ceiling binds from the FLIGHT CONDITION ITSELF, regardless
+> of the steering.** Slice 24 does not add a new cap — it adds a new UPSTREAM CAUSE (the roll lag) that
+> DRIVES the demand into the existing cap. The causation is undented: the τ_roll knob touches ONLY the
+> roll-loop gain (ζ=1, I_xx held), so τ_roll→0 recovering the hit isolates the roll LAG as the cause.
+
+### Notes for STATUS / the record
+- The RECOVERY proof drives `af_tau_roll → 0.01`, **BELOW the slider's declared min 0.1** — legitimate
+  for a headless causation probe (it walks past the in-range domain to the τ→0 limit), NOT an in-range
+  value. A direct `set_param af_tau_roll = 0` stays FINITE (the `_FRAME_EPS` consumer floor — convention
+  6; measured: all telemetry finite over 3 s), so the wild-but-finite moment never ships Inf/NaN to JSON.
+- The shot's cross-range at t=4 s: BTT +315 m (banked φ=120° but barely turned — the lag) vs STT +493 m
+  (no roll, ahead) — the visual of "you must bank before you turn," and both `_draw` branches land on the
+  state they claim.
 
 ---
 

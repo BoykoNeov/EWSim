@@ -2972,6 +2972,84 @@ induced/separation drag and ρ(z) on the 6-DOF path (a later composition).
 
 ---
 
+**Slice 24 — BANK-TO-TURN + ROLL-LAG: the steering law that must bank before it turns (HANDOFF §11 Tier-A)**
+— the SECOND slice of the bank-to-turn / 3-D arc, the payoff of the STT-first split, on slice 23's 6-DOF
+substrate. Slice 23's SKID-TO-TURN makes maneuver lift in BOTH body planes at once (α pitch + β yaw), so its
+⟂-v accel points ANYWHERE off v̂ with NO roll — it turns the instant the guidance command asks. BANK-TO-TURN
+makes lift in only ONE body plane (α on the body pitch axis; β actively driven to ≈ 0 — COORDINATED flight)
+and must ROLL the body so that single lift plane contains the demanded lift; roll has a FINITE bandwidth
+τ_roll. Against the SAME static out-of-plane target STT hit, BTT MISSES. **THE LESSON, one sentence: skid-to-
+turn points its lift anywhere instantly; bank-to-turn must ROLL to point its single lift plane first — and
+with finite roll bandwidth the time spent banking is time not turning, so against an out-of-plane target BTT
+misses where STT hit. You must bank before you turn.**
+
+THE `:steering = (:skid_to_turn, :bank_to_turn)` rung (slice-23 §2 reserved it), on the HELD `:six_dof` plant
+— the ONE toggled fidelity (`:airframe` authored six_dof, guidance :pn, autopilot :alpha; convention 9, the
+slice-21/22 two-view-claiming-keys precedent). THE CROSS-FIDELITY DEPENDENCY (the slice-19 shape, now
+steering-on-airframe): `:steering` is INERT without `:airframe === :six_dof` (the scalar plant has no roll
+DOF). Class **4c** (physics-changing, NO RNG — truth-fed PN, no seeker ⇒ "draw-count invariance" VACUOUS; the
+10th consecutive 4c after 14–23; live-settable, no set_fidelity guard). New pure lib additions in
+`airframe3d.jl`: `STEERING_MODES`, `bank_angle` (the roll about v̂, shared by command + readout — the #1 SIGN
+TRAP's 6th occurrence), `steering_bank_command` (REVERSIBLE-LIFT with NEAREST-REPRESENTATION bank — the gate-0
+load-bearing law), `btt_roll_moment` (the ζ=1 bank autopilot moment, τ_roll the sole lever), `btt_moments`
+(the `stt_moments` sibling — pitch/yaw DUPLICATED not shared, roll swapped to the autopilot). Wiring:
+`_integrate_6dof!` gains a `:bank_to_turn` roll-moment branch (STT damper path TEXTUALLY VERBATIM), the
+`:alpha` decide arm a BTT sub-branch (single-plane signed α + a `:phi_cmd` bank seam, β→0), `build_env!` the
+gated `bank_deg`/`phi_cmd` readouts, `radar.jl` `steering = STEERING_MODES`, `scenario.jl` the `tau_roll`
+loader. Client (`Sandbox.gd`): a slice-24 handshake reuses slice 23's 3-D airframe view but routes the shared
+button to the STEERING cycler (value-guarded so a slice-23 wire keeps the airframe cycler — a within-airframe3d
+SWITCH), the HUD labels the steering law + shows bank φ, a magenta lift-axis vector visualizes the bank.
+
+⭐⭐ **THE GATE-3 MECHANISM CORRECTION (advisor, load-bearing — the shot's OWN telemetry refuted the plan's
+one-liner).** The BTT miss is **NOT** the pure-kinematic "time spent banking is time not turning" — it is a
+**DOWNSTREAM AERO-CEILING miss**, a chain: roll lag → cross-range lift throttled by sin(φ) while φ slews → the
+missile falls behind → the catch-up demand OUTRUNS the SAME slice-19/23 ceiling → `aero_sat` binds → miss.
+Measured over the approach: **`aero_sat` binds 93.2% of the bank_to_turn approach (8876/9525 frames) vs 0.2%
+for skid_to_turn (14/9199); τ_roll→0.01 drops it back to 0.2% (19/9200)** — the saturation is the CONSEQUENCE
+of the roll lag. ⚠ **THE SLICE-19/23 CONTRAST, precisely (the copy-paste false-claim trap):** the ceiling
+`a_max_aero = Q·S·|C_Lα|·α_max/m` binds in 19/20/21/22/23 AND 24 — but under `:bank_to_turn` it binds BECAUSE
+the roll lag leaves the missile behind (τ_roll→0 removes the lag AND the saturation), a DOWNSTREAM consequence
+of the steering law; under 19/23 it binds from the FLIGHT CONDITION ITSELF, regardless of steering. Slice 24
+adds no new cap — it adds a new UPSTREAM CAUSE (the roll lag) that drives the demand into the existing cap.
+
+Gate 0 (8 probes, `temp/slice24_gate0/`, reusing the shipped kernels) forced ONE design change (the naive
+"+lift/α≥0" bank churns 180° in-plane [PROBE F], and a hard ±90° flip chatters at the 90° singularity [PROBE
+G] → the NEAREST-REPRESENTATION reversible-lift law) and one framing correction (route (a) static is the
+COLD-START face — the missile launches wings-level and must roll ~90° to point cross-range lift; the SUSTAINED-
+TRACKING face, an out-of-plane MANEUVERING target, is a NAMED DEFERRAL, not a refutation). The GYROSCOPIC ω×Iω
+term goes LIVE under BTT (p≠0) but is IMMATERIAL to the miss (gate-0 PROBE D2: ≤3% at lesson τ, 1.3% at the
+showcase — because the RATES stay small under coordinated flight in the slow-roll regime, NOT because the
+diagonal-I cross-coefficients are small [~0.9]); INCLUDED for honesty. ζ=1 (critically-damped roll loop) is
+the named approximation making τ_roll the sole lever; I_xx stays a NON-knob (roll-loop gain); the STT c_roll
+damper goes INERT under BTT.
+
+Live-wire goldens (frame-sampled, seed 24, LOS-gated): STT **0.230** (== slice 23's, byte-identical STT path)
+vs BTT τ_roll=1.0 **371.79** (**1614×** per-tick / 74× frame-sampled — it TURNED, max|y|→2704, just LATE);
+τ_roll→0.01 RECOVERS **0.133** (the causation — the roll LAG caused the miss); τ_roll=2.0 SATURATES **1535**
+(toward the discard ≈ Y=2000, no reversal); in-plane Y=0 → max|y|=0.0 EXACTLY (the sign invariant). ⚠ The
+recovery proof drives `af_tau_roll → 0.01`, BELOW the slider's declared min 0.1 — a headless causation probe
+(the τ→0 limit), not an in-range value; a direct `set_param af_tau_roll = 0` stays FINITE (the `_FRAME_EPS`
+consumer floor — convention 6, measured). Four proofs green (verifier: the miss split + af_tau_roll→0 causation
++ bit-identical replay; UI: the steering cycler + the slice-23 MIRROR [a SWITCH not an `or`] + a SIX-way
+value-guard + prior UI tests re-run; smoke-load → `EWSIM_SERVER_DONE`; TWO shots: BTT bank φ=120° + aero_sat=1
+[the shipped branch] vs STT omega_p≈0 + β=6.9° [the else] — both `_draw` branches proven). Full suite **4335**
+(4276 + 25 airframe3d + 34 missile); slices 1–23 byte-identical, proven ON THE WIRE (slice23_verify re-run
+reproduces SIX_DOF 5.011 / ratio 399.6× / CY_ZERO 2002.373 to the digit).
+
+Run it live: `pwsh tools/julia.ps1 --project=core tools/server.jl scenarios/slice24_bank_to_turn.yaml`, then
+launch Godot on `clients/godot`. **Cycle the steering button** bank_to_turn ↔ skid_to_turn and watch the SAME
+target off the plane: bank_to_turn banks LATE (φ→~120°, aero_sat lit) and misses ~372 m, skid_to_turn turns
+immediately and hits; drag **τ_roll toward 0.1** and the bank keeps up → the miss shrinks toward the STT hit.
+Re-run the gate-3 proof headless: start the server, then the console Godot `--headless --path clients/godot
+--script res://net/slice24_verify.gd` (exit 0 = pass). The UI test needs NO server: `… res://net/slice24_ui_test.gd`.
+DEFERRED (NAMED): **SUSTAINED-TRACKING / route (b)** — an out-of-plane MANEUVERING target (the demand rotating
+faster than the roll loop follows — a DISTINCT face from this slice's cold-start; its own careful mover build);
+**AERO + INERTIAL CROSS-COUPLING / DEPARTURE** (non-diagonal I, sustained large p, Clβ/Cnp/Clr, the radome /
+body-rate parasitic loop); **ζ ≠ 1 / a 2nd roll knob / a 2nd-order roll actuator**; ASYMMETRIC AERO; a SEEKER
+in the 6-DOF loop (→ 4a/RNG-live); induced/separation drag + ρ(z) on the 6-DOF path.
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,
