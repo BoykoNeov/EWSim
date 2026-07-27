@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–25 COMPLETE & green — 4399 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–25
+**Slices 1–26 COMPLETE & green — 4470 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–26
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
@@ -66,7 +66,13 @@ rung on the HELD `:six_dof` plant, where BTT makes lift in ONE plane and must RO
 τ_roll bandwidth, so against the SAME out-of-plane target STT hit BTT MISSES (you must bank before you turn) —
 and the gate-3 correction that its miss is a DOWNSTREAM aero-ceiling miss (the roll lag drives the demand into
 the slice-19 ceiling, `aero_sat` 93.2% of the approach vs 0.2% for STT; τ_roll→0 removes both the lag and the
-saturation), NOT the kinematic one-liner.** Full gate-by-gate
+saturation), NOT the kinematic one-liner — slice 25 A SEEKER IN THE 6-DOF LOOP, where slice 11's SCALAR in-plane
+seeker leaves the 6-DOF missile blind out of plane and it misses by the full 2000 m cross-range FROM THE SENSOR,
+and slice 26 THE RADOME / BODY-RATE PARASITIC LOOP — the arc's NAMED END POINT and the GUIDANCE LIMIT CYCLE slice
+15 named, slice 19 deferred and slice 20 hunted and KILLED on the ACTUATOR path: the seeker looks through glass
+that bends the LOS by `ε = R·(look angle)`, so the missile's OWN body rate moves the LOS it reports, and past a
+LOOP GAIN `N·|R|/ρ ≈ 0.38` the missile SHAKES ITSELF into a sustained limit cycle — with a NOISELESS seeker and
+a stationary target.** Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -557,6 +563,50 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   monopulse / az×el CFAR; a measured Vc; the 3-D `:raw` arm; **seeker noise × the BTT roll loop = DEAD, not
   deferred** (a ~1000:1 low-pass: std(Δφ_cmd) 1.07 vs std(Δφ_ach) 1.6e-5 — the slice-20 dead-fin precedent). (4399)
 
+- **Slice 26 (§11 Tier-A, the 3-D arc's NAMED END POINT) — THE RADOME / BODY-RATE PARASITIC LOOP: the seeker
+  that sees the missile's own nose.** The seeker does not look at the target directly — it looks through a
+  RADOME, which REFRACTS by an amount depending on WHERE IT IS LOOKING: `ε ≈ R·(look angle off the boresight)`.
+  So the missile's OWN body rotation MOVES the LOS it reports, with the target standing still — a feedback path
+  `q → look → ε → apparent λ̇ → PN → a_cmd → α → q`. **This is the GUIDANCE LIMIT CYCLE slice 15 NAMED, slice 19
+  DEFERRED and slice 20 HUNTED AND KILLED on the ACTUATOR path** (`δ_max` shadows `δ̇_max`, its FINDING 7) —
+  it lives on the SENSOR path. ⚠ **THE PROJECT'S FIRST TRUE POSITIVE-FEEDBACK INSTABILITY, and the phrase slice
+  20 FORBIDS is EARNED here**: a LOOP GAIN, a STABILITY BOUNDARY, and SELF-EXCITATION FROM ZERO INPUT (at
+  σ_seek = 0 — a NOISELESS seeker — R = −0.10 still rings, 106×). Do not import slice 20's "degenerative
+  spiral" language, and do not export slice 26's. ⭐⭐ **THE THRESHOLD FACTORIZES AS A LOOP GAIN**:
+  `N·|R_crit| ≈ 0.38` to ±3% across N ∈ {3…8} and `|R_crit| ∝ ρ` — a MEASURED boundary, NOT an algebraic
+  identity (do not write it in slice 21/22's language). The payload is the DESIGN TRADE: **you cannot buy N
+  without buying glass.** ⭐ **THE METRIC IS AN OSCILLATION, NOT A MISS — a NEW KIND of gate-3 proof** (slice
+  20's plan sketched it for the cycle it never shipped): rms body pitch rate **0.01245 → 0.88138 rad/s = 70.8×**
+  between R = −0.09 and −0.10. ⚠ **The MISS is NOT the metric and is NOT MONOTONE ANYWHERE — the ringing arm
+  STILL HITS (2.18 m)**, and `max|q|` is neither frame- nor noise-robust (peaks OVERLAP across the threshold):
+  **rms, never the peak.** ⭐ And the rms metric IS frame-robust (0.88372 frame vs 0.88138 tick), **REVERSING
+  the arc's usual sampling caveat** — which is exactly why it beats any miss here. ⚠ TWO WINDOWS, TWO RATIOS,
+  both honest (mid-half ticks 70.8× / the verifier's closing-frames 23.0×) — quote each with its window.
+  ⭐ **THE ISOLATION IS NOT SLICE 25's and must not copy it**: `aero_sat == 0` is IMPOSSIBLE (an oscillation
+  drives demand into the ceiling, 60.8%). Instead **raise α_max 3× and THE ONSET DOES NOT MOVE** — only the
+  amplitude grows: **the ceiling BOUNDS the cycle, the radome decides whether there IS one.** ⚠ `Cmq` from −50
+  to −250 leaves the onset EXACTLY where it was ⇒ **"more aero damping fixes it" is REFUTED**; this is a
+  GUIDANCE-loop instability (k_q supplies ~98% of the damping — slice-20 FINDING 3), ringing near 1.7–2.1 Hz vs
+  the airframe's own 1.396 Hz. ⭐ **The mechanism is FRAME-EXACT and measuring it caught a SIGN ERROR in the
+  plan's own first draft (#1 sign trap's 8th)**: on a FROZEN geometry `ε̇_el = +R·cos(look_az)·ω_y`,
+  `ε̇_az = −R·ω_z` — the textbook `−R·θ̇` transliterated to `−R·q` is the WRONG SIGN here (nose-up is a −y
+  rotation, so `θ̇ = −ω_y`), and it survived into a hand-written test until the PAIRED coefficient assert
+  contradicted it. ⚠ **AND IT CANNOT BE IDENTIFIED IN CLOSED LOOP** (R² = 0.999 with `a/R` = 1.9…5.5 — `ėl` and
+  `q` are collinear on a tracking missile): **freeze the geometry.** ⚠ Only NEGATIVE slopes ring; positive ones
+  DE-TUNE (`ω_app/ω_true` → 0.593, the miss opens from sluggishness) — one knob, two failure modes, the `af_cma`
+  shape. ⚠ **`omega_ratio` is a DIAGNOSTIC, not the mechanism** — once ringing it is the same fact as `rms q`
+  told twice. ⭐ **BYTE-IDENTITY MEASURED STRONGER THAN EXPECTED: an authored `R = 0` is BIT-IDENTICAL to the
+  key being absent**, which VERIFIES the knob-vs-rung discriminator instead of arguing it. RUNG-gated on the
+  LIVE `:airframe === :six_dof`, never on `haskey(:att_q)` (the slice-21/23 latent-bug class, 3rd occurrence).
+  Class **4a** (2nd consecutive; the seed is load-bearing). ⚠ **THE BUTTON IS DROPPED and the slice-20
+  inherited-cycler precedent DOES NOT TRANSFER**: `:pitch_plane` would leave the radome LIVE beside slice 25's
+  unrelated 2000 m blind miss — two mechanisms in one view. Slice-16 Option-P′, and the drop needs BOTH the
+  mode-entry AND `_update_fid_btn`. ONE knob `radome_slope ∈ [−0.12,+0.06]` (bounded by the metric's PLATEAU);
+  `n_pn`/`rho`/`af_alpha_max`/`sigma_seek` DISQUALIFIED and asserted ABSENT in the gate. Four proofs green
+  (S26V 0.80408 vs 0.03493 = 23.0×, mirror 59.2×, replay 0.0; EIGHT-way UI guard; TWO shots at the same range:
+  "RADOME PARASITIC LOOP — RINGING" q +1.168 vs "RADOME — refracting, loop STABLE" q +0.019). Slices 1–25
+  byte-identical, proven ON THE WIRE (23/24/25 verifiers re-run to the digit). (4470)
+
 
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened
 with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–24 are into the §11 Tier-A
@@ -588,12 +638,20 @@ aero-ceiling miss — the roll lag leaves the missile behind, the catch-up deman
 (`aero_sat` 93.2% of the approach vs 0.2% for STT; τ_roll→0 removes BOTH the lag and the saturation) — NOT the
 kinematic "time banking is time not turning" one-liner, and the 19/23 contrast must be written precisely (the
 ceiling binds in both, but under BTT it binds BECAUSE of the roll lag, downstream; under 19/23 from the flight
-condition itself). The NEXT named candidates: SUSTAINED-TRACKING / route (b) — an out-of-plane MANEUVERING
-target (the demand rotating faster than the roll loop follows, a DISTINCT face from slice 24's cold-start), and
+condition itself). **The arc then took its SENSOR slices and CLOSED: slice 25 put a real seeker in the 6-DOF
+loop (slice 11's scalar in-plane bearing rebuilds ω = (0,−λ̇,0), so the missile that CAN turn out of plane is
+never TOLD to — 2000 m from the SENSOR), and slice 26 cashed the arc's NAMED END POINT, the RADOME / body-rate
+parasitic loop: the seeker looks through glass whose bend depends on the LOOK ANGLE, so the missile's own body
+rate feeds back into the LOS it reports, and past a LOOP GAIN N·|R|/ρ ≈ 0.38 it SHAKES ITSELF into a sustained
+limit cycle — the guidance limit cycle slice 15 named and slice 20 killed on the ACTUATOR path, alive on the
+SENSOR path, and the project's FIRST true positive-feedback instability.** The NEXT named candidates: a RADOME
+COMPENSATION / stability-margin autopilot (the engineering answer to slice 26 — a rate-gyro feed-forward
+cancelling the parasitic term; it needs slice 26); SUSTAINED-TRACKING / route (b) — an out-of-plane MANEUVERING
+target (the demand rotating faster than the roll loop follows, a DISTINCT face from slice 24's cold-start); and
 the AERO + INERTIAL CROSS-COUPLING / DEPARTURE that makes a real BTT airframe go OUT-OF-PLANE during a hard roll
-(non-diagonal I, Clβ/Cnp/Clr, the radome/body-rate parasitic loop; diagonal I + symmetric cruciform + coordinated
-flight keep 23/24 clean).** What else remains of §11 Tier-A/B/C: land clutter [terrain banked the heightfield],
-the radome slice (needs a SEEKER in the 6-DOF loop → class flips back to 4a/RNG-live). ⚠ Slice 21 did NOT finish the
+(non-diagonal I, Clβ/Cnp/Clr; diagonal I + symmetric cruciform + coordinated flight keep 23/24 clean).
+What else remains of §11 Tier-A/B/C: land clutter [terrain banked the heightfield]; a seeker FOV / gimbal limit
+(slice 26 made the look angle a first-class quantity); monopulse / az×el CFAR. ⚠ Slice 21 did NOT finish the
 atmosphere: ρ(z) reaches the COUPLED airframe path ONLY. The point-mass/ballistic drag path keeps a constant ρ
 because `dynamics.jl`'s steppers take a `v -> a(v)` closure with NO position in it, and changing that contract to
 `(p,v) -> a` touches slice 8's `rk4_step`/`euler_step` — the byte-identity surface of EVERY ballistic slice — for a

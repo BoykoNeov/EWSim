@@ -1,0 +1,182 @@
+# slice26_radome — THE RADOME / BODY-RATE PARASITIC LOOP: the seeker that sees the missile's own nose
+# (HANDOFF §11 Tier-A, slice 26 gate 3). The FOURTH slice of the bank-to-turn / 3-D arc (23 = the 6-DOF
+# substrate + skid-to-turn, 24 = bank-to-turn + roll-lag, 25 = a seeker in the 6-DOF loop) and THE
+# ARC'S NAMED END POINT — slice 25 wrote it down as a hard prerequisite in its own deferral list.
+#
+# It is also the home of a lesson slice 15 NAMED, slice 19 DEFERRED and slice 20 HUNTED AND KILLED:
+# the GUIDANCE LIMIT CYCLE. Slice 20's gate 0 proved no such cycle exists on the ACTUATOR feedback
+# path (δ_max structurally shadows δ̇_max — its FINDING 7). It arrives here through a wholly different
+# feedback path: THE SENSOR'S.
+#
+# THE LESSON — and it is a SLIDER, not a button (see "NO FIDELITY BUTTON" below):
+#   The seeker does not look at the target directly. It looks through a RADOME, and a radome
+#   REFRACTS — by an amount that depends on WHERE IT IS LOOKING through it: ε ≈ R·(look angle off the
+#   body centerline), R the "radome error slope". So when the missile's OWN BODY rotates, the look
+#   angle changes, the bend changes, and THE LINE OF SIGHT THE SEEKER REPORTS MOVES — with the target
+#   perfectly still. That is a feedback path from the airframe's attitude back into the guidance loop:
+#
+#       q → look angle → ε → apparent λ̇ → PN → a_cmd → α → q
+#
+#   Below a critical loop gain it is a harmless perturbation. ABOVE IT THE LOOP IS UNSTABLE and the
+#   missile shakes itself into a sustained limit cycle. Drag `radome_slope` down from 0 and watch the
+#   body rate sit quiet, quiet, quiet — and then, between −0.09 and −0.10, ERUPT.
+#
+# > THE LESSON, IN ONE SENTENCE. A piece of glass in front of the seeker closes a feedback loop from
+# > the missile's own body rate back into the LOS rate it measures, and past a critical loop gain
+# > N·|R| the missile shakes itself: at R = −0.09 the body is quiet, at R = −0.10 it oscillates
+# > ~60× harder, SELF-EXCITED, with no noise in the loop and a stationary target.
+#
+# ⚠ THE PROJECT'S FIRST TRUE POSITIVE-FEEDBACK INSTABILITY — and the phrase slice 20 FORBADE is
+# EARNED here. Slice 20 carries a standing warning ("say DEGENERATIVE SPIRAL, never positive
+# feedback") because its speed bleed is self-limiting and the positive sign sits only on the tracking
+# error past a crossing. Slice 26 is the opposite in every respect that matters: there is a LOOP GAIN,
+# a STABILITY BOUNDARY, and SELF-EXCITATION FROM ZERO INPUT. Do not import slice 20's language here,
+# and do not import slice 26's anywhere else.
+#
+# ⭐ THE THRESHOLD FACTORIZES AS A LOOP GAIN — measured at gate 0, and it is the teaching payload:
+#   N     |    3   |    4   |    5   |    6   |    8         and |R_crit| ∝ ρ  (0.095·ρ, measured at
+#   R_crit| −0.130 | −0.095 | −0.080 | −0.065 | −0.050        ρ = 0.6/1.0/1.5/2.0)
+#   N·|R| |  0.390 |  0.380 |  0.400 |  0.390 |  0.400
+#   A radome slope is not good or bad by itself. |R| = 0.1 is a POOR radome and |R| ≤ 0.03 a good one
+#   — but a missile that wants a HIGHER navigation constant (a snappier intercept) needs a BETTER
+#   radome to keep the same margin, and one flying at LOWER dynamic pressure needs better still.
+#   YOU CANNOT BUY N WITHOUT BUYING GLASS.
+#
+# ⚠ THE METRIC IS rms BODY RATE — NEVER the peak, NEVER the miss. `max|q|` is neither frame-robust
+# nor noise-robust (peaks OVERLAP across the threshold). The MISS is not the metric and IS NOT
+# MONOTONE ANYWHERE (1.73 m at R = −0.15 sits BELOW 3.35 m at −0.12) — the ringing arm still HITS.
+# ⭐ And unlike every miss in this arc, the rms metric is FRAME-ROBUST: a ~2 Hz ring sampled at
+# 62.5 Hz reproduces the per-tick figure to 3 digits, which REVERSES the usual sampling caveat
+# ([[ewsim-missile-verifier-sampling]]) and is exactly why the oscillation is the better headline.
+#
+# ⚠ THE ISOLATION IS MADE DIFFERENTLY FROM SLICE 25's — do NOT copy `aero_sat == 0`, which is
+# IMPOSSIBLE here: an oscillation drives demand and demand hits the ceiling. Instead: RAISE α_max
+# 3× (0.3 → 0.9, the ceiling 330 → 990) AND THE ONSET DOES NOT MOVE — only the cycle's amplitude
+# grows. THE CEILING BOUNDS THE LIMIT CYCLE; THE RADOME DECIDES WHETHER THERE IS ONE. The other caps
+# are provably clear on this wire: `defl_sat` ~0.02% (cap #3), the ceiling ≪ a_max = 3000 (cap #1),
+# no stall (no aero_curve here at all).
+#
+# ⚠ IT IS STRUCTURAL, NOT NOISE AMPLIFICATION. The tempting story ("a noisy seeker excites the
+# airframe") is REFUTED: at σ_seek = 0 — a perfectly NOISELESS seeker — R = −0.10 still rings, a 106×
+# rms jump. The loop excites ITSELF.
+#
+# ⚠ THE THRESHOLD IS THE GUIDANCE LOOP'S, NOT THE AIRFRAME'S. Sweeping Cmq from −50 to −250 leaves
+# the onset at EXACTLY −0.095: "more aero damping fixes it" is REFUTED (the autopilot's k_q supplies
+# ~98% of the damping — slice-20 FINDING 3 on this same airframe). The ring sits near 1.7–2.1 Hz
+# against the bare airframe's short-period 1.396 Hz. Never describe this as "the airframe going
+# unstable" — that is slice 22 half B, a different mechanism.
+#
+# ⚠ WHY σ_seek = 5e-5 AND WHY IT IS NOT A KNOB HERE (it was slice 25's ONE knob). At slice 25's
+# σ = 3e-4 the SEEKER NOISE ALONE puts 0.059 rad/s of jitter on q — 7× the σ=0 baseline — and
+# compresses the ring's signature. MEASURED contrast vs σ: 106.6× / 96.2× / 68.5× / 41.0× / 21.3× /
+# 13.8× at σ = 0 / 2e-5 / 5e-5 / 1e-4 / 2e-4 / 3e-4. Shipping σ as a slider here would hand the
+# student a knob that DEGRADES the lesson beside it, so it is an AUTHORED CONSTANT at slice 25's own
+# knob minimum (an in-domain value — this is a re-authoring, not a new regime).
+#
+# NO FIDELITY BUTTON, DELIBERATELY (the slice-16 Option-P′ handshake, and slice 16 is the right
+# analogue: a live knob spanning a stability boundary with no button at all). The handshake ships a
+# `radome_view` marker and the client DROPS the shared button. ⚠ The slice-20 precedent — keep the
+# inherited cycler, ship zero client code — deliberately does NOT transfer: slice 20's other position
+# (`:point_mass`) makes induced drag INERT, but here the inherited cycler would be slice 25's
+# `seeker_axes` and its other position (`:pitch_plane`) leaves the radome LIVE AND REFRACTING on a
+# missile that ALSO misses by 2000 m for a wholly unrelated reason. Two mechanisms compounding in one
+# view is exactly what convention 9 exists to prevent.
+#
+# ⚠ THE LOOK ANGLE STAYS SMALL — AND DO NOT QUOTE THE PEAK. The linear model `ε = R·look` is a
+# small-angle model, so where the look angle actually lives matters. MEASURED on this wire: it is
+# **≤ 13° over the ENTIRE guided approach** (deciles 10.1 / 11.0 / 8.0 / 3.0 / 2.6 / 5.3 / 6.9 / 6.3 /
+# 6.7°), and it exceeds 30° on **6 of 9400 ticks — first at r = 3.5 m**, i.e. the last 5 milliseconds
+# as the LOS sweeps past the nose at CPA. The `look_angle` telemetry therefore PEAKS at 103.6° (179.1°
+# on the R = 0 arm, at r = 0.5 m) and that number is a CPA geometry artifact, not a regime the model
+# is being asked to cover. Quote the approach window, never the peak.
+#
+# NAMED APPROXIMATIONS (§1): a CONSTANT error slope — a real radome's slope VARIES with look angle and
+# the design case is the worst LOCAL slope (deferred); no seeker FOV / gimbal limit (this slice makes
+# the look angle a first-class quantity, so it is now doubly expressible); ONE isotropic σ on both
+# angles and a TRUTH Vc (slice 11's scope, unchanged); the target is static and AERODYNAMICALLY FREE;
+# diagonal inertia, symmetric cruciform, lift drag-free (slices 23/24); constant ρ — a FLIGHT
+# CONDITION, so say "low dynamic pressure", never "high altitude" (no `:atmosphere` rung here).
+#
+# Class 4a: DRAW-INVARIANT (2 randn/tick, radome or not) YET TRAJECTORY-CHANGING — the slice-11/25
+# combo, and the second consecutive RNG-live slice (the seed is load-bearing; conventions 3/11 apply).
+# UNITS (§1 trifecta): pos/vel SI; angles rad; σ_seek in RADIANS; `radome_slope` DIMENSIONLESS and
+# SIGNED (dε/d(look angle)); I in kg·m²; ρ in kg/m³; launch ELEVATION in DEGREES → radians at the
+# loader. dt = 1e-3 / emit_every = 16.
+name: slice26_radome
+seed: 26
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # FIVE keys, NONE toggled — the lesson is the SLIDER (the slice-16/20 shape). `airframe` HELD at
+  # :six_dof (the radome is INERT without it — there is no attitude to look through, and the gate is
+  # on the LIVE rung, not on a key that is never deleted), `seeker_axes` HELD at :az_el (the arm that
+  # HITS, so the ring is the only thing that degrades it), `seeker` HELD at :filtered, `autopilot`
+  # :alpha and `guidance` :pn as in 23/24/25. `steering` is OMITTED (the loader default IS
+  # :skid_to_turn — slice 24 measured BTT binding the ceiling 93.2% of its approach, which would
+  # make the isolation above impossible).
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+
+entities:
+  # The interceptor — slices 23/24/25's plant and launch condition EXACTLY (6-DOF, guided, sensing),
+  # with ρ = 1.0 as slice 25 retuned it. FOUR blocks ⇒ [BallisticMissile (phase-1 6-DOF airframe),
+  # Seeker (phase-3 observe!), Autopilot (phase-4 α/β guidance)].
+  #
+  # seeker.radome_slope = −0.10 — THE SHOWCASE OPENS ON THE DRAMA (the slice-25 "opens on the miss"
+  #   shape): one step past the measured onset, so the body is already ringing when the client
+  #   connects. Drag the slider RIGHT toward 0 and the oscillation vanishes between −0.10 and −0.09.
+  # seeker.sigma_seek = 5e-5 — an AUTHORED CONSTANT, not a knob (see the header).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true, radome_slope: -0.10}
+      guidance: {n_pn: 4.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # The STATIC target OFF the x–z plane at cross-range +Y = 2000 m — slices 23/24/25's geometry,
+  # kept UNCHANGED so the arc's four slices read side by side. vel = 0, AERODYNAMICALLY FREE.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 0.0, 0.0]
+    target: {rcs_m2: 1.0}
+
+knobs:
+  # ONE knob (the slice-16/20 shape — a slider lesson with no button at all). The domain STRADDLES
+  # the measured threshold and stops where the metric plateaus.
+  #
+  # ⚠ THE DOMAIN IS SET BY THE METRIC'S PLATEAU, NOT BY THE PHYSICS. Measured rms q relative to the
+  # R = 0 baseline: 1.0 at +0.05 / 0.0 / −0.05 / −0.08, 1.1 at −0.09, then 50.2 at −0.095, 68.5 at
+  # −0.10, and 65.8 / 64.0 / 64.4 / 63.6 at −0.12 / −0.15 / −0.20 / −0.30. Past onset the α_max clamp
+  # BOUNDS the cycle, so it is a PLATEAU, not growth — the domain enters it and stops. Pushing far
+  # past that does eventually open the miss (28 m at −0.20, 256 m at −0.30), but the MISS IS NOT
+  # MONOTONE ANYWHERE, so it cannot bound a domain and must not be sold as the lesson.
+  #
+  # NOT KNOBS, deliberately: `n_pn` — it is live-read every tick (NOT a dead knob) and moves the
+  # boundary cleanly, which is what makes it tempting; disqualified because it moves the LOOP GAIN
+  # the lesson is ABOUT, so a student could cross the threshold with the radome untouched and
+  # conclude the slope did it (the confounded-lever rule). `rho` — same objection, and slice 25
+  # measured its isolated domain at only [1.0, 1.5]. `af_alpha_max` — it sets the cycle's AMPLITUDE,
+  # i.e. the one thing the isolation must hold fixed. `sigma_seek` — see the header: on this wire it
+  # degrades the lesson beside it.
+  - {target: m1, key: radome_slope, min: -0.12, max: 0.06, label: "radome error slope R (dε/d look angle — NEGATIVE closes the parasitic loop; the threshold is N·|R|)"}

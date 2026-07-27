@@ -144,6 +144,10 @@ var _airframe_target := ""         # the missile id carrying the airframe params
 # airframe overlay to a terrain-style 3-D view (the out-of-plane trail) + the 3-ring cycler. The 3-D
 # scene reuses the slice-18 _t3d_* SubViewport machinery (camera/env/markers/trail), minus the terrain.
 var _airframe_6dof := false        # handshake airframe_6dof — the 3-D-airframe discriminator
+# Slice-26 RADOME: a missile carrying an authored :radome_slope. Reuses the 3-D airframe view above
+# UNCHANGED; its only effect is that _enter_airframe3d_mode DROPS the shared fidelity button (there
+# is no rung to cycle — the lesson is the radome_slope slider). Slice-16's Option-P′, second use.
+var _radome_view := false          # handshake radome_view — the DROP-THE-BUTTON marker
 var _af3d_missile := ""            # the interceptor id (the trail source)
 var _af3d_target := ""             # the target id (the +Y off-plane marker)
 var _af3d_nose_mesh: ImmediateMesh = null   # the nose-direction vector (from att_q), coupled/six_dof only
@@ -452,6 +456,11 @@ func _on_scenario(obj: Dictionary) -> void:
 	# Slice-23 3-D-airframe discriminator (a missile carrying :af_cy_beta) — recognized alongside
 	# airframe_view; the dispatch below routes it to the 3-D view BEFORE the 2-D airframe branch.
 	_airframe_6dof = bool(obj.get("airframe_6dof", false))
+	# Slice-26 RADOME discriminator (a missile carrying an authored :radome_slope). It does NOT pick
+	# a view — it reuses the slice-23 3-D airframe view wholesale — its only job is to make
+	# _enter_airframe3d_mode DROP the shared button, because slice 26 has no fidelity rung at all
+	# (the lesson is the radome_slope slider). Slice-16's Option-P′ mechanism, second use.
+	_radome_view = bool(obj.get("radome_view", false))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -1080,6 +1089,28 @@ func _enter_airframe3d_mode(obj: Dictionary) -> void:
 	# :six_dof AND :steering held at the loader default (the scenario omits it) — convention 9, ONE
 	# toggled fidelity. VALUE-GUARDED three ways: slice 25 → this cycler, slice 24 (`steering`, no
 	# `seeker_axes`) → the steering cycler, slice 23 (neither) → the airframe 3-ring.
+	# SLICE 26 — THE RADOME, and it is the ONE case in this whole dispatch that DROPS the button
+	# rather than re-pointing it. Checked FIRST (the "check the NEW key first" rule, 5th occurrence).
+	# The lesson is the `radome_slope` SLIDER: a radome bends the LOS by ε = R·(look angle), so the
+	# missile's own body rate moves the LOS it reports, and past a critical loop gain N·|R| the loop
+	# is unstable and the missile shakes itself into a limit cycle. There is NO fidelity rung to
+	# cycle (R = 0 is an in-domain slider value AND bit-identical to the radome not existing), so
+	# this is slice 16's Option-P′ exactly: recognize the view by its handshake key and HIDE the
+	# button (hide + guarded disconnect).
+	#
+	# ⚠ THE SLICE-20 PRECEDENT DELIBERATELY DOES NOT TRANSFER. Slice 20 also had no rung and kept
+	# the INHERITED cycler, because its other position (`:point_mass`) makes induced drag INERT —
+	# nothing false is displayed. Here the inherited cycler would be the `seeker_axes` one below,
+	# and its other position (`:pitch_plane`) leaves the radome LIVE AND REFRACTING on a missile
+	# that ALSO misses by 2000 m for a wholly unrelated reason: two mechanisms compounding in one
+	# view, which is what convention 9 exists to prevent, and the "identical signature, different
+	# mechanism" trap slice 25 spent a section on. So the button goes, and the slider stays.
+	if _radome_view:
+		_fid_kind = "airframe"                      # the 3-D view's drawing/badge treatment, unchanged
+		_prop_btn.visible = false
+		_prop_btn.tooltip_text = ""
+		_build_airframe3d_scene()
+		return
 	if _fidelity.has("seeker_axes"):
 		_fid_kind = "seeker_axes"
 		if not _prop_btn.pressed.is_connected(_on_seeker_axes_pressed):
@@ -1273,7 +1304,23 @@ func _draw_airframe3d_hud() -> void:
 	# what the SEEKER can SEE (the plant is held). This is the one case where the missile is fully
 	# capable and simply never commanded — so the label says BLIND, not "discarded" (slice 23) and not
 	# "lagging" (slice 24).
-	if _fidelity.has("seeker_axes"):
+	# SLICE 26 — checked FIRST (the same order as _enter_airframe3d_mode). A radome wire ALSO carries
+	# `seeker_axes` (HELD at az_el), so without this the label would read slice 25's and name the wrong
+	# lesson. There is no rung here, so the label is driven by the KNOB's own sign: only NEGATIVE
+	# slopes close the loop, and the threshold is a LOOP GAIN, not a slope value.
+	if _radome_view:
+		var slope := float(_telemetry.get(_af3d_missile + ".radome_slope", 0.0))
+		var qr := absf(float(_telemetry.get(_af3d_missile + ".omega_q", 0.0)))
+		# ⚠ The label reports the MEASURED body rate, not a threshold comparison: |R_crit| moves with
+		# N and ρ (the boundary is N·|R|/ρ ≈ 0.38), so a client-side "R < −0.095 ⇒ unstable" test would
+		# be physics in GDScript AND wrong the moment a scenario changes N (convention 13).
+		# ⚠ Keep these SHORT — the headline is drawn at `vp.x − 430` in 20 px, so ~38 characters is
+		# the width. A longer string runs off the right edge and the lesson's own name is the part
+		# that gets cut (measured: "…the body rate fe|" on the first shot).
+		lbl = "RADOME PARASITIC LOOP — RINGING" if qr > 0.5 \
+			  else ("RADOME — refracting, loop STABLE" if slope != 0.0 else "NO RADOME — R = 0")
+		col = Color(1.00, 0.62, 0.30) if qr > 0.5 else Color(0.45, 0.90, 1.00)
+	elif _fidelity.has("seeker_axes"):
 		var see := str(_fidelity.get("seeker_axes", "pitch_plane"))
 		var is3d := see == "az_el"
 		lbl = "AZ/EL SEEKER — LOS rate in 3-D" if is3d else "IN-PLANE SEEKER — BLIND out of plane"
@@ -1301,7 +1348,21 @@ func _draw_airframe3d_hud() -> void:
 	# EXACTLY 0.0 under :pitch_plane (ω ∥ ±ŷ by construction) — the blindness as ONE number, straight
 	# from the core's `omega_oop` telemetry (no client-side physics — convention 13). Presence-gated,
 	# so slices 23/24 are untouched; checked before the bank/β lines for the same reason the label is.
-	if _telemetry.has(_af3d_missile + ".omega_oop"):
+	# SLICE 26 — THE HEADLINE READOUT: the body rate (the thing that rings) and the boresight error
+	# (the mechanism that makes it ring), both straight from core telemetry. Presence-gated on
+	# `radome_eps`, which only a radome wire ships, so slices 23/24/25 are untouched; checked before
+	# the omega_oop line for the same reason the label is (a radome wire carries BOTH keys).
+	if _telemetry.has(_af3d_missile + ".radome_eps"):
+		var bq := float(_telemetry.get(_af3d_missile + ".omega_q", 0.0))
+		var eps := float(_telemetry[_af3d_missile + ".radome_eps"])
+		var lka := float(_telemetry.get(_af3d_missile + ".look_angle", 0.0))
+		draw_string(_font, Vector2(vp.x - 430, 110), "body pitch rate q: %+.3f rad/s%s" % [bq, "   ← RINGING" if absf(bq) > 0.5 else ""],
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if absf(bq) > 0.5 else COL_TICK)
+		draw_string(_font, Vector2(vp.x - 430, 132), "radome boresight error ε: %+.5f rad   (look angle %.1f°)" % [eps, lka],
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45))
+		draw_string(_font, Vector2(vp.x - 430, 154), "slope R = %+.3f   —   the threshold is the LOOP GAIN N·|R|" % float(_telemetry.get(_af3d_missile + ".radome_slope", 0.0)),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	elif _telemetry.has(_af3d_missile + ".omega_oop"):
 		var oop := float(_telemetry[_af3d_missile + ".omega_oop"])
 		draw_string(_font, Vector2(vp.x - 430, 110), "seeker ω out-of-plane: %.5f rad/s%s" % [oop, "   ← BLIND" if oop == 0.0 else ""],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if oop == 0.0 else Color(0.45, 0.90, 1.00))
@@ -1420,7 +1481,14 @@ func _update_fid_btn() -> void:
 			_prop_btn.visible = true
 			_prop_btn.text = "seeker: %s" % str(_fidelity.get("seeker_axes", "?"))
 		"airframe":
-			if _fidelity.has("airframe"):
+			if _radome_view:
+				# Slice-26 THE RADOME: the scenario DOES carry an `:airframe` fidelity (HELD at six_dof),
+				# so the branch below would re-show the button that _enter_airframe3d_mode deliberately
+				# dropped. There is no rung to cycle here — the lesson is the radome_slope SLIDER — and
+				# cycling the HELD :airframe would be the convention-9 "toggle a held key" trap. Keep it
+				# hidden (the slice-16 arm's "defensive against a re-show" shape, second use).
+				_prop_btn.visible = false
+			elif _fidelity.has("airframe"):
 				# Slice-17 α→lift coupling: the button IS the airframe cycler (point_mass ↔ pitch_coupled).
 				_prop_btn.visible = true
 				_prop_btn.text = "airframe: %s" % str(_fidelity.get("airframe", "?"))

@@ -3149,6 +3149,192 @@ precedent — do not re-propose it cold); the out-of-plane MANEUVERING target (c
 
 ---
 
+Slice 26 (§11 Tier-A, the bank-to-turn / 3-D arc's NAMED END POINT) — **THE RADOME / BODY-RATE
+PARASITIC LOOP: the seeker that sees the missile's own nose — COMPLETE & green (4470 tests).**
+
+Slice 25 wrote this slice down as a hard prerequisite in its own deferral list: *"an error slope
+perturbs a TWO-ANGLE measurement as a function of look angle; there was nothing for it to perturb
+before this slice."* It is ALSO the home of a lesson **slice 15 NAMED, slice 19 DEFERRED and slice 20
+HUNTED AND KILLED**: the GUIDANCE LIMIT CYCLE. Slice 20's gate 0 proved no such cycle exists on the
+ACTUATOR feedback path (`δ_max` structurally shadows `δ̇_max`, its FINDING 7). **It arrives here
+through a wholly different feedback path: the SENSOR's.**
+
+THE LESSON: the seeker does not look at the target directly — it looks through a RADOME, which
+REFRACTS by an amount depending on WHERE IT IS LOOKING through it, `ε ≈ R·(look angle off the body
+centerline)`. So when the missile's OWN BODY rotates, the look angle changes, the bend changes, and
+**the line of sight the seeker reports MOVES — with the target perfectly still.** That closes a
+feedback path `q → look → ε → apparent λ̇ → PN → a_cmd → α → q`, and past a critical loop gain the
+loop is UNSTABLE: **the missile shakes itself into a sustained limit cycle, with a NOISELESS seeker
+and a stationary target.**
+
+⚠ **THE PROJECT'S FIRST TRUE POSITIVE-FEEDBACK INSTABILITY, AND THE PHRASE SLICE 20 FORBADE IS
+EARNED HERE.** Slice 20 carries a standing warning ("say DEGENERATIVE SPIRAL, never positive
+feedback") because its speed bleed is self-limiting and the positive sign sits only on the tracking
+error past a crossing. Slice 26 is the opposite in every respect that matters: a **loop gain**, a
+**stability boundary**, and **self-excitation from zero input**. Do not import slice 20's language
+here, and do not import slice 26's anywhere else.
+
+⭐⭐ **THE THRESHOLD FACTORIZES AS A LOOP GAIN — `N·|R_crit| ≈ 0.38`, constant to ±3% across a 2.67×
+span of N** (0.390 / 0.380 / 0.400 / 0.390 / 0.400 at N = 3/4/5/6/8, i.e. R_crit = −0.130 / −0.095 /
+−0.080 / −0.065 / −0.050), **and `|R_crit| ∝ ρ`** (0.100 / 0.095 / 0.097 / 0.095 at ρ = 0.6/1.0/1.5/
+2.0). ⚠ It is a MEASURED stability boundary, NOT an algebraic identity — do not write it in slice
+21's ρ-factor or slice 22's `α_stall/α_max` language. **The teaching payload is the design trade:** a
+radome slope is not good or bad by itself; |R| = 0.1 is a POOR radome and |R| ≤ 0.03 a good one, but a
+missile that wants a HIGHER navigation constant needs a BETTER radome to keep the same margin, and one
+at LOWER dynamic pressure better still. **YOU CANNOT BUY N WITHOUT BUYING GLASS.**
+
+⭐ **THE METRIC IS AN OSCILLATION, NOT A MISS — a NEW KIND of gate-3 proof for the suite** (slice 20's
+plan sketched this shape for the cycle it never got to ship). rms body pitch rate over the approach:
+**0.01245 → 0.88138 rad/s = 70.8×** between R = −0.09 and −0.10 (per-tick, mid-half window). ⚠ **The
+MISS is NOT the metric and IS NOT MONOTONE ANYWHERE** (1.73 m at R = −0.15 sits BELOW 3.35 m at
+−0.12): **the ringing arm STILL HITS (2.18 m)**, and the verifier pins that so a later slice cannot
+"fix" the scenario by chasing a miss that was never the claim. ⚠ **`max|q|` is neither frame- nor
+noise-robust** (peaks OVERLAP across the threshold) — **rms, never the peak.**
+⭐ **AND THE rms METRIC IS FRAME-ROBUST, REVERSING THE ARC'S USUAL SAMPLING CAVEAT**
+([[ewsim-missile-verifier-sampling]]): a ~2 Hz ring sampled at 62.5 Hz reproduces the per-tick figure
+to 3 digits (0.88372 frame vs 0.88138 tick; 0.01212 vs 0.01245 at R = 0) — **which is exactly why the
+oscillation is the better headline than any miss in this arc.** ⚠ TWO WINDOWS, TWO RATIOS, BOTH
+HONEST: the docs quote rms over the MIDDLE HALF OF TICKS (70.8×) and the verifier over CLOSING FRAMES
+with r > 1000 m (23.0×, its baseline higher because that window includes the early transient). Quote
+each with its window or it reads as drift.
+
+⭐ **THE ISOLATION IS MADE DIFFERENTLY FROM SLICE 25's, AND MUST NOT COPY IT.** `aero_sat == 0` is
+IMPOSSIBLE here — an oscillation drives demand and demand hits the ceiling (60.8% at the showcase
+point). Instead: **raise α_max 3× (0.3 → 0.9, ceiling 330 → 990) and THE ONSET DOES NOT MOVE** —
+only the cycle's amplitude grows (max|q| 1.39 → 4.24). **The ceiling BOUNDS the limit cycle; the
+radome decides whether there IS one.** The other caps are provably clear on the shipped arm:
+`defl_sat` 1–2 ticks in ~9400 (0.02%, cap #3), ceiling 329.87 ≪ `a_max` 3000 (cap #1), no stall.
+
+⭐ **STRUCTURAL, NOT NOISE AMPLIFICATION.** The tempting story ("a noisy seeker excites the airframe")
+is REFUTED: at **σ_seek = 0** — a perfectly noiseless seeker — R = −0.10 still rings, a **106× rms
+jump**. The loop excites ITSELF. ⚠ Related: at slice 25's σ = 3e-4 the seeker NOISE ALONE puts 7× the
+σ=0 baseline of jitter on `q`, compressing the signature 106× → 13.8×, so the scenario re-authors
+σ = 5e-5 (slice 25's own knob MINIMUM — an in-domain value) and **`sigma_seek` is DISQUALIFIED as a
+knob here: on this wire it is a knob that DEGRADES the lesson beside it.**
+
+⚠ **THE THRESHOLD IS THE GUIDANCE LOOP'S, NOT THE AIRFRAME'S — "more aero damping fixes it" is
+REFUTED.** `Cmq` from −50 to −250 leaves the onset at EXACTLY −0.095 (the autopilot's `k_q` supplies
+~98% of the damping — slice-20 FINDING 3 on this same airframe). The ring sits near **1.7–2.1 Hz**
+(σ = 0 only, two independent estimators AGREEING; they disagree 2× at R = −0.095 near onset, so quote
+the band where they agree) against the bare airframe's short-period 1.396 Hz. Never call this "the
+airframe going unstable" — that is slice 22 half B, a different mechanism.
+
+⭐ **THE MECHANISM IS FRAME-EXACT, AND MEASURING IT CAUGHT A SIGN ERROR IN THE PLAN'S OWN FIRST
+DRAFT (the #1 SIGN TRAP's 8th occurrence).** On a FROZEN geometry (target, missile and true LOS all
+held still, only the attitude rotating, so `d(look)/dt` is 100% body rate): **`ε̇_el =
++R·cos(look_az)·ω_y` and `ε̇_az = −R·ω_z`**, exact to 6 digits. The textbook writes `−R·θ̇`, and
+transliterating that to `−R·q` HERE is the wrong sign: this project's convention is nose-up = a **−y**
+body rotation (slice 23), so `θ̇ = −ω_y` while `q` names `ω[2] = ω_y`. **Nose-up (`q < 0`) with
+`R < 0` ⇒ `ε̇_el > 0`: the LOS appears to rotate UP, which commands MORE nose-up.** The wrong sign
+survived into a hand-written `@test ėe_up < 0` and was caught by the PAIRED coefficient assert on the
+same value — which is the entire reason sign assertions are paired.
+⚠ **AND IT CANNOT BE IDENTIFIED IN CLOSED LOOP — a general result worth keeping.** Fitting
+`ε̇_el ≈ a·ėl_true + b·q` on the live wire returns **R² = 0.999 with `a/R` ranging 1.9…5.5**: the
+regressors are COLLINEAR, because a missile that is tracking pitches at nearly the rate the LOS
+rotates. **A parasitic gain cannot be measured on a tracking missile — freeze the geometry**, which
+makes the isolation a pure-kernel tooth rather than an in-loop regression.
+
+⚠ **THE SIGN IS ONE-SIDED AND THE OTHER SIGN IS A DIFFERENT FAILURE.** Positive R never rings out to
++0.6 — instead the seeker UNDER-reports the LOS rate (`ω_app/ω_true` 1.00 → 0.593), the EFFECTIVE
+navigation ratio sags, and the miss opens from **sluggishness** (0.23 → 7.66 m). One knob, two
+entirely different failure modes on its two signs — the `af_cma` shape, where 0 is the benign
+interior point. The de-tuning face is a NAMED DEFERRAL (convention 9).
+⚠ **`ω_app/ω_true` IS A DIAGNOSTIC, NOT THE MECHANISM (advisor)** — once the loop rings it is
+dominated by the cycle's own body-rate feedthrough, i.e. THE SAME FACT AS `rms q` TOLD TWICE. It
+ships as `omega_ratio`, labelled a consequence, and must never be quoted beside `rms q` as
+independent evidence (the convention-4 false-claim trap).
+
+GATE 1 — `frames.jl` gains `look_angles` (`az_el ∘ rotate_inv` — the LOS off the missile's own
+boresight) and `radome_error` (`ε = R·look`, per angle). **Both one-liners ON PURPOSE: the physics is
+the FEEDBACK PATH, not the formula.** Teeth: `R = 0 ⇒ (0.0, 0.0)` exactly, PAIRED with a does-perturb
+case; the identity-attitude degenerate; linearity in both arguments; the frozen-geometry parasitic
+gains as NUMBERS; the sign-flip mirror. GATE 2 — the perturbation lands on the MEASURED angles inside
+`_observe_point3d!`, **after the two `randn` draws and before the trackers**, so the α-β filter
+differentiates the bent angle and PRODUCES the parasitic rate itself (never hand-injected — advisor).
+⭐ **BYTE-IDENTITY IS A BRANCH with the else-arm slice-25 VERBATIM, and the measurement is stronger
+than expected: an authored `R = 0` is BIT-IDENTICAL to the key being absent** (`ε = 0·look` is exactly
+±0.0 and `a + ±0.0 === a`). **That VERIFIES the knob-vs-rung discriminator rather than arguing it** —
+R = 0 is not merely "an in-domain slider value", it is bit-identical to the radome not existing, which
+is precisely why this is a KNOB like `af_cma`/`af_k_induced` and not a rung like `:atmosphere` (whose
+off-state is `H = ∞`, a limit point no slider reaches). The branch still earns its keep: byte-identity
+is BY CONSTRUCTION (the no-key arm never forms ε), not by a zero that happens to cancel.
+⚠ **RUNG-GATED on the LIVE `:airframe === :six_dof`, NOT on `haskey(:att_q)`** — that key is minted by
+`_integrate_6dof!` and NEVER deleted, so a key-gated radome would keep refracting through a FROZEN
+attitude after a cross-toggle. **The slice-21 `_atm_on` / slice-23 stale-readout class, 3rd
+occurrence**, pinned by a live cross-toggle test. `haskey(:att_q)` stays ONLY as a crash guard.
+The loader key is PRESENCE-gated on `radome_slope` (the `alt_hold_m` precedent — every 11/13/25
+scenario HAS a `seeker:` block, so block-gating would break them all) and validated **FINITE ONLY**:
+the sign IS the lesson and every magnitude is crash-safe (gate-0 P5B ran |R| to 1e6 with all telemetry
+finite), so a magnitude bound would be a fake constraint. The draw count stays EXACTLY 2/tick (slice
+25's button legality rests on it). `LIVE_FIDELITY_MODES` UNTOUCHED — no new rung.
+**Class 4a** (draw-invariant, RNG-live — the seed is load-bearing, conventions 3/11 apply; the 2nd
+consecutive 4a after slice 25). Telemetry, key-gated: `radome_slope` / `radome_eps` / `radome_eps_az`
+/ `look_angle` / `omega_ratio`.
+
+CLIENT — ⚠ **THE BUTTON IS DROPPED, and the slice-20 precedent DELIBERATELY DOES NOT TRANSFER
+(advisor).** The discriminator is not preference: *does the button's other position leave this slice's
+lesson intact?* For slice 20 it did — `:point_mass` makes induced drag INERT, so nothing false is
+displayed. Here the inherited cycler would be slice 25's `seeker_axes`, and its other position
+(`:pitch_plane`) leaves the radome **LIVE AND REFRACTING** on a missile that ALSO misses by 2000 m for
+a wholly unrelated reason: **two mechanisms compounding in one view, which is what convention 9 exists
+to prevent**, and the "identical signature, different mechanism" trap slice 25 spent a section on. So
+slice 26 ships a `radome_view` handshake marker and the client HIDES the button — **slice 16's
+Option-P′, second use, and slice 16 is the right analogue anyway: a live knob spanning a stability
+boundary with no button at all.** ⚠ **The drop needs BOTH sites**: `_enter_airframe3d_mode` hid it and
+`_update_fid_btn`'s `"airframe"` case turned it straight back on (the scenario DOES carry an
+`:airframe` fidelity, HELD at six_dof) — exactly the "defensive against a re-show" note slice 16 left
+in that same branch, now load-bearing for a second slice. The 3-D airframe view + the new HUD headline
+(`RADOME PARASITIC LOOP — RINGING` / `RADOME — refracting, loop STABLE`, plus the body rate, ε and the
+look angle) are the only other client edits.
+
+THE WIRE (seed 26, `scenarios/slice26_radome.yaml`, ρ = 1.0, N = 4, α_max = 0.3, σ = 5e-5, STT and
+`seeker_axes: az_el` HELD): rms q **0.01245 (R = 0) → 0.88138 (R = −0.10) = 70.8×**, onset between
+−0.090 and −0.095 (0.01398 → 0.61603), plateau past −0.10 (the α_max clamp bounds the cycle), miss
+0.155 → 2.179 m (BOTH HIT), `defl_sat` 0.02%, ceiling 329.87, replay posdiff **0.0**.
+⚠ **THE LOOK ANGLE STAYS SMALL AND THE PEAK MUST NOT BE QUOTED**: `ε = R·look` is a small-angle model,
+and the look angle is **≤ 13° over the ENTIRE guided approach**, exceeding 30° on **6 of 9400 ticks,
+first at r = 3.5 m** — the LOS sweeping past the nose in the last 5 ms. The telemetry PEAKS at 103.6°
+(179.1° on the R = 0 arm at r = 0.5 m) and that is a CPA geometry artifact, not a regime the model is
+asked to cover.
+KNOB — **ONE** (`radome_slope ∈ [−0.12, +0.06]`), bounded by the METRIC'S PLATEAU. **NOT knobs,
+deliberately:** `n_pn` (live-read every tick, so NOT a dead knob — disqualified because it moves the
+LOOP GAIN the lesson is ABOUT, so a student could cross the threshold with the radome untouched: the
+confounded-lever rule), `rho` (same, plus slice 25's [1.0, 1.5] isolated domain), `af_alpha_max` (it
+sets the cycle's AMPLITUDE, the thing the isolation holds fixed), `sigma_seek` (above). All five
+disqualifications are asserted IN the verifier's handshake check and the UI test's knob check ("a doc
+claim about a gate must live IN the gate").
+
+FOUR PROOFS GREEN. `slice26_verify.gd` → **`S26V OK`** (RINGING rms_q **0.80408** / max|ε| 0.01243 rad
+/ miss 5.210 / max|y| 2999.6 / aero_sat **268/496** / defl_sat **0** / ceil 329.84; REPLAY posdiff
+**0.0** — a limit cycle replaying bit-for-bit is a stronger statement than a smooth trajectory doing
+so; QUIET at −0.09 rms_q **0.03493** = **23.0×** with max|ε| still 0.00165 — *the glass refracts on
+BOTH sides, the LOOP is what changed*; MIRROR at +0.06 rms_q **0.01357** = **59.2×**).
+`slice26_ui_test.gd` → **`S26UI OK`** (six teeth incl. the SHARP slice-25 MIRROR — the same fidelity
+WITHOUT the marker keeps its cycler, proving an if/elif SWITCH on the MARKER — and an EIGHT-way
+value-guard where 16-vs-26 is asserted on BOTH mode and visibility so the two button-dropping branches
+cannot collapse). `Sandbox.tscn` smoke-load → **`EWSIM_SERVER_DONE`**. TWO windowed shots at the SAME
+range (~3.65 km): **"RADOME PARASITIC LOOP — RINGING"** (q **+1.168 rad/s**, ε −0.00255 rad at look
+8.0°, a_cmd 361.85, aero_sat 1, omega_ratio 6.90, track_gap 342.21) vs **"RADOME — refracting, loop
+STABLE"** (q **+0.019 rad/s**, ε −0.00102 rad at look 2.5°, a_cmd 39.97, aero_sat 0, omega_ratio 1,
+track_gap 10.50). **The 23/24/25 verifiers re-run reproduce their STATUS numbers TO THE DIGIT**
+(2002.373 / 5.011 / 399.6×; 371.800 / 5.011 / 74.2× / 5.331; 2000.044 / 1.373 / 1456.5× / 40.925 m).
+⚠ **One gate-3 defect of the slice-21/25 class, in the PROOF not the physics: the HUD headline ran off
+the right edge** (`"…the body rate fe|"` — it is drawn at `vp.x − 430` in 20 px, so ~38 characters is
+the width). **A proof you cannot read is not a proof**, exactly as with `%g`.
+
+Run: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice26_radome.yaml`, then the
+console Godot `--headless --path clients/godot --script res://net/slice26_verify.gd` (exit 0 = pass).
+The UI test needs NO server: `… res://net/slice26_ui_test.gd`.
+DEFERRED (NAMED): a **LOOK-ANGLE-DEPENDENT slope `R(look)`** (real radomes have a wiggly slope curve
+and the design case is the worst LOCAL slope — this slice ships the constant-slope linear model as a
+§1 named approximation); **the de-tuning face of positive R** (measured, real, a different lesson);
+a **radome-slope COMPENSATION / stability-margin autopilot** (a rate-gyro feed-forward cancelling the
+parasitic term — the natural next slice, and it needs this one); a seeker **FOV / gimbal limit** (this
+slice makes the look angle a first-class quantity, so it is now doubly expressible); monopulse / az×el
+CFAR; a MEASURED `Vc`; the 3-D `:raw` arm; the out-of-plane MANEUVERING target (composes with this).
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

@@ -314,6 +314,62 @@ max|α| 0.139 rad = 8.0° oscillating near 2 Hz while the path barely weaves —
 
 ---
 
+## Gate 3 — THE WIRE (measured on `scenarios/slice26_radome.yaml`, seed 26, via load_scenario→tick!)
+
+⚠ **TWO WINDOWS, TWO RATIOS, AND BOTH ARE HONEST** — quote each with its window or it reads as drift
+(the slice-21/25 gate-3 bug class). The plan/scenario quote **rms q over the MIDDLE HALF OF TICKS**;
+the verifier computes **rms q over FRAMES that are CLOSING with r > 1000 m** (the same window its
+isolation counts use). The second includes the early transient, so its baseline is higher:
+
+| R | rms q (mid-half ticks) | rms q (verifier window) | miss (m) | aero_sat | defl_sat |
+|---|---|---|---|---|---|
+| +0.06 | 0.01261 | 0.01357 | 0.241 | 0.3% | 0.01% |
+| 0.00 | **0.01245** | **0.01339** | 0.155 | 0.0% | 0.01% |
+| −0.08 | 0.01259 | 0.01702 | 0.149 | 0.1% | 0.01% |
+| −0.09 | 0.01398 | **0.03493** | 0.280 | 0.9% | 0.01% |
+| −0.095 | 0.61603 | 0.56472 | 0.961 | 32.6% | 0.01% |
+| **−0.10 (shipped)** | **0.88138** | **0.80408** | **2.179** | 60.8% | 0.02% |
+| −0.12 | 0.84747 | 0.83384 | 3.454 | 94.8% | 0.00% |
+
+**HEADLINE: 70.8× per-tick / 72.9× frame-sampled vs R = 0** (the frame ratio is measured on the
+mid-half grid — 0.88372 vs 0.01212 over 587 frames — which is the FRAME-ROBUSTNESS claim of §8 tested
+on the shipping wire, not a probe). **The verifier's own A/B is 23.0× (R = −0.10 vs −0.09) and 59.2×
+(vs +0.06)**, and its pass text INTERPOLATES those rather than quoting the table.
+
+⚠ **THE LOOK ANGLE STAYS SMALL — AND THE PEAK MUST NOT BE QUOTED.** `ε = R·look` is a small-angle
+model. Measured: **≤ 13° over the entire guided approach** (deciles 10.1 / 11.0 / 8.0 / 3.0 / 2.6 /
+5.3 / 6.9 / 6.3 / 6.7°), exceeding 30° on **6 of 9400 ticks, first at r = 3.5 m** — the LOS sweeping
+past the nose in the last 5 ms. The `look_angle` telemetry therefore PEAKS at 103.6° (179.1° on the
+R = 0 arm at r = 0.5 m) and that is a CPA geometry artifact, not a regime the model covers.
+
+Replay is bit-identical on every arm (posdiff 0.0); the radome off `:six_dof` is exactly inert
+(identical rms and miss, and NO radome telemetry shipped).
+
+## Gate 3 — AS-BUILT (run 2026-07-27; the four proofs)
+
+**All four green.** `slice26_verify.gd` → **`S26V OK`** (RINGING rms_q **0.80408** / max|ε| 0.01243 rad
+/ miss 5.210 / max|y| 2999.6 / aero_sat **268/496** / defl_sat **0** / ceil 329.84; REPLAY posdiff
+**0.0**; QUIET at −0.09 rms_q **0.03493** = **23.0×** with max|ε| still 0.00165 — *the glass refracts
+on both sides, the LOOP is what changed*; MIRROR at +0.06 rms_q **0.01357** = **59.2×**).
+`slice26_ui_test.gd` → **`S26UI OK`** (six teeth incl. the slice-25 MIRROR and an EIGHT-way
+value-guard). `Sandbox.tscn` smoke-load → **`EWSIM_SERVER_DONE`**. TWO windowed shots at the SAME
+range (~3.65 km), both `_draw` branches: **"RADOME PARASITIC LOOP — RINGING"** (q **+1.168 rad/s**,
+ε −0.00255 rad at look 8.0°, a_cmd 361.85, aero_sat 1, omega_ratio 6.90, track_gap 342.21) vs
+**"RADOME — refracting, loop STABLE"** (q **+0.019 rad/s**, ε −0.00102 rad at look 2.5°, a_cmd 39.97,
+aero_sat 0, omega_ratio 1, track_gap 10.50). The **23/24/25 verifiers re-run reproduce their STATUS
+numbers TO THE DIGIT** (2002.373 / 5.011 / 399.6×; 371.800 / 5.011 / 74.2× / 5.331; 2000.044 / 1.373
+/ 1456.5× / posdiff 40.925).
+
+### Two things the gate itself caught
+
+1. **The client re-showed the button it had just dropped.** `_enter_airframe3d_mode` hid it, and
+   `_update_fid_btn`'s `"airframe"` case turned it straight back on because the scenario DOES carry
+   an `:airframe` fidelity (HELD at six_dof). The drop needs BOTH sites — exactly the "defensive
+   against a re-show" note slice 16 left in that same branch, now load-bearing for a second slice.
+2. **The HUD headline ran off the right edge** (`"…the body rate fe|"`) — the headline is drawn at
+   `vp.x − 430` in 20 px, so ~38 characters is the width. A label that does not fit is the same
+   class of defect as slice 21/25's `%g`: **a proof you cannot read is not a proof.**
+
 ## Named deferrals (write them down; do not let them leak into this slice)
 
 - **A LOOK-ANGLE-DEPENDENT slope `R(look)`** — real radomes have a wiggly slope curve and the design
@@ -335,7 +391,7 @@ max|α| 0.139 rad = 8.0° oscillating near 2 Hz while the path barely weaves —
 ## Task checklist
 
 - [x] Gate 0 — the parasitic-loop hunt; FINDINGS above; advisor pass before gate 1.
-- [ ] Gate 1 — `frames.jl` look-angle/boresight kernels + `test_frames.jl` teeth; `tools/test.ps1` green.
-- [ ] Gate 2 — the `_observe_point3d!` seam + loader key + telemetry; byte-identity assert for 11/13/25.
-- [ ] Gate 3 — scenario + the four proofs; re-run the 23/24/25 verifiers.
-- [ ] Docs — `docs/STATUS.md` as-built, `CLAUDE.md` status line, `HANDOFF.md` §11, memory.
+- [x] Gate 1 — `frames.jl` look-angle/boresight kernels + `test_frames.jl` teeth (4419 tests).
+- [x] Gate 2 — the `_observe_point3d!` seam + loader key + telemetry + the handshake marker (4470).
+- [x] Gate 3 — scenario + the four proofs; the 23/24/25 verifiers re-run to the digit.
+- [x] Docs — `docs/STATUS.md` as-built, `CLAUDE.md` status line, `HANDOFF.md` §11, memory.

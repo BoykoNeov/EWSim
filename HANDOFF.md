@@ -644,9 +644,16 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   DELIBERATE — it is what licenses slice 20's "the target does NOT maneuver: the missile pays for its
   OWN turn" and the convention-9 isolation generally (a constrained target would make an aero miss
   PARTLY the target's problem, muddying every ceiling lesson in the arc) — but a defensive turn
-  costing the TARGET energy is a genuine lesson of its own, and it is its own slice; bank-to-turn
-  (the 3-D quaternion+ω superset, where the pitch-plane out-of-plane discard finally dies) and the
-  radome/body-rate parasitic loop.
+  costing the TARGET energy is a genuine lesson of its own, and it is its own slice. ⚠ The two items
+  that used to close this list are **BUILT, not deferred**: bank-to-turn (the 3-D quaternion+ω
+  superset, where the pitch-plane out-of-plane discard finally dies) landed as **slices 23–24**, and
+  the **radome / body-rate parasitic loop** as **slice 26** — the arc's named end point, whose hard
+  prerequisite was slice 25's two-angle seeker (an error slope needs a two-angle measurement to
+  perturb). Slice 26 is also where the GUIDANCE LIMIT CYCLE slice 15 named and slice 20's gate 0
+  KILLED on the actuator path finally appears, on the SENSOR path, with a measured stability
+  boundary `N·|R_crit|/ρ ≈ 0.38`. The remaining deferrals from that thread: a radome-slope
+  COMPENSATION autopilot, a look-angle-dependent `R(look)`, a seeker FOV/gimbal limit, and the
+  aero+inertial cross-coupling / departure of a real BTT airframe. See `docs/STATUS.md`.
 - **Sibling domains that reuse the shared libs.** IR/EO seekers and IRST (add an IR
   environment channel to `env`, reuse `frames.jl`/`estimation.jl`); communications EW —
   jamming of frequency-hopping / spread-spectrum links — as a parallel to radar EW;
