@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–24 COMPLETE & green — 4335 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–24
+**Slices 1–25 COMPLETE & green — 4399 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–25
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
@@ -524,6 +524,38 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   not an `or`] + a SIX-way value-guard + prior UI tests re-run; smoke-load → `DONE`; TWO shots — BTT bank φ=120°
   + aero_sat=1 [the shipped branch] vs STT omega_p≈0 + β=6.9° [the else]). Slices 1–23 byte-identical, proven ON
   THE WIRE (slice23_verify re-run reproduces SIX_DOF 5.011 / ratio 399.6× / CY_ZERO 2002.373). (4335)
+
+- **Slice 25 (§11 Tier-A, the 3-D arc's SENSOR slice) — A SEEKER IN THE 6-DOF LOOP: the seeker that cannot see
+  out of the plane.** Slices 23/24 gave the missile an airframe that can turn out of the x–z plane and a choice
+  of how to point its lift — both TRUTH-FED. Slice 11's seeker measures a SCALAR in-plane bearing and rebuilds
+  `ω = (0,−λ̇,0)`, STRUCTURALLY incapable of an out-of-plane component, so **the 6-DOF missile is never TOLD to
+  turn**: same 2000 m miss, from the SENSOR. ⚠ **SAME SIGNATURE AS SLICE 23's FOIL, DIFFERENT MECHANISM** (the
+  copy-paste false-claim trap): 23's autopilot THREW the command away; here the plant is `:six_dof` and fully
+  capable — the command was never FORMED. New `frames.jl` kernels `los_unit_from_angles` / `los_rate_from_angles`
+  (`ω = û × û̇`, the #1 SIGN TRAP's 7th) — **the oracle is an IDENTITY** (`(r×v)/‖r‖² ≡ û × û̇`), pinned vs an
+  INDEPENDENT closed-form `(ȧz,ėl)` recompute; ⚠ measure it EXCLUDING the init ticks (tick-1 3.4e-2 vs 8.9e-5
+  after — round 1 nearly read it as a sign error). NEW key `:seeker_axes = (:pitch_plane, :az_el)`, NOT a 4th
+  `SEEKER_MODES` rung (those name the TRACKER, not the DIMENSIONALITY). ⭐⭐ **THE 2-DRAW LOCKSTEP makes the
+  button legal**: both rungs draw 2 randn/tick and the foil DISCARDS the azimuth sample (gate the VALUE, never
+  the draw) — else the toggle is a 1↔2 draw-topology flip and `set_fidelity` must reject the switch the
+  showcase needs. The HOST is the scenario's `two_angle` marker, NOT the fidelity ⇒ introducing the key on a
+  slice-11/13 wire is INERT (P11, a test). Dispatch precedence EXPLICIT; `two_angle × seeker: scan` is a LOAD
+  ERROR (slice-21 "refused, not branch-ordered"). ⭐ **THE ISOLATION forced a retune off slice 24's wire**
+  (advisor): at ρ=0.3 the hit-arm saturates 93.9% and misses 1268 m; at ρ=1.0/σ=0.3 mrad **`aero_sat` is 0 in
+  BOTH arms** ⇒ a POINTING miss, NOT the arc's 7th ceiling miss (asserted as a number, the FLAG never a
+  hand-rolled compare — the sets nest). Class **4a — the 10-slice 4c streak (14–24) ENDS and the seed is
+  load-bearing again for the first time since 13**; replay is SEEDED determinism, not "RNG-free". Wire (seed
+  25): pitch_plane **2000.044** with max|y| and omega_oop **0.0 EXACTLY** vs az_el sub-metre per-tick;
+  ⚠ the verifier's frame grid ≠ the probe's and a HIT samples COARSELY (1.373 / 1456× vs 9.555 / 209×) — the
+  asserts are ONE-SIDED and **the pass text INTERPOLATES what the run measured**. ⚠ This file reproduced slice
+  21's `%g`-is-not-a-GDScript-specifier bug verbatim (the whole `%` fails silently on a GREEN run). ONE knob
+  `sigma_seek ∈ [5e-5,3e-4]` — the REALISM lever, NOT the lesson (non-monotone in σ); `rho` DISQUALIFIED (its
+  isolated domain is only [1.0,1.5]) along with `beta`/`speed`, asserted ABSENT in the verifier. Four proofs
+  green (SEVEN-way UI value-guard; TWO shots: "BLIND out of plane" +0 m / ω_oop 0.00000 vs "AZ/EL — LOS rate in
+  3-D" +983 m / 0.00929). Slices 1–24 byte-identical, proven ON THE WIRE (23/24 verifiers re-run to the digit).
+  Deferred (NAMED): **RADOME / body-rate parasitic loop** (this slice is its prerequisite); seeker FOV/gimbal;
+  monopulse / az×el CFAR; a measured Vc; the 3-D `:raw` arm; **seeker noise × the BTT roll loop = DEAD, not
+  deferred** (a ~1000:1 low-pass: std(Δφ_cmd) 1.07 vs std(Δφ_ach) 1.6e-5 — the slice-20 dead-fin precedent). (4399)
 
 
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened

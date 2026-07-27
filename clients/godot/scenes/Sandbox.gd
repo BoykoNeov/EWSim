@@ -269,6 +269,13 @@ const ATMOSPHERE_RUNGS := ["constant", "exponential"]   # slice-21 atmosphere cy
 # convention 9, ONE toggled fidelity: airframe is HELD :six_dof). The cross-fidelity dependency: this
 # rung is inert without :airframe:six_dof (the scalar plant has no roll DOF).
 const STEERING_RUNGS := ["skid_to_turn", "bank_to_turn"]
+# Slice-25 A SEEKER IN THE 6-DOF LOOP: the SEEKER-AXES cycler on the HELD :six_dof skid-to-turn plant.
+# pitch_plane (slice 11's SCALAR in-plane tracker — ω ∥ ±ŷ, so the cross-range command is never FORMED
+# and the missile flies straight down the x–z plane) ↔ az_el (an azimuth/elevation PAIR → the LOS-rate
+# VECTOR ω = û × û̇ → the out-of-plane component survives → intercept). Shown when the handshake
+# fidelity carries `seeker_axes`; it is checked BEFORE `steering`/`airframe` (the "check the NEW key
+# first" rule — slices 21/22/24, 4th occurrence) so the ONE toggled fidelity owns the shared button.
+const SEEKER_AXES_RUNGS := ["pitch_plane", "az_el"]
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
 # --- terrain 3-D view (slice 18): the client's FIRST true 3-D view. Populated only when the
@@ -1068,7 +1075,17 @@ func _enter_airframe3d_mode(obj: Dictionary) -> void:
 	# two-view-claiming-keys precedent, "check the NEW key first"). Otherwise it is the slice-23 airframe
 	# 3-ring cycler. The 3-D view + trail/nose drawing are shared either way (the bank is a NEW thing to
 	# draw on the same scene). VALUE-GUARDED: a slice-23 wire (no `steering`) keeps the airframe cycler.
-	if _fidelity.has("steering"):
+	# SLICE 25 — checked FIRST (the "check the NEW key first" rule, 4th occurrence): a seeker-axes
+	# scenario puts the SEEKER's measurement dimensionality on the shared button, with :airframe HELD
+	# :six_dof AND :steering held at the loader default (the scenario omits it) — convention 9, ONE
+	# toggled fidelity. VALUE-GUARDED three ways: slice 25 → this cycler, slice 24 (`steering`, no
+	# `seeker_axes`) → the steering cycler, slice 23 (neither) → the airframe 3-ring.
+	if _fidelity.has("seeker_axes"):
+		_fid_kind = "seeker_axes"
+		if not _prop_btn.pressed.is_connected(_on_seeker_axes_pressed):
+			_prop_btn.pressed.connect(_on_seeker_axes_pressed)   # guarded for the headless UI test
+		_prop_btn.tooltip_text = "Cycle seeker axes (set_fidelity): pitch_plane → az_el"
+	elif _fidelity.has("steering"):
 		_fid_kind = "steering"
 		if not _prop_btn.pressed.is_connected(_on_steering_pressed):
 			_prop_btn.pressed.connect(_on_steering_pressed)   # guarded for the headless UI test
@@ -1252,7 +1269,16 @@ func _draw_airframe3d_hud() -> void:
 	var lbl := ""
 	var col := Color(0.45, 0.90, 1.00)
 	var is_bank := false
-	if _fidelity.has("steering"):
+	# SLICE 25 — checked FIRST, matching _enter_airframe3d_mode's routing: a seeker-axes wire labels
+	# what the SEEKER can SEE (the plant is held). This is the one case where the missile is fully
+	# capable and simply never commanded — so the label says BLIND, not "discarded" (slice 23) and not
+	# "lagging" (slice 24).
+	if _fidelity.has("seeker_axes"):
+		var see := str(_fidelity.get("seeker_axes", "pitch_plane"))
+		var is3d := see == "az_el"
+		lbl = "AZ/EL SEEKER — LOS rate in 3-D" if is3d else "IN-PLANE SEEKER — BLIND out of plane"
+		col = Color(0.45, 0.90, 1.00) if is3d else Color(1.00, 0.62, 0.30)
+	elif _fidelity.has("steering"):
 		is_bank = str(_fidelity.get("steering", "skid_to_turn")) == "bank_to_turn"
 		lbl = "BANK-TO-TURN — banking to turn (roll lag)" if is_bank else "SKID-TO-TURN — lift in two planes, no roll"
 		col = Color(1.00, 0.62, 0.30) if is_bank else Color(0.45, 0.90, 1.00)
@@ -1271,7 +1297,15 @@ func _draw_airframe3d_hud() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
 	# SLICE 24 — the BANK angle (roll about velocity), the roll-lag tell (shipped only on the bank_to_turn
 	# wire). φ ≈ 0 wings-level; the missile must roll to ~±90° to point its single lift plane cross-range.
-	if _telemetry.has(_af3d_missile + ".bank_deg"):
+	# SLICE 25 — THE HEADLINE READOUT: the out-of-plane content of the LOS rate THE SEEKER REPORTS.
+	# EXACTLY 0.0 under :pitch_plane (ω ∥ ±ŷ by construction) — the blindness as ONE number, straight
+	# from the core's `omega_oop` telemetry (no client-side physics — convention 13). Presence-gated,
+	# so slices 23/24 are untouched; checked before the bank/β lines for the same reason the label is.
+	if _telemetry.has(_af3d_missile + ".omega_oop"):
+		var oop := float(_telemetry[_af3d_missile + ".omega_oop"])
+		draw_string(_font, Vector2(vp.x - 430, 110), "seeker ω out-of-plane: %.5f rad/s%s" % [oop, "   ← BLIND" if oop == 0.0 else ""],
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if oop == 0.0 else Color(0.45, 0.90, 1.00))
+	elif _telemetry.has(_af3d_missile + ".bank_deg"):
 		draw_string(_font, Vector2(vp.x - 430, 110), "bank φ: %+.0f°  (τ_roll roll lag)" % float(_telemetry[_af3d_missile + ".bank_deg"]),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45))
 	elif _telemetry.has(_af3d_missile + ".beta"):
@@ -1380,6 +1414,11 @@ func _update_fid_btn() -> void:
 			# to cycle (the rung is the lesson), like atmosphere — no visibility branch.
 			_prop_btn.visible = true
 			_prop_btn.text = "steering: %s" % str(_fidelity.get("steering", "?"))
+		"seeker_axes":
+			# Slice-25: the button IS the seeker-axes cycler (pitch_plane ↔ az_el). Same shape as
+			# steering/atmosphere — the rung IS the lesson, so no visibility branch.
+			_prop_btn.visible = true
+			_prop_btn.text = "seeker: %s" % str(_fidelity.get("seeker_axes", "?"))
 		"airframe":
 			if _fidelity.has("airframe"):
 				# Slice-17 α→lift coupling: the button IS the airframe cycler (point_mass ↔ pitch_coupled).
@@ -1622,6 +1661,26 @@ func _on_steering_pressed() -> void:
 	var next: String = STEERING_RUNGS[(i + 1) % STEERING_RUNGS.size()] if i >= 0 else "skid_to_turn"
 	_fidelity["steering"] = next
 	_client.send({"type": "set_fidelity", "key": "steering", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
+func _on_seeker_axes_pressed() -> void:
+	# A SEEKER IN THE 6-DOF LOOP — the sensor half of the 3-D arc. Both rungs run the SAME α-β tracker
+	# on the SAME held :six_dof skid-to-turn plant against the SAME target; the ONLY variable is how
+	# many ANGLES the seeker measures. Under :pitch_plane (the default — the showcase OPENS on the
+	# miss) it measures ONE in-plane bearing, so its ω is structurally ∥ ±ŷ, the cross-range command is
+	# never FORMED, and the trail stays FLAT in the x–z plane (max|y| = 0.0 EXACTLY) → ~2000 m miss.
+	# Press once → :az_el measures an az/el PAIR, rebuilds the LOS-rate VECTOR, and the SAME airframe
+	# yaws out to intercept. ⚠ NOT a ceiling miss: `aero_sat` is 0 in BOTH arms (the isolation) — the
+	# missile has the authority and is simply never told to use it. Class 4a — DRAW-INVARIANT (both
+	# rungs draw 2 randn/tick; the foil DISCARDS the azimuth sample) YET TRAJECTORY-CHANGING, so it is
+	# LIVE-SETTABLE with NO set_fidelity guard, UNLIKE :cfar/:scan. The client owns the displayed rung
+	# (badge + button locally; the server applies it on the next tick).
+	var cur := str(_fidelity.get("seeker_axes", "pitch_plane"))
+	var i := SEEKER_AXES_RUNGS.find(cur)
+	var next: String = SEEKER_AXES_RUNGS[(i + 1) % SEEKER_AXES_RUNGS.size()] if i >= 0 else "pitch_plane"
+	_fidelity["seeker_axes"] = next
+	_client.send({"type": "set_fidelity", "key": "seeker_axes", "value": next})
 	_render_badge()
 	_update_fid_btn()
 

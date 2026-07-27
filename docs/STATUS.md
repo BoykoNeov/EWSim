@@ -3046,7 +3046,106 @@ DEFERRED (NAMED): **SUSTAINED-TRACKING / route (b)** — an out-of-plane MANEUVE
 faster than the roll loop follows — a DISTINCT face from this slice's cold-start; its own careful mover build);
 **AERO + INERTIAL CROSS-COUPLING / DEPARTURE** (non-diagonal I, sustained large p, Clβ/Cnp/Clr, the radome /
 body-rate parasitic loop); **ζ ≠ 1 / a 2nd roll knob / a 2nd-order roll actuator**; ASYMMETRIC AERO; a SEEKER
-in the 6-DOF loop (→ 4a/RNG-live); induced/separation drag + ρ(z) on the 6-DOF path.
+in the 6-DOF loop (→ 4a/RNG-live — **DONE, slice 25**); induced/separation drag + ρ(z) on the 6-DOF path.
+
+---
+
+**Slice 25 — A SEEKER IN THE 6-DOF LOOP: the seeker that cannot see out of the plane (HANDOFF §11 Tier-A)**
+— the THIRD slice of the bank-to-turn / 3-D arc and its FIRST SENSOR slice. Slices 23 and 24 gave the missile
+an airframe that can turn OUT of the x–z plane and a choice of how to point its lift — and both were
+TRUTH-FED. Give it a REAL seeker and slice 11's sensor is waiting with the SAME approximation one layer up:
+it measures a SCALAR in-plane bearing `λ = atan(Δz, Δx)` and reconstructs `ω = (0, −λ̇, 0)`, an LOS rate
+STRUCTURALLY incapable of an out-of-plane component. This cashes a deferral slice 11 wrote into its OWN source
+(`missile.jl`: *"Scalar avoids the vector form's tangent-injection / cross-innovation-sign / renormalize bug
+surface"*) — the shape of 21 cashing constant-ρ and 22 cashing linear C_L. **THE LESSON, one sentence: slice 23
+gave the missile an airframe that can turn out of the plane — but a seeker that only measures IN the plane
+produces an LOS rate with no out-of-plane component, so the missile never asks it to: the same 2000 m miss,
+from the SENSOR this time.**
+
+⚠ **THE SIGNATURE IS IDENTICAL TO SLICE 23's FOIL AND THE MECHANISM IS NOT** (the copy-paste false-claim trap).
+Slice 23's `:pitch_coupled` missed 2002 m with `max|y| = 0.0` because the AUTOPILOT threw the cross-range
+command away. Slice 25's plant is `:six_dof` and FULLY CAPABLE of flying it — flip the button and it does, on
+the same wire: **the command was never FORMED**, because the measurement had no such component in it.
+
+⭐ **THE ISOLATION IS THE OTHER HALF OF THE CLAIM, AND IT FORCED A RETUNE OFF SLICE 24's WIRE (advisor).** The
+arc has produced SIX ceiling misses (19/20/21/22/23/24); a seventh would be unattributable. At slice 24's
+ρ = 0.3 the ceiling floor is ~95 m/s² and PN's `N·Vc·λ̇` on a noisy bearing peaks the demand at ~2530 ⇒
+`aero_sat` **93.9%** and the arm that must HIT misses by 1268 m (gate-0 P3/P4). Retuned to ρ = 1.0 / σ = 0.3
+mrad, **`aero_sat` is 0 in BOTH arms on the shipping wire** — a POINTING miss (the slice-13 framing), asserted
+by the verifier as a number in both flight phases, never claimed in prose. ⚠ `a_demand` peaks 356 against a
+314 ceiling in the foil arm WITHOUT `aero_sat` firing (the flag keys off the ⟂-v PROJECTION while `a_demand`
+is full-magnitude — the sets NEST, slice 19), so the verifier asserts the **FLAG**, never a hand-rolled compare.
+
+⭐⭐ **THE 2-DRAW LOCKSTEP IS WHAT MAKES THE BUTTON LEGAL.** A two-angle seeker draws **2** `randn`/tick against
+slice 11's **1**, so a naive rung toggle would be a draw-topology FLIP mid-replay and `set_fidelity` would have
+to REJECT the very switch the showcase exists to make (the `:cfar` 4b guard). **Both rungs therefore draw 2
+UNCONDITIONALLY and `:pitch_plane` DISCARDS the azimuth sample** — gate the VALUE, never the draw (convention
+3's template, applied to a FOIL). Measured 2.0 draws/tick on both rungs ⇒ class **4a WITHIN a 2-draw host**.
+**Do NOT "optimize away" the unused draw** — a test pins it against `Xoshiro(seed)` advanced by 2N. The host
+is the SCENARIO's `seeker: {two_angle: true}` marker, NOT the fidelity, which is exactly what makes introducing
+`:seeker_axes` on a slice-11/13 wire INERT (P11: bit-identical trace incl. the next draw off `w.rng`) — the
+guard against the slice-21 `_atm_on` / slice-23 `:att_q` latent-bug class, both of which an advisor caught at
+gate 2 rather than by reasoning. **THE DISPATCH PRECEDENCE is explicit and one corner is a LOAD ERROR**
+(`two_angle` × `seeker: scan` — the slice-13 profile is single-axis by construction; az×el CFAR is a named
+deferral, refused rather than silently branch-ordered — the slice-21 precedent).
+
+New `frames.jl` kernels beside `az_el` (which had sat unused since slice 8 — built for exactly this):
+`los_unit_from_angles` and `los_rate_from_angles` (`ω = û × û̇`). **THE ORACLE IS AN IDENTITY, not a
+calibration**: with `r = R·û`, `r×v = R²(û × û̇)` ⇒ `(r×v)/‖r‖² ≡ û × û̇`, so the seeker's ω IS the quantity
+`los_rate` computes from truth — pinned via an INDEPENDENT closed-form recompute of `(ȧz, ėl)` (convention 11)
+at the FP floor, with the **#1 SIGN TRAP's 7th occurrence** (the argument order `û × û̇`) pinned by the
+in-plane invariant (`ω_x == ω_z == 0.0` EXACTLY) PAIRED with a does-turn case. ⚠ Measure the oracle EXCLUDING
+the init ticks — the tick-1 error is 3.4e-2 (rates seeded 0) vs 8.9e-5 relative after, and round 1 nearly read
+it as a sign error.
+
+**THE 10-SLICE 4c STREAK (14–24) ENDS: class 4a, and the seed is load-bearing again for the first time since
+13** — draw-invariant YET trajectory-changing (slice 11's combo), live-settable, no `set_fidelity` guard;
+conventions 3/11 apply again and replay is SEEDED determinism, NOT the "RNG-free" claim slices 14–24 shipped.
+
+Live-wire goldens (`scenarios/slice25_seeker_3d.yaml`, seed 25): `:pitch_plane` **2000.044** per-tick /
+2000.071 frame with **max|y| = 0.0 EXACTLY** and reported **omega_oop = 0.0 EXACTLY** on every frame, vs
+`:az_el` **0.008** per-tick / 9.555 frame (probe grid) — `aero_sat` **0/8647** and **0/7760**. ⚠ **The
+verifier's own frame grid differs from the Julia probe's (the server's emit phase), and a HIT samples
+COARSELY**: it measures 2000.044 / **1.373** / 1456×. Both are correct; the ASSERTS are ONE-SIDED bounds
+(`< 30`, `> 30×`) and **the pass text INTERPOLATES what the run measured** rather than quoting a probe figure —
+slice 21's gate-3 bug #2, avoided by construction. ⚠ This file also reproduced slice 21's OTHER gate-3 bug
+verbatim: **`%g` is not a GDScript specifier**, and an unknown one makes the WHOLE `%` fail so the line prints
+as its own format string ON A GREEN RUN. A number that does not print is not a proof.
+
+ONE knob, `sigma_seek ∈ [5e-5, 3e-4]` rad. ⚠ **It is the REALISM lever, NOT the lesson lever** — the miss does
+NOT degrade monotonically in σ (0.235/0.243/0.260/0.278 m at 0.05/0.1/0.2/0.3 mrad, then FALLING to 0.057 at
+1.0 while `aero_sat` climbs to 25.4%: the noise EXCITES the loop, it does not steer it), and the domain is
+bounded by where the ISOLATION survives, not by the physics. DISQUALIFIED and asserted ABSENT in the verifier
+(the "a doc claim about a gate must live IN the gate" rule): **`rho`** (isolated domain only [1.0, 1.5] — a
+1.5× span, and it moves the one thing this slice must hold), the α-β **`beta`** gain (breaks the isolation at
+≥ 0.15 — the slice-11 U-shape), **`speed`** (the slice-19 DEAD-knob finding, 3rd occurrence). The PLANT is held
+at skid-to-turn BY OMISSION (BTT binds `aero_sat` 93.2% of its approach — it cannot isolate a sensor), and the
+TRACKER at `:filtered` (a 3-D `:raw` arm is slice 11's lesson in a new letter — convention 9).
+
+CLIENT: the slice-23 3-D airframe view REUSED, with the shared button routed to the SEEKER-AXES cycler —
+checked BEFORE `steering`/`airframe` ("check the NEW key first", 4th occurrence), so the within-airframe3d
+discriminator is now THREE-WAY and both MIRROR cases are asserted (an if/elif SWITCH, not an `or`). The HUD
+gains the headline readout `seeker ω out-of-plane: … ← BLIND` straight from the core's `omega_oop` (convention
+13 — no client-side physics). Four proofs green (verifier `S25V OK`; UI test `S25UI OK` with a SEVEN-way
+value-guard; smoke-load → `EWSIM_SERVER_DONE`; TWO windowed shots — "IN-PLANE SEEKER — BLIND out of plane" at
+cross-range **+0 m** with ω_oop 0.00000 vs "AZ/EL SEEKER — LOS rate in 3-D" at **+983 m** with ω_oop 0.00929,
+both `_draw` branches proven). Full suite **4399** (4335 + 28 frames + 36 missile); slices 1–24 byte-identical,
+proven ON THE WIRE (the 23/24 verifiers re-run reproduce 2002.373 / 5.011 / 399.6× and 371.800 / 74.2× / 5.331
+to the digit).
+
+Run it live: `pwsh tools/julia.ps1 --project=core tools/server.jl scenarios/slice25_seeker_3d.yaml`, then
+launch Godot on `clients/godot`. **Cycle the seeker button** pitch_plane ↔ az_el and watch the SAME airframe,
+SAME PN law, SAME target: the in-plane seeker's trail stays dead flat (cross-range +0 m, ω_oop 0.00000) and
+misses by ~2000 m; the az/el seeker curves out and intercepts. Re-run the gate-3 proof headless: start the
+server, then the console Godot `--headless --path clients/godot --script res://net/slice25_verify.gd` (exit 0
+= pass). The UI test needs NO server: `… res://net/slice25_ui_test.gd`.
+DEFERRED (NAMED): **RADOME / body-rate parasitic loop** (the arc's named end point — an error slope perturbs a
+TWO-ANGLE measurement as a function of look angle, and there was nothing for it to perturb before this slice);
+a seeker **FOV / gimbal limit** (now expressible for the first time); **monopulse / az×el CFAR** (slice 13's
+`:scan` lifted to two angular axes); a MEASURED range/closing speed (`Vc` stays truth here); the 3-D `:raw`
+arm; **seeker noise × the BTT roll loop — DEAD, not deferred** (killed at gate 0: the ζ=1 τ_roll=1.0 roll loop
+is a ~1000:1 low-pass — `std(Δφ_cmd)` 1.07 rad/tick vs `std(Δφ_ach)` 1.6e-5; the slice-20 dead-scalar-fin
+precedent — do not re-propose it cold); the out-of-plane MANEUVERING target (composes with this slice).
 
 ---
 

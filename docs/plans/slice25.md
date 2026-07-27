@@ -275,6 +275,34 @@ value finite (convention 5/6).
 
 ---
 
+## Gate 3 — AS-BUILT (run 2026-07-27; the four proofs + two bugs found IN THE PROOFS)
+
+**All four green.** `slice25_verify.gd` → `S25V OK` (PITCH_PLANE 2000.044 frame / max|y| 0.000000 /
+max_omega_oop 0.000000000 / aero_sat **0/553**; REPLAY posdiff **0.0**; AZ_EL **1.373** / max|y|
+2595.57 / aero_sat **0/497** / ratio 1456.5×; SIGMA_LIVE σ=5e-5 → miss 1.179, posdiff vs default σ
+**40.925 m** — the knob is LIVE — aero_sat 0/497). `slice25_ui_test.gd` → `S25UI OK` (six teeth incl.
+BOTH mirror cases and a SEVEN-way value-guard). `Sandbox.tscn` smoke-load → `EWSIM_SERVER_DONE`.
+TWO windowed shots, both `_draw` branches: "IN-PLANE SEEKER — BLIND out of plane" / cross-range
+**+0 m** / `seeker ω out-of-plane: 0.00000 rad/s ← BLIND` (with `a_demand 86.57` vs `a_max_aero
+321.70`, `aero_sat 0` — the isolation VISIBLE in the readout) vs "AZ/EL SEEKER — LOS rate in 3-D" /
+**+983 m** / `0.00929 rad/s`. Full suite **4399**. The 23/24 verifiers re-run reproduce their STATUS
+numbers TO THE DIGIT (2002.373 / 5.011 / 399.6× / 2002.373 and 371.800 / 5.011 / 74.2× / 5.331).
+
+### ⚠ TWO BUGS, BOTH IN THE PROOF AND BOTH SLICE-21 RECURRENCES
+
+1. **`%g` is not a GDScript specifier.** An unknown one makes the WHOLE `%` fail, so
+   `S25V_SIGMA_LIVE` printed as its own format string ON A GREEN RUN. Exactly the slice-21 gate-3
+   finding, reproduced by a file whose header already cited it. **A number that does not print is
+   not a proof** — and green does not mean printed.
+2. **The pass text quoted probe numbers the file did not measure** (`≈9.6 m / 209×` while the run
+   measured 1.373 / 1456×). Root cause worth recording: **the server's emit phase does not match a
+   Julia probe's `k % emit_every` grid**, and because a HIT samples coarsely, the sampled CPA moves
+   between ~1 and ~10 m for the same physics. FIXED STRUCTURALLY — the pass text now INTERPOLATES
+   `_blind_miss` / `_azel_miss` / their ratio, so it cannot drift from what was measured. The
+   ASSERTS were always safe (one-sided `< 30`, `> 30×`) — only the prose was wrong.
+
+---
+
 ## Named deferrals (write them down; do not let them leak into this slice)
 
 - **The 3-D `:raw` arm** — slice 11's tracker lesson in az/el (§6). Real, measured to saturate at the
