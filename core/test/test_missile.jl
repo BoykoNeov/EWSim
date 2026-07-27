@@ -4495,3 +4495,245 @@ end
         @test !haskey(w2.env[:telemetry], "m1.radome_eps")     # …and no radome telemetry at all
     end
 end
+
+@testset "THE RADOME SLOPE CURVE wired (slice 28 — the band the engagement visits)" begin
+    dt = 1.0e-3
+    n3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # Slices 26/27's wire with TWO changes, and BOTH are measured decisions:
+    #
+    #  (1) THE RIPPLE keys (`radome_ripple` / `radome_ripple_k`) — the one new authored pair.
+    #      `ripple === nothing` mints NO key at all: the byte-identity arm, and the shape the
+    #      loader and the seam both gate on.
+    #  (2) ⚠ A **CROSSING** TARGET, which BREAKS the static Y = 2000 geometry slices 23–27 all
+    #      shared. That is not a preference: against a STATIC target the collision course carries
+    #      ZERO LEAD, so the look angle decays to 0.04–0.54° over the endgame and a look-angle
+    #      dependent slope is a DEAD KNOB there (`docs/plans/slice28.md` §1, measured on a STABLE
+    #      arm — a ringing arm's look angle swings BECAUSE it is ringing). A crossing target holds
+    #      a sustained LEAD ANGLE of 15–30° for the whole flight. The slice-25 precedent: the
+    #      isolation forces the wire, and the wire change is stated rather than slipped in.
+    #
+    # R₀ = −0.03 is a GOOD radome on slice 26's scale, deliberately: the lesson is that good glass
+    # at boresight is not good glass everywhere. k = 12 (a 30° ripple period) is AUTHORED and NOT a
+    # knob — the metric is non-monotone in it (plan §8).
+    function curve_world(; radome = -0.03, ripple = nothing, k = 12.0, slope_est = -0.03,
+                           vy = 200.0, axes = :az_el, airframe = :six_dof, seed = 28,
+                           sigma = 5.0e-5, rho = 1.0, alpha_max = 0.3, n_pn = 8.0, Y = 2000.0)
+        w = World(seed = seed,
+                  fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                 :autopilot => :alpha, :airframe => airframe,
+                                                 :seeker => :filtered, :seeker_axes => axes))
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => rho,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => alpha_max, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => n_pn, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => sigma, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true)
+        radome    === nothing || (comp[:radome_slope] = radome)
+        slope_est === nothing || (comp[:radome_slope_est] = slope_est)
+        if ripple !== nothing
+            comp[:radome_ripple] = ripple; comp[:radome_ripple_k] = k
+        end
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, Y, 4200.0),
+                                 vel = Vec3(0.0, vy, 0.0), comp = Dict{Symbol,Any}())
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:t1)]
+    end
+
+    # ⚠⚠ TWO DELIBERATE DEPARTURES FROM SLICES 26/27's METRIC, both measured (plan §7) — do NOT
+    # copy this block back onto a 26/27 wire:
+    #
+    #  (a) THE CHANNEL IS **YAW** (`omega_r`), not pitch. The lead angle this wire holds is in
+    #      AZIMUTH, so the azimuth channel is the one sitting on the steep part of the curve and
+    #      the ring is in yaw. `rms q` is reported BESIDE it as the CHANNEL-SPLIT evidence, not as
+    #      the headline.
+    #  (b) THE WINDOW IS A **RANGE BAND** [500, 3000] m, not a tick fraction. On a crossing wire
+    #      `rms r` carries a LEGITIMATE baseline — the missile turning onto the collision course,
+    #      which is front-loaded: 0.172 over the whole approach against 0.0138 inside the band.
+    #      And arms with different ToF would otherwise compare DIFFERENT PARTS of the engagement.
+    #      ⇒ quote the window with every number.
+    # rms, NEVER the peak; and the MISS is not the metric — the ringing arms still HIT (slice 26).
+    function curvefly(; T = 16.0, kw...)
+        w, s = curve_world(; kw...)
+        qs = Float64[]; rs_ = Float64[]; rr = Float64[]
+        rmin, prev, closing = Inf, Inf, true
+        asat = 0; dsat = 0; nt = 0
+        for _ in 1:round(Int, T / dt)
+            tick!(w, s, dt); empty!(w.events)
+            tel = w.env[:telemetry]
+            r = n3(w.entities[:t1].pos - w.entities[:m1].pos)
+            push!(qs, Float64(get(tel, "m1.omega_q", 0.0)))
+            push!(rs_, Float64(get(tel, "m1.omega_r", 0.0)))
+            push!(rr, r)
+            asat += Int(Float64(get(tel, "m1.aero_sat", 0.0)) != 0.0)
+            dsat += Int(Float64(get(tel, "m1.defl_sat", 0.0)) != 0.0)
+            nt += 1
+            closing && r > prev && (closing = false)
+            closing && (rmin = min(rmin, r)); prev = r
+            closing || break
+        end
+        win = findall(x -> 500.0 < x < 3000.0, rr)
+        rms(v) = isempty(win) ? 0.0 : sqrt(sum(abs2, v[win]) / length(win))
+        return (rms_r = rms(rs_), rms_q = rms(qs), miss = rmin,
+                asat = asat, dsat = dsat, nt = nt, nwin = length(win), w = w)
+    end
+
+    @testset "BYTE-IDENTITY — no `radome_ripple` key ⇒ the slice-26/27 path, bit-for-bit" begin
+        # The structural claim (the slice-20/21/26/27 shape, now at a THIRD nesting level): the
+        # no-ripple arm calls `radome_error` VERBATIM, it does not evaluate the curve at amplitude
+        # zero. `x + 0.0` is not the identity at x = −0.0 and float addition is not associative.
+        function trace(; kw...)
+            w, s = curve_world(; kw...)
+            out = Float64[]
+            for _ in 1:900
+                tick!(w, s, dt); empty!(w.events)
+                m = w.entities[:m1]
+                append!(out, (m.pos[1], m.pos[2], m.pos[3], m.vel[1], m.vel[2], m.vel[3]))
+            end
+            return out
+        end
+        base = trace(ripple = nothing)
+        @test trace(ripple = nothing) == base                  # determinism, and the control
+        # ⭐ AMPLITUDE 0 IS BIT-IDENTICAL TO THE KEY NOT EXISTING — which is what makes `ripple` a
+        # KNOB rather than a fidelity rung (atmosphere.jl's discriminator: the off-state is
+        # knob-REACHABLE). MEASURED, as slice 26 measured it for R = 0, not argued.
+        @test trace(ripple = 0.0) == base
+        @test trace(ripple = -0.05) != base                    # …PAIRED with a does-curve arm
+    end
+
+    @testset "the DRAW COUNT is unchanged — 2/tick, ripple or not (class 4a, convention 3)" begin
+        # The curve is arithmetic on state that already exists, so it cannot move the RNG. Measured
+        # the way slices 25/26/27 measure it: an identical seed must leave the stream in the same
+        # place after the same number of ticks, whatever the ripple.
+        function draws(rip)
+            w, s = curve_world(ripple = rip)
+            for _ in 1:300; tick!(w, s, dt); empty!(w.events); end
+            return randn(w.rng)             # the NEXT draw is the stream's fingerprint
+        end
+        d0 = draws(nothing)
+        @test draws(0.0) == d0
+        @test draws(-0.05) == d0
+        @test draws(-0.20) == d0
+    end
+
+    @testset "INERTNESS — the ripple needs the radome AND a 6-DOF plant (5th occurrence)" begin
+        # Rung-gated on the LIVE `:airframe`, never on a key that is never deleted (the slice-21
+        # `_atm_on` / 23 / 26 / 27 latent-bug class). Without `:six_dof` there is no attitude to
+        # look through, so the curve cannot reach the seam and no telemetry may be shipped.
+        r = curvefly(T = 4.0, airframe = :pitch_coupled, ripple = -0.10)
+        @test !haskey(r.w.env[:telemetry], "m1.radome_slope_local")
+        @test !haskey(r.w.env[:telemetry], "m1.radome_eps")
+        # and WITHOUT `radome_slope` the whole radome branch is off, so the ripple is unreachable
+        r2 = curvefly(T = 4.0, radome = nothing, ripple = -0.10)
+        @test !haskey(r2.w.env[:telemetry], "m1.radome_slope_local")
+    end
+
+    @testset "⭐ THE CURVE RINGS WHERE THE CONSTANT DOES NOT (the slice, on the wire)" begin
+        # The SAME boresight slope R₀ = −0.03 and the SAME compensator R̂ = −0.03 — which is
+        # EXACTLY right at boresight — flown against the SAME crossing target. The only difference
+        # is that the glass has a ripple, so the slope where the seeker is actually looking is not
+        # the slope it was characterized at.
+        flat  = curvefly(ripple = nothing)
+        curve = curvefly(ripple = -0.05)
+        @test flat.rms_r  < 0.05                       # a boresight-correct compensator: quiet
+        @test curve.rms_r > 0.5                        # the same missile, the same glass: RINGING
+        @test curve.rms_r > 15 * flat.rms_r
+        # ⚠ THE MISS IS NOT THE METRIC — the ringing arm still HITS (slices 26/27, unchanged).
+        @test curve.miss < 5.0
+        # ⭐ THE CHANNEL SPLIT: the ring is in YAW, because the lead angle is in AZIMUTH, while the
+        # PITCH channel sits near the BORESIGHT slope. A CONSTANT slope cannot produce this — both
+        # channels then share one slope and ring together. A second isolation, not a decoration.
+        @test curve.rms_q < 0.5 * curve.rms_r
+    end
+
+    @testset "⭐⭐ THE ISOLATION — non-monotone in the GEOMETRY, with the control flat" begin
+        # ⚠ THE CONFOUND THIS DEFEATS IS REAL AND WAS MEASURED: a crossing engagement moves the
+        # stability boundary ON ITS OWN (constant-R onset |R_crit| ≈ 0.065 crossing vs ≈ 0.05
+        # static, WITH NO CURVE ANYWHERE). So "crossing rings, static does not" is partly a claim
+        # about crossing engagements. ⇒ HOLD THE GLASS AND SWEEP THE ENGAGEMENT.
+        #
+        # With k = 12 the slope ripple peaks at look = 15° and returns to R₀ at 30°, so a MONOTONE
+        # crossing-speed sweep must go QUIET → RING → QUIET. **A confound cannot produce a
+        # non-monotone response to a monotone geometry change.**
+        rip  = [curvefly(ripple = -0.05, vy = v).rms_r for v in (0.0, 200.0, 400.0)]
+        ctrl = [curvefly(ripple = nothing, vy = v).rms_r for v in (0.0, 200.0, 400.0)]
+        @test rip[1] < 0.05                            # slow: the seeker sits near boresight
+        @test rip[2] > 0.5                             # mid:  parked on the ripple's steep part
+        @test rip[3] < 0.20                            # fast: past the peak, back toward R₀
+        @test rip[2] > 8 * rip[1] && rip[2] > 4 * rip[3]
+        # THE CONTROL: the same geometry sweep with NO ripple is FLAT and quiet throughout — so the
+        # engagement change by itself never rings, and it is the CURVE that the geometry selects
+        # from.
+        @test all(<(0.05), ctrl)
+        @test maximum(ctrl) / minimum(ctrl) < 2.0      # flat, not merely quiet
+    end
+
+    @testset "⭐ THE COMPENSATOR: the scalar that works is set by the ENGAGEMENT" begin
+        # Slice 27's R̂ is inherited unchanged, and the payload is what it can and cannot buy here.
+        # ⚠ THE FIRST VERSION OF THIS CLAIM ("you cannot cancel a function with a scalar") WAS
+        # REFUTED AT GATE 0 and must not be re-imported: a scalar tuned to the OPERATING look angle
+        # quiets the ring, and it is ALSO safe at boresight (measured across n_pn 8–16 and static
+        # Y 2000–6000). The mechanism of that asymmetry is structural — the ripple term
+        # `A·(1−cos(k·look))` vanishes IDENTICALLY at look = 0, so `R(0) = R₀` for every amplitude
+        # and the boresight engagement cannot see the curve at all.
+        # ⇒ what IS true, and is the actionable lesson: characterizing at BORESIGHT is the
+        # DANGEROUS choice, because it is exactly right in the one place the loop is never closed.
+        bore = curvefly(ripple = -0.05, slope_est = -0.03)    # R̂ = R(0): boresight-correct
+        oper = curvefly(ripple = -0.05, slope_est = -0.13)    # R̂ = R(15°): engagement-correct
+        @test bore.rms_r > 0.5                                # the natural choice RINGS
+        @test oper.rms_r < 0.10                               # the engagement's choice is quiet
+        @test bore.rms_r > 8 * oper.rms_r
+        # and the SAME engagement-tuned scalar is safe against a STATIC target — the asymmetry,
+        # measured rather than assumed away
+        @test curvefly(ripple = -0.05, slope_est = -0.13, vy = 0.0).rms_r < 0.05
+    end
+
+    @testset "the telemetry keys — shipped as NUMBERS, and 26/27's are NOT redefined" begin
+        r = curvefly(ripple = -0.05)
+        tel = r.w.env[:telemetry]
+        for kk in ("m1.radome_ripple", "m1.radome_slope_local", "m1.radome_slope_az",
+                   "m1.radome_residual_local")
+            @test haskey(tel, kk) && isfinite(Float64(tel[kk]))
+        end
+        # ⚠ SLICE 26/27's KEYS KEEP THEIR MEANINGS — `radome_slope` is still the BORESIGHT slope
+        # and `radome_residual` is still `R₀ − R̂`, so a 26/27 wire reads the numbers it always did.
+        # The look-angle quantities are ADDED beside them, never substituted into them.
+        @test Float64(tel["m1.radome_slope"]) ≈ -0.03 atol = 1e-15
+        @test Float64(tel["m1.radome_residual"]) ≈ 0.0 atol = 1e-15
+        # the local slope must lie inside the curve's BOUNDS [R₀, R₀+2A] (frames.jl guarantees it)
+        @test -0.13 - 1e-9 ≤ Float64(tel["m1.radome_slope_local"]) ≤ -0.03 + 1e-9
+        # a no-ripple wire ships NONE of them (the never-stale discipline; 26/27 byte-identical)
+        tel0 = curvefly(ripple = nothing).w.env[:telemetry]
+        @test haskey(tel0, "m1.radome_eps")                    # …the radome IS live
+        for kk in ("m1.radome_ripple", "m1.radome_slope_local", "m1.radome_slope_az",
+                   "m1.radome_residual_local")
+            @test !haskey(tel0, kk)
+        end
+    end
+
+    @testset "an absurd ripple never crashes a tick (live-slider guard, convention 5/6)" begin
+        # A declared knob must be crash-safe over ANY value a slider can produce, and `k` must be
+        # floored at the consumer as well as validated at load (`ripple/k` at k = 0 divides).
+        for (A, kk) in ((-1.0e6, 12.0), (1.0e6, 12.0), (-0.05, 1.0e-12), (-0.05, 1.0e6), (0.0, 12.0))
+            r = curvefly(T = 2.0, ripple = A, k = kk)
+            for (_, v) in r.w.env[:telemetry]
+                v isa Real && @test isfinite(Float64(v))
+            end
+        end
+    end
+
+    @testset "loader: the ripple is PRESENCE-gated (a slice-27 wire cannot grow one)" begin
+        base = joinpath(@__DIR__, "..", "..", "scenarios")
+        scn27 = load_scenario(joinpath(base, "slice27_radome_comp.yaml"))
+        m27 = first(e for (_, e) in scn27.world.entities if e.kind === :missile)
+        @test !haskey(m27.comp, :radome_ripple)
+        @test !haskey(m27.comp, :radome_ripple_k)
+    end
+end

@@ -397,6 +397,40 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                     error("missile '$id': seeker.radome_slope_est must be finite " *
                           "(got $(comp[:radome_slope_est]))")
             end
+            # Slice 28 — THE SLOPE RIPPLE, which turns slice 26's constant `R` into a CURVE
+            # `R(look) = radome_slope + radome_ripple·(1 − cos(k·look))`. Presence-gated on
+            # `radome_ripple` for the same convention-2 reason as the two keys above: only a YAML
+            # that AUTHORS it mints the key, so every slice-11/13/25/26/27 wire stays byte-identical
+            # and `_observe_point3d!` calls slice 26's `radome_error` VERBATIM without it.
+            # ⚠ `radome_ripple` IS THE KNOB; `radome_ripple_k` IS AUTHORED AND NOT A KNOB — the
+            # metric is NON-MONOTONE in `k` (quiet / rings / rings / marginal / quiet / rings at
+            # k = 4/6/8.2/12/16/24 at held amplitude), because `k` decides WHERE ON THE WIGGLE the
+            # engagement's operating look angle lands. Declaring it a slider would hand a student a
+            # lever whose direction reverses ([[ewsim-df-ellipse-sigma-monotonicity]], 4th
+            # occurrence; `docs/plans/slice28.md` §8).
+            # Amplitude validated FINITE only (its SIGN matters and every magnitude is crash-safe —
+            # the slope is BOUNDED to [R₀, R₀+2A] by construction, which is why this form ships and
+            # a cubic does not). `k` validated FINITE AND > 0 at LOAD, and floored again at the
+            # consumer (convention 5's two guard sites: `ripple/k` at k = 0 is a real crash path).
+            # INERT without `radome_slope`… no — ⚠ NOT inert: `radome_slope` DEFAULTS to nothing,
+            # so a ripple authored without it never reaches the seam, because `_rad_on` gates on
+            # `radome_slope`. That is deliberate: a ripple ABOUT no boresight slope is a radome, and
+            # a radome is authored by its slope key. Refused as a LOAD ERROR rather than silently
+            # ignored (the slice-21 "refused, not branch-ordered" precedent).
+            if haskey(sb, "radome_ripple")
+                haskey(sb, "radome_slope") ||
+                    error("missile '$id': seeker.radome_ripple authored without " *
+                          "seeker.radome_slope — the ripple is a variation OF a boresight slope, " *
+                          "and without it the radome is not wired at all (slice 28)")
+                comp[:radome_ripple] = _f64(sb["radome_ripple"])
+                isfinite(comp[:radome_ripple]) ||
+                    error("missile '$id': seeker.radome_ripple must be finite " *
+                          "(got $(comp[:radome_ripple]))")
+                comp[:radome_ripple_k] = _f64(get(sb, "radome_ripple_k", 12.0))
+                (isfinite(comp[:radome_ripple_k]) && comp[:radome_ripple_k] > 0) ||
+                    error("missile '$id': seeker.radome_ripple_k must be finite and > 0 " *
+                          "(got $(comp[:radome_ripple_k]))")
+            end
             # Slice 13: the `:scan` seeker (fidelity `seeker: scan`) forms a NOISY angular-power
             # PROFILE over a FIXED grid (the slice-3 CFAR sandbox on the LOS-ANGLE axis) instead of
             # ONE noisy truth bearing. The grid/beam/CFAR/gate config lands here (STATIC — draw-count/

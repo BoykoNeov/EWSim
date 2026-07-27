@@ -1563,12 +1563,38 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     if _rad_on
         R_rad = Float64(c[:radome_slope])
         look_az, look_el = look_angles(c[:att_q]::Quat, û_tru)
-        ε_az, ε_el = radome_error(R_rad, look_az, look_el)
+        # SLICE 28 — THE SLOPE CURVE. Slices 26/27 both assumed the glass has ONE slope; a real
+        # radome's error slope is a CURVE in look angle, because the ray passes through different
+        # glass at different look angles. `R(look) = R₀ + A·(1−cos(k·look))` (frames.jl
+        # `radome_slope_curve`), and the bend is its EXACT integral — so the parasitic loop, which
+        # is driven by `dε/dlook`, is closed by the curve's LOCAL DERIVATIVE at the look angle the
+        # missile is actually flying. ⭐ And WHICH look angle that is belongs to the ENGAGEMENT,
+        # not to the radome: a static target's collision course carries zero lead and settles the
+        # seeker onto boresight (MEASURED at 0.04–0.54° on slices 23–27's wire — this key would be
+        # a DEAD KNOB there), while a crossing target holds a sustained lead of 15–30°.
+        # See `docs/plans/slice28.md`.
+        #
+        # ⚠ STRUCTURAL BYTE-IDENTITY, the slice-20/21/26/27 shape, THIRD nesting level here: the
+        # else-arm calls `radome_error` VERBATIM. Never the curve kernel at amplitude 0 — `x + 0.0`
+        # is not the identity at `x = −0.0` and float addition is not associative, so a no-ripple
+        # wire is bit-for-bit slice 26/27 BY CONSTRUCTION rather than by a zero that cancels. (The
+        # kernels' own reduction IS pinned bit-for-bit in `test_frames.jl` — that exactness is the
+        # knob-vs-rung argument, atmosphere.jl's discriminator; it is not the seam's mechanism.)
+        _ripple_on = haskey(c, :radome_ripple)
+        if _ripple_on
+            A_rip = Float64(c[:radome_ripple])
+            k_rip = Float64(get(c, :radome_ripple_k, 12.0))
+            ε_az, ε_el = radome_error_curve(R_rad, A_rip, k_rip, look_az, look_el)
+        else
+            A_rip = 0.0; k_rip = 0.0
+            ε_az, ε_el = radome_error(R_rad, look_az, look_el)
+        end
         az_m = az_tru + ε_az + σ * n_az
         el_m = el_tru + ε_el + σ * n_el
         λ_m  = λ_tru  + ε_el + σ * n_el     # ONE physical bend of ONE measurement — both trackers see it
     else
         R_rad = 0.0; look_az = 0.0; look_el = 0.0; ε_az = 0.0; ε_el = 0.0
+        _ripple_on = false; A_rip = 0.0; k_rip = 0.0
         az_m = az_tru + σ * n_az            # ── slice-25 VERBATIM below ──
         el_m = el_tru + σ * n_el
         λ_m  = λ_tru  + σ * n_el
@@ -1700,6 +1726,23 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         ω_t = los_rate(tgt.pos - e.pos, tgt.vel - e.vel)
         n_t = _norm3(ω_t)
         tel["$sid.omega_ratio"] = _finite(n_t > 1.0e-12 ? _norm3(ω) / n_t : FINITE_CEIL)
+        # SLICE 28 — the SLOPE-CURVE readouts, shipped ONLY while the ripple is authored (the
+        # never-stale discipline; a slice-26/27 wire is byte-identical). ⚠ NOTHING ABOVE IS
+        # REDEFINED: `radome_slope` still ships `R₀` and slice 27's `radome_residual` below still
+        # ships `R₀ − R̂`, so 26/27 wires read the same numbers they always did. The look-angle
+        # quantities are ADDED beside them.
+        if _ripple_on
+            tel["$sid.radome_ripple"] = _finite_coord(A_rip)               # the live knob value A
+            # ⭐ THE QUANTITY THE LESSON IS ABOUT: the LOCAL slope where the seeker is looking.
+            # Shipped as a NUMBER so the client never evaluates the curve (convention 13 — physics
+            # in GDScript is the forbidden move; the slice-21 `rho_air` precedent).
+            tel["$sid.radome_slope_local"] = _finite_coord(
+                radome_slope_curve(R_rad, A_rip, k_rip, hypot(look_az, look_el)))
+            # the AZIMUTH channel's own operating point — the one the crossing lead angle moves,
+            # and the one that differs from the pitch channel's (slice 28's channel split)
+            tel["$sid.radome_slope_az"] = _finite_coord(
+                radome_slope_curve(R_rad, A_rip, k_rip, look_az))
+        end
     end
     # SLICE 27 — the COMPENSATOR readouts, shipped ONLY while the compensator is live (the
     # never-stale discipline; a slice-11/13/25/26 wire is byte-identical). All SCALARS.
@@ -1711,6 +1754,15 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # true slope is read from comp rather than from `R_rad` so this is correct even on a wire
         # that compensates for glass it does not have (residual = −R̂).
         tel["$sid.radome_residual"]  = _finite_coord(Float64(get(c, :radome_slope, 0.0)) - R̂_rad)
+        # SLICE 28 — ⭐ THE RESIDUAL THAT ACTUALLY CLOSES THE LOOP once the slope is a CURVE:
+        # `R(look) − R̂`, evaluated where the seeker is looking. On a slice-26/27 wire this key is
+        # ABSENT (no ripple authored) and `radome_residual` above is the whole story — which is
+        # exactly the point of slice 28: that key is a property of the HARDWARE, this one is a
+        # property of the ENGAGEMENT.
+        if _ripple_on
+            tel["$sid.radome_residual_local"] = _finite_coord(
+                radome_slope_curve(R_rad, A_rip, k_rip, hypot(look_az, look_el)) - R̂_rad)
+        end
         # The feed-forward the gyro actually contributed this tick, on the loop-closing axis — the
         # MECHANISM made visible beside `radome_eps`, which is the disease it is treating.
         tel["$sid.radome_ff_el"]     = _finite_coord(ėl_ff)                  # rad/s
