@@ -1390,11 +1390,28 @@ end
 # BY CONSTRUCTION (the slice-11 body is textually UNCHANGED below). `:scan` is introduce/remove-rejected
 # at `set_fidelity` (server.jl, the 4b guard), so this branch is only ever reached from a `:scan`-loaded
 # scenario — never toggled onto a live point-path replay.
+# SLICE-25 THREE-WAY DISPATCH — the PRECEDENCE is explicit, and the one ambiguous corner is refused
+# at LOAD, not ordered around (`_validate_missile`; the slice-21 "stall × ρ(z) is a LOAD ERROR"
+# precedent — `docs/plans/slice25.md` §1b). The TWO-ANGLE path is selected by the SCENARIO's host
+# marker `:seek_two_angle` (from the `seeker:` block), NEVER by the `:seeker_axes` fidelity: that is
+# precisely what makes introducing `:seeker_axes` live on a slice-11/13 wire INERT (P11) instead of a
+# 1→2 draw-topology flip that would desync replay. `:seeker` (the TRACKER: raw ↔ filtered) and
+# `:seeker_axes` (the DIMENSIONALITY) are ORTHOGONAL on the host.
+#
+#   no host marker            → `_observe_scan!` / `_observe_point!` exactly as before (slices 11/13
+#                               byte-identical — `_observe_point!` still runs `randn(w.rng)` as its
+#                               literal first statement)
+#   host marker + :raw/:filtered → `_observe_point3d!` (2 draws, both rungs)
+#   host marker + :scan       → UNREACHABLE (refused at LOAD)
 function observe!(s::Seeker, w::World)
     e = w.entities[s.id]
     c = e.comp
     rung = get(w.fidelity, :seeker, :filtered)
-    rung === :scan ? _observe_scan!(s, w, e, c) : _observe_point!(s, w, e, c, rung)
+    if get(c, :seek_two_angle, false) === true
+        _observe_point3d!(s, w, e, c, rung)
+    else
+        rung === :scan ? _observe_scan!(s, w, e, c) : _observe_point!(s, w, e, c, rung)
+    end
     return nothing
 end
 
@@ -1457,6 +1474,121 @@ function _observe_point!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung::
     tel["$sid.lambda_dot_filt"] = _finite_coord(λ̇_est)         # α-β estimate (smooth — always available)
     tel["$sid.lambda_dot_used"] = _finite_coord(λ̇_used)        # the one PN actually consumed this tick
     tel["$sid.sigma_seek"]      = _finite(σ)
+    return nothing
+end
+
+# The slice-25 TWO-ANGLE seeker — the missile's sensor finally sees in 3-D (§11 Tier-A, the third
+# slice of the bank-to-turn / 3-D arc). Slice 23 gave the missile an airframe that can turn OUT of the
+# x–z plane and slice 24 made it choose HOW to point its lift; both were TRUTH-FED. This is the
+# SENSOR half, and it cashes the deferral slice 11 wrote into its own source (`_observe_point!` above:
+# "Scalar avoids the vector form's tangent-injection / cross-innovation-sign / renormalize bug
+# surface"). The seeker measures an azimuth/elevation PAIR, α-β tracks EACH, and rebuilds the LOS-rate
+# VECTOR `ω = û × û̇` (`los_rate_from_angles`, frames.jl — IDENTICALLY the quantity `los_rate`
+# computes from truth, which makes truth an EXACT oracle rather than a calibrated one).
+#
+# THE LESSON lives in the `:seeker_axes` rung, and the FOIL is the point: `:pitch_plane` runs slice
+# 11's SCALAR tracker on `λ = atan(Δz, Δx)` and rebuilds `ω = (0, −λ̇, 0)` — an LOS rate STRUCTURALLY
+# incapable of an out-of-plane component. Against a cross-range target the missile then flies straight
+# down the x–z plane and misses by the full offset, with `max|y| = 0.0` EXACTLY: the SAME signature as
+# slice 23's `:pitch_coupled` discard from a WHOLLY different cause (there the autopilot THREW the
+# command away; here it was never FORMED, because the measurement had no such component in it).
+#
+# ⚠ THE 2-DRAW LOCKSTEP (convention 3, and what makes the showcase button LEGAL): BOTH rungs draw
+# EXACTLY 2 `randn` — `:pitch_plane` takes `n_az` and DISCARDS it. Gate the VALUE, never the draw. Do
+# NOT "optimize away" the unused draw: without it the toggle is a 1↔2 draw-topology flip mid-replay
+# and `set_fidelity` would have to reject the very switch the button exists to make (the `:cfar` 4b
+# guard). Measured 2.0 draws/tick on both rungs (gate-0 P9) ⇒ class 4a within the 2-draw host.
+#
+# ⚠ BOTH TRACKERS ARE UPDATED EVERY TICK (the slice-11 raw+filtered precedent, one level up): the az/el
+# pair AND the scalar λ, so a live `:seeker_axes` toggle is BUMPLESS and the state evolution is
+# rung-INVARIANT — the rung selects only WHICH (ω, û) the phase-4 `decide!` consumes.
+#
+# ONE isotropic σ (`sigma_seek`) on both angles is a NAMED approximation (a real seeker's az/el
+# channels differ); `Vc` stays TRUTH, exactly as in slice 11 (§ scope: only the ANGLES are noisy).
+function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung::Symbol)
+    # CONVENTION 3 — the unconditional draws, FIRST, before any target/geometry/impact gate, and the
+    # SAME COUNT on both `:seeker_axes` rungs (the foil discards `n_az` below, it does not skip it).
+    n_az = randn(w.rng)
+    n_el = randn(w.rng)
+
+    tgt = _nearest_target(w, e)
+    tgt === nothing && return nothing        # no LOS to measure (load validates ≥1 target); draws taken
+
+    dt = Float64(get(c, :dt_s_seeker, 1.0e-3))
+    σ  = max(Float64(get(c, :sigma_seek, 3.0e-3)), 0.0)   # σ≥0 floor (a live slider can't go negative)
+    α  = Float64(get(c, :alpha, 0.30))                    # α-β gains (load-validated 0<α<1, β>0)
+    β  = Float64(get(c, :beta,  0.05))
+    axes = get(w.fidelity, :seeker_axes, :az_el)
+
+    # Truth angles and the noisy MEASUREMENTS. `az_el` (frames.jl) is the same convention the
+    # reconstruction inverts; `λ` is slice 11's in-plane bearing, measured with the ELEVATION sample
+    # (the in-plane bearing IS an elevation-like angle in x–z — the azimuth sample is the one the foil
+    # structurally cannot use). NOT wrapped here — only the innovation DIFFERENCES wrap.
+    û_tru        = los_unit(e.pos, tgt.pos)
+    az_tru, el_tru = az_el(û_tru)
+    λ_tru        = atan(û_tru[3], û_tru[1])
+    az_m = az_tru + σ * n_az
+    el_m = el_tru + σ * n_el
+    λ_m  = λ_tru  + σ * n_el
+
+    # Lazy first-tick init (the `_observe_point!` shape): seed every memory, all rates 0.
+    if !get(c, :seek_init, false)
+        c[:seek_az_prev]  = az_m; c[:seek_el_prev]  = el_m; c[:seek_lambda_prev]   = λ_m
+        c[:seek_az_est]   = az_m; c[:seek_el_est]   = el_m; c[:seek_lambda_est]    = λ_m
+        c[:seek_azdot_est] = 0.0; c[:seek_eldot_est] = 0.0; c[:seek_lambdadot_est] = 0.0
+        c[:seek_init]     = true
+        ȧz_raw = 0.0; ėl_raw = 0.0; λ̇_raw = 0.0
+        az_est = az_m; el_est = el_m; λ_est = λ_m
+        ȧz_est = 0.0; ėl_est = 0.0; λ̇_est = 0.0
+    else
+        # RAW foil rates: finite-difference consecutive noisy angles (amplifies σ by 1/dt).
+        ȧz_raw = wrap_angle(az_m - Float64(c[:seek_az_prev]))     / dt
+        ėl_raw = wrap_angle(el_m - Float64(c[:seek_el_prev]))     / dt
+        λ̇_raw  = wrap_angle(λ_m  - Float64(c[:seek_lambda_prev])) / dt
+        c[:seek_az_prev] = az_m; c[:seek_el_prev] = el_m; c[:seek_lambda_prev] = λ_m
+        # FILTERED: one α-β predict–correct step per angle — ALL THREE trackers every tick, both
+        # rungs (warm + rung-invariant state ⇒ a bumpless live toggle).
+        az_est, ȧz_est = alpha_beta_los_step(Float64(c[:seek_az_est]),
+                                             Float64(c[:seek_azdot_est]), az_m, dt; α = α, β = β)
+        el_est, ėl_est = alpha_beta_los_step(Float64(c[:seek_el_est]),
+                                             Float64(c[:seek_eldot_est]), el_m, dt; α = α, β = β)
+        λ_est,  λ̇_est  = alpha_beta_los_step(Float64(c[:seek_lambda_est]),
+                                             Float64(c[:seek_lambdadot_est]), λ_m, dt; α = α, β = β)
+        c[:seek_az_est] = az_est; c[:seek_azdot_est] = ȧz_est
+        c[:seek_el_est] = el_est; c[:seek_eldot_est] = ėl_est
+        c[:seek_lambda_est] = λ_est; c[:seek_lambdadot_est] = λ̇_est
+    end
+
+    # The rung selects WHICH (ω, û) PN consumes — the draw count is identical either way, and so is
+    # every tracker's state. `:seeker` picks the tracker within the chosen dimensionality (a
+    # CONSISTENT estimate source — the slice-11 FINDINGS decision f, now in two angles).
+    if axes === :az_el
+        azu, elu, ȧz, ėl = rung === :raw ? (az_m, el_m, ȧz_raw, ėl_raw) :
+                                           (az_est, el_est, ȧz_est, ėl_est)
+        ω = los_rate_from_angles(azu, elu, ȧz, ėl)
+        û = los_unit_from_angles(azu, elu)
+    else
+        λu, λ̇u = rung === :raw ? (λ_m, λ̇_raw) : (λ_est, λ̇_est)
+        ω = Vec3(0.0, -λ̇u, 0.0)                       # slice 11's reconstruction, VERBATIM in shape
+        û = Vec3(cos(λu), 0.0, sin(λu))
+    end
+    c[:seeker_omega] = ω
+    c[:seeker_los]   = û
+
+    # Telemetry — phase-3 `observe!` is POST-`empty!(w.env)`, so a direct write survives. All SCALARS
+    # (no Array → no `float()` crash in the client). Shipped ONLY on this path (the never-stale
+    # discipline), so slices 11/13 wires are byte-identical.
+    #
+    # `omega_oop` IS THE HEADLINE READOUT: the out-of-plane content of the LOS rate the seeker
+    # reports. Under `:pitch_plane` it is EXACTLY 0.0 by construction (ω ∥ ±ŷ) — the blindness made
+    # visible, one number, no client-side physics (convention 13).
+    tel = get!(() -> Dict{String,Any}(), w.env, :telemetry)
+    sid = String(s.id)
+    tel["$sid.az_dot_est"]  = _finite_coord(ȧz_est)             # α-β azimuth rate (the new axis)
+    tel["$sid.el_dot_est"]  = _finite_coord(ėl_est)             # α-β elevation rate
+    tel["$sid.omega_oop"]   = _finite(hypot(ω[1], ω[3]))        # ‖out-of-plane ω‖ — 0.0 on the foil
+    tel["$sid.omega_mag"]   = _finite(_norm3(ω))                # ‖ω‖ (the PN driver)
+    tel["$sid.sigma_seek"]  = _finite(σ)
     return nothing
 end
 

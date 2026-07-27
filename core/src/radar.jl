@@ -199,6 +199,14 @@ const EP_MODES = (:none, :freq_agility, :sidelobe_blanking)
 # `:guidance`/`:autopilot`/`:seeker` (slice-14 pins `guidance=:pn`, `autopilot=:ideal`, no seeker so the
 # ONE button toggles the ONE cooperation lesson). Referencing COOPERATION_MODES (not re-listing) is
 # one-list-no-drift.
+# `:seeker_axes` (slice-25 two-angle seeker; rungs `SEEKER_AXES_MODES` from estimation.jl) selects the
+# seeker's measurement DIMENSIONALITY — `:az_el` keeps the LOS rate's out-of-plane component, the foil
+# `:pitch_plane` discards it. Class 4a WITHIN a 2-draw host: BOTH rungs draw exactly 2 randn/tick (the
+# foil DISCARDS the azimuth sample — convention 3, "gate the value, never the draw"), so a live toggle
+# keeps the RNG in lockstep and needs NO `set_fidelity` guard, UNLIKE `:cfar`/`:scan`. The 2-draw
+# topology is gated on the SCENARIO's host marker (`:seek_two_angle`, from the `seeker:` block) and
+# NOT on this key, which is what makes INTRODUCING it on a slice-11/13 wire inert rather than a
+# replay-desyncing draw flip (the P11 invariant, pinned in `test_missile.jl`).
 # `:airframe` (slice-17 α→lift→γ coupling; rungs `AIRFRAME_MODES` from airframe.jl) is a NEW fidelity
 # KEY (contrast slice-15's `:fin`, a new RUNG of `:autopilot`) — also class 4c (physics-changing, no
 # RNG). `:point_mass↔:pitch_coupled` CHANGES the trajectory (α generates a body lift that bends the
@@ -214,6 +222,7 @@ const LIVE_FIDELITY_MODES = (propagation = PROPAGATION_MODES, cfar = CFAR_MODES,
                              multipath = GPS_TOGGLE, noise = GPS_TOGGLE, raim = RAIM_MODES,
                              integrator = INTEGRATOR_MODES, autopilot = AUTOPILOT_MODES,
                              guidance = GUIDANCE_MODES, seeker = SEEKER_MODES,
+                             seeker_axes = SEEKER_AXES_MODES,
                              discrimination = DISCRIMINATION_MODES,
                              cooperation = COOPERATION_MODES,
                              airframe = AIRFRAME_MODES,

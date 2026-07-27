@@ -348,6 +348,14 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                 error("missile '$id': seeker.alpha must be in (0,1) (got $(comp[:alpha]))")
             comp[:beta] > 0 ||
                 error("missile '$id': seeker.beta must be > 0 (got $(comp[:beta]))")
+            # Slice 25: `two_angle: true` makes this a TWO-ANGLE (az/el) seeker — the 2-draw host
+            # (`docs/plans/slice25.md` §1). The comp key is the HOST MARKER: `observe!` dispatches on
+            # it, NOT on the `:seeker_axes` fidelity, so introducing that fidelity live on a
+            # slice-11/13 wire cannot flip a draw count (the P11 inertness invariant; `test_missile.jl`
+            # pins it). Absent ⇒ the key is absent ⇒ slices 11/13 byte-identical. ONE isotropic σ
+            # (`sigma_seek`) is applied to BOTH angles — a NAMED approximation (a real seeker's az/el
+            # channels differ), and it keeps the showcase's single noise knob honest.
+            comp[:seek_two_angle] = get(sb, "two_angle", false) === true
             # Slice 13: the `:scan` seeker (fidelity `seeker: scan`) forms a NOISY angular-power
             # PROFILE over a FIXED grid (the slice-3 CFAR sandbox on the LOS-ANGLE axis) instead of
             # ONE noisy truth bearing. The grid/beam/CFAR/gate config lands here (STATIC — draw-count/
@@ -999,5 +1007,19 @@ function _validate_missile(world::World)
     # so a mis-authored guided missile fails as a clear load error, not a runtime no-target coast).
     (guided && n_target < 1) &&
         error("a guided missile scenario needs ≥ 1 :target to pursue (got $n_target)")
+    # Slice 25: the ONE meaningless corner of the `:seeker` × `:seeker_axes` product, REFUSED at LOAD
+    # rather than silently branch-ordered (the slice-21 "stall × ρ(z) is a LOAD ERROR" precedent —
+    # `docs/plans/slice25.md` §1b). The slice-13 `:scan` profile is built over ONE angular axis by
+    # construction (`angular_grid` on λ), so a two-angle host has nothing coherent to scan; az×el CFAR
+    # is a NAMED DEFERRAL. Without this, `observe!`'s three-way dispatch would silently pick a winner
+    # and a mis-authored scenario would RUN and teach the wrong thing.
+    if get(world.fidelity, :seeker, :filtered) === :scan
+        for (id, e) in world.entities
+            get(e.comp, :seek_two_angle, false) === true &&
+                error("missile '$id': seeker.two_angle is incompatible with fidelity seeker: scan — " *
+                      "the :scan angular profile is single-axis (λ) by construction; az×el CFAR is a " *
+                      "named deferral (docs/plans/slice25.md §1b)")
+        end
+    end
     return world
 end

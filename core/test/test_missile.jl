@@ -3761,3 +3761,172 @@ end
         end
     end
 end
+
+# --- slice 25 gate 2: the TWO-ANGLE seeker wired — the sensor half of the 3-D arc ----------------
+# Slice 23 gave the missile an airframe that can turn out of the x–z plane and slice 24 made it
+# choose HOW to point its lift — both TRUTH-FED. Here the SEEKER sees in 3-D: an az/el pair, α-β on
+# each, and `ω = û × û̇` (frames.jl). The FOIL `:pitch_plane` is slice 11's scalar tracker, whose ω is
+# structurally ∥ ±ŷ — so the cross-range command is never FORMED.
+#
+# The teeth: the 2-DRAW LOCKSTEP (what makes the button legal — both rungs draw 2, the foil DISCARDS
+# the azimuth sample); the foil's blindness pinned EXACTLY (`== 0.0`) and PAIRED with a does-see case
+# so it cannot pass by producing zero; the P11 INERTNESS invariant (introducing `:seeker_axes` on a
+# slice-11 wire is bit-identical — the guard against the slice-21 `_atm_on` / slice-23 `:att_q`
+# latent-bug class); and the LOAD refusal of the one ambiguous dispatch corner (§1b).
+#
+# The autopilot is `:ideal` ON PURPOSE: a fiat-accel plant CAN fly out of plane, so a foil miss here
+# is the SENSOR's, isolated from the airframe (the 6-DOF showcase is gate 3).
+@testset "guided missile — the TWO-ANGLE seeker wired (slice 25, :seeker_axes)" begin
+    dt = 1.0e-3
+
+    # A CROSS-RANGE target (off the x–z plane) — the geometry the in-plane seeker cannot see.
+    function seeker3d_world(; axes = :az_el, seeker = :filtered, seed = 25, sigma = 3.0e-4,
+                            two_angle = true, Y = 2000.0)
+        fid = Dict(:autopilot => :ideal, :guidance => :pn, :seeker => seeker)
+        axes === nothing || (fid[:seeker_axes] = axes)
+        w = World(seed = seed, fidelity = fid)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0, 0, 3000.0),
+            vel = Vec3(700cosd(12), 0.0, 700sind(12)),
+            comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.225,
+                :k_guid => 3.0, :n_pn => 4.0, :r_stop => 30.0,
+                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :a_max => 3000.0,
+                :sigma_seek => sigma, :alpha => 0.30, :beta => 0.05,
+                :seek_two_angle => two_angle))
+        w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(6000.0, Y, 4200.0),
+            vel = Vec3(0.0, 0.0, 0.0), comp = Dict{Symbol,Any}(:rcs_m2 => 1.0))
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1)]
+    end
+    function fly3d!(w, subs; n = 12000)
+        miss = Inf; maxy = 0.0; prev = Inf; opening = 0
+        for _ in 1:n
+            tick!(w, subs, dt); empty!(w.events)
+            r = w.env[:telemetry]["m1.los_range"]
+            miss = min(miss, r); maxy = max(maxy, abs(w.entities[:m1].pos[2]))
+            opening = r > prev ? opening + 1 : 0; prev = r
+            (opening ≥ 200 && r > miss + 50.0) && break
+        end
+        return (miss = miss, maxy = maxy)
+    end
+
+    @testset "the 2-DRAW LOCKSTEP — EXACTLY 2 randn/tick on BOTH rungs (convention 3)" begin
+        # The Seeker is the only w.rng consumer, so after N ticks w.rng must equal a fresh
+        # Xoshiro(seed) advanced by 2N draws. THIS is what makes the button live-toggleable: the
+        # foil DISCARDS n_az, it does not skip the draw. If someone "optimizes" that away, this fails.
+        for axes in (:az_el, :pitch_plane), N in (500, 3000)
+            w, subs = seeker3d_world(axes = axes, seed = 25)
+            for _ in 1:N; tick!(w, subs, dt); empty!(w.events); end
+            ref = Xoshiro(25); for _ in 1:(2N); randn(ref); end
+            @test randn(copy(ref)) == randn(copy(w.rng))
+        end
+        # …and a NON-two-angle host still draws exactly 1 (slice 11 untouched by the new dispatch)
+        w, subs = seeker3d_world(axes = nothing, two_angle = false, seed = 25)
+        for _ in 1:500; tick!(w, subs, dt); empty!(w.events); end
+        ref = Xoshiro(25); for _ in 1:500; randn(ref); end
+        @test randn(copy(ref)) == randn(copy(w.rng))
+    end
+
+    @testset "the FOIL's blindness is EXACT — and PAIRED with a does-see case" begin
+        wf, sf = seeker3d_world(axes = :pitch_plane)
+        for _ in 1:200; tick!(wf, sf, dt); empty!(wf.events); end
+        ωf = wf.entities[:m1].comp[:seeker_omega]
+        @test ωf[1] == 0.0 && ωf[3] == 0.0                     # ω ∥ ±ŷ, structurally
+        @test wf.env[:telemetry]["m1.omega_oop"] == 0.0        # the headline readout, EXACTLY zero
+        @test abs(ωf[2]) > 0.0                                 # it does estimate SOMETHING (teeth)
+        # PAIRED: the same geometry through the two-angle rung MUST produce out-of-plane ω
+        wa, sa = seeker3d_world(axes = :az_el)
+        for _ in 1:200; tick!(wa, sa, dt); empty!(wa.events); end
+        @test wa.env[:telemetry]["m1.omega_oop"] > 1.0e-6
+        @test abs(wa.entities[:m1].comp[:seeker_omega][3]) > 1.0e-6
+        # BOTH trackers kept warm on BOTH rungs (a bumpless live toggle — the slice-11 shape)
+        for c in (wf.entities[:m1].comp, wa.entities[:m1].comp)
+            for k in (:seek_az_est, :seek_azdot_est, :seek_el_est, :seek_eldot_est,
+                      :seek_lambda_est, :seek_lambdadot_est)
+                @test haskey(c, k)
+            end
+            @test c[:seek_azdot_est] != 0.0 && c[:seek_lambdadot_est] != 0.0
+        end
+    end
+
+    @testset "the rung is NOT a dead knob — the foil never leaves the x–z plane (max|y| == 0.0)" begin
+        ra = fly3d!(seeker3d_world(axes = :az_el)...)
+        rf = fly3d!(seeker3d_world(axes = :pitch_plane)...)
+        @test ra.maxy > 100.0                                  # the two-angle seeker TURNS
+        @test rf.maxy == 0.0                                   # the foil: EXACTLY in-plane, always
+        @test rf.miss > 1000.0                                 # ⇒ it misses by ≈ the cross-range Y
+        @test ra.miss < 50.0                                   # …while the two-angle arm closes
+        @test rf.miss / max(ra.miss, 1e-9) > 20.0              # decisive, not a nudge
+    end
+
+    @testset "P11 — introducing :seeker_axes on a NON-two-angle wire is INERT (the latent-bug guard)" begin
+        # The claim that lets `:seeker_axes` ship with NO set_fidelity guard: the 2-draw topology is
+        # gated on the SCENARIO's host marker, never on this key. This is the slice-21 `_atm_on` /
+        # slice-23 `:att_q` bug class — both were key-gated blocks firing where they should not.
+        function trace25(; introduce_at = -1, axes = :az_el, N = 2000)
+            w, subs = seeker3d_world(axes = nothing, two_angle = false, seed = 25)
+            out = Float64[]
+            for k in 1:N
+                k == introduce_at && (w.fidelity[:seeker_axes] = axes)
+                tick!(w, subs, dt); empty!(w.events)
+                k % 250 == 0 && append!(out, (w.entities[:m1].pos[1], w.entities[:m1].pos[2],
+                                              w.entities[:m1].pos[3], randn(copy(w.rng))))
+            end
+            out
+        end
+        base25 = trace25()
+        @test trace25(introduce_at = 500, axes = :az_el)       == base25   # bit-identical, incl. the
+        @test trace25(introduce_at = 500, axes = :pitch_plane) == base25   # next draw off w.rng
+    end
+
+    @testset "a huge σ_seek on the 3-D path never crashes a tick (live-slider guard, convention 5)" begin
+        w, subs = seeker3d_world(axes = :az_el, seeker = :raw, sigma = 5.0)
+        ok = true
+        for _ in 1:800
+            tick!(w, subs, dt); empty!(w.events)
+            tel = w.env[:telemetry]
+            ok &= all(isfinite, w.entities[:m1].pos) && all(isfinite, w.entities[:m1].comp[:a_ctrl]) &&
+                  isfinite(tel["m1.omega_oop"]) && isfinite(tel["m1.az_dot_est"]) &&
+                  isfinite(tel["m1.el_dot_est"]) && isfinite(tel["m1.omega_mag"])
+            ok || break
+        end
+        @test ok
+    end
+
+    @testset "loader: two_angle arms the host; :scan × two_angle is a LOAD ERROR (§1b precedence)" begin
+        base = """
+        name: sk3
+        seed: 25
+        dt_physics: 0.001
+        fidelity: {autopilot: ideal, guidance: pn, seeker: filtered, seeker_axes: az_el}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 700.0
+              elevation_deg: 12.0
+              cd_area_m2: 0.0
+              seeker: {sigma_seek: 0.0003, alpha: 0.3, beta: 0.05, two_angle: true}
+              guidance: {n_pn: 4.0, a_max: 3000.0}
+          - id: tgt1
+            kind: target
+            pos: [6000.0, 2000.0, 4200.0]
+            vel: [0.0, 0.0, 0.0]
+            target: {rcs_m2: 1.0}
+        """
+        mktempdir() do dir
+            p = joinpath(dir, "ok.yaml"); write(p, base)
+            scn = load_scenario(p)
+            @test scn.world.entities[:m1].comp[:seek_two_angle] === true
+            @test any(s -> s isa Seeker, scn.subs)
+            # the ONE ambiguous corner, refused at LOAD rather than silently branch-ordered
+            pb = joinpath(dir, "bad.yaml")
+            write(pb, replace(base, "seeker: filtered" => "seeker: scan"))
+            @test_throws ErrorException load_scenario(pb)
+            # …and a missile WITHOUT the marker leaves the key false (the slice-11 path)
+            p2 = joinpath(dir, "plain.yaml")
+            write(p2, replace(base, ", two_angle: true" => ""))
+            @test load_scenario(p2).world.entities[:m1].comp[:seek_two_angle] === false
+        end
+    end
+end
