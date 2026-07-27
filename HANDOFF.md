@@ -659,11 +659,29 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   MARGIN, not immunity**, and the design question stops being "how good is my radome?" and becomes
   "how well do I KNOW it?" — with a number (`0.38/(N·ρ)`). It is NOT an equivalent radome: a gyro
   can only cancel what a gyro can see, so the body-rate half of the bend goes exactly and the
-  LOS-driven half survives. The remaining deferrals from that thread: an IMPERFECT GYRO (noise /
+  LOS-driven half survives. ⚠ A FOURTH item is now **BUILT, not deferred**: the
+  **look-angle-dependent slope `R(look)`** landed as **slice 28**, and it moves the residual out of
+  the hardware and into the ENGAGEMENT. A radome's error slope is a CURVE, and slice 26's loop is
+  closed by its LOCAL DERIVATIVE at the look angle the missile is actually flying — which the target's
+  crossing geometry decides, not the radome. Against a static target the collision course carries zero
+  lead and the seeker settles onto boresight, where the curve is flat BY CONSTRUCTION (`R(0) = R₀` for
+  every amplitude); against a crossing one it holds a sustained ~15° lead and parks on steep glass. So
+  a compensator characterized at BORESIGHT — the natural place to characterize it — has a HARDWARE
+  residual of EXACTLY 0.000 **and the missile rings**, while the same glass goes quiet once `R̂` is set
+  to the slope the engagement actually flies. **"Know your slope" sharpens into "know your slope CURVE
+  over the look-angle BAND the engagement visits"**, and the licensing fact is that the loop tracks
+  `dε/dlook` rather than `ε`: a radome inside its boresight-ERROR spec everywhere can still ring
+  (matched-secant quiet, matched-derivative ringing, same bend at the operating point). ⚠ It also
+  measured that **slice 26/27's `≈ 0.38` is NOT geometry-free** (`≈ 0.52` on a crossing wire, with no
+  curve involved) — the FORM of the law transfers, not the constant. The remaining deferrals from that
+  thread: **LOOK-ANGLE-SCHEDULED `R̂(look)`** (the engineering answer to slice 28 exactly as 27 was to
+  26; its single-point version is already measured), an IMPERFECT GYRO (noise /
   bias / scale-factor, the cheapest successor — a scale-factor error lands back on the residual),
   ESTIMATING `R̂` IN FLIGHT (blocked on slice 26's non-identifiability in closed loop), the
-  ANGLE-DOMAIN corrector as its own A/B, a look-angle-dependent `R(look)`, a seeker FOV/gimbal
-  limit, and the aero+inertial cross-coupling / departure of a real BTT airframe.
+  ANGLE-DOMAIN corrector as its own A/B, a 2-D slope `R(look_az, look_el)` or an ASYMMETRIC error
+  curve (slice 28 ships one ODD scalar curve per axis — a symmetric radome), a seeker FOV/gimbal
+  limit (now the sharpest of these, since slice 28 makes the look angle the quantity the whole lesson
+  turns on), and the aero+inertial cross-coupling / departure of a real BTT airframe.
   See `docs/STATUS.md`.
 - **Sibling domains that reuse the shared libs.** IR/EO seekers and IRST (add an IR
   environment channel to `env`, reuse `frames.jl`/`estimation.jl`); communications EW —

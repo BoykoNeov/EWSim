@@ -4672,6 +4672,43 @@ end
         @test curve.rms_q < 0.5 * curve.rms_r
     end
 
+    @testset "⭐ THE LOOP TRACKS THE DERIVATIVE, NOT THE BEND — what LICENSES the slice" begin
+        # A slope CURVE is more than a re-parameterization of slice 26's constant only if the loop
+        # is driven by the LOCAL DERIVATIVE `dε/dlook` rather than by the BEND `ε` itself. Under
+        # slice 26's LINEAR model those are the same number, which is exactly why 26 could not tell
+        # them apart. Here they are not: at the operating look angle the shipped curve's DERIVATIVE
+        # is −0.10 while its SECANT `ε(L)/L` is −0.05, a factor of two apart.
+        #
+        # ⚠ THIS TRIO IS MEASURED OFF THE SHIPPED WIRE, DELIBERATELY (R₀ = 0 instead of −0.03), AND
+        # THE REASON IS A TRAP THAT SPOILED TWO GATE-0 RUNS: the A/B is only an A/B if the SECANT
+        # arm lands INSIDE critical. On the shipped wire the secant is ≈ −0.079, already past
+        # |R_crit| ≈ 0.065 for this geometry, so BOTH linear arms would ring and the comparison
+        # would prove nothing. R₀ = 0 puts the secant at −0.05 (safe) and the derivative at −0.10
+        # (well past). ⚠ AND IT IS NOT CLIENT-DRIVABLE — `radome_slope` is not a slice-28 knob — so
+        # it lives here rather than in `slice28_verify.gd` (the slice-27 precedent: its α_max
+        # isolation lives in this file because α_max is deliberately not a knob).
+        #
+        # ⭐ THE PAYLOAD: a radome INSIDE ITS BORESIGHT-ERROR SPEC EVERYWHERE can still ring, because
+        # specs are written on `ε` and stability is written on `dε/dlook`.
+        L = deg2rad(15.5)                     # the MEASURED median look angle on these arms
+        # "matched" is a MEASUREMENT of the shipped kernels, not an assertion about them
+        @test radome_slope_curve(0.0, -0.05, 12.0, L) ≈ -0.10 atol = 0.01           # the DERIVATIVE
+        @test radome_error_curve(0.0, -0.05, 12.0, L, 0.0)[1] / L ≈ -0.05 atol = 0.01  # the SECANT
+        rip = curvefly(radome =  0.0,  ripple = -0.05,   slope_est = 0.0)
+        sec = curvefly(radome = -0.05, ripple = nothing, slope_est = 0.0)
+        der = curvefly(radome = -0.10, ripple = nothing, slope_est = 0.0)
+        @test rip.rms_r > 0.5                 # the CURVE rings
+        @test sec.rms_r < 0.10                # a constant matched to its BEND is quiet
+        @test der.rms_r > 0.5                 # a constant matched to its SLOPE rings
+        @test rip.rms_r > 8 * sec.rms_r       # same bend at the operating point, opposite behaviour
+        # ⭐ AND THE CHANNEL SPLIT FALLS OUT OF THE SAME TRIPLE, which is what makes it evidence
+        # rather than an observation: a CONSTANT slope gives both channels ONE gain and rings them
+        # TOGETHER (measured 0.844 pitch against 0.838 yaw), while the curve puts the two channels at
+        # two different points on the same glass and rings only the one with the lead angle.
+        @test der.rms_q > 0.5 * der.rms_r
+        @test rip.rms_q < 0.25 * rip.rms_r
+    end
+
     @testset "⭐⭐ THE ISOLATION — non-monotone in the GEOMETRY, with the control flat" begin
         # ⚠ THE CONFOUND THIS DEFEATS IS REAL AND WAS MEASURED: a crossing engagement moves the
         # stability boundary ON ITS OWN (constant-R onset |R_crit| ≈ 0.065 crossing vs ≈ 0.05

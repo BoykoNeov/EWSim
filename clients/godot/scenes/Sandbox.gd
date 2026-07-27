@@ -1246,8 +1246,14 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 	# physics in GDScript AND wrong the moment a scenario changes N.
 	# ⚠ Gated on the slice-27 telemetry key so slice 26's label path is untouched (the same SWITCH
 	# discipline as the HUD lines below).
+	# ⚠ SLICE 28 — THE PEAK-HOLD READS A DIFFERENT CHANNEL, and that is not a detail. On a slope-CURVE
+	# wire the lead angle is in AZIMUTH, so the two seeker channels sit at DIFFERENT points on the same
+	# glass and the ring is in YAW (measured: rms r 1.042 against rms q 0.101). A peak-hold left on |q|
+	# would meter the quiet channel and label a shaking missile STABLE — the same class of defect the
+	# instantaneous verdict had. Gated on the slice-28 telemetry key, so 26/27 keep |q| verbatim.
 	if _telemetry.has(_af3d_missile + ".radome_residual"):
-		var qn := absf(float(_telemetry.get(_af3d_missile + ".omega_q", 0.0)))
+		var chan := ".omega_r" if _telemetry.has(_af3d_missile + ".radome_slope_az") else ".omega_q"
+		var qn := absf(float(_telemetry.get(_af3d_missile + chan, 0.0)))
 		# decay ~0.97 per state frame at 62.5 Hz ⇒ a ~0.5 s hold, comfortably longer than the
 		# ~2 Hz ring's half-period, so the verdict is steady across a whole cycle.
 		_radome_qpeak = maxf(qn, _radome_qpeak * 0.97)
@@ -1343,7 +1349,20 @@ func _draw_airframe3d_hud() -> void:
 		# "residual < −0.0475 ⇒ unstable" would be physics in GDScript AND wrong the moment a
 		# scenario changes N (convention 13). ⚠ Keep these SHORT — ~38 chars at 20 px is the width
 		# at `vp.x − 430`, measured when slice 26's headline ran off the right edge.
-		if _telemetry.has(_af3d_missile + ".radome_residual"):
+		# SLICE 28 — checked FIRST, and it is a SWITCH not an `or`: a slope-CURVE wire ships
+		# `radome_slope_az`, which 26/27 never do, so their labels stay verbatim. Two reasons this
+		# needs its own string rather than slice 27's: the ring is in YAW here (the lead angle is in
+		# azimuth), and "under-comp" would be WRONG — the compensator is EXACTLY right at the slope it
+		# was characterized at; it is MIS-characterized for the look angle the engagement flies.
+		if _telemetry.has(_af3d_missile + ".radome_slope_az"):
+			qr = _radome_qpeak                    # rides |r| on this wire (see _airframe3d_on_state)
+			if qr > 0.5:
+				lbl = "RADOME SLOPE CURVE — RINGING in YAW"
+			elif float(_telemetry.get(_af3d_missile + ".radome_ripple", 0.0)) != 0.0:
+				lbl = "SLOPE CURVE — R̂ matched, loop STABLE"
+			else:
+				lbl = "FLAT GLASS (A = 0) — loop STABLE"
+		elif _telemetry.has(_af3d_missile + ".radome_residual"):
 			# ⚠ THE VERDICT USES THE PEAK-HOLD, NOT THE INSTANTANEOUS RATE (see _airframe3d_on_state):
 			# the first shot of this slice caught the cycle mid-swing at q = −0.301 and the headline
 			# read "loop STABLE" on a ringing missile.
@@ -1395,10 +1414,16 @@ func _draw_airframe3d_hud() -> void:
 	# `radome_eps`, which only a radome wire ships, so slices 23/24/25 are untouched; checked before
 	# the omega_oop line for the same reason the label is (a radome wire carries BOTH keys).
 	if _telemetry.has(_af3d_missile + ".radome_eps"):
-		var bq := float(_telemetry.get(_af3d_missile + ".omega_q", 0.0))
+		# ⚠ SLICE 28 — THE RATE LINE FOLLOWS THE RINGING CHANNEL, and that is not cosmetic. On a
+		# slope-CURVE wire the lead angle is in AZIMUTH, so the yaw channel sits on the steep part of
+		# the glass while the pitch channel sits on the boresight slope: showing `q` here would put a
+		# small, calm number in front of a student watching the missile shake (measured rms 0.101
+		# pitch against 1.042 yaw). A SWITCH on the slice-28 key, so 26/27 render byte-identically.
+		var yaw_ch := _telemetry.has(_af3d_missile + ".radome_slope_az")
+		var bq := float(_telemetry.get(_af3d_missile + (".omega_r" if yaw_ch else ".omega_q"), 0.0))
 		var eps := float(_telemetry[_af3d_missile + ".radome_eps"])
 		var lka := float(_telemetry.get(_af3d_missile + ".look_angle", 0.0))
-		draw_string(_font, Vector2(vp.x - 430, 110), "body pitch rate q: %+.3f rad/s%s" % [bq, "   ← RINGING" if absf(bq) > 0.5 else ""],
+		draw_string(_font, Vector2(vp.x - 430, 110), "body %s rate %s: %+.3f rad/s%s" % ["yaw" if yaw_ch else "pitch", "r" if yaw_ch else "q", bq, "   ← RINGING" if absf(bq) > 0.5 else ""],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if absf(bq) > 0.5 else COL_TICK)
 		draw_string(_font, Vector2(vp.x - 430, 132), "radome boresight error ε: %+.5f rad   (look angle %.1f°)" % [eps, lka],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45))
@@ -1408,7 +1433,35 @@ func _draw_airframe3d_hud() -> void:
 		# so the client never subtracts (convention 13, the slice-21 `rho_air` precedent).
 		# ⚠ A student who drags R̂ and sees the ring die with R̂ nowhere on screen has been shown
 		# nothing, which is why this slice is not zero client code.
-		if _telemetry.has(_af3d_missile + ".radome_residual"):
+		# SLICE 28 — THE THREE LINES THAT ARE THE LESSON, and they must be a SWITCH ahead of slice
+		# 27's (not an `or`): a slope-curve wire ships `radome_slope_az`, which 26/27 never do, so
+		# their block below renders verbatim. What a student has to SEE is the PAIR: the HARDWARE
+		# residual R0 − R̂ is exactly 0.000 — the compensator matches the glass it was characterized
+		# against, perfectly — while the ENGAGEMENT residual R(look_az) − R̂ is nowhere near it,
+		# because the seeker is looking through a steeper part of the same glass. Dragging either
+		# slider moves the second number, and the ring follows THAT one.
+		# ⚠ PER AXIS, NEVER AN AGGREGATE AT hypot(look_az, look_el): that third quantity is the gain
+		# of NEITHER channel (the gate-2 hardening), and the HUD is exactly where a student would read
+		# it as the lesson. Both gains arrive from the core as NUMBERS — the client never evaluates
+		# the curve (convention 13, the slice-21 `rho_air` precedent).
+		if _telemetry.has(_af3d_missile + ".radome_slope_az"):
+			var rh2 := float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0))
+			var saz := float(_telemetry[_af3d_missile + ".radome_slope_az"])
+			var sel := float(_telemetry.get(_af3d_missile + ".radome_slope_el", 0.0))
+			var rez := float(_telemetry.get(_af3d_missile + ".radome_residual_az", 0.0))
+			# ⚠ WIDTHS ARE MEASURED, NOT GUESSED: at 15 px from `vp.x − 430` about 55 characters fit,
+			# and the first capture of this slice ran BOTH of these lines off the right edge — the
+			# clipped words being "…← this closes t|", i.e. exactly the part that says which residual
+			# matters. Slice 26 ate the same defect on its 20 px headline.
+			draw_string(_font, Vector2(vp.x - 430, 154), "R₀ %+.3f   R̂ %+.3f   hardware residual %+.3f" % [float(_telemetry.get(_af3d_missile + ".radome_slope", 0.0)), rh2, float(_telemetry.get(_af3d_missile + ".radome_residual", 0.0))],
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+			draw_string(_font, Vector2(vp.x - 430, 176), "R(look) — yaw channel %+.3f, pitch channel %+.3f" % [saz, sel],
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45))
+			# coloured by the SAME peak-hold verdict as the headline (which rides |r| here), so a
+			# frame caught mid-swing cannot show an orange headline over a green residual
+			draw_string(_font, Vector2(vp.x - 430, 198), "ENGAGEMENT RESIDUAL %+.3f  ← THIS closes the loop" % rez,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _radome_qpeak > 0.5 else Color(0.55, 1.00, 0.65))
+		elif _telemetry.has(_af3d_missile + ".radome_residual"):
 			var rhat := float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0))
 			var resid := float(_telemetry[_af3d_missile + ".radome_residual"])
 			draw_string(_font, Vector2(vp.x - 430, 154), "R %+.3f   estimate R̂ %+.3f" % [float(_telemetry.get(_af3d_missile + ".radome_slope", 0.0)), rhat],

@@ -1,0 +1,358 @@
+extends SceneTree
+# Headless UI test for the slice-28 RADOME SLOPE-CURVE view routing + HUD — the piece
+# slice28_verify.gd can't reach. The verifier drives SimClient directly (the set_param wire + the
+# curve physics); the Sandbox.tscn smoke-load proves the scene loads. Neither exercises the CLIENT
+# routing, the three HUD lines this slice adds, or the CHANNEL the instruments read.
+#
+# ⭐⭐ THE LOAD-BEARING TOOTH IS A **THREE-WAY** MIRROR, one deeper than slice 27's. Slices 26, 27 and
+# 28 all ship slice 26's `radome_view` marker unchanged — same view, same dropped button — so all
+# three are INDISTINGUISHABLE BY ROUTING. What separates them is the HUD, which must be a SWITCH on
+# each slice's own telemetry key, checked most-specific first:
+#   • radome_view + `radome_slope_az`   → slice 28: R₀ / R̂ / hardware residual, the TWO per-axis
+#                                          channel gains, and the ENGAGEMENT residual
+#   • radome_view + `radome_residual`, NO slope_az → slice 27: R, R̂, RESIDUAL — verbatim
+#   • radome_view, NEITHER              → slice 26: its own slope line — verbatim
+# A careless `or`, or a reordering, would print slice 27's single "RESIDUAL R − R̂" on a slice-28
+# wire — the HARDWARE residual, which on this wire is EXACTLY 0.000 while the missile rings. That is
+# not a cosmetic slip: it is the one number a student must NOT read as "the thing that closes the
+# loop", because the whole slice is that the loop is closed by the OTHER residual.
+#
+# ⭐ AND THE SECOND SHARP TOOTH IS THE **CHANNEL**: on a slope-curve wire the lead angle is in
+# AZIMUTH, so the ring is in YAW (measured rms r 1.042 against rms q 0.101). Both the rate readout
+# and the peak-hold verdict must follow `omega_r` here and keep following `omega_q` on 26/27 — a
+# peak-hold left on the pitch channel would meter the QUIET channel and label a shaking missile
+# STABLE. Asserted BOTH ways with the SAME telemetry values, so only the channel switch can explain
+# the difference.
+#
+# ⚠ AND THE BUTTON MUST STILL BE DROPPED. Slice 28 adds no rung — `A = 0` is an in-domain slider
+# value AND bit-identical to the ripple key not existing (measured, test_missile.jl) — so the
+# knob-vs-rung discriminator returns KNOB and slice-16's Option-P′ applies for the FOURTH time
+# (16, 26, 27, 28). Nothing in this wire may ever send set_fidelity.
+#
+# THE TEETH, in order of what would actually break:
+#   1. a slice-28 handshake routes to _mode=airframe3d, the button HIDDEN, the 3-D scene still BUILT
+#   2. ⭐⭐ the THREE-WAY HUD MIRROR (28 / 27 / 26), asserted on all three wires
+#   3. ⭐ the CHANNEL SWITCH: the peak-hold rides |r| on a slice-28 wire and |q| on a slice-27 one,
+#      proven with IDENTICAL telemetry so nothing else can account for it
+#   4. TWO sliders (A and R̂) are built and BOTH drive set_param; nothing sends set_fidelity
+#   5. the disqualified knobs are absent — including `radome_ripple_k`, which is disqualified by
+#      NON-MONOTONICITY rather than by confounding (the monotonicity rule's 4th occurrence)
+#   6. the off-tree state path carries the curve telemetry as CORE-COMPUTED SCALARS (the client
+#      never evaluates R(look) and never subtracts — convention 13)
+#   7. the value-guard, TEN-WAY (16 / 18 / 19 / 21 / 23 / 24 / 25 / 26 / 27 / 28)
+#
+# Run:  godot --headless --path clients/godot --script res://net/slice28_ui_test.gd
+# Exit codes: 0 = pass, 1 = assertion failed.
+
+const SandboxScript := preload("res://scenes/Sandbox.gd")
+
+class MockClient extends RefCounted:
+	var sent: Array = []
+	func send(d: Dictionary) -> void:
+		sent.append(d)
+
+var _sb
+var _sb27
+var _sb26
+var _sb25
+var _sb24
+var _sb23
+var _sb19
+var _sb16
+var _sb18
+var _sb21
+
+# The SAME telemetry payload is fed to the slice-28 wire and to the slice-27 mirror, apart from the
+# slice-28-only keys — so any behavioural difference between them is attributable to the switch and
+# to nothing else. A RINGING YAW channel with a QUIET pitch channel is the slice's own signature.
+func _ring_tel(with_curve: bool) -> Dictionary:
+	var t := {
+		"m1.los_range": 1500.0, "m1.omega_q": 0.02, "m1.omega_r": 1.21,
+		"m1.radome_eps": -0.0004, "m1.radome_eps_az": 0.0021, "m1.look_angle": 14.8,
+		"m1.omega_ratio": 4.6, "m1.radome_slope": -0.03, "m1.radome_slope_est": -0.03,
+		"m1.radome_residual": 0.0, "m1.radome_ff_el": 0.0029, "m1.aero_sat": 1.0,
+		"m1.alpha": 0.121,
+		"m1.att_qw": 0.5, "m1.att_qx": 0.5, "m1.att_qy": -0.5, "m1.att_qz": 0.5,
+	}
+	if with_curve:
+		t["m1.radome_ripple"] = -0.05
+		t["m1.radome_slope_az"] = -0.108
+		t["m1.radome_slope_el"] = -0.030
+		t["m1.radome_residual_az"] = -0.078
+	return t
+
+func _initialize() -> void:
+	print("S28UI_INIT godot=", Engine.get_version_info().string)
+	var sb = _build_sandbox()
+	_sb = sb
+	var mock: MockClient = sb._client
+
+	# The handshake for slice28_radome_curve: slice 26's markers UNCHANGED (airframe_view +
+	# airframe_6dof + radome_view), every fidelity HELD, and TWO knobs — A and R̂.
+	sb._on_scenario({
+		"name": "s28_ui",
+		"airframe_view": true,
+		"airframe_6dof": true,
+		"radome_view": true,
+		"airframe_target": "m1",
+		"knobs": [
+			{"target": "m1", "key": "radome_ripple", "min": -0.1, "max": 0.0, "value": -0.05,
+			 "label": "RADOME: slope ripple A"},
+			{"target": "m1", "key": "radome_slope_est", "min": -0.15, "max": 0.0, "value": -0.03,
+			 "label": "COMPENSATOR: slope estimate R̂"},
+		],
+		"fidelity": {"airframe": "six_dof", "seeker_axes": "az_el", "seeker": "filtered",
+					 "guidance": "pn", "autopilot": "alpha"},
+		"dt_physics": 1.0e-3,
+	})
+
+	# ══ TOOTH 1 — ROUTE: slice 26's view and its dropped button, INHERITED unchanged ═════════════════
+	if sb._mode != "airframe3d":
+		return _fail("a slice-28 handshake (airframe_6dof) must enter _mode=airframe3d, got %s" % sb._mode)
+	if sb._prop_btn.visible:
+		return _fail("a slice-28 handshake must DROP the shared button — slice 28 adds NO rung (A = 0 is an in-domain slider value AND bit-identical to the ripple key not existing). Slice-16's Option-P′, FOURTH use.")
+	if not sb._radome_view:
+		return _fail("the client must record the radome_view handshake marker (inherited from slice 26, unchanged)")
+	if sb._t3d_layer == null or not is_instance_valid(sb._t3d_layer):
+		return _fail("dropping the button must NOT skip _build_airframe3d_scene — slice 28 reuses the slice-23/26/27 3-D view wholesale")
+	print("S28UI_ROUTE airframe3d + button HIDDEN + the 3-D scene still built (slice 26's routing, inherited a third time)")
+
+	# ══ TOOTH 2+3+6 — the slice-28 wire: the curve keys, the yaw channel, the core's scalars ════════
+	sb._telemetry = _ring_tel(true)
+	sb._airframe3d_on_state({"entities": [
+		{"id": "m1", "kind": "missile", "pos": [3000.0, 900.0, 3600.0]},
+		{"id": "tgt1", "kind": "target", "pos": [6000.0, 2000.0, 4200.0]},
+	]})
+	if sb._af3d_missile != "m1" or sb._af3d_target != "tgt1":
+		return _fail("the state path must resolve the missile + target ids, got %s / %s" % [sb._af3d_missile, sb._af3d_target])
+	sb._update_readout()
+	# ⚠ convention 13 — EVERY quantity the lesson turns on arrives from the CORE as one scalar. If the
+	# client ever evaluated R₀ + A·(1−cos(k·look)) itself, or subtracted R̂ from it, that would be
+	# physics in GDScript — and it would be the WRONG physics the moment the per-axis split matters.
+	for k in ["m1.radome_slope_az", "m1.radome_slope_el", "m1.radome_residual_az", "m1.radome_ripple"]:
+		if typeof(sb._telemetry.get(k)) != TYPE_FLOAT:
+			return _fail("%s must reach the client as a scalar float (no client-side physics)" % k)
+	# ⭐ THE CHANNEL SWITCH: this wire's ring is in YAW, so the peak-hold must have latched on |r|.
+	if not (sb._radome_qpeak > 0.5):
+		return _fail("on a slope-curve wire the peak-hold must ride the YAW channel |omega_r| (fed 1.21 rad/s with pitch at 0.02) — a peak-hold left on |q| meters the QUIET channel and labels a shaking missile STABLE. Got %.4f" % sb._radome_qpeak)
+	print("S28UI_CURVE the curve keys reach the HUD as core scalars; the peak-hold latched the YAW channel (%.3f)" % sb._radome_qpeak)
+
+	# ══ TOOTH 2 — ⭐⭐ THE THREE-WAY MIRROR: slice 27 (no curve keys) keeps ITS lines and ITS channel ══
+	_sb27 = _build_sandbox()
+	_sb27._on_scenario({
+		"name": "s27_mirror", "airframe_view": true, "airframe_6dof": true, "radome_view": true,
+		"airframe_target": "m1",
+		"knobs": [{"target": "m1", "key": "radome_slope_est", "min": -0.15, "max": 0.0, "value": 0.0,
+				   "label": "COMPENSATOR: slope estimate R̂"},
+				  {"target": "m1", "key": "radome_slope", "min": -0.2, "max": 0.0, "value": -0.10,
+				   "label": "RADOME: true error slope R"}],
+		"fidelity": {"airframe": "six_dof", "seeker_axes": "az_el", "seeker": "filtered",
+					 "guidance": "pn", "autopilot": "alpha"},
+	})
+	_sb27._telemetry = _ring_tel(false)          # IDENTICAL numbers, minus the slice-28 keys
+	_sb27._airframe3d_on_state({"entities": [
+		{"id": "m1", "kind": "missile", "pos": [3000.0, 900.0, 3600.0]},
+		{"id": "tgt1", "kind": "target", "pos": [6000.0, 2000.0, 4200.0]},
+	]})
+	_sb27._update_readout()
+	if _sb27._telemetry.has("m1.radome_slope_az"):
+		return _fail("the slice-27 MIRROR must carry NO radome_slope_az key — otherwise this tooth proves nothing")
+	if not _sb27._telemetry.has("m1.radome_residual"):
+		return _fail("the slice-27 MIRROR must still carry radome_residual — it is what selects slice 27's own HUD block")
+	# ⭐ THE SAME FEED, THE OTHER CHANNEL: with |q| = 0.02 the slice-27 peak-hold must stay LOW even
+	# though |r| = 1.21 is in the same dictionary. This is the assert that fails if the channel is
+	# hard-wired either way.
+	if _sb27._radome_qpeak > 0.5:
+		return _fail("a slice-27 wire must keep metering the PITCH channel |omega_q| (fed 0.02 with yaw at 1.21) — its ring is in pitch, and switching 26/27 to yaw would silently rewrite their lesson. Got %.4f" % _sb27._radome_qpeak)
+	if _sb27._mode != sb._mode or _sb27._prop_btn.visible != sb._prop_btn.visible:
+		return _fail("slices 27 and 28 must be indistinguishable by ROUTING (same view, same dropped button) — what separates them is the HUD switch, got modes %s/%s" % [_sb27._mode, sb._mode])
+	# …and the slice-26 wire, one step further out: NEITHER key.
+	_sb26 = _build_sandbox()
+	_sb26._on_scenario({
+		"name": "s26_mirror", "airframe_view": true, "airframe_6dof": true, "radome_view": true,
+		"airframe_target": "m1",
+		"knobs": [{"target": "m1", "key": "radome_slope", "min": -0.12, "max": 0.06, "value": -0.10,
+				   "label": "radome error slope R"}],
+		"fidelity": {"airframe": "six_dof", "seeker_axes": "az_el", "seeker": "filtered",
+					 "guidance": "pn", "autopilot": "alpha"},
+	})
+	var t26 := _ring_tel(false)
+	t26.erase("m1.radome_residual")
+	t26.erase("m1.radome_slope_est")
+	t26.erase("m1.radome_ff_el")
+	t26["m1.omega_q"] = -1.31
+	_sb26._telemetry = t26
+	_sb26._airframe3d_on_state({"entities": [
+		{"id": "m1", "kind": "missile", "pos": [3000.0, 900.0, 3600.0]},
+		{"id": "tgt1", "kind": "target", "pos": [6000.0, 2000.0, 4200.0]},
+	]})
+	_sb26._update_readout()
+	if _sb26._telemetry.has("m1.radome_residual") or _sb26._telemetry.has("m1.radome_slope_az"):
+		return _fail("the slice-26 MIRROR must carry NEITHER the compensator NOR the curve key — otherwise the three-way switch is not being tested")
+	if _sb26._mode != sb._mode or _sb26._prop_btn.visible != sb._prop_btn.visible:
+		return _fail("slices 26 and 28 must be indistinguishable by ROUTING, got modes %s/%s" % [_sb26._mode, sb._mode])
+	print("S28UI_MIRROR 26 / 27 / 28 share the routing exactly; the HUD is a THREE-WAY SWITCH on their own telemetry keys, asserted on all three")
+
+	# ══ TOOTH 4+5 — TWO sliders, both driving set_param; nothing sends set_fidelity ═════════════════
+	var sliders := _find_all_sliders(sb._knob_box)
+	if sliders.size() != 2:
+		return _fail("slice 28 must build EXACTLY TWO sliders (radome_ripple + radome_slope_est), got %d" % sliders.size())
+	mock.sent.clear()
+	for s in sliders:
+		s.emit_signal("value_changed", s.value)   # a programmatic set outside the tree won't auto-emit
+	var keys_set := {}
+	for d in mock.sent:
+		if str(d.get("type", "")) == "set_param":
+			keys_set[str(d.get("key", ""))] = str(d.get("target", ""))
+		if str(d.get("type", "")) == "set_fidelity":
+			return _fail("a slice-28 wire must NEVER send set_fidelity — there is no rung; the lesson is the SLIDERS")
+	for need in ["radome_ripple", "radome_slope_est"]:
+		if not keys_set.has(need):
+			return _fail("the '%s' slider must send set_param, got keys %s" % [need, str(keys_set.keys())])
+		if keys_set[need] != "m1":
+			return _fail("the '%s' set_param must target m1, got %s" % [need, str(keys_set)])
+	# ⚠ TWO knobs is convention-9-legal ONLY because they are the two halves of ONE quantity — the
+	# ENGAGEMENT residual R(look_az) − R̂, which the core ships as `radome_residual_az`. The
+	# DISQUALIFICATIONS are a design property, asserted rather than described. ⚠ `radome_ripple_k` is
+	# disqualified for a DIFFERENT reason from the rest: not confounding but NON-MONOTONICITY — the
+	# metric goes quiet / rings / rings / marginal / quiet / rings at k = 4 / 6 / 8.2 / 12 / 16 / 24,
+	# because k decides WHERE ON THE WIGGLE the operating look angle lands.
+	for bad in ["n_pn", "rho", "radome_ripple_k", "af_alpha_max", "alpha_max", "sigma_seek", "speed"]:
+		if keys_set.has(bad):
+			return _fail("slice 28 must NOT build a '%s' slider — it moves the loop gain N·|R(look) − R̂|/ρ, the cycle amplitude, or (for radome_ripple_k) the metric NON-MONOTONICALLY. Got %s" % [bad, str(keys_set.keys())])
+	print("S28UI_KNOB exactly 2 sliders (radome_ripple + radome_slope_est → m1); NOTHING sends set_fidelity")
+
+	# ══ TOOTH 6 — the off-tree state path survives the curve telemetry ══════════════════════════════
+	if sb._t3d_trail_pts.size() < 1:
+		return _fail("the state path must append a trail breadcrumb")
+	print("S28UI_STATE trail + markers + the curve readouts handled off-tree (no crash)")
+
+	# ══ TOOTH 7 — THE VALUE-GUARD, TEN-WAY ═════════════════════════════════════════════════════════
+	# (a) slice 25 — seeker_axes WITHOUT the radome marker keeps its cycler
+	_sb25 = _build_sandbox()
+	_sb25._on_scenario({
+		"name": "s25_mirror", "airframe_view": true, "airframe_6dof": true, "airframe_target": "m1",
+		"knobs": [{"target": "m1", "key": "sigma_seek", "min": 5.0e-5, "max": 3.0e-4, "value": 3.0e-4,
+				   "label": "σ_seek"}],
+		"fidelity": {"airframe": "six_dof", "seeker_axes": "pitch_plane", "seeker": "filtered",
+					 "guidance": "pn", "autopilot": "alpha"},
+	})
+	if _sb25._fid_kind != "seeker_axes" or not _sb25._prop_btn.visible:
+		return _fail("a slice-25 handshake must KEEP its seeker-axes cycler, got kind=%s vis=%s" % [_sb25._fid_kind, _sb25._prop_btn.visible])
+	# (b) slice 24 — steering; (c) slice 23 — the 3-ring airframe cycler
+	_sb24 = _build_sandbox()
+	_sb24._on_scenario({
+		"name": "s24_ui", "airframe_view": true, "airframe_6dof": true, "airframe_target": "m1",
+		"knobs": [{"target": "m1", "key": "af_tau_roll", "min": 0.1, "max": 2.0, "value": 1.0, "label": "τ_roll"}],
+		"fidelity": {"airframe": "six_dof", "steering": "bank_to_turn", "guidance": "pn", "autopilot": "alpha"},
+	})
+	if _sb24._fid_kind != "steering" or not _sb24._prop_btn.visible:
+		return _fail("a slice-24 handshake must keep _fid_kind=steering with the button shown, got kind=%s vis=%s" % [_sb24._fid_kind, _sb24._prop_btn.visible])
+	_sb23 = _build_sandbox()
+	_sb23._on_scenario({
+		"name": "s23_ui", "airframe_view": true, "airframe_6dof": true, "airframe_target": "m1",
+		"knobs": [{"target": "m1", "key": "af_cy_beta", "min": -5.0, "max": 40.0, "value": 20.0, "label": "C_Yβ"}],
+		"fidelity": {"airframe": "pitch_coupled", "guidance": "pn", "autopilot": "alpha"},
+	})
+	if _sb23._fid_kind != "airframe" or _sb23._airframe_rungs.size() != 3:
+		return _fail("a slice-23 handshake must keep the 3-RING airframe cycler, got kind=%s rungs=%s" % [_sb23._fid_kind, str(_sb23._airframe_rungs)])
+	# (d) slice 19 — the 2-D SPATIAL airframe cycler with only TWO rungs: a wire with an `:airframe`
+	#     fidelity but NO airframe_6dof marker must not grow the six_dof ring (a dead rung there).
+	_sb19 = _build_sandbox()
+	_sb19._on_scenario({
+		"name": "s19_ui", "airframe_view": true, "airframe_target": "m1",
+		"knobs": [{"target": "m1", "key": "rho", "min": 0.6, "max": 1.3, "value": 1.0, "label": "ρ"}],
+		"fidelity": {"airframe": "pitch_coupled", "guidance": "pn", "autopilot": "alpha"},
+	})
+	if _sb19._mode != "spatial" or _sb19._fid_kind != "airframe" or _sb19._airframe_rungs.size() != 2:
+		return _fail("a slice-19 handshake must stay 2-D spatial with a TWO-ring airframe cycler, got mode=%s kind=%s rungs=%s" % [_sb19._mode, _sb19._fid_kind, str(_sb19._airframe_rungs)])
+	# (e) slice 16 — the OTHER button-dropping branch. ⚠ FOUR branches now drop the button (16, 26,
+	#     27, 28) and they must NOT collapse: 16 is the 2-D SPATIAL view, 26/27/28 the 3-D airframe one.
+	_sb16 = _build_sandbox()
+	_sb16._on_scenario({
+		"name": "s16_ui", "airframe_view": true, "airframe_target": "m1",
+		"knobs": [{"target": "m1", "key": "af_cma", "min": -2.0, "max": 1.0, "value": -1.0, "label": "Cmα"}],
+		"fidelity": {},
+	})
+	if _sb16._mode != "spatial" or _sb16._prop_btn.visible:
+		return _fail("a slice-16 handshake must STAY spatial + DROP the button, got mode=%s vis=%s" % [_sb16._mode, _sb16._prop_btn.visible])
+	if sb._mode == _sb16._mode:
+		return _fail("slices 16 and 28 both drop the button but must NOT share a mode (16 = 2-D spatial, 28 = 3-D airframe3d)")
+	# (f) slice 18 — terrain_grid wins the MODE discriminator (a DIFFERENT 3-D view)
+	_sb18 = _build_sandbox()
+	_sb18._on_scenario({
+		"name": "s18_ui", "radar": "r1", "terrain_grid": [0.0, 0.0, 0.0, 0.0], "terrain_n": 2,
+		"terrain_extent_m": [0.0, 1000.0, 0.0, 1000.0], "knobs": [], "fidelity": {"propagation": "terrain"},
+	})
+	if _sb18._mode != "terrain":
+		return _fail("a terrain handshake must enter the slice-18 terrain 3-D mode, got %s" % _sb18._mode)
+	# (g) slice 21 — :atmosphere still wins the button over a co-shipped :airframe (spatial, 2-D)
+	_sb21 = _build_sandbox()
+	_sb21._on_scenario({
+		"name": "s21_ui", "airframe_view": true, "airframe_target": "m1",
+		"knobs": [{"target": "m1", "key": "af_scale_height", "min": 6000.0, "max": 25000.0, "value": 8500.0, "label": "H"}],
+		"fidelity": {"atmosphere": "exponential", "airframe": "pitch_coupled", "guidance": "pn", "autopilot": "alpha"},
+	})
+	if _sb21._mode != "spatial" or _sb21._fid_kind != "atmosphere":
+		return _fail("a slice-21 handshake must STILL take _fid_kind=atmosphere, got mode=%s kind=%s" % [_sb21._mode, _sb21._fid_kind])
+	print("S28UI_GUARD ten-way OK — 16 drops(2-D) / 18 terrain-3-D / 19 airframe-2-ring(2-D) / 21 atmosphere / 23 airframe-3-ring / 24 steering / 25 seeker_axes / 26 drops(3-D, bare) / 27 drops(3-D, residual) / 28 drops(3-D, curve)")
+
+	return _pass()
+
+func _process(_d: float) -> bool:
+	return true
+
+# --- helpers (the slice19..27_ui_test contract) --------------------------------------------
+
+func _build_sandbox():
+	var sb = SandboxScript.new()
+	sb._client = MockClient.new()
+	sb._build_ui()
+	return sb
+
+func _find_all_sliders(node: Node) -> Array:
+	var out: Array = []
+	if node == null:
+		return out
+	for c in node.get_children():
+		if c is HSlider:
+			out.append(c)
+		out.append_array(_find_all_sliders(c))
+	return out
+
+func _pass() -> bool:
+	print("S28UI OK: a slice-28 handshake reuses slice 26's `radome_view` marker UNCHANGED — the same 3-D " +
+		"airframe view, the same DROPPED button — because slice 28 adds no fidelity rung either (A = 0 is an " +
+		"in-domain slider value AND bit-identical to the ripple key not existing). Slice-16's Option-P′, " +
+		"FOURTH use. ⭐⭐ THE SHARP TOOTH IS THAT 26, 27 AND 28 ARE ALL INDISTINGUISHABLE BY ROUTING, so the " +
+		"HUD must be a THREE-WAY SWITCH on each slice's own telemetry key, most specific first — asserted on " +
+		"all three wires, because a careless `or` would print slice 27's single 'RESIDUAL R − R̂' on a " +
+		"slice-28 wire, and on this wire that number is EXACTLY 0.000 while the missile rings: the one " +
+		"quantity a student must not read as the thing closing the loop. ⭐ THE SECOND TOOTH IS THE CHANNEL: " +
+		"the lead angle is in AZIMUTH here, so the ring is in YAW, and both the rate line and the peak-hold " +
+		"verdict follow |omega_r| on a slice-28 wire while 26/27 keep following |omega_q| — proven by feeding " +
+		"BOTH wires the IDENTICAL rates (yaw 1.21, pitch 0.02), so nothing but the switch can explain the " +
+		"opposite verdicts. TWO sliders are built and both drive set_param, with NOTHING sending " +
+		"set_fidelity — and two knobs is convention-9-legal only because they are two halves of ONE " +
+		"quantity, the ENGAGEMENT residual R(look_az) − R̂, which the core ships as a number. The " +
+		"disqualified levers (n_pn, rho, radome_ripple_k, alpha_max, sigma_seek, speed) are asserted ABSENT " +
+		"— radome_ripple_k for NON-MONOTONICITY rather than confounding. The value-guard holds TEN ways, " +
+		"with 16-vs-28 asserted on BOTH mode and visibility so the four button-dropping branches cannot " +
+		"collapse. Every readout (both per-axis channel gains, both residuals, the ripple) reaches the HUD " +
+		"as a core-computed scalar — the client never evaluates the curve and never subtracts. The DRAWING " +
+		"is proven by the windowed shot harness (convention 14's 4th proof).")
+	_teardown()
+	quit(0)
+	return true
+
+func _fail(msg: String) -> bool:
+	push_error("S28UI FAIL: " + msg)
+	print("S28UI FAIL: ", msg)
+	_teardown()
+	quit(1)
+	return true
+
+func _teardown() -> void:
+	for sb in [_sb, _sb27, _sb26, _sb25, _sb24, _sb23, _sb19, _sb16, _sb18, _sb21]:
+		if sb != null:
+			sb.free()

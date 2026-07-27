@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–27 COMPLETE & green — 4545 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–27
+**Slices 1–28 COMPLETE & green — 5013 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–28
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
@@ -76,7 +76,14 @@ a stationary target — and slice 27 THE RADOME-SLOPE COMPENSATION AUTOPILOT, th
 as its own successor: the missile already carries a rate gyro, so feed slice 26's coupling forward with the slope
 you BELIEVE you have (`R̂`) and subtract it — and it cancels TO THE ACCURACY OF THAT BELIEF, so what closes the
 loop is the RESIDUAL `R − R̂` and slice 26's boundary returns VERBATIM as `N·|R − R̂|/ρ ≈ 0.38`. COMPENSATION BUYS
-MARGIN, NOT IMMUNITY: the design requirement stops being "a better radome" and becomes "a BETTER-KNOWN one".**
+MARGIN, NOT IMMUNITY: the design requirement stops being "a better radome" and becomes "a BETTER-KNOWN one" —
+and slice 28 `R(look)`: THE SLOPE CURVE, AND THE BAND THE ENGAGEMENT VISITS, which cashes the deferral BOTH 26
+and 27 named. 26 and 27 both assumed the glass has ONE slope; it does not, and the parasitic loop is closed by
+the curve's LOCAL DERIVATIVE at the look angle the missile is actually flying — which belongs to the ENGAGEMENT,
+not to the radome. Against a CROSSING target the seeker holds a sustained ~15° lead and parks on steep glass, so
+a compensator characterized at BORESIGHT is exactly right where the loop is never closed: the HARDWARE residual
+`R₀ − R̂` is EXACTLY 0.000 AND IT RINGS, because the ENGAGEMENT residual `R(look_az) − R̂` is −0.078. "Know your
+slope" sharpens into "KNOW YOUR SLOPE CURVE OVER THE BAND THE ENGAGEMENT VISITS".**
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
@@ -656,6 +663,48 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   — the same R̂ on worse glass RINGS AGAIN — and ⭐⭐ DIAGONAL; S27UI NINE-way guard + the slice-26 HUD mirror; smoke;
   TWO shots). Slices 1–26 byte-identical, proven ON THE WIRE (25/26 verifiers re-run to the digit). (4545)
 
+- **Slice 28 (§11 Tier-A, the 3-D arc's SIXTH slice) — `R(look)`: THE SLOPE CURVE, AND THE BAND THE ENGAGEMENT
+  VISITS.** Slices 26 and 27 both assumed the glass has ONE slope. It does not: a radome's error slope is a CURVE
+  in look angle, and slice 26's loop is closed by its **LOCAL DERIVATIVE at the look angle the missile is actually
+  flying** — which is set by the ENGAGEMENT, not by the radome. ⭐⭐ **THE WHOLE SLICE IS ONE PAIR OF NUMBERS THE
+  CORE SHIPS, and slice 27 could not have written it (it had one of the two keys, because it had one slope):** the
+  HARDWARE residual `radome_residual` = `R₀ − R̂` is **EXACTLY 0.000** — the compensator matches the glass it was
+  characterized against, perfectly — **and the missile RINGS**, because the ENGAGEMENT residual
+  `radome_residual_az` = `R(look_az) − R̂` runs −0.100…−0.052. Drag R̂ to −0.13 = R(15°) and the two numbers TRADE
+  PLACES (hardware +0.100, engagement 0.000) and it goes quiet ⇒ **the scalar that works is set by the ENGAGEMENT,
+  and characterizing at BORESIGHT is the natural AND DANGEROUS choice** (`R(0) = R₀` for every amplitude — exactly
+  right in the one place the loop is never closed). ⚠⚠ **THE WIRE CHANGES AND THE MEASUREMENT IS THE REASON** —
+  the FIRST slice of the arc to break the shared static Y=2000 geometry: a static target's collision course carries
+  ZERO LEAD (|look| 0.04°→0.54°, measured on a STABLE arm — a ringing arm's look angle swings BECAUSE it rings) so
+  `R(look)` would be a DEAD KNOB there; a CROSSING target (vy=200) holds a sustained ~15° lead. ⭐⭐ **THE ISOLATION
+  IS NON-MONOTONE IN THE GEOMETRY** (QUIET→RING→QUIET, rms r 0.016/1.042/0.011 at vy 0/200/400, with the no-ripple
+  CONTROL flat quiet throughout) — and it defeats a REAL confound: crossing moves the constant-R onset to
+  |R_crit|≈0.065 vs 0.05 static WITH NO CURVE ANYWHERE. **A confound cannot produce a non-monotone response to a
+  monotone change.** ⭐ **WHAT LICENSES THE SLICE: THE LOOP TRACKS THE DERIVATIVE, NOT THE BEND** — RIPPLE 1.064
+  rings / matched-SECANT 0.016 quiet / matched-DERIVATIVE 0.838 rings ⇒ a radome inside its boresight-ERROR spec
+  everywhere can still ring. ⚠ Measured at R₀=0 deliberately (on the shipped wire the secant is past critical and
+  BOTH arms would ring — the trap that spoiled two gate-0 runs). ⚠ **THE METRIC IS `rms r` (YAW), a DELIBERATE
+  departure from 26/27's rms q** (the lead is in AZIMUTH) — and the pitch channel beside it is **THE CHANNEL
+  SPLIT**, the second isolation: R(look_az) −0.130…−0.082 vs R(look_el) pinned at −0.030, rms r 1.042 vs rms q
+  0.101, **a signature no CONSTANT slope can produce** (a constant rings both together, 0.838/0.844). ⚠ Window =
+  RANGE BAND [500,3000] m (a crossing wire's rms r has a LEGITIMATE front-loaded baseline: 0.172 whole-approach vs
+  0.0138 in band; arms with different ToF would compare different parts of the engagement); frame-robust; the miss
+  is NOT the metric (every arm hits). ⭐ Curve form = a BOUNDED slope ripple `R₀ + A(1−cos(k·look))` with ε its
+  exact integral — **the CUBIC was KILLED at gate 0** (unbounded slope ⇒ the bend diverges, miss → km, onset and
+  breakdown too close for a domain). ⚠⚠ **TWO planned verifier phases MOVED to `test_missile.jl` — NEITHER IS
+  CLIENT-DRIVABLE** (target velocity isn't a comp key; `radome_slope` isn't a slice-28 knob) — the slice-27
+  precedent, and the relocation is stated in the verifier header. TWO knobs (A ∈ [−0.10,0], R̂ ∈ [−0.15,0]) = two
+  halves of ONE quantity; `k` AUTHORED and DISQUALIFIED BY NON-MONOTONICITY (4th occurrence). Class **4a** (4th
+  consecutive RNG-live); KNOB not rung (A=0 bit-identical to the key absent, measured); button DROPPED (16/26/27/28).
+  ⚠ NOT zero client code: a THREE-WAY HUD switch + **both instruments follow the RINGING channel** (`omega_r` here,
+  `omega_q` on 26/27 — a peak-hold left on pitch meters the QUIET channel). ⚠ The first shot ran two new lines off
+  the right edge (~55 chars fit at 15 px). ⚠ **`N·|R−R̂|/ρ ≈ 0.38` IS NOT GEOMETRY-FREE** — ≈0.52 here; the FORM
+  transfers, not the number. Four proofs green (S28V FIVE phases: RINGING 1.04145 / REPLAY 0.0 / FLAT 72.1× with
+  both gains collapsed onto −0.030 / ⭐⭐ CURED 80.7× with the residuals mirrored / ⭐ DOMAIN reaching the exact bound
+  −0.23000; S28UI TEN-way guard + the THREE-WAY mirror + the channel switch on identical telemetry; smoke; TWO
+  shots at the same range). Slices 1–27 byte-identical, proven ON THE WIRE (25/26/27 verifiers re-run to the
+  digit). (5013)
+
 
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened
 with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–24 are into the §11 Tier-A
@@ -698,19 +747,27 @@ named successor — the RADOME-SLOPE COMPENSATION AUTOPILOT — and the arc's en
 PARTIAL one, exactly quantifiably: a rate-gyro feed-forward cancels the parasitic term to the accuracy of the
 slope estimate it is given, so what closes the loop is the RESIDUAL `R − R̂` and slice 26's boundary returns
 verbatim as `N·|R − R̂|/ρ ≈ 0.38` — MARGIN, NOT IMMUNITY, and "how good is my radome?" becomes "how well do I
-KNOW it?".** The NEXT named candidates: an IMPERFECT GYRO (noise / bias / scale-factor — slice 27's gyro is
+KNOW it?". And slice 28 CASHED the deferral 26 and 27 both named — `R(look)`, the SLOPE CURVE: the residual stops
+being a property of the HARDWARE and becomes a property of the ENGAGEMENT, because the loop is closed by the
+curve's LOCAL DERIVATIVE where the seeker is actually looking. A crossing target holds a sustained lead, so a
+BORESIGHT-characterized compensator has a HARDWARE residual of exactly 0.000 and rings anyway; the same glass
+goes quiet when R̂ is set to the slope the ENGAGEMENT flies. ⇒ "know your slope" becomes "KNOW YOUR SLOPE CURVE
+OVER THE BAND THE ENGAGEMENT VISITS".** The NEXT named candidates: LOOK-ANGLE-SCHEDULED `R̂(look)` (the
+engineering answer to slice 28 exactly as 27 was to 26 — its single-point version is already measured);
+an IMPERFECT GYRO (noise / bias / scale-factor — slice 27's gyro is
 PERFECT by §1, and a scale-factor error is exactly a multiplicative error on R̂, i.e. it lands back on the
 residual, which makes it the cheapest well-motivated successor); ESTIMATING R̂ IN FLIGHT (⚠ slice 26's P7A is a
 REAL obstacle — the parasitic gain is NOT identifiable in closed loop, so such a slice must first answer *what
 excites the estimate?*); the ANGLE-DOMAIN corrector as its own A/B on worse glass (built and measured at slice
-27's gate 0, not shipped); a look-angle-dependent `R(look)` (it composes sharply with slice 27: against a wiggly
-real slope curve a CONSTANT R̂ is wrong almost everywhere, so the residual becomes a function of the geometry);
-SUSTAINED-TRACKING / route (b) — an out-of-plane MANEUVERING
+27's gate 0, not shipped); a 2-D slope `R(look_az, look_el)` or an ASYMMETRIC error curve (slice 28 ships ONE
+ODD scalar curve PER AXIS — a symmetric radome, and a manufacturing asymmetry would make the crossing DIRECTION
+matter); SUSTAINED-TRACKING / route (b) — an out-of-plane MANEUVERING
 target (the demand rotating faster than the roll loop follows, a DISTINCT face from slice 24's cold-start); and
 the AERO + INERTIAL CROSS-COUPLING / DEPARTURE that makes a real BTT airframe go OUT-OF-PLANE during a hard roll
 (non-diagonal I, Clβ/Cnp/Clr; diagonal I + symmetric cruciform + coordinated flight keep 23/24 clean).
 What else remains of §11 Tier-A/B/C: land clutter [terrain banked the heightfield]; a seeker FOV / gimbal limit
-(slice 26 made the look angle a first-class quantity); monopulse / az×el CFAR. ⚠ Slice 21 did NOT finish the
+(slice 26 made the look angle a first-class quantity and slice 28 made the whole lesson turn on it — a real
+seeker cannot hold 30° indefinitely, so this is now the sharpest of these); monopulse / az×el CFAR. ⚠ Slice 21 did NOT finish the
 atmosphere: ρ(z) reaches the COUPLED airframe path ONLY. The point-mass/ballistic drag path keeps a constant ρ
 because `dynamics.jl`'s steppers take a `v -> a(v)` closure with NO position in it, and changing that contract to
 `(p,v) -> a` touches slice 8's `rk4_step`/`euler_step` — the byte-identity surface of EVERY ballistic slice — for a

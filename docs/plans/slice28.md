@@ -14,8 +14,10 @@ cure and measured its limit (a scalar `R̂` cancels to the accuracy of the belie
 slope is a curve in look angle. Slice 28 makes it one, and the consequence is that the residual
 stops being a property of the hardware and becomes a property of **the engagement**.
 
-**Status: GATE 0 COMPLETE (10 probes run 2026-07-27, `M:\claud_projects\temp\slice28\`; raw
-findings in `GATE0_FINDINGS.md` beside the probe scripts).**
+**Status: COMPLETE (2026-07-27) — all three gates green, 5013 tests. Gate 0's 10 probes and their raw
+findings live in `M:\claud_projects\temp\slice28\GATE0_FINDINGS.md` beside the probe scripts; the
+as-built record (exact wire numbers, the two relocated proofs, the advisor catches) is in
+`docs/STATUS.md`.**
 
 ---
 
@@ -375,7 +377,18 @@ CPAs (slice 27).
 
 - [x] Gate 0 — the look-angle-band hunt; 10 probes; FINDINGS above; two advisor passes (the
       confound catch that forced §2, and the payload refutation that produced §5's reframe).
-- [ ] Gate 1 — `frames.jl` `radome_slope_curve` / `radome_error_curve` + `test_frames.jl` teeth.
-- [ ] Gate 2 — the `_observe_point3d!` seam + loader keys + telemetry; byte-identity on the wire.
-- [ ] Gate 3 — scenario + the four proofs; the 25/26/27 verifiers re-run to the digit.
-- [ ] Docs — `docs/STATUS.md` as-built, `CLAUDE.md` status line, `HANDOFF.md` §11, memory.
+- [x] Gate 1 — `frames.jl` `radome_slope_curve` / `radome_error_curve` + `test_frames.jl` teeth.
+- [x] Gate 2 — the `_observe_point3d!` seam + loader keys + telemetry; byte-identity on the wire.
+      ⚠ HARDENED after an advisor pass: the channel gain ships **PER AXIS** (`radome_slope_az` /
+      `radome_slope_el`), never an aggregate at `hypot(look_az, look_el)` — that third quantity is
+      the gain of NEITHER channel and agreed numerically only because this wire holds `look_el ≈ 0`.
+- [x] Gate 3 — scenario + the four proofs; the 25/26/27 verifiers re-run to the digit (5013 tests).
+      ⚠⚠ **TWO of the phases this plan listed for `slice28_verify.gd` moved to `test_missile.jl`,
+      and neither was dropped — NEITHER IS CLIENT-DRIVABLE** (advisor; the slice-27 precedent, whose
+      α_max isolation lives there because α_max is deliberately not a knob): the target's VELOCITY is
+      not a comp key, so `set_param` cannot reach the crossing-speed sweep, and `radome_slope` is not
+      a slice-28 knob, so neither can the matched-secant triple. The verifier's FIVE drivable phases
+      are RINGING / REPLAY / FLAT (A → 0) / CURED (R̂ → R(15°)) / DOMAIN (A → the declared floor).
+      ⭐ The centrepiece assert is the one slice 27 could not have written: the HARDWARE residual is
+      EXACTLY 0.000 **and it rings**, because the ENGAGEMENT residual is −0.100…−0.052.
+- [x] Docs — `docs/STATUS.md` as-built, `CLAUDE.md` status line, `HANDOFF.md` §11, memory.

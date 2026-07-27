@@ -1,0 +1,235 @@
+# slice28_radome_curve — R(look): THE SLOPE CURVE, AND THE BAND THE ENGAGEMENT VISITS
+# (HANDOFF §11 Tier-A, slice 28 gate 3). The SIXTH slice of the bank-to-turn / 3-D arc (23 = the
+# 6-DOF substrate + skid-to-turn, 24 = bank-to-turn + roll-lag, 25 = a seeker in the 6-DOF loop,
+# 26 = the radome parasitic loop, 27 = the radome-slope compensation autopilot) and a deferral
+# BOTH 26 and 27 named:
+#
+#     "A LOOK-ANGLE-DEPENDENT SLOPE R(look) — it composes sharply with slice 27: against a wiggly
+#      real slope curve a CONSTANT R̂ is wrong almost everywhere, so the residual becomes a
+#      function of the geometry."
+#
+# Slice 26 built the disease (a constant error slope R closes a parasitic loop). Slice 27 built
+# the cure and measured its limit (a scalar R̂ cancels to the accuracy of the belief; the residual
+# R − R̂ sets the boundary). BOTH ASSUMED THE GLASS HAS ONE SLOPE. It does not.
+#
+# > THE LESSON, IN ONE SENTENCE. The radome's error slope is a CURVE, the parasitic loop is closed
+# > by its LOCAL DERIVATIVE at the look angle the engagement actually holds, and that look angle is
+# > set by the target's crossing geometry — so slice 27's requirement "know your slope" sharpens
+# > into "KNOW YOUR SLOPE CURVE OVER THE LOOK-ANGLE BAND THE ENGAGEMENT VISITS", and characterizing
+# > at boresight is the natural AND DANGEROUS choice.
+#
+# ⭐⭐ THE WHOLE SLICE IN ONE PAIR OF NUMBERS, BOTH SHIPPED BY THE CORE AS TELEMETRY. On this wire
+# the HARDWARE residual `radome_residual` = R₀ − R̂ is EXACTLY 0.000 — the compensator's belief
+# matches the glass it was characterized against, perfectly — and the missile RINGS anyway, because
+# the ENGAGEMENT residual `radome_residual_az` = R(look_az) − R̂ is −0.078 where the seeker is
+# actually looking. Drag R̂ to −0.13 and the two numbers TRADE PLACES (hardware +0.100, engagement
+# 0.000) and the body goes quiet. Slice 27 could not have written that pair: it had only one of the
+# two keys, because it had only one slope.
+#
+# ⚠ THE WIRE CHANGES, AND THE MEASUREMENT IS THE REASON — SAY SO, DO NOT SLIP IT IN. This is the
+# first slice of the arc to break the shared STATIC Y = 2000 geometry that 23/24/25/26/27 held so
+# they would read side by side. Against a static target the collision course carries ZERO LEAD, so
+# the look angle decays to ~0 and the whole endgame sits at ONE point (MEASURED on a STABLE arm,
+# range-gated at r > 500 m: |look| runs 0.04° → 0.54° over the last half of the flight) — R(look)
+# would be a DEAD KNOB there. A CROSSING target holds a SUSTAINED LEAD and the seeker looks 15° off
+# boresight for the whole flight (median 14.8° here). ⚠ The lead is almost entirely in AZIMUTH
+# (look_el within ±0.5°), which is load-bearing twice below (the metric channel, and the split).
+#
+# ⭐⭐ THE ISOLATION IS A NON-MONOTONE RESPONSE TO A MONOTONE GEOMETRY CHANGE, and it defeats a REAL
+# confound: "static is quiet, crossing rings" changes the operating look angle AND the whole
+# engagement, and the second one moves the loop on its own (constant-R onset |R_crit| ≈ 0.065
+# crossing vs ≈ 0.05 static, WITH NO CURVE ANYWHERE — a ~30% shift from geometry alone). ⇒ HOLD THE
+# GLASS, SWEEP THE ENGAGEMENT. With k = 12 the ripple peaks at look = 15° and returns to R₀ at 30°,
+# so a monotone crossing-speed sweep goes QUIET → RING → QUIET (rms r 0.016 / 1.042 / 0.011 at
+# vy = 0 / 200 / 400) while the no-ripple CONTROL is flat quiet at every speed (0.016 / 0.014 /
+# 0.011). A confound cannot produce a non-monotone response to a monotone change. ⚠ The sweep lives
+# in `test_missile.jl`, NOT in the verifier: the target's velocity is not a comp key, so it is not
+# client-drivable (the slice-27 precedent — its α_max isolation lives there for the same reason).
+#
+# ⭐ WHAT LICENSES THE SLICE AT ALL: THE LOOP TRACKS THE DERIVATIVE, NOT THE BEND. Under slice 26's
+# linear model those are the same number, which is exactly why 26 could not tell them apart. On the
+# shipped kernel (R₀ = 0, A = −0.05, R̂ = 0 — an OFF-WIRE trio, see below) the curve's derivative at
+# the operating look angle is −0.10 and its secant is −0.05: RIPPLE rings at rms r 1.064, a CONSTANT
+# slope matched to the SECANT is quiet at 0.016, a CONSTANT slope matched to the DERIVATIVE rings at
+# 0.838. Same bend at the operating point, opposite behaviour. ⇒ A RADOME INSIDE ITS BORESIGHT-ERROR
+# SPEC EVERYWHERE CAN STILL RING, because specs are written on ε and stability is written on dε/dlook.
+# ⚠ That trio is measured at R₀ = 0 rather than on this wire, DELIBERATELY: here the secant is
+# ≈ −0.079, already past |R_crit| ≈ 0.065, so both arms would ring and the A/B would prove nothing
+# (two gate-0 runs were spoiled exactly that way). It lives in `test_missile.jl` — `radome_slope` is
+# not a slice-28 knob, so it is not client-drivable either.
+#
+# ⚠ THE METRIC IS rms r (YAW) — A DELIBERATE DEPARTURE FROM 26/27's rms q (PITCH), NOT "the arc's
+# metric, continued". The reason is measured: the lead is in AZIMUTH, so the ring is in yaw.
+# ⭐ AND THE PITCH CHANNEL BESIDE IT IS THE SECOND ISOLATION — THE CHANNEL SPLIT. With the lead in
+# azimuth and look_el ≈ 0, the two seeker channels sit at DIFFERENT POINTS ON THE SAME GLASS: yaw at
+# R(look_az) ≈ −0.108, pitch at R(look_el) ≈ R₀ = −0.03. Measured here: rms r 1.042 with rms q only
+# 0.101. A CONSTANT SLOPE CANNOT PRODUCE THIS — it gives both channels one slope and rings them
+# together (measured: the matched-DERIVATIVE arm above rings rms r 0.838 WITH rms q 0.844). One
+# radome, two channels, two operating points.
+#
+# ⚠ THE WINDOW IS A RANGE BAND [500, 3000] m, NOT A TICK FRACTION, and it must be QUOTED WITH EVERY
+# NUMBER (slice 26's two-windows-two-ratios rule). Two defects it fixes, both of which would
+# otherwise have entered as physics: on a crossing wire rms r carries a LEGITIMATE baseline (the
+# missile turning onto the collision course, front-loaded — 0.172 over the whole approach against
+# 0.0138 in the band), and arms with different ToF would otherwise compare DIFFERENT PARTS of the
+# engagement. ⭐ The metric is FRAME-ROBUST (per-tick 1.04174 vs frame-sampled 1.04145 on the shipped
+# arm), which is why the oscillation beats any miss here. ⚠ rms, NEVER the peak. ⚠ THE MISS IS NOT
+# THE METRIC — the ringing arms still HIT (0.15–1.8 m per-tick), exactly as in 26/27.
+#
+# ⚠ NO NEW INSTABILITY AND NO NEW CAP. The loop is slice 26's — a true positive-feedback loop with a
+# loop gain, a stability boundary and self-excitation from zero input. Slice 28 makes that loop gain
+# a FUNCTION OF THE FLIGHT CONDITION, exactly as slice 20 made the aero ceiling self-lowering without
+# adding a cap. ⚠ Slice 20's "degenerative spiral" language stays forbidden here; slice 26's stays
+# forbidden elsewhere.
+# ⚠ A NAMED APPROXIMATION, STATED NOT SWEPT: slice 26/27's N·|R − R̂|/ρ ≈ 0.38 IS NOT GEOMETRY-FREE
+# (it measures ≈ 0.52 on this crossing wire, with no curve involved at all). What transfers is the
+# FORM of the law — a threshold on N·|R(look) − R̂|/ρ — not the number.
+#
+# NO FIDELITY BUTTON, DELIBERATELY — slice 26's `radome_view` marker is INHERITED UNCHANGED and the
+# client keeps the button DROPPED. `A = 0` is an in-domain slider value AND bit-identical to the
+# ripple not existing (MEASURED in test_missile.jl, not argued) ⇒ KNOB, by atmosphere.jl's
+# discriminator, exactly as slice 26 concluded for R and slice 27 for R̂. FOURTH slice in this family
+# (16, 26, 27, 28) whose lesson is sliders with no button at all. ⚠ NOT zero client code: one HUD
+# line for the LOCAL slope R(look_az) beside R̂ and the look angle, because a student who drags A
+# while the quantity that moved is invisible has not been shown anything (slice 27 ate that defect
+# once). ⚠ PER AXIS, never an aggregate at hypot(look_az, look_el) — that third quantity is the gain
+# of NEITHER channel (the gate-2 hardening).
+#
+# NAMED APPROXIMATIONS (§1): a SYMMETRIC radome (ε is ODD in look — an asymmetric error curve is a
+# named deferral); ONE scalar curve PER AXIS (real glass varies over the aperture in 2-D); a PERFECT
+# rate gyro (slice 27's, unchanged); the two-term feed-forward leaves the PITCH→AZIMUTH cross-term
+# uncancelled (slice 27's gate-1 finding, pinned in test_frames.jl); no seeker FOV / gimbal limit
+# (sharper here than ever — this slice makes the look angle the quantity the whole lesson turns on);
+# ONE isotropic σ and a TRUTH Vc (slice 11's scope); diagonal inertia, symmetric cruciform, lift
+# drag-free (slices 23/24); constant ρ — a FLIGHT CONDITION, so say "low dynamic pressure", never
+# "high altitude" (no :atmosphere rung here). The small-angle bend model is held INSIDE its validity
+# budget by measurement: 0.0% of in-band frames past a 30° look angle across the ENTIRE A domain.
+#
+# Class 4a: DRAW-INVARIANT (2 randn/tick, ripple or not — the curve is arithmetic on state that
+# already exists) YET TRAJECTORY-CHANGING. FOURTH consecutive RNG-live slice (25, 26, 27, 28): the
+# seed is load-bearing and conventions 3/11 apply. Draw-count identity is ASSERTED, not assumed.
+# UNITS (§1 trifecta): pos/vel SI; angles rad; σ_seek in RADIANS; `radome_slope`, `radome_ripple`
+# and `radome_slope_est` DIMENSIONLESS and SIGNED (dε/d(look angle)); `radome_ripple_k` per RADIAN
+# of look angle; I in kg·m²; ρ in kg/m³; launch ELEVATION in DEGREES → radians at the loader.
+# dt = 1e-3 / emit_every = 16.
+name: slice28_radome_curve
+seed: 28
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # FIVE keys, NONE toggled — the lesson is the SLIDERS (the slice-16/20/26/27 shape). `airframe`
+  # HELD at :six_dof (the radome, its compensator AND the ripple are all INERT without it — there is
+  # no attitude to look through; the gate is on the LIVE rung, never on `:att_q`, which is minted
+  # once and never deleted: the slice-21/23/26/27 latent-bug class, whose FIFTH occurrence this
+  # would be), `seeker_axes` HELD at :az_el (a two-angle seeker is what HAS a look angle in azimuth
+  # at all), `seeker` HELD at :filtered, `autopilot` :alpha and `guidance` :pn as in 23/24/25/26/27.
+  # `steering` is OMITTED (the loader default IS :skid_to_turn — slice 24 measured BTT binding the
+  # ceiling 93.2% of its approach, which would make the isolation above impossible).
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+
+entities:
+  # The interceptor — slices 23/24/25/26/27's plant and launch condition. n_pn = 8 is slice 27's,
+  # AUTHORED and NEVER A KNOB (26 and 27 both disqualified it: it moves the loop gain the lesson is
+  # ABOUT, so a student could cross the boundary with the glass untouched — the confounded-lever
+  # rule). The radome block is where slice 28 lives:
+  #
+  # seeker.radome_slope     = −0.03 — the BORESIGHT slope R₀, and it is a GOOD radome on slice 26's
+  #   own scale (|R| = 0.1 is POOR, ≤ 0.03 good). Deliberately: the lesson is that good glass at
+  #   boresight is not good glass everywhere.
+  # seeker.radome_ripple    = −0.05 — the ripple amplitude A. ⚠ THE SHOWCASE OPENS ON THE DISEASE
+  #   (the slice-25/26/27 shape): the body is already ringing when the client connects.
+  # seeker.radome_ripple_k  = 12.0 — a 30° ripple period, AUTHORED AND NOT A KNOB. ⚠ DISQUALIFIED BY
+  #   NON-MONOTONICITY: at held A the metric goes quiet / rings / rings / marginal / QUIET / rings at
+  #   k = 4 / 6 / 8.2 / 12 / 16 / 24, because k decides WHERE ON THE WIGGLE the operating look angle
+  #   lands ([[ewsim-df-ellipse-sigma-monotonicity]], the 4th occurrence — slices 19, 22). It is also
+  #   WHY k = 12 was chosen: it is the value that puts a quiet zone inside the valid crossing-speed
+  #   band, which is what makes the non-monotone isolation possible at all.
+  # seeker.radome_slope_est = −0.03 — R̂, slice 27's compensator, CHARACTERIZED AT BORESIGHT: the
+  #   natural thing to do, exactly right at look = 0 (R(0) = R₀ identically, for every A), and
+  #   exactly wrong where the loop is closed. THE HARDWARE RESIDUAL IS ZERO AND IT RINGS.
+  # seeker.sigma_seek       = 5e-5 — slice 26/27's AUTHORED CONSTANT, not a knob (a knob that
+  #   DEGRADES the lesson beside it).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               radome_slope: -0.03, radome_ripple: -0.05, radome_ripple_k: 12.0,
+               radome_slope_est: -0.03}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # ⭐ THE CROSSING TARGET — the ONE change to the arc's shared geometry, and the whole reason the
+  # slice exists on a wire at all. Same start point as 23/24/25/26/27 (cross-range +Y = 2000 m off
+  # the x–z plane), but MOVING at +200 m/s in +y: a constant-velocity crossing engagement, which
+  # forces the interceptor onto a LEAD collision course and parks the seeker ~15° off boresight for
+  # the whole flight instead of settling it onto the glass's flat spot. AERODYNAMICALLY FREE (no
+  # target airframe — the lesson is about the interceptor's sensor, not about the target).
+  # ⚠ vy = 200 sits inside a MEASURED valid band: past vy ≈ 400 the closing speed — and with it the
+  # PN loop gain — collapses, and even a flat-glass CONTROL at a ringing slope goes quiet there, so
+  # arms above 400 must not be read as ripple physics.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 200.0, 0.0]
+    target: {rcs_m2: 1.0}
+
+knobs:
+  # ⭐ TWO KNOBS, and convention 9 is satisfied by a MEASUREMENT, not by counting sliders: they are
+  # the two halves of ONE quantity — the ENGAGEMENT residual `R(look_az) − R̂`, which the core ships
+  # as `radome_residual_az`. A moves the first term (the glass off-boresight), R̂ the second (the
+  # belief); the ring dies when their difference clears ≈ −0.055, from EITHER side. THE ONE QUANTITY
+  # THAT DECIDES IS ON THE WIRE AS A NUMBER, so the pairing is a reading, not an argument.
+  #
+  # ⚠ THE DOMAINS, AND WHICH ENDPOINT IS MEASURED vs WHICH IS FRAMING (slice 26's post-commit lesson
+  # — "measure the endpoints, don't infer them from the interior"):
+  #
+  # KNOB 1 (A, the new one). MEASURED at vy = 200 with R̂ = −0.03: onset between A = −0.025 (rms r
+  # 0.0142, quiet) and −0.03 (0.821, rings); then it RISES AND PLATEAUS — 1.002 / 1.042 / 1.085 /
+  # 1.093 at −0.04 / −0.05 / −0.08 / −0.10. ⭐ The model-validity budget holds across the ENTIRE
+  # range: 0.0% of in-band frames past a 30° look angle (the k = 8.2 / vy = 300 wire blew it — 5.3%
+  # at A = −0.06, 17.1% at −0.10 — and would have bounded the domain here). The FLOOR is where the
+  # plateau is established with ~1.5× margin to the point where the MISS starts growing (2.1 / 3.6 /
+  # 4.4 m at A = −0.15 / −0.20 / −0.30) — a measured plateau, NOT a physical wall, and it is stated
+  # that way rather than implied. The CEILING (0.00) is the flat-glass limit: bit-identical to the
+  # ripple key not existing, which is the knob-vs-rung discriminator MEASURED.
+  #
+  # KNOB 2 (R̂, slice 27's, INHERITED UNCHANGED — and this is what it buys once the slope is a
+  # curve). MEASURED at the shipped A: the ring dies between R̂ = −0.07 (0.564, marginal) and −0.08
+  # (0.0123, quiet), i.e. at an ENGAGEMENT residual of ≈ −0.055 — so the crossing sits at ~50% of
+  # slider travel. The floor −0.15 comfortably contains R(15°) = −0.13, the ENGAGEMENT-CORRECT
+  # characterization, which is the payload's actionable half; beyond it the de-tune face is gentle
+  # (0.026 at −0.20, 0.042 at −0.25 — it does not bite until R̂ ≈ −0.50, residual +0.46), so the
+  # floor is UI FRAMING and says so. The CEILING (0.00) is physical, as in slice 27: a POSITIVE R̂
+  # compensates the WRONG WAY and is exactly a worse radome.
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED, AND THE VERIFIER ASSERTS THEIR ABSENCE: `n_pn` and
+  # `rho` move the LOOP GAIN the lesson is about; `radome_ripple_k` is non-monotone (above);
+  # `af_alpha_max` sets the cycle's AMPLITUDE, the one thing the isolation must hold fixed; the
+  # target's crossing SPEED is the isolation's own independent variable and must not be a lever a
+  # student can confound the lesson with (it is swept in `test_missile.jl` instead); `sigma_seek`
+  # compresses the contrast; `speed` is the slice-19 DEAD knob.
+  - {target: m1, key: radome_ripple, min: -0.1, max: 0.0,
+     label: "RADOME: slope ripple A (the glass's slope is a CURVE, R(look) = R0 + A*(1-cos(k*look)) — R(0) = R0 for EVERY A)"}
+  - {target: m1, key: radome_slope_est, min: -0.15, max: 0.0,
+     label: "COMPENSATOR: slope estimate R̂ (characterized at BORESIGHT = -0.03 — drag DOWN toward the slope the ENGAGEMENT actually flies)"}
