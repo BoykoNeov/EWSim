@@ -4466,6 +4466,27 @@ end
         @test tel["m1.radome_slope_est"] ≈ -0.06 atol = 1e-15
         @test tel["m1.radome_residual"] ≈ -0.04 atol = 1e-15
         @test haskey(tel, "m1.radome_ff_el")
+        # ⭐ AND `radome_ff_el` IS PINNED BY VALUE, NOT MERELY BY PRESENCE (advisor — slice 26 shipped
+        # a whole hardening commit on the finding that "a shipped telemetry key with NO tooth is the
+        # kind that rots"). The gate-1 axis-asymmetry tooth covers the KERNEL; this covers the SEAM'S
+        # USE of it, which is where a refactor would drop the `cos(look_az)` factor or swap the axes.
+        # ⚠ Reconstructed at σ = 0 so the measurement is exactly truth + bend: the compensator's look
+        # angle comes from the MEASURED (bent) LOS, and reproducing THAT composition is the point —
+        # a tooth that recomputed it from `û_tru` would pass on a compensator that illegally read
+        # truth. Phase 1 < phase 3, so the post-tick att/ω are the ones observe! consumed.
+        let R = -0.10, R̂ = -0.06
+            w3, s3 = comp_world(radome = R, slope_est = R̂, sigma = 0.0)
+            for _ in 1:200; tick!(w3, s3, dt); empty!(w3.events); end
+            m3 = w3.entities[:m1]; t3 = w3.entities[:t1]
+            û_t = los_unit(m3.pos, t3.pos)
+            az_t, el_t = az_el(û_t)
+            εa, εe = radome_error(R, look_angles(m3.comp[:att_q]::Quat, û_t)...)
+            û_m = los_unit_from_angles(az_t + εa, el_t + εe)          # the BENT measurement
+            la_c, _ = look_angles(m3.comp[:att_q]::Quat, û_m)
+            _, ff_e = radome_compensation(R̂, la_c, m3.comp[:omega_body]::Vec3)
+            @test w3.env[:telemetry]["m1.radome_ff_el"] ≈ ff_e atol = 1e-12
+            @test abs(ff_e) > 1e-6                                    # PAIRED: it is not passing on 0
+        end
         # compensating for a radome the missile does NOT have: residual = −R̂, and it is REAL
         # (it de-tunes), not a no-op — which is why the compensator is not gated on the radome key.
         w2, s2 = comp_world(radome = nothing, slope_est = -0.06)

@@ -78,7 +78,13 @@ buy a gyro and know your glass to within `0.38/(N·ρ)`.** On the shipped wire (
 **±0.0475** — so a −0.10 radome with a manufacturing spread worse than about ±0.05 rings anyway,
 compensator or not. That is a specification an engineer can actually write down.
 
-### 2. ⭐⭐ THE ISOLATION, AND IT IS THE SAME MEASUREMENT AS THE HEADLINE (advisor)
+### 2. ⭐⭐ THE ISOLATION — ONE MEASUREMENT CARRIES IT AND THE HEADLINE, A SECOND CLOSES IT (advisor)
+
+⚠ **Say it that way, not "the same measurement is the isolation."** The offset-vs-gain argument is the
+strong one and it does double duty, but the isolation rests on TWO measurements with different failure
+modes (the one-for-one offset AND the miss at baseline). Slice 25's isolation was one number and slice
+26 had to warn against copying it; compressing this one to a tidy phrase would hand a later slice
+licence to ship one measurement where these tests assert two.
 
 **The sharpest risk in this slice is that the compensator quiets the ring by DE-TUNING rather than
 by cancelling.** Slice 26 measured (P7A) that in closed loop `ėl` and `q` are COLLINEAR — R² = 0.999

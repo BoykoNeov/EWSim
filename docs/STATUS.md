@@ -3344,11 +3344,19 @@ the width). **A proof you cannot read is not a proof**, exactly as with `%g`.
 Run: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice26_radome.yaml`, then the
 console Godot `--headless --path clients/godot --script res://net/slice26_verify.gd` (exit 0 = pass).
 The UI test needs NO server: `… res://net/slice26_ui_test.gd`.
+⚠ **KNOWN-LATENT DISPLAY DEFECT, DOCUMENTED RATHER THAN BACKPORTED (found at slice 27's gate 3, and it
+is LIVE, not historical): this slice's HUD headline keys off the INSTANTANEOUS `|q| > 0.5`, and a limit
+cycle crosses zero TWICE PER CYCLE — so a RE-SHOOT of this scenario has roughly even odds of rendering
+"RADOME — refracting, loop STABLE" on the RINGING arm.** The shipped shot caught q = +1.168 and is
+correct; the capture instant is what saved it. **Slice 27 is the fix** — a display-only PEAK-HOLD on
+|q| (an instrument, not physics), gated on the slice-27 telemetry key so THIS slice's label path stays
+byte-identical. Deliberately NOT backported: it is a cosmetic path on a shipped slice whose artifact
+is already correct. **Anyone re-shooting this scenario to compare against slice 27 must expect it.**
 DEFERRED (NAMED): a **LOOK-ANGLE-DEPENDENT slope `R(look)`** (real radomes have a wiggly slope curve
 and the design case is the worst LOCAL slope — this slice ships the constant-slope linear model as a
 §1 named approximation); **the de-tuning face of positive R** (measured, real, a different lesson);
 a **radome-slope COMPENSATION / stability-margin autopilot** (a rate-gyro feed-forward cancelling the
-parasitic term — the natural next slice, and it needs this one); a seeker **FOV / gimbal limit** (this
+parasitic term — **DONE, slice 27**); a seeker **FOV / gimbal limit** (this
 slice makes the look angle a first-class quantity, so it is now doubly expressible); monopulse / az×el
 CFAR; a MEASURED `Vc`; the 3-D `:raw` arm; the out-of-plane MANEUVERING target (composes with this).
 
@@ -3374,7 +3382,11 @@ zero input. Slice 20's "degenerative spiral" language is still forbidden here, a
 still forbidden everywhere else. **Slice 27 adds NO new instability and NO new cap; it adds a SECOND
 TERM INSIDE THE SAME LOOP GAIN.**
 
-⭐⭐ **THE BOUNDARY SHIFTS ONE-FOR-ONE, AND THE SAME MEASUREMENT IS THE ISOLATION.** Sweeping the true
+⭐⭐ **THE BOUNDARY SHIFTS ONE-FOR-ONE — ONE MEASUREMENT CARRIES BOTH THE HEADLINE AND THE ISOLATION,
+AND A SECOND (THE MISS AT BASELINE) RULES OUT THE REMAINING READING.** ⚠ That phrasing is deliberate:
+slice 25's isolation was ONE number (`aero_sat == 0`) and slice 26 had to warn "do not copy slice 25's
+isolation" — this one is TWO numbers with different failure modes, and compressing it to "the same
+measurement" would hand a later slice licence to ship one where the tests assert two. Sweeping the true
 slope R down at fixed R̂ gives an onset whose RESIDUAL is CONSTANT — −0.095 / −0.095 / −0.095 / −0.095
 / −0.100 / −0.100 at R̂ = 0 / −0.05 / −0.10 / −0.15 / −0.20 / −0.30 (gate-0 P2A, at N = 4). An
 **OFFSET**, across a 6× span. **That is not a stylistic preference for one statistic: the obvious
