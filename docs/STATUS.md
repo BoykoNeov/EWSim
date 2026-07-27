@@ -3664,10 +3664,15 @@ quiet zone inside the valid speed band, which is what makes the isolation above 
 both gates.
 
 **KNOB, not rung** — `A = 0` is bit-identical to the ripple key not existing (MEASURED, not argued:
-atmosphere.jl's discriminator, slice 26's `R = 0` precedent), and the identity is **STRUCTURAL** (the
-seam branches on key presence and the else-arm calls `radome_error` VERBATIM — never the curve kernel
-at amplitude 0, because `x + 0.0` is not the identity at `x = −0.0` and float addition is not
-associative). **The button stays DROPPED — the FOURTH slice in this family (16, 26, 27, 28) whose
+atmosphere.jl's discriminator, slice 26's `R = 0` precedent). ⚠ **TWO DISTINCT IDENTITIES HOLD HERE AND
+THEY ARE NOT THE SAME CLAIM (advisor).** (1) **KEY ABSENT ⇒ the VERBATIM SEAM**: the seam branches on
+key presence and the else-arm calls `radome_error` itself — never the curve kernel at amplitude 0,
+because `x + 0.0` is not the identity at `x = −0.0` and float addition is not associative. That is what
+keeps a slice-26/27 wire byte-identical, and it is pinned in `test_missile.jl`. (2) **THE SLIDER AT 0 ⇒
+the KERNEL REDUCTION**: the shipped scenario AUTHORS the key, so dragging A to its top endpoint still
+routes through `radome_error_curve(R, 0.0, k, ·)` — which is pinned bit-for-bit EQUAL to `radome_error`
+in `test_frames.jl`. The verifier's FLAT phase exercises (2), not (1); both are tested, and conflating
+them would let a later refactor drop one while the other kept passing. **The button stays DROPPED — the FOURTH slice in this family (16, 26, 27, 28) whose
 lesson is sliders with no button at all.** Class **4a** (2 randn/tick, curve or not — arithmetic on
 state that already exists; FOURTH consecutive RNG-live slice, the seed load-bearing, draw-count
 identity ASSERTED not assumed). **RUNG-GATED on the LIVE `:airframe`**, never on `haskey(:att_q)` (the
@@ -3722,7 +3727,9 @@ because the two arms have different ToF): **"RADOME SLOPE CURVE — RINGING in Y
 ENGAGEMENT RESIDUAL −0.066 in orange) vs **"SLOPE CURVE — R̂ matched, loop STABLE"** (yaw rate +0.002,
 R̂ −0.130 / hardware residual +0.100, yaw channel −0.130 vs pitch −0.030, ENGAGEMENT RESIDUAL −0.000 in
 green). **Slices 1–27 byte-identical, proven ON THE WIRE** — the 25/26/27 verifiers re-run reproduce
-their STATUS numbers TO THE DIGIT (`omega_oop` 0.0 / max|ε| 0.01243 / `S27V` rms 0.76836).
+their STATUS numbers TO THE DIGIT, every phase re-read rather than just the headline (slice 26: 0.80408 /
+max|ε| 0.01243 / QUIET 0.03493 = 23.0× / MIRROR 59.2× / posdiff 0.0; slice 27: RINGING 0.76836 / CURED
+0.01404 = 54.7× / MARGIN 0.81604 / DIAGONAL 0.01300 / posdiff 0.0; slice 25: `omega_oop` exactly 0.0).
 
 Run: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice28_radome_curve.yaml`, then the
 console Godot `--headless --path clients/godot --script res://net/slice28_verify.gd` (exit 0 = pass).

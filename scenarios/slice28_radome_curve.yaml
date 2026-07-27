@@ -21,8 +21,10 @@
 # ⭐⭐ THE WHOLE SLICE IN ONE PAIR OF NUMBERS, BOTH SHIPPED BY THE CORE AS TELEMETRY. On this wire
 # the HARDWARE residual `radome_residual` = R₀ − R̂ is EXACTLY 0.000 — the compensator's belief
 # matches the glass it was characterized against, perfectly — and the missile RINGS anyway, because
-# the ENGAGEMENT residual `radome_residual_az` = R(look_az) − R̂ is −0.078 where the seeker is
-# actually looking. Drag R̂ to −0.13 and the two numbers TRADE PLACES (hardware +0.100, engagement
+# the ENGAGEMENT residual `radome_residual_az` = R(look_az) − R̂ is nowhere near zero where the seeker
+# is actually looking (MEDIAN −0.078, and it never comes closer than −0.052 anywhere in the measurement
+# band — the verifier asserts the whole RANGE, not a single sample, which is why this line names the
+# number as a median). Drag R̂ to −0.13 and the two numbers TRADE PLACES (hardware +0.100, engagement
 # 0.000) and the body goes quiet. Slice 27 could not have written that pair: it had only one of the
 # two keys, because it had only one slope.
 #

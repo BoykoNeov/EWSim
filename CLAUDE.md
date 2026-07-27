@@ -83,7 +83,8 @@ the curve's LOCAL DERIVATIVE at the look angle the missile is actually flying �
 not to the radome. Against a CROSSING target the seeker holds a sustained ~15° lead and parks on steep glass, so
 a compensator characterized at BORESIGHT is exactly right where the loop is never closed: the HARDWARE residual
 `R₀ − R̂` is EXACTLY 0.000 AND IT RINGS, because the ENGAGEMENT residual `R(look_az) − R̂` is −0.078. "Know your
-slope" sharpens into "KNOW YOUR SLOPE CURVE OVER THE BAND THE ENGAGEMENT VISITS".**
+slope" sharpens into "KNOW YOUR SLOPE CURVE OVER THE BAND THE ENGAGEMENT VISITS".** (−0.078 is the MEDIAN of
+that residual; it spans −0.100…−0.052 over the measurement band, and the verifier asserts the whole range.)
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
