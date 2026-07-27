@@ -382,3 +382,83 @@ computer has no truth LOS. Feeding it the true look angle would make the slice f
 """
 radome_compensation(slope_est::Real, look_az::Real, ω_body::Vec3) =
     (slope_est * ω_body[3], -slope_est * cos(look_az) * ω_body[2])
+
+# --- the SLOPE CURVE (slice 28, §11 Tier-A — a deferral named by BOTH 26 and 27) -------------
+#
+# Slices 26 and 27 both assumed the glass has ONE error slope. It does not: a radome's boresight
+# error slope is a CURVE in look angle, because the ray passes through different glass at
+# different look angles. The consequence is not a bigger `R` — it is that **which part of the
+# curve closes the loop is decided by the ENGAGEMENT, not by the radome**: a static target's
+# collision course carries zero lead and settles the seeker onto boresight, while a crossing
+# target holds a sustained lead angle and parks it on a steep part of the glass (`docs/plans/
+# slice28.md` §1, MEASURED — on slices 23–27's static wire the look angle decays to 0.04–0.54°,
+# which would make this whole family of kernels a DEAD KNOB there).
+
+"""
+    radome_slope_curve(slope0, ripple, k, look) -> R   (dimensionless, signed)
+
+The radome's LOCAL error slope at look angle `look` (slice 28):
+
+    R(look) = slope0 + ripple·(1 − cos(k·look))
+
+`slope0` is the BORESIGHT slope, `ripple` the slope-ripple amplitude and `k` its spatial
+frequency in rad⁻¹ (period `2π/k` in look angle). Bounded to `[slope0, slope0+2·ripple]`
+BY CONSTRUCTION — which is the whole reason this form ships and a cubic `ε = R₀·look + C·look³`
+does not: the cubic's slope is UNBOUNDED, so the amplitude that puts the off-axis slope past
+critical also makes the bend diverge once the look angle grows, and the missile is simply lost
+(measured: miss 2550–4158 m). That would be the small-angle model carrying the lesson exactly
+where it is invalid — the objection slice 27 used to reject `R = −0.30`, recurring.
+
+**`R(0) == slope0` EXACTLY, for every `ripple`** — the ripple term vanishes identically at
+boresight. That is not a convenience: it is the MECHANISM of slice 28's central asymmetry.
+Characterizing the radome at boresight — the natural thing to do — measures a number that is
+*structurally* insensitive to the curve, and so is exactly right in the one place the loop is
+never closed. Hence: **the scalar `R̂` that works is set by the ENGAGEMENT, not by the radome,
+and characterizing at boresight is the DANGEROUS choice** (`docs/plans/slice28.md` §5).
+
+⚠ `k` is a NON-KNOB (authored). The metric is NON-MONOTONE in it — quiet / rings / rings /
+marginal / quiet / rings at `k` = 4 / 6 / 8.2 / 12 / 16 / 24 at held amplitude — because `k`
+decides WHERE ON THE WIGGLE the operating look angle lands ([[ewsim-df-ellipse-sigma-monotonicity]],
+4th occurrence). A caller must floor it positive; `radome_error_curve` divides by it.
+
+⚠ ODD by construction (a SYMMETRIC radome). An asymmetric error curve, and a genuinely 2-D
+`R(look_az, look_el)`, are named deferrals — this is ONE scalar curve applied per angle, which
+is slice 26's own per-angle application generalized.
+"""
+radome_slope_curve(slope0::Real, ripple::Real, k::Real, look::Real) =
+    slope0 + ripple * (1 - cos(k * look))
+
+"""
+    radome_error_curve(slope0, ripple, k, look_az, look_el) -> (ε_az, ε_el)   (radians)
+
+The BORESIGHT ERROR of a radome whose slope follows [`radome_slope_curve`](@ref) — the EXACT
+integral of that slope, applied per angle:
+
+    ε(u) = slope0·u + ripple·u − (ripple/k)·sin(k·u)         ⇒   dε/du ≡ R(u)
+
+**⭐ THAT IDENTITY IS THE POINT OF THE SLICE, AND IT IS A TOOTH, NOT A COMMENT** (`test_frames.jl`
+finite-differences this against `radome_slope_curve`). Slice 26's parasitic loop is driven by
+`dε/dt = (dε/dlook)·(dlook/dt)` — the LOCAL DERIVATIVE — while a radome is SPECIFIED by its
+boresight ERROR `ε`. Under slice 26's linear model those are the same number, which is precisely
+why 26 could not tell them apart. Here they separate, and the loop follows the DERIVATIVE:
+a matched-secant A/B (same bend at the operating look angle, different slope there) rings on the
+curve and stays quiet on the constant — measured. **A radome inside its boresight-error spec
+everywhere can still ring.**
+
+⚠ **`ripple == 0` IS NOT A SUBSTITUTE FOR [`radome_error`](@ref), AND THE SEAM MUST BRANCH.**
+Algebraically the ripple terms vanish, but `x + 0.0` is not the identity at `x = −0.0` and float
+addition is not associative, so the shipped no-ripple path is a KEY-ABSENT branch upstream that
+calls `radome_error` VERBATIM (the slice-20/21/26/27 structural-byte-identity shape). The
+reduction is pinned here bit-for-bit anyway, because that exactness is what makes `ripple` a KNOB
+rather than a fidelity rung (atmosphere.jl's discriminator — measured, not argued).
+
+⚠ SIGN: the parasitic gain inherits slice 26's convention unchanged, with `R` → `R(look)`. The
+gate-1 tooth measures the frozen-geometry coefficient at **TWO different look angles** and
+requires it to MOVE and to match `radome_slope_curve` at each — the #1 SIGN TRAP's 10th
+occurrence. A test at ONE look angle passes for a constant-slope kernel and proves nothing.
+"""
+function radome_error_curve(slope0::Real, ripple::Real, k::Real, look_az::Real, look_el::Real)
+    kk = max(Float64(k), 1.0e-6)          # convention 5: `ripple/k` at k = 0 is a real crash path
+    f(u) = slope0 * u + ripple * u - (ripple / kk) * sin(kk * u)
+    return (f(look_az), f(look_el))
+end

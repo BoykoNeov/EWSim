@@ -89,6 +89,13 @@ export look_angles, radome_error
 # Compensation buys MARGIN, not immunity. KNOB (`radome_slope_est`), no rung — `R̂ = 0` is an
 # in-domain slider value AND bit-identical to the compensator not existing (measured, gate-0 P1B).
 export radome_compensation
+# Slice 28 (§11 Tier-A): the radome's error slope is a CURVE in look angle, not a number — so the
+# parasitic loop's gain is that curve's LOCAL DERIVATIVE at the look angle the engagement actually
+# holds, and WHICH part of the curve closes the loop is set by the target's crossing geometry.
+# `R(0) == slope0` exactly ⇒ characterizing at boresight measures a number structurally insensitive
+# to the curve: the natural, and dangerous, choice. KNOB (`radome_ripple`), no rung — amplitude 0
+# is an in-domain slider value and bit-identical to the ripple not existing.
+export radome_slope_curve, radome_error_curve
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step
 export INTEGRATOR_MODES, G_ACCEL

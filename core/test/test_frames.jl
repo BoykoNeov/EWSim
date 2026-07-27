@@ -380,6 +380,140 @@
         end
     end
 
+    @testset "radome slope CURVE — the DERIVATIVE identity (slice 28)" begin
+        # ⭐ THE TOOTH THAT IS THE SLICE: `radome_error_curve` is the EXACT integral of
+        # `radome_slope_curve`, so finite-differencing the shipped BEND must reproduce the shipped
+        # SLOPE. This pins the two kernels TO EACH OTHER rather than restating either formula —
+        # and it is what makes "the parasitic loop follows the DERIVATIVE, not the bend" a
+        # statement about the shipped code instead of about the plan.
+        R₀, A, k = -0.03, -0.05, 12.0
+        h = 1.0e-6
+        for u in (0.0, 0.05, 0.15, 0.262, 0.40, -0.20, -0.45)
+            fd = (radome_error_curve(R₀, A, k, u + h, 0.0)[1] -
+                  radome_error_curve(R₀, A, k, u - h, 0.0)[1]) / (2h)
+            @test fd ≈ radome_slope_curve(R₀, A, k, u) atol = 1e-8
+        end
+        # the SAME identity on the ELEVATION axis (the curve is applied per angle, not to a
+        # magnitude — a kernel that curved only azimuth would pass every azimuth-only test)
+        for u in (0.10, -0.30)
+            fd = (radome_error_curve(R₀, A, k, 0.0, u + h)[2] -
+                  radome_error_curve(R₀, A, k, 0.0, u - h)[2]) / (2h)
+            @test fd ≈ radome_slope_curve(R₀, A, k, u) atol = 1e-8
+        end
+
+        # ⭐ `R(0) == slope0` EXACTLY for EVERY amplitude — the ripple term vanishes identically at
+        # boresight. This is not a convenience: it is the MECHANISM of the slice's central
+        # asymmetry (characterizing at boresight measures a number STRUCTURALLY insensitive to the
+        # curve, hence exactly right in the one place the loop is never closed).
+        for Aa in (0.0, -0.02, -0.05, -0.10, +0.07)
+            @test radome_slope_curve(R₀, Aa, k, 0.0) === Float64(R₀)
+        end
+
+        # BOUNDEDNESS — the property that killed the cubic. R ∈ [R₀, R₀+2A] over any look sweep.
+        let lo = min(R₀, R₀ + 2A), hi = max(R₀, R₀ + 2A)
+            for u in range(-1.0, 1.0; length = 101)
+                Ru = radome_slope_curve(R₀, A, k, u)
+                @test lo - 1e-12 ≤ Ru ≤ hi + 1e-12
+            end
+        end
+
+        # ODDNESS of the bend (a SYMMETRIC radome) — bit-for-bit, PAIRED with a does-curve case.
+        for u in (0.13, 0.37, 0.62)
+            @test radome_error_curve(R₀, A, k, u, 0.0)[1] ==
+                  -radome_error_curve(R₀, A, k, -u, 0.0)[1]
+        end
+        @test radome_error_curve(R₀, A, k, 0.30, 0.0)[1] != radome_error_curve(R₀, 0.0, k, 0.30, 0.0)[1]
+
+        # ⚠ THE REDUCTION, BIT-FOR-BIT: amplitude 0 IS slice 26's linear kernel. That exactness is
+        # what makes `ripple` a KNOB rather than a fidelity rung (atmosphere.jl's discriminator —
+        # MEASURED, not argued). ⚠ The SEAM still branches: `x + 0.0` is not the identity at
+        # x = −0.0 and float addition is not associative, so the shipped no-ripple path calls
+        # `radome_error` verbatim rather than relying on this.
+        for (ua, ue) in ((0.31, -0.22), (0.0, 0.0), (-0.45, 0.18))
+            @test radome_error_curve(-0.10, 0.0, k, ua, ue) == radome_error(-0.10, ua, ue)
+        end
+        # k is FLOORED at the consumer, so a zero/negative k cannot divide-by-zero a live tick
+        # (convention 5 — the slice-21 scale-height precedent). Finite, not necessarily meaningful.
+        @test all(isfinite, radome_error_curve(R₀, A, 0.0, 0.3, -0.2))
+        @test all(isfinite, radome_error_curve(R₀, A, -5.0, 0.3, -0.2))
+    end
+
+    @testset "THE PARASITIC GAIN MOVES WITH LOOK ANGLE (slice 28; the #1 SIGN TRAP's 10th)" begin
+        # ⚠⚠ THE TOOTH MUST BE MEASURED AT **TWO DIFFERENT LOOK ANGLES**. A frozen-geometry test at
+        # ONE look angle passes for a CONSTANT-slope kernel too and would prove nothing — the whole
+        # claim of slice 28 is that the coefficient MOVES. So: same frozen geometry as slices 26/27
+        # (target, missile and true LOS all still, only the attitude rotating — slice 26's P7A: a
+        # parasitic gain cannot be measured on a tracking missile), two DIFFERENT boresights, and
+        # the measured coefficient must match `radome_slope_curve` AT EACH.
+        R₀, A, k = -0.03, -0.05, 12.0
+        dt = 1.0e-5
+        û  = los_unit(Vec3(0.0, 0.0, 3000.0), Vec3(6000.0, 2000.0, 4200.0))
+
+        # ε̇_el under a pitch rate, with the missile's nose PRE-ROTATED by `yaw0` so the LOS sits at
+        # a chosen look angle. Finite difference of the SHIPPED curve kernel.
+        function gain_at(yaw0::Float64)
+            q0 = quat_from_axis_angle(Vec3(0.0, 0.0, 1.0), yaw0)
+            ω  = Vec3(0.0, -1.0, 0.0)                       # nose UP is a −y rotation (slice 23)
+            q1 = qnormalize(qmul(q0, quat_from_axis_angle(ω, norm3_test(ω) * dt)))
+            a0, e0 = radome_error_curve(R₀, A, k, look_angles(q0, û)...)
+            a1, e1 = radome_error_curve(R₀, A, k, look_angles(q1, û)...)
+            laz, lel = look_angles(q0, û)
+            return ((e1 - e0) / dt, laz, lel)
+        end
+
+        # TWO look angles, chosen either side of the ripple's first extremum (peak at k·look = π,
+        # i.e. look = 0.262 rad = 15°): the coefficient must DIFFER, and match the curve at each.
+        ėe_a, laz_a, lel_a = gain_at(0.0)    # LOS sits at its natural azimuth off the nose
+        ėe_b, laz_b, lel_b = gain_at(-0.45)  # nose yawed away ⇒ a much larger look azimuth
+        @test !(laz_a ≈ laz_b)                                   # the two probes really do differ
+        # ⭐ SLICE 26's LAW WITH `R` → `R(look)`: a pure PITCH rate moves `look_el`, so the
+        # ELEVATION coefficient is the curve's slope AT `look_el`, scaled by cos(look_az).
+        # ⚠ THIS ASSERT WAS FIRST WRITTEN WITH `R(0)` IN PLACE OF `R(look_el)` — on the assumption
+        # that this frozen geometry has `look_el ≈ 0`. IT DOES NOT (`look_el` = 0.187 rad), and the
+        # test caught it: 0.1055 measured against 0.0285 predicted, ~3.7× out. The kernel was
+        # right and the expectation was wrong — which is exactly the failure mode a
+        # "restate the formula" tooth would have hidden.
+        @test ėe_a ≈ radome_slope_curve(R₀, A, k, lel_a) * cos(laz_a) * (-1.0) atol = 2e-5
+        @test ėe_b ≈ radome_slope_curve(R₀, A, k, lel_b) * cos(laz_b) * (-1.0) atol = 2e-5
+        # A yaw pre-rotation leaves ELEVATION untouched (a rotation about ẑ preserves it), so the
+        # two pitch coefficients share `R(look_el)` and differ ONLY through cos(look_az). The
+        # AZIMUTH channel below is the one that moves along the CURVE — that IS the channel split.
+        @test lel_a ≈ lel_b atol = 1e-12
+        @test ėe_a ≉ ėe_b                                        # cos(look_az) alone already moves it
+
+        # ⭐ THE AZIMUTH CHANNEL IS WHERE THE CURVE BITES, and this is the assert that a
+        # constant-slope kernel CANNOT pass: under a pure YAW rate the coefficient is the curve's
+        # slope AT THE LOOK AZIMUTH, so it must MOVE between the two probes and match at each.
+        function gain_az_at(yaw0::Float64)
+            q0 = quat_from_axis_angle(Vec3(0.0, 0.0, 1.0), yaw0)
+            ω  = Vec3(0.0, 0.0, 1.0)
+            q1 = qnormalize(qmul(q0, quat_from_axis_angle(ω, norm3_test(ω) * dt)))
+            a0, _ = radome_error_curve(R₀, A, k, look_angles(q0, û)...)
+            a1, _ = radome_error_curve(R₀, A, k, look_angles(q1, û)...)
+            laz, _ = look_angles(q0, û)
+            return ((a1 - a0) / dt, laz)
+        end
+        ėa_a, laz_a2 = gain_az_at(0.0)
+        ėa_b, laz_b2 = gain_az_at(-0.45)
+        @test ėa_a ≈ -radome_slope_curve(R₀, A, k, laz_a2) atol = 2e-5
+        @test ėa_b ≈ -radome_slope_curve(R₀, A, k, laz_b2) atol = 2e-5
+        # THE HEADLINE, ON THE KERNEL: the two coefficients are NOT the same number, and their
+        # ratio is the ratio of the curve at the two look angles — the same glass, two engagements.
+        @test abs(ėa_a - ėa_b) > 0.01
+        @test (ėa_a / ėa_b) ≈ radome_slope_curve(R₀, A, k, laz_a2) /
+                              radome_slope_curve(R₀, A, k, laz_b2) atol = 5e-3
+        # PAIRED CONTROL: with amplitude 0 the SAME two probes give the SAME coefficient — which is
+        # exactly why a one-look-angle test proves nothing.
+        let g(y) = begin
+                q0 = quat_from_axis_angle(Vec3(0.0, 0.0, 1.0), y)
+                q1 = qnormalize(qmul(q0, quat_from_axis_angle(Vec3(0.0, 0.0, 1.0), dt)))
+                (radome_error_curve(R₀, 0.0, k, look_angles(q1, û)...)[1] -
+                 radome_error_curve(R₀, 0.0, k, look_angles(q0, û)...)[1]) / dt
+            end
+            @test g(0.0) ≈ g(-0.45) atol = 2e-5
+        end
+    end
+
     @testset "SEEKER_AXES_MODES — the one-list-no-drift const (convention 7)" begin
         @test SEEKER_AXES_MODES == (:pitch_plane, :az_el)
         @test :az_el in SEEKER_AXES_MODES && :pitch_plane in SEEKER_AXES_MODES
