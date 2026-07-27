@@ -735,6 +735,18 @@ function _airframe_view_info(w::World)
     # pitch_coupled ↔ six_dof. `false`/absent on every slice-16..22 wire ⇒ they keep the 2-D view.
     info = Dict{Symbol,Any}(:airframe_view => true, :airframe_target => String(missiles[1]))
     any(haskey(w.entities[m].comp, :af_cy_beta) for m in missiles) && (info[:airframe_6dof] = true)
+    # SLICE 26 — the RADOME marker, and its job is to make the client DROP the shared fidelity
+    # button (Option-P′ again — slice 16's own resolution, and slice 16 is the right analogue: a
+    # live knob spanning a stability boundary, with no button at all).
+    #
+    # ⚠ THE SLICE-20 PRECEDENT DELIBERATELY DOES NOT TRANSFER (advisor). Slice 20 kept the inherited
+    # cycler because its other position (`:point_mass`) makes induced drag INERT — nothing false is
+    # displayed. A radome wire is a two-angle host, so the inherited cycler would be slice 25's
+    # `seeker_axes`, and its other position (`:pitch_plane`) leaves the radome LIVE AND REFRACTING on
+    # a missile that ALSO misses by 2000 m for a wholly unrelated reason. Two mechanisms compounding
+    # in one view is exactly what convention 9 exists to prevent — and it is the "identical
+    # signature, different mechanism" trap slice 25 spent a section on. So: no button, one slider.
+    any(haskey(w.entities[m].comp, :radome_slope) for m in missiles) && (info[:radome_view] = true)
     return info
 end
 
@@ -1527,9 +1539,40 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     û_tru        = los_unit(e.pos, tgt.pos)
     az_tru, el_tru = az_el(û_tru)
     λ_tru        = atan(û_tru[3], û_tru[1])
-    az_m = az_tru + σ * n_az
-    el_m = el_tru + σ * n_el
-    λ_m  = λ_tru  + σ * n_el
+
+    # SLICE 26 — THE RADOME. The seeker does not look at the target directly: it looks THROUGH a
+    # radome, which refracts by `ε = R·(look angle off the boresight)` (frames.jl `radome_error`).
+    # The bend therefore depends on the missile's OWN ATTITUDE, which closes a feedback path from
+    # the airframe back into guidance — `q → look → ε → apparent λ̇ → PN → a_cmd → α → q` — and past
+    # a critical loop gain (MEASURED at `N·|R|/ρ ≈ 0.38`) that loop is UNSTABLE and the missile
+    # shakes itself into a sustained limit cycle. See `docs/plans/slice26.md`.
+    #
+    # ⚠ STRUCTURAL BYTE-IDENTITY (the slice-20/21 shape): a BRANCH, with the else-arm slice-25
+    # VERBATIM — never `az_tru + ε + σ*n` trusting `R = 0 ⇒ ε = 0.0`. Two reasons, both real: the
+    # `-0.0` trap, and float non-associativity ((a+ε)+b ≠ a+b in the last ULP). A no-radome wire is
+    # bit-for-bit slice 25 BY CONSTRUCTION, not by a zero that happens to cancel.
+    #
+    # ⚠ RUNG-GATED ON THE LIVE `:airframe`, NOT merely on `haskey(:att_q)` (the slice-21 `_atm_on` /
+    # slice-23 stale-readout latent-bug class, whose THIRD occurrence this would be): `:att_q` is
+    # minted by `_integrate_6dof!` and NEVER deleted, so after a cross-toggle off `:six_dof` a
+    # key-gated radome would keep refracting through a FROZEN attitude — a boresight error computed
+    # from an attitude the missile is no longer flying. `haskey(:att_q)` stays ONLY as a crash guard
+    # (convention 5: a live knob can never throw inside a tick), it is not the semantic gate.
+    _rad_on = haskey(c, :radome_slope) && haskey(c, :att_q) &&
+              get(w.fidelity, :airframe, :point_mass) === :six_dof
+    if _rad_on
+        R_rad = Float64(c[:radome_slope])
+        look_az, look_el = look_angles(c[:att_q]::Quat, û_tru)
+        ε_az, ε_el = radome_error(R_rad, look_az, look_el)
+        az_m = az_tru + ε_az + σ * n_az
+        el_m = el_tru + ε_el + σ * n_el
+        λ_m  = λ_tru  + ε_el + σ * n_el     # ONE physical bend of ONE measurement — both trackers see it
+    else
+        R_rad = 0.0; look_az = 0.0; look_el = 0.0; ε_az = 0.0; ε_el = 0.0
+        az_m = az_tru + σ * n_az            # ── slice-25 VERBATIM below ──
+        el_m = el_tru + σ * n_el
+        λ_m  = λ_tru  + σ * n_el
+    end
 
     # Lazy first-tick init (the `_observe_point!` shape): seed every memory, all rates 0.
     if !get(c, :seek_init, false)
@@ -1589,6 +1632,24 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     tel["$sid.omega_oop"]   = _finite(hypot(ω[1], ω[3]))        # ‖out-of-plane ω‖ — 0.0 on the foil
     tel["$sid.omega_mag"]   = _finite(_norm3(ω))                # ‖ω‖ (the PN driver)
     tel["$sid.sigma_seek"]  = _finite(σ)
+    # SLICE 26 — the RADOME readouts, shipped ONLY while the radome is live (the never-stale
+    # discipline; a slice-11/13/25 wire is byte-identical). All SCALARS (convention 13 — the client
+    # recomputes nothing; convention 6 — `_finite`/`_finite_coord` on every one).
+    if _rad_on
+        tel["$sid.radome_slope"] = _finite_coord(R_rad)                     # the live knob value
+        # ⭐ THE MECHANISM: the boresight error this tick. `ε_el` is the ELEVATION bend — the one
+        # that closes the pitch loop (`ε̇_el = +R·cos(look_az)·ω_y`, frames.jl `radome_error`).
+        tel["$sid.radome_eps"]    = _finite_coord(ε_el)                     # signed, rad
+        tel["$sid.radome_eps_az"] = _finite_coord(ε_az)                     # signed, rad
+        tel["$sid.look_angle"]    = _finite(rad2deg(hypot(look_az, look_el)))  # off boresight, deg
+        # ⚠ A DIAGNOSTIC, NOT THE MECHANISM (advisor). Once the loop is ringing this ratio is
+        # dominated by the cycle's own body-rate feedthrough, so it is a CONSEQUENCE of the ring —
+        # the same fact as the body rate, told twice. Never quote it as independent evidence: the
+        # STATIC effect of R on the reported rate is small and smooth (0.593 at R = +0.6).
+        ω_t = los_rate(tgt.pos - e.pos, tgt.vel - e.vel)
+        n_t = _norm3(ω_t)
+        tel["$sid.omega_ratio"] = _finite(n_t > 1.0e-12 ? _norm3(ω) / n_t : FINITE_CEIL)
+    end
     return nothing
 end
 

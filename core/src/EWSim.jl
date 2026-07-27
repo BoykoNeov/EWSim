@@ -75,6 +75,14 @@ export rotate, rotate_inv, los_unit, los_range, range_rate, los_rate, az_el
 # Two-angle (az/el) LOS reconstruction (slice 25, §11 Tier-A — a seeker in the 6-DOF loop):
 # the measurement→direction inverse of `az_el` + the LOS-rate VECTOR `ω = û × û̇` (≡ `los_rate`)
 export los_unit_from_angles, los_rate_from_angles
+# Slice 26 (§11 Tier-A — the arc's named end point): the RADOME / body-rate PARASITIC LOOP. The
+# seeker looks THROUGH a radome that refracts by an amount depending on the LOOK ANGLE, so the
+# missile's own body rate moves the line of sight it reports — a feedback path from the airframe
+# back into guidance. Both kernels are one-liners ON PURPOSE: the physics is the LOOP, not the
+# formula. KNOB (`radome_slope`), no fidelity rung — `R = 0` is an in-domain slider value
+# (atmosphere.jl's discriminator; the `af_cma` analogue, which likewise spans a stability
+# boundary through zero).
+export look_angles, radome_error
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step
 export INTEGRATOR_MODES, G_ACCEL

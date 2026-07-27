@@ -356,6 +356,24 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # (`sigma_seek`) is applied to BOTH angles — a NAMED approximation (a real seeker's az/el
             # channels differ), and it keeps the showcase's single noise knob honest.
             comp[:seek_two_angle] = get(sb, "two_angle", false) === true
+            # Slice 26 — THE RADOME ERROR SLOPE, PRESENCE-GATED ON THE KEY (the `alt_hold_m` /
+            # `af_delta_rate_max` precedent, NOT the block-presence pattern the other seeker keys
+            # use): every slice-11/13/25 scenario HAS a `seeker:` block, so gating on the block would
+            # grow them all a radome and kill convention-2 byte-identity. Only a YAML that AUTHORS
+            # `radome_slope` mints the key, and `_observe_point3d!` gates on `haskey(:radome_slope)`.
+            # SIGNED and dimensionless (dε/d(look angle)): NEGATIVE slopes close a POSITIVE-feedback
+            # loop through the body rate and, past `N·|R|/ρ ≈ 0.38`, the missile shakes itself into a
+            # sustained limit cycle; POSITIVE ones merely de-tune the effective navigation ratio
+            # (`docs/plans/slice26.md` §4). Validated FINITE only — the sign IS the lesson and every
+            # magnitude is crash-safe (gate-0 P5B ran |R| to 1e6 with all telemetry finite), so a
+            # magnitude bound here would be a fake constraint. It is INERT without a two-angle host
+            # AND without the live `:airframe = :six_dof` rung (there is no attitude to look through).
+            if haskey(sb, "radome_slope")
+                comp[:radome_slope] = _f64(sb["radome_slope"])
+                isfinite(comp[:radome_slope]) ||
+                    error("missile '$id': seeker.radome_slope must be finite " *
+                          "(got $(comp[:radome_slope]))")
+            end
             # Slice 13: the `:scan` seeker (fidelity `seeker: scan`) forms a NOISY angular-power
             # PROFILE over a FIXED grid (the slice-3 CFAR sandbox on the LOS-ANGLE axis) instead of
             # ONE noisy truth bearing. The grid/beam/CFAR/gate config lands here (STATIC — draw-count/

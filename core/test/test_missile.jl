@@ -3930,3 +3930,274 @@ end
         end
     end
 end
+
+@testset "THE RADOME / body-rate PARASITIC LOOP wired (slice 26 — the arc's named end point)" begin
+    dt = 1.0e-3
+    n3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # The slice-25 engagement on the slice-23/24 6-DOF plant — a two-angle seeker, skid-to-turn,
+    # a STATIC cross-range target — with the radome slope as the ONE new authored key. σ = 5e-5:
+    # at slice 25's 3e-4 the seeker NOISE ALONE puts 7× the σ=0 baseline of jitter on q and
+    # compresses the ring's signature from 106× to 14× (gate-0 P6B). `radome === nothing` mints NO
+    # `:radome_slope` key at all — the byte-identity arm, and the shape the loader gates on.
+    function rad_world(; radome = nothing, axes = :az_el, airframe = :six_dof, seed = 26,
+                         sigma = 5.0e-5, rho = 1.0, alpha_max = 0.3, n_pn = 4.0, Y = 2000.0)
+        w = World(seed = seed,
+                  fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                 :autopilot => :alpha, :airframe => airframe,
+                                                 :seeker => :filtered, :seeker_axes => axes))
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => rho,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => alpha_max, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => n_pn, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => sigma, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true)
+        radome === nothing || (comp[:radome_slope] = radome)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, Y, 4200.0),
+                                 vel = zero(Vec3), comp = Dict{Symbol,Any}())
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:t1)]
+    end
+
+    # ⭐ THE METRIC IS rms BODY RATE over the mid-engagement — NEVER the peak and NEVER the miss.
+    # `max|q|` is neither frame-robust nor noise-robust (peaks OVERLAP across the threshold, gate-0
+    # P5D/P6C), and the miss is NOT MONOTONE ANYWHERE (1.73 m at R = −0.15 sits BELOW 3.35 m at
+    # −0.12 — the 4th occurrence of [[ewsim-df-ellipse-sigma-monotonicity]], here disqualifying the
+    # metric rather than bounding a domain). First-CPA over the first descending band as always.
+    function ringfly(; T = 12.0, kw...)
+        w, s = rad_world(; kw...)
+        qs = Float64[]; rmin, prev, closing = Inf, Inf, true
+        asat = 0; dsat = 0; nt = 0; αpk = 0.0; epk = 0.0; msat = 0
+        for _ in 1:round(Int, T / dt)
+            tick!(w, s, dt); empty!(w.events)
+            tel = w.env[:telemetry]
+            push!(qs, Float64(get(tel, "m1.omega_q", 0.0)))
+            αpk = max(αpk, abs(Float64(get(tel, "m1.alpha", 0.0))))
+            epk = max(epk, abs(Float64(get(tel, "m1.radome_eps", 0.0))))
+            asat += Int(Float64(get(tel, "m1.aero_sat", 0.0)) != 0.0)
+            dsat += Int(Float64(get(tel, "m1.defl_sat", 0.0)) != 0.0)
+            msat += Int(Float64(get(tel, "m1.saturated", 0.0)) != 0.0)
+            nt += 1
+            r = n3(w.entities[:t1].pos - w.entities[:m1].pos)
+            closing && r > prev && (closing = false)
+            closing && (rmin = min(rmin, r)); prev = r
+            closing || break
+        end
+        i0 = max(1, length(qs) ÷ 4); i1 = max(i0 + 1, 3length(qs) ÷ 4)
+        rms = sqrt(sum(abs2, @view qs[i0:i1]) / (i1 - i0 + 1))
+        return (rms = rms, miss = rmin, qpk = maximum(abs, qs), αpk = αpk, epk = epk,
+                asat = asat, dsat = dsat, msat = msat, nt = nt, w = w)
+    end
+
+    @testset "BYTE-IDENTITY — no `radome_slope` key ⇒ the slice-25 path, bit-for-bit" begin
+        # The structural claim (the slice-20/21 shape): the no-radome arm takes a DIFFERENT BRANCH,
+        # it does not add a zero. Never `+ ε` trusting `R = 0 ⇒ 0.0` — the `-0.0` trap AND float
+        # non-associativity ((a+ε)+b ≠ a+b in the last ULP) both live on that line.
+        function trace(; kw...)
+            w, s = rad_world(; kw...)
+            out = Float64[]
+            for k in 1:2500
+                tick!(w, s, dt); empty!(w.events)
+                k % 250 == 0 && append!(out, (w.entities[:m1].pos..., w.entities[:m1].vel...,
+                                              w.entities[:m1].comp[:att_q]...,
+                                              w.entities[:m1].comp[:omega_body]...,
+                                              randn(copy(w.rng))))
+            end
+            out
+        end
+        base = trace()
+        # a SECOND no-radome run is bit-identical to the first (determinism, and the control)
+        @test trace() == base
+        # ⭐ AND SO IS AN AUTHORED `R = 0` — MEASURED, and stronger than expected. `ε = 0·look` is
+        # exactly ±0.0, and `a + ±0.0 === a` for every finite a, so the radome BRANCH at R = 0
+        # reproduces the key-absent branch bit-for-bit. That is the KNOB-vs-RUNG discriminator
+        # (atmosphere.jl) verified rather than argued: R = 0 is not merely "an in-domain slider
+        # value", it is BIT-IDENTICAL to the radome not existing — which is precisely why this is a
+        # knob like `af_cma`/`af_k_induced` and NOT a rung like `:atmosphere` (whose off-state is
+        # `H = ∞`, a limit point no slider reaches).
+        @test trace(radome = 0.0) == base
+        # ⚠ The BRANCH still earns its keep: byte-identity here is BY CONSTRUCTION (the no-key arm
+        # never forms ε at all), not by a zero that happens to cancel. An unconditional `+ ε` would
+        # ride on `0.0 * look` staying finite — which it does not if a look angle ever goes non-finite.
+        # …and the RNG stream is in lockstep either way — 2 draws/tick, radome or not (convention 3)
+        for R in (nothing, 0.0, -0.10)
+            w, s = rad_world(radome = R)
+            for _ in 1:600; tick!(w, s, dt); empty!(w.events); end
+            ref = Xoshiro(26); for _ in 1:1200; randn(ref); end
+            @test randn(copy(ref)) == randn(copy(w.rng))
+        end
+    end
+
+    @testset "INERTNESS — the radome needs a 6-DOF plant (the latent-bug class, 3rd occurrence)" begin
+        # ⚠ RUNG-GATED, NOT key-gated. `:att_q` is minted by `_integrate_6dof!` and NEVER deleted, so
+        # a key-gated radome would keep refracting through a FROZEN attitude after a cross-toggle off
+        # `:six_dof` (the slice-21 `_atm_on` bug and the slice-23 stale-readout bug, both caught by an
+        # advisor at gate 2 — this is the same class's third appearance).
+        base = ringfly(airframe = :pitch_coupled, radome = nothing)
+        with = ringfly(airframe = :pitch_coupled, radome = -0.30)   # a slope 3× past onset…
+        @test with.rms == base.rms                                  # …changes NOTHING off :six_dof
+        @test with.miss == base.miss
+        @test !haskey(with.w.env[:telemetry], "m1.radome_eps")      # and ships no stale telemetry
+        # the LIVE cross-toggle: start in :six_dof (att_q minted), leave it, and the radome must go
+        # inert on the very next tick rather than refract through the frozen attitude.
+        w, s = rad_world(radome = -0.15)
+        for _ in 1:400; tick!(w, s, dt); empty!(w.events); end
+        @test haskey(w.entities[:m1].comp, :att_q)
+        @test haskey(w.env[:telemetry], "m1.radome_eps")
+        w.fidelity[:airframe] = :pitch_coupled
+        tick!(w, s, dt); empty!(w.events)
+        @test haskey(w.entities[:m1].comp, :att_q)                  # the key SURVIVES (never deleted)
+        @test !haskey(w.env[:telemetry], "m1.radome_eps")           # …but the radome does NOT fire
+    end
+
+    @testset "⭐ THE LIMIT CYCLE — 0.09 is quiet, 0.10 shakes (and it is not the miss)" begin
+        quiet = ringfly(radome = -0.09)
+        ring  = ringfly(radome = -0.10)
+        zero_ = ringfly(radome = 0.0)
+        @test quiet.rms < 0.05                          # below onset the body is QUIET…
+        @test ring.rms  > 0.5                           # …and one step past it, it is not
+        @test ring.rms / quiet.rms > 10.0               # decisive, not a nudge (gate 0: ~60×)
+        @test ring.rms / zero_.rms > 10.0
+        @test quiet.rms / zero_.rms < 3.0               # …while R = −0.09 is barely off baseline
+        # ⚠ THE MISS IS *NOT* THE METRIC — the ringing arm still HITS. Asserting a miss here would
+        # be a false claim (and it is not monotone in R anyway). Pin that it stays a hit, so nobody
+        # later "fixes" the scenario by chasing one.
+        @test ring.miss < 50.0
+        # THE MECHANISM is ε, and it is nonzero only where the radome is (paired null).
+        @test ring.epk > 1.0e-3
+        @test zero_.epk == 0.0
+    end
+
+    @testset "⭐ THE SIGN — only NEGATIVE slopes ring; positive ones DE-TUNE (the #1 trap's 8th)" begin
+        neg = ringfly(radome = -0.10)
+        pos = ringfly(radome =  0.10)
+        @test neg.rms > 0.5
+        @test pos.rms < 0.05                            # the mirror case: same |R|, no cycle at all
+        @test neg.rms / pos.rms > 10.0
+        # …and the positive arm is not merely inert — it perturbs the measurement just as hard.
+        @test pos.epk > 1.0e-3
+        @test isapprox(pos.epk, neg.epk; rtol = 0.6)
+    end
+
+    @testset "⭐ THE ISOLATION — the ceiling BOUNDS the cycle, it does not CAUSE it" begin
+        # Slice 25 bought `aero_sat == 0` in both arms. That is IMPOSSIBLE here and must not be
+        # copied: an oscillation drives demand, and demand hits the ceiling. The isolation is made a
+        # DIFFERENT and stronger way — raise α_max 3× so the ceiling cannot bind at the old
+        # amplitude and the ONSET DOES NOT MOVE. Only the amplitude grows.
+        q_lo = ringfly(radome = -0.09, alpha_max = 0.3)
+        r_lo = ringfly(radome = -0.10, alpha_max = 0.3)
+        q_hi = ringfly(radome = -0.09, alpha_max = 0.9)
+        r_hi = ringfly(radome = -0.10, alpha_max = 0.9)
+        @test q_hi.rms < 0.05 && r_hi.rms > 0.5         # SAME onset at a 3× ceiling
+        @test q_lo.rms < 0.05 && r_lo.rms > 0.5
+        @test r_hi.rms > r_lo.rms                       # …the ceiling only sets the AMPLITUDE
+        @test r_hi.qpk > 1.5 * r_lo.qpk
+        # the OTHER caps stay provably clear on the SHIPPED configuration (α_max = 0.3): the fin
+        # deflection limit (cap #3) is not what is binding, and `a_max` (cap #1) never binds at all.
+        @test r_lo.dsat <= 0.01 * r_lo.nt
+        @test q_lo.dsat <= 0.01 * q_lo.nt
+        # cap #1 (`a_max`, the authored MAGNITUDE clamp) is structurally out of reach: the aero
+        # ceiling itself maxes ≪ a_max, so the α inversion clamps first and `a_max` cannot be what
+        # is binding. ⚠ Counted over the run, NOT read off the last tick — the r→0 endgame spikes
+        # `a_demand` on the final ticks in EVERY arm ([[ewsim-missile-verifier-sampling]]), and
+        # sampling there reads `saturated == 1` on a run that never saturated in the approach.
+        @test r_lo.msat <= 0.01 * r_lo.nt
+        @test q_lo.msat <= 0.01 * q_lo.nt
+        @test Float64(r_lo.w.env[:telemetry]["m1.a_max_aero"]) < 1000.0
+    end
+
+    @testset "⭐ THE LOOP GAIN — the threshold is `N·|R|`, so raising N destabilizes EARLIER" begin
+        # The teaching payload: a radome slope is not good or bad by itself. Gate 0 measured
+        # `N·|R_crit|` = 0.380…0.400 across N ∈ {3,…,8}; two cells of that surface are enough to
+        # pin the SCALING here (the full sweep lives in docs/plans/slice26.md §1).
+        @test ringfly(radome = -0.08, n_pn = 4.0).rms < 0.05    # inert at N = 4…
+        @test ringfly(radome = -0.08, n_pn = 5.0).rms > 0.5     # …and ringing at N = 5, same slope
+        @test ringfly(radome = -0.12, n_pn = 3.0).rms < 0.05    # a BIGGER slope is safe at N = 3
+    end
+
+    @testset "STRUCTURAL, not noise: σ_seek = 0 still self-excites" begin
+        # The tempting story ("a noisy seeker excites the airframe") — REFUTED, and refuting it is
+        # what makes this a LOOP lesson rather than a filter one.
+        @test ringfly(radome = -0.10, sigma = 0.0).rms > 0.5
+        @test ringfly(radome =  0.0,  sigma = 0.0).rms < 0.05
+    end
+
+    @testset "an absurd slope never crashes a tick (live-slider guard, convention 5/6)" begin
+        for R in (-1.0e6, 1.0e6, -1.0, 1.0)
+            w, s = rad_world(radome = R)
+            ok = true
+            for _ in 1:600
+                tick!(w, s, dt); empty!(w.events)
+                tel = w.env[:telemetry]
+                ok &= all(isfinite, w.entities[:m1].pos) &&
+                      all(isfinite, w.entities[:m1].comp[:att_q]) &&
+                      isfinite(tel["m1.radome_eps"]) && isfinite(tel["m1.look_angle"]) &&
+                      isfinite(tel["m1.omega_ratio"]) && isfinite(tel["m1.radome_slope"])
+                ok || break
+            end
+            @test ok
+        end
+    end
+
+    @testset "loader + handshake: the key is PRESENCE-gated and it DROPS the button" begin
+        base = """
+        name: rad
+        seed: 26
+        dt_physics: 0.001
+        fidelity: {autopilot: alpha, guidance: pn, seeker: filtered, seeker_axes: az_el, airframe: six_dof}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 700.0
+              elevation_deg: 12.0
+              cd_area_m2: 0.0
+              rho: 1.0
+              seeker: {sigma_seek: 0.00005, alpha: 0.3, beta: 0.05, two_angle: true, radome_slope: -0.10}
+              guidance: {n_pn: 4.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+              airframe: {ref_len_m: 0.2, inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0, cmq: -150.0,
+                         cla: 20.0, alpha_max: 0.3, cy_beta: 20.0, inertia_roll_kgm2: 2.0,
+                         inertia_yaw_kgm2: 20.0, c_roll: 50.0}
+          - id: tgt1
+            kind: target
+            pos: [6000.0, 2000.0, 4200.0]
+            vel: [0.0, 0.0, 0.0]
+            target: {rcs_m2: 1.0}
+        """
+        mktempdir() do dir
+            p = joinpath(dir, "ok.yaml"); write(p, base)
+            scn = load_scenario(p)
+            @test scn.world.entities[:m1].comp[:radome_slope] == -0.10
+            # the handshake marker that makes the client DROP the shared button (Option-P′) —
+            # ⚠ NOT the slice-20 inherited-cycler precedent: `:pitch_plane` would leave the radome
+            # LIVE AND REFRACTING beside slice 25's unrelated 2000 m blind miss.
+            info = EWSim._airframe_view_info(scn.world)
+            @test info[:radome_view] === true
+            @test info[:airframe_6dof] === true
+            # PRESENCE-gated: no authored key ⇒ NO comp key ⇒ no marker (slices 23/24/25 keep theirs)
+            p2 = joinpath(dir, "plain.yaml")
+            write(p2, replace(base, ", radome_slope: -0.10" => ""))
+            scn2 = load_scenario(p2)
+            @test !haskey(scn2.world.entities[:m1].comp, :radome_slope)
+            @test !haskey(EWSim._airframe_view_info(scn2.world), :radome_view)
+            @test EWSim._airframe_view_info(scn2.world)[:airframe_6dof] === true
+            # …and it is a real, knob-addressable comp key (a slider must name one)
+            p3 = joinpath(dir, "knob.yaml")
+            write(p3, base * "\nknobs:\n  - {target: m1, key: radome_slope, min: -0.12, max: 0.06, label: R}\n")
+            @test length(load_scenario(p3).knobs) == 1
+            # a non-finite slope is refused at LOAD (convention 5, validate-at-load half)
+            pb = joinpath(dir, "bad.yaml")
+            write(pb, replace(base, "radome_slope: -0.10" => "radome_slope: .nan"))
+            @test_throws ErrorException load_scenario(pb)
+        end
+    end
+end

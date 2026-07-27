@@ -262,3 +262,68 @@ function los_rate_from_angles(az::Real, el::Real, az_dot::Real, el_dot::Real)
              el_dot * ce)
     return _cross(û, u̇)
 end
+
+# --- the RADOME (slice 26, §11 Tier-A — the bank-to-turn / 3-D arc's named end point) ------
+#
+# The seeker does not look at the target directly: it looks THROUGH a radome, and a radome
+# REFRACTS. Everything below is measurement geometry in the BODY frame, which is why it lives
+# here beside `rotate_inv`/`az_el` and not in an aero lib — the radome is a property of the
+# SENSOR's installation, not of the airframe.
+#
+# ⚠ THE PHYSICS IS THE FEEDBACK PATH, NOT THE FORMULA. Both kernels below are one-liners, and
+# their triviality is the point: what makes slice 26 a slice is that `look` depends on the
+# missile's own ATTITUDE, so a body rate moves the reported line of sight, which moves the
+# guidance command, which moves the body rate. Past a critical loop gain (MEASURED at
+# `N·|R|/ρ ≈ 0.38`, `docs/plans/slice26.md` §1) that loop is UNSTABLE and the missile shakes
+# itself into a sustained limit cycle — with a NOISELESS seeker and a stationary target.
+
+"""
+    look_angles(att::Quat, los::Vec3) -> (look_az, look_el)   (radians)
+
+The LOOK ANGLES of a line-of-sight direction off the missile's own boresight: `los` rotated
+into the BODY frame (`rotate_inv`, since `att` maps body→inertial) and read out with
+[`az_el`](@ref). Zero when the nose points straight at the target.
+
+Slice 26 (the radome parasitic loop) is the first consumer, and slice 25's two-angle seeker
+was its hard prerequisite: an error slope perturbs a measurement AS A FUNCTION OF LOOK ANGLE,
+and before slice 25 there was no two-angle measurement for it to perturb. A seeker FOV /
+gimbal limit is the other thing this quantity makes expressible (a named deferral).
+
+The identity attitude returns `az_el(los)` unchanged — the degenerate pinned in
+`test_frames.jl`.
+"""
+look_angles(att::Quat, los::Vec3) = az_el(rotate_inv(att, los))
+
+"""
+    radome_error(slope, look_az, look_el) -> (ε_az, ε_el)   (radians)
+
+The BORESIGHT ERROR a radome of error slope `slope` (dimensionless, signed) adds to a
+measurement taken at look angles `(look_az, look_el)`: the standard LINEAR model
+`ε = R · (look angle)`, applied per angle. A §1 named approximation — a real radome's slope
+VARIES with look angle and the design case is the worst LOCAL slope (a named deferral).
+
+**`slope == 0` returns exactly `(0.0, 0.0)`** — the shipped no-radome path is a KEY-ABSENT
+branch upstream of this (never `+ ε` trusting the zero, the `-0.0` trap), and this exactness
+is pinned bit-for-bit and PAIRED with a does-perturb case.
+
+**SIGN — the #1 "missile flies away" bug (HANDOFF §1), 8th occurrence, and the one place a
+transliterated textbook formula gets it WRONG.** On a FROZEN geometry (target, missile and
+true LOS all held still, only the attitude rotating) the parasitic gain measures EXACTLY
+
+    ε̇_el = +R·cos(look_az)·ω_y ,    ε̇_az = −R·ω_z
+
+(`docs/plans/slice26.md` §4, gate-0 P8B, pinned in `test_frames.jl`). The textbook writes this
+as `−R·θ̇`, and transliterating that to `−R·q` in THIS project is the wrong sign: the
+convention here is nose-up = a **−y** body rotation (slice 23), so `θ̇ = −ω_y` while `q` is the
+telemetry name for `ω[2] = ω_y`. Hence: **nose-up (`q < 0`) with `R < 0` ⇒ `ε̇_el > 0` ⇒ the
+LOS appears to rotate UP ⇒ the loop commands MORE nose-up.** Only NEGATIVE slopes destabilize;
+positive ones DE-TUNE (the seeker under-reports the LOS rate, the effective navigation ratio
+sags, and the miss opens from sluggishness — measured, and a named deferral).
+
+⚠ This gain is NOT identifiable on a tracking missile: in closed loop `ėl` and `q` are
+collinear (a missile that is tracking pitches at nearly the rate the LOS rotates), so an
+in-loop regression fits with R² = 0.999 and meaningless coefficients (gate-0 P7A). **Freeze
+the geometry** — that is what the test does.
+"""
+radome_error(slope::Real, look_az::Real, look_el::Real) =
+    (slope * look_az, slope * look_el)

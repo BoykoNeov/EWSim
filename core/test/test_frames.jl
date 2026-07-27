@@ -171,6 +171,100 @@
         @test los_rate_from_angles(0.7, -0.2, 0.0, 0.0) == zero(Vec3)
     end
 
+    # --- SLICE 26: the RADOME / body-rate parasitic loop (the arc's named end point) ---------
+    @testset "look_angles — the LOS off the missile's own boresight" begin
+        û = los_unit(Vec3(0.0, 0.0, 3000.0), Vec3(6000.0, 2000.0, 4200.0))
+        # DEGENERATE: the identity attitude is the inertial frame, so the look angles ARE az/el.
+        la, le = look_angles(Quat(1, 0, 0, 0), û)
+        az0, el0 = az_el(û)
+        @test la == az0
+        @test le == el0
+        # A nose pointed AT the target sees zero look angle (the boresight definition). Build the
+        # attitude from `quat_from_two_vectors` — the same constructor `_integrate_6dof!` uses.
+        q_on = quat_from_two_vectors(Vec3(1.0, 0.0, 0.0), û)
+        la2, le2 = look_angles(q_on, û)
+        @test abs(la2) < 1e-12
+        @test abs(le2) < 1e-12
+        # And it is `az_el ∘ rotate_inv` — an INDEPENDENT recompute, not the same call renamed.
+        q_off = quat_from_axis_angle(Vec3(0.0, -1.0, 0.0), 0.17)
+        @test collect(look_angles(q_off, û)) ≈ collect(az_el(rotate_inv(q_off, û))) atol=0.0
+    end
+
+    @testset "radome_error — R = 0 is EXACT, PAIRED with a does-perturb case" begin
+        # `slope == 0` must give exactly (0.0, 0.0) — pinned bit-for-bit. The shipped no-radome
+        # path is a KEY-ABSENT branch upstream of this, so this exactness is belt AND braces.
+        @test radome_error(0.0, 0.31, -0.22) === (0.0, -0.0)
+        @test radome_error(0.0, 0.31, -0.22)[1] == 0.0
+        @test radome_error(0.0, 0.31, -0.22)[2] == 0.0
+        # PAIRED does-perturb case, so the test cannot pass by producing zero.
+        εa, εe = radome_error(-0.10, 0.32, 0.19)
+        @test εa ≈ -0.032 atol=1e-15
+        @test εe ≈ -0.019 atol=1e-15
+        # LINEAR in the slope AND in the look angle (the model's whole content).
+        @test radome_error(0.05, 0.4, 0.4)[1] ≈ 2 * radome_error(0.05, 0.2, 0.2)[1] atol=1e-15
+        @test radome_error(0.10, 0.4, 0.4)[2] ≈ 2 * radome_error(0.05, 0.4, 0.4)[2] atol=1e-15
+        # a zero look angle (nose ON the target) refracts NOTHING, at any slope
+        @test radome_error(-0.5, 0.0, 0.0) === (-0.0, -0.0)
+    end
+
+    @testset "THE PARASITIC GAIN on a FROZEN GEOMETRY (the #1 SIGN TRAP, 8th occurrence)" begin
+        # ⚠ THE GEOMETRY IS FROZEN ON PURPOSE — the target, the missile and the TRUE LOS all hold
+        # still and ONLY the attitude rotates, so d(look)/dt is 100% body rate with nothing to
+        # confound it. This is NOT stylistic: in closed loop `ėl` and `q` are COLLINEAR (a missile
+        # that is tracking pitches at nearly the rate the LOS rotates), so an in-loop fit returns
+        # R² = 0.999 with meaningless coefficients (gate-0 P7A). A parasitic gain cannot be
+        # measured on a tracking missile.
+        û = los_unit(Vec3(0.0, 0.0, 3000.0), Vec3(6000.0, 2000.0, 4200.0))
+        R  = -0.10
+        dt = 1.0e-3
+        # ε̇ under a body rate ω, by finite difference of the shipped kernels
+        function eps_dot(ω::Vec3)
+            q0 = Quat(1.0, 0.0, 0.0, 0.0)
+            q1 = qnormalize(qmul(q0, quat_from_axis_angle(ω, norm3_test(ω) * dt)))
+            a0, e0 = radome_error(R, look_angles(q0, û)...)
+            a1, e1 = radome_error(R, look_angles(q1, û)...)
+            return ((a1 - a0) / dt, (e1 - e0) / dt)
+        end
+        look_az, _ = look_angles(Quat(1, 0, 0, 0), û)
+        # PITCH: ε̇_el = +R·cos(look_az)·ω_y — the sign that makes the loop, measured not cited.
+        ėa_up, ėe_up = eps_dot(Vec3(0.0, -1.0, 0.0))        # nose UP is a −y rotation (slice 23)
+        @test ėe_up ≈ R * cos(look_az) * (-1.0) atol=2e-4
+        # ⚠ AND ITS SIGN IS POSITIVE — `R < 0` times `ω_y < 0`. THAT IS THE LOOP: a nose-up rate
+        # RAISES the apparent elevation, which reads as a climbing LOS, which commands more
+        # nose-up. (This line was first written `< 0` from the transliterated textbook `−R·q` and
+        # the paired coefficient assert above contradicted it — the #1 sign trap caught in its own
+        # test, which is the entire reason the assertion is PAIRED.)
+        @test ėe_up > 0
+        # THE LOOP'S SIGN, stated as the physics rather than as a coefficient: with R < 0 a
+        # nose-up rate makes the APPARENT elevation move the SAME way the true one would if the
+        # target were climbing — so the guidance sees a climbing LOS and pitches up harder.
+        # `ε_el` itself (not its rate) is what the measurement carries:
+        q_up = quat_from_axis_angle(Vec3(0.0, -1.0, 0.0), 0.05)    # nose up 0.05 rad
+        _, εe_up = radome_error(R, look_angles(q_up, û)...)
+        _, εe_0  = radome_error(R, look_angles(Quat(1, 0, 0, 0), û)...)
+        @test εe_up > εe_0                                   # pitching up RAISES the apparent el
+        # YAW: ε̇_az = −R·ω_z, EXACT (no cosine factor on this axis).
+        ėa_yaw, ėe_yaw = eps_dot(Vec3(0.0, 0.0, 1.0))
+        @test ėa_yaw ≈ -R * 1.0 atol=2e-4
+        @test abs(ėe_yaw) < 1e-3                             # a pure yaw does not move elevation
+        # PAIRED NULL: at R = 0 every one of those rates is EXACTLY zero — no loop, no cycle.
+        let R0 = 0.0
+            q1 = qnormalize(qmul(Quat(1.0, 0.0, 0.0, 0.0),
+                                 quat_from_axis_angle(Vec3(0.0, -1.0, 0.0), dt)))
+            @test radome_error(R0, look_angles(q1, û)...) === (-0.0, -0.0) ||
+                  radome_error(R0, look_angles(q1, û)...) == (0.0, 0.0)
+        end
+        # SIGN ASYMMETRY: flipping the slope flips the parasitic term (it is LINEAR in R), which
+        # is why one sign destabilizes and the other de-tunes.
+        let Rp = +0.10
+            q1 = qnormalize(qmul(Quat(1.0, 0.0, 0.0, 0.0),
+                                 quat_from_axis_angle(Vec3(0.0, -1.0, 0.0), dt)))
+            _, εe_p = radome_error(Rp, look_angles(q1, û)...)
+            _, εe_n = radome_error(-Rp, look_angles(q1, û)...)
+            @test εe_p ≈ -εe_n atol=1e-15
+        end
+    end
+
     @testset "SEEKER_AXES_MODES — the one-list-no-drift const (convention 7)" begin
         @test SEEKER_AXES_MODES == (:pitch_plane, :az_el)
         @test :az_el in SEEKER_AXES_MODES && :pitch_plane in SEEKER_AXES_MODES
