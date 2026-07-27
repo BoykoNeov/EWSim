@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–26 COMPLETE & green — 4470 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–26
+**Slices 1–26 COMPLETE & green — 4476 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–26
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
@@ -605,7 +605,11 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   `n_pn`/`rho`/`af_alpha_max`/`sigma_seek` DISQUALIFIED and asserted ABSENT in the gate. Four proofs green
   (S26V 0.80408 vs 0.03493 = 23.0×, mirror 59.2×, replay 0.0; EIGHT-way UI guard; TWO shots at the same range:
   "RADOME PARASITIC LOOP — RINGING" q +1.168 vs "RADOME — refracting, loop STABLE" q +0.019). Slices 1–25
-  byte-identical, proven ON THE WIRE (23/24/25 verifiers re-run to the digit). (4470)
+  byte-identical, proven ON THE WIRE (23/24/25 verifiers re-run to the digit). ⭐ Post-commit
+  (advisor): the DECLARED DOMAIN'S ENDPOINTS are now MEASURED, not inferred from the interior — a
+  `DOMAIN_MIN` phase at −0.12 (where aero_sat runs 95%) shows `defl_sat` 0/499 and the metric
+  PLATEAUING, which is the measured reason the domain stops there; and the two shipped-but-unasserted
+  telemetry keys (`omega_ratio`, `radome_eps_az`) got a tooth each. (4476)
 
 
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened

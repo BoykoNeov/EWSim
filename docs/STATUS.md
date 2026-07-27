@@ -3190,13 +3190,16 @@ MISS is NOT the metric and IS NOT MONOTONE ANYWHERE** (1.73 m at R = −0.15 sit
 −0.12): **the ringing arm STILL HITS (2.18 m)**, and the verifier pins that so a later slice cannot
 "fix" the scenario by chasing a miss that was never the claim. ⚠ **`max|q|` is neither frame- nor
 noise-robust** (peaks OVERLAP across the threshold) — **rms, never the peak.**
-⭐ **AND THE rms METRIC IS FRAME-ROBUST, REVERSING THE ARC'S USUAL SAMPLING CAVEAT**
+⚠ **READ THE WINDOW BEFORE THE NUMBER — TWO ARE IN USE AND BOTH ARE HONEST.** The docs quote rms over
+the **MIDDLE HALF OF TICKS** (and that grid's ×16 decimation); the verifier computes rms over **FRAMES
+that are CLOSING with r > 1000 m**, the same window its isolation counts use. That window includes the
+early transient, so its baseline is higher and its ratio smaller: **70.8× (docs) vs 23.0× (verifier)**.
+A reader who carries a docs number to the verifier's output will think something drifted. (The
+slice-21/25 gate-3 bug class, pre-empted rather than repeated.)
+⭐ **WITHIN a window, THE rms METRIC IS FRAME-ROBUST — REVERSING THE ARC'S USUAL SAMPLING CAVEAT**
 ([[ewsim-missile-verifier-sampling]]): a ~2 Hz ring sampled at 62.5 Hz reproduces the per-tick figure
-to 3 digits (0.88372 frame vs 0.88138 tick; 0.01212 vs 0.01245 at R = 0) — **which is exactly why the
-oscillation is the better headline than any miss in this arc.** ⚠ TWO WINDOWS, TWO RATIOS, BOTH
-HONEST: the docs quote rms over the MIDDLE HALF OF TICKS (70.8×) and the verifier over CLOSING FRAMES
-with r > 1000 m (23.0×, its baseline higher because that window includes the early transient). Quote
-each with its window or it reads as drift.
+to 3 digits ON THE SAME GRID (0.88372 frame vs 0.88138 tick; 0.01212 vs 0.01245 at R = 0) — **which is
+exactly why the oscillation is the better headline than any miss in this arc.**
 
 ⭐ **THE ISOLATION IS MADE DIFFERENTLY FROM SLICE 25's, AND MUST NOT COPY IT.** `aero_sat == 0` is
 IMPOSSIBLE here — an oscillation drives demand and demand hits the ceiling (60.8% at the showcase
@@ -3296,6 +3299,16 @@ and the look angle is **≤ 13° over the ENTIRE guided approach**, exceeding 30
 first at r = 3.5 m** — the LOS sweeping past the nose in the last 5 ms. The telemetry PEAKS at 103.6°
 (179.1° on the R = 0 arm at r = 0.5 m) and that is a CPA geometry artifact, not a regime the model is
 asked to cover.
+⭐ **THE DECLARED DOMAIN'S ENDPOINTS ARE MEASURED, NOT INFERRED FROM THE INTERIOR (advisor,
+post-commit).** The first cut of the verifier proved the isolation at −0.10 / −0.09 / +0.06 — but a
+student can drag the slider to its MINIMUM, −0.12, where `aero_sat` runs ~95%, and no gate covered
+it. **A `DOMAIN_MIN` phase now does**: at −0.12 `defl_sat` is **0/499** (cleaner than the shipped
+point's 2/9400 per-tick), the ceiling still 329.84, every telemetry scalar finite, the missile still
+closes (3.992 m), and rms **0.83384** — i.e. the metric **PLATEAUS rather than grows** past onset,
+which is the measured reason the domain stops where it does. **General rule: the endpoints of a
+declared knob domain should be measured** — the [[ewsim-missile-verifier-sampling]] "the range gate
+can dictate which arms you may ship" discipline applied to a knob range instead of a sweep.
+
 KNOB — **ONE** (`radome_slope ∈ [−0.12, +0.06]`), bounded by the METRIC'S PLATEAU. **NOT knobs,
 deliberately:** `n_pn` (live-read every tick, so NOT a dead knob — disqualified because it moves the
 LOOP GAIN the lesson is ABOUT, so a student could cross the threshold with the radome untouched: the
@@ -3308,7 +3321,13 @@ FOUR PROOFS GREEN. `slice26_verify.gd` → **`S26V OK`** (RINGING rms_q **0.8040
 / miss 5.210 / max|y| 2999.6 / aero_sat **268/496** / defl_sat **0** / ceil 329.84; REPLAY posdiff
 **0.0** — a limit cycle replaying bit-for-bit is a stronger statement than a smooth trajectory doing
 so; QUIET at −0.09 rms_q **0.03493** = **23.0×** with max|ε| still 0.00165 — *the glass refracts on
-BOTH sides, the LOOP is what changed*; MIRROR at +0.06 rms_q **0.01357** = **59.2×**).
+BOTH sides, the LOOP is what changed*; MIRROR at +0.06 rms_q **0.01357** = **59.2×**; DOMAIN_MIN at
+−0.12 rms_q **0.83384** / defl_sat **0/499** / aero_sat 466/499 / ceil 329.84 / miss 3.992).
+⭐ Two telemetry keys that shipped with NO tooth — `omega_ratio` and `radome_eps_az` — got one each
+(advisor: *"a live wire key with no tooth is the kind that rots"*): the ratio is loosely pinned near
+1 at R = 0 (0.919 — the α-β tracker lags truth, so it is NOT exactly 1) and ≥ 2× that when ringing,
+with the co-moving `ω_truth → 0` divide asserted FINITE; `radome_eps_az` is EXACTLY 0.0 at R = 0 and
+nonzero when ringing (it is nonzero only BECAUSE the target is off the x–z plane).
 `slice26_ui_test.gd` → **`S26UI OK`** (six teeth incl. the SHARP slice-25 MIRROR — the same fidelity
 WITHOUT the marker keeps its cycler, proving an if/elif SWITCH on the MARKER — and an EIGHT-way
 value-guard where 16-vs-26 is asserted on BOTH mode and visibility so the two button-dropping branches

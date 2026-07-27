@@ -360,6 +360,23 @@ aero_sat 0, omega_ratio 1, track_gap 10.50). The **23/24/25 verifiers re-run rep
 numbers TO THE DIGIT** (2002.373 / 5.011 / 399.6×; 371.800 / 5.011 / 74.2× / 5.331; 2000.044 / 1.373
 / 1456.5× / posdiff 40.925).
 
+### Post-commit hardening (advisor) — three gaps the self-checks missed
+
+1. ⭐ **THE DECLARED DOMAIN'S ENDPOINTS WERE NEVER MEASURED.** The verifier proved the isolation at
+   −0.10 / −0.09 / +0.06; a student dragging to the MINIMUM (−0.12, where `aero_sat` runs ~95%)
+   landed in a state no gate covered. A `DOMAIN_MIN` phase now measures it: `defl_sat` **0/499**,
+   ceiling 329.84, miss 3.992, rms **0.83384** — so the isolation survives AND the metric is shown to
+   **PLATEAU** rather than grow, which is the measured reason the domain stops there.
+   **General rule: the endpoints of a declared knob domain should be MEASURED, not inferred from the
+   interior** — [[ewsim-missile-verifier-sampling]]'s "the range gate can dictate which arms you may
+   ship", applied to a knob range.
+2. **Two shipped telemetry keys had NO tooth at all** (`omega_ratio`, `radome_eps_az`) — live wire
+   keys nothing asserts are the kind that rot. One tooth each, including the co-moving
+   `ω_truth → 0` divide asserted FINITE. ⚠ `omega_ratio` at R = 0 measures **0.919, not 1.0** (the
+   α-β tracker lags truth), so the tooth is deliberately loose and only pins the SEPARATION.
+3. **The frame-robustness claim needed the two-windows warning BEFORE it, not after** — a reader who
+   carries the docs' 0.88372 to the verifier's 0.80408 will think something drifted.
+
 ### Two things the gate itself caught
 
 1. **The client re-showed the button it had just dropped.** `_enter_airframe3d_mode` hid it, and

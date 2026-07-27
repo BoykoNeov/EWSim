@@ -4129,6 +4129,34 @@ end
         @test ringfly(radome =  0.0,  sigma = 0.0).rms < 0.05
     end
 
+    @testset "the telemetry keys that would otherwise ROT (advisor: shipped but unasserted)" begin
+        # `omega_ratio` and `radome_eps_az` are shipped on the wire and read by the HUD, but neither
+        # is load-bearing for the headline — which is exactly how a key quietly breaks. One tooth each.
+        wq, sq = rad_world(radome = 0.0);   for _ in 1:2000; tick!(wq, sq, dt); empty!(wq.events); end
+        wr, sr = rad_world(radome = -0.10); for _ in 1:2000; tick!(wr, sr, dt); empty!(wr.events); end
+        # ⚠ `omega_ratio` is a DIAGNOSTIC, not the mechanism — its STATIC response to R is small and
+        # smooth, and once the loop rings it is dominated by the cycle's own body-rate feedthrough.
+        # So the tooth is deliberately LOOSE at R = 0 (the α-β tracker lags truth, so it sits near
+        # but not at 1) and only asserts the SEPARATION once ringing.
+        rq = Float64(wq.env[:telemetry]["m1.omega_ratio"])
+        rr = Float64(wr.env[:telemetry]["m1.omega_ratio"])
+        @test 0.5 < rq < 1.5                       # no radome ⇒ the seeker reports ≈ the truth rate
+        @test rr > 2.0 * rq                        # ringing ⇒ the body rate dominates what it reports
+        @test isfinite(rq) && isfinite(rr)
+        # the zero-relative-velocity guard: ω_truth → 0 must give a huge-but-FINITE ratio, never NaN
+        # (convention 6 — the `_finite`/FINITE_CEIL clamp, and the divide that would otherwise 0/0)
+        wz, sz = rad_world(radome = -0.10)
+        tick!(wz, sz, dt); empty!(wz.events)
+        wz.entities[:m1].vel = wz.entities[:t1].vel      # co-moving ⇒ r×v ≡ 0
+        tick!(wz, sz, dt)
+        @test isfinite(Float64(wz.env[:telemetry]["m1.omega_ratio"]))
+        # `radome_eps_az` is the YAW-axis boresight error — real physics (`ε̇_az = −R·ω_z`), and it is
+        # NONZERO here precisely because the target is off the x–z plane (an in-plane engagement
+        # would leave it at zero, which is why the cross-range geometry is what makes it meaningful).
+        @test abs(Float64(wr.env[:telemetry]["m1.radome_eps_az"])) > 1.0e-4
+        @test Float64(wq.env[:telemetry]["m1.radome_eps_az"]) == 0.0      # R = 0 ⇒ exactly zero
+    end
+
     @testset "an absurd slope never crashes a tick (live-slider guard, convention 5/6)" begin
         for R in (-1.0e6, 1.0e6, -1.0, 1.0)
             w, s = rad_world(radome = R)

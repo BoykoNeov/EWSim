@@ -34,6 +34,11 @@ extends SceneTree
 #   • MIRROR    — set_param radome_slope → +0.06 (the top of the declared domain): the SAME |R| class
 #                 of perturbation with the OPPOSITE SIGN does not ring at all. Only NEGATIVE slopes
 #                 close the loop; positive ones de-tune (the #1 sign trap's 8th occurrence).
+#   • DOMAIN_MIN — set_param radome_slope → −0.12, the BOTTOM of the declared knob domain: a state a
+#                 student can drag to, where `aero_sat` runs ~95%. **The endpoints of a declared
+#                 domain must be MEASURED, not inferred from the interior** — so the isolation is
+#                 re-asserted there, and the metric is shown to PLATEAU rather than grow (which is
+#                 why the domain stops where it does).
 #   • ISOLATION — asserted INSIDE every flight phase: `defl_sat` never fires (cap #3) and the aero
 #                 ceiling stays ≪ a_max (cap #1), so neither is what is binding. ⚠ THE OTHER HALF OF
 #                 THE ISOLATION — that raising α_max 3× leaves the ONSET exactly where it is, so the
@@ -64,8 +69,9 @@ const HIT_MAX       := 50.0       # the ringing arm STILL HITS (measured 2.18 m 
 const CEIL_MAX      := 1000.0     # a_max_aero (measured 329.84) ≪ a_max 3000 ⇒ cap #1 out of reach
 const QUIET_SLOPE   := -0.09      # one step back across the measured onset (−0.09 / −0.095)
 const MIRROR_SLOPE  := 0.06       # the TOP of the declared knob domain — an in-domain mirror
+const DOMAIN_MIN    := -0.12      # the BOTTOM of the declared domain (see the DOMAIN_MIN phase)
 
-enum P { HANDSHAKE, RINGING, REPLAY, QUIET, MIRROR }
+enum P { HANDSHAKE, RINGING, REPLAY, QUIET, MIRROR, DOMAIN_MIN_P }
 
 var _client
 var _inbox: Array = []
@@ -207,6 +213,29 @@ func _process(_dt_frame: float) -> bool:
 				return _fail("the positive-slope arm must perturb the measurement just as hard (max|eps| > 1e-4), got %.6f" % _max_eps)
 			if not (_min_los < HIT_MAX):
 				return _fail("the positive-slope arm must still intercept (< %.0f m), got %.2f" % [HIT_MAX, _min_los])
+			_reset_then_scan([_set_param_cmd("m1", "radome_slope", DOMAIN_MIN)], STEPS, P.DOMAIN_MIN_P)
+
+		# --- THE DECLARED DOMAIN'S BOTTOM END — a state a student can drag to (advisor) -------------
+		P.DOMAIN_MIN_P:
+			if not _drain_scan():
+				return false
+			var dmin_rms := _rms_q()
+			print("S26V_DOMAIN_MIN slope=%.3f  rms_q=%.5f  miss(frame)=%.3f  defl_sat=%d/%d  aero_sat=%d/%d  ceil_max=%.2f  max|eps|=%.5f" % [DOMAIN_MIN, dmin_rms, _min_los, _n_defl, _n_appr, _n_aero, _n_appr, _max_ceil, _max_eps])
+			# ⚠ THE ENDPOINTS OF A DECLARED DOMAIN MUST BE MEASURED, NOT INFERRED FROM THE INTERIOR
+			# (the [[ewsim-missile-verifier-sampling]] "the range gate can dictate which arms you may
+			# ship" discipline, applied to a KNOB domain). The phases above cover −0.10 / −0.09 /
+			# +0.06; a student dragging the slider to its MINIMUM lands here, where `aero_sat` runs
+			# ~95% — so the isolation has to be shown to survive at the end, not assumed to.
+			if not _isolation_ok():
+				return _fail("the ISOLATION must survive at the DOMAIN MINIMUM: " + _isolation_msg())
+			if not (dmin_rms > RING_RMS_MIN):
+				return _fail("the domain minimum must still be past the onset (rms > %.2f), got %.5f" % [RING_RMS_MIN, dmin_rms])
+			# …and the metric PLATEAUS past onset rather than growing (the α_max clamp bounds the
+			# cycle) — which is precisely why the domain stops here instead of running further.
+			if not (dmin_rms < 2.0 * _ring_rms):
+				return _fail("past the onset the metric must PLATEAU, not grow (domain-min rms %.5f vs shipped %.5f)" % [dmin_rms, _ring_rms])
+			if not (_min_los < HIT_MAX):
+				return _fail("even at the domain minimum the missile must still close (< %.0f m), got %.2f" % [HIT_MAX, _min_los])
 			return _pass()
 	return false
 
