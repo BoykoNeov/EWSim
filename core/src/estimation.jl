@@ -78,6 +78,36 @@ const SEEKER_MODES = (:raw, :filtered, :scan)
 #     brighter decoy; this α-β predicted-LOS association is the discriminator (HANDOFF §9).
 const DISCRIMINATION_MODES = (:none, :gated)
 
+# The seeker's MEASUREMENT DIMENSIONALITY (slice 25 — a seeker in the 6-DOF loop). The SINGLE source
+# of truth (gate-2's `LIVE_FIDELITY_MODES` REFERENCES it — the `SEEKER_MODES` one-list-no-drift,
+# defined HERE so estimation.jl precedes radar.jl).
+#
+# ⚠ WHY THIS IS A SEPARATE KEY AND NOT A FOURTH `SEEKER_MODES` RUNG. `:raw`/`:filtered` name the
+# TRACKER (finite-difference vs α-β) and `:scan` names the PROFILE topology; NONE of them name how
+# many ANGLES are measured, which is what moves here. A 4th rung would also force the showcase button
+# to cycle through `:scan` (meaningless there). The two keys are ORTHOGONAL on the host, with ONE
+# corner refused at LOAD (`:scan` × a two-angle host — the slice-13 angular profile is IN-PLANE by
+# construction; az×el CFAR is a named deferral, NOT a silent branch order — `docs/plans/slice25.md` §1b).
+#
+#   • :az_el       — the seeker measures an azimuth/elevation PAIR, the α-β tracker runs on EACH, and
+#     `los_rate_from_angles` (frames.jl) rebuilds the LOS-rate VECTOR `ω = û × û̇`. The out-of-plane
+#     component SURVIVES, so the 6-DOF airframe slice 23 built is finally COMMANDED in 3-D.
+#   • :pitch_plane — THE FOIL: slice 11's SCALAR in-plane tracker on `λ = atan(Δz, Δx)`, rebuilding
+#     `ω = (0, −λ̇, 0)`. Structurally incapable of an out-of-plane component ⇒ against a cross-range
+#     target the missile flies straight down the x–z plane and misses by the full offset — the SAME
+#     signature as slice 23's `:pitch_coupled` discard (`max|y| = 0.0` EXACTLY) from a WHOLLY
+#     different cause: there the autopilot THREW the command away, here it was never FORMED.
+#
+# ⚠ THE 2-DRAW LOCKSTEP (convention 3, and the thing that makes the button legal): BOTH rungs draw
+# EXACTLY 2 `randn`/tick — `:pitch_plane` takes the azimuth sample and DISCARDS it. Gate the VALUE,
+# never the draw (the `detect_once`/`_draw_pseudoranges` template, applied to a FOIL). Without that
+# the toggle would be a 1↔2 draw-topology FLIP mid-replay and `set_fidelity` would have to reject the
+# very switch the showcase exists to make (the `:cfar` 4b guard). **Do NOT "optimize away" the unused
+# draw.** Measured at gate 0 (P9): 2.0 draws/tick on both rungs ⇒ class 4a WITHIN the 2-draw host,
+# live-settable, NO guard — while the HOST itself is comp-presence gated, so introducing this key on a
+# slice-11/13 wire is INERT (P11: bit-identical trace, RNG stream in lockstep).
+const SEEKER_AXES_MODES = (:pitch_plane, :az_el)
+
 # Solve the weighted 2×2 normal equations M·p = g and return (p, cov = M⁻¹), with a
 # RELATIVE det floor (NOT an absolute one — det carries units and scales with sensor
 # count and 1/R̂, so an absolute floor is scale-fragile; advisor). For a PSD M,

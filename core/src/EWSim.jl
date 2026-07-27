@@ -58,7 +58,7 @@ export cfar_alpha, cfar_threshold, cfar_scan
 # DF / geolocation shared libs (slice 5): geometry/DOP + estimation scaffold
 export bearing, wrap_angle, eig2x2, error_ellipse, gdop, FINITE_CEIL
 export linear_ls, gauss_newton, bearings_fix, ESTIMATOR_MODES
-export alpha_beta_los_step, SEEKER_MODES
+export alpha_beta_los_step, SEEKER_MODES, SEEKER_AXES_MODES
 # Countermeasures — the :scan seeker angular-profile processing primitives (slice 13 gate 1)
 export angular_grid, paint_angular_profile!, intensity_centroid, extract_peaks, validation_gate, DISCRIMINATION_MODES
 # GPS shared-lib reuse (slice 7): N-dim solver siblings + GPS pseudorange positioning
@@ -72,6 +72,9 @@ export difference_histogram, detect_pris, associate, assoc_pct, DEINTERLEAVER_MO
 # transforms + the sign-critical LOS kernel (slices 10–13 ride this)
 export qmul, qconj, qinv, qnormalize, quat_from_axis_angle, quat_from_two_vectors
 export rotate, rotate_inv, los_unit, los_range, range_rate, los_rate, az_el
+# Two-angle (az/el) LOS reconstruction (slice 25, §11 Tier-A — a seeker in the 6-DOF loop):
+# the measurement→direction inverse of `az_el` + the LOS-rate VECTOR `ω = û × û̇` (≡ `los_rate`)
+export los_unit_from_angles, los_rate_from_angles
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step
 export INTEGRATOR_MODES, G_ACCEL

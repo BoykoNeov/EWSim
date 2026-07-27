@@ -99,4 +99,82 @@
             @test az_el(los_unit(f, t))[1] ≈ bearing(f, t) atol=1e-12
         end
     end
+
+    # --- slice 25 gate 1: the two-angle (az/el) LOS reconstruction ---------------------
+    # The seeker in the 6-DOF loop measures an ANGLE PAIR and must rebuild BOTH the LOS
+    # direction and the LOS-rate VECTOR from it. The oracle is `los_rate` itself (the
+    # identity ω = û × û̇ ≡ (r×v)/‖r‖², plan §3) computed through a DIFFERENT algorithm —
+    # convention 11's independent recompute, not a self-calibrated round-trip.
+
+    @testset "los_unit_from_angles ↔ az_el round-trip (the measurement→direction inverse)" begin
+        @test los_unit_from_angles(0.0, 0.0) ≈ Vec3(1, 0, 0) atol=1e-12
+        @test los_unit_from_angles(π/2, 0.0) ≈ Vec3(0, 1, 0) atol=1e-12
+        @test los_unit_from_angles(0.0, π/2) ≈ Vec3(0, 0, 1) atol=1e-12
+        for u in (Vec3(1,0,0), Vec3(0,-1,0), Vec3(0.3,-0.4,0.5), Vec3(-2.0,1.0,-3.0))
+            û = u / norm3_test(u)
+            az, el = az_el(û)
+            @test los_unit_from_angles(az, el) ≈ û atol=1e-12          # round-trip
+            @test norm3_test(los_unit_from_angles(az, el)) ≈ 1.0 atol=1e-12
+        end
+        # the ±π azimuth SEAM: −x is reachable from either side and both rebuild the same û
+        @test los_unit_from_angles( π, 0.0) ≈ Vec3(-1, 0, 0) atol=1e-12
+        @test los_unit_from_angles(-π, 0.0) ≈ Vec3(-1, 0, 0) atol=1e-12
+    end
+
+    @testset "los_rate_from_angles ≡ los_rate (the EXACT oracle, convention 11)" begin
+        # An INDEPENDENT closed form for the angle rates from the kinematics (a different
+        # algorithm from `los_rate_from_angles`, which is the point):
+        #   az = atan(y,x)     ⇒ ȧz = (x·v_y − y·v_x)/(x²+y²)
+        #   el = atan(z,ϱ)     ⇒ ėl = (v_z·ϱ − z·ϱ̇)/(ϱ² + z²),  ϱ̇ = (x·v_x + y·v_y)/ϱ
+        function angle_rates(r, v)
+            ϱ  = hypot(r[1], r[2])
+            ȧz = (r[1]*v[2] - r[2]*v[1]) / (r[1]^2 + r[2]^2)
+            ϱ̇  = (r[1]*v[1] + r[2]*v[2]) / ϱ
+            ėl = (v[3]*ϱ - r[3]*ϱ̇) / (ϱ^2 + r[3]^2)
+            return ȧz, ėl
+        end
+        for (r, v) in ((Vec3(1000.0,    0.0,    0.0), Vec3(-300.0,  50.0,   20.0)),
+                       (Vec3(6000.0, 2000.0, 1200.0), Vec3(-700.0, 120.0, -240.0)),
+                       (Vec3(-500.0,  900.0, -300.0), Vec3( 110.0, -60.0,   90.0)),
+                       (Vec3(  10.0,   -4.0,    7.0), Vec3(  -1.0,   2.5,   -3.0)))
+            az, el = az_el(r / norm3_test(r))
+            ȧz, ėl = angle_rates(r, v)
+            ω_ang  = los_rate_from_angles(az, el, ȧz, ėl)
+            ω_tru  = los_rate(r, v)
+            # ABSOLUTE atol scaled to the rate magnitude — the identity is EXACT, so this
+            # is a floating-point-floor check, not a tolerance to be tuned.
+            @test ω_ang ≈ ω_tru atol=1e-12 * max(1.0, norm3_test(ω_tru))
+        end
+    end
+
+    @testset "the IN-PLANE invariant PAIRED with a does-turn case (the #1 SIGN TRAP, 7th)" begin
+        # In-plane: the target sits in the x–z plane and stays there (az ≡ 0, ȧz ≡ 0) ⇒ the
+        # LOS rate is PURELY ±y. This is the foil's whole content — a seeker that measures
+        # only elevation can never produce ω_x/ω_z. Pinned EXACTLY (`== 0.0`), because the
+        # kernel's az terms multiply sin(0) = 0 identically.
+        ω_in = los_rate_from_angles(0.0, 0.3, 0.0, 0.02)
+        @test ω_in[1] == 0.0
+        @test ω_in[3] == 0.0
+        @test ω_in[2] < 0                       # climbing LOS (ėl > 0) ⇒ ω ∥ −ŷ
+        # PAIRED does-turn case, so the test cannot pass by producing zero: give it an
+        # azimuth rate and the out-of-plane components MUST appear.
+        ω_out = los_rate_from_angles(0.0, 0.3, 0.02, 0.0)
+        @test abs(ω_out[3]) > 1e-3              # ω_z is what turns the missile in cross-range
+        @test ω_out != zero(Vec3)
+        # SIGN, pinned against truth on a concrete right-going crossing (target dead ahead
+        # on +x at 1000 m, moving +y): ω = +ẑ·v_y/R — the same case the los_rate testset pins.
+        r = Vec3(1000.0, 0.0, 0.0); v = Vec3(0.0, 50.0, 0.0)
+        az, el = az_el(r / norm3_test(r))
+        @test los_rate_from_angles(az, el, 50.0/1000.0, 0.0) ≈ los_rate(r, v) atol=1e-12
+        @test los_rate_from_angles(az, el, 50.0/1000.0, 0.0)[3] > 0
+        # zero rates ⇒ zero ω (a static LOS commands nothing)
+        @test los_rate_from_angles(0.7, -0.2, 0.0, 0.0) == zero(Vec3)
+    end
+
+    @testset "SEEKER_AXES_MODES — the one-list-no-drift const (convention 7)" begin
+        @test SEEKER_AXES_MODES == (:pitch_plane, :az_el)
+        @test :az_el in SEEKER_AXES_MODES && :pitch_plane in SEEKER_AXES_MODES
+        # it is a SEPARATE key from SEEKER_MODES (the tracker), NOT a fourth rung of it
+        @test isempty(intersect(SEEKER_AXES_MODES, SEEKER_MODES))
+    end
 end

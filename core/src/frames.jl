@@ -209,3 +209,56 @@ uses the SAME `atan(Δy, Δx)` convention as `geometry.jl`'s [`bearing`](@ref) �
 equal on a shared z=0 example (the §9 reuse-faithfulness proof).
 """
 az_el(los::Vec3) = (atan(los[2], los[1]), atan(los[3], hypot(los[1], los[2])))
+
+"""
+    los_unit_from_angles(az, el) -> Vec3
+
+The INVERSE of [`az_el`](@ref): the unit LOS direction rebuilt from an azimuth/elevation
+PAIR, `û = (cos el·cos az, cos el·sin az, sin el)`. Round-trips with `az_el` to machine
+precision for `|el| < π/2` (pinned in `test_frames.jl`).
+
+Slice 25 (a seeker in the 6-DOF loop): a two-angle seeker MEASURES `(az, el)` — this is
+how the measurement becomes a direction again. Its slice-11 predecessor measured the
+SCALAR in-plane bearing `λ = atan(Δz, Δx)` and could only rebuild an x–z direction, which
+is the whole foil (`docs/plans/slice25.md` §1).
+"""
+function los_unit_from_angles(az::Real, el::Real)
+    ca, sa = cos(az), sin(az)
+    ce, se = cos(el), sin(el)
+    return Vec3(ce * ca, ce * sa, se)
+end
+
+"""
+    los_rate_from_angles(az, el, az_dot, el_dot) -> Vec3   (rad/s)
+
+The LOS angular-rate VECTOR reconstructed from an angle pair and its rates —
+`ω = û × û̇`, with
+
+    ∂û/∂az = (−cos el·sin az,  cos el·cos az, 0)
+    ∂û/∂el = (−sin el·cos az, −sin el·sin az, cos el)
+    û̇      = ȧz·∂û/∂az + ėl·∂û/∂el
+
+**This is IDENTICALLY the quantity [`los_rate`](@ref) computes from truth kinematics.**
+With `r = R·û`: `v = Ṙ·û + R·û̇`, so `r×v = R²·(û × û̇)` and `(r×v)/‖r‖² ≡ û × û̇` — the
+radial component cancels because `û × û ≡ 0`. That identity makes truth an EXACT oracle
+for a seeker's estimate rather than a calibrated one, and it is pinned that way in
+`test_frames.jl` against an INDEPENDENT closed-form recompute of `(ȧz, ėl)` (convention 11).
+
+**SIGN** is the #1 "missile flies away" bug (HANDOFF §1) and this is its 7th occurrence in
+the project: the argument ORDER `û × û̇` is load-bearing — swapping it negates ω and PN
+commands away from the intercept. Pinned by an in-plane invariant (`az ≡ 0` and `ȧz ≡ 0`
+⇒ `ω_x = ω_z = 0`, motion confined to the x–z plane) PAIRED with a does-turn case, so the
+test cannot pass by producing zero.
+
+Note `ȧz` is ill-conditioned as `|el| → π/2` (the pole, where azimuth ceases to be
+observable); ω itself stays finite and correct there because `∂û/∂az → 0`.
+"""
+function los_rate_from_angles(az::Real, el::Real, az_dot::Real, el_dot::Real)
+    ca, sa = cos(az), sin(az)
+    ce, se = cos(el), sin(el)
+    û = Vec3(ce * ca, ce * sa, se)
+    u̇ = Vec3(az_dot * (-ce * sa) + el_dot * (-se * ca),
+             az_dot * ( ce * ca) + el_dot * (-se * sa),
+             el_dot * ce)
+    return _cross(û, u̇)
+end
