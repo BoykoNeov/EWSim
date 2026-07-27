@@ -1,0 +1,151 @@
+# slice25_seeker_3d — A SEEKER IN THE 6-DOF LOOP: the seeker that cannot see out of the plane
+# (HANDOFF §11 Tier-A, slice 25 gate 3). The THIRD slice of the bank-to-turn / 3-D arc (23 = the
+# 6-DOF substrate + skid-to-turn, 24 = bank-to-turn + roll-lag) and its FIRST SENSOR slice.
+#
+# Slices 19–22 flew a pitch-plane airframe whose autopilot DISCARDED the out-of-plane component of
+# the guidance command. Slice 23 killed that discard: `att` became a real quaternion, skid-to-turn
+# made lift in two body planes at once, and the out-of-plane target finally intercepted. But every
+# missile in that arc was TRUTH-FED — PN read the target's true position and velocity. Give it a REAL
+# seeker and slice 11's sensor is waiting with the SAME approximation one layer up: it measures a
+# SCALAR in-plane bearing λ = atan(Δz, Δx) and reconstructs ω = (0, −λ̇, 0), an LOS rate that is
+# STRUCTURALLY INCAPABLE of having an out-of-plane component. The airframe slice 23 taught to turn
+# out of plane is never told to.
+#
+# THE LESSON (the `seeker_axes` button — TWO rungs on a HELD 6-DOF skid-to-turn plant; the ONE
+# toggled fidelity, convention 9):
+#   • :pitch_plane (default — the showcase OPENS on the MISS) — slice 11's scalar tracker. The
+#     missile flies straight down the x–z plane and misses by essentially the whole cross-range
+#     offset (~2000 m), with max|y| = 0.0 EXACTLY. It is not saturated, not out of control, and not
+#     short of authority: it is simply never COMMANDED sideways.
+#   • :az_el — the seeker measures an azimuth/elevation PAIR, α-β tracks EACH, and rebuilds the
+#     LOS-rate VECTOR ω = û × û̇ (frames.jl `los_rate_from_angles`). The out-of-plane component
+#     survives → the 6-DOF airframe is finally commanded in 3-D → INTERCEPT (sub-metre).
+#   Flip the button and watch the SAME airframe, the SAME PN law, the SAME target: the ONLY change
+#   is how many ANGLES the seeker measures.
+#
+# > THE LESSON, IN ONE SENTENCE. Slice 23 gave the missile an airframe that can turn out of the
+# > plane — but a seeker that only measures IN the plane produces an LOS rate with no out-of-plane
+# > component, so the missile never asks it to: the same 2000 m miss, from the SENSOR this time.
+#
+# ⚠ THE SIGNATURE IS IDENTICAL TO SLICE 23's FOIL AND THE MECHANISM IS NOT — that is the point, and
+# it is the copy-paste false-claim trap. Slice 23's `:pitch_coupled` missed 2002 m with max|y| = 0.0
+# because the AUTOPILOT threw the cross-range command away. Here the plant is `:six_dof` and FULLY
+# CAPABLE of flying it (flip the button and it does, on the same wire): the command was never
+# FORMED, because the measurement had no such component in it to form it from.
+#
+# ⚠ THIS IS A POINTING MISS, NOT THE ARC'S SEVENTH CEILING MISS. Slices 19/20/21/22/23/24 all end in
+# `a_max_aero` binding. Here `aero_sat` is 0 in BOTH arms (asserted by the verifier, not claimed in
+# prose): the ceiling never binds, so the miss is attributable to the SENSOR alone — the slice-13
+# aimpoint framing, one arc later.
+#
+# ⚠ WHY ρ = 1.0 AND σ = 0.3 mrad — this wire is NOT slice 24's. Slice 24 ran ρ = 0.3 so its roll lag
+# could visibly cost the intercept; at that dynamic pressure the ceiling floor is ~95 m/s² and PN's
+# N·Vc·λ̇ on a noisy bearing peaks the demand at ~2530 → aero_sat 93.9% and the arm that must HIT
+# misses by 1268 m (gate-0 P3/P4). The retune to ρ = 1.0 (ceiling ~317) and σ = 0.3 mrad is what buys
+# the isolation above. Constant ρ, a flight condition — "low dynamic pressure", never "high altitude"
+# (no `:atmosphere` rung here).
+#
+# ⚠ THE FOIL IS SLICE 11's TRACKER IN A 2-DRAW HOST, NOT SLICE 11's SEEKER. Both rungs draw EXACTLY
+# 2 randn/tick and `:pitch_plane` DISCARDS the azimuth sample (convention 3 — gate the VALUE, never
+# the draw), which is what makes the button live-toggleable instead of a replay-desyncing 1↔2
+# draw-topology flip. So this arm consumes the RNG differently from `slice11_seeker` and will NOT
+# reproduce its realization on the same geometry. That is design, not drift.
+#
+# THE STEERING LAW IS HELD AT SKID-TO-TURN — `steering:` is deliberately OMITTED (the loader default
+# IS :skid_to_turn). Slice 24 measured `aero_sat` binding 93.2% of the bank_to_turn approach vs 0.2%
+# for STT; layering seeker noise onto a plant saturated 93% of the time would make the isolation
+# above impossible. THE FILTER IS HELD TOO (`seeker: filtered`): a 3-D `:raw` arm re-runs slice 11's
+# tracker lesson in a new letter — real, and a DIFFERENT lesson (convention 9 keeps it out).
+#
+# NAMED APPROXIMATIONS (§1): ONE isotropic σ on BOTH angles (a real seeker's az/el channels differ);
+# `Vc` stays TRUTH — only the ANGLES are noisy (slice 11's scope, unchanged); no seeker FOV/gimbal
+# limit; no radome error slope (the arc's named end point, and THIS slice is its prerequisite — an
+# error slope needs a two-angle measurement to perturb); the target is static and AERODYNAMICALLY
+# FREE; diagonal inertia, symmetric cruciform, lift drag-free (slices 23/24, unchanged).
+#
+# Class 4a: DRAW-INVARIANT (2 randn/tick on both rungs — introduce-safe, live-settable, NO
+# set_fidelity guard) YET TRAJECTORY-CHANGING (the toggle MOVES the missile) — the slice-11 combo,
+# and the FIRST RNG-live missile slice since 13 (the 10-slice 4c streak, 14–24, ENDS here: the seed
+# is load-bearing again and conventions 3/11 apply). UNITS (§1 trifecta): pos/vel SI; angles rad;
+# σ_seek in RADIANS; I in kg·m²; ρ in kg/m³; launch ELEVATION in DEGREES → radians at the loader.
+# dt = 1e-3 / emit_every = 16.
+name: slice25_seeker_3d
+seed: 25
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # FOUR keys, ONE toggled (convention 9): `seeker_axes` is THE BUTTON (pitch_plane ↔ az_el);
+  # `airframe` HELD at :six_dof (the plant that CAN fly the command — which is what makes the foil's
+  # miss the sensor's fault), `autopilot` :alpha and `guidance` :pn as in 23/24, `seeker` HELD at
+  # :filtered. Default :pitch_plane → the showcase OPENS on the MISS; cycle to :az_el and it HITS.
+  # `steering` is OMITTED on purpose (defaults to :skid_to_turn — see the header).
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: pitch_plane
+
+entities:
+  # The interceptor — 6-DOF, guided, AND (new this slice) SENSING. Launched from z = 3000 m climbing
+  # at 12° at 700 m/s IN the x–z plane, mass 140 kg, drag off. THREE blocks present ⇒
+  # [BallisticMissile (phase-1 6-DOF airframe), Seeker (phase-3 observe!), Autopilot (phase-4 α/β
+  # guidance)] — "a missile is integrate! + observe! + decide!" (HANDOFF §3), now in 3-D.
+  #
+  # seeker: two_angle: true is THE HOST MARKER (it selects the 2-draw az/el path; `seeker_axes` then
+  #   selects which tracker's ω the autopilot consumes). σ_seek = 0.3 mrad — the isolated regime
+  #   (gate-0 P10: aero_sat stays 0.0% out to 0.3 mrad and starts binding at 0.5). α = 0.30 / β = 0.05
+  #   are slice 11's gains, AUTHORED CONSTANTS here: gate-0 P8b measured β ≥ 0.15 breaking the
+  #   isolation (19.6% at σ = 0.3; 80.5% at β = 0.4) — the slice-11 U-shape recurring.
+  # airframe: the slice-23/24 set. ρ = 1.0 (the retune — see the header). I = 20 (pitch = yaw),
+  #   Cmα = −1.0 (STABLE), Cmδ = +3.0, Cmq = −150, C_Lα = 20, α_max 0.3, C_Yβ 20 (= C_Lα, symmetric
+  #   cruciform), I_xx 2, I_zz 20, c_roll 50 (the STT roll damper).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 3.0e-4, alpha: 0.30, beta: 0.05, two_angle: true}
+      guidance: {n_pn: 4.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # The STATIC target OFF the x–z plane at cross-range +Y = 2000 m — slice 23/24's geometry, kept so
+  # the arc's three slices read side by side. vel = 0, AERODYNAMICALLY FREE. At (6000, 2000, 4200):
+  # downrange 6 km, cross-range 2 km, altitude 4.2 km.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 0.0, 0.0]
+    target: {rcs_m2: 1.0}
+
+knobs:
+  # ONE knob, deliberately (the slice-20 shape). σ_seek is the REALISM lever: the 1-σ angular noise
+  # on BOTH measured angles. Drag it up and the two-angle arm's demand grows (PN's N·Vc·λ̇ carries the
+  # noise) until it starts pressing the aero ceiling; drag it down and the intercept tightens.
+  #
+  # ⚠ σ_seek IS NOT A LESSON LEVER AND MUST NOT BE SOLD AS ONE — the miss does NOT degrade
+  # monotonically in σ (gate-0 P10: 0.235 / 0.243 / 0.260 / 0.278 m at 0.05 / 0.1 / 0.2 / 0.3 mrad,
+  # then FALLING to 0.057 at 1.0 mrad while aero_sat climbs to 25.4% — the noise is exciting the loop,
+  # not steering it). Its DOMAIN [0.05, 0.3] mrad is set by where the POINTING-MISS ISOLATION
+  # survives, not by the physics. The lesson's lever is the BUTTON.
+  #
+  # NOT KNOBS, deliberately: `rho` — its ISOLATED domain is only [1.0, 1.5] (at 0.6 the two-angle arm
+  # is already 1.6% saturated at σ = 0.3), a 1.5× span far narrower than a slider labelled "air
+  # density" implies, and it moves the one thing this slice needs held; the α-β `beta` gain (breaks
+  # the isolation at ≥ 0.15 — P8b); the target's cross-range Y (position is load-only — the slice-21
+  # DEAD-KNOB finding, 3rd occurrence); k_alpha/k_q (slice-19 FINDING 14).
+  - {target: m1, key: sigma_seek, min: 5.0e-5, max: 3.0e-4, label: "σ_seek LOS angular noise (rad, 1σ on BOTH angles — the realism lever, NOT the lesson)"}

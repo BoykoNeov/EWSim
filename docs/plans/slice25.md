@@ -251,6 +251,30 @@ view must keep ITS button on those wires); the Sandbox smoke-load; a windowed sh
 
 ---
 
+## Gate 3 — THE WIRE (measured on `scenarios/slice25_seeker_3d.yaml`, seed 25, via load_scenario→tick!)
+
+| arm | miss (per-tick) | miss (frame @16) | max\|y\| | omega_oop max | aero_sat |
+|---|---|---|---|---|---|
+| `:pitch_plane` (default) | **2000.044** | 2000.071 | **0.0 EXACTLY** | **0.0 EXACTLY** | **0/8647** |
+| `:az_el` | **0.008** | 9.555 | 2839.3 | 336.4 | **0/7760** |
+
+**Ratio: 209.3× FRAME-SAMPLED / 258131× per-tick.** ⚠ **Quote the frame-sampled ratio and
+"sub-metre per-tick" — NEVER the 258131×.** The per-tick figure is a lucky near-zero CPA on this
+seed; the verifier sees FRAMES, and a hit samples coarsely. Pin CONSERVATIVE ONE-SIDED BOUNDS
+(`:az_el` frame miss < 30, `:pitch_plane` > 1500), the slice-11 discipline — never the ratio.
+
+**THE ISOLATION HOLDS ON THE SHIPPING WIRE: `aero_sat` is 0 in BOTH arms** (0/8647 and 0/7760) — a
+POINTING miss, not the arc's seventh ceiling miss. ⚠ Note `a_demand` peaks at 356.1 against a 314.2
+ceiling in the foil arm WITHOUT `aero_sat` firing: the flag keys off the ⟂-v PROJECTION while
+`a_demand` is full-magnitude, so the sets NEST (slice-19's documented behaviour). **The verifier must
+assert the FLAG, never a hand-rolled `demand > ceiling` compare.**
+
+Replay is bit-identical on both rungs; the knob holds the isolation across its whole declared domain
+(0/7761 saturated frames at 5e-5, 1e-4, 2e-4, 3e-4 rad); a σ pegged to 5 rad keeps every telemetry
+value finite (convention 5/6).
+
+---
+
 ## Named deferrals (write them down; do not let them leak into this slice)
 
 - **The 3-D `:raw` arm** — slice 11's tracker lesson in az/el (§6). Real, measured to saturate at the
