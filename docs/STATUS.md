@@ -3354,6 +3354,196 @@ CFAR; a MEASURED `Vc`; the 3-D `:raw` arm; the out-of-plane MANEUVERING target (
 
 ---
 
+**Slice 27 — THE RADOME-SLOPE COMPENSATION AUTOPILOT: buying margin with a gyro (HANDOFF §11 Tier-A)**
+— the FIFTH slice of the bank-to-turn / 3-D arc, and the one **slice 26 named as its own successor**
+("a rate-gyro feed-forward that cancels the parasitic term — the natural slice 27, and it needs this
+one"). **COMPLETE & green (4545 tests).**
+
+Slice 26 built the disease. Slice 27 is the cure — **and the point of the slice is that the cure is
+PARTIAL, in a way that is exactly quantifiable.** The missile already carries a rate gyro (the α/β
+autopilot has fed on `:omega_body` since slice 23), so feed slice 26's measured coupling forward with
+the slope the guidance computer BELIEVES it has, `R̂`, and subtract it. **THE LESSON, one sentence:
+a rate-gyro feed-forward cancels the radome's parasitic term to the accuracy of the slope estimate it
+is given, so what closes the loop is the RESIDUAL `R − R̂` and slice 26's boundary becomes
+`N·|R − R̂|/ρ ≈ 0.38`: compensation buys MARGIN, NOT IMMUNITY, and the design requirement is not a
+better radome but a BETTER-KNOWN one — here, to ±0.0475.**
+
+⚠ **SLICE 26's LANGUAGE AND ITS PROHIBITIONS ARE INHERITED WHOLE.** The instability is still slice
+26's — a true positive-feedback loop with a loop gain, a stability boundary and self-excitation from
+zero input. Slice 20's "degenerative spiral" language is still forbidden here, and slice 26's is
+still forbidden everywhere else. **Slice 27 adds NO new instability and NO new cap; it adds a SECOND
+TERM INSIDE THE SAME LOOP GAIN.**
+
+⭐⭐ **THE BOUNDARY SHIFTS ONE-FOR-ONE, AND THE SAME MEASUREMENT IS THE ISOLATION.** Sweeping the true
+slope R down at fixed R̂ gives an onset whose RESIDUAL is CONSTANT — −0.095 / −0.095 / −0.095 / −0.095
+/ −0.100 / −0.100 at R̂ = 0 / −0.05 / −0.10 / −0.15 / −0.20 / −0.30 (gate-0 P2A, at N = 4). An
+**OFFSET**, across a 6× span. **That is not a stylistic preference for one statistic: the obvious
+alternative story is DE-TUNING** — slice 26 measured that `ėl` and `q` are COLLINEAR in closed loop
+(R² = 0.999), so subtracting `R̂·cos·ω_y` from `ėl` is numerically near-indistinguishable from SCALING
+`ėl` DOWN, i.e. from lowering effective N, and a "compensator" that worked that way would quiet the
+ring just as convincingly (advisor, and it was the sharpest risk in the slice). **A GAIN CANNOT
+PRODUCE A CONSTANT OFFSET**, and the miss stays at baseline where de-tuning OPENS it (slice 26
+measured that signature at 0.23 → 7.66 m). ⇒ cancellation, not de-tuning, from ONE measurement.
+
+⭐ **SLICE 26's LAW SURVIVES THE SUBSTITUTION VERBATIM** (gate-0 P3A, measured with R̂ = −0.20 HELD, so
+every point is a COMPENSATED missile): `N·|R − R̂|/ρ` = **0.390 / 0.400 / 0.400 / 0.390 / 0.400** at
+N = 3/4/5/6/8 and **0.400 / 0.400 / 0.387 / 0.390** at ρ = 0.6/1.0/1.5/2.0, against slice 26's
+uncompensated 0.390 / 0.380 / 0.400 / 0.390 / 0.400. **The same law, to the third digit.** ⚠ Say
+"MEASURED boundary", NEVER "identity" — slice 26's rule, unchanged (contrast slice 21's ρ-factor and
+slice 22's `α_stall/α_max`, which ARE algebraic identities). ⭐ The teaching payload is a REQUIREMENT
+NUMBER: slice 26 sold the factorization as *"you cannot buy N without buying glass"*; slice 27 adds
+the third currency — **or you can buy a gyro and KNOW your glass to within `0.38/(N·ρ)`.**
+
+⚠⚠ **BUT IT IS NOT AN EQUIVALENT RADOME — the finding that keeps the slice honest (gate-0 P3B).** The
+residual predicts the STABILITY BOUNDARY exactly; it does NOT make `(R, R̂)` the same missile as
+`(R − R̂, 0)`. Over-compensating to a residual of +0.15 misses by **31.4 m** where a BARE radome at
++0.15 misses by **0.47**. **Why:** the look angle moves for TWO reasons — the BODY rotating, which the
+gyro sees, and the LOS itself rotating, which it does not. The body-rate half cancels EXACTLY (hence
+the exact boundary); the LOS-driven half survives. **A GYRO CAN ONLY CANCEL WHAT A GYRO CAN SEE.**
+
+⭐ **THE ARCHITECTURE WAS CHOSEN BY MEASUREMENT, NOT ASSUMED (advisor).** Gate 0 built BOTH candidates:
+the `:rate` gyro feed-forward (what ships) and an `:angle`-domain corrector that subtracts `R̂·look`
+from the measured angle ahead of the tracker — superficially cleaner, since it removes the bend
+itself. **The angle-domain arm FAILS**: its onset residual DRIFTS instead of holding (−0.095 → −0.005
+as R̂ goes 0 → −0.30), and on the diagonal **with PERFECT knowledge `R̂ = R = −0.50` it RINGS anyway**
+(rms 0.844, miss 131 m) where the rate arm stays quiet (0.014). **The reason is a general principle
+worth more than the slice:** the angle-domain corrector needs the LOOK ANGLE and can only obtain it by
+rotating the MEASURED LOS into the body frame — **a LOS it can only see through the very bend it is
+removing**, so its error is second order in `R·R̂` and stops being small exactly when the glass gets
+bad. The rate arm's correction signal is the GYRO, **outside the corrupted path**. ⇒ **compensate with
+a signal that is not itself corrupted by what you are compensating.** ⚠ The advisor predicted the
+OPPOSITE defect (the α-β filter lags the parasitic term inside `ėl_est` while the gyro path does not,
+so `:rate` might under-cancel); that effect is REAL but SMALL (~17%) and swamped. `:angle` does NOT
+ship (convention 9) — a gate-0 finding and a named deferral.
+
+⚠⚠ **GATE-1 FINDING — THE TWO-TERM LAW DOES NOT CANCEL EVERYTHING, AND THE TESTSET FOUND IT.** The
+cancellation tooth FAILED on first run: ELEVATION cancelled to 1e-16, AZIMUTH left **0.005984** against
+a 2e-4 tolerance. The cause was in slice 26's own measured table, which this slice's plan had quoted
+without noticing: for an OFF-BORESIGHT LOS a PITCH rate also moves AZIMUTH (`ε̇_az/R = −0.0598`) — a
+CROSS-TERM the classic two-term feed-forward does not model. **It is a §1 named approximation OF THE
+COMPENSATOR, not a defect in it**, and it does not touch the claim, for a reason worth stating:
+**elevation is the channel that closes the pitch loop** (gain 0.9487 vs the cross-term's 0.0598,
+~16× down) and the residual law was measured END TO END with this very law. The tooth now asserts the
+honest thing — elevation cancels EXACTLY, azimuth cancels under pure yaw, and the pitch→azimuth
+residual is PINNED at `R̂·k_cross·ω_y` against a cross-coefficient MEASURED from `radome_error` (never
+a magic constant, convention 11). ⇒ **on the loop-closing axis compensation IS a slope offset; on the
+other it is a slope offset plus a known second-order term.**
+
+⚠ **THE SHOWCASE WIRE WAS CHOSEN ON MODEL VALIDITY, NOT TASTE — and the first candidate was rejected
+by a measurement.** The crossing must land mid-slider, which needs `|R| ≈ 2·|R_crit| = 2·0.38/(N·ρ)`.
+Reaching that by WORSENING THE GLASS to R = −0.30 was tried first and REJECTED at gate 0: it puts the
+look-angle deciles at 12–25° with **528/9924 ticks past 30°** (5.3%), i.e. the linear small-angle model
+`ε = R·look` carrying the lesson exactly where it is weakest. **Raising N instead (N = 8, R = −0.10,
+ρ = 1.0)** keeps the glass REAL (slice 26: `|R| = 0.1` is POOR, ≤ 0.03 good) and the look-angle budget
+at slice 26's own (**6/9421 ticks past 30°**, 0.06%). ⚠ **Be honest about the symmetry (advisor): N = 8
+is the TOP of slice 26's own measured range**, so this wire sits at one extreme just as R = −0.30 sat
+at the other — what separates them is a MEASUREMENT, not which extreme sounds realistic. ⭐ And it
+instantiates slice 26's own payload: this is exactly the missile that design trade condemned.
+⚠ `n_pn` STAYS AUTHORED, NEVER A KNOB — slice 26 disqualified it and the objection is STRONGER here:
+with a compensator on the wire a student who crossed the boundary via N would credit the compensator.
+
+⚠ **THE METRIC IS SLICE 26's, UNCHANGED — rms BODY RATE, never the peak, never the miss — and this
+wire ENFORCES the discipline rather than tempting you away from it: THE UNCOMPENSATED ARM STILL HITS**
+(per-tick 2.447 m vs 0.316 m). ⭐ The rms metric is FRAME-ROBUST here as in slice 26 (per-tick 0.81712
+vs frame-sampled 0.81704, ratio 0.9999). ⚠ **THE ISOLATION IS SLICE 26's, RE-RUN ON THE COMPENSATED
+BOUNDARY**: `aero_sat == 0` is IMPOSSIBLE (99.8% on the uncompensated arm — do NOT copy slice 25's),
+so instead **raise α_max 3× and the CROSSING DOES NOT MOVE** (stays at R̂ = −0.055 while the amplitude
+grows, rms 0.844 → 2.568, max|q| 1.42 → 4.34). Other caps clear on the shipped arms: `defl_sat`
+0.01–0.02% (cap #3), ceiling 329.87 ≪ `a_max` 3000 (cap #1), max|α| 0.156 < α_max 0.3 (no clamp leak).
+
+⭐ **TWO KNOBS, AND CONVENTION 9 IS SATISFIED BY A MEASUREMENT, NOT BY COUNTING SLIDERS** (advisor):
+they are two halves of ONE quantity, and three gate-0 measurements say so. **(1) THE DIAGONAL** — move
+both together and NOTHING HAPPENS (rms q 0.019 / 0.016 / 0.014 / 0.012 / 0.011 at R = R̂ = 0 / −0.05 /
+−0.10 / −0.20 / −0.30, quiet out to −0.80): **the missile does not care about glass it KNOWS about.**
+**(2) BOTH KNOBS CROSS AT THE SAME RESIDUAL** — dragging R̂ with R held at −0.10 crosses at R̂ = −0.055;
+dragging R with R̂ held at −0.10 crosses at R = −0.145. Residual −0.045 both times, from opposite
+directions. **(3) THE GRID is the whole slice in one picture**: stability is a DIAGONAL BAND in
+(R, R̂), not a rectangle — **and slice 26 is this grid's `R̂ = 0` column.** ⚠ **THE DOMAINS, AND WHICH
+ENDPOINT IS ACTUALLY MEASURED (advisor — slice 26's post-commit lesson was "measure the endpoints",
+and half of these are NOT set by a measurement, which the plan says plainly rather than implying
+otherwise):** R̂ ∈ [−0.15, 0.00] — the **FLOOR is UI FRAMING** (the crossing at −0.055 sits at ~37% of
+travel; the metric is MEASURED FLAT from −0.06 to ≈ −0.30 and the de-tune face does not bite until
+residual ≈ +0.3 — miss 2.9 m at R̂ = −0.40, 18.8 at −0.50, 214 at −0.80), while the **CEILING (0.00)
+IS physical** (a POSITIVE R̂ compensates the WRONG WAY and is exactly a WORSE radome: R̂ = +0.10 against
+R = −0.10 misses by 25.99 m, reproducing slice 26's BARE R = −0.20). R ∈ [−0.20, 0.00] — **the floor
+IS measured**: one clear step past the crossing at −0.145, deep enough that the ring is unambiguous
+(aero_sat 99.7%) while the look-angle budget holds (8/9400 past 30°), and it lands the residual at
+−0.10, the same residual slice 26 shipped. ⚠ **Do NOT sell this as the `af_cma` two-failure-modes
+shape**: within its domain this knob shows ONE, and the other is a measurement recorded outside it.
+
+**KNOB, NOT RUNG, and the button stays DROPPED.** `R̂ = 0` is an in-domain slider value AND
+**BIT-IDENTICAL to the compensator not existing** — MEASURED, not argued (`test_missile.jl`) ⇒ KNOB by
+atmosphere.jl's discriminator, exactly as slice 26 concluded for R; `LIVE_FIDELITY_MODES` UNTOUCHED.
+Slice 26's `radome_view` marker is INHERITED unchanged — **third slice in this family (16, 26, 27)
+whose lesson is a slider with no button at all.** Class **4a** (2 randn/tick, compensator or not —
+the feed-forward is arithmetic on state that already exists; THIRD consecutive RNG-live slice, the
+seed load-bearing, draw-count identity ASSERTED not assumed). **RUNG-GATED on the LIVE `:airframe`**,
+never on `haskey(:att_q)` (the slice-21 `_atm_on` / slice-23 stale-readout / slice-26 latent-bug
+class, 4th occurrence); ⚠ and **NOT gated on the radome's own key** — compensating for glass you do
+not have is a REAL configuration (residual = −R̂ ⇒ it de-tunes), not a no-op. New `frames.jl` kernel
+`radome_compensation`; new loader key `seeker.radome_slope_est` (validated FINITE only — a WRONG-SIGN
+estimate is legitimate and instructive, and bounding the key would bound the lesson); telemetry
+`radome_slope_est` / **`radome_residual`** (⭐ the deciding quantity shipped as a NUMBER so the client
+never subtracts — convention 13, the slice-21 `rho_air` precedent) / `radome_ff_el`.
+
+⚠ **NOT zero client code (advisor): one HUD line, because a student who drags R̂ and watches the ring
+die with R̂ nowhere on screen has been shown nothing** — slice 26 ate the "a proof you cannot read is
+not a proof" defect once already. The HUD is a **SWITCH on `radome_residual`**, so a slice-26 wire is
+untouched; keying off `radome_view` instead would print a residual of 0.000 on every slice-26 wire,
+which is not cosmetic but WRONG (slice 26 has no compensator, so its residual IS its bare slope).
+
+⭐⭐ **AND THE SHOT HARNESS CAUGHT A REAL DEFECT — convention 14's 4th proof earning its keep.** The
+first slice-27 shot rendered **"RADOME COMPENSATED — loop STABLE" on the RINGING arm**, doubly wrong:
+the verdict keyed off the INSTANTANEOUS `|q| > 0.5` and **a limit cycle crosses zero twice per cycle**,
+so the capture landed mid-swing at q = −0.301 (peak 1.47); and the shipped wire OPENS with R̂ = 0, a
+compensator that BELIEVES NOTHING, so "compensated" named a cure the arm did not have. Slice 26 has
+the same structure and merely got lucky with its capture instant. FIXED with a **display-only
+PEAK-HOLD** on |q| (an instrument, not physics — it computes no threshold from R, R̂ or N, since
+|R_crit| moves with N and ρ and a client-side stability test would be physics in GDScript AND wrong
+the moment a scenario changes N) plus a **three-state label**, both gated on the slice-27 key so slice
+26's label path is byte-identical. ⚠ **A second methodological defect, caught by the VERIFIER itself:**
+its first de-tune assert compared the two arms' FRAME-sampled CPAs and failed (3.305 ringing vs 5.269
+cured). That comparison measures the frame grid, not the physics — at emit_every 16 and ~700 m/s the
+grid is ~11 m wide and **a HIT samples COARSELY** ([[ewsim-missile-verifier-sampling]]). The assert is
+now ONE-SIDED (the miss must not open into de-tune territory, 18.8 m being the measured signature);
+the per-tick comparison lives in `test_missile.jl` where per-tick sampling is available.
+
+Four proofs green. `slice27_verify.gd` → **`S27V OK`** (FIVE phases: **RINGING** rms 0.76836 with the
+residual exactly −0.1000 and defl_sat 0/495, ceiling 329.84; **REPLAY** posdiff **0.0**; **CURED**
+rms 0.01404 = **54.7×** with the residual exactly 0 and the feed-forward live (max 0.00439 rad/s);
+⭐ **MARGIN** — R̂ HELD at −0.10 while the glass degrades to −0.20 puts the residual back at exactly
+−0.1000 and **the loop RINGS AGAIN (0.81604)**: the boundary MOVED, it did not vanish; ⭐⭐ **DIAGONAL**
+— R = R̂ = −0.15 (glass 1.5× worse than shipped, perfectly known, and the R̂ slider's declared FLOOR, so
+this phase MEASURES a domain endpoint) is **QUIET at 0.01300** with the residual 0). `slice27_ui_test.gd`
+→ **`S27UI OK`** (the slice-26 MIRROR asserted BOTH ways — 26 and 27 are indistinguishable by ROUTING,
+so the HUD must be a SWITCH on the compensator's own key — plus TWO sliders both driving set_param with
+NOTHING sending set_fidelity, the five disqualified levers asserted ABSENT, and a **NINE-WAY** value
+guard where 16-vs-27 is asserted on BOTH mode and visibility so the three button-dropping branches
+cannot collapse). `Sandbox.tscn` smoke-load → **`EWSIM_SERVER_DONE`**. TWO windowed shots at the SAME
+range (~3.65 km): **"RADOME LOOP — RINGING, NO comp"** (residual −0.100 orange, a_cmd 587, track_gap
+456, omega_ratio 4.60, aero_sat 1) vs **"RADOME COMPENSATED — loop STABLE"** (residual −0.000 green,
+a_cmd 35.5, track_gap 19.5, omega_ratio 1.24, aero_sat 0, ff −1.4e-3). **Slices 1–26 byte-identical,
+proven ON THE WIRE** — the 25/26 verifiers re-run reproduce their STATUS numbers TO THE DIGIT
+(2000.044 / 1.373 / 1456.5× / 40.925 m; 0.80408 / 0.03493 / 23.0× / mirror 59.2× / posdiff 0.0).
+
+Run: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice27_radome_comp.yaml`, then the
+console Godot `--headless --path clients/godot --script res://net/slice27_verify.gd` (exit 0 = pass).
+The UI test needs NO server: `… res://net/slice27_ui_test.gd`. Live: drag **R̂ DOWN** from 0 and the
+ring dies between −0.05 and −0.055; then drag **R** down past −0.145 and it comes back.
+DEFERRED (NAMED): **THE ANGLE-DOMAIN CORRECTOR** (built and measured at gate 0, not shipped — its
+failure mode, a correction signal corrupted by what it corrects, is a general principle and could
+carry its own slice on worse glass); **AN IMPERFECT GYRO** (noise, bias, scale-factor error — this
+slice's gyro is PERFECT, a §1 approximation; a scale-factor error is exactly a multiplicative error on
+R̂, i.e. it lands back on the residual, which makes it a cheap and well-motivated successor);
+**ESTIMATING R̂ IN FLIGHT** (the adaptive answer — ⚠ slice 26's P7A is a REAL obstacle: the parasitic
+gain is NOT identifiable in closed loop, so such a slice must first answer *what excites the
+estimate?*); **a look-angle-dependent `R(look)`** (slice 26's, and it composes sharply: against a
+wiggly real slope curve a CONSTANT R̂ is wrong almost everywhere, so the residual becomes a function of
+the geometry); seeker FOV / gimbal limit; monopulse / az×el CFAR; a measured `Vc`; the 3-D `:raw` arm;
+the out-of-plane MANEUVERING target.
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

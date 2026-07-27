@@ -83,6 +83,12 @@ export los_unit_from_angles, los_rate_from_angles
 # (atmosphere.jl's discriminator; the `af_cma` analogue, which likewise spans a stability
 # boundary through zero).
 export look_angles, radome_error
+# Slice 27 (§11 Tier-A): the RADOME-SLOPE COMPENSATION autopilot — the rate-gyro feed-forward that
+# cancels slice 26's parasitic term to the accuracy of the slope estimate it is given, so what
+# closes the loop is the RESIDUAL `R − R̂` and slice 26's boundary becomes `N·|R − R̂|/ρ ≈ 0.38`.
+# Compensation buys MARGIN, not immunity. KNOB (`radome_slope_est`), no rung — `R̂ = 0` is an
+# in-domain slider value AND bit-identical to the compensator not existing (measured, gate-0 P1B).
+export radome_compensation
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step
 export INTEGRATOR_MODES, G_ACCEL

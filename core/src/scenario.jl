@@ -374,6 +374,29 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                     error("missile '$id': seeker.radome_slope must be finite " *
                           "(got $(comp[:radome_slope]))")
             end
+            # Slice 27 — THE COMPENSATOR'S SLOPE ESTIMATE `R̂`, the slope the guidance computer
+            # BELIEVES its radome has. Presence-gated on the KEY for the same reason as
+            # `radome_slope` above (every slice-11/13/25/26 scenario has a `seeker:` block).
+            # ⚠ AUTHORED UNDER `seeker:` BECAUSE THAT IS THE CODE SITE, NOT BECAUSE IT IS A SENSOR
+            # PROPERTY: the compensator is a GUIDANCE-computer function, but the correction is
+            # defined on the LOS ANGLE RATES and those exist only where `_observe_point3d!`
+            # assembles ω (phase 3). `docs/plans/slice27.md` §9 records the reasoning so the
+            # placement is a decision rather than a default.
+            # SIGNED and dimensionless, like the slope it estimates, and validated FINITE only —
+            # a WRONG-SIGN estimate is a legitimate (and instructive) input: it compensates the
+            # wrong way and is exactly a WORSE radome (gate-0 P1C: R̂ = +0.10 against R = −0.10
+            # misses by 25.99 m, reproducing slice 26's BARE R = −0.20). What closes the loop is
+            # the RESIDUAL `R − R̂`, so bounding this key would bound the lesson.
+            # INERT without a two-angle host, without `:radome_slope`… no — ⚠ NOT inert without
+            # `radome_slope`: compensating for glass you do not have is a REAL configuration (it
+            # injects a residual of −R̂ and de-tunes), so the gate is the LIVE `:airframe = :six_dof`
+            # rung + a two-angle host, exactly as the radome's is.
+            if haskey(sb, "radome_slope_est")
+                comp[:radome_slope_est] = _f64(sb["radome_slope_est"])
+                isfinite(comp[:radome_slope_est]) ||
+                    error("missile '$id': seeker.radome_slope_est must be finite " *
+                          "(got $(comp[:radome_slope_est]))")
+            end
             # Slice 13: the `:scan` seeker (fidelity `seeker: scan`) forms a NOISY angular-power
             # PROFILE over a FIXED grid (the slice-3 CFAR sandbox on the LOS-ANGLE axis) instead of
             # ONE noisy truth bearing. The grid/beam/CFAR/gate config lands here (STATIC — draw-count/

@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–26 COMPLETE & green — 4476 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–26
+**Slices 1–27 COMPLETE & green — 4545 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–27
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
@@ -72,7 +72,12 @@ and slice 26 THE RADOME / BODY-RATE PARASITIC LOOP — the arc's NAMED END POINT
 15 named, slice 19 deferred and slice 20 hunted and KILLED on the ACTUATOR path: the seeker looks through glass
 that bends the LOS by `ε = R·(look angle)`, so the missile's OWN body rate moves the LOS it reports, and past a
 LOOP GAIN `N·|R|/ρ ≈ 0.38` the missile SHAKES ITSELF into a sustained limit cycle — with a NOISELESS seeker and
-a stationary target.** Full gate-by-gate
+a stationary target — and slice 27 THE RADOME-SLOPE COMPENSATION AUTOPILOT, the ENGINEERING ANSWER slice 26 named
+as its own successor: the missile already carries a rate gyro, so feed slice 26's coupling forward with the slope
+you BELIEVE you have (`R̂`) and subtract it — and it cancels TO THE ACCURACY OF THAT BELIEF, so what closes the
+loop is the RESIDUAL `R − R̂` and slice 26's boundary returns VERBATIM as `N·|R − R̂|/ρ ≈ 0.38`. COMPENSATION BUYS
+MARGIN, NOT IMMUNITY: the design requirement stops being "a better radome" and becomes "a BETTER-KNOWN one".**
+Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
 
@@ -611,6 +616,46 @@ lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md
   PLATEAUING, which is the measured reason the domain stops there; and the two shipped-but-unasserted
   telemetry keys (`omega_ratio`, `radome_eps_az`) got a tooth each. (4476)
 
+- **Slice 27 (§11 Tier-A, the 3-D arc's ENGINEERING ANSWER) — THE RADOME-SLOPE COMPENSATION AUTOPILOT: buying
+  margin with a gyro.** Slice 26 named this slice as its own successor. The missile already carries a rate gyro
+  (the α/β autopilot has fed on `:omega_body` since slice 23), so feed slice 26's MEASURED coupling forward with
+  the slope the guidance computer BELIEVES it has (`R̂`) and subtract it: `Δȧz = +R̂·ω_z`, `Δėl = −R̂·cos(look_az)·ω_y`
+  (`frames.jl` `radome_compensation`). ⚠ **THOSE SIGNS ARE THE NEGATION of slice 26's parasitic gain (the #1 SIGN
+  TRAP's 9th) and the plan's first draft had BOTH flipped** — which DOUBLES the term at `R̂ = R` while still
+  producing a plausible sweep (the ring quiets at `R̂ = −R`) and the slice gets written up backwards; the tooth is
+  the CANCELLATION measured against the SHIPPED `radome_error` on a FROZEN geometry, never the formula restated.
+  ⭐⭐ **THE BOUNDARY SHIFTS ONE-FOR-ONE — AND THE SAME MEASUREMENT IS THE ISOLATION**: the onset RESIDUAL is
+  CONSTANT at −0.095 across a 6× span of R̂, an OFFSET not a gain. That matters because the obvious alternative
+  story is DE-TUNING (slice 26 measured `ėl` and `q` COLLINEAR, R² = 0.999, so the correction is numerically
+  near-indistinguishable from scaling `ėl` down = lowering effective N), and **a gain cannot produce a constant
+  offset**; the miss staying at baseline is the second discriminator. ⭐ Slice 26's law returns VERBATIM:
+  `N·|R − R̂|/ρ` = 0.390/0.400/0.400/0.390/0.400 at N = 3…8 (⚠ a MEASURED boundary, never an "identity" — slice
+  26's rule). The payload is a REQUIREMENT NUMBER: *you cannot buy N without buying glass — or you can buy a gyro
+  and KNOW your glass to within `0.38/(N·ρ)`* (here ±0.0475). ⚠⚠ **BUT IT IS NOT AN EQUIVALENT RADOME**: over-
+  compensating to a residual of +0.15 misses by 31.4 m where a BARE +0.15 radome misses by 0.47 — the look angle
+  moves for TWO reasons and **a gyro can only cancel what a gyro can see** (the body-rate half exactly, hence the
+  exact boundary; the LOS-driven half survives). ⭐ **THE ARCHITECTURE WAS MEASURED, NOT ASSUMED**: an ANGLE-domain
+  corrector RINGS at `R̂ = R = −0.50` despite PERFECT knowledge, because it needs the look angle and can only see
+  it THROUGH the bend it is removing (error second order in `R·R̂`) ⇒ **compensate with a signal that is not itself
+  corrupted by what you are compensating** — a general result, and `:angle` does NOT ship. ⚠⚠ **GATE-1 FINDING:
+  the two-term law leaves the PITCH→AZIMUTH cross-term uncancelled** (the testset FAILED on it first, 0.005984 vs
+  a 2e-4 tolerance) — a §1 approximation OF THE COMPENSATOR, harmless because ELEVATION is the loop-closing
+  channel (0.9487 vs 0.0598, ~16×), now PINNED at `R̂·k_cross·ω_y` against a MEASURED coefficient. Wire (seed 27,
+  N = 8, R = −0.10 — ⚠ the wire chosen on **MODEL VALIDITY**: the alternative R = −0.30 puts 5.3% of ticks past a
+  30° look angle vs 0.06% here, and `n_pn` stays AUTHORED, never a knob): rms q 0.844 → 0.0135 (62.4× per-tick,
+  54.7× frame). ⭐ **TWO KNOBS, convention 9 satisfied by a MEASUREMENT not by counting sliders** — the DIAGONAL
+  (move both together and NOTHING happens), both knobs crossing at the SAME residual (−0.045 from opposite
+  directions), and the (R, R̂) grid being a DIAGONAL BAND of which **slice 26 is the `R̂ = 0` column**. Class **4a**
+  (3rd consecutive RNG-live; draw-count identity ASSERTED); KNOB not rung (`R̂ = 0` is BIT-IDENTICAL to the
+  compensator not existing, measured); the button stays DROPPED (16/26/27). ⚠ **The shot harness CAUGHT A REAL
+  DEFECT**: the first shot read "COMPENSATED — loop STABLE" on the RINGING arm, because a limit cycle crosses zero
+  twice per cycle so an INSTANTANEOUS verdict mislabels half the frames — fixed with a display-only PEAK-HOLD
+  (an instrument, not physics) plus a three-state label. ⚠ **And the VERIFIER caught a second**: its first de-tune
+  assert compared two FRAME-sampled CPAs (3.305 vs 5.269) — that measures the ~11 m frame grid, not the physics
+  ([[ewsim-missile-verifier-sampling]]: a HIT samples COARSELY). Four proofs green (S27V FIVE phases incl. ⭐ MARGIN
+  — the same R̂ on worse glass RINGS AGAIN — and ⭐⭐ DIAGONAL; S27UI NINE-way guard + the slice-26 HUD mirror; smoke;
+  TWO shots). Slices 1–26 byte-identical, proven ON THE WIRE (25/26 verifiers re-run to the digit). (4545)
+
 
 (The missile guidance arc — slices 8–12 — and its CAPSTONE slice 14 are COMPLETE; the countermeasures arc opened
 with slice 13. HANDOFF §10 items 1–13 — the committed roadmap — are all DONE; slices 15–24 are into the §11 Tier-A
@@ -648,9 +693,19 @@ never TOLD to — 2000 m from the SENSOR), and slice 26 cashed the arc's NAMED E
 parasitic loop: the seeker looks through glass whose bend depends on the LOOK ANGLE, so the missile's own body
 rate feeds back into the LOS it reports, and past a LOOP GAIN N·|R|/ρ ≈ 0.38 it SHAKES ITSELF into a sustained
 limit cycle — the guidance limit cycle slice 15 named and slice 20 killed on the ACTUATOR path, alive on the
-SENSOR path, and the project's FIRST true positive-feedback instability.** The NEXT named candidates: a RADOME
-COMPENSATION / stability-margin autopilot (the engineering answer to slice 26 — a rate-gyro feed-forward
-cancelling the parasitic term; it needs slice 26); SUSTAINED-TRACKING / route (b) — an out-of-plane MANEUVERING
+SENSOR path, and the project's FIRST true positive-feedback instability. Slice 27 then cashed slice 26's OWN
+named successor — the RADOME-SLOPE COMPENSATION AUTOPILOT — and the arc's engineering answer turns out to be a
+PARTIAL one, exactly quantifiably: a rate-gyro feed-forward cancels the parasitic term to the accuracy of the
+slope estimate it is given, so what closes the loop is the RESIDUAL `R − R̂` and slice 26's boundary returns
+verbatim as `N·|R − R̂|/ρ ≈ 0.38` — MARGIN, NOT IMMUNITY, and "how good is my radome?" becomes "how well do I
+KNOW it?".** The NEXT named candidates: an IMPERFECT GYRO (noise / bias / scale-factor — slice 27's gyro is
+PERFECT by §1, and a scale-factor error is exactly a multiplicative error on R̂, i.e. it lands back on the
+residual, which makes it the cheapest well-motivated successor); ESTIMATING R̂ IN FLIGHT (⚠ slice 26's P7A is a
+REAL obstacle — the parasitic gain is NOT identifiable in closed loop, so such a slice must first answer *what
+excites the estimate?*); the ANGLE-DOMAIN corrector as its own A/B on worse glass (built and measured at slice
+27's gate 0, not shipped); a look-angle-dependent `R(look)` (it composes sharply with slice 27: against a wiggly
+real slope curve a CONSTANT R̂ is wrong almost everywhere, so the residual becomes a function of the geometry);
+SUSTAINED-TRACKING / route (b) — an out-of-plane MANEUVERING
 target (the demand rotating faster than the roll loop follows, a DISTINCT face from slice 24's cold-start); and
 the AERO + INERTIAL CROSS-COUPLING / DEPARTURE that makes a real BTT airframe go OUT-OF-PLANE during a hard roll
 (non-diagonal I, Clβ/Cnp/Clr; diagonal I + symmetric cruciform + coordinated flight keep 23/24 clean).

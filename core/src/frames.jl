@@ -327,3 +327,58 @@ the geometry** — that is what the test does.
 """
 radome_error(slope::Real, look_az::Real, look_el::Real) =
     (slope * look_az, slope * look_el)
+
+"""
+    radome_compensation(slope_est, look_az, ω_body) -> (Δȧz, Δėl)   (rad/s)
+
+The RATE-GYRO FEED-FORWARD that cancels [`radome_error`](@ref)'s parasitic term (slice 27, §11
+Tier-A — the engineering answer to slice 26, which named it as its own successor). Returns the
+CORRECTIONS to ADD to the seeker's measured LOS angle rates, given the slope the guidance
+computer BELIEVES its radome has (`slope_est` = `R̂`) and the body-frame rate gyro reading.
+
+    Δȧz = +R̂·ω_z ,      Δėl = −R̂·cos(look_az)·ω_y
+
+**⚠ THE SIGNS ARE THE WHOLE FUNCTION, and they are the #1 SIGN TRAP's 9th occurrence.** They are
+the NEGATION of the parasitic gain `radome_error` produces (`ε̇_el = +R·cos(look_az)·ω_y`,
+`ε̇_az = −R·ω_z`), because compensation SUBTRACTS what the radome ADDED. The first draft of slice
+27's plan carried BOTH flipped (advisor) — which DOUBLES the parasitic term at `R̂ = R` while
+still producing a plausible-looking sweep: the ring goes quiet at `R̂ = −R`, and the slice gets
+written up backwards. ⇒ the gate-1 tooth is not this formula restated, it is the CANCELLATION
+measured against the shipped `radome_error` on the frozen geometry, PAIRED with an axis-asymmetry
+case (a pure yaw rate must correct `Δȧz` ONLY, a pure pitch rate `Δėl` ONLY — a compensator that
+put the cosine on both axes, or neither, still cancels at `look_az ≈ 0` and would pass a single
+small-angle test).
+
+**WHAT IT CANCELS, AND WHAT IT CANNOT (slice 27 gate-0 P3B — the finding that keeps the slice
+honest).** The look angle moves for TWO reasons: the BODY rotating, which the gyro sees, and the
+LOS itself rotating, which it does not. This cancels the body-rate half EXACTLY, which is why the
+STABILITY BOUNDARY lands exactly on the residual `R − R̂` (measured: slice 26's loop gain
+`N·|R|/ρ ≈ 0.38` returns verbatim with `R` → `R − R̂`, constant to ±3% across N ∈ {3…8} and
+ρ ∈ {0.6…2.0}). The LOS-driven half survives, so a compensated missile is **NOT** the same missile
+as one with a better radome — over-compensation de-tunes rather than helping (`R = −0.30`,
+`R̂ = −0.45` misses by 31.4 m where a bare `R = +0.15` misses by 0.47). **A gyro can only cancel
+what a gyro can see** — say "the residual sets the STABILITY BOUNDARY", never "the residual is an
+equivalent radome".
+
+**⚠ AND WHAT THE TWO-TERM LAW LEAVES BEHIND (gate-1 finding — the testset failed on it first).**
+For an OFF-BORESIGHT LOS a PITCH rate also moves AZIMUTH (slice 26's own frozen-geometry table:
+`ε̇_az/R = −0.0598` at `ω = (0,−1,0)`), a CROSS-TERM this law does not model — so the AZIMUTH
+channel keeps a residual under pitch while the ELEVATION channel cancels exactly. That is a §1
+named approximation of the CLASSIC compensator, not a defect in it, and it does not touch the
+slice's claim: elevation is the channel that closes the pitch loop (gain 0.9487 against the
+cross-term's 0.0598, ~16× down), and the residual law was measured END TO END with this very
+law. ⇒ **on the loop-closing axis compensation IS a slope offset; on the other axis it is a slope
+offset plus a known second-order term** — pinned in `test_frames.jl` against the cross-coefficient
+MEASURED from `radome_error`, never a magic constant.
+
+`slope_est == 0` returns exact zeros — the shipped no-compensator path is a KEY-ABSENT branch
+upstream of this (never `+ Δ` trusting the zero: the `-0.0` trap), and that exactness is what
+makes "no compensation" KNOB-REACHABLE and therefore a knob rather than a fidelity rung
+(atmosphere.jl's discriminator; measured bit-identical at gate 0, not argued).
+
+⚠ A PERFECT gyro is a §1 named approximation (slice 11's "Vc stays truth" precedent). ⚠ And
+`look_az` here is the compensator's OWN estimate, formed from the BENT measurement — a guidance
+computer has no truth LOS. Feeding it the true look angle would make the slice fake.
+"""
+radome_compensation(slope_est::Real, look_az::Real, ω_body::Vec3) =
+    (slope_est * ω_body[3], -slope_est * cos(look_az) * ω_body[2])

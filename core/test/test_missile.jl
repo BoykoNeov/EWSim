@@ -4229,3 +4229,248 @@ end
         end
     end
 end
+
+@testset "THE RADOME-SLOPE COMPENSATION AUTOPILOT wired (slice 27 — margin, not immunity)" begin
+    dt = 1.0e-3
+    n3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # Slice 26's wire with the COMPENSATOR's estimate as the one new authored key. ⚠ N = 8, not
+    # slice 26's 4: the shipped showcase is the missile slice 26's own design trade condemned — a
+    # SNAPPY interceptor (`N·|R|/ρ = 0.80`, twice the boundary) carrying a POOR but REAL radome.
+    # That wire was chosen on MODEL VALIDITY, not taste: reaching the same loop gain by worsening
+    # the glass to R = −0.30 instead puts 5.3% of ticks past a 30° look angle, where the linear
+    # `ε = R·look` model is weakest, against 0.06% here (`docs/plans/slice27.md` §5).
+    # `slope_est === nothing` mints NO `:radome_slope_est` key — the byte-identity arm.
+    function comp_world(; radome = -0.10, slope_est = nothing, axes = :az_el, airframe = :six_dof,
+                          seed = 27, sigma = 5.0e-5, rho = 1.0, alpha_max = 0.3, n_pn = 8.0,
+                          Y = 2000.0)
+        w = World(seed = seed,
+                  fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                 :autopilot => :alpha, :airframe => airframe,
+                                                 :seeker => :filtered, :seeker_axes => axes))
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => rho,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => alpha_max, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => n_pn, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => sigma, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true)
+        radome    === nothing || (comp[:radome_slope] = radome)
+        slope_est === nothing || (comp[:radome_slope_est] = slope_est)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, Y, 4200.0),
+                                 vel = zero(Vec3), comp = Dict{Symbol,Any}())
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:t1)]
+    end
+
+    # ⭐ SLICE 26's METRIC, UNCHANGED: rms body pitch rate over the mid-engagement. NEVER the peak
+    # (peaks OVERLAP across the threshold) and NEVER the miss (not monotone anywhere — and on THIS
+    # wire the uncompensated arm still HITS at ~2.4 m, which is exactly why the oscillation is the
+    # headline). First-CPA over the first descending band ([[ewsim-missile-verifier-sampling]]).
+    function compfly(; T = 12.0, kw...)
+        w, s = comp_world(; kw...)
+        qs = Float64[]; rmin, prev, closing = Inf, Inf, true
+        asat = 0; dsat = 0; nt = 0; αpk = 0.0
+        for _ in 1:round(Int, T / dt)
+            tick!(w, s, dt); empty!(w.events)
+            tel = w.env[:telemetry]
+            push!(qs, Float64(get(tel, "m1.omega_q", 0.0)))
+            αpk = max(αpk, abs(Float64(get(tel, "m1.alpha", 0.0))))
+            asat += Int(Float64(get(tel, "m1.aero_sat", 0.0)) != 0.0)
+            dsat += Int(Float64(get(tel, "m1.defl_sat", 0.0)) != 0.0)
+            nt += 1
+            r = n3(w.entities[:t1].pos - w.entities[:m1].pos)
+            closing && r > prev && (closing = false)
+            closing && (rmin = min(rmin, r)); prev = r
+            closing || break
+        end
+        i0 = max(1, length(qs) ÷ 4); i1 = max(i0 + 1, 3length(qs) ÷ 4)
+        rms = sqrt(sum(abs2, @view qs[i0:i1]) / (i1 - i0 + 1))
+        return (rms = rms, miss = rmin, qpk = maximum(abs, qs), αpk = αpk,
+                asat = asat, dsat = dsat, nt = nt, w = w)
+    end
+
+    @testset "BYTE-IDENTITY — no `radome_slope_est` key ⇒ the slice-26 path, bit-for-bit" begin
+        # The structural claim (the slice-20/21/26 shape): the no-compensator arm takes a DIFFERENT
+        # BRANCH, it does not add a zero. Never `ȧz + ȧz_ff` trusting `R̂ = 0 ⇒ 0.0`.
+        function trace(; kw...)
+            w, s = comp_world(; kw...)
+            out = Float64[]
+            for k in 1:2500
+                tick!(w, s, dt); empty!(w.events)
+                k % 250 == 0 && append!(out, (w.entities[:m1].pos..., w.entities[:m1].vel...,
+                                              w.entities[:m1].comp[:att_q]...,
+                                              w.entities[:m1].comp[:omega_body]...,
+                                              randn(copy(w.rng))))
+            end
+            out
+        end
+        base = trace()
+        @test trace() == base                              # determinism, and the control
+        # ⭐ AN AUTHORED R̂ = 0 IS BIT-IDENTICAL TO THE KEY BEING ABSENT — the same measurement slice
+        # 26 made for `R = 0`, and it is what makes this a KNOB rather than a fidelity rung by
+        # atmosphere.jl's discriminator (the off-state is knob-reachable, not a limit point).
+        @test trace(slope_est = 0.0) == base
+        # …and the RNG stream stays in lockstep — the compensator adds NO draw (class 4a,
+        # convention 3). Asserted, not assumed.
+        for R̂ in (nothing, 0.0, -0.10)
+            w, s = comp_world(slope_est = R̂)
+            for _ in 1:600; tick!(w, s, dt); empty!(w.events); end
+            ref = Xoshiro(27); for _ in 1:1200; randn(ref); end
+            @test randn(copy(ref)) == randn(copy(w.rng))
+        end
+    end
+
+    @testset "INERTNESS — the compensator needs a 6-DOF plant (the latent-bug class, 4th)" begin
+        # ⚠ RUNG-GATED ON THE LIVE `:airframe`, not on `haskey(:att_q)`: that key is minted by
+        # `_integrate_6dof!` and NEVER deleted, so a key-gated compensator would keep feeding a
+        # FROZEN gyro reading forward after a cross-toggle off `:six_dof`. Slice 21's `_atm_on`,
+        # slice 23's stale readout and slice 26's radome are occurrences 1–3.
+        b = compfly(airframe = :pitch_coupled, slope_est = nothing)
+        c = compfly(airframe = :pitch_coupled, slope_est = -0.10)
+        @test c.rms == b.rms
+        @test c.miss == b.miss
+        @test !haskey(c.w.env[:telemetry], "m1.radome_residual")
+        # the LIVE cross-toggle: inert on the very next tick
+        w, s = comp_world(slope_est = -0.10)
+        for _ in 1:400; tick!(w, s, dt); empty!(w.events); end
+        @test haskey(w.env[:telemetry], "m1.radome_residual")
+        w.fidelity[:airframe] = :pitch_coupled
+        tick!(w, s, dt); empty!(w.events)
+        @test haskey(w.entities[:m1].comp, :att_q)              # the key SURVIVES (never deleted)
+        @test !haskey(w.env[:telemetry], "m1.radome_residual")  # …but the compensator does NOT fire
+    end
+
+    @testset "⭐ THE CURE — a matched estimate kills the ring the radome starts" begin
+        ring = compfly(radome = -0.10, slope_est = nothing)   # slice 26's disease, at N = 8
+        cure = compfly(radome = -0.10, slope_est = -0.10)     # perfect knowledge
+        @test ring.rms > 0.5                                  # the loop is ringing…
+        @test cure.rms < 0.05                                 # …and the gyro quiets it
+        @test ring.rms / cure.rms > 20.0                      # decisive (gate 0: 62×)
+        # ⚠ AND THE MISS STAYS AT BASELINE — THE DE-TUNE DISCRIMINATOR (advisor, and it is the
+        # sharpest risk in the slice). `ėl` and `q` are COLLINEAR in closed loop (slice 26 P7A,
+        # R² = 0.999), so subtracting `R̂·cos·ω_y` from `ėl` is numerically near-indistinguishable
+        # from SCALING `ėl` DOWN — i.e. from lowering effective N. A "compensator" that works by
+        # DE-TUNING would quiet the ring just as convincingly, and slice 26 measured de-tuning's
+        # signature: the miss OPENS from sluggishness. Ring down AND miss at baseline ⇒ cancellation.
+        clean = compfly(radome = nothing, slope_est = nothing)
+        @test cure.miss < 2.0 * max(clean.miss, 0.5)
+        @test cure.miss < ring.miss
+    end
+
+    @testset "⭐⭐ THE BOUNDARY IS ON THE RESIDUAL — an OFFSET, not a gain" begin
+        # THE HEADLINE, and simultaneously the ISOLATION (the same measurement does both — a
+        # de-tuner's onset would move with R̂ as a GAIN, and a gain cannot hold a constant offset).
+        # Slice 26's boundary sits at |R| ≈ 0.38/(N·ρ) = 0.0475 here; compensation must SHIFT it by
+        # exactly R̂. Sampled at three estimates rather than swept (a full sweep is the verifier's
+        # job — this is the tooth).
+        for R̂ in (0.0, -0.10, -0.20)
+            est = R̂ == 0.0 ? nothing : R̂
+            # one step INSIDE the boundary (residual 0.04 < 0.0475) ⇒ quiet
+            @test compfly(radome = R̂ - 0.04, slope_est = est).rms < 0.10
+            # one step OUTSIDE it (residual 0.10 > 0.0475) ⇒ ringing
+            @test compfly(radome = R̂ - 0.10, slope_est = est).rms > 0.5
+        end
+        # ⭐ THE DIAGONAL: move the glass and the belief TOGETHER and NOTHING HAPPENS. This is what
+        # makes TWO knobs ONE lesson (convention 9 is satisfied by the measurement, not by counting
+        # sliders) — the missile does not care about glass it KNOWS about.
+        for R in (-0.05, -0.20, -0.40)
+            @test compfly(radome = R, slope_est = R).rms < 0.10
+        end
+        # ⚠ AND THE WRONG SIGN IS A WORSE RADOME, NOT A WEAKER CURE — the #1 SIGN TRAP's 9th
+        # occurrence, pinned as behaviour. A double-flipped compensator would quiet the ring HERE
+        # and ring at R̂ = R, and every number in this slice would be written backwards.
+        wrong = compfly(radome = -0.10, slope_est = +0.10)
+        @test wrong.rms > 0.5
+        @test wrong.miss > compfly(radome = -0.10, slope_est = -0.10).miss
+    end
+
+    @testset "THE ISOLATION — the ceiling BOUNDS the cycle, the RESIDUAL decides there is one" begin
+        # Slice 26's isolation, re-run on the COMPENSATED boundary. ⚠ `aero_sat == 0` is IMPOSSIBLE
+        # (an oscillation drives demand into the ceiling — do NOT copy slice 25's isolation), so:
+        # raise α_max 3× and the CROSSING must not move while the AMPLITUDE grows.
+        lo_ring = compfly(radome = -0.10, slope_est = nothing, alpha_max = 0.3)
+        hi_ring = compfly(radome = -0.10, slope_est = nothing, alpha_max = 0.9)
+        lo_cure = compfly(radome = -0.10, slope_est = -0.10,   alpha_max = 0.3)
+        hi_cure = compfly(radome = -0.10, slope_est = -0.10,   alpha_max = 0.9)
+        @test hi_ring.rms > 1.5 * lo_ring.rms            # a taller ceiling ⇒ a BIGGER cycle…
+        @test lo_cure.rms < 0.05 && hi_cure.rms < 0.05   # …but the cured arm stays cured
+        # the other caps are provably clear on the arms that ship (slice 26's discipline, as numbers)
+        @test lo_cure.dsat / lo_cure.nt < 0.01           # cap #3 (δ_max) — never binds
+        @test lo_ring.dsat / lo_ring.nt < 0.01
+        @test lo_cure.αpk < 0.3                          # no α_max clamp leak on the cured arm
+    end
+
+    @testset "the loader key + telemetry (the residual shipped as a NUMBER — convention 13)" begin
+        base = """
+        name: s27
+        seed: 27
+        dt_physics: 1.0e-3
+        fidelity: {airframe: six_dof, autopilot: alpha, guidance: pn, seeker: filtered, seeker_axes: az_el}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 700.0
+              elevation_deg: 12.0
+              cd_area_m2: 0.0
+              rho: 1.0
+              seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true, radome_slope: -0.10, radome_slope_est: -0.06}
+              guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+              airframe: {ref_len_m: 0.2, inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0, cmq: -150.0,
+                         cla: 20.0, alpha_max: 0.3, cy_beta: 20.0, inertia_roll_kgm2: 2.0,
+                         inertia_yaw_kgm2: 20.0, c_roll: 50.0}
+          - id: tgt1
+            kind: target
+            pos: [6000.0, 2000.0, 4200.0]
+            vel: [0.0, 0.0, 0.0]
+            target: {rcs_m2: 1.0}
+        """
+        mktempdir() do dir
+            p = joinpath(dir, "ok.yaml"); write(p, base)
+            scn = load_scenario(p)
+            @test scn.world.entities[:m1].comp[:radome_slope_est] == -0.06
+            # the slice-26 marker is INHERITED unchanged — slice 27 adds no rung, so the button
+            # stays DROPPED (third slice in this family: 16, 26, 27).
+            @test EWSim._airframe_view_info(scn.world)[:radome_view] === true
+            # PRESENCE-gated: no authored estimate ⇒ NO comp key (slice 26 wires untouched)
+            p2 = joinpath(dir, "plain.yaml")
+            write(p2, replace(base, ", radome_slope_est: -0.06" => ""))
+            @test !haskey(load_scenario(p2).world.entities[:m1].comp, :radome_slope_est)
+            # …and it is knob-addressable (a slider must name a real comp key)
+            p3 = joinpath(dir, "knob.yaml")
+            write(p3, base * "\nknobs:\n  - {target: m1, key: radome_slope_est, min: -0.15, max: 0.0, label: Rhat}\n")
+            @test length(load_scenario(p3).knobs) == 1
+            # a non-finite estimate is refused at LOAD (convention 5, validate-at-load half). ⚠ Only
+            # FINITE is checked: a WRONG-SIGN estimate is a legitimate and instructive input (it
+            # compensates the wrong way = a strictly worse radome), and what closes the loop is the
+            # RESIDUAL, so bounding this key would bound the lesson.
+            pb = joinpath(dir, "bad.yaml")
+            write(pb, replace(base, "radome_slope_est: -0.06" => "radome_slope_est: .inf"))
+            @test_throws ErrorException load_scenario(pb)
+        end
+        # ⭐ THE RESIDUAL IS SHIPPED AS A NUMBER so the client never subtracts (convention 13 — the
+        # slice-21 `rho_air` precedent). It is `R − R̂`, and it is correct even when compensating
+        # for glass that is not there.
+        w, s = comp_world(radome = -0.10, slope_est = -0.06)
+        for _ in 1:200; tick!(w, s, dt); empty!(w.events); end
+        tel = w.env[:telemetry]
+        @test tel["m1.radome_slope_est"] ≈ -0.06 atol = 1e-15
+        @test tel["m1.radome_residual"] ≈ -0.04 atol = 1e-15
+        @test haskey(tel, "m1.radome_ff_el")
+        # compensating for a radome the missile does NOT have: residual = −R̂, and it is REAL
+        # (it de-tunes), not a no-op — which is why the compensator is not gated on the radome key.
+        w2, s2 = comp_world(radome = nothing, slope_est = -0.06)
+        for _ in 1:200; tick!(w2, s2, dt); empty!(w2.events); end
+        @test w2.env[:telemetry]["m1.radome_residual"] ≈ +0.06 atol = 1e-15
+        @test !haskey(w2.env[:telemetry], "m1.radome_eps")     # …and no radome telemetry at all
+    end
+end

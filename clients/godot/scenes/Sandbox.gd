@@ -148,6 +148,9 @@ var _airframe_6dof := false        # handshake airframe_6dof — the 3-D-airfram
 # UNCHANGED; its only effect is that _enter_airframe3d_mode DROPS the shared fidelity button (there
 # is no rung to cycle — the lesson is the radome_slope slider). Slice-16's Option-P′, second use.
 var _radome_view := false          # handshake radome_view — the DROP-THE-BUTTON marker
+# Slice-27 DISPLAY-ONLY peak-hold on the body rate (see _airframe3d_on_state): a limit cycle crosses
+# zero twice per cycle, so an instantaneous verdict mislabels half the frames. Instrument, not physics.
+var _radome_qpeak := 0.0
 var _af3d_missile := ""            # the interceptor id (the trail source)
 var _af3d_target := ""             # the target id (the +Y off-plane marker)
 var _af3d_nose_mesh: ImmediateMesh = null   # the nose-direction vector (from att_q), coupled/six_dof only
@@ -1232,6 +1235,22 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 			_af3d_missile = id
 		if _af3d_target == "" and str(e.get("kind", "")) == "target":
 			_af3d_target = id
+	# SLICE 27 — a DISPLAY-ONLY PEAK-HOLD on |q|, and it fixes a real defect the shot harness caught.
+	# The limit cycle crosses zero TWICE PER CYCLE, so ANY instantaneous |q| > threshold verdict
+	# mislabels roughly half the frames: the first slice-27 shot landed at q = −0.301 mid-swing (peak
+	# 1.47) and the headline read "loop STABLE" on a ringing missile. Slice 26 has the same structure
+	# and merely got lucky with its capture instant.
+	# ⚠ THIS IS AN INSTRUMENT, NOT PHYSICS (convention 13). It is a peak-hold meter with decay — the
+	# same thing a real rate display does — and it decides only WHICH STRING to draw. It computes no
+	# threshold from R, R̂ or N: |R_crit| moves with N and ρ, so a client-side stability test would be
+	# physics in GDScript AND wrong the moment a scenario changes N.
+	# ⚠ Gated on the slice-27 telemetry key so slice 26's label path is untouched (the same SWITCH
+	# discipline as the HUD lines below).
+	if _telemetry.has(_af3d_missile + ".radome_residual"):
+		var qn := absf(float(_telemetry.get(_af3d_missile + ".omega_q", 0.0)))
+		# decay ~0.97 per state frame at 62.5 Hz ⇒ a ~0.5 s hold, comfortably longer than the
+		# ~2 Hz ring's half-period, so the verdict is steady across a whole cycle.
+		_radome_qpeak = maxf(qn, _radome_qpeak * 0.97)
 	if _t3d_layer == null or _t3d_los_mesh == null:
 		return
 	var mpos: Array = _entities.get(_af3d_missile, {}).get("pos", [0, 0, 0])
@@ -1317,8 +1336,31 @@ func _draw_airframe3d_hud() -> void:
 		# ⚠ Keep these SHORT — the headline is drawn at `vp.x − 430` in 20 px, so ~38 characters is
 		# the width. A longer string runs off the right edge and the lesson's own name is the part
 		# that gets cut (measured: "…the body rate fe|" on the first shot).
-		lbl = "RADOME PARASITIC LOOP — RINGING" if qr > 0.5 \
-			  else ("RADOME — refracting, loop STABLE" if slope != 0.0 else "NO RADOME — R = 0")
+		# SLICE 27 — a COMPENSATED wire names the cure, not just the disease. A SWITCH on the
+		# compensator's own telemetry key, so a slice-26 wire keeps its label verbatim.
+		# ⚠ The verdict is still driven by the MEASURED body rate, never by a client-side threshold
+		# test on the residual: |R_crit| moves with N and ρ (the boundary is N·|R − R̂|/ρ ≈ 0.38), so
+		# "residual < −0.0475 ⇒ unstable" would be physics in GDScript AND wrong the moment a
+		# scenario changes N (convention 13). ⚠ Keep these SHORT — ~38 chars at 20 px is the width
+		# at `vp.x − 430`, measured when slice 26's headline ran off the right edge.
+		if _telemetry.has(_af3d_missile + ".radome_residual"):
+			# ⚠ THE VERDICT USES THE PEAK-HOLD, NOT THE INSTANTANEOUS RATE (see _airframe3d_on_state):
+			# the first shot of this slice caught the cycle mid-swing at q = −0.301 and the headline
+			# read "loop STABLE" on a ringing missile.
+			# ⚠ AND "COMPENSATED" IS EARNED, NOT ASSUMED — the shipped wire OPENS with R̂ = 0, a
+			# compensator that BELIEVES NOTHING, and calling that "compensated" would have named the
+			# cure on the arm that has none. Three states, because the knob really has three.
+			var rh := float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0))
+			qr = _radome_qpeak                    # the verdict below (and `col`) ride the peak-hold
+			if qr > 0.5:
+				lbl = "RADOME LOOP — RINGING, under-comp" if rh != 0.0 \
+					  else "RADOME LOOP — RINGING, NO comp"
+			else:
+				lbl = "RADOME COMPENSATED — loop STABLE" if rh != 0.0 \
+					  else "RADOME — refracting, loop STABLE"
+		else:
+			lbl = "RADOME PARASITIC LOOP — RINGING" if qr > 0.5 \
+				  else ("RADOME — refracting, loop STABLE" if slope != 0.0 else "NO RADOME — R = 0")
 		col = Color(1.00, 0.62, 0.30) if qr > 0.5 else Color(0.45, 0.90, 1.00)
 	elif _fidelity.has("seeker_axes"):
 		var see := str(_fidelity.get("seeker_axes", "pitch_plane"))
@@ -1360,8 +1402,24 @@ func _draw_airframe3d_hud() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if absf(bq) > 0.5 else COL_TICK)
 		draw_string(_font, Vector2(vp.x - 430, 132), "radome boresight error ε: %+.5f rad   (look angle %.1f°)" % [eps, lka],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45))
-		draw_string(_font, Vector2(vp.x - 430, 154), "slope R = %+.3f   —   the threshold is the LOOP GAIN N·|R|" % float(_telemetry.get(_af3d_missile + ".radome_slope", 0.0)),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+		# SLICE 27 — the COMPENSATOR line, a SWITCH on `radome_residual` (not an `or`): a slice-26
+		# wire ships no such key and renders its own line unchanged, byte-identical. The RESIDUAL is
+		# what actually decides — `N·|R − R̂|/ρ ≈ 0.38` — and it arrives from the core as ONE NUMBER
+		# so the client never subtracts (convention 13, the slice-21 `rho_air` precedent).
+		# ⚠ A student who drags R̂ and sees the ring die with R̂ nowhere on screen has been shown
+		# nothing, which is why this slice is not zero client code.
+		if _telemetry.has(_af3d_missile + ".radome_residual"):
+			var rhat := float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0))
+			var resid := float(_telemetry[_af3d_missile + ".radome_residual"])
+			draw_string(_font, Vector2(vp.x - 430, 154), "R %+.3f   estimate R̂ %+.3f" % [float(_telemetry.get(_af3d_missile + ".radome_slope", 0.0)), rhat],
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+			# the residual is coloured by the SAME peak-hold verdict as the headline, so a frame
+			# caught mid-swing cannot show an orange headline over a green residual (or vice versa)
+			draw_string(_font, Vector2(vp.x - 430, 176), "RESIDUAL R − R̂ = %+.3f   ← this closes the loop" % resid,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _radome_qpeak > 0.5 else Color(0.55, 1.00, 0.65))
+		else:
+			draw_string(_font, Vector2(vp.x - 430, 154), "slope R = %+.3f   —   the threshold is the LOOP GAIN N·|R|" % float(_telemetry.get(_af3d_missile + ".radome_slope", 0.0)),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
 	elif _telemetry.has(_af3d_missile + ".omega_oop"):
 		var oop := float(_telemetry[_af3d_missile + ".omega_oop"])
 		draw_string(_font, Vector2(vp.x - 430, 110), "seeker ω out-of-plane: %.5f rad/s%s" % [oop, "   ← BLIND" if oop == 0.0 else ""],

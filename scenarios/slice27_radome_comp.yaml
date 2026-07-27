@@ -1,0 +1,198 @@
+# slice27_radome_comp — THE RADOME-SLOPE COMPENSATION AUTOPILOT: buying margin with a gyro
+# (HANDOFF §11 Tier-A, slice 27 gate 3). The FIFTH slice of the bank-to-turn / 3-D arc (23 = the
+# 6-DOF substrate + skid-to-turn, 24 = bank-to-turn + roll-lag, 25 = a seeker in the 6-DOF loop,
+# 26 = the radome parasitic loop) and the one slice 26 named as its own successor:
+#
+#     "A radome-slope COMPENSATION / stability-margin autopilot — the engineering answer (a
+#      rate-gyro feed-forward that cancels the parasitic term). It is the natural slice 27."
+#
+# Slice 26 built the disease. This is the cure — and the point of the slice is that the cure is
+# PARTIAL, in a way that is exactly quantifiable.
+#
+# THE LESSON — and it is TWO SLIDERS, not a button (see "NO FIDELITY BUTTON" below):
+#   The missile already carries a rate gyro (the α/β autopilot has fed on it since slice 23). So
+#   subtract the parasitic term back out: slice 26 measured the coupling exactly, so feed it
+#   forward with the slope you BELIEVE your radome has, R̂ — and the parasitic path is cancelled
+#   TO THE ACCURACY OF YOUR BELIEF. What is left driving the loop is the RESIDUAL `R − R̂`.
+#
+# > THE LESSON, IN ONE SENTENCE. A rate-gyro feed-forward cancels the radome's parasitic term to
+# > the accuracy of the slope estimate it is given, so what closes the loop is the RESIDUAL R − R̂
+# > and slice 26's boundary becomes N·|R − R̂|/ρ ≈ 0.38: compensation buys MARGIN, NOT IMMUNITY,
+# > and the design requirement is not a better radome but a BETTER-KNOWN one — here, to ±0.0475.
+#
+# ⭐⭐ THE BOUNDARY SHIFTS ONE-FOR-ONE, AND THAT IS ALSO THE ISOLATION. Sweeping the true slope R
+# down at fixed R̂ gives an onset whose RESIDUAL is constant — −0.095 / −0.095 / −0.095 / −0.095 /
+# −0.100 / −0.100 at R̂ = 0 / −0.05 / −0.10 / −0.15 / −0.20 / −0.30 (gate-0 P2A, at N = 4). An
+# OFFSET, across a 6× span. ⚠ THAT MATTERS BECAUSE THE OBVIOUS ALTERNATIVE STORY IS DE-TUNING:
+# slice 26 measured that `ėl` and `q` are COLLINEAR in closed loop (R² = 0.999), so subtracting
+# `R̂·cos·ω_y` from `ėl` is numerically near-indistinguishable from SCALING `ėl` DOWN — i.e. from
+# lowering effective N — and a "compensator" that works by de-tuning would quiet the ring just as
+# convincingly. A GAIN cannot produce a constant offset, and the miss stays at baseline (slice 26
+# measured de-tuning's signature as the miss OPENING from sluggishness). ⇒ cancellation, not
+# de-tuning, and the SAME measurement proves the headline and the isolation.
+#
+# ⭐ AND SLICE 26's LAW SURVIVES THE SUBSTITUTION VERBATIM (gate-0 P3A, measured with R̂ = −0.20
+# HELD, so every point is a COMPENSATED missile): N·|R − R̂|/ρ = 0.390 / 0.400 / 0.400 / 0.390 /
+# 0.400 at N = 3/4/5/6/8 and 0.400 / 0.400 / 0.387 / 0.390 at ρ = 0.6/1.0/1.5/2.0 — against slice
+# 26's uncompensated 0.390 / 0.380 / 0.400 / 0.390 / 0.400. The same law, to the third digit.
+# ⚠ Say "MEASURED boundary", NEVER "identity" — slice 26's rule, unchanged (contrast slice 21's
+# ρ-factor and slice 22's α_stall/α_max, which ARE algebraic identities).
+#
+# ⚠⚠ BUT IT IS **NOT** AN EQUIVALENT RADOME, AND THIS IS THE FINDING THAT KEEPS THE SLICE HONEST
+# (gate-0 P3B). The residual predicts the STABILITY BOUNDARY exactly; it does NOT make (R, R̂) the
+# same missile as (R − R̂, 0). Over-compensating to a residual of +0.15 misses by 31.4 m where a
+# BARE radome at +0.15 misses by 0.47. The reason: the look angle moves for TWO reasons — the BODY
+# rotating, which the gyro sees, and the LOS itself rotating, which it does not. The body-rate half
+# cancels EXACTLY (hence the exact boundary); the LOS-driven half survives. A GYRO CAN ONLY CANCEL
+# WHAT A GYRO CAN SEE.
+#
+# ⚠ THE METRIC IS rms BODY RATE — slice 26's, unchanged, and this wire ENFORCES it rather than
+# tempting you away: THE UNCOMPENSATED ARM STILL HITS (2.447 m vs 0.316 m). Never the peak (peaks
+# overlap across the threshold), never the miss (not monotone anywhere). ⭐ And the rms metric is
+# FRAME-ROBUST — per-tick 0.81712 vs frame-sampled 0.81704, ratio 0.9999 — which is why the
+# oscillation beats any miss here.
+#
+# ⚠ THE ISOLATION IS SLICE 26's, RE-RUN ON THE COMPENSATED BOUNDARY. `aero_sat == 0` is IMPOSSIBLE
+# (an oscillation drives demand into the ceiling — 99.8% on the uncompensated arm; do NOT copy
+# slice 25's isolation). Instead: RAISE α_max 3× (0.3 → 0.9) AND THE CROSSING DOES NOT MOVE — it
+# stays at R̂ = −0.055 while the amplitude grows (rms q 0.844 → 2.568, max|q| 1.42 → 4.34). The
+# ceiling BOUNDS the cycle; the RESIDUAL decides whether there is one. Other caps clear on the
+# shipped arms: defl_sat 0.01–0.02% (cap #3), ceiling 329.87 ≪ a_max 3000 (cap #1), max|α| 0.156 <
+# α_max 0.3 (no clamp leak; no aero_curve on this wire at all).
+#
+# ⚠ WHY N = 8 AND NOT SLICE 26's 4 — AND IT IS A MODEL-VALIDITY ARGUMENT, NOT A TASTE ONE. The
+# crossing must land mid-slider, which needs |R| ≈ 2·|R_crit| = 2·0.38/(N·ρ). Reaching that by
+# WORSENING THE GLASS to R = −0.30 was tried first and REJECTED at gate 0: it puts the look-angle
+# deciles at 12–25° with 528/9924 ticks past 30° (5.3%), i.e. the linear small-angle model
+# `ε = R·look` carrying the lesson exactly where it is weakest. Raising N instead keeps the glass
+# REAL (slice 26: |R| = 0.1 is a POOR radome, ≤ 0.03 a good one) and the look-angle budget at
+# slice 26's own (6/9421 ticks past 30°, 0.06%). ⚠ Be honest about the symmetry: N = 8 is the TOP
+# of slice 26's own measured range, so this wire sits at one extreme just as R = −0.30 sat at the
+# other — what separates them is a MEASUREMENT, not which extreme sounds realistic.
+# ⭐ And it instantiates slice 26's own teaching payload: "YOU CANNOT BUY N WITHOUT BUYING GLASS"
+# — this is exactly the missile that trade condemned, and slice 27 adds the third currency: OR YOU
+# CAN BUY A GYRO AND KNOW YOUR GLASS, to within 0.38/(N·ρ).
+# ⚠ `n_pn` STAYS AUTHORED, NEVER A KNOB. Slice 26 disqualified it (it moves the loop gain the
+# lesson is ABOUT) and the objection is STRONGER here: a student could cross the boundary with both
+# slopes untouched and conclude the compensator did it (the confounded-lever rule).
+#
+# NO FIDELITY BUTTON, DELIBERATELY — slice 26's `radome_view` marker is INHERITED UNCHANGED and the
+# client keeps the button DROPPED. `R̂ = 0` is an in-domain slider value AND bit-identical to the
+# compensator not existing (MEASURED at gate 0, not argued) ⇒ KNOB, by atmosphere.jl's
+# discriminator, exactly as slice 26 concluded for R. Third slice in this family (16, 26, 27) whose
+# lesson is a slider with no button at all. ⚠ NOT zero client code, though: one HUD line, because a
+# student who drags R̂ and sees the ring die with R̂ nowhere on screen has not been shown anything
+# (slice 26 ate the "a proof you cannot read is not a proof" defect once already).
+#
+# NAMED APPROXIMATIONS (§1): a PERFECT rate gyro — no noise, no bias, no scale-factor error (slice
+# 11's "Vc stays truth" precedent; an imperfect gyro is a named deferral, and a scale-factor error
+# is exactly a multiplicative error on R̂, i.e. it lands back on the residual); the two-term
+# feed-forward leaves the PITCH→AZIMUTH cross-term uncancelled (gate-1 finding, pinned in
+# test_frames.jl — elevation is the loop-closing channel, gain 0.9487 vs the cross-term's 0.0598);
+# a CONSTANT true slope (slice 26's, unchanged — a real radome's slope curve is wiggly, which makes
+# a constant R̂ wrong almost everywhere: the sharpest composition with this slice); no seeker FOV /
+# gimbal limit; ONE isotropic σ and a TRUTH Vc (slice 11's scope); diagonal inertia, symmetric
+# cruciform, lift drag-free (slices 23/24); constant ρ — a FLIGHT CONDITION, so say "low dynamic
+# pressure", never "high altitude" (no :atmosphere rung here).
+#
+# Class 4a: DRAW-INVARIANT (2 randn/tick, compensator or not — the feed-forward is arithmetic on
+# state that already exists) YET TRAJECTORY-CHANGING. THIRD consecutive RNG-live slice (25, 26, 27):
+# the seed is load-bearing and conventions 3/11 apply. Draw-count identity is ASSERTED, not assumed.
+# UNITS (§1 trifecta): pos/vel SI; angles rad; σ_seek in RADIANS; `radome_slope` and
+# `radome_slope_est` DIMENSIONLESS and SIGNED (dε/d(look angle)); I in kg·m²; ρ in kg/m³; launch
+# ELEVATION in DEGREES → radians at the loader. dt = 1e-3 / emit_every = 16.
+name: slice27_radome_comp
+seed: 27
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # FIVE keys, NONE toggled — the lesson is the SLIDERS (the slice-16/20/26 shape). `airframe` HELD
+  # at :six_dof (BOTH the radome and its compensator are INERT without it — there is no attitude to
+  # look through and no gyro to feed forward, and the gate is on the LIVE rung, not on a key that is
+  # never deleted), `seeker_axes` HELD at :az_el, `seeker` HELD at :filtered, `autopilot` :alpha and
+  # `guidance` :pn as in 23/24/25/26. `steering` is OMITTED (the loader default IS :skid_to_turn —
+  # slice 24 measured BTT binding the ceiling 93.2% of its approach, which would make the isolation
+  # above impossible).
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+
+entities:
+  # The interceptor — slices 23/24/25/26's plant and launch condition, with TWO changes, both
+  # measured at gate 0: n_pn 4 → 8 (the snappy missile slice 26's trade condemned — see the header)
+  # and the compensator's estimate authored at 0.
+  #
+  # seeker.radome_slope     = −0.10 — a POOR but REAL radome (slice 26's own scale).
+  # seeker.radome_slope_est =  0.00 — ⚠ THE SHOWCASE OPENS ON THE DISEASE (the slice-25/26 shape):
+  #   the compensator is present but BELIEVES NOTHING, so the body is already ringing when the
+  #   client connects. Drag `R̂` DOWN and the ring dies between −0.05 and −0.055.
+  # seeker.sigma_seek       = 5e-5 — an AUTHORED CONSTANT, not a knob (slice 26's reasoning,
+  #   unchanged and re-measured here: at σ = 3e-4 the contrast compresses from 63.8× to 23.4×, so
+  #   it would be a knob that DEGRADES the lesson beside it).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               radome_slope: -0.10, radome_slope_est: 0.0}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # The STATIC target OFF the x–z plane at cross-range +Y = 2000 m — slices 23/24/25/26's geometry,
+  # kept UNCHANGED so the arc's five slices read side by side. vel = 0, AERODYNAMICALLY FREE.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 0.0, 0.0]
+    target: {rcs_m2: 1.0}
+
+knobs:
+  # ⭐ TWO KNOBS — and convention 9 is satisfied by a MEASUREMENT, not by counting sliders: these
+  # are two halves of ONE quantity, the residual `R − R̂`, and three gate-0 measurements say so.
+  #   (1) THE DIAGONAL (P6A): move both TOGETHER and NOTHING HAPPENS — rms q 0.019 / 0.016 / 0.014 /
+  #       0.012 / 0.011 at R = R̂ = 0 / −0.05 / −0.10 / −0.20 / −0.30, quiet out to −0.80. THE
+  #       MISSILE DOES NOT CARE ABOUT GLASS IT KNOWS ABOUT.
+  #   (2) BOTH KNOBS CROSS AT THE SAME RESIDUAL (P6D): dragging R̂ with R held at −0.10 crosses at
+  #       R̂ = −0.055; dragging R with R̂ held at −0.10 crosses at R = −0.145. Residual −0.045 both
+  #       times, from opposite directions.
+  #   (3) THE GRID (P6B) is the whole slice in one picture: stability is a DIAGONAL BAND in (R, R̂),
+  #       not a rectangle — and SLICE 26 IS THIS GRID'S R̂ = 0 COLUMN.
+  #
+  # ⚠ THE DOMAINS, AND WHAT ACTUALLY SETS EACH ONE (slice 26's post-commit lesson was "measure the
+  # endpoints, don't infer them" — so say plainly which endpoint is measured and which is framing):
+  #
+  # KNOB 1 (R̂): the FLOOR is UI FRAMING, not physics, and the plan says so. The crossing at −0.055
+  # sits at ~37% of travel, and the metric is MEASURED FLAT from −0.06 out to about −0.30 (rms
+  # 0.0154 → 0.0119) with the de-tune face not biting until residual ≈ +0.3 (miss 2.9 m at R̂ =
+  # −0.40, 18.8 at −0.50, 214 at −0.80). −0.15, −0.20 and −0.30 would all be defensible. ⚠ The
+  # CEILING (0.00) *is* physical: a POSITIVE R̂ compensates the WRONG WAY and is exactly a WORSE
+  # radome — measured, R̂ = +0.10 against R = −0.10 misses by 25.99 m, reproducing slice 26's BARE
+  # R = −0.20. (⇒ do NOT sell this as the `af_cma` two-failure-modes shape: within its domain this
+  # knob shows ONE, and the other is a measurement recorded outside it.)
+  #
+  # KNOB 2 (R): the floor IS measured — one clear step past the crossing at −0.145, deep enough
+  # that the ring is unambiguous (aero_sat 99.7%, rms 0.820) while the look-angle budget still holds
+  # (8/9400 ticks past 30°). It also lands the residual at −0.10, the SAME residual slice 26 shipped
+  # as its own showcase, so the two slices read side by side.
+  - {target: m1, key: radome_slope_est, min: -0.15, max: 0.0,
+     label: "COMPENSATOR: slope estimate R̂ (what the guidance computer BELIEVES — drag DOWN to cancel)"}
+  - {target: m1, key: radome_slope, min: -0.2, max: 0.0,
+     label: "RADOME: true error slope R (the glass itself — the loop is closed by the RESIDUAL R − R̂)"}

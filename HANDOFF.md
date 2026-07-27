@@ -651,9 +651,20 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   prerequisite was slice 25's two-angle seeker (an error slope needs a two-angle measurement to
   perturb). Slice 26 is also where the GUIDANCE LIMIT CYCLE slice 15 named and slice 20's gate 0
   KILLED on the actuator path finally appears, on the SENSOR path, with a measured stability
-  boundary `N·|R_crit|/ρ ≈ 0.38`. The remaining deferrals from that thread: a radome-slope
-  COMPENSATION autopilot, a look-angle-dependent `R(look)`, a seeker FOV/gimbal limit, and the
-  aero+inertial cross-coupling / departure of a real BTT airframe. See `docs/STATUS.md`.
+  boundary `N·|R_crit|/ρ ≈ 0.38`. ⚠ A THIRD item on that list is now **BUILT, not deferred**: the
+  **radome-slope COMPENSATION autopilot** landed as **slice 27**, and the engineering answer turns
+  out to be a PARTIAL one, exactly quantifiably — a rate-gyro feed-forward cancels the parasitic
+  term to the accuracy of the slope estimate it is given, so what closes the loop is the RESIDUAL
+  `R − R̂` and slice 26's boundary returns verbatim as `N·|R − R̂|/ρ ≈ 0.38`. **Compensation buys
+  MARGIN, not immunity**, and the design question stops being "how good is my radome?" and becomes
+  "how well do I KNOW it?" — with a number (`0.38/(N·ρ)`). It is NOT an equivalent radome: a gyro
+  can only cancel what a gyro can see, so the body-rate half of the bend goes exactly and the
+  LOS-driven half survives. The remaining deferrals from that thread: an IMPERFECT GYRO (noise /
+  bias / scale-factor, the cheapest successor — a scale-factor error lands back on the residual),
+  ESTIMATING `R̂` IN FLIGHT (blocked on slice 26's non-identifiability in closed loop), the
+  ANGLE-DOMAIN corrector as its own A/B, a look-angle-dependent `R(look)`, a seeker FOV/gimbal
+  limit, and the aero+inertial cross-coupling / departure of a real BTT airframe.
+  See `docs/STATUS.md`.
 - **Sibling domains that reuse the shared libs.** IR/EO seekers and IRST (add an IR
   environment channel to `env`, reuse `frames.jl`/`estimation.jl`); communications EW —
   jamming of frequency-hopping / spread-spectrum links — as a parallel to radar EW;

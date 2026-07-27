@@ -265,6 +265,121 @@
         end
     end
 
+    @testset "radome_compensation — THE CANCELLATION (slice 27; the #1 SIGN TRAP's 9th)" begin
+        # ⚠ THE SAME FROZEN GEOMETRY, AND FOR THE SAME REASON (slice 26's P7A stands): in closed
+        # loop `ėl` and `q` are COLLINEAR, so a compensator can no more be IDENTIFIED on a tracking
+        # missile than the parasitic gain it cancels. Freeze the geometry; measure; then pair.
+        û = los_unit(Vec3(0.0, 0.0, 3000.0), Vec3(6000.0, 2000.0, 4200.0))
+        R  = -0.10
+        dt = 1.0e-3
+        # The PARASITIC rate the radome actually produces under a body rate ω — by finite difference
+        # of the SHIPPED kernels, exactly as the slice-26 testset above does it.
+        function eps_dot(ω::Vec3)
+            q0 = Quat(1.0, 0.0, 0.0, 0.0)
+            q1 = qnormalize(qmul(q0, quat_from_axis_angle(ω, norm3_test(ω) * dt)))
+            a0, e0 = radome_error(R, look_angles(q0, û)...)
+            a1, e1 = radome_error(R, look_angles(q1, û)...)
+            return ((a1 - a0) / dt, (e1 - e0) / dt)
+        end
+        # The same finite difference at an ARBITRARY slope — the "bare radome at the residual
+        # slope" reference the last block compares against.
+        function eps_dot_slope(slope::Float64, ω::Vec3)
+            q0 = Quat(1.0, 0.0, 0.0, 0.0)
+            q1 = qnormalize(qmul(q0, quat_from_axis_angle(ω, norm3_test(ω) * dt)))
+            a0, e0 = radome_error(slope, look_angles(q0, û)...)
+            a1, e1 = radome_error(slope, look_angles(q1, û)...)
+            return ((a1 - a0) / dt, (e1 - e0) / dt)
+        end
+        look_az, _ = look_angles(Quat(1, 0, 0, 0), û)
+
+        # ⭐ THE TOOTH THAT WOULD HAVE CAUGHT THE DOUBLE SIGN FLIP. Compensation must CANCEL the
+        # measured parasitic rate — the correction PLUS the parasitic term ≈ 0 — with the estimate
+        # MATCHED to the truth (R̂ = R). Asserting the formula against itself would pass with BOTH
+        # signs negated, which doubles the term at R̂ = R and quiets the ring at R̂ = −R instead:
+        # the slice would then be written up backwards (advisor, gate 0).
+        for ω in (Vec3(0.0, -1.0, 0.0), Vec3(0.0, 1.0, 0.0), Vec3(0.0, 0.0, 1.0),
+                  Vec3(0.0, -0.6, 0.8))
+            ėa_p, ėe_p = eps_dot(ω)                          # what the radome ADDS
+            Δa,   Δe   = radome_compensation(R, look_az, ω)  # what the gyro SUBTRACTS
+            @test abs(ėe_p + Δe) < 2e-4                      # ELEVATION: cancelled, all rates
+        end
+        # AZIMUTH cancels on a PURE YAW rate — the term the two-term law models.
+        let (ėa_p, _) = eps_dot(Vec3(0.0, 0.0, 1.0)), (Δa, _) = radome_compensation(R, look_az, Vec3(0.0, 0.0, 1.0))
+            @test abs(ėa_p + Δa) < 2e-4
+        end
+
+        # ⚠⚠ AND WHAT IT DOES **NOT** CANCEL — MEASURED AND PINNED, NOT HIDDEN (gate-1 finding).
+        # Slice 26's own frozen-geometry table already showed it: a PITCH rate also moves AZIMUTH
+        # (`ε̇_az/R = −0.0598` at ω = (0,−1,0)) for an OFF-BORESIGHT LOS — a CROSS-TERM the classic
+        # two-term feed-forward does not model. So the azimuth channel keeps a residual under pitch,
+        # and this testset FIRST failed on exactly that (0.005984 against a 2e-4 tolerance). It is a
+        # §1 named approximation of the compensator, not a defect in it — and it does not touch the
+        # slice's claim, because the ELEVATION channel is the one that closes the pitch loop (its
+        # gain is 0.9487 against the cross-term's 0.0598, ~16×) and the residual law was MEASURED
+        # end-to-end with this very law, holding to ±3% across N ∈ {3…8} and ρ ∈ {0.6…2.0}.
+        # Pinned against the cross-coefficient MEASURED from the shipped kernel — never a magic
+        # constant (convention 11).
+        k_cross = eps_dot_slope(1.0, Vec3(0.0, 1.0, 0.0))[1]      # az rate per unit ω_y per unit slope
+        k_pitch = eps_dot_slope(1.0, Vec3(0.0, 1.0, 0.0))[2]      # el rate per unit ω_y per unit slope
+        @test abs(k_cross) > 0.01                                  # it is REAL — not a rounding artifact
+        @test abs(k_cross / k_pitch) < 0.10                        # and it is SMALL — ~16× down
+        let ω = Vec3(0.0, 1.0, 0.0)
+            ėa_p, _ = eps_dot(ω)
+            Δa,   _ = radome_compensation(R, look_az, ω)
+            @test abs(ėa_p + Δa) ≈ abs(R * k_cross) atol = 2e-4    # the residual IS the cross-term
+        end
+
+        # ⭐ THE AXIS-ASYMMETRY TOOTH — the one the cancellation test alone CANNOT catch. The
+        # parasitic gain carries `cos(look_az)` on the PITCH axis and NOTHING on the yaw axis, so a
+        # compensator that applied the cosine to BOTH axes (or to NEITHER) still cancels at
+        # `look_az ≈ 0` and would pass a single frozen-geometry test taken at a small look angle.
+        # The shipped wire's look-angle deciles START at 14°, where `cos` is 0.97 — close enough to
+        # hide it. So assert the axes SEPARATELY, at a look angle big enough to see the cosine.
+        @test look_az > 0.25                                  # ≈ 18.4° here — cos = 0.949, not 1
+        let (Δa, Δe) = radome_compensation(R, look_az, Vec3(0.0, 0.0, 1.0))   # PURE YAW
+            @test Δa == R * 1.0                               # yaw axis: NO cosine factor
+            @test Δe == 0.0                                   # and it does not touch elevation
+        end
+        let (Δa, Δe) = radome_compensation(R, look_az, Vec3(0.0, 1.0, 0.0))   # PURE PITCH
+            @test Δa == 0.0                                   # pitch does not touch azimuth
+            @test Δe ≈ -R * cos(look_az) atol = 1e-15         # pitch axis: the cosine IS there
+            @test Δe != -R                                    # ⇐ the assert that fails if it is dropped
+        end
+
+        # R̂ = 0 corrects NOTHING, at any body rate (the knob-reachable off-state — what makes this
+        # a KNOB and not a fidelity rung), PAIRED with a does-correct case so it cannot pass by
+        # producing zero.
+        @test radome_compensation(0.0, look_az, Vec3(0.3, -0.7, 0.5)) == (0.0, -0.0) ||
+              radome_compensation(0.0, look_az, Vec3(0.3, -0.7, 0.5)) == (0.0, 0.0)
+        @test radome_compensation(-0.1, look_az, Vec3(0.3, -0.7, 0.5)) != (0.0, 0.0)
+        # A ZERO BODY RATE corrects nothing at any slope — the parasitic path is a BODY-RATE path,
+        # which is the entire reason a gyro is the right sensor for it.
+        @test radome_compensation(-0.5, look_az, zero(Vec3)) == (-0.0, 0.0) ||
+              radome_compensation(-0.5, look_az, zero(Vec3)) == (0.0, 0.0)
+        # LINEAR in the estimate AND in the body rate (the model's whole content).
+        @test radome_compensation(-0.20, look_az, Vec3(0.0, 1.0, 1.0))[2] ≈
+              2 * radome_compensation(-0.10, look_az, Vec3(0.0, 1.0, 1.0))[2] atol = 1e-15
+        @test radome_compensation(-0.10, look_az, Vec3(0.0, 2.0, 2.0))[1] ≈
+              2 * radome_compensation(-0.10, look_az, Vec3(0.0, 1.0, 1.0))[1] atol = 1e-15
+        # ⚠ AND THE RESIDUAL IS WHAT SURVIVES: compensating with R̂ leaves exactly the parasitic
+        # rate of a radome of slope (R − R̂). THIS is the slice's headline expressed on the kernel —
+        # the STABILITY BOUNDARY's variable, and the reason a MISMATCHED estimate is the design
+        # case rather than an afterthought. ⚠ It is a boundary, NOT an equivalent radome: the
+        # LOS-driven half of the bend survives (gate-0 P3B) — see the docstring.
+        for R̂ in (0.0, -0.05, -0.10, -0.15)
+            ω = Vec3(0.0, -0.8, 0.4)
+            ėa_p, ėe_p = eps_dot(ω)
+            Δa,   Δe   = radome_compensation(R̂, look_az, ω)
+            ėa_r, ėe_r = eps_dot_slope(R - R̂, ω)            # a BARE radome at the residual slope
+            @test abs((ėe_p + Δe) - ėe_r) < 2e-4             # ELEVATION: EXACTLY the residual slope
+            # ⚠ AZIMUTH is the residual slope PLUS the uncancelled cross-term, and the gap is
+            # EXACTLY `R̂·k_cross·ω_y` — pinned rather than tolerated, so the approximation is
+            # characterized instead of merely surviving. ⇒ on the loop-closing axis compensation IS
+            # a slope offset; on the other axis it is a slope offset plus a known second-order term.
+            @test ((ėa_p + Δa) - ėa_r) ≈ R̂ * k_cross * ω[2] atol = 2e-4
+        end
+    end
+
     @testset "SEEKER_AXES_MODES — the one-list-no-drift const (convention 7)" begin
         @test SEEKER_AXES_MODES == (:pitch_plane, :az_el)
         @test :az_el in SEEKER_AXES_MODES && :pitch_plane in SEEKER_AXES_MODES

@@ -1605,14 +1605,65 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # The rung selects WHICH (ω, û) PN consumes — the draw count is identical either way, and so is
     # every tracker's state. `:seeker` picks the tracker within the chosen dimensionality (a
     # CONSISTENT estimate source — the slice-11 FINDINGS decision f, now in two angles).
+    # SLICE 27 — THE RADOME-SLOPE COMPENSATION AUTOPILOT (the engineering answer slice 26 named as
+    # its own successor). The missile already carries a rate gyro — the α/β autopilot has fed on
+    # `:omega_body` since slice 23 — so FEED THE PARASITIC TERM FORWARD AND SUBTRACT IT: with the
+    # slope the guidance computer BELIEVES it has (`R̂ = :radome_slope_est`),
+    #
+    #     Δȧz = +R̂·ω_z ,     Δėl = −R̂·cos(look_az)·ω_y      (frames.jl `radome_compensation`)
+    #
+    # cancels slice 26's gain TO THE ACCURACY OF THAT BELIEF. ⭐ What is left driving the loop is
+    # the RESIDUAL `R − R̂`, and slice 26's boundary returns verbatim with the substitution:
+    # `N·|R − R̂|/ρ ≈ 0.38` (MEASURED to ±3% across N ∈ {3…8} and ρ ∈ {0.6…2.0}, `docs/plans/
+    # slice27.md` §1). ⇒ compensation buys MARGIN, NOT IMMUNITY, and the design requirement stops
+    # being "a better radome" and becomes "a better-KNOWN one" — here, to within 0.38/(N·ρ).
+    #
+    # ⚠ IT IS NOT AN EQUIVALENT RADOME (gate-0 P3B — the finding that keeps the slice honest). The
+    # look angle moves for TWO reasons: the BODY rotating, which the gyro sees, and the LOS itself
+    # rotating, which it does not. The body-rate half cancels exactly — hence the exact boundary —
+    # but the LOS-driven half survives, so over-compensation DE-TUNES rather than helping. Say "the
+    # residual sets the STABILITY BOUNDARY", never "the residual is an equivalent radome".
+    #
+    # ⚠ THE COMPENSATOR NEVER READS TRUTH. The radome bends the REAL ray (`look_az`/`look_el` above,
+    # from `û_tru`) — that is the PHYSICS. The correction must use what a guidance computer actually
+    # has: its own INS attitude, the gyro, and the BENT measurement. So the look angle here is
+    # recomputed from `az_m`/`el_m`, and its own error is second order in the bend. Feeding it the
+    # truth look angle would make the slice fake (advisor).
+    #
+    # ⚠ RUNG-GATED ON THE LIVE `:airframe`, exactly as the radome is — never on `haskey(:att_q)`
+    # alone (the slice-21 `_atm_on` / slice-23 stale-readout / slice-26 latent-bug class, whose
+    # FOURTH occurrence this would be). ⚠ And NOT gated on the radome's own key: compensating for
+    # glass you do not have is a real configuration (residual = −R̂ ⇒ it de-tunes), not a no-op.
+    ȧz_ff = 0.0; ėl_ff = 0.0; R̂_rad = 0.0
+    _comp_on = haskey(c, :radome_slope_est) && haskey(c, :att_q) &&
+               get(w.fidelity, :airframe, :point_mass) === :six_dof
+    if _comp_on
+        R̂_rad = Float64(c[:radome_slope_est])
+        # The compensator's OWN look angle: the MEASURED (bent) LOS rotated into the body frame.
+        look_az_c, _ = look_angles(c[:att_q]::Quat, los_unit_from_angles(az_m, el_m))
+        ȧz_ff, ėl_ff = radome_compensation(R̂_rad, look_az_c,
+                                           get(c, :omega_body, zero(Vec3))::Vec3)
+    end
+
+    # ⚠ STRUCTURAL BYTE-IDENTITY (the slice-20/21/26 shape): a BRANCH, with the else-arm slice-26
+    # VERBATIM — never `ȧz + ȧz_ff` trusting `R̂ = 0 ⇒ Δ = 0.0`. The `-0.0` trap and float
+    # non-associativity both apply, and a no-compensator wire must be bit-for-bit slice 26 BY
+    # CONSTRUCTION rather than by a zero that happens to cancel. (Measured at gate 0: `R̂ = 0` is
+    # bit-identical to the key being absent, `max|Δq| = 0.0` — which is what makes this a KNOB
+    # rather than a fidelity rung, by atmosphere.jl's discriminator.)
     if axes === :az_el
         azu, elu, ȧz, ėl = rung === :raw ? (az_m, el_m, ȧz_raw, ėl_raw) :
                                            (az_est, el_est, ȧz_est, ėl_est)
-        ω = los_rate_from_angles(azu, elu, ȧz, ėl)
+        ω = _comp_on ? los_rate_from_angles(azu, elu, ȧz + ȧz_ff, ėl + ėl_ff) :
+                       los_rate_from_angles(azu, elu, ȧz, ėl)
         û = los_unit_from_angles(azu, elu)
     else
         λu, λ̇u = rung === :raw ? (λ_m, λ̇_raw) : (λ_est, λ̇_est)
-        ω = Vec3(0.0, -λ̇u, 0.0)                       # slice 11's reconstruction, VERBATIM in shape
+        # The in-plane foil carries the SAME single physical correction the bend was applied to
+        # (`ε` went onto `λ` as well — one bend of one measurement, slice 26), so the elevation
+        # feed-forward is what it sees. ω ∥ ±ŷ either way: the slice-25 blindness is untouched.
+        ω = _comp_on ? Vec3(0.0, -(λ̇u + ėl_ff), 0.0) :
+                       Vec3(0.0, -λ̇u, 0.0)            # slice 11's reconstruction, VERBATIM in shape
         û = Vec3(cos(λu), 0.0, sin(λu))
     end
     c[:seeker_omega] = ω
@@ -1649,6 +1700,20 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         ω_t = los_rate(tgt.pos - e.pos, tgt.vel - e.vel)
         n_t = _norm3(ω_t)
         tel["$sid.omega_ratio"] = _finite(n_t > 1.0e-12 ? _norm3(ω) / n_t : FINITE_CEIL)
+    end
+    # SLICE 27 — the COMPENSATOR readouts, shipped ONLY while the compensator is live (the
+    # never-stale discipline; a slice-11/13/25/26 wire is byte-identical). All SCALARS.
+    if _comp_on
+        tel["$sid.radome_slope_est"] = _finite_coord(R̂_rad)                 # the live knob value R̂
+        # ⭐ THE QUANTITY THAT DECIDES, shipped as a NUMBER so the client never subtracts (the
+        # slice-21 `rho_air` precedent: physics in GDScript is convention 13's forbidden move).
+        # `R − R̂` — what is LEFT driving the parasitic loop after the gyro has had its say. The
+        # true slope is read from comp rather than from `R_rad` so this is correct even on a wire
+        # that compensates for glass it does not have (residual = −R̂).
+        tel["$sid.radome_residual"]  = _finite_coord(Float64(get(c, :radome_slope, 0.0)) - R̂_rad)
+        # The feed-forward the gyro actually contributed this tick, on the loop-closing axis — the
+        # MECHANISM made visible beside `radome_eps`, which is the disease it is treating.
+        tel["$sid.radome_ff_el"]     = _finite_coord(ėl_ff)                  # rad/s
     end
     return nothing
 end
