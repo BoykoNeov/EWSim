@@ -51,6 +51,33 @@ measurement. **On a slice-11 wire the key is INERT** (nothing reads it — the s
 inert-without-its-host shape), so `set_fidelity` needs **NO guard**: introducing it live cannot flip
 a draw count that is gated on comp presence, not on the rung.
 
+⚠ **That last sentence is the ONE claim gate 0 could not test against shipping code, and it is the
+shape of this arc's two latent bugs** (slice 21's `_atm_on` firing a key-gated block on a frozen
+state; slice 23's `build_env!` readout key-gated on `:att_q`, which is never deleted, firing stale
+across a cross-toggle — BOTH caught by an advisor at gate 2, neither by reasoning at gate 0). It is
+pinned NOW as **P11** (probe 4): on a slice-11 wire, `:seeker_axes` introduced live at t = 1.5 s
+leaves the remaining trace **bit-identical (max |Δ| = 0.0 over 84 sampled state scalars)** and the
+**next draw off `w.rng` identical** (stream in lockstep). Vacuous today — nothing reads the key —
+which is exactly the point: **it becomes a `test_missile.jl` tooth at gate 2 so it FAILS LOUDLY if
+the `:seeker_axes` read lands OUTSIDE the comp-presence gate.**
+
+### 1b. ⭐ THE DISPATCH PRECEDENCE — decided explicitly, and one combination is a LOAD ERROR
+
+`observe!` today is a two-way `rung === :scan ? _observe_scan! : _observe_point!`. A third path makes
+two conditions simultaneously satisfiable, and **silent branch order is how a scenario runs and
+teaches the wrong thing** (the slice-21 "stall × ρ(z) is a LOAD ERROR, refused rather than silently
+branch-ordered" precedent). The decision, to be written in the source, not implied:
+
+| scenario | `:seeker` | outcome |
+|---|---|---|
+| no 2-angle host | `:raw` / `:filtered` / `:scan` | UNCHANGED — slices 11/13 byte-identical |
+| 2-angle host | `:filtered` | `_observe_point3d!`, α-β tracker — **the showcase** |
+| 2-angle host | `:raw` | `_observe_point3d!`, finite-difference rates — reachable and DEFINED (§6 keeps it off the button, it is not a dead combination) |
+| 2-angle host | `:scan` | **LOAD ERROR** — the slice-13 angular profile is IN-PLANE by construction (one λ axis); az×el CFAR is a named deferral, not a silent branch |
+
+So `:seeker` (tracker) and `:seeker_axes` (dimensionality) are ORTHOGONAL on the host, with the one
+meaningless corner refused at LOAD rather than ordered around.
+
 ### 2. ⭐⭐ THE 2-DRAW LOCKSTEP — the foil DRAWS the azimuth sample and DISCARDS it (convention 3)
 
 The trap that would have killed the showcase: a two-angle seeker draws **2** `randn`/tick against
@@ -62,6 +89,11 @@ VALUE, never the draw — `detect_once` / `_draw_pseudoranges` / `_draw_profile!
 template, now applied to a *foil* rather than to a geometry gate. **MEASURED (P9): 26000 draws over
 13000 ticks on BOTH rungs, exactly 2.0/tick ⇒ the button is live-toggleable, class 4a within a
 2-draw host.** Do NOT "optimize away" the unused draw — it IS the mechanism that makes the toggle legal.
+
+⚠ **AND SAY SO IN THE SCENARIO HEADER: the foil is slice 11's TRACKER in a 2-draw host, NOT slice
+11's seeker.** Because it consumes the RNG differently, `slice25 :pitch_plane` will NOT reproduce
+`slice11 :filtered`'s realization on the same geometry — someone WILL compare them and find they
+disagree. Written down, that reads as design; unwritten, it reads as drift.
 
 ### 3. THE LOS-RATE RECONSTRUCTION — `ω = û × û̇`, and it is the #1 SIGN TRAP's 7th occurrence
 
@@ -96,7 +128,13 @@ miss of 1268 m in the arm that is supposed to HIT (P3/P4).
 
 **7182×, and `aero_sat` is 0 in BOTH arms** — the ceiling never binds, so the miss is a POINTING miss
 (the slice-13 framing), NOT the seventh ceiling miss. This is the claim gate 3 must assert as a
-NUMBER, not prose. ⚠ Slice 24's ρ = 0.3 was chosen so BTT's roll lag could visibly cost the
+NUMBER, not prose.
+
+⚠ **THOSE ARE PER-TICK TRUTH NUMBERS AND THE 0.278 WILL NOT SURVIVE `emit_every = 16`.**
+Frame-sampling error is ASYMMETRIC — a MISS samples faithfully (radial rate → 0 at CPA) but a HIT
+samples COARSELY ([[ewsim-missile-verifier-sampling]]; slice 21's gate-3 bug #2 was exactly this:
+pass text quoting per-tick truth while the file measured frames). Gate 3 must MEASURE the
+frame-sampled ratio and quote **both, labelled** — the slice-24 form ("74× frame / 1614× per-tick"). ⚠ Slice 24's ρ = 0.3 was chosen so BTT's roll lag could visibly cost the
 intercept; slice 25 needs the OPPOSITE (authority to spare). Same geometry, different flight
 condition — say so in the scenario header rather than letting a reader assume the wires match.
 
@@ -129,11 +167,15 @@ not steering it). It is the REALISM knob, and its domain `[0.05, 0.3] mrad` is s
 isolation survives**, exactly as slice 19's ρ domain was set by monotonicity rather than by physics
 ([[ewsim-df-ellipse-sigma-monotonicity]], 4th occurrence).
 
-**NOT knobs, deliberately:** the α-β `β` gain — P8b measures `β ≥ 0.15` breaking the isolation
-(19.6% at σ = 0.3, 80.5% at β = 0.4), the slice-11 U-shape recurring, so it is an AUTHORED constant
-here; the target's cross-range `Y` (position is load-only — the slice-21 DEAD-KNOB finding, 3rd
-occurrence); `k_alpha`/`k_q` (slice-19 FINDING 14). **Candidate knobs for gate 1:** `rho` (the
-ceiling — isolation holds at ρ ≥ 1.0; at ρ = 0.6 it is already 1.6% at σ = 0.3) and `af_alpha_max`.
+**NOT knobs, deliberately — and the list is the point, not an apology:** the α-β `β` gain — P8b
+measures `β ≥ 0.15` breaking the isolation (19.6% at σ = 0.3, 80.5% at β = 0.4), the slice-11 U-shape
+recurring, so it is an AUTHORED constant here; the target's cross-range `Y` (position is load-only —
+the slice-21 DEAD-KNOB finding, 3rd occurrence); `k_alpha`/`k_q` (slice-19 FINDING 14); and **`rho`,
+whose ISOLATED domain is only [1.0, 1.5]** — a 1.5× span (at ρ = 0.6 it is already 1.6% saturated at
+σ = 0.3), which is narrower than a slider labelled "air density" implies, and it moves nothing the
+lesson needs beyond the ceiling it must NOT touch. **Ship `sigma_seek` alone** (plus `af_alpha_max`
+only if gate 1 finds it clean) and state the disqualifications in the scenario header — a knob whose
+range is one-third of what its label suggests teaches a wrong intuition about the physics.
 
 ---
 
@@ -154,6 +196,10 @@ ceiling — isolation holds at ρ ≥ 1.0; at ρ = 0.6 it is already 1.6% at σ 
 - **P10 — the σ domain** (§7).
 - **P8b — the α-β gains** (§7). ⚠ Round 2's β sweep was a PROBE BUG (the gains were never plumbed
   into the probe seeker and every row read identically) — re-run plumbed before it was believed.
+- **P11 — the INERTNESS invariant** (§1, advisor item 1): `:seeker_axes` introduced live on a
+  slice-11 wire leaves the trace bit-identical (max |Δ| = 0.0) and the RNG stream in lockstep.
+  Vacuous today BY DESIGN; it ships as a gate-2 tooth against the latent-bug class that has now bitten
+  this arc twice.
 
 ### ⭐ CANDIDATE (2) IS DEAD — "seeker noise × the BTT roll loop" (killed at gate 0, with numbers)
 
@@ -191,7 +237,8 @@ invariant PAIRED with a does-turn case, the slice-24 shape); wrap behaviour at t
 **Gate 2 — the wired subsystem.** A `_observe_point3d!` **sibling** dispatched from `observe!`, with
 `_observe_point!` left TEXTUALLY UNCHANGED and `n = randn(w.rng)` still its literal first statement
 (the slice-13 `_observe_scan!` precedent — no value-branch inside the point path). `:seeker_axes` in
-`LIVE_FIDELITY_MODES`. ⚠ **The seed goes LIVE again — the first RNG-consuming missile slice since
+`LIVE_FIDELITY_MODES`; the §1b precedence table in the source and the `:scan` × host corner refused
+at LOAD; **P11 promoted to a `test_missile.jl` tooth** (the inertness invariant, §1). ⚠ **The seed goes LIVE again — the first RNG-consuming missile slice since
 13**, so `test_determinism` and the `_sample_z` absolute golden are back in force, conventions 3/11
 APPLY, and the class flips **4c → 4a** after a 10-slice 4c streak (14–24).
 
