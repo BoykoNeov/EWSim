@@ -1733,15 +1733,28 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # quantities are ADDED beside them.
         if _ripple_on
             tel["$sid.radome_ripple"] = _finite_coord(A_rip)               # the live knob value A
-            # ⭐ THE QUANTITY THE LESSON IS ABOUT: the LOCAL slope where the seeker is looking.
-            # Shipped as a NUMBER so the client never evaluates the curve (convention 13 — physics
-            # in GDScript is the forbidden move; the slice-21 `rho_air` precedent).
-            tel["$sid.radome_slope_local"] = _finite_coord(
-                radome_slope_curve(R_rad, A_rip, k_rip, hypot(look_az, look_el)))
-            # the AZIMUTH channel's own operating point — the one the crossing lead angle moves,
-            # and the one that differs from the pitch channel's (slice 28's channel split)
+            # ⭐ THE QUANTITIES THE LESSON IS ABOUT: the LOCAL slope where the seeker is looking —
+            # shipped as NUMBERS so the client never evaluates the curve (convention 13; the
+            # slice-21 `rho_air` precedent).
+            #
+            # ⚠ PER AXIS, AND THAT IS NOT A DETAIL (advisor). The curve is applied to EACH look
+            # angle separately (`ε_az = f(look_az)`, `ε_el = f(look_el)`), so the two channels have
+            # two DIFFERENT gains — `R(look_az)` closes the yaw loop and `R(look_el)` the pitch one
+            # (times slice 26's `cos(look_az)`). An earlier draft shipped ONE key evaluated at the
+            # TOTAL off-boresight angle `hypot(look_az, look_el)`, which is a THIRD quantity that is
+            # the gain of NEITHER channel; it agreed numerically only because this wire holds
+            # `look_el ≈ 0`, and it would have reached the HUD and the shots — the places a student
+            # reads the lesson — as the wrong number. The number the client shows must be a number
+            # the physics uses.
+            #
+            # ⭐ AND THE PAIR IS THE CHANNEL SPLIT MADE VISIBLE: on a crossing engagement the lead
+            # is in AZIMUTH, so these two keys sit at DIFFERENT points on the same glass — which is
+            # a signature no CONSTANT slope can produce (a constant gives both channels one slope
+            # and rings them together).
             tel["$sid.radome_slope_az"] = _finite_coord(
                 radome_slope_curve(R_rad, A_rip, k_rip, look_az))
+            tel["$sid.radome_slope_el"] = _finite_coord(
+                radome_slope_curve(R_rad, A_rip, k_rip, look_el))
         end
     end
     # SLICE 27 — the COMPENSATOR readouts, shipped ONLY while the compensator is live (the
@@ -1759,9 +1772,13 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # ABSENT (no ripple authored) and `radome_residual` above is the whole story — which is
         # exactly the point of slice 28: that key is a property of the HARDWARE, this one is a
         # property of the ENGAGEMENT.
+        # ⚠ ON THE AZIMUTH CHANNEL, named as such rather than called "local": that is the channel
+        # a crossing engagement's lead angle moves, and therefore the one whose residual closes the
+        # loop that rings here. The elevation channel's residual is `radome_slope_el − R̂`, which the
+        # client can read off the two keys above if it ever needs it.
         if _ripple_on
-            tel["$sid.radome_residual_local"] = _finite_coord(
-                radome_slope_curve(R_rad, A_rip, k_rip, hypot(look_az, look_el)) - R̂_rad)
+            tel["$sid.radome_residual_az"] = _finite_coord(
+                radome_slope_curve(R_rad, A_rip, k_rip, look_az) - R̂_rad)
         end
         # The feed-forward the gyro actually contributed this tick, on the loop-closing axis — the
         # MECHANISM made visible beside `radome_eps`, which is the disease it is treating.

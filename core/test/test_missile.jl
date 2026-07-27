@@ -4563,6 +4563,8 @@ end
     function curvefly(; T = 16.0, kw...)
         w, s = curve_world(; kw...)
         qs = Float64[]; rs_ = Float64[]; rr = Float64[]
+        saz = Float64[]; sel = Float64[]
+        tel_mid = Dict{String,Any}()
         rmin, prev, closing = Inf, Inf, true
         asat = 0; dsat = 0; nt = 0
         for _ in 1:round(Int, T / dt)
@@ -4572,6 +4574,14 @@ end
             push!(qs, Float64(get(tel, "m1.omega_q", 0.0)))
             push!(rs_, Float64(get(tel, "m1.omega_r", 0.0)))
             push!(rr, r)
+            push!(saz, Float64(get(tel, "m1.radome_slope_az", NaN)))
+            push!(sel, Float64(get(tel, "m1.radome_slope_el", NaN)))
+            # ⚠ A MID-WINDOW SNAPSHOT, NOT THE LAST TICK. The telemetry dict left behind when the
+            # loop exits is the CPA frame, where the LOS sweeps through the missile and BOTH look
+            # angles swing wildly — asserting channel gains there measures the endgame spike, not
+            # the operating point ([[ewsim-missile-verifier-sampling]]). Caught by this very test:
+            # at CPA the elevation gain read −0.129 against an operating value of −0.03.
+            isempty(tel_mid) && r < 2000.0 && (tel_mid = copy(tel))
             asat += Int(Float64(get(tel, "m1.aero_sat", 0.0)) != 0.0)
             dsat += Int(Float64(get(tel, "m1.defl_sat", 0.0)) != 0.0)
             nt += 1
@@ -4581,7 +4591,9 @@ end
         end
         win = findall(x -> 500.0 < x < 3000.0, rr)
         rms(v) = isempty(win) ? 0.0 : sqrt(sum(abs2, v[win]) / length(win))
-        return (rms_r = rms(rs_), rms_q = rms(qs), miss = rmin,
+        med(v) = (u = sort(v[win]); isempty(u) ? NaN : u[(length(u) + 1) ÷ 2])
+        return (rms_r = rms(rs_), rms_q = rms(qs), miss = rmin, tel_mid = tel_mid,
+                slope_az = med(saz), slope_el = med(sel),
                 asat = asat, dsat = dsat, nt = nt, nwin = length(win), w = w)
     end
 
@@ -4621,6 +4633,13 @@ end
         @test draws(0.0) == d0
         @test draws(-0.05) == d0
         @test draws(-0.20) == d0
+        # ⚠ AND THE FINGERPRINT MUST BE LIVE, or the three lines above cannot tell "lockstep
+        # preserved" from "the probe is insensitive" (advisor). A different SEED must move it.
+        let w, s2
+            w, s2 = curve_world(ripple = -0.05, seed = 99)
+            for _ in 1:300; tick!(w, s2, dt); empty!(w.events); end
+            @test randn(w.rng) != d0
+        end
     end
 
     @testset "INERTNESS — the ripple needs the radome AND a 6-DOF plant (5th occurrence)" begin
@@ -4628,11 +4647,11 @@ end
         # `_atm_on` / 23 / 26 / 27 latent-bug class). Without `:six_dof` there is no attitude to
         # look through, so the curve cannot reach the seam and no telemetry may be shipped.
         r = curvefly(T = 4.0, airframe = :pitch_coupled, ripple = -0.10)
-        @test !haskey(r.w.env[:telemetry], "m1.radome_slope_local")
+        @test !haskey(r.w.env[:telemetry], "m1.radome_slope_az")
         @test !haskey(r.w.env[:telemetry], "m1.radome_eps")
         # and WITHOUT `radome_slope` the whole radome branch is off, so the ripple is unreachable
         r2 = curvefly(T = 4.0, radome = nothing, ripple = -0.10)
-        @test !haskey(r2.w.env[:telemetry], "m1.radome_slope_local")
+        @test !haskey(r2.w.env[:telemetry], "m1.radome_slope_az")
     end
 
     @testset "⭐ THE CURVE RINGS WHERE THE CONSTANT DOES NOT (the slice, on the wire)" begin
@@ -4697,9 +4716,9 @@ end
 
     @testset "the telemetry keys — shipped as NUMBERS, and 26/27's are NOT redefined" begin
         r = curvefly(ripple = -0.05)
-        tel = r.w.env[:telemetry]
-        for kk in ("m1.radome_ripple", "m1.radome_slope_local", "m1.radome_slope_az",
-                   "m1.radome_residual_local")
+        tel = r.tel_mid                       # ⚠ mid-window, never the CPA frame (see `curvefly`)
+        for kk in ("m1.radome_ripple", "m1.radome_slope_az", "m1.radome_slope_el",
+                   "m1.radome_residual_az")
             @test haskey(tel, kk) && isfinite(Float64(tel[kk]))
         end
         # ⚠ SLICE 26/27's KEYS KEEP THEIR MEANINGS — `radome_slope` is still the BORESIGHT slope
@@ -4707,13 +4726,23 @@ end
         # The look-angle quantities are ADDED beside them, never substituted into them.
         @test Float64(tel["m1.radome_slope"]) ≈ -0.03 atol = 1e-15
         @test Float64(tel["m1.radome_residual"]) ≈ 0.0 atol = 1e-15
-        # the local slope must lie inside the curve's BOUNDS [R₀, R₀+2A] (frames.jl guarantees it)
-        @test -0.13 - 1e-9 ≤ Float64(tel["m1.radome_slope_local"]) ≤ -0.03 + 1e-9
+        # ⭐ THE TWO CHANNEL GAINS ARE DIFFERENT NUMBERS — the channel split, in telemetry. The
+        # lead is in AZIMUTH, so the yaw channel sits well off the boresight slope while the pitch
+        # channel sits ON it. ⚠ These are PER-AXIS gains, not an aggregate over the total
+        # off-boresight angle: that third quantity is the gain of NEITHER channel (advisor).
+        for kk in ("m1.radome_slope_az", "m1.radome_slope_el")
+            @test -0.13 - 1e-9 ≤ Float64(tel[kk]) ≤ -0.03 + 1e-9
+        end
+        @test r.slope_el ≈ -0.03 atol = 5e-3            # pitch channel: ON the boresight slope
+        @test r.slope_az < -0.05                        # yaw channel:   well OFF it
+        @test abs(r.slope_az - r.slope_el) > 0.03       # …and they are genuinely two numbers
+        # and the residual that closes the RINGING loop is the azimuth one
+        @test abs(Float64(tel["m1.radome_residual_az"])) > 0.01
         # a no-ripple wire ships NONE of them (the never-stale discipline; 26/27 byte-identical)
-        tel0 = curvefly(ripple = nothing).w.env[:telemetry]
+        tel0 = curvefly(ripple = nothing).tel_mid
         @test haskey(tel0, "m1.radome_eps")                    # …the radome IS live
-        for kk in ("m1.radome_ripple", "m1.radome_slope_local", "m1.radome_slope_az",
-                   "m1.radome_residual_local")
+        for kk in ("m1.radome_ripple", "m1.radome_slope_az", "m1.radome_slope_el",
+                   "m1.radome_residual_az")
             @test !haskey(tel0, kk)
         end
     end
