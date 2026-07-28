@@ -952,6 +952,18 @@ paraphrase away the specifics.
     headless smoke-load (server `DONE` ⇒ scene connected, catches parse bugs); and a windowed
     **shot-harness** capture to eyeball `_draw` (Godot skips `_draw` headless). See
     [[ewsim-godot-headless]].
+    ⚠⚠ **A VERIFIER'S `STEPS` MUST BE A MULTIPLE OF THE SCENARIO'S `emit_every`** (slice 31; slice 30
+    escaped it only by accident, 20000 = 16×1250). The server emits every `emit_every`th tick, so
+    `STEPS = 15000` at `emit_every = 16` makes the LAST frame `t = 14.992` while the drain loop waits
+    for `t ≥ STEPS·dt` = 15.000 — which never arrives. The run hangs **silently, with no output at
+    all**, to `MAX_SECONDS`, and reads exactly like a slow wire. ⚠ Compounding it: Godot's stdout is
+    BLOCK-BUFFERED into a file or a pipe, so per-arm progress is invisible until ~4 KB accumulates.
+    **When a verifier looks slow, MEASURE before waiting** — timing the core alone (`tick!` in a
+    loop, no server) and a minimal-client frame-rate probe separates physics from emit path from
+    client in two cheap runs.
+    ⚠ **Anything the verdict computes inside `_draw` has NO headless proof** — extract it to a pure
+    helper the UI test can call (slice 31's aim-point comparison shipped wrong and only the SHOT
+    caught it).
 
 15. **Batches own their OWN seeded stream** (never `w.rng`) so a sweep can't desync the live trace
     — the *distribution* path (no byte-identity assert; the Threads/GPU seam). Determinism is CPU.

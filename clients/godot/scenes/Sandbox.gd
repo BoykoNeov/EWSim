@@ -1316,6 +1316,26 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 		_af3d_nose_mesh.surface_add_vertex(m3 + up_dir * 7.0)
 		_af3d_nose_mesh.surface_end()
 
+# ⚠⚠ EXTRACTED SO IT IS TESTABLE HEADLESSLY, and that is the whole reason it is a function: the
+# label lives in `_draw`, which never runs under `--headless`, so the FIRST version of this
+# comparison shipped with only a windowed SHOT as evidence — and the shot caught it (slice 31).
+# ⭐ THE COMPARISON IS `R̂(1+s)` AGAINST `R_worst`, NOT AGAINST `radome_aim_gyro`. The two aim
+# points live on OPPOSITE SIDES of the (1+s) factor: the HUD line tells the student where to put
+# the SLIDER (`R̂ ≤ R_worst/(1+s)` = `radome_aim_gyro`), while the VERDICT is about what the LOOP
+# ends up seeing (`R̂(1+s) ≤ R_worst`). Mixing them labelled a correctly-aimed missile "the gyro
+# eats the margin". The two statements are equivalent while `1 + s > 0`; this form stays right
+# when it is not.
+# ⚠ THE THIRD STATE IS SLICE 30's AND MEANS THE SAME THING HERE: quiet at THIS gyro is not quiet
+# at the gyro you will be shipped.
+# ⚠ the same 1e−9 tolerance slice 30 needed, for the same reason: both sides are Float64 products
+# a student is asked to match with a decimal slider.
+func _gyro_verdict_label(ringing: bool, eff: float, worst: float) -> String:
+	if ringing:
+		return "GYRO — RINGING: loop sees R̂(1+s)"
+	if eff <= worst + 1.0e-9:
+		return "AIMED PAST THE GYRO — the SAFE side"
+	return "QUIET HERE — the gyro eats the margin"
+
 func _draw_airframe3d_hud() -> void:
 	# The 3-D layer renders the world; the 2-D canvas only LABELS it (the terrain-view discipline).
 	# The headline: the plant, the cross-range miss (los_range), and the out-of-plane excursion.
@@ -1382,23 +1402,7 @@ func _draw_airframe3d_hud() -> void:
 			qr = _radome_qpeak                    # rides |r| here too (a slice-31 wire has a ripple)
 			var eff31 := float(_telemetry.get(_af3d_missile + ".radome_slope_est_eff", 0.0))
 			var aim31 := float(_telemetry.get(_af3d_missile + ".radome_slope_worst", 0.0))
-			if qr > 0.5:
-				lbl = "GYRO — RINGING: loop sees R̂(1+s)"
-			else:
-				# ⚠⚠ THE COMPARISON IS `R̂(1+s)` AGAINST `R_worst`, NOT AGAINST `radome_aim_gyro` —
-				# and the first shot of this slice caught the difference. The two aim points live on
-				# OPPOSITE SIDES of the (1+s) factor: the HUD line below tells the student where to
-				# put the SLIDER (`R̂ ≤ R_worst/(1+s)` = `radome_aim_gyro`), while the VERDICT is
-				# about what the LOOP ends up seeing (`R̂(1+s) ≤ R_worst`). Comparing the effective
-				# belief with the slider-side target mixes the two and labelled a correctly-aimed
-				# missile "the gyro eats the margin". The two statements are equivalent for
-				# `1 + s > 0`; this form stays right when it is not.
-				# ⚠ the same 1e−9 tolerance slice 30 needed, for the same reason: both sides are Float64
-				# products a student is asked to match with a decimal slider.
-				if eff31 <= aim31 + 1.0e-9:
-					lbl = "AIMED PAST THE GYRO — the SAFE side"
-				else:
-					lbl = "QUIET HERE — the gyro eats the margin"
+			lbl = _gyro_verdict_label(qr > 0.5, eff31, aim31)
 		elif _telemetry.has(_af3d_missile + ".cross_speed_mps"):
 			qr = _radome_qpeak                    # rides |r| here too (an envelope wire has a ripple)
 			var rh30 := float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0))

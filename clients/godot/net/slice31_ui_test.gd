@@ -48,6 +48,9 @@ extends SceneTree
 #   2. ⭐⭐ the SIX-WAY HUD MIRROR (31 / 30 / 29 / 28 / 27 / 26), with the 30 mirror CARRYING the
 #      aim-point key so the wrong discriminator would be caught
 #   3. ⭐ TWO BELIEFS on screen and they DISAGREE; ⚠ and BOTH residuals ship, also disagreeing
+#   3b. ⭐⭐ THE VERDICT COMPARISON, pinned in BOTH directions on a fixture that sits BETWEEN
+#       `radome_slope_worst` and `radome_aim_gyro` — the two aim points are on opposite sides of the
+#       (1+s) factor, and the form the windowed shot caught would fail exactly this case
 #   4. ⭐ the CHANNEL: the peak-hold still rides |r| on a slice-31 wire and |q| on a slice-27 one,
 #      proven with IDENTICAL telemetry so nothing else can account for it
 #   5. THREE sliders are built, ALL drive set_param, ALL target the interceptor
@@ -183,6 +186,29 @@ func _initialize() -> void:
 	# ⚠ AND SLICE 28's RESIDUAL KEEPS ITS MEANING: both ship, and they disagree by the belief rescale.
 	if not (absf(float(sb._telemetry["m1.radome_residual_az_eff"]) - float(sb._telemetry["m1.radome_residual_az"])) > 1.0e-6):
 		return _fail("both residuals must ship and DISAGREE — slice 28's `radome_residual_az` keeps its meaning (its own headline is that the hardware residual reads 0.000 while the missile rings) and the gyro-effective one ships ALONGSIDE it")
+	# ⭐⭐ THE VERDICT COMPARISON, PINNED IN BOTH DIRECTIONS — the ONE thing on this wire that had a
+	# pixel proof and no headless regression test (advisor). The label lives in `_draw`, which never
+	# runs headless, so slice 31's first version shipped comparing the EFFECTIVE belief `R̂(1+s)`
+	# against `radome_aim_gyro` = `R_worst/(1+s)` — OPPOSITE SIDES of the (1+s) factor — and labelled
+	# a correctly-aimed missile "the gyro eats the margin". Only the windowed SHOT caught it. The
+	# comparison is now a pure helper so both branches are asserted here, and an edit back to the
+	# aim-point form fails on the SAFE-side case below rather than surviving until someone looks at a
+	# picture.
+	# ⚠ THE SHIPPED FIXTURE IS THE UNDER-AIMED ONE (eff −0.2565 is NOT past worst −0.330), so the
+	# safe side needs its own numbers — which is exactly the gap: a single fixture tests one branch.
+	if sb._gyro_verdict_label(false, -0.2565, -0.330) != "QUIET HERE — the gyro eats the margin":
+		return _fail("an UNDER-AIMED quiet arm (loop sees -0.2565, R_worst -0.330) must NOT be called safe — got '%s'" % sb._gyro_verdict_label(false, -0.2565, -0.330))
+	if sb._gyro_verdict_label(false, -0.342, -0.330) != "AIMED PAST THE GYRO — the SAFE side":
+		return _fail("an arm whose LOOP SEES -0.342, past R_worst -0.330, IS on the safe side — got '%s'. ⚠ If this fails against `radome_aim_gyro` (-0.3474) instead of `radome_slope_worst`, that is the exact defect the shot caught: the two aim points are on opposite sides of the (1+s) factor" % sb._gyro_verdict_label(false, -0.342, -0.330))
+	# …and the aim-point form would get this ONE wrong, which is what makes the pair a real tooth:
+	# -0.342 is past -0.330 (SAFE) but NOT past -0.3474 (the slider-side target).
+	if not (-0.342 <= -0.330 and -0.342 > -0.3474):
+		return _fail("the SAFE-side fixture must sit BETWEEN the two aim points, or it cannot discriminate the two forms of the comparison")
+	# RINGING wins over both, at either aim point.
+	if sb._gyro_verdict_label(true, -0.342, -0.330) != "GYRO — RINGING: loop sees R̂(1+s)":
+		return _fail("a ringing arm must be labelled RINGING regardless of where it is aimed")
+	print("S31UI_VERDICT the aim verdict is pinned in BOTH directions on a fixture that sits between R_worst and radome_aim_gyro — the form the shot caught would fail it")
+
 	# ⭐ THE RE-AIMED POINT MUST BE BELOW THE PLAIN ONE: the gyro spec pushes the design deeper.
 	if not (float(sb._telemetry["m1.radome_aim_gyro"]) < float(sb._telemetry["m1.radome_slope_worst"])):
 		return _fail("with an UNDER-reading gyro the re-aimed point R_worst/(1+s) (%.4f) must sit BELOW slice 30's R_worst (%.4f) — that deepening IS the gyro budget being spent" % [float(sb._telemetry["m1.radome_aim_gyro"]), float(sb._telemetry["m1.radome_slope_worst"])])
