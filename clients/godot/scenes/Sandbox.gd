@@ -1354,7 +1354,16 @@ func _draw_airframe3d_hud() -> void:
 		# needs its own string rather than slice 27's: the ring is in YAW here (the lead angle is in
 		# azimuth), and "under-comp" would be WRONG — the compensator is EXACTLY right at the slope it
 		# was characterized at; it is MIS-characterized for the look angle the engagement flies.
-		if _telemetry.has(_af3d_missile + ".radome_slope_az"):
+		# SLICE 29 — checked FIRST, and a SWITCH ahead of slice 28's (not an `or`): a SCHEDULED
+		# compensator ships `radome_sched_slope`, which 26/27/28 never do, so their labels stay
+		# verbatim. It needs its own string because the lesson is not "the belief is wrong" — on the
+		# shipped arm the belief is a BETTER model of the glass than the one that stays quiet — it is
+		# that the belief is evaluated at an index the radome already bent.
+		if _telemetry.has(_af3d_missile + ".radome_sched_slope"):
+			qr = _radome_qpeak                    # rides |r| here too (a schedule wire has a ripple)
+			lbl = "SCHEDULED R̂ — RINGING at own INDEX" if qr > 0.5 \
+				  else "SCHEDULED R̂(look) — loop STABLE"
+		elif _telemetry.has(_af3d_missile + ".radome_slope_az"):
 			qr = _radome_qpeak                    # rides |r| on this wire (see _airframe3d_on_state)
 			if qr > 0.5:
 				lbl = "RADOME SLOPE CURVE — RINGING in YAW"
@@ -1444,7 +1453,34 @@ func _draw_airframe3d_hud() -> void:
 		# of NEITHER channel (the gate-2 hardening), and the HUD is exactly where a student would read
 		# it as the lesson. Both gains arrive from the core as NUMBERS — the client never evaluates
 		# the curve (convention 13, the slice-21 `rho_air` precedent).
-		if _telemetry.has(_af3d_missile + ".radome_slope_az"):
+		# SLICE 29 — THE THREE LINES THAT ARE ITS LESSON, a SWITCH ahead of slice 28's (not an `or`):
+		# only a SCHEDULED wire ships `radome_sched_slope`, so 26/27/28 render byte-identically.
+		# What a student must SEE is that the TWO error numbers DISAGREE, and which one the ring
+		# follows. The MODEL error is the belief against the glass at the SAME look angle — the bench
+		# number, what "how good is my schedule?" naturally means. The LOOP RESIDUAL is the belief
+		# against the glass where the compensator ACTUALLY EVALUATES IT: at its own index, which the
+		# radome bent. On the shipped arm the model error is the SMALLER of the two and it rings;
+		# drag k̂ up past the truth and the model gets WORSE while the ring dies.
+		# ⚠ Both arrive from the core as NUMBERS — the client never evaluates a curve or subtracts
+		# anything (convention 13, the slice-21 `rho_air` precedent). ⚠ And the index pair is on
+		# screen because without it the crossover looks like a contradiction rather than a mechanism.
+		if _telemetry.has(_af3d_missile + ".radome_sched_slope"):
+			var lt29 := float(_telemetry.get(_af3d_missile + ".look_angle", 0.0))
+			var le29 := float(_telemetry.get(_af3d_missile + ".look_angle_est", 0.0))
+			var mde29 := float(_telemetry.get(_af3d_missile + ".radome_model_err_az", 0.0))
+			var rez29 := float(_telemetry.get(_af3d_missile + ".radome_residual_az", 0.0))
+			# ⚠ WIDTHS ARE MEASURED, NOT GUESSED: ~55 characters fit at 15 px from `vp.x − 430`, and
+			# slice 28's first capture ran two lines off the right edge (slice 26 ate the same defect
+			# at 20 px). Every line below is counted against that budget.
+			draw_string(_font, Vector2(vp.x - 430, 154), "schedule Â %+.3f  k̂ %.1f   (glass A %+.3f)" % [float(_telemetry.get(_af3d_missile + ".radome_ripple_est", 0.0)), float(_telemetry.get(_af3d_missile + ".radome_ripple_k_est", 0.0)), float(_telemetry.get(_af3d_missile + ".radome_ripple", 0.0))],
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+			draw_string(_font, Vector2(vp.x - 430, 176), "MODEL err vs glass %+.3f   ← the BENCH number" % mde29,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45))
+			# coloured by the SAME peak-hold verdict as the headline, so a frame caught mid-swing
+			# cannot show an orange headline over a green residual (slice 27's shot-harness defect)
+			draw_string(_font, Vector2(vp.x - 430, 198), "LOOP RESID %+.3f @ own index %.1f° (truth %.1f°)" % [rez29, le29, lt29],
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _radome_qpeak > 0.5 else Color(0.55, 1.00, 0.65))
+		elif _telemetry.has(_af3d_missile + ".radome_slope_az"):
 			var rh2 := float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0))
 			var saz := float(_telemetry[_af3d_missile + ".radome_slope_az"])
 			var sel := float(_telemetry.get(_af3d_missile + ".radome_slope_el", 0.0))
