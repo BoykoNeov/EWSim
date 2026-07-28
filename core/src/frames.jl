@@ -462,3 +462,92 @@ function radome_error_curve(slope0::Real, ripple::Real, k::Real, look_az::Real, 
     f(u) = slope0 * u + ripple * u - (ripple / kk) * sin(kk * u)
     return (f(look_az), f(look_el))
 end
+
+# --- the SCHEDULED COMPENSATOR (slice 29, §11 Tier-A — the answer slice 28 named) ---------------
+#
+# Slice 27 gave the missile a rate-gyro feed-forward with a SCALAR belief `R̂`. Slice 28 showed the
+# glass has no single slope, so the belief must be a CURVE. Making it one is three lines — and it
+# introduces a question a scalar never had to answer: **evaluated WHERE?** The only look angle a
+# guidance computer owns is the one it computes from its own measurement, and that measurement is
+# what the radome bent. So the schedule lands at the wrong point on its own curve, and the belief
+# that reaches the loop is `R̂(look_bent)` rather than `R̂(look_truth)`.
+#
+# ⭐ SLICE 26/27/28's RESIDUAL LAW SURVIVES — READ AT THE COMPENSATOR'S OWN INDEX. Measured
+# (`docs/plans/slice29.md` §3, gate-0 P10c): at a common reference look angle the TRUTH-indexed
+# residual gets two of three arms WRONG (it predicts quiet for the arm that rings and ringing for
+# the arm that stays quiet) while the INDEX-SHIFTED residual gets every arm right. Slice 29 adds no
+# new gain to the loop; it adds the fact that a SCHEDULE HAS AN EVALUATION POINT AT ALL.
+
+"""
+    radome_schedule_slope(ripple_est, k_est, look) -> R̂'   (per radian)
+
+The SCHEDULE'S OWN SLOPE `dR̂/dlook` at look angle `look` — the exact derivative of the belief
+[`radome_slope_curve`](@ref)`(·, ripple_est, k_est, ·)` builds:
+
+    R̂'(look) = ripple_est · k_est · sin(k_est · look)
+
+⭐ **THIS IS A SENSITIVITY, NOT A LOOP GAIN — say it that way** (the slice's own gate-0 correction,
+made twice). A scheduled compensator is evaluated at an index that is wrong by the bend, so the
+belief it applies is off by roughly `R̂'·(index error)`; this function is the coefficient in that
+statement, and it is what makes a schedule's stability depend on the SHAPE of its curve and not only
+on how close its VALUE is. ⚠ The first-order form is quantitatively good AWAY from `k_est ≈ k`, and
+FAILS at `k_est = k` on a wire whose operating look angle sits at the curve's own extremum, where
+`R̂' = 0` and the second-order term carries it (measured: −0.001 predicted against −0.022 actual).
+**Quote the index-shifted residual, which is exact; use this to explain its size and sign.**
+
+⭐ **SLICE 27's SCALAR COMPENSATOR HAD `R̂' ≡ 0`, WHICH IS WHY IT NEVER HAD TO CHOOSE AN INDEX** —
+and why slice 27 concluded the RATE domain was safe while its ANGLE-domain corrector was not. The
+immunity was never the domain; it was the constancy. That is the general result slice 29 carries:
+*a corrector built from a signal the disease corrupts inherits the disease — including when the
+corruption enters through the corrector's own argument rather than its output.*
+
+`radome_schedule_slope(·, ·, 0) == 0` exactly, and `ripple_est == 0` gives exactly zero at every
+look angle — the knob-reachable off-state that makes `Â` a KNOB rather than a fidelity rung
+(atmosphere.jl's discriminator).
+"""
+radome_schedule_slope(ripple_est::Real, k_est::Real, look::Real) =
+    ripple_est * k_est * sin(k_est * look)
+
+"""
+    radome_compensation_scheduled(slope0_est, ripple_est, k_est, look_az, look_el, ω_body)
+        -> (Δȧz, Δėl)   (rad/s)
+
+[`radome_compensation`](@ref) with the scalar belief replaced by the SCHEDULE
+[`radome_slope_curve`](@ref)`(slope0_est, ripple_est, k_est, ·)` — slice 29, the engineering answer
+slice 28 named for itself. Slice 27's signs are inherited UNCHANGED:
+
+    Δȧz = +R̂(look_az)·ω_z ,      Δėl = −R̂(look_el)·cos(look_az)·ω_y
+
+⚠ **PER AXIS, AND THAT IS NOT A DETAIL — slice 28's gate-2 hardening applied to the COMPENSATOR.**
+Slice 27 used one `R̂` for both channels because there was only one. A curve has a different value at
+each channel's look angle, so the azimuth channel's belief is `R̂(look_az)` and the elevation
+channel's is `R̂(look_el)`; a single value taken at `hypot(look_az, look_el)` is the belief of
+NEITHER, and on a crossing wire (where `look_el ≈ 0`) it would agree numerically while being wrong
+in principle — exactly the defect slice 28 caught on the plant side.
+
+⚠⚠ **THE CALLER MUST PASS THE COMPENSATOR'S OWN LOOK ANGLES, NOT THE TRUTH ONES, AND THE DIFFERENCE
+IS THE SLICE.** The radome bends the real ray at the TRUE look angle — that is the physics. This
+function is the guidance computer, which has only its INS attitude, its gyro and its BENT
+measurement, so `look_az`/`look_el` here are recomputed from the measured angles (`missile.jl`
+`_observe_point3d!` passes `look_az_c`). Feeding it the truth look angles would make the slice fake
+AND would silently delete its finding: measured at a common reference angle, a schedule that is a
+BETTER model of the glass (wrong by −0.041 against a −0.056 onset) RINGS, while one that is a far
+worse model (−0.152) stays QUIET, because at their own indices the errors are −0.067 and −0.001.
+[`radome_schedule_slope`](@ref) is the sensitivity that sizes that shift.
+
+**`ripple_est == 0` reduces to [`radome_compensation`](@ref) bit-for-bit** at every look angle — the
+knob-vs-rung discriminator, pinned in `test_frames.jl` and PAIRED with a does-schedule case. ⚠ The
+SEAM still branches upstream rather than calling this at zero amplitude: `x + 0.0` is not the
+identity at `x = −0.0` and float addition is not associative, so a slice-27/28 wire is bit-for-bit
+unchanged BY CONSTRUCTION (the slice-20/21/26/27/28 structural-byte-identity shape).
+
+⚠ Everything slice 27's law does NOT cancel is inherited unchanged: the LOS-driven half of the bend
+(a gyro can only cancel what a gyro can see), and the PITCH→AZIMUTH cross-term the two-term law does
+not model. A PERFECT gyro remains a §1 named approximation.
+"""
+function radome_compensation_scheduled(slope0_est::Real, ripple_est::Real, k_est::Real,
+                                       look_az::Real, look_el::Real, ω_body::Vec3)
+    R̂_az = radome_slope_curve(slope0_est, ripple_est, k_est, look_az)
+    R̂_el = radome_slope_curve(slope0_est, ripple_est, k_est, look_el)
+    return (R̂_az * ω_body[3], -R̂_el * cos(look_az) * ω_body[2])
+end

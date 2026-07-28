@@ -96,6 +96,16 @@ export radome_compensation
 # to the curve: the natural, and dangerous, choice. KNOB (`radome_ripple`), no rung — amplitude 0
 # is an in-domain slider value and bit-identical to the ripple not existing.
 export radome_slope_curve, radome_error_curve
+# Slice 29 (§11 Tier-A): the SCHEDULED compensator `R̂(look)` — slice 27's feed-forward with the
+# belief made a CURVE, which is the engineering answer slice 28 named. ⭐ And a schedule has to be
+# EVALUATED somewhere: the only look angle a guidance computer owns is the one the radome already
+# bent, so the belief that reaches the loop is `R̂(look_bent)`, not `R̂(look_truth)`. Slice 26/27/28's
+# residual law survives verbatim — read at the COMPENSATOR'S OWN INDEX — and `radome_schedule_slope`
+# is the SENSITIVITY that says what the indexing error costs. Slice 27's scalar was immune because a
+# constant has `R̂' ≡ 0`: the immunity was never the domain, it was the constancy. KNOBS
+# (`radome_ripple_est`, `radome_ripple_k_est`), no rung — `Â = 0` is an in-domain slider value AND
+# bit-identical to the schedule not existing.
+export radome_schedule_slope, radome_compensation_scheduled
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step
 export INTEGRATOR_MODES, G_ACCEL

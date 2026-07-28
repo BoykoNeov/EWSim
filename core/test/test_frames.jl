@@ -514,6 +514,133 @@
         end
     end
 
+    @testset "the SCHEDULED compensator — its SLOPE, and its INDEX (slice 29)" begin
+        R₀, A, k = -0.03, -0.15, 12.0
+        û  = los_unit(Vec3(0.0, 0.0, 3000.0), Vec3(6000.0, 2000.0, 4200.0))
+        look_az, _ = look_angles(Quat(1, 0, 0, 0), û)
+
+        # ⭐ THE DERIVATIVE IDENTITY — the sibling of slice 28's integral identity, and what makes
+        # "the schedule's own slope" a statement about the SHIPPED code rather than about the plan.
+        # `radome_schedule_slope` must BE the derivative of the belief `radome_slope_curve` builds,
+        # so finite-difference the one and compare to the other. Pins the two kernels TO EACH OTHER
+        # rather than restating either formula (convention 11).
+        h = 1.0e-6
+        for u in (0.0, 0.05, 0.15, 0.262, 0.40, -0.20, -0.45)
+            fd = (radome_slope_curve(R₀, A, k, u + h) -
+                  radome_slope_curve(R₀, A, k, u - h)) / (2h)
+            @test fd ≈ radome_schedule_slope(A, k, u) atol = 1e-6
+        end
+        # ⭐ AND IT IS ZERO AT THE CURVE'S OWN EXTREMUM — the fact that makes the first-order form
+        # fail exactly at `k̂ = k` on this wire (gate-0 P10c: −0.001 predicted vs −0.022 actual), and
+        # therefore the reason the shipped claim quotes the index-shifted RESIDUAL and uses this
+        # only as the sensitivity that explains it.
+        @test radome_schedule_slope(A, k, π / k) ≈ 0.0 atol = 1e-15   # look = 15° at k = 12
+        @test radome_schedule_slope(A, k, 0.0) === -0.0 ||
+              radome_schedule_slope(A, k, 0.0) == 0.0
+        # slice 27's scalar has NO slope, at any look angle — the whole reason it never had to
+        # choose an index. PAIRED with a does-vary case so it cannot pass by producing zero.
+        for u in (0.0, 0.12, 0.26, 0.44)
+            @test radome_schedule_slope(0.0, k, u) == 0.0
+        end
+        @test radome_schedule_slope(A, k, 0.12) != 0.0
+
+        # ⚠ THE REDUCTION, BIT-FOR-BIT: amplitude 0 IS slice 27's kernel, at every look angle and
+        # every body rate. That exactness is what makes `Â` a KNOB and not a fidelity rung
+        # (atmosphere.jl's discriminator — MEASURED, not argued), PAIRED with a does-schedule case.
+        for (ua, ue) in ((0.31, -0.22), (0.0, 0.0), (-0.45, 0.18))
+            for ω in (Vec3(0.0, -0.8, 0.4), Vec3(0.3, -0.7, 0.5), zero(Vec3))
+                @test radome_compensation_scheduled(-0.03, 0.0, k, ua, ue, ω) ==
+                      radome_compensation(-0.03, ua, ω)
+            end
+        end
+        @test radome_compensation_scheduled(-0.03, A, k, 0.31, -0.22, Vec3(0.0, -0.8, 0.4)) !=
+              radome_compensation(-0.03, 0.31, Vec3(0.0, -0.8, 0.4))
+
+        # ⭐ PER AXIS — slice 28's gate-2 hardening applied to the COMPENSATOR. The two channels must
+        # take the belief at THEIR OWN look angle. A kernel using one value at `hypot(look_az,
+        # look_el)` — or `look_az` for both — agrees numerically whenever `look_el ≈ 0`, which is
+        # exactly the wire this slice ships, so assert it at angles where they differ a lot.
+        let ua = 0.262, ue = -0.40                      # az at the ripple PEAK, el far from it
+            R̂a = radome_slope_curve(-0.03, A, k, ua)
+            R̂e = radome_slope_curve(-0.03, A, k, ue)
+            @test !(R̂a ≈ R̂e)                            # the probe really does separate them
+            Δa, Δe = radome_compensation_scheduled(-0.03, A, k, ua, ue, Vec3(0.0, 1.0, 1.0))
+            @test Δa ≈ R̂a atol = 1e-15                  # yaw channel: the AZIMUTH belief, no cosine
+            @test Δe ≈ -R̂e * cos(ua) atol = 1e-15       # pitch channel: the ELEVATION belief
+            @test Δe ≉ -R̂a * cos(ua)                    # ⇐ fails if the azimuth belief is reused
+            # and the axis split itself (slice 27's tooth shape, inherited)
+            @test radome_compensation_scheduled(-0.03, A, k, ua, ue, Vec3(0.0, 0.0, 1.0))[2] == 0.0
+            @test radome_compensation_scheduled(-0.03, A, k, ua, ue, Vec3(0.0, 1.0, 0.0))[1] == 0.0
+        end
+
+        # ⭐⭐ THE INDEX TOOTH — THE #1 SIGN TRAP's 11th OCCURRENCE, AND THE SLICE ITSELF.
+        # Evaluating the schedule at a BENT index instead of the truth one perturbs the correction
+        # by ≈ R̂'·δ, and the SIGN of that perturbation must FLIP between a `k̂` below the true `k`
+        # and one above — because `R̂'` does. ⚠ A test at ONE `k̂` passes for a constant-slope
+        # compensator and proves nothing (slice 28's two-look-angles rule, transposed to `k̂`).
+        # This is the kernel-level statement of the measured result that a schedule which is a
+        # BETTER model of the glass can ring while a worse one stays quiet.
+        let u_true = π / k, δ = deg2rad(-2.6)           # 15°, and the MEASURED index error on the wire
+            ω = Vec3(0.0, 0.0, 1.0)                     # pure yaw ⇒ read the azimuth channel
+            function shift(k̂)
+                tru = radome_compensation_scheduled(R₀, A, k̂, u_true,     0.0, ω)[1]
+                ben = radome_compensation_scheduled(R₀, A, k̂, u_true + δ, 0.0, ω)[1]
+                return ben - tru
+            end
+            # ⚠ THE SIGNS HERE WERE WRITTEN BACKWARDS ON THE FIRST DRAFT AND THE TEST CAUGHT IT
+            # (the trap's 11th occurrence claiming its first victim in this slice): the shift is in
+            # the BELIEF `R̂`, and the residual `R − R̂` moves the OTHER WAY. Under-estimating `k̂`
+            # RAISES `R̂` at a smaller index ⇒ the residual goes MORE NEGATIVE ⇒ closer to ringing,
+            # which is the measured direction (gate-0 P10c: `k̂` = 10's residual −0.041 → −0.067).
+            @test shift(10.0) > +0.01                   # k̂ BELOW k: the belief applied is LESS steep
+            @test shift(17.0) < -0.01                   # k̂ ABOVE k: MORE steep
+            @test sign(shift(10.0)) != sign(shift(17.0))          # the flip, stated as such
+            # and each matches the first-order sensitivity AWAY from the extremum. ⚠ The atols are
+            # WIDE ON PURPOSE and they are the docstring's caveat as a number: over a 2.6° step the
+            # second-order term is already 25–30% of the first-order one, which is precisely why the
+            # shipped claim quotes the exact index-shifted RESIDUAL and uses `R̂'` only to explain it.
+            @test shift(10.0) ≈ radome_schedule_slope(A, 10.0, u_true) * δ atol = 1.5e-2
+            @test shift(17.0) ≈ radome_schedule_slope(A, 17.0, u_true) * δ atol = 2.5e-2
+            # ⚠ AND AT k̂ = k THE FIRST-ORDER TERM VANISHES EXACTLY while the ACTUAL shift does not —
+            # the second-order term, pinned so the docstring's caveat is a tested statement rather
+            # than a hedge. The measured wire agrees: a residual of −0.022 where first order says 0.
+            @test abs(radome_schedule_slope(A, k, u_true)) < 1e-14   # exactly the extremum
+            @test abs(shift(k)) > 1e-3                               # yet the shift is REAL
+            @test shift(k) ≈ 0.5 * (A * k^2 * cos(k * u_true)) * δ^2 atol = 2e-3   # ⇐ it is 2nd order
+            # a CONSTANT belief cannot be shifted by its index at all — the paired control that
+            # makes every assert above about SCHEDULING rather than about compensation.
+            let tru = radome_compensation(R₀, u_true, ω)[1],
+                ben = radome_compensation(R₀, u_true + δ, ω)[1]
+                @test ben == tru
+            end
+        end
+
+        # THE CANCELLATION still holds when the belief MATCHES the glass and both are read at the
+        # SAME angle — slice 27's tooth, re-run against the CURVE kernels so the scheduled law is
+        # pinned to the physics it claims to cancel, not merely to its own formula.
+        let dt = 1.0e-3
+            function eps_dot_curve(ω::Vec3)
+                q0 = Quat(1.0, 0.0, 0.0, 0.0)
+                q1 = qnormalize(qmul(q0, quat_from_axis_angle(ω, norm3_test(ω) * dt)))
+                a0, e0 = radome_error_curve(R₀, A, k, look_angles(q0, û)...)
+                a1, e1 = radome_error_curve(R₀, A, k, look_angles(q1, û)...)
+                return ((a1 - a0) / dt, (e1 - e0) / dt)
+            end
+            laz, lel = look_angles(Quat(1, 0, 0, 0), û)
+            for ω in (Vec3(0.0, -1.0, 0.0), Vec3(0.0, 1.0, 0.0), Vec3(0.0, -0.6, 0.8))
+                _, ėe_p = eps_dot_curve(ω)
+                _, Δe   = radome_compensation_scheduled(R₀, A, k, laz, lel, ω)
+                @test abs(ėe_p + Δe) < 2e-3            # ELEVATION: cancelled against the CURVE
+            end
+        end
+
+        # k̂ is not divided by anywhere (unlike `radome_error_curve`'s `ripple/k`), but a live slider
+        # must still never produce a non-finite correction (conventions 5/6).
+        @test all(isfinite, radome_compensation_scheduled(R₀, A, 0.0, 0.3, -0.2, Vec3(1.0, 1.0, 1.0)))
+        @test all(isfinite, radome_compensation_scheduled(R₀, A, -5.0, 0.3, -0.2, Vec3(1.0, 1.0, 1.0)))
+        @test isfinite(radome_schedule_slope(A, 0.0, 0.3))
+    end
+
     @testset "SEEKER_AXES_MODES — the one-list-no-drift const (convention 7)" begin
         @test SEEKER_AXES_MODES == (:pitch_plane, :az_el)
         @test :az_el in SEEKER_AXES_MODES && :pitch_plane in SEEKER_AXES_MODES
