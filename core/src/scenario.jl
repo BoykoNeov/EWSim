@@ -431,6 +431,38 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                     error("missile '$id': seeker.radome_ripple_k must be finite and > 0 " *
                           "(got $(comp[:radome_ripple_k]))")
             end
+            # Slice 29 — THE SCHEDULED COMPENSATOR: slice 27's belief made a CURVE,
+            # `R̂(look) = radome_slope_est + radome_ripple_est·(1 − cos(k̂·look))`. Presence-gated on
+            # `radome_ripple_est` (the convention-2 shape of every key above), so a slice-27/28 wire
+            # never mints it and `_observe_point3d!` calls `radome_compensation` VERBATIM.
+            # ⚠ BOTH ARE KNOBS HERE, and that is the SPLIT FROM SLICE 28's `radome_ripple_k`: the
+            # metric is NON-MONOTONE in the GLASS's `k` (which is why 28 authored it), but in the
+            # BELIEF's `k̂` the quiet window is a single CONNECTED band about the truth — measured
+            # ring/ring/ring/ring | quiet(10.7…19.5) | ring/ring — so a student can walk it, and its
+            # ASYMMETRY (over-estimate by 60% and stay quiet, under-estimate by 15% and ring) IS the
+            # lesson (`docs/plans/slice29.md` §6). Do not copy 28's disqualification across; it was
+            # measured on the other side of the comparison.
+            # Both validated FINITE only. ⚠ `k̂` needs no positivity guard the way slice 28's `k`
+            # does — `radome_slope_curve`/`radome_schedule_slope` never DIVIDE by it (only
+            # `radome_error_curve` does, and that is the glass's key), so `k̂ = 0` is a well-defined
+            # flat belief rather than a crash path. Validated finite for convention 6 all the same.
+            # ⚠ INERT without `radome_slope_est` — and REFUSED rather than silently ignored (the
+            # slice-21/28 "refused, not branch-ordered" precedent): a ripple on a belief that does
+            # not exist is a scheduled compensator with nothing to schedule.
+            if haskey(sb, "radome_ripple_est")
+                haskey(sb, "radome_slope_est") ||
+                    error("missile '$id': seeker.radome_ripple_est authored without " *
+                          "seeker.radome_slope_est — the schedule is a variation OF a believed " *
+                          "boresight slope, and without it no compensator is wired (slice 29)")
+                comp[:radome_ripple_est] = _f64(sb["radome_ripple_est"])
+                isfinite(comp[:radome_ripple_est]) ||
+                    error("missile '$id': seeker.radome_ripple_est must be finite " *
+                          "(got $(comp[:radome_ripple_est]))")
+                comp[:radome_ripple_k_est] = _f64(get(sb, "radome_ripple_k_est", 12.0))
+                isfinite(comp[:radome_ripple_k_est]) ||
+                    error("missile '$id': seeker.radome_ripple_k_est must be finite " *
+                          "(got $(comp[:radome_ripple_k_est]))")
+            end
             # Slice 13: the `:scan` seeker (fidelity `seeker: scan`) forms a NOISY angular-power
             # PROFILE over a FIXED grid (the slice-3 CFAR sandbox on the LOS-ANGLE axis) instead of
             # ONE noisy truth bearing. The grid/beam/CFAR/gate config lands here (STATIC — draw-count/

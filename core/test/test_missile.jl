@@ -4803,3 +4803,281 @@ end
         @test !haskey(m27.comp, :radome_ripple_k)
     end
 end
+
+@testset "THE SCHEDULED COMPENSATOR wired (slice 29 — evaluated at its OWN bent index)" begin
+    dt = 1.0e-3
+    n3(v) = sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+
+    # Slice 28's wire with TWO changes, both measured decisions:
+    #
+    #  (1) THE SCHEDULE keys (`radome_ripple_est` / `radome_ripple_k_est`) — the new authored pair.
+    #      `ripple_est === nothing` mints NO key: the byte-identity arm, and the shape the loader
+    #      and the seam both gate on.
+    #  (2) THE GLASS IS DEEPENED, A = −0.05 → −0.15 (AUTHORED). ⚠ THE GEOMETRY IS UNCHANGED and
+    #      that is itself a gate-0 result: on a settled PN collision course the lead angle is
+    #      CONSTANT BY CONSTRUCTION (V_M·sin L = V_T·sin aspect), so slice 28's wire holds look_az
+    #      to a 0.2° band — and opening that band with a maneuvering target does NOT license a
+    #      schedule, because the best POST-HOC scalar then matches it (1.06 / 0.97 / 1.07 / 1.40×;
+    #      the parasitic loop needs DWELL at a supercritical residual, and a band the engagement
+    #      SWEEPS THROUGH is visited briefly everywhere). ⇒ the frozen look angle is the ENABLING
+    #      condition, not an obstacle. −0.15 is what gives the k̂ tolerance band an interior
+    #      (`docs/plans/slice29.md` §1, §5).
+    function sched_world(; radome = -0.03, ripple = -0.15, k = 12.0, slope_est = -0.03,
+                           ripple_est = -0.15, k_est = 10.0,
+                           vy = 200.0, axes = :az_el, airframe = :six_dof, seed = 29,
+                           sigma = 5.0e-5, rho = 1.0, alpha_max = 0.3, n_pn = 8.0, Y = 2000.0)
+        w = World(seed = seed,
+                  fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                 :autopilot => :alpha, :airframe => airframe,
+                                                 :seeker => :filtered, :seeker_axes => axes))
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => rho,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => alpha_max, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => n_pn, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => sigma, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true)
+        radome    === nothing || (comp[:radome_slope] = radome)
+        slope_est === nothing || (comp[:radome_slope_est] = slope_est)
+        if ripple !== nothing
+            comp[:radome_ripple] = ripple; comp[:radome_ripple_k] = k
+        end
+        if ripple_est !== nothing
+            comp[:radome_ripple_est] = ripple_est; comp[:radome_ripple_k_est] = k_est
+        end
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, Y, 4200.0),
+                                 vel = Vec3(0.0, vy, 0.0), comp = Dict{Symbol,Any}())
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:t1)]
+    end
+
+    # THE METRIC IS SLICE 28's, UNCHANGED AND FOR ITS REASONS: `rms r` (YAW — the lead is in
+    # azimuth) in the RANGE BAND [500, 3000] m (a crossing wire's whole-approach rms r carries a
+    # legitimate front-loaded baseline; arms with different ToF would compare different parts of
+    # the engagement). rms, NEVER the peak; the MISS is not the metric — every arm here HITS.
+    function schedfly(; T = 16.0, kw...)
+        w, s = sched_world(; kw...)
+        qs = Float64[]; rs_ = Float64[]; rr = Float64[]
+        res = Float64[]; mde = Float64[]; slp = Float64[]; lkt = Float64[]; lke = Float64[]
+        rmin, prev, closing = Inf, Inf, true
+        dsat = 0; asat = 0; nt = 0
+        for _ in 1:round(Int, T / dt)
+            tick!(w, s, dt); empty!(w.events)
+            tel = w.env[:telemetry]
+            r = n3(w.entities[:t1].pos - w.entities[:m1].pos)
+            push!(qs, Float64(get(tel, "m1.omega_q", 0.0)))
+            push!(rs_, Float64(get(tel, "m1.omega_r", 0.0)))
+            push!(rr, r)
+            push!(res, Float64(get(tel, "m1.radome_residual_az", NaN)))
+            push!(mde, Float64(get(tel, "m1.radome_model_err_az", NaN)))
+            push!(slp, Float64(get(tel, "m1.radome_sched_slope", NaN)))
+            push!(lkt, Float64(get(tel, "m1.look_angle", NaN)))
+            push!(lke, Float64(get(tel, "m1.look_angle_est", NaN)))
+            # ⚠ COUNTED INSIDE THE MEASUREMENT WINDOW ONLY, and that is not bookkeeping: the fin
+            # DOES peg during the launch transient on every arm, so a whole-flight count would make
+            # the isolation below fail everywhere and say nothing. Measured: 0 in-window on every
+            # arm of the k̂ and Â sweeps; nonzero pre-window on all of them.
+            (500.0 < r < 3000.0) &&
+                (dsat += Int(Float64(get(tel, "m1.defl_sat", 0.0)) != 0.0);
+                 asat += Int(Float64(get(tel, "m1.aero_sat", 0.0)) != 0.0))
+            nt += 1
+            closing && r > prev && (closing = false)
+            closing && (rmin = min(rmin, r)); prev = r
+            closing || break
+        end
+        win = findall(x -> 500.0 < x < 3000.0, rr)
+        rms(v) = isempty(win) ? 0.0 : sqrt(sum(abs2, v[win]) / length(win))
+        med(v) = (u = sort(filter(isfinite, v[win])); isempty(u) ? NaN : u[(length(u) + 1) ÷ 2])
+        return (rms_r = rms(rs_), rms_q = rms(qs), miss = rmin,
+                res_med = med(res), mde_med = med(mde), slope_med = med(slp),
+                look_t = med(lkt), look_e = med(lke),
+                dsat = dsat, asat = asat, nt = nt, nwin = length(win), w = w)
+    end
+
+    @testset "BYTE-IDENTITY — no `radome_ripple_est` key ⇒ the slice-27/28 path, bit-for-bit" begin
+        # The structural claim at a FOURTH nesting level (the slice-20/21/26/27/28 shape): the
+        # no-schedule arm calls `radome_compensation` VERBATIM, it does not evaluate the scheduled
+        # kernel at amplitude zero. `x + 0.0` is not the identity at x = −0.0 and float addition is
+        # not associative.
+        function trace(; kw...)
+            w, s = sched_world(; kw...)
+            out = Float64[]
+            for _ in 1:900
+                tick!(w, s, dt); empty!(w.events)
+                m = w.entities[:m1]
+                append!(out, (m.pos[1], m.pos[2], m.pos[3], m.vel[1], m.vel[2], m.vel[3]))
+            end
+            return out
+        end
+        base = trace(ripple_est = nothing)
+        @test trace(ripple_est = nothing) == base              # determinism, and the control
+        # ⭐ Â = 0 IS BIT-IDENTICAL TO THE KEY NOT EXISTING — the schedule collapses to slice 27's
+        # SCALAR. That is the knob-vs-rung discriminator (atmosphere.jl's: the off-state is
+        # knob-REACHABLE), MEASURED as slices 26/28 measured theirs, not argued.
+        @test trace(ripple_est = 0.0) == base
+        @test trace(ripple_est = 0.0, k_est = 3.7) == base      # …and k̂ is INERT at Â = 0
+        @test trace(ripple_est = -0.15) != base                 # …PAIRED with a does-schedule arm
+        @test trace(ripple_est = -0.15, k_est = 17.0) !=
+              trace(ripple_est = -0.15, k_est = 10.0)           # k̂ moves the path too
+    end
+
+    @testset "DRAW-COUNT INVARIANCE — class 4a, and it is ASSERTED not assumed" begin
+        # The schedule is arithmetic on state that already exists: the same draws per tick either
+        # way. A draw-topology flip would desync replay (convention 3), so this is pinned rather
+        # than inferred from "we added no `randn` call".
+        function endrng(; kw...)
+            w, s = sched_world(; kw...)
+            for _ in 1:400
+                tick!(w, s, dt); empty!(w.events)
+            end
+            return copy(w.rng)
+        end
+        r0 = endrng(ripple_est = nothing)
+        @test endrng(ripple_est = -0.15, k_est = 10.0) == r0
+        @test endrng(ripple_est = -0.15, k_est = 22.0) == r0
+        @test endrng(ripple_est = -0.30, k_est = 6.0)  == r0
+    end
+
+    @testset "⭐⭐ THE CROSSOVER — the RINGING schedule is the BETTER model of the glass" begin
+        # THE SLICE, AS FOUR NUMBERS THE CORE SHIPS. `radome_model_err_az` is the belief compared
+        # with the glass AT THE SAME LOOK ANGLE — what an engineer computes on the bench, and what
+        # "how good is my schedule?" naturally means. `radome_residual_az` is the belief compared
+        # with the glass where the compensator ACTUALLY EVALUATES IT: at its own index, formed from
+        # the BENT measurement. The two ORDERINGS ARE REVERSED, and the outcome follows the second.
+        ring  = schedfly(k_est = 10.0)      # the shipped arm
+        cure  = schedfly(k_est = 12.0)      # the belief matched to the glass
+        quiet = schedfly(k_est = 17.0)      # a much WORSE model that stays quiet
+
+        @test ring.rms_r > 0.30                                 # it RINGS
+        @test quiet.rms_r < 0.05                                # it does NOT
+        @test ring.rms_r / quiet.rms_r > 20.0                   # …by a wide margin
+
+        # ⭐ THE MODEL-ERROR ORDERING: the ringing arm is the BETTER model, several times over.
+        @test abs(ring.mde_med) < abs(quiet.mde_med)
+        @test abs(quiet.mde_med) / abs(ring.mde_med) > 3.0
+        # ⭐⭐ AND THE LOOP-RESIDUAL ORDERING IS THE OPPOSITE — which is the whole slice. ⚠ Compared
+        # LIKE WITH LIKE: both are `radome_residual_az`, both index-shifted. Setting one arm's
+        # index-shifted value against another's model error would prove nothing.
+        @test abs(ring.res_med) > abs(quiet.res_med)
+        @test abs(ring.res_med) / abs(quiet.res_med) > 3.0
+        # ⭐ AND A PERFECT MODEL DOES NOT GIVE A ZERO LOOP RESIDUAL. `k̂ = k` and `Â = A` make the
+        # model error EXACTLY zero, and the loop still sees a residual, because the belief is still
+        # evaluated 2.4–2.7° off. The cleanest single statement of the slice.
+        @test abs(cure.mde_med) < 1e-12                         # the model is EXACT…
+        @test abs(cure.res_med) > 0.01                          # …and the loop residual is NOT zero
+        @test cure.rms_r < 0.05                                 # (it is still comfortably quiet)
+
+        # ⚠ THE ORDERING CLAIM IS ON MEDIANS, WHICH IS LEGITIMATE ONLY BECAUSE THE `mde`/`res` PAIR
+        # COME FROM THE SAME TICKS. A residual quoted as a median on a RINGING arm describes the
+        # ring, not its cause (slice 28 §1's rule; this slice's draft violated it and an advisor
+        # pass caught it) — so the ring/quiet VERDICT is on `rms r`, never on a residual threshold,
+        # and the residual is used only for the ORDERING BETWEEN arms.
+        @test ring.nwin > 200 && quiet.nwin > 200               # both windows are real
+
+        # THE ISOLATION, AND IT IS SLICE 26's SHAPE — NOT SLICE 25's (the copy-paste false-claim
+        # trap). `defl_sat == 0` in-window on every arm, so the fourth cap (slice 15's DEFLECTION
+        # limit) is nowhere near this: the difference between the arms is the guidance loop, not a
+        # fin running out of travel. ⚠ But `aero_sat == 0` is IMPOSSIBLE on a ringing arm and must
+        # NOT be asserted — an oscillation drives demand into the slice-19 ceiling BY DEFINITION
+        # (slice 26's own finding). Measured here: 584/4342 in-window on the ringing arm against
+        # 0/4360 on the cured one. The ceiling BOUNDS the cycle; the belief decides whether there
+        # is one.
+        @test ring.dsat == 0 && quiet.dsat == 0 && cure.dsat == 0
+        @test cure.asat == 0 && quiet.asat == 0                # the quiet arms never touch it…
+        @test ring.asat > 0                                    # …and the ringing one must
+    end
+
+    @testset "⭐ THE INDEX IS REAL AND IT IS THE BEND — `look_angle_est` vs `look_angle`" begin
+        # The mechanism as a number: the compensator's own look angle runs BELOW the truth one, and
+        # the gap IS the bend it is correcting. Slice 27's discipline made visible — the compensator
+        # never reads truth, and this is what that costs.
+        r = schedfly(k_est = 12.0)
+        @test isfinite(r.look_t) && isfinite(r.look_e)
+        @test r.look_t - r.look_e > 1.0                         # degrees — a real, sizeable gap
+        @test r.look_t - r.look_e < 6.0                         # …and not a wild one
+        # NO GLASS ⇒ NO BEND ⇒ NO INDEX ERROR. The paired control that makes the gap ABOUT the
+        # radome rather than about seeker noise or the attitude.
+        flat = schedfly(radome = 0.0, ripple = 0.0, k_est = 12.0)
+        @test abs(flat.look_t - flat.look_e) < 0.2
+    end
+
+    @testset "the k̂ TOLERANCE BAND is CONNECTED and ASYMMETRIC (⇒ a knob, unlike slice 28's k)" begin
+        # ⚠ SLICE 28 DISQUALIFIED THE GLASS's `k` FOR NON-MONOTONICITY (quiet/rings/rings/marginal/
+        # QUIET/rings). The BELIEF's `k̂` is a DIFFERENT MEASUREMENT and comes out differently: one
+        # CONNECTED quiet window about the truth, which a student can walk. Do not copy 28's
+        # disqualification across — it was measured on the other side of the comparison.
+        rings(k̂) = schedfly(k_est = k̂).rms_r > 0.30
+        for k̂ in (6.0, 9.0, 10.0)               ; @test  rings(k̂); end   # BELOW: rings
+        for k̂ in (11.0, 12.0, 14.0, 17.0, 19.0) ; @test !rings(k̂); end   # the quiet window
+        for k̂ in (20.0, 22.0)                   ; @test  rings(k̂); end   # ABOVE: rings again
+        # ⭐ THE ASYMMETRY IS THE LESSON: the quiet window is far wider ABOVE the truth than below.
+        # Under-estimate `k̂` by 15% (12 → 10) and it rings; over-estimate by 58% (12 → 19) and it
+        # does not.
+        @test !rings(19.0) && rings(10.0)
+        # BOTH DECLARED ENDPOINTS RING UNAMBIGUOUSLY (slice 26's post-commit rule: measure the
+        # declared endpoints, don't infer them from the interior — it moved this ceiling off 20,
+        # where `rms r` is only ≈0.47, a marginal edge).
+        @test schedfly(k_est = 6.0).rms_r  > 0.6
+        @test schedfly(k_est = 22.0).rms_r > 0.6
+    end
+
+    @testset "the Â knob — MONOTONE, and over-estimation is the SAFE side (one-sidedness)" begin
+        # ⭐⭐ THE CONSTRAINT IS ONE-SIDED — slice 26's finding, used here as a design rule for the
+        # first time: only a NEGATIVE residual rings, a POSITIVE one merely de-tunes. So the LEVEL
+        # half of the belief has a safe direction, and the metric walks monotonically toward it.
+        r0  = schedfly(ripple_est = 0.0,   k_est = 12.0)
+        r13 = schedfly(ripple_est = -0.13, k_est = 12.0)
+        r15 = schedfly(ripple_est = -0.15, k_est = 12.0)
+        r20 = schedfly(ripple_est = -0.20, k_est = 12.0)
+        r30 = schedfly(ripple_est = -0.30, k_est = 12.0)
+        @test r0.rms_r  > 0.6                     # Â = 0 IS slice 27's scalar, and it rings hard
+        @test r13.rms_r > 0.30                    # under-estimating still rings
+        @test r15.rms_r < 0.05                    # the truth is quiet
+        # OVER-estimating is SAFE and gently degrading — never a ring.
+        @test r20.rms_r < 0.05 && r30.rms_r < 0.10
+        @test r15.rms_r < r20.rms_r < r30.rms_r   # monotone on the safe side
+        # ⭐ AND `radome_sched_slope` IS EXACTLY ZERO AT Â = 0 — the schedule has no slope, which is
+        # why slice 27's scalar never had to choose an index. The knob-vs-rung fact, on the wire.
+        @test abs(r0.slope_med) < 1e-15
+        @test abs(r15.slope_med) > 0.1            # …PAIRED with a does-slope arm
+    end
+
+    @testset "INERT without its host, and no live knob can crash a tick (conventions 5/6)" begin
+        # RUNG-GATED on the LIVE `:airframe`, never on `haskey(:att_q)` — the slice-21/23/26/27/28
+        # latent-bug class, whose SIXTH occurrence this would be. Under `:pitch_coupled` there is no
+        # 6-DOF attitude to look through, so the schedule's keys must be absent entirely.
+        r = schedfly(T = 2.0, airframe = :pitch_coupled)
+        @test !haskey(r.w.env[:telemetry], "m1.radome_sched_slope")
+        @test !haskey(r.w.env[:telemetry], "m1.radome_model_err_az")
+        # every live knob value keeps the wire finite (convention 6 — no Inf/NaN to JSON)
+        for (Â, k̂) in ((-1.0e6, 12.0), (1.0e6, 12.0), (-0.15, 0.0), (-0.15, -5.0),
+                       (-0.15, 1.0e6), (0.0, 12.0))
+            rr = schedfly(T = 2.0, ripple_est = Â, k_est = k̂)
+            for (_, v) in rr.w.env[:telemetry]
+                v isa Real && @test isfinite(Float64(v))
+            end
+        end
+    end
+
+    @testset "loader: the schedule is PRESENCE-gated, and refuses to hang on nothing" begin
+        base = joinpath(@__DIR__, "..", "..", "scenarios")
+        for f in ("slice26_radome.yaml", "slice27_radome_comp.yaml", "slice28_radome_curve.yaml")
+            scn = load_scenario(joinpath(base, f))
+            m = first(e for (_, e) in scn.world.entities if e.kind === :missile)
+            @test !haskey(m.comp, :radome_ripple_est)
+            @test !haskey(m.comp, :radome_ripple_k_est)
+        end
+        scn29 = load_scenario(joinpath(base, "slice29_radome_schedule.yaml"))
+        m29 = first(e for (_, e) in scn29.world.entities if e.kind === :missile)
+        @test m29.comp[:radome_ripple_est]   == -0.15
+        @test m29.comp[:radome_ripple_k_est] == 10.0
+        @test m29.comp[:radome_ripple]       == -0.15      # the GLASS is deeper than slice 28's
+        @test m29.comp[:radome_ripple_k]     == 12.0       # …and its k is still AUTHORED
+    end
+end

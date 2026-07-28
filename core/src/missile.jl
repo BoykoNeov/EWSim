@@ -1661,14 +1661,48 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # FOURTH occurrence this would be). ⚠ And NOT gated on the radome's own key: compensating for
     # glass you do not have is a real configuration (residual = −R̂ ⇒ it de-tunes), not a no-op.
     ȧz_ff = 0.0; ėl_ff = 0.0; R̂_rad = 0.0
+    _sched_on = false; Â_est = 0.0; k̂_est = 0.0; look_az_c = 0.0; look_el_c = 0.0
     _comp_on = haskey(c, :radome_slope_est) && haskey(c, :att_q) &&
                get(w.fidelity, :airframe, :point_mass) === :six_dof
     if _comp_on
         R̂_rad = Float64(c[:radome_slope_est])
         # The compensator's OWN look angle: the MEASURED (bent) LOS rotated into the body frame.
-        look_az_c, _ = look_angles(c[:att_q]::Quat, los_unit_from_angles(az_m, el_m))
-        ȧz_ff, ėl_ff = radome_compensation(R̂_rad, look_az_c,
-                                           get(c, :omega_body, zero(Vec3))::Vec3)
+        look_az_c, look_el_c = look_angles(c[:att_q]::Quat, los_unit_from_angles(az_m, el_m))
+        # SLICE 29 — THE SCHEDULED COMPENSATOR. Slice 28 showed the glass has no single slope, so
+        # the belief must be a CURVE too: `R̂(look) = R̂₀ + Â·(1 − cos(k̂·look))` (frames.jl
+        # `radome_compensation_scheduled`), applied PER AXIS — the azimuth channel's belief at
+        # `look_az_c`, the elevation channel's at `look_el_c` (slice 28's gate-2 hardening, now on
+        # the compensator side).
+        #
+        # ⭐⭐ AND THE INDEX IS THE SLICE. A schedule has to be EVALUATED somewhere, and the only
+        # look angle a guidance computer owns is `look_az_c`/`look_el_c` — computed from the BENT
+        # measurement, which is exactly what the radome did to it. So the belief that reaches the
+        # loop is `R̂(look_bent)`, not `R̂(look_truth)`, and slice 26/27/28's residual law survives
+        # ONLY when read at this index: measured at a common reference look angle, the TRUTH-indexed
+        # residual gets two of three arms WRONG (it predicts quiet for the arm that rings and
+        # ringing for the arm that stays quiet) while the index-shifted one gets every arm right
+        # (`docs/plans/slice29.md` §3, gate-0 P10c). ⚠ `look_az`/`look_el` (TRUTH, off `û_tru`) are
+        # RIGHT THERE in this function and are what the GLASS bends at — passing them here instead
+        # would be the natural edit and would silently delete the slice. Slice 27's rule: the
+        # compensator never reads truth.
+        #
+        # ⚠ STRUCTURAL BYTE-IDENTITY (the slice-20/21/26/27/28 shape, FOURTH nesting level): the
+        # else-arm calls `radome_compensation` VERBATIM. Never the scheduled kernel at amplitude 0 —
+        # `x + 0.0` is not the identity at `x = −0.0` and float addition is not associative, so a
+        # slice-27/28 wire is bit-for-bit unchanged BY CONSTRUCTION. (The kernels' own reduction IS
+        # pinned bit-for-bit in `test_frames.jl` — that exactness is the knob-vs-rung argument,
+        # atmosphere.jl's discriminator; it is not the seam's mechanism.)
+        _sched_on = haskey(c, :radome_ripple_est)
+        if _sched_on
+            Â_est = Float64(c[:radome_ripple_est])
+            k̂_est = Float64(get(c, :radome_ripple_k_est, 12.0))
+            ȧz_ff, ėl_ff = radome_compensation_scheduled(R̂_rad, Â_est, k̂_est,
+                                                         look_az_c, look_el_c,
+                                                         get(c, :omega_body, zero(Vec3))::Vec3)
+        else
+            ȧz_ff, ėl_ff = radome_compensation(R̂_rad, look_az_c,
+                                               get(c, :omega_body, zero(Vec3))::Vec3)
+        end
     end
 
     # ⚠ STRUCTURAL BYTE-IDENTITY (the slice-20/21/26 shape): a BRANCH, with the else-arm slice-26
@@ -1776,9 +1810,55 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # a crossing engagement's lead angle moves, and therefore the one whose residual closes the
         # loop that rings here. The elevation channel's residual is `radome_slope_el − R̂`, which the
         # client can read off the two keys above if it ever needs it.
+        # ⚠⚠ SLICE 29 GENERALIZES THE SECOND TERM, AND WHICH LOOK ANGLE EACH SIDE USES IS THE WHOLE
+        # SLICE. The GLASS bends at the TRUTH look angle (`look_az`, off `û_tru`) — that is physics.
+        # The BELIEF is evaluated wherever the compensator evaluates it, which is its OWN bent index
+        # (`look_az_c`). So under a schedule this key is `R(look_az) − R̂(look_az_c)`: the same
+        # QUANTITY as slice 28's (the engagement residual on the loop-closing axis), with `R̂` no
+        # longer constant. ⭐ It is the ONLY version that predicts the outcome — the both-truth
+        # version gets two of three measured arms wrong (gate-0 P10c). ⚠ A slice-26/27/28 wire is
+        # byte-identical BY GATING (`_sched_on` false ⇒ the expression is slice 28's, character for
+        # character), and for a CONSTANT `R̂` the two indices give the same number anyway — which is
+        # precisely why slice 27 never had to choose one.
         if _ripple_on
             tel["$sid.radome_residual_az"] = _finite_coord(
-                radome_slope_curve(R_rad, A_rip, k_rip, look_az) - R̂_rad)
+                radome_slope_curve(R_rad, A_rip, k_rip, look_az) -
+                (_sched_on ? radome_slope_curve(R̂_rad, Â_est, k̂_est, look_az_c) : R̂_rad))
+        end
+        # SLICE 29 — the SCHEDULE's own readouts, shipped ONLY while it is live (the never-stale
+        # discipline; a slice-27/28 wire is byte-identical). All SCALARS, all at the COMPENSATOR'S
+        # OWN INDEX, because that is where the belief actually acts.
+        if _sched_on
+            tel["$sid.radome_ripple_est"] = _finite_coord(Â_est)                 # the live knob Â
+            tel["$sid.radome_ripple_k_est"] = _finite(k̂_est)                     # the live knob k̂
+            # ⭐ THE SENSITIVITY, NOT A LOOP GAIN — say it that way (the slice's own gate-0
+            # correction, made twice). `R̂' = Â·k̂·sin(k̂·look)` sizes and signs what the indexing
+            # error costs; the RESIDUAL above is what actually decides. Shipped as a NUMBER so the
+            # client never differentiates (convention 13, the slice-21 `rho_air` precedent).
+            tel["$sid.radome_sched_slope"] = _finite_coord(
+                radome_schedule_slope(Â_est, k̂_est, look_az_c))
+            # the scheduled belief PER AXIS, each at ITS OWN channel's index — the compensator-side
+            # twin of slice 28's `radome_slope_az`/`_el`, and the channel split seen from the cure.
+            tel["$sid.radome_slope_est_az"] = _finite_coord(
+                radome_slope_curve(R̂_rad, Â_est, k̂_est, look_az_c))
+            tel["$sid.radome_slope_est_el"] = _finite_coord(
+                radome_slope_curve(R̂_rad, Â_est, k̂_est, look_el_c))
+            # ⭐ THE INDEX ITSELF, beside slice 26's TRUTH `look_angle`: the gap between these two
+            # numbers IS the bend, and it is the mechanism made visible. A student who sees only the
+            # residual cannot tell why a better model of the glass rings.
+            tel["$sid.look_angle_est"] = _finite(rad2deg(hypot(look_az_c, look_el_c)))
+            # ⭐⭐ THE MODEL ERROR — A DIAGNOSTIC, AND THE OTHER HALF OF THE SLICE AS A NUMBER. This
+            # is the belief compared with the glass AT THE SAME LOOK ANGLE: what an engineer computes
+            # on the bench, where there is no bend to index through, and what "how good is my
+            # schedule?" naturally means. ⚠ IT IS NOT WHAT CLOSES THE LOOP — `radome_residual_az` is
+            # — and the two CROSS OVER, which is the whole slice: the shipped `k̂ = 10` is a BETTER
+            # model of the glass than `k̂ = 17` and RINGS, while 17 is a far worse model and stays
+            # quiet, because indexed 2.4–2.7° low they land the other way round. Shipped so the
+            # comparison is a READING of two core numbers rather than a claim (convention 13); it is
+            # a diagnostic in the slice-26 `omega_ratio` sense, and must be labelled as one.
+            tel["$sid.radome_model_err_az"] = _finite_coord(
+                radome_slope_curve(R_rad, A_rip, k_rip, look_az) -
+                radome_slope_curve(R̂_rad, Â_est, k̂_est, look_az))
         end
         # The feed-forward the gyro actually contributed this tick, on the loop-closing axis — the
         # MECHANISM made visible beside `radome_eps`, which is the disease it is treating.
