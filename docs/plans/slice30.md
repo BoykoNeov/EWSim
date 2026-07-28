@@ -248,16 +248,30 @@ Slices 1–29 stay byte-identical by PRESENCE gating.
 
 ## Gate 1 — the core seam
 
-`ConstantVelocity.integrate!` (`core/src/radar.jl`) gains ONE presence-gated key, **copying
-`alt_hold_m` literally** (the advisor's point: `alt_hold_m` PINS its coordinate every tick; slice
-29's probes did a one-shot `t.vel = ...`, and for a constant the difference is nil — P2a measured the
-pinned form reproducing slice 29's P4/P5 matrix to the digit — but the pinned form is the one that
-composes with a live slider):
+`ConstantVelocity.integrate!` (`core/src/radar.jl`) gains ONE presence-gated key, pinned EVERY tick
+(slice 29's probes did a one-shot `t.vel = ...`; for a constant the difference is nil — P2a measured
+the pinned form reproducing slice 29's P4/P5 matrix to the digit — but the pinned form is the one
+that composes with a live slider):
 
 ```julia
 haskey(e.comp, :cross_speed_mps) &&
     (e.vel = Vec3(e.vel[1], Float64(e.comp[:cross_speed_mps]), e.vel[3]))
+e.pos = e.pos + e.vel * dt
 ```
+
+⚠⚠ **THE PIN GOES BEFORE THE INTEGRATE LINE, AND THIS IS NOT WHERE `alt_hold_m` PUTS IT** (advisor,
+load-bearing — the plan's own first draft had it after, copying `alt_hold_m` literally, and that is
+a BUG). `alt_hold_m` pins a **position**: the pin is idempotent AND is itself the observable, so
+after the update is correct. `cross_speed_mps` pins a **velocity that the `pos` update on the same
+tick has already consumed** — pinned after, the first step of every run advances on the AUTHORED
+`vel_y` and the knob is dead for one tick.
+
+⚠ **AND GATE 0's OWN BIT-IDENTITY TEST CANNOT SEE THAT BUG.** P4d compared `cross_speed_mps = 200`
+against a target authored `vel: [0, 200, 0]` — the two AGREE, so an ordering error is invisible.
+P4d is the BYTE-IDENTITY check, not the CORRECTNESS check. The discriminating tooth is a
+**DISAGREEING pair** (gate 1, below). ⚠ The probes escaped the bug only because they set `tgt.vel`
+BEFORE `tick!` — i.e. gate 0 measured the correct order while the plan's first draft wrote the wrong
+one, which is exactly the kind of gap that reaches a verifier green.
 
 ⚠ It must compose with `alt_hold_m` (one pins `pos.z`, the other `vel.y` — disjoint) and must NOT
 collide with the `a_lat_mps2` / `turn_sign` → `ManeuveringTarget` fork, whose `_lateral_accel` is
@@ -267,10 +281,19 @@ rather than silently branch-ordered (the slice-21 precedent).
 Loader (`core/src/scenario.jl`): the key lands beside `alt_hold_m`, validated finite at LOAD
 (convention 5), and declared a knob.
 
-**Teeth** (`test_radar.jl` / `test_missile.jl`): the presence gate is bit-identical when absent; a
-value equal to the authored `vel_y` is bit-identical to no key (the discriminator, MEASURED); the
-pin holds against an authored non-zero `vel_y`; it composes with `alt_hold_m`; a maneuvering target
-carrying it is a load error; draw-count identity across the knob.
+**Teeth** (`test_radar.jl` / `test_missile.jl`):
+
+- **BYTE-IDENTITY** — the presence gate is bit-identical when the key is absent (slices 1–29).
+- **THE KNOB-vs-RUNG DISCRIMINATOR** — `cross_speed_mps` EQUAL to the authored `vel_y` is
+  bit-identical to no key (P4d, `posdiff == 0` exactly).
+- ⭐⭐ **THE CORRECTNESS TOOTH — A DISAGREEING PAIR, WHICH IS THE ONLY ONE THAT CATCHES THE ORDERING
+  BUG.** Authored `vel: [0, 200, 0]` with `cross_speed_mps: 0` must be bit-identical to a target
+  authored `vel: [0, 0, 0]` with NO key — in particular `max|pos_y| == 0.0` EXACTLY. Pinned after
+  the integrate line it is ~0.2 m, not 0.0, and every equal-value test still passes.
+- the pin holds against an authored non-zero `vel_y` over many ticks (not just the first);
+- it composes with `alt_hold_m` (disjoint coordinates: one pins `pos.z`, the other `vel.y`);
+- a maneuvering target carrying it is a LOAD ERROR;
+- draw-count identity across the knob (class 4a, asserted).
 
 ## Gate 2 — telemetry and the wire
 
@@ -292,12 +315,21 @@ student who deepens the glass silently invalidates the R̂ they already set. Eve
 slice 26/28's radome HUD, and the button stays DROPPED (16/26/27/28/29/30 — the SIXTH slice in that
 family whose lesson is sliders with no button at all).
 
-Four proofs, per convention 14. The verifier's phases:
+**FOUR PROOFS, per convention 14** — `slice30_verify.gd`, `slice30_ui_test.gd`, the `Sandbox.tscn`
+headless smoke-load, and the windowed shot harness. ⚠ The list below is the FIRST proof's internal
+PHASES, not the four — do not let the heading and the content contradict each other (slice 21 lost a
+headline to exactly that class of proof-not-physics defect).
+
+`slice30_verify.gd` phases:
 
 1. **ENVELOPE / BORESIGHT** — sweep `cross_speed_mps` across the domain; assert the ring count is 6/7.
 2. **⭐ ENVELOPE / WORST-CASE SCALAR** — same sweep at `R̂ = R₀+2A`; assert 0/7 and quote both counts.
-3. **⭐⭐ THE PRICE** — `ω_ratio` and the miss across QUIET arms only (§6), showing the cost of the
-   guarantee; assert it grows as A deepens.
+   ⇒ the headline, in the envelope's own units.
+3. **⭐⭐ THE PRICE** — `ω_ratio` and the miss, asserted to grow as A deepens.
+   ⚠⚠ **QUIET-TO-QUIET, AND R̂ MUST BE MOVED TO THE WORST-CASE SCALAR *FOR EACH A*** (it is
+   `R₀+2A`, so it MOVES with A). At the boresight compensator most arms RING, and §6 forbids reading
+   `ω_ratio` off a ringing arm — implemented naively this phase becomes a ring-vs-quiet comparison
+   and the slice states §6 and violates it in the same file.
 4. **SUFFICIENT-NOT-TIGHT** — the envelope goes quiet at R̂ ≈ -0.28, above the rule's -0.33 (§3).
 5. **REPLAY** — held-seed bit-identical across a knob change (posdiff 0.0).
 6. **DOMAIN ENDPOINTS** — the dead point at vy = 0 (residual -0.0000) and the validity budget at the
