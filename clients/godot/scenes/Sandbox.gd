@@ -1359,7 +1359,26 @@ func _draw_airframe3d_hud() -> void:
 		# verbatim. It needs its own string because the lesson is not "the belief is wrong" — on the
 		# shipped arm the belief is a BETTER model of the glass than the one that stays quiet — it is
 		# that the belief is evaluated at an index the radome already bent.
-		if _telemetry.has(_af3d_missile + ".radome_sched_slope"):
+		# SLICE 30 — checked FIRST, and a SWITCH ahead of slice 29's (not an `or`): only a wire whose
+		# TARGET carries the crossing-speed knob ships `cross_speed_mps`, so 26/27/28/29 keep their
+		# labels verbatim. ⚠ NOT `radome_slope_worst` — gate 2 measured that key as ADDITIVE on every
+		# ripple-carrying wire, so 28/29 grow it too and would take this branch.
+		# ⚠ THE THIRD STATE IS THE WHOLE POINT, and it is why this is not a two-way label: quiet HERE
+		# is not the same claim as quiet EVERYWHERE. A student who dials one engagement quiet without
+		# reaching the aim point has bought nothing for the next one — that is the trap the envelope
+		# exists to show. The comparison is between two numbers the CORE ships (belief vs aim point),
+		# never a client-side threshold on the physics (convention 13; slice 27's `rh != 0.0` label
+		# is the precedent).
+		if _telemetry.has(_af3d_missile + ".cross_speed_mps"):
+			qr = _radome_qpeak                    # rides |r| here too (an envelope wire has a ripple)
+			var rh30 := float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0))
+			var aim30 := float(_telemetry.get(_af3d_missile + ".radome_slope_worst", 0.0))
+			if qr > 0.5:
+				lbl = "ENVELOPE — RINGING at this crossing"
+			else:
+				lbl = "AIMED AT R₀+2A — the SAFE side" if rh30 <= aim30 \
+					  else "QUIET HERE — R̂ above the aim point"
+		elif _telemetry.has(_af3d_missile + ".radome_sched_slope"):
 			qr = _radome_qpeak                    # rides |r| here too (a schedule wire has a ripple)
 			lbl = "SCHEDULED R̂ — RINGING at own INDEX" if qr > 0.5 \
 				  else "SCHEDULED R̂(look) — loop STABLE"
@@ -1464,7 +1483,42 @@ func _draw_airframe3d_hud() -> void:
 		# ⚠ Both arrive from the core as NUMBERS — the client never evaluates a curve or subtracts
 		# anything (convention 13, the slice-21 `rho_air` precedent). ⚠ And the index pair is on
 		# screen because without it the crossover looks like a contradiction rather than a mechanism.
-		if _telemetry.has(_af3d_missile + ".radome_sched_slope"):
+		# SLICE 30 — THE THREE LINES THAT ARE ITS LESSON, a SWITCH ahead of slice 29's (not an `or`):
+		# only a wire whose TARGET carries the crossing-speed knob ships `cross_speed_mps`, so
+		# 26/27/28/29 render byte-identically below. ⚠ THE DISCRIMINATOR IS *NOT*
+		# `radome_slope_worst`: gate 2 measured that key as ADDITIVE on every ripple-carrying wire,
+		# so slices 28 and 29 grow it too and it would capture their views.
+		# ⭐⭐ THE ONE LINE THE LESSON REQUIRES IS THE AIM POINT SHOWN *LIVE BESIDE* R̂. The rule is
+		# "put the scalar at or below the most negative slope this glass reaches ANYWHERE" — and the
+		# glass is a SLIDER here, so dragging A MOVES THE RULE'S OWN TARGET. Without this line a
+		# student who deepens the glass silently invalidates the R̂ they already set, which is the
+		# exact defect slice 28 ate once. ⚠ It arrives from the core as a NUMBER (`radome_slope_worst`
+		# = min(R₀, R₀+2A)); the client never evaluates the curve or adds anything (convention 13,
+		# the slice-21 `rho_air` precedent).
+		# ⚠ "OR BELOW", NEVER "= the threshold": the rule is SUFFICIENT, NEVER TIGHT (the envelope
+		# goes quiet ABOVE it, at −0.28 against −0.33), and the HUD is exactly where a student would
+		# read a bound as a measured boundary.
+		# ⚠ AND THE CROSSING SPEED IS ON SCREEN BECAUSE THE ENGAGEMENT IS THIS SLICE'S NEW AXIS: the
+		# residual below is a property of the engagement, not of the hardware, so the label that says
+		# WHICH engagement is being flown belongs beside it.
+		if _telemetry.has(_af3d_missile + ".cross_speed_mps"):
+			var rh30 := float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0))
+			var aim30 := float(_telemetry.get(_af3d_missile + ".radome_slope_worst", 0.0))
+			var saz30 := float(_telemetry.get(_af3d_missile + ".radome_slope_az", 0.0))
+			var rez30 := float(_telemetry.get(_af3d_missile + ".radome_residual_az", 0.0))
+			var vy30 := float(_telemetry[_af3d_missile + ".cross_speed_mps"])
+			# ⚠ WIDTHS ARE MEASURED, NOT GUESSED: ~55 characters fit at 15 px from `vp.x − 430`, and
+			# slice 28's first capture ran two lines off the right edge. Each line below is counted.
+			draw_string(_font, Vector2(vp.x - 430, 154), "R₀ %+.3f   R̂ %+.3f   AIM AT %+.3f or below" % [float(_telemetry.get(_af3d_missile + ".radome_slope", 0.0)), rh30, aim30],
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+			draw_string(_font, Vector2(vp.x - 430, 176), "engagement: crossing %.0f m/s   R(look) yaw %+.3f" % [vy30, saz30],
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45))
+			# coloured by the SAME peak-hold verdict as the headline (which rides |r| on a
+			# ripple-carrying wire), so a frame caught mid-swing cannot show an orange headline over
+			# a green residual (slice 27's shot-harness defect)
+			draw_string(_font, Vector2(vp.x - 430, 198), "ENGAGEMENT RESIDUAL %+.3f  ← THIS closes the loop" % rez30,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _radome_qpeak > 0.5 else Color(0.55, 1.00, 0.65))
+		elif _telemetry.has(_af3d_missile + ".radome_sched_slope"):
 			var lt29 := float(_telemetry.get(_af3d_missile + ".look_angle", 0.0))
 			var le29 := float(_telemetry.get(_af3d_missile + ".look_angle_est", 0.0))
 			var mde29 := float(_telemetry.get(_af3d_missile + ".radome_model_err_az", 0.0))

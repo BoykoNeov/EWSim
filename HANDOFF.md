@@ -685,11 +685,18 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   28's wire IS a scalar), the loop needs DWELL at a supercritical residual (so a SWEPT band does not
   license one either — the best post-hoc scalar matches the schedule), and ⭐⭐ THE RADOME CONSTRAINT
   IS ONE-SIDED, so a scalar at the envelope's worst-case slope is unconditionally stable ⇒ GAIN
-  SCHEDULING BUYS PERFORMANCE, NOT STABILITY.** The remaining deferrals from that thread:
-  ⭐ **THE ENVELOPE / ONE-SIDEDNESS SLICE** (slice 29's strongest successor — measured at its gate 0,
-  not shipped because it is multi-engagement; its enabling change is a presence-gated
-  `cross_speed_mps` on `ConstantVelocity`, exactly slice 18's `alt_hold_m`, which would ALSO retire
-  the constraint that forced slice 28 to relocate two proofs), an IMPERFECT GYRO (noise /
+  SCHEDULING BUYS PERFORMANCE, NOT STABILITY.** **Slice 30 then SHIPPED that last refutation as its
+  own slice, by making the ENGAGEMENT addressable: a presence-gated `cross_speed_mps` on
+  `ConstantVelocity` (exactly slice 18's `alt_hold_m`) turns the crossing speed into a slider, so the
+  claim that ranges over engagements becomes a RING COUNT over an envelope. The
+  boresight-characterized scalar — HARDWARE residual exactly 0.000 — rings at 6 of 7 crossing speeds;
+  the same kind of scalar aimed at the glass's worst-case slope (`radome_slope_worst` = `min(R₀,
+  R₀+2A)`, shipped as a number) rings at 0 of 7, at every glass depth measured. ⚠ The rule is
+  SUFFICIENT, NEVER TIGHT (the envelope is already quiet 0.05 above it). ⭐ And the bound is not
+  free: over-compensation de-tunes, so the scalar has TWO bounds — STABILITY FROM BELOW, ACCURACY
+  FROM ABOVE — and they close on each other as the glass worsens. ⚠ Slice 30 adds an AXIS, not a
+  mechanism: no new instability, no new cap, no new gain.** The remaining deferrals from that thread:
+  an IMPERFECT GYRO (noise /
   bias / scale-factor, the cheapest successor — a scale-factor error lands back on the residual),
   ESTIMATING `R̂` IN FLIGHT (blocked on slice 26's non-identifiability in closed loop), the
   ANGLE-DOMAIN corrector as its own A/B, a 2-D slope `R(look_az, look_el)` or an ASYMMETRIC error

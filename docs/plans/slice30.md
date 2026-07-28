@@ -506,5 +506,29 @@ headline to exactly that class of proof-not-physics defect).
       while the same amplitude NaNs its neighbours; measured finite, no defect). Three advisor calls landed: the `min` instead of the literal
       `R₀+2A`, the phase-4 `decide!` site for `cross_speed_mps`, and the target-scoped `set_param`
       check that gate 3's whole approach depends on.
-- [ ] Gate 3 — scenario + the four proofs; the 26/27/28/29 verifiers re-run to the digit.
+- [x] Gate 3 — scenario + the four proofs; the 26/27/28/29 verifiers re-run to the digit
+      (0.80408 / 0.76836 / 1.04145 / 0.63631). **5617 → 5644 (+27)**, full suite green. The
+      verifier flies **31 arms** and passed on its FIRST real run with no bound adjustment, because
+      every number was measured on the SHIPPED YAML at ITS OWN SEED first (probes 12/13/14) rather
+      than inherited from the seed-28 tables. **THREE gate-3 corrections, all from the advisor pass
+      that opened the gate:**
+      **(1) ⚠⚠ THE PRICE COULD NOT BE ASSERTED ON THE MISS** — §2's column is a PER-TICK CPA and the
+      verifier reads FRAMES on an ~11 m grid, so 0.213-vs-1.075 m is inside the sampling error (the
+      defect slice 27's verifier ate). Moved to `ω_ratio` (0.7806 / 0.5647 / 0.4035, 1.93×), with
+      the miss ONE-SIDED everywhere except the domain corner — and that arm moved to **vy = 0**,
+      where the de-tune miss is largest (21.680 vs 4.242 m, a 17 m gap that clears the grid; at
+      vy = 200 the same pair is 10.0 vs 0.6 and would have measured the emit rate).
+      **(2) §6 IS A PRECONDITION, NOT A CAVEAT** — each price arm asserts `rms r` QUIET *before* its
+      `ω_ratio` is read, else the phase silently becomes the ring-vs-quiet comparison §6 forbids.
+      **(3) ⭐ ToF VARIES ARM TO ARM — A FIRST FOR THIS ARC** (9.4 s at vy = 0 to 18.3 s at the
+      corner): `STEPS` sized off the SLOWEST arm (20000) AND every arm asserts it reached CPA, since
+      an arm that runs out of steps still closing reports its LAST RANGE as a "miss". Measured: at
+      15000 steps vy = 400 reported 184.8 / 491.4 / 387.3 m — all three were last closing ranges.
+      **Two more findings of the gate itself:** the "sufficient, never tight" bracket was measured
+      rather than rounded (§3 said ≈ −0.28; the envelope is 0/7 by −0.27, and the last DECISIVE ring
+      is at −0.24 / 0.70899 — −0.26 rings at only 1.06× the verdict line and is NOT asserted); and
+      ⚠⚠ the client's HUD discriminator is **`cross_speed_mps`, not `radome_slope_worst`** — gate 2
+      measured the aim point as ADDITIVE on every ripple-carrying wire, so 28/29 grow it and
+      switching on it would capture their views (both UI mirrors now CARRY it, so the wrong choice
+      would be caught).
 - [ ] Docs — `docs/STATUS.md` as-built, `CLAUDE.md` status line, `HANDOFF.md` §11, memory.

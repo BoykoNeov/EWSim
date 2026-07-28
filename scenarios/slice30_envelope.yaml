@@ -1,0 +1,240 @@
+# slice30_envelope — THE ENVELOPE, AND THE ONE-SIDED CONSTRAINT
+# (HANDOFF §11 Tier-A, slice 30 gate 3). The EIGHTH slice of the bank-to-turn / 3-D arc (23 = the
+# 6-DOF substrate + skid-to-turn, 24 = bank-to-turn + roll-lag, 25 = a seeker in the 6-DOF loop,
+# 26 = the radome parasitic loop, 27 = the compensation autopilot, 28 = the slope CURVE, 29 = the
+# SCHEDULED compensator), and the deferral slice 29 named as its own STRONGEST successor.
+#
+# Slice 26 measured — and never used — the fact that the radome constraint is ONE-SIDED: only a
+# NEGATIVE residual closes the parasitic loop, while a POSITIVE one merely de-tunes the seeker. Read
+# as a design rule that is worth more than the whole scheduling apparatus slices 27–29 built:
+#
+# > THE LESSON, IN ONE SENTENCE. Because only a negative residual rings, stability is
+# > UNCONDITIONALLY PURCHASABLE with a SCALAR aimed at the envelope's worst-case slope — so what a
+# > SCHEDULE actually buys is ACCURACY, and the engineering question stops being "how well do I know
+# > my glass?" and becomes "how much navigation ratio am I willing to pay to stop caring?"
+#
+# ⭐⭐ SO THIS SLICE ADDS AN AXIS, NOT A MECHANISM: THE ENGAGEMENT. Slices 26–29 all flew ONE
+# engagement, so "the residual" could be spoken of as a number. Here the crossing speed is a SLIDER
+# (`cross_speed_mps`, the gate-1 seam — exactly slice 18's `alt_hold_m` in shape), and the same glass
+# with the same compensator visits a BAND of look angles as the engagement changes. Against the
+# BORESIGHT-characterized scalar slice 28 shipped (R̂ = −0.03, the hardware residual EXACTLY 0.000)
+# the envelope rings at 6 of its 7 speeds. Drag R̂ down to the glass's worst-case slope — the number
+# the core ships as `radome_slope_worst` = min(R₀, R₀+2A) — and it rings at ZERO of them, at every
+# glass depth measured (a 3× range of slope span). ⇒ GAIN SCHEDULING BUYS PERFORMANCE, NOT
+# STABILITY, and slice 27's "know your slope to within 0.38/(N·ρ)" is revealed as a TWO-SIDED reading
+# of a ONE-SIDED constraint.
+#
+# ⭐ AND THE BOUND IS NOT FREE — THE SECOND HALF OF THE LESSON IS THE PRICE. Over-compensation
+# de-tunes the seeker: the SAME guarantee costs ω_ratio 0.605 → 0.407 → 0.307 as the glass deepens
+# (|2A| 0.20 → 0.30 → 0.40), because the aim point R₀+2A moves down with it. So the scalar has TWO
+# bounds — STABILITY FROM BELOW, ACCURACY FROM ABOVE — and they close on each other as the glass
+# worsens. That closing window is the classical fixed-gain-versus-gain-scheduling argument, made
+# quantitative on a measured plant.
+#
+# ⚠ THE RULE IS SUFFICIENT, NEVER TIGHT, AND THE SCENARIO SAYS SO RATHER THAN IMPLYING IT. On this
+# glass the envelope actually goes quiet at R̂ ≈ −0.28, ABOVE the rule's −0.33, because the loop needs
+# the residual to reach the ONSET (≈ −0.055, slice 29 P10b) and not merely to be negative. The rule
+# carries ~0.05 of built-in margin: a BOUND TO BE EXCEEDED, not an estimate to be matched. Never
+# present −0.33 as a measured threshold.
+#
+# ⚠ THE COMPENSATOR HERE IS SLICE 27's SCALAR, DELIBERATELY — there is NO `radome_ripple_est` and NO
+# `radome_ripple_k_est` on this wire. A schedule would confound the whole point (the claim is about
+# what a SCALAR can guarantee) and it would also route the client to slice 29's HUD branch.
+#
+# ⚠ ω_ratio IS A DE-TUNE MEASURE ONLY ON A QUIET ARM (gate-0 P4c). On a RINGING arm it reads
+# 1.51–16.0 — that is the limit cycle corrupting the reported LOS rate, not a de-tune (slice 26:
+# `omega_ratio` is a DIAGNOSTIC, never the mechanism). The price is quoted as the drop ACROSS QUIET
+# ARMS, never as "1.58 → 0.41", which silently compares a ringing number to a quiet one.
+#
+# ⚠ NO NEW INSTABILITY, NO NEW CAP, NO NEW GAIN AND NO NEW MECHANISM WHATSOEVER. The loop is slice
+# 26's. Slice 20's "degenerative spiral" language stays forbidden here; slice 26's stays forbidden
+# elsewhere. What is new is the AXIS, and the axis is what turns slice 26's sign observation into a
+# design rule.
+#
+# ⚠ THE NON-MONOTONE SWEEP SLICE 28 HAD TO RELOCATE IS *NOT* RESHIPPED AS A PROOF HERE, AND THAT IS
+# THE HONEST DELIVERABLE. The constraint IS retired in principle — target velocity is a comp key now
+# — but slice 28's QUIET→RING→QUIET shape does not reproduce at THIS glass: at A = −0.15 the sweep
+# rings from 80 to 400 with no quiet upper end, because the deeper ripple keeps R(look) supercritical
+# across the whole band. The shape is a property of the (A, k) pair, not of the knob. Slice 28's
+# relocated phases therefore STAY in `test_missile.jl`, where they are already proven; the
+# non-monotone remains reachable by dragging A back to −0.10. Moving a proof to a slider buys
+# presentation, not evidence.
+#
+# ⚠ THE METRIC, THE WINDOW AND THE CHANNEL ARE SLICE 28/29's, INHERITED WITH THEIR REASONS: rms r
+# (YAW) in the RANGE BAND r ∈ [500, 3000] m — the lead is in azimuth so the ring is in yaw; a
+# crossing wire's whole-approach rms r carries a legitimate front-loaded baseline; arms with
+# different ToF would otherwise compare different parts of the engagement, and THAT MATTERS MORE HERE
+# THAN ANYWHERE (the crossing speed is a slider, so ToF genuinely varies arm to arm — the first wire
+# in this arc where it does). ⚠ QUOTE THE WINDOW WITH EVERY NUMBER. ⚠ rms, NEVER the peak.
+# ⚠ THE MISS IS NOT THE METRIC — every arm on the shipped envelope HITS, and a frame-sampled CPA on
+# an ~11 m grid cannot resolve the sub-metre price differences anyway ([[ewsim-missile-verifier-
+# sampling]]: a HIT samples COARSELY; slice 27's verifier ate exactly that defect).
+#
+# NO FIDELITY BUTTON, DELIBERATELY — slice 26's `radome_view` marker is INHERITED UNCHANGED and the
+# client keeps the button DROPPED. This is the SIXTH slice in that family (16, 26, 27, 28, 29, 30)
+# whose lesson is sliders with no button at all. All three knobs are in-domain slider values with no
+# distinct code path behind them (atmosphere.jl's KNOB-vs-RUNG discriminator): A = 0 is bit-identical
+# to the ripple key being absent (slice 28, measured) and `cross_speed_mps` EQUAL to the authored
+# `vel_y` is bit-identical to the key being absent (gate 1, measured).
+#
+# NAMED APPROXIMATIONS (§1): a PERFECT rate gyro (slice 27's — an imperfect one is a named deferral,
+# and a scale-factor error lands straight back on the belief); the two-term feed-forward leaves the
+# PITCH→AZIMUTH cross-term uncancelled (slice 27's gate-1 finding); a SYMMETRIC radome and ONE scalar
+# curve PER AXIS (slice 28's — an asymmetric curve would make the crossing DIRECTION matter, which
+# composes directly with this slice's new axis); no seeker FOV / gimbal limit — sharper again here,
+# since this slice's UPPER crossing-speed endpoint is set by the look angle approaching 30°, which is
+# exactly where a real gimbal would already have stopped; ONE isotropic σ and a TRUTH Vc (slice 11's
+# scope); diagonal inertia, symmetric cruciform, lift drag-free (slices 23/24); constant ρ — a FLIGHT
+# CONDITION, so say "low dynamic pressure", never "high altitude". The small-angle bend model is held
+# INSIDE its validity budget BY MEASUREMENT: 0.0% of in-band frames past a 30° look angle across the
+# whole shipped envelope, and the crossing-speed CEILING is where that budget starts to go (38.6% at
+# vy = 450 on SHALLOW glass, 100% at 500).
+#
+# Class 4a: DRAW-INVARIANT (2 randn/tick — a target-velocity pin adds no draw) YET TRAJECTORY-
+# CHANGING. SIXTH consecutive RNG-live slice (25, 26, 27, 28, 29, 30): the seed is load-bearing and
+# conventions 3/11 apply. Draw-count identity is ASSERTED, not assumed.
+# UNITS (§1 trifecta): pos/vel SI; angles rad; σ_seek in RADIANS; `cross_speed_mps` in m/s and SIGNED
+# (a negative crossing flies the mirror engagement); `radome_slope`, `radome_ripple` and
+# `radome_slope_est` DIMENSIONLESS and SIGNED (dε/d(look angle)); `radome_ripple_k` per RADIAN of
+# look angle; I in kg·m²; ρ in kg/m³; launch ELEVATION in DEGREES → radians at the loader.
+# dt = 1e-3 / emit_every = 16.
+name: slice30_envelope
+seed: 30
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # FIVE keys, NONE toggled — the lesson is the SLIDERS (the slice-16/20/26/27/28/29 shape).
+  # `airframe` HELD at :six_dof (the radome and its compensator are both INERT without it — there is
+  # no attitude to look through; the gate is on the LIVE rung, never on `:att_q`, which is minted
+  # once and never deleted: the slice-21/23/26/27/28/29 latent-bug class), `seeker_axes` HELD at
+  # :az_el (a two-angle seeker is what HAS a look angle in azimuth at all), `seeker` HELD at
+  # :filtered, `autopilot` :alpha and `guidance` :pn as in 23–29. `steering` is OMITTED (the loader
+  # default IS :skid_to_turn — slice 24 measured BTT binding the aero ceiling 93.2% of its approach,
+  # which would confound the metric).
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+
+entities:
+  # The interceptor — slices 23–29's plant and launch condition, UNCHANGED. n_pn = 8 is slice 27's,
+  # AUTHORED and NEVER A KNOB (26/27/28/29 all disqualified it: it moves the loop gain the lesson is
+  # ABOUT, so a student could cross the boundary with the belief untouched — the confounded-lever
+  # rule).
+  #
+  # THE GLASS:
+  #   radome_slope    = −0.03 — the BORESIGHT slope R₀, a GOOD radome on slice 26's scale, and
+  #     AUTHORED (not a knob): R₀ is the level the compensator was characterized against, and a
+  #     student who can move BOTH the level and the belief has no comparison left. A is the knob
+  #     because A is what makes the glass a CURVE, i.e. what the rule has to bound.
+  #   radome_ripple   = −0.15 — the amplitude A, slice 29's depth. A KNOB, and the one that MOVES
+  #     THE RULE'S OWN TARGET (R₀+2A). ⚠ A = −0.10 was REJECTED as the shipped glass even though it
+  #     ships slice 28's non-monotone sweep for free, because its PRICE is 0.213 m — a price a
+  #     student cannot see. The slice's own headline is the two bounds; take the price half.
+  #   radome_ripple_k = 12.0 — a 30° ripple period, so the curve's extremum sits on the ~15° lead
+  #     this crossing geometry holds at the default speed. ⚠ STILL NOT A KNOB (slice 28's
+  #     non-monotonicity finding stands).
+  #
+  # THE BELIEF (slice 27's SCALAR — no schedule on this wire, deliberately):
+  #   radome_slope_est = −0.03 — R̂, CHARACTERIZED AT BORESIGHT: exactly right at look = 0 (R(0) = R₀
+  #     for every A), and exactly wrong where the loop is closed. ⚠ THE SHOWCASE OPENS ON THE DISEASE
+  #     (the slice-25/26/27/28/29 shape): the body is already ringing when the client connects, with
+  #     a compensator whose HARDWARE residual is EXACTLY 0.000.
+  #   sigma_seek = 5e-5 — slices 26–29's AUTHORED CONSTANT, not a knob (a knob that DEGRADES the
+  #     lesson beside it).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               radome_slope: -0.03, radome_ripple: -0.15, radome_ripple_k: 12.0,
+               radome_slope_est: -0.03}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # ⭐ THE CROSSING TARGET, AND ITS SPEED IS NOW THE SLICE'S OWN AXIS. Same start point as 23–29
+  # (cross-range +Y = 2000 m off the x–z plane) and the same authored +200 m/s crossing, but the
+  # velocity is now PINNED EVERY TICK from `cross_speed_mps` (the gate-1 `ConstantVelocity` seam,
+  # applied BEFORE the pos update — pinned after, the first step of every run would advance on the
+  # AUTHORED vel_y and the knob would be dead for one tick). AERODYNAMICALLY FREE (no target
+  # airframe — the lesson is about the interceptor's sensor, not about the target).
+  # ⚠ THE AUTHORED `vel` AND THE PIN AGREE AT THE DEFAULT, ON PURPOSE: that equality is the
+  # knob-vs-rung discriminator, and gate 1 measured it bit-identical to the key being absent. ⚠ It is
+  # ALSO why the ordering bug is invisible to an equal-value test — the discriminating tooth is a
+  # DISAGREEING pair, and it lives in `test_radar.jl`.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 200.0, 0.0]
+    target: {rcs_m2: 1.0, cross_speed_mps: 200.0}
+
+knobs:
+  # ⭐⭐ THREE KNOBS, AND CONVENTION 9 IS SATISFIED BY A MEASUREMENT, NOT BY COUNTING SLIDERS. They
+  # are legal iff they are three terms of ONE quantity — the ENGAGEMENT residual the core has shipped
+  # as `radome_residual_az` since slice 28 (vy sets the look angle the engagement holds, A sets the
+  # glass's slope there, R̂ sets the belief). Over the full reachable grid (245 arms), the fraction of
+  # in-band ticks whose residual sits below the onset predicts the verdict: of the 196 arms where it
+  # is EXACTLY ZERO, 196 are quiet and NONE rings. ⚠⚠ QUOTE THE 196/196, NOT THE 47/47 — a RINGING
+  # arm's look band swings BECAUSE it rings, so "supercritical on a ringing arm" is CORROBORATION and
+  # never proof (slice 29's P10a); "never supercritical on a quiet arm" has no such circularity, and
+  # it is the direction convention 9 actually needs. ⭐ The only two exceptions are QUIET arms with
+  # brief (3.9%, 9.3%) supercritical excursions that never got the DWELL — slice 29's P3 and this
+  # slice's own P1 arriving independently out of a grid built to test neither.
+  #
+  # KNOB 1 (`cross_speed_mps`, the NEW AXIS and the reason this slice could not ship as part of 29).
+  # ⚠ THE FLOOR IS A DEAD POINT AND IT IS DEAD EXACTLY: at vy = 0 the collision course carries no
+  # lead (look 0.04°), so R(look) = R₀ and the engagement residual is −0.0000 — the glass's curve is
+  # invisible and this whole slice has nothing to say. That is the measurement that makes the axis
+  # real. The CEILING is the MODEL-VALIDITY budget, read at the SHALLOW end of the A domain (at
+  # vy = 450, 38.6% of in-band frames pass a 30° look angle; at 500, 100%) — a domain chosen on deep
+  # glass alone would have been wrong, because at A = −0.15 the same 450 is still 0.0%. Slice 28's
+  # other reason corroborates: the closing speed collapses 688 → 362 → 241 across this range.
+  # ⚠ A STEP IS NOT A SWEEP: dragging this slider to a new CONSTANT speed gives a new FROZEN lead —
+  # dwell at the new operating point — so the loop builds exactly as it does from t0 (0.904 at every
+  # switch time tested, and under 1/2/4/8 s ramps). Slice 29's P3 is INTACT: a genuine sweep keeps
+  # moving THROUGH the supercritical band and does not dwell. ~0.5 s to establish, against a 4+ s
+  # measurement band.
+  #
+  # KNOB 2 (`radome_ripple` A, the GLASS DEPTH — slice 28's knob, its domain re-measured here).
+  # ⚠ IT MOVES THE RULE'S OWN TARGET, which is exactly why the HUD shows R₀+2A LIVE beside R̂: a
+  # student who deepens the glass silently invalidates the R̂ they already set. THE FLOOR IS THE
+  # CORNER, MEASURED RATHER THAN INFERRED: at A = −0.25 with the R̂ slider at its TOP the validity
+  # budget blows to 0.6% — and ⚠ the blown cell is at the UNDER-compensated corner, the opposite of
+  # what row-wise scans suggested. The CEILING (0.00) is the flat-glass limit and is bit-identical to
+  # the ripple key not existing (slice 28, measured).
+  #
+  # KNOB 3 (`radome_slope_est` R̂, slice 27's belief — INHERITED, its domain WIDENED). The FLOOR
+  # contains R₀+2A = −0.43 for the DEEPEST glass with margin and puts the DE-TUNE FACE on show (the
+  # miss reaches 21.6 m at the corner) — the price half of the lesson, reachable with one slider.
+  # The CEILING (0.00) is physical, as in slice 27/28: a POSITIVE R̂ compensates the WRONG WAY and is
+  # exactly a worse radome.
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED, AND THE VERIFIER ASSERTS THEIR ABSENCE: `n_pn` and
+  # `rho` move the LOOP GAIN the lesson is about; `radome_slope` is the level the belief was
+  # characterized against; `radome_ripple_k` is non-monotone (slice 28); `radome_ripple_est` /
+  # `radome_ripple_k_est` would put slice 29's SCHEDULE on a wire whose whole claim is about what a
+  # SCALAR can guarantee; `af_alpha_max` sets the cycle's AMPLITUDE; `sigma_seek` compresses the
+  # contrast; `speed` is the slice-19 DEAD knob.
+  - {target: tgt1, key: cross_speed_mps, min: 0.0, max: 400.0,
+     label: "ENGAGEMENT: target crossing speed (m/s) — the ENVELOPE axis; at 0 there is no lead, the seeker sits on boresight and the curve is invisible"}
+  - {target: m1, key: radome_ripple, min: -0.2, max: 0.0,
+     label: "RADOME: slope ripple A (the glass) — deepening it MOVES the rule's own aim point R₀+2A, shown live in the HUD"}
+  - {target: m1, key: radome_slope_est, min: -0.55, max: 0.0,
+     label: "COMPENSATOR: scalar belief R̂ — drag to the HUD's R₀+2A and the WHOLE envelope goes quiet (sufficient, never tight)"}

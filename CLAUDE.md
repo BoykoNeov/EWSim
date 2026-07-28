@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–29 COMPLETE & green — 5500 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–28
+**Slices 1–30 COMPLETE & green — 5644 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–30
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
@@ -109,7 +109,26 @@ quoted as a median there (the ring/quiet VERDICT is always on rms r) — and the
 this wire (≈ −0.056, from a constant-R̂ sweep, whose R̂' ≡ 0 makes its residual unambiguous). What IS legitimate on a
 ringing arm is comparing the bench and loop numbers TO EACH OTHER, since both come from identical frames — and the
 verifier's first run failed at 1.6× using a MEAN OF ABSOLUTES (inflated by the ring's symmetric excursions); the
-MEDIAN gives 3.7×. (5500)**
+MEDIAN gives 3.7×. (5500)
+**And slice 30 SHIPPED 29's own strongest deferral — THE ENVELOPE, AND THE ONE-SIDED CONSTRAINT — by making the
+ENGAGEMENT addressable (a presence-gated `cross_speed_mps` on ConstantVelocity, exactly slice 18's `alt_hold_m`).
+⭐⭐ THE HEADLINE IS A RING COUNT, NOT A RATIO: 26–29 each flew ONE engagement, so "the residual" could be spoken of
+as a number; here the crossing speed is a SLIDER and the envelope is the worst cell over vy ∈ {0,80,130,200,260,320,
+400}. The BORESIGHT-characterized scalar (hardware residual EXACTLY 0.000) rings 6/7; a scalar aimed at the glass's
+worst-case slope (`radome_slope_worst` = min(R₀,R₀+2A) = −0.33, READ OFF THE WIRE) rings 0/7 — at every glass depth
+measured. ⇒ STABILITY IS UNCONDITIONALLY PURCHASABLE WITH A SCALAR (it errs in the HARMLESS direction everywhere),
+so GAIN SCHEDULING BUYS PERFORMANCE, NOT STABILITY. ⚠ SUFFICIENT, NEVER TIGHT — 0/7 already at −0.28, and the
+bracket is MEASURED (last decisive ring −0.24/0.709; the boundary between −0.26 [1.06× the line, MARGINAL, NOT
+asserted] and −0.27). ⭐ THE BOUND IS NOT FREE ⇒ TWO BOUNDS, STABILITY FROM BELOW AND ACCURACY FROM ABOVE, closing on
+each other as the glass worsens: ω_ratio 0.781/0.565/0.404 at A = −0.10/−0.15/−0.20 (the aim point itself moving
+−0.23→−0.43). ⚠⚠ THE PRICE IS ON ω_ratio, NOT THE MISS (advisor): gate 0's price column is a PER-TICK CPA and the
+verifier reads FRAMES on an ~11 m grid — slice 27's defect. The ONE miss claim is the DOMAIN CORNER, flown at vy = 0
+because the de-tune miss is largest where the lead is smallest (21.68 vs 4.24 m; at vy = 200 it is 10.0 vs 0.6 and
+would measure the emit rate). ⚠⚠ AND ω_ratio IS A DE-TUNE MEASURE ONLY ON A QUIET ARM, so every price arm asserts
+QUIET first. ⚠ ToF VARIES ARM TO ARM (9.4→18.3 s) — a first for this arc: STEPS sized off the SLOWEST arm AND every
+arm asserts it REACHED CPA. ⚠ NO new instability/cap/gain — 30 adds an AXIS. ⚠⚠ The HUD discriminator is
+`cross_speed_mps`, NOT `radome_slope_worst` (gate 2: the aim point is ADDITIVE on every ripple wire, so 28/29 grow
+it). 196/196 quiet-arm grid settles convention 9 for THREE knobs. Class 4a, button DROPPED (6th). (5644)**
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
@@ -782,12 +801,11 @@ OVER THE BAND THE ENGAGEMENT VISITS". And slice 29 cashed 28's OWN named success
 compensator — where the answer turns out to hinge on something a scalar never had to face: a schedule must be
 EVALUATED somewhere, and the only look angle a guidance computer owns is the one the radome already bent. ⇒ what
 closes the loop is the residual at the COMPENSATOR'S OWN INDEX, and a schedule that is a BETTER model of the glass
-can ring while a much worse one stays quiet.** The NEXT named candidates: ⭐ THE ENVELOPE / ONE-SIDEDNESS SLICE
-(slice 29's own strongest successor, fully measured at ITS gate 0 and not shipped because it is
-MULTI-ENGAGEMENT: over-compensate deliberately to the envelope's worst-case slope and pay for it in ω_ratio /
-miss. ⚠ Its enabling change is small and precedented — a presence-gated `cross_speed_mps` on ConstantVelocity,
-exactly slice 18's `alt_hold_m` — and it would ALSO retire the constraint that forced slice 28 to relocate two
-proofs);
+can ring while a much worse one stays quiet. And slice 30 SHIPPED 29's own strongest deferral — THE ENVELOPE AND
+THE ONE-SIDED CONSTRAINT — by making the ENGAGEMENT a slider (`cross_speed_mps`): because only a NEGATIVE residual
+rings, a SCALAR aimed at the glass's worst-case slope is stable in EVERY engagement (6/7 → 0/7), so what a
+schedule buys is ACCURACY, not stability — and the bound is paid for in navigation ratio, giving the scalar TWO
+bounds that close on each other as the glass worsens.** The NEXT named candidates:
 an IMPERFECT GYRO (noise / bias / scale-factor — slice 27's gyro is
 PERFECT by §1, and a scale-factor error is exactly a multiplicative error on R̂, i.e. it lands back on the
 residual, which makes it the cheapest well-motivated successor); ESTIMATING R̂ IN FLIGHT (⚠ slice 26's P7A is a
@@ -801,8 +819,9 @@ target (the demand rotating faster than the roll loop follows, a DISTINCT face f
 the AERO + INERTIAL CROSS-COUPLING / DEPARTURE that makes a real BTT airframe go OUT-OF-PLANE during a hard roll
 (non-diagonal I, Clβ/Cnp/Clr; diagonal I + symmetric cruciform + coordinated flight keep 23/24 clean).
 What else remains of §11 Tier-A/B/C: land clutter [terrain banked the heightfield]; a seeker FOV / gimbal limit
-(slice 26 made the look angle a first-class quantity and slice 28 made the whole lesson turn on it — a real
-seeker cannot hold 30° indefinitely, so this is now the sharpest of these); monopulse / az×el CFAR. ⚠ Slice 21 did NOT finish the
+(slice 26 made the look angle a first-class quantity, slice 28 made the whole lesson turn on it, and slice 30's
+crossing-speed CEILING is set by the look angle approaching 30° — exactly where a real gimbal would already have
+stopped, so this is now the sharpest of these); monopulse / az×el CFAR. ⚠ Slice 21 did NOT finish the
 atmosphere: ρ(z) reaches the COUPLED airframe path ONLY. The point-mass/ballistic drag path keeps a constant ρ
 because `dynamics.jl`'s steppers take a `v -> a(v)` closure with NO position in it, and changing that contract to
 `(p,v) -> a` touches slice 8's `rk4_step`/`euler_step` — the byte-identity surface of EVERY ballistic slice — for a

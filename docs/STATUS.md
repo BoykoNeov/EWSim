@@ -3902,6 +3902,142 @@ finding about DWELL).
 
 ---
 
+**Slice 30 — THE ENVELOPE, AND THE ONE-SIDED CONSTRAINT (HANDOFF §11 Tier-A)** — the EIGHTH slice of
+the bank-to-turn / 3-D arc, and the deferral slice 29 named as its own STRONGEST successor. Slice 26
+measured — and never used — the fact that the radome constraint is **ONE-SIDED**: only a NEGATIVE
+residual closes the parasitic loop, while a POSITIVE one merely de-tunes. Read as a design rule that
+is worth more than the whole scheduling apparatus slices 27–29 built. **⇒ THE LESSON: because only a
+negative residual rings, stability is UNCONDITIONALLY PURCHASABLE with a SCALAR aimed at the
+envelope's worst-case slope — so what a SCHEDULE actually buys is ACCURACY, and the engineering
+question stops being "how well do I know my glass?" and becomes "how much navigation ratio am I
+willing to pay to stop caring?"** ⭐ **THIS IS THE FIRST SLICE OF THE ARC WHOSE PHYSICS WAS ALREADY
+MEASURED BEFORE IT BEGAN** — slice 29's gate 0 produced the result as a REFUTATION of its own first
+plan and then could not ship it, because the claim ranges over ENGAGEMENTS and the engagement was not
+addressable. **⇒ SLICE 30 ADDS AN AXIS, NOT A MECHANISM: no new instability, no new cap, no new gain.
+Slice 20's "degenerative spiral" language stays forbidden here; slice 26's stays forbidden
+elsewhere.**
+
+⭐⭐ **THE HEADLINE IS A RING COUNT OVER AN ENVELOPE, NOT A RATIO ON ONE ARM.** Slices 26–29 each flew
+ONE engagement, so "the residual" could be spoken of as a number. Here the crossing speed is a SLIDER
+(`cross_speed_mps`, the gate-1 `ConstantVelocity` seam — exactly slice 18's `alt_hold_m` in shape),
+the ENVELOPE is the worst cell over vy ∈ {0, 80, 130, 200, 260, 320, 400}, and a compensator PASSES
+stability iff it rings at ZERO of the seven. **The BORESIGHT-characterized scalar slice 28 shipped —
+whose HARDWARE residual against R₀ is EXACTLY 0.000 — rings at 6/7. A scalar aimed at the glass's
+worst-case slope (`radome_slope_worst` = `min(R₀, R₀+2A)` = −0.33, READ OFF THE WIRE) rings at 0/7**,
+at every glass depth measured (a 3× range of slope span, gate 0). Measured margins on the shipped
+wire: smallest RING **0.85462** (2.85× above the 0.30 verdict line), largest quiet under the
+worst-case scalar **0.05853** (5.13× below it). ⚠ **A COUNT HAS NO TOLERANCE TO ABSORB NOISE** — gate
+2 therefore re-ran all 14 arms at a second seed (6/7 vs 6/7, 0/7 vs 0/7; every cell moved < 0.2%),
+and the two MARGINAL cells are teeth in `test_missile.jl`. ⭐ **THE ONE-SIDEDNESS AS A NUMBER**: on
+the same glass at the same crossing speed the boresight scalar leaves a NEGATIVE engagement residual
+(**−0.193**, rms `ω_r` 1.07180) and the worst-case scalar an over-compensated POSITIVE one (**+0.017**,
+rms 0.05853).
+
+⚠ **THE RULE IS SUFFICIENT, NEVER TIGHT, AND THE BRACKET IS MEASURED RATHER THAN ROUNDED.** The
+envelope is ALREADY 0/7 at `R̂ = −0.28`, above the rule's −0.33, because the loop needs the residual
+to reach the ONSET (≈ −0.055) and not merely to be negative; at `R̂ = −0.24` the envelope's
+last-ringing cell (vy = 200) still rings decisively at **0.70899**. ⚠ The true boundary sits between
+−0.26 (0.3168 — 1.06× the verdict line, MARGINAL) and −0.27 (0/7), and **a marginal cell is not
+asserted** (slice 26's post-commit rule). **Never present −0.33 as a measured threshold.**
+
+⭐⭐ **AND THE BOUND IS NOT FREE — THE SECOND HALF IS THE PRICE, AND THE SCALAR THEREFORE HAS TWO
+BOUNDS: STABILITY FROM BELOW, ACCURACY FROM ABOVE.** They close on each other as the glass worsens —
+the classical fixed-gain-versus-gain-scheduling argument, made quantitative on a measured plant.
+Measured QUIET-TO-QUIET at the shipped engagement with `R̂` re-aimed at each glass's own wire-read aim
+point: `ω_ratio` **0.7806 / 0.5647 / 0.4035** at A = −0.10 / −0.15 / −0.20 (**1.93×**), the aim point
+itself moving −0.23 → −0.33 → −0.43. ⚠⚠ **THE PRICE IS ASSERTED ON `ω_ratio`, NOT ON THE MISS
+(advisor, and it is a REAL defect avoided)**: gate 0's price column (0.213 / 1.075 / 4.150 m) came
+from a Julia probe computing a PER-TICK CPA, while the verifier reads FRAMES on an ~11 m grid — the
+exact defect slice 27's verifier ate ([[ewsim-missile-verifier-sampling]]: a HIT samples COARSELY).
+⚠⚠ **AND `ω_ratio` IS A DE-TUNE MEASURE ONLY ON A QUIET ARM** (on a ringing one it reads 1.5–16 —
+the cycle corrupting the reported LOS rate, slice 26: a DIAGNOSTIC, never the mechanism), so every
+price arm asserts `rms r` QUIET *before* its `ω_ratio` is read; implemented naively the phase becomes
+the ring-vs-quiet comparison the slice forbids and the file would state that rule and violate it.
+⭐ **THE ONE PLACE A MISS CARRIES A CLAIM IS THE DOMAIN CORNER, AND IT IS FLOWN AT vy = 0 FOR THAT
+REASON** — the de-tune miss is largest where the lead is smallest: at A = −0.20 the over-compensated
+floor `R̂ = −0.55` misses by **21.680 m** against **4.242 m** at its own aim point (5.1×, a 17 m gap
+that clears the frame grid), still QUIET, `ω_ratio` 0.2396 vs 0.3025. At vy = 200 the same pair is
+10.0 vs 0.6 m — INSIDE the sampling error, and asserting it there would measure the emit rate.
+
+⚠ **ToF VARIES ARM TO ARM — THE FIRST WIRE IN THIS ARC WHERE IT DOES** (9.4 s at vy = 0 to 18.3 s at
+the domain corner), which is what makes slice 28's fixed RANGE BAND [500, 3000] m load-bearing here
+rather than merely inherited, and why every arm asserts it REACHED CPA before its miss is quoted
+(`STEPS = 20000`, sized off the slowest arm — an arm that runs out of steps still closing reports its
+LAST RANGE as a "miss"). The metric, window and channel are slice 28/29's: **rms r (YAW)**, quoted
+with its window, rms never the peak.
+
+⚠ **THE NON-MONOTONE SWEEP SLICE 28 HAD TO RELOCATE IS *NOT* RESHIPPED, AND THAT IS THE HONEST
+DELIVERABLE #2.** The constraint IS retired in principle (target velocity is a comp key now), but
+slice 28's QUIET→RING→QUIET shape does not reproduce at A = −0.15: the deeper ripple keeps `R(look)`
+supercritical across the whole band. The shape belongs to the (A, k) pair, not to the knob ⇒ slice
+28's relocated phases STAY in `test_missile.jl`, and the scenario header says so and says why.
+**Moving a proof to a slider buys presentation, not evidence.**
+
+THREE KNOBS, and **convention 9 is satisfied by a MEASUREMENT, not by counting sliders**: they are
+three terms of ONE quantity — the engagement residual `radome_residual_az` (vy sets the look angle the
+engagement holds, A the glass's slope there, R̂ the belief). Over gate 0's full 245-arm grid, of the
+**196** arms whose in-flight residual never went supercritical, **196 are quiet and NONE rings**.
+⚠⚠ **QUOTE THE 196/196, NOT THE 47/47** — a ringing arm's look band swings BECAUSE it rings, so
+"supercritical on a ringing arm" is corroboration and never proof (slice 29's P10a); the quiet
+direction has no such circularity. Domains, every endpoint MEASURED: `cross_speed_mps ∈ [0, 400]`
+(FLOOR = the DEAD POINT and it is dead exactly — residual **−0.000008**, look 0.63°, R(look) = R₀,
+the whole slice has nothing to say there; CEILING = the model-validity budget, read at the SHALLOW
+end of the A domain: 38.6% of in-band frames past a 30° look at vy = 450, 100% at 500), `radome_ripple
+∈ [−0.20, 0]` (the FLOOR is the CORNER, measured: at −0.25 with R̂ at its top the budget blows to
+0.6% — ⚠ at the UNDER-compensated corner, the opposite of what row-wise scans suggested), and
+`radome_slope_est ∈ [−0.55, 0]` (contains R₀+2A = −0.43 for the deepest glass with margin, and puts
+the de-tune face on show). Class **4a** (SIXTH consecutive RNG-live slice; a velocity pin adds no
+draw, identity asserted); **KNOB not rung** on all three (A = 0 bit-identical to the ripple key
+absent, slice 28 measured; `cross_speed_mps` equal to the authored `vel_y` bit-identical to the key
+absent, gate 1 measured); the button stays DROPPED (16/26/27/28/29/30 — Option-P′'s SIXTH use).
+
+**⚠ NOT ZERO CLIENT CODE, AND THE ONE REQUIRED LINE IS THE AIM POINT SHOWN LIVE BESIDE `R̂`** (advisor
+— slice 28 ate exactly this defect once): the glass is a SLIDER, so dragging A MOVES THE RULE'S OWN
+TARGET, and without that line a student who deepens the glass silently invalidates the R̂ they already
+set. It ships as a NUMBER (`radome_slope_worst`) and is labelled "**or below**", never as a threshold.
+⚠⚠ **THE HUD DISCRIMINATOR IS `cross_speed_mps`, NOT `radome_slope_worst`** — gate 2 measured the aim
+point as ADDITIVE on every ripple-carrying wire, so slices 28 and 29 grow it too and switching on it
+would print an ENGAGEMENT label on wires with no engagement knob. The slice-30 block is a SWITCH ahead
+of 29's, and both UI mirrors deliberately CARRY the aim-point key so the wrong discriminator would be
+caught. The headline label is THREE-state for the same reason the slice exists: ringing / "AIMED AT
+R₀+2A — the SAFE side" / "**QUIET HERE — R̂ above the aim point**" — quiet HERE is not the same claim
+as quiet EVERYWHERE.
+
+Four proofs green: **S30V** (31 flights — ENVELOPE 6/7 → 0/7 with margins, TIGHT 0/7 at −0.28 plus
+the still-ringing bracket at −0.24, PRICE quiet-to-quiet 1.93× with the aim point read off the wire
+per glass depth, DOMAIN corner 21.680 vs 4.242 m, REPLAY posdiff **0.0**, the dead point's residual,
+and per-arm isolation: `defl_sat` 0 in-band everywhere, ceiling ~321 ≪ a_max 3000, look ≤ 27° inside
+the 30° budget — ⚠ `aero_sat` DOES fire on the ringing arms and is NOT asserted, slice 26's rule);
+**S30UI** (the FIVE-WAY HUD mirror + the TWELVE-way value-guard + ⭐ the crossing-speed slider
+targeting **tgt1**, the first knob in this arc on something other than the interceptor); the
+`Sandbox.tscn` headless smoke-load (`EWSIM_SERVER_DONE`); and TWO windowed shots at the same range
+(1441 m vs 1433 m): "ENVELOPE — RINGING at this crossing", yaw rate −1.309, R̂ −0.030 against "AIM AT
+−0.330 or below", ENGAGEMENT RESIDUAL −0.299 orange, `ω_ratio` 30.20, `track_gap` 1825 — versus
+"AIMED AT R₀+2A — the SAFE side", yaw +0.028, R̂ −0.330 = the aim, RESIDUAL **+0.011 green**,
+`ω_ratio` 0.66, `track_gap` 14.4. Slices 1–29 byte-identical, proven ON THE WIRE (the 26/27/28/29
+verifiers re-run to the digit: 0.80408 / 23.0× / 59.2×, 0.76836 / 54.7×, 1.04145 / 72.1× / 80.7×,
+0.63631 with bench 0.01394 vs loop 0.05210). **5644 tests** (gate 1 +42, gate 2 +75, gate 3 +27).
+
+Run: `pwsh tools/julia.ps1 --project=core tools/server.jl scenarios/slice30_envelope.yaml`, then
+console Godot `--headless --path clients/godot --script res://net/slice30_verify.gd` (exit 0 = pass;
+it flies 31 arms, so give it a few minutes). The UI test needs NO server: `… res://net/slice30_ui_test.gd`.
+Live: the wire OPENS ON THE DISEASE — drag the **crossing speed** across its range and watch the ring
+survive every setting except 0; then drag **R̂** down to the HUD's own `R₀+2A` and sweep the crossing
+speed again — it is quiet everywhere. Then drag **A** deeper and watch the aim point MOVE OUT FROM
+UNDER the R̂ you just set.
+DEFERRED (NAMED): an IMPERFECT GYRO (noise / bias / scale-factor — a scale-factor error is
+multiplicative on `R̂`, so it lands straight back on the residual; open since slice 27); ESTIMATING
+`R̂` IN FLIGHT (still blocked by slice 26's P7A, sharpened by slice 29); a 2-D slope
+`R(look_az, look_el)` and an ASYMMETRIC error curve (inherited from slice 28 — an asymmetric curve
+would make the crossing DIRECTION matter, which composes directly with this slice's new axis);
+**seeker FOV / gimbal limit** (sharper again: this slice's upper domain endpoint is set by the look
+angle reaching 30°, which is exactly where a real gimbal would already have stopped); the out-of-plane
+MANEUVERING target (slice 24 route (b), and now with a REASON to want it — it is the genuine sweep
+that a STEP deliberately is not); the NON-MONOTONE SWEEP as a shipped proof (it needs its own glass,
+not this one).
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

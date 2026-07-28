@@ -5352,4 +5352,49 @@ end
         @test abs(g30 - g42) < 0.005
         @test g30 / q30 > 10.0
     end
+
+    @testset "the SHIPPED WIRE: the engagement is a knob, and the compensator is a SCALAR" begin
+        # Gate 3's own tooth (the slice-29 "loader: PRESENCE-gated" precedent). The scenario file IS
+        # the deliverable here, so the properties the verifier's handshake gate asserts on the WIRE
+        # are asserted on the FILE too — a doc claim about a gate lives IN the gate.
+        base = joinpath(@__DIR__, "..", "..", "scenarios")
+        scn = load_scenario(joinpath(base, "slice30_envelope.yaml"))
+        m = first(e for (_, e) in scn.world.entities if e.kind === :missile)
+        t = first(e for (_, e) in scn.world.entities if e.kind === :target)
+        # THE ENGAGEMENT, on the TARGET — and the authored `vel` AGREES with it, which is the
+        # knob-vs-rung discriminator (gate 1 measured that pair bit-identical to no key at all).
+        @test t.comp[:cross_speed_mps] == 200.0
+        @test t.vel[2] == 200.0
+        # THE GLASS: slice 29's depth, its k still AUTHORED.
+        @test m.comp[:radome_slope]    == -0.03
+        @test m.comp[:radome_ripple]   == -0.15
+        @test m.comp[:radome_ripple_k] == 12.0
+        # ⚠ THE BELIEF IS A SCALAR, DELIBERATELY — no schedule anywhere on this wire. The claim is
+        # about what a SCALAR can guarantee across an envelope, so slice 29's keys would confound it
+        # (and would route the client to slice 29's HUD branch).
+        @test m.comp[:radome_slope_est] == -0.03
+        @test !haskey(m.comp, :radome_ripple_est)
+        @test !haskey(m.comp, :radome_ripple_k_est)
+        # THREE KNOBS — the engagement, the glass and the belief: three terms of ONE quantity (the
+        # engagement residual), which is how convention 9 is satisfied here.
+        @test length(scn.knobs) == 3
+        kk = Dict(kb.key => kb.target for kb in scn.knobs)
+        @test kk[:cross_speed_mps]  === :tgt1        # ⭐ on the TARGET, not the interceptor
+        @test kk[:radome_ripple]    === :m1
+        @test kk[:radome_slope_est] === :m1
+        # …and the disqualified levers are ABSENT (they move the loop gain the lesson is about, the
+        # level the belief was characterized against, or the cycle's amplitude).
+        for bad in (:n_pn, :rho, :radome_slope, :radome_ripple_k, :af_alpha_max, :sigma_seek, :speed)
+            @test !haskey(kk, bad)
+        end
+        # THE PRESENCE GATE, from the other side: no earlier wire in the arc carries the new key, so
+        # none of them grows the `cross_speed_mps` readout (slices 1–29 byte-identical).
+        for f in ("slice26_radome.yaml", "slice27_radome_comp.yaml", "slice28_radome_curve.yaml",
+                  "slice29_radome_schedule.yaml")
+            s = load_scenario(joinpath(base, f))
+            for (_, e) in s.world.entities
+                @test !haskey(e.comp, :cross_speed_mps)
+            end
+        end
+    end
 end
