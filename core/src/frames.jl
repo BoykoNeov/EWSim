@@ -589,9 +589,76 @@ unchanged BY CONSTRUCTION (the slice-20/21/26/27/28 structural-byte-identity sha
 (a gyro can only cancel what a gyro can see), and the PITCH→AZIMUTH cross-term the two-term law does
 not model. A PERFECT gyro remains a §1 named approximation.
 """
+
 function radome_compensation_scheduled(slope0_est::Real, ripple_est::Real, k_est::Real,
                                        look_az::Real, look_el::Real, ω_body::Vec3)
     R̂_az = radome_slope_curve(slope0_est, ripple_est, k_est, look_az)
     R̂_el = radome_slope_curve(slope0_est, ripple_est, k_est, look_el)
     return (R̂_az * ω_body[3], -R̂_el * cos(look_az) * ω_body[2])
 end
+
+# --- AN IMPERFECT GYRO (slice 31, §11 Tier-A — the PERFECT-gyro approximation 27-30 all named) ----
+#
+# Every compensator slices 27-30 built multiplies a RATE GYRO READING by a believed slope and
+# subtracts the product from the seeker's LOS rate. All four assumed that reading is TRUTH. It is
+# not - and the two ways it fails land in two DIFFERENT CURRENCIES this arc has never had to
+# separate: a SCALE FACTOR lands on the RESIDUAL (the stability boundary) and is ONE-SIDED, while a
+# BIAS lands on the AIM POINT (an additive injection, the arc's first) and is TWO-SIDED.
+
+"""
+    gyro_reading(ω_true, scale_err, bias) -> Vec3   (rad/s)
+
+What the RATE GYRO REPORTS, given the body rate the missile actually has (slice 31):
+
+    ω̃ = (1 + scale_err)·ω_true + bias
+
+`scale_err` is the dimensionless SCALE-FACTOR error (`s`; +0.05 = the gyro reads 5% high on every
+axis) and `bias` the per-axis rate offset in rad/s. Slices 27–30 all fed
+[`radome_compensation`](@ref) the TRUE body rate — a PERFECT gyro, named as a §1 approximation in
+every one of them. This is that approximation cashed.
+
+⭐⭐ **THE TWO TERMS LAND IN DIFFERENT CURRENCIES, AND THAT IS THE SLICE.** The feed-forward is
+`R̂·ω̃`, so:
+
+  * a SCALE-FACTOR error is common-mode on the product ⇒ the belief that reaches the loop is
+    **`R̂·(1+s)`**, exactly. It lands back on slice 26/27's residual (`R − R̂(1+s)`), MOVES THE
+    STABILITY BOUNDARY, and inherits slice 26/30's ONE-SIDEDNESS: with `R̂ < 0`, a gyro that
+    UNDER-reads (`s < 0`) walks the effective belief toward the ringing side while `s > 0` merely
+    de-tunes.
+  * a BIAS never touches the belief. It injects a CONSTANT spurious LOS rate `R̂·b` into guidance —
+    the arc's FIRST ADDITIVE entry, where 26–30 are all multiplicative gain errors — so it does not
+    move the boundary, it moves the AIM POINT, and it is TWO-SIDED: there is no safe direction.
+
+⚠ **THE SCALE FACTOR'S EQUIVALENCE IS EXACT, AND SAYING SO IS THE POINT.** `R̂(1+s)` is a value
+`radome_slope_est` can already take, so the scale-factor half ADDS NO MECHANISM on its own — it is
+this project's FALSE-FIDELITY trap (slice 15's `k_δ` cancellation, slice 16's refused toggle, slice
+19's dead `speed` knob) and it is shipped as a TOOTH, never as a headline. What the equivalence
+cannot express is what the slice claims: the error is MULTIPLICATIVE, so its ABSOLUTE size is
+`|R̂|·|s|`, and slice 30's design rule "aim `R̂` at `radome_slope_worst`" therefore has to become
+`R_worst/(1+s)`. **A feed-forward compensator is an amplifier for its own sensor, with gain `|R̂|`**
+— and slice 30 buys unconditional stability precisely by making that gain as large as the glass
+demands.
+
+⚠ Pinned to a tight `atol`, NEVER bit-for-bit: `R̂·((1+s)·ω)` and `(R̂·(1+s))·ω` differ in the last
+ULP by float non-associativity. An "exact reparameterization" claim in this codebase means the
+PHYSICS is the same, not that the bits are.
+
+`scale_err == 0` with a zero `bias` returns `ω_true` componentwise unchanged — but the shipped
+no-gyro-error path is a KEY-ABSENT branch upstream that passes `:omega_body` VERBATIM, never this
+function at zero (the `-0.0` trap and float non-associativity, the slice-20/21/26/27/28/29
+structural-byte-identity shape). That exactness is still pinned here, because it is what makes both
+terms KNOBS rather than fidelity rungs (atmosphere.jl's discriminator).
+
+⚠ `scale_err == −1` is the DEAD GYRO: the reading collapses to the bias alone, the feed-forward
+vanishes with it, and the missile is slice 26's UNCOMPENSATED missile — a degenerate that is a free
+tooth, not an edge case to guard.
+
+⚠ GYRO NOISE IS A NAMED DEFERRAL, ON DRAW-TOPOLOGY GROUNDS (convention 3), not an oversight: a
+per-tick random rate error is an unconditional THIRD `randn` on a path that has drawn exactly two
+since slice 25, so introducing it desyncs every 25–30 replay — the slice-13 `:scan` 4b shape, which
+would need a host marker and an introduce-rejecting `set_fidelity`. Deterministic errors do not.
+"""
+gyro_reading(ω_true::Vec3, scale_err::Real, bias::Vec3) =
+    Vec3((1.0 + scale_err) * ω_true[1] + bias[1],
+         (1.0 + scale_err) * ω_true[2] + bias[2],
+         (1.0 + scale_err) * ω_true[3] + bias[3])

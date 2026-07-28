@@ -492,6 +492,35 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                     error("missile '$id': seeker.radome_ripple_k_est must be finite " *
                           "(got $(comp[:radome_ripple_k_est]))")
             end
+            # Slice 31 — AN IMPERFECT GYRO. The compensator's feed-forward is `R̂·ω̃`, and slices
+            # 27–30 all fed it the TRUE body rate (a PERFECT gyro, named as a §1 approximation in
+            # every one of them). Here it reads `ω̃ = (1+s)·ω + b` (frames.jl `gyro_reading`), and the
+            # two error terms land in DIFFERENT CURRENCIES: `gyro_scale_err` is common-mode on the
+            # product, so the belief reaching the loop is exactly `R̂(1+s)` — back onto the RESIDUAL,
+            # i.e. a STABILITY boundary — while `gyro_bias_z`/`gyro_bias_y` inject a constant spurious
+            # LOS rate `R̂·b`, which moves the AIM POINT and has no residual to move.
+            # ⚠ ALL THREE PRESENCE-GATED (the convention-2 shape of every key above): only a YAML that
+            # AUTHORS one mints it, and `_observe_point3d!` passes the TRUTH rate through VERBATIM
+            # without them, so slices 25–30 are bit-for-bit unchanged BY CONSTRUCTION.
+            # ⚠ VALIDATED FINITE ONLY, and deliberately NOT bounded away from `s = −1`: that is the
+            # DEAD GYRO, a legitimate degenerate that reproduces slice 26's uncompensated missile
+            # bit-for-bit (measured at gate 0), not a crash path — nothing divides by `1+s` in the
+            # core (the telemetry aim point floors it, convention 5).
+            # ⚠ INERT WITHOUT `radome_slope_est`, AND REFUSED RATHER THAN SILENTLY IGNORED (the
+            # slice-21/28/29 "refused, not branch-ordered" precedent): the gyro reading reaches the
+            # COMPENSATOR and nothing else on this path — the autopilot keeps its own truth rate (a §1
+            # named approximation whose mechanism is DAMPING, measured at gate 0) — so without a
+            # compensator these are DEAD KNOBS, the slice-19 `speed` class this project hunts.
+            for gk in ("gyro_scale_err", "gyro_bias_z", "gyro_bias_y")
+                haskey(sb, gk) || continue
+                haskey(sb, "radome_slope_est") ||
+                    error("missile '$id': seeker.$gk authored without seeker.radome_slope_est — " *
+                          "the gyro reading reaches the radome compensator and nothing else, so " *
+                          "without one this knob is DEAD (slice 31)")
+                comp[Symbol(gk)] = _f64(sb[gk])
+                isfinite(comp[Symbol(gk)]) ||
+                    error("missile '$id': seeker.$gk must be finite (got $(comp[Symbol(gk)]))")
+            end
             # Slice 13: the `:scan` seeker (fidelity `seeker: scan`) forms a NOISY angular-power
             # PROFILE over a FIXED grid (the slice-3 CFAR sandbox on the LOS-ANGLE axis) instead of
             # ONE noisy truth bearing. The grid/beam/CFAR/gate config lands here (STATIC — draw-count/

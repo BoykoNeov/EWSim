@@ -1369,7 +1369,37 @@ func _draw_airframe3d_hud() -> void:
 		# exists to show. The comparison is between two numbers the CORE ships (belief vs aim point),
 		# never a client-side threshold on the physics (convention 13; slice 27's `rh != 0.0` label
 		# is the precedent).
-		if _telemetry.has(_af3d_missile + ".cross_speed_mps"):
+		# SLICE 31 — checked FIRST, and a SWITCH ahead of slice 30's (not an `or`): only a wire with an
+		# IMPERFECT GYRO ships `gyro_scale_err`, so 26/27/28/29/30 keep their labels verbatim. It needs
+		# its own string because the lesson is not "the belief is wrong" — the belief is whatever the
+		# student set — it is that a SENSOR ERROR RESCALES IT, so the number that closes the loop is
+		# `R̂(1+s)` and the design rule's own target moves to `R_worst/(1+s)`.
+		# ⚠ THE THIRD STATE IS SLICE 30's AND IT MEANS THE SAME THING HERE: quiet at THIS gyro is not
+		# quiet at the gyro you will actually be shipped. The comparison is between two numbers the CORE
+		# ships (the EFFECTIVE belief vs the re-aimed point), never a client-side threshold on the
+		# physics (convention 13).
+		if _telemetry.has(_af3d_missile + ".gyro_scale_err"):
+			qr = _radome_qpeak                    # rides |r| here too (a slice-31 wire has a ripple)
+			var eff31 := float(_telemetry.get(_af3d_missile + ".radome_slope_est_eff", 0.0))
+			var aim31 := float(_telemetry.get(_af3d_missile + ".radome_slope_worst", 0.0))
+			if qr > 0.5:
+				lbl = "GYRO — RINGING: loop sees R̂(1+s)"
+			else:
+				# ⚠⚠ THE COMPARISON IS `R̂(1+s)` AGAINST `R_worst`, NOT AGAINST `radome_aim_gyro` —
+				# and the first shot of this slice caught the difference. The two aim points live on
+				# OPPOSITE SIDES of the (1+s) factor: the HUD line below tells the student where to
+				# put the SLIDER (`R̂ ≤ R_worst/(1+s)` = `radome_aim_gyro`), while the VERDICT is
+				# about what the LOOP ends up seeing (`R̂(1+s) ≤ R_worst`). Comparing the effective
+				# belief with the slider-side target mixes the two and labelled a correctly-aimed
+				# missile "the gyro eats the margin". The two statements are equivalent for
+				# `1 + s > 0`; this form stays right when it is not.
+				# ⚠ the same 1e−9 tolerance slice 30 needed, for the same reason: both sides are Float64
+				# products a student is asked to match with a decimal slider.
+				if eff31 <= aim31 + 1.0e-9:
+					lbl = "AIMED PAST THE GYRO — the SAFE side"
+				else:
+					lbl = "QUIET HERE — the gyro eats the margin"
+		elif _telemetry.has(_af3d_missile + ".cross_speed_mps"):
 			qr = _radome_qpeak                    # rides |r| here too (an envelope wire has a ripple)
 			var rh30 := float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0))
 			var aim30 := float(_telemetry.get(_af3d_missile + ".radome_slope_worst", 0.0))
@@ -1506,7 +1536,44 @@ func _draw_airframe3d_hud() -> void:
 		# ⚠ AND THE CROSSING SPEED IS ON SCREEN BECAUSE THE ENGAGEMENT IS THIS SLICE'S NEW AXIS: the
 		# residual below is a property of the engagement, not of the hardware, so the label that says
 		# WHICH engagement is being flown belongs beside it.
-		if _telemetry.has(_af3d_missile + ".cross_speed_mps"):
+		# SLICE 31 — THE FOUR LINES THAT ARE ITS LESSON, a SWITCH ahead of slice 30's (not an `or`):
+		# only a wire with an IMPERFECT GYRO ships `gyro_scale_err`, so 26/27/28/29/30 render
+		# byte-identically below. ⚠ THE DISCRIMINATOR IS THE GYRO KEY ITSELF — the same reason slice 30
+		# could not use `radome_slope_worst` (an ADDITIVE key captures the earlier views), and it is
+		# checked FIRST because a slice-31 wire may carry any of the earlier keys as well.
+		# ⭐⭐ THE ONE LINE THE LESSON REQUIRES IS THE **EFFECTIVE** BELIEF BESIDE THE AUTHORED ONE. A
+		# scale-factor error is common-mode on the feed-forward product, so what closes the loop is
+		# `R̂(1+s)` and NOT the R̂ the designer set — a student who reads only the slider cannot see why a
+		# competent-looking design rings. ⚠ BOTH numbers arrive from the core (convention 13: the client
+		# never multiplies physics).
+		# ⭐ AND THE AIM POINT IS RE-AIMED FOR THE GYRO: slice 30's rule becomes `R_worst/(1+s)`, shipped
+		# as `radome_aim_gyro`, so dragging the GYRO slider moves THE RULE'S OWN TARGET exactly as
+		# dragging the glass did in slice 30. ⚠ "or below", never "= the threshold" — the rule is
+		# SUFFICIENT, NEVER TIGHT, and the HUD is exactly where a student would misread a bound.
+		# ⚠ THE BIAS LINE IS NOT DECORATION: it is the OTHER CURRENCY, and the term no other knob on this
+		# wire reaches. It ships the injection `R̂·b` as a number, so a student can watch it GROW as they
+		# cure the ring by aiming deeper — the same sensor costing more the more you compensate.
+		if _telemetry.has(_af3d_missile + ".gyro_scale_err"):
+			var s31 := float(_telemetry[_af3d_missile + ".gyro_scale_err"])
+			var rh31 := float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0))
+			var eff31 := float(_telemetry.get(_af3d_missile + ".radome_slope_est_eff", 0.0))
+			var aim31 := float(_telemetry.get(_af3d_missile + ".radome_aim_gyro", 0.0))
+			var rez31 := float(_telemetry.get(_af3d_missile + ".radome_residual_az_eff", 0.0))
+			var bz31 := float(_telemetry.get(_af3d_missile + ".gyro_bias_z", 0.0))
+			var inj31 := float(_telemetry.get(_af3d_missile + ".gyro_inject_az", 0.0))
+			# ⚠ WIDTHS ARE MEASURED, NOT GUESSED: ~55 characters fit at 15 px from `vp.x − 430`, and
+			# slice 28's first capture ran two lines off the right edge. Each line below is counted.
+			draw_string(_font, Vector2(vp.x - 430, 154), "R̂ %+.3f  ×(1%+.2f) → LOOP SEES %+.3f" % [rh31, s31, eff31],
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+			draw_string(_font, Vector2(vp.x - 430, 176), "gyro AIM AT %+.3f or below  (bias %+.3f rad/s)" % [aim31, bz31],
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45))
+			# coloured by the SAME peak-hold verdict as the headline, so a frame caught mid-swing cannot
+			# show an orange headline over a green residual (slice 27's shot-harness defect)
+			draw_string(_font, Vector2(vp.x - 430, 198), "ENGAGEMENT RESIDUAL %+.3f (eff) ← closes the loop" % rez31,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _radome_qpeak > 0.5 else Color(0.55, 1.00, 0.65))
+			draw_string(_font, Vector2(vp.x - 430, 220), "bias injects %+.5f rad/s — the OTHER currency" % inj31,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.70, 0.80, 1.00))
+		elif _telemetry.has(_af3d_missile + ".cross_speed_mps"):
 			var rh30 := float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0))
 			var aim30 := float(_telemetry.get(_af3d_missile + ".radome_slope_worst", 0.0))
 			var saz30 := float(_telemetry.get(_af3d_missile + ".radome_slope_az", 0.0))

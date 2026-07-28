@@ -115,6 +115,16 @@ export radome_schedule_slope, radome_compensation_scheduled
 # tight. The ENGAGEMENT itself becomes the new axis via the `cross_speed_mps` knob (scenario.jl /
 # radar.jl `ConstantVelocity`) — no new instability, no new cap, no new gain.
 export radome_slope_worst
+# Slice 31 (§11 Tier-A): AN IMPERFECT GYRO — the PERFECT-gyro approximation slices 27–30 all named,
+# cashed. `ω̃ = (1+s)·ω + b`, and the two error terms land in DIFFERENT CURRENCIES: a SCALE FACTOR is
+# common-mode on the feed-forward product, so the belief reaching the loop is exactly `R̂(1+s)` — it
+# lands back on the RESIDUAL, moves the stability boundary, and is ONE-SIDED like slice 26/30's
+# constraint; a BIAS injects a constant spurious LOS rate `R̂·b` — the arc's first ADDITIVE entry —
+# which moves the AIM POINT, not the boundary, and is TWO-SIDED. ⭐ Both scale with `|R̂|`, the very
+# quantity slice 30's design rule maximizes ⇒ a feed-forward compensator is an AMPLIFIER for its own
+# sensor, and slice 30's aim point becomes `R_worst/(1+s)`. KNOBS, no rung. ⚠ Gyro NOISE is deferred
+# on DRAW-TOPOLOGY grounds (convention 3), not overlooked.
+export gyro_reading
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step
 export INTEGRATOR_MODES, G_ACCEL

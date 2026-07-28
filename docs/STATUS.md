@@ -4038,6 +4038,150 @@ not this one).
 
 ---
 
+**Slice 31 — AN IMPERFECT GYRO: THE MARGIN IS A GYRO BUDGET (HANDOFF §11 Tier-A)** — the NINTH slice
+of the bank-to-turn / 3-D arc, and the deferral slices 27, 28, 29 and 30 ALL named as a §1
+approximation: their rate gyro is PERFECT. Every compensator 27–30 built multiplies a GYRO READING by
+a believed slope and subtracts it; here the reading is `ω̃ = (1+s)·ω + b` (frames.jl `gyro_reading`),
+and **the two error terms of ONE sensor land in TWO DIFFERENT CURRENCIES**. A SCALE FACTOR is
+common-mode on the product `R̂·ω̃`, so the belief that reaches the loop is EXACTLY `R̂(1+s)` — back onto
+slice 26/27's RESIDUAL, moving the STABILITY BOUNDARY, and ONE-SIDED like slice 26/30's constraint. A
+BIAS never touches the belief: it injects a constant spurious LOS rate `R̂·b` — **the arc's FIRST
+ADDITIVE entry**, where 26–30 are all multiplicative gain errors — which moves the AIM POINT, not the
+boundary. **⇒ THE LESSON: slice 30's rule is SUFFICIENT, NEVER TIGHT, and that margin is not slack —
+it is a GYRO BUDGET.** Aiming at the glass's worst-case slope tolerates a −21% scale-factor error; a
+design "sharpened" to the onset measured on this very wire tolerates almost none and rings on a
+realistic 5% one. What the conservatism purchases is INSENSITIVITY TO YOUR OWN SENSOR.
+
+⚠⚠ **THE ADVISOR'S BLOCKING RISK FIRED BEFORE ANY CODE, AND THE SLICE WAS REBUILT AROUND IT.** A
+common-mode scale factor is EXACTLY `R̂ → R̂(1+s)`, so the scale-factor half **adds no mechanism by
+itself** — it walks a knob slice 27 shipped and slice 30 sweeps. That is this project's FALSE-FIDELITY
+class (slice 15's `k_δ` cancellation, slice 16's refused toggle, slice 19's dead `speed` knob), 5th
+occurrence in this arc. ⇒ it ships as a **TOOTH, not a headline**: `(R̂, s)` flies the SAME MISSILE as
+`(R̂(1+s), perfect gyro)` — MEASURED on the wire at **max|Δpos| 7.76e−10 m** over the flight, with
+identical rms r to five decimals. ⚠ Pinned as an `atol`, **NEVER** as bit-identity: `R̂·((1+s)·ω)` and
+`(R̂·(1+s))·ω` differ in the last ULPs (gate 0 measured both — two of five wire pairs came out
+bit-identical and three did not). What the equivalence CANNOT express is that the error is
+MULTIPLICATIVE, so its absolute size is `|R̂|·|s|`, which is why slice 30's aim point becomes
+`R_worst/(1+s)` (shipped live as `radome_aim_gyro`). **Slice 31 is therefore a DESIGN-RULE slice, not
+a mechanism slice, and the scenario header says so out loud.**
+
+⭐⭐ **THE SHIPPED WIRE OPENS ON THE DISEASE AND THE DESIGN THAT CATCHES IT LOOKS COMPETENT:**
+`radome_slope_est = −0.27`, aimed just past the onset measured here with a PERFECT gyro (−0.260),
+instead of at slice 30's conservative `radome_slope_worst` = R₀+2A = −0.33 — exactly the "estimate to
+be matched" slice 30 warned against — plus `gyro_scale_err = −0.05`, a scale-factor error a cheap MEMS
+rate gyro really has. The loop then sees **−0.2565** and rms r is **0.42395** in the [500,3000] m band:
+RINGING. ⭐ **AND IT HAS TWO DIFFERENT CURES, ONE SLIDER EACH** — `s → 0` (BUY A BETTER GYRO, 0.03186,
+**13.3×**) or `R̂ → radome_aim_gyro = −0.3474` (DESIGN MORE CONSERVATIVELY, 0.05903, **7.2×**) with the
+gyro left exactly as it is. ⭐⭐ And cure B's effective belief lands on `radome_slope_worst` **EXACTLY**
+(−0.33000 vs −0.33000, asserted): slice 30's rule is not replaced, it is RE-AIMED for the sensor.
+The verdict follows the EFFECTIVE belief and nothing else — at a THIRD aim point (−0.30), `s = −0.145`
+lands on −0.25650 and RINGS while `s = −0.070` lands on −0.27900 and stays quiet.
+
+⭐⭐ **THE OTHER CURRENCY, AND THE HONEST NARROWING THAT MAKES IT PRECISE.** On slice 30's aim point a
+bias NEVER rings across its whole domain, both signs (rms r 0.134 / 0.046 / 0.078 / 0.145 at
+b = −0.08 / −0.02 / +0.02 / +0.08 rad/s) with `aero_sat` **0 on every arm**, while the miss moves 7500×
+across the reachable range (0.23 → 1735 m) — the verdict never does. ⚠ **BUT "A BIAS NEVER RINGS" WAS
+TOO STRONG, AND THE HONESTY CHECK FOUND IT (gate-0 P9/P10):** a bias STEERS the missile, which moves
+the LOOK ANGLE, which on CURVED glass moves the ENGAGEMENT residual — **slice 28's mechanism arriving
+through the SENSOR**. The curve's extremum sits at `k·look = π ⇒ look = 15°` and this engagement holds
+~13.6°, so a NEGATIVE bias walks the seeker UP ONTO THE STEEPEST GLASS. On a MARGINAL design
+(R̂ = −0.265, 0.005 past the onset) with a PERFECT gyro, **b = −0.02 RINGS it (0.35210, look 18.7°)
+while b = +0.02 does not (0.05114, look 13.1°)** — and the SAME pair leaves −0.28 / −0.30 / −0.33
+untouched. ⇒ the precise claim: **a bias has NO STABILITY VERDICT OF ITS OWN — it has no residual to
+move — but it can flip a MARGINAL design in either direction.** ⭐⭐ **SO THE MARGIN IS MEASURED TWICE,
+IN BOTH CURRENCIES, AND IT IS THE SAME MARGIN.**
+
+⭐ **THE CLAIM ONLY THE BIAS CAN PRODUCE — TWO CURES FOR ONE DISEASE, AND ONLY ONE OF THEM IS FREE:
+1.97×.** With the same b = +0.01, curing by DESIGNING DEEPER costs 0.014586 rad/s of true LOS azimuth
+rate against cure A's 0.007413 — the injection is `R̂·b`, so the scalar that buys stability buys the
+sensor's own bias with it. ⚠⚠ **MEASURED ON `los_azdot_true`, NEVER ON `gyro_inject_az`:** that key is
+`R̂·b` and nothing else, so its ratio between two aim points is |R̂_B|/|R̂_A| = 1.29 **by arithmetic** —
+and the verifier's FIRST DRAFT asserted exactly that tautology (convention 11's trap) and would have
+passed while proving nothing. The new key is a TRUTH diagnostic in the `omega_ratio` sense, closed-form
+(`d(atan2(dy,dx))/dt`), pinned against an INDEPENDENT recompute.
+
+⚠⚠ **AND AT REALISTIC GYRO GRADES NEITHER TERM MATTERS — the slice-15 "the lack of effect IS the
+lesson" shape (user-ratified), QUANTIFIED.** b = 2.1 °/hr moves rms r by 0.00001; s = −1% moves it by
+−0.001; a tactical gyro is ~1–10 °/hr and 0.1–1%. **The compensator's own sensor is NOT the weak link
+on slice 30's design** — the conservative aim point buys a budget ~200× looser than the hardware. That
+is precisely WHY the pencil-sharpening comparison is the headline: at the TIGHTENED aim point a
+realistic 3–5% error is already at the boundary. ⚠ **The knob domains are chosen for VISIBILITY, not
+realism, and the scenario file says so.**
+
+⚠ Class **4a** (7th consecutive RNG-live; 2 randn/tick UNCHANGED — both gyro terms are DETERMINISTIC
+and add no draw, ASSERTED not assumed). **KNOBS, no rung** — `s = 0` and `b = 0` are in-domain slider
+values BIT-IDENTICAL to the keys being absent (measured), so atmosphere.jl's discriminator returns
+KNOB and the button stays DROPPED (slice-16 Option-P′, SEVENTH use: 16/26/27/28/29/30/31). THREE knobs
+(`gyro_scale_err ∈ [−0.4,+0.4]`, `gyro_bias_z ∈ [−0.08,+0.08]` rad/s, `radome_slope_est ∈ [−0.55,0]`),
+convention-9-legal because they are literally the three terms of the product the compensator
+subtracts, `R̂·((1+s)·ω + b)` — and the discriminator is MEASURED twice (the equivalence, and the flip
+sitting at the same effective belief across four aim points). ⚠ `cross_speed_mps` is DISQUALIFIED and
+asserted absent: slice 30's envelope axis is a SECOND lesson. `gyro_bias_y` ships as a supported comp
+key but NOT a knob (it drives the ELEVATION channel, ~10× smaller on a crossing wire). The loader
+REFUSES a gyro key without `radome_slope_est` — the gyro reaches the compensator and nothing else, so
+without one it is a DEAD KNOB (the slice-19 `speed` class; the slice-21/28/29 "refused, not
+branch-ordered" precedent). ⚠ `s = −1` (the DEAD GYRO, bit-identical to slice 26's uncompensated
+missile) is NOT refused — a legitimate degenerate, and `radome_aim_gyro` floors its denominator.
+
+**TELEMETRY.** New, all gated on a gyro key: `gyro_scale_err`, `gyro_bias_z`, `radome_slope_est_eff`
+(= `R̂(1+s)`, **the belief the LOOP sees** — the line the HUD exists for), `radome_aim_gyro`
+(= `R_worst/(1+s)`), `radome_residual_az_eff`, `gyro_inject_az` and `los_azdot_true`. ⚠⚠ **Slice 27/28's
+`radome_residual` / `radome_residual_az` KEEP THEIR MEANING (advisor)** — slice 28's headline IS that
+the hardware residual reads exactly 0.000 while the missile rings, so folding the gyro into that key
+would make its meaning depend on which keys happen to be present. The gyro-effective residual ships
+ALONGSIDE, and the two DISAGREE by exactly `−R̂·s` (asserted).
+
+⚠ **THE CLIENT IS NOT ZERO CODE, and the shot harness caught a real defect in it** (convention 14's
+4th proof earning its keep): the three-state headline first compared the EFFECTIVE belief `R̂(1+s)`
+against `radome_aim_gyro` = `R_worst/(1+s)` — **two quantities on opposite sides of the (1+s) factor**.
+The HUD line tells the student where to put the SLIDER; the VERDICT is about what the LOOP sees. Mixing
+them labelled a correctly-aimed missile "the gyro eats the margin". Nothing headless can catch it —
+`_draw` never runs there. ⚠ A SECOND shot defect: `_range()` can read a STALE frame, so the harness
+sailed past CPA and captured the target BEHIND the missile (range opening, look 158°); fixed with a
+hard tick cap beside the range gate. The HUD is a **SIX-WAY SWITCH** (31/30/29/28/27/26) on each
+slice's own telemetry key, and the slice-30 mirror in the UI test deliberately carries BOTH
+`radome_slope_worst` and `cross_speed_mps` so a branch switched on either would be caught.
+
+⚠⚠ **THE GATE-3 TRAP THAT COST THE MOST WAS ARITHMETIC, NOT PHYSICS: `STEPS` MUST BE A MULTIPLE OF
+`emit_every`.** The server emits every 16th tick, so with `STEPS = 15000` the last frame it ever sends
+is `t = 14.992` while the verifier waits for `t ≥ 15.000` — the run hangs SILENTLY, with no output, to
+`MAX_SECONDS`, and reads exactly like a slow wire (Godot's stdout is also block-buffered into a file
+or pipe, which hides per-arm progress and reinforces the wrong story). It was misdiagnosed twice
+before measurement settled it: the CORE runs 27k ticks/s here (1.26× slice 30's; the slice-31 seam +
+telemetry account for 1.44×), a MINIMAL client drains the same server at ~5000 ticks/s on BOTH wires
+(5063 vs 4975), and the verifier itself reaches t = 14.40 in **2.89 s**. There was never a slowdown.
+`STEPS = 12800 = 16 × 800`; slice 30's 20000 = 16 × 1250 lands exactly, which is why it never showed.
+
+Four proofs green: **S31V OK** (17 arms — DISEASE / REPLAY / CURE A / CURE B / EQUIV / SAME-EFFECTIVE
+×2 / BIAS ×4 / MARGINAL ×2 / PRICE ×4; replay posdiff **0.0**; `defl_sat` 0 and the look angle inside
+the 30° budget on every arm; `aero_sat` asserted 0 on the QUIET bias/price arms only, since on a
+ringing arm it is expected — slice 26); **S31UI OK** (the SIX-WAY mirror + a THIRTEEN-WAY value guard);
+the headless `Sandbox.tscn` smoke-load (server `DONE`, zero script errors); and TWO windowed shots at
+the same range with the SAME gyro in both — "GYRO — RINGING: loop sees R̂(1+s)" (yaw rate −0.591,
+residual −0.062) against "AIMED PAST THE GYRO — the SAFE side" (+0.020, +0.027). **Slices 1–30
+byte-identical, and 26/27/28/29/30's verifiers were ALL re-run against this core and PASS — proven ON
+THE WIRE, not read off the diff.** (5798)
+Run: `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice31_gyro.yaml`, then console
+Godot `--headless --path clients/godot --script res://net/slice31_verify.gd` (exit 0 = pass; 17 arms,
+give it a few minutes). The UI test needs NO server: `… res://net/slice31_ui_test.gd`. Live: the wire
+OPENS ON THE DISEASE — drag **gyro s** to 0 and the ring dies (cure A), or put it back and drag **R̂**
+down to the HUD's own `gyro AIM AT` number and it dies with the bad gyro still fitted (cure B). Then
+add **bias** and watch the aim point move while the verdict does not.
+DEFERRED (NAMED): a SINGLE IMU — and its mechanism is now MEASURED, not guessed: feeding the same
+corrupted rate to the α/β autopilot moves the onset from `s ≤ −0.22` to `s ≤ −0.18` and DESTROYS the
+exact `R̂(1+s)` equivalence, because `k_q` supplies ~98% of the plant damping (a DAMPING error, not a
+residual one — two mechanisms at once, which convention 9 forbids); GYRO NOISE on DRAW-TOPOLOGY
+grounds (convention 3 — an unconditional third `randn` desyncs every 25–30 replay; the slice-13
+`:scan` 4b shape) ⚠ and slice 25's ~1000:1 roll-loop low-pass says probe before shipping, it may be
+DEAD; PER-AXIS scale factors and gyro MISALIGNMENT (this one is COMMON-MODE, which is exactly why it
+collapses onto one number); `gyro_bias_y` as a knob (it wants a geometry whose lead is in ELEVATION);
+plus everything 26–30 named — ESTIMATING `R̂` IN FLIGHT (still blocked by slice 26's P7A), a 2-D slope
+`R(look_az, look_el)`, an ASYMMETRIC error curve, **seeker FOV / gimbal limit** (sharper again: this
+slice's bias domain is bounded by the look angle reaching 30°, exactly where a gimbal would have
+stopped), the out-of-plane MANEUVERING target.
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

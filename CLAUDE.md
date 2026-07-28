@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–30 COMPLETE & green — 5644 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–30
+**Slices 1–31 COMPLETE & green — 5798 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–31
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
@@ -130,6 +130,35 @@ QUIET first. ⚠ ToF VARIES ARM TO ARM (9.4→18.3 s) — a first for this arc: 
 arm asserts it REACHED CPA. ⚠ NO new instability/cap/gain — 30 adds an AXIS. ⚠⚠ The HUD discriminator is
 `cross_speed_mps`, NOT `radome_slope_worst` (gate 2: the aim point is ADDITIVE on every ripple wire, so 28/29 grow
 it). 196/196 quiet-arm grid settles convention 9 for THREE knobs. Class 4a, button DROPPED (6th). (5644)**
+**And slice 31 AN IMPERFECT GYRO: THE MARGIN IS A GYRO BUDGET — the §1 approximation 27/28/29/30 ALL named (their
+gyro is PERFECT). The compensator multiplies a GYRO READING by a believed slope, so make the reading real —
+`ω̃ = (1+s)·ω + b` — and THE TWO ERROR TERMS OF ONE SENSOR LAND IN TWO DIFFERENT CURRENCIES: a SCALE FACTOR is
+common-mode on the product, so the belief reaching the loop is EXACTLY `R̂(1+s)` (back onto the RESIDUAL — a
+STABILITY boundary, ONE-SIDED like 26/30's), while a BIAS injects a constant `R̂·b` — THE ARC'S FIRST ADDITIVE
+ENTRY — which moves the AIM POINT and has no residual to move. ⇒ SLICE 30's "SUFFICIENT, NEVER TIGHT" MARGIN IS
+NOT SLACK, IT IS A GYRO BUDGET: its conservative aim point tolerates −21% of scale factor, a design SHARPENED to
+the measured onset tolerates ~3%. ⚠⚠ THE ADVISOR'S BLOCKING RISK FIRED BEFORE ANY CODE: the scale-factor half is
+EXACTLY a reparameterization of a SHIPPED KNOB (`(R̂,s)` flies the SAME MISSILE as `(R̂(1+s), perfect gyro)` —
+max|Δpos| 7.76e−10 m on the wire), i.e. the FALSE-FIDELITY class (15's `k_δ`, 19's dead `speed`), so it ships as a
+TOOTH and the slice is a DESIGN-RULE slice ⚠ pinned as an `atol`, NEVER bit-identity. The wire OPENS RINGING on a
+COMPETENT-LOOKING design (R̂ = −0.27 sharpened past the onset −0.260, s = −0.05 = a real cheap-MEMS error ⇒ the
+loop sees −0.2565, rms r 0.42395) and has ⭐ TWO CURES, ONE SLIDER EACH: `s → 0` (13.3×) or `R̂ → radome_aim_gyro`
+= R_worst/(1+s) (7.2×) with the SAME bad gyro — and cure B's effective belief lands on `radome_slope_worst`
+EXACTLY. ⭐⭐ THE OTHER CURRENCY: a bias NEVER rings across its whole domain, both signs, at slice 30's aim point
+(aero_sat 0 on every arm) while the miss moves 7500× ⚠ BUT "NEVER RINGS" WAS TOO STRONG — it STEERS the missile,
+moving the LOOK ANGLE and hence the ENGAGEMENT residual (slice 28's mechanism THROUGH THE SENSOR), so on a
+MARGINAL design 0.005 past the onset b = −0.02 RINGS it and b = +0.02 does not. ⇒ THE MARGIN IS MEASURED TWICE,
+IN BOTH CURRENCIES. ⭐ The one claim only the BIAS can produce: TWO CURES, AND ONLY ONE IS FREE — designing
+deeper costs 1.97× the aim-point error of buying a better gyro ⚠⚠ measured on `los_azdot_true`, NEVER on
+`gyro_inject_az` (= `R̂·b`, whose ratio is arithmetic — the verifier's first draft asserted exactly that
+tautology). ⚠⚠ AT REALISTIC GYRO GRADES NEITHER TERM MATTERS (2.1 °/hr moves rms r by 0.00001) — the slice-15
+"lack of effect IS the lesson" shape, QUANTIFIED, and the reason the pencil-sharpening pair is the headline;
+domains are chosen for VISIBILITY, not realism, and the scenario says so. ⚠ Slice 27/28's `radome_residual*` KEEP
+their meaning — the gyro-effective residual ships ALONGSIDE (advisor). ⚠ The SHOT caught a real client defect
+(the verdict compared `R̂(1+s)` against the SLIDER-side aim point — opposite sides of the (1+s) factor). ⚠⚠ AND A
+HARNESS TRAP WORTH MORE THAN THE HOUR IT COST: `STEPS` MUST BE A MULTIPLE OF `emit_every` (15000 with emit 16 ⇒
+the last frame is t = 14.992 and the verifier waits forever for 15.000, hanging SILENTLY — it reads exactly like
+a slow wire; the core runs 27k ticks/s and the verifier drains 5k). Class 4a (7th), button DROPPED (7th). (5798)**
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
@@ -806,10 +835,17 @@ can ring while a much worse one stays quiet. And slice 30 SHIPPED 29's own stron
 THE ONE-SIDED CONSTRAINT — by making the ENGAGEMENT a slider (`cross_speed_mps`): because only a NEGATIVE residual
 rings, a SCALAR aimed at the glass's worst-case slope is stable in EVERY engagement (6/7 → 0/7), so what a
 schedule buys is ACCURACY, not stability — and the bound is paid for in navigation ratio, giving the scalar TWO
-bounds that close on each other as the glass worsens.** The NEXT named candidates:
-an IMPERFECT GYRO (noise / bias / scale-factor — slice 27's gyro is
-PERFECT by §1, and a scale-factor error is exactly a multiplicative error on R̂, i.e. it lands back on the
-residual, which makes it the cheapest well-motivated successor); ESTIMATING R̂ IN FLIGHT (⚠ slice 26's P7A is a
+bounds that close on each other as the glass worsens. And slice 31 cashed the §1 approximation all four of
+26/27/28/29/30 carried — a PERFECT gyro — and found that the sensor's two error terms land in two DIFFERENT
+CURRENCIES (a scale factor on the RESIDUAL, i.e. a stability boundary; a bias on the AIM POINT, additive and with
+no residual to move), which turns slice 30's "sufficient, never tight" margin into a GYRO BUDGET: −21% of scale
+factor at the conservative aim point, ~3% at a sharpened one.** The NEXT named candidates:
+a SINGLE IMU (slice 31 corrupts the COMPENSATOR's gyro only; feeding the same reading to the α/β autopilot was
+MEASURED at its gate 0 and moves the onset by a DIFFERENT mechanism — plant DAMPING, `k_q` supplying ~98% of it —
+which is why it is a separate slice and not a footnote); GYRO NOISE (⚠ deferred on DRAW-TOPOLOGY grounds, not
+overlooked: an unconditional third `randn` desyncs every 25–31 replay, so it needs the slice-13 `:scan` 4b shape,
+and slice 25's ~1000:1 roll-loop low-pass says probe first — it may be DEAD); per-axis scale factors and gyro
+MISALIGNMENT (slice 31's is COMMON-MODE, which is exactly why it collapses onto one number); ESTIMATING R̂ IN FLIGHT (⚠ slice 26's P7A is a
 REAL obstacle — the parasitic gain is NOT identifiable in closed loop, so such a slice must first answer *what
 excites the estimate?* — and ⚠ slice 29 SHARPENS it: the estimator would have to identify a SHAPE from a signal
 whose own index is bent); the ANGLE-DOMAIN corrector as its own A/B on worse glass (built and measured at slice

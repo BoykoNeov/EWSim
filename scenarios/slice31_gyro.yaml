@@ -1,0 +1,231 @@
+# slice31_gyro — AN IMPERFECT GYRO: THE MARGIN IS A GYRO BUDGET
+# (HANDOFF §11 Tier-A, slice 31 gate 3). The NINTH slice of the bank-to-turn / 3-D arc (23 = the
+# 6-DOF substrate + skid-to-turn, 24 = bank-to-turn + roll-lag, 25 = a seeker in the 6-DOF loop,
+# 26 = the radome parasitic loop, 27 = the compensation autopilot, 28 = the slope CURVE, 29 = the
+# SCHEDULED compensator, 30 = the ENVELOPE and the one-sided constraint), and the deferral slices
+# 27–30 ALL named as a §1 approximation: their rate gyro is PERFECT.
+#
+# Every compensator 27–30 built multiplies a GYRO READING by a believed slope and subtracts it. Here
+# the reading is what a real gyro reports, `ω̃ = (1+s)·ω + b`, and the two error terms of ONE sensor
+# land in TWO DIFFERENT CURRENCIES:
+#
+#   • a SCALE FACTOR is common-mode on the product `R̂·ω̃`, so the belief that reaches the loop is
+#     EXACTLY `R̂(1+s)` — back onto slice 26/27's RESIDUAL. It moves the STABILITY BOUNDARY, and it
+#     is ONE-SIDED like slice 26/30's constraint: a gyro that UNDER-reads walks the effective belief
+#     toward the ringing side, one that over-reads merely de-tunes.
+#   • a BIAS never touches the belief. It injects a CONSTANT spurious LOS rate `R̂·b` — the arc's
+#     FIRST ADDITIVE entry, where 26–30 are all multiplicative gain errors — so it moves the AIM
+#     POINT, not the boundary, and it is TWO-SIDED: there is no safe direction.
+#
+# > THE LESSON, IN ONE SENTENCE. Slice 30's rule is SUFFICIENT, NEVER TIGHT — and that margin is not
+# > slack, it is a GYRO BUDGET: aiming `R̂` at the glass's worst-case slope buys tolerance to a −21%
+# > scale-factor error, while a design "sharpened" to the measured onset buys ZERO and rings on a
+# > realistic 5% one. What the conservatism actually purchases is INSENSITIVITY TO YOUR OWN SENSOR.
+#
+# ⭐⭐ THE WIRE OPENS ON THE DISEASE, AND THE DESIGN THAT CATCHES IT LOOKS COMPETENT (the 25–30
+# shape): `radome_slope_est = −0.27`, a belief aimed just past the ONSET measured on this very wire
+# (−0.260 with a perfect gyro) rather than at slice 30's conservative `radome_slope_worst` = R₀+2A =
+# −0.33 — exactly the "estimate to be matched" slice 30 warned against — plus `gyro_scale_err =
+# −0.05`, a scale-factor error a cheap MEMS rate gyro really has. rms r 0.402: RINGING.
+# ⭐ AND IT HAS TWO DIFFERENT CURES, ONE SLIDER EACH, which is the slice on one screen:
+#     drag `gyro_scale_err → 0`      (BUY A BETTER GYRO)          rms r 0.031  — 13.0×
+#     drag `radome_slope_est → −0.33` (DESIGN MORE CONSERVATIVELY) rms r 0.053  —  7.6×
+#
+# ⚠⚠ AND THE SLICE SAYS OUT LOUD WHAT ITS OWN GATE 0 FOUND: the scale-factor half is a
+# REINTERPRETATION OF A SHIPPED KNOB, not a new mechanism. `(R̂, s)` flies the SAME MISSILE as
+# `(R̂(1+s), perfect gyro)` — measured on this wire to max|Δpos| 6.4e−11 m over the whole flight, and
+# BIT-identical in two of five test pairs — so this opening state is reachable as a slice-30 wire at
+# `R̂ = −0.2565` with no gyro at all, and cure A is indistinguishable from dragging `R̂`. That is the
+# project's own FALSE-FIDELITY trap (slice 15's `k_δ` cancellation, slice 16's refused toggle, slice
+# 19's dead `speed` knob) caught in the open and shipped as a TOOTH rather than hidden. What the
+# equivalence CANNOT express is that the error is MULTIPLICATIVE — absolute size `|R̂|·|s|` — which is
+# why slice 30's aim point becomes `R_worst/(1+s)` (shipped live as `radome_aim_gyro`).
+#
+# ⭐ THE BIAS IS THE TERM NO EXISTING KNOB REACHES, AND THE WIRE SHIPS THE CLAIM THAT NEEDS IT:
+# TWO CURES FOR ONE DISEASE, AND ONLY ONE OF THEM IS FREE. With the same bias present, cure B
+# (design deeper) costs 1.68–1.75× the aim-point error of cure A (buy a better gyro) — measured at
+# b = ±0.005 / ±0.010 / +0.020, every arm quiet, `aero_sat` 0.0%. Cure A fixes both currencies; cure
+# B trades stability for accuracy, because the deeper aim point amplifies the same bias.
+#
+# ⚠⚠ "A BIAS NEVER RINGS" IS TOO STRONG, AND THE HONESTY CHECK FOUND IT. A bias steers the missile,
+# which moves the LOOK ANGLE, which on CURVED glass moves the ENGAGEMENT residual — slice 28's
+# mechanism arriving through the SENSOR. The curve's extremum sits at k·look = π ⇒ look = 15° and
+# this engagement holds ~13.6°, just below it, so a NEGATIVE bias walks the seeker UP ONTO THE
+# STEEPEST GLASS. Measured across the whole bias domain at five aim points: it RINGS a MARGINAL
+# design (R̂ = −0.265, 0.005 past the onset: 0.302 at b = −0.010) and CANNOT touch −0.28 / −0.30 /
+# −0.33. ⇒ the precise statement is that a bias has NO STABILITY VERDICT OF ITS OWN — it has no
+# residual to move — but it can flip a marginal design in either direction. ⭐⭐ SO THE MARGIN IS
+# MEASURED TWICE, IN BOTH CURRENCIES, AND IT IS THE SAME MARGIN.
+#
+# ⚠⚠ THE KNOB DOMAINS ARE CHOSEN FOR VISIBILITY, NOT REALISM, AND THAT IS ITSELF A FINDING. A
+# tactical-grade rate gyro carries ~1–10 °/hr of bias and 0.1–1% of scale factor; at those grades
+# NEITHER TERM MATTERS HERE (b = 2.1 °/hr moves rms r by 0.00001; s = −1% moves it by −0.001). The
+# compensator's own sensor is NOT the weak link on slice 30's design, and the reason is QUANTIFIED
+# rather than asserted: the conservative aim point buys a −21% budget, ~200× looser than the
+# hardware. This is the slice-15 "the lack of effect IS the lesson" shape — and it is exactly why the
+# headline is the pencil-sharpening comparison: at the TIGHTENED aim point a realistic 3–5% error is
+# already at the boundary.
+#
+# ⚠ NO NEW INSTABILITY, NO NEW CAP, NO NEW PLANT AND NO NEW LOOP GAIN. The loop is slice 26's; slice
+# 20's "degenerative spiral" language stays forbidden here and slice 26's stays forbidden elsewhere.
+# What is new is an ERROR SOURCE on an existing signal path, one of whose two terms enters in a
+# genuinely new way (additive, not multiplicative).
+#
+# ⚠ THE METRIC, THE WINDOW AND THE CHANNEL ARE 28/29/30's, INHERITED WITH THEIR REASONS: rms r (YAW)
+# in the RANGE BAND r ∈ [500, 3000] m — the lead is in azimuth so the ring is in yaw; a crossing
+# wire's whole-approach rms r carries a legitimate front-loaded baseline (the tick-window version of
+# this metric reads the launch transient and collapses every verdict to ~0.14 — measured, in this
+# slice's own first-draft gate-2 tests). ⚠ QUOTE THE WINDOW WITH EVERY NUMBER. ⚠ rms, NEVER the peak.
+# ⚠ THE MISS IS NOT THE METRIC — every arm here HITS (0.03–1.06 m) and a frame-sampled CPA on an
+# ~11 m grid cannot resolve the differences anyway ([[ewsim-missile-verifier-sampling]]).
+#
+# NO FIDELITY BUTTON, DELIBERATELY — slice 26's `radome_view` marker is INHERITED UNCHANGED and the
+# client keeps the button DROPPED. This is the SEVENTH slice in that family (16, 26, 27, 28, 29, 30,
+# 31) whose lesson is sliders with no button at all. All three knobs are in-domain slider values with
+# no distinct code path behind them (atmosphere.jl's KNOB-vs-RUNG discriminator): `gyro_scale_err = 0`
+# and `gyro_bias_z = 0` are BIT-IDENTICAL to the keys being absent (measured, `test_missile.jl`).
+#
+# NAMED APPROXIMATIONS (§1): a SINGLE IMU — the corrupted reading feeds the COMPENSATOR only, while
+# the α/β autopilot keeps the truth rate — and the deferral's MECHANISM is named because it was
+# MEASURED (gate-0 P7: feeding both moves the onset from −0.22 to −0.18 and DESTROYS the exact
+# `R̂(1+s)` equivalence, because `k_q` supplies ~98% of the plant damping — a DAMPING error, not a
+# residual one, i.e. two mechanisms at once, which convention 9 forbids inside one lesson); GYRO
+# NOISE, deferred on DRAW-TOPOLOGY grounds (convention 3 — an unconditional third `randn` would
+# desync every 25–30 replay; the slice-13 `:scan` 4b shape) and NOT overlooked; a COMMON-MODE scale
+# factor across all three axes (per-axis scale factors and gyro MISALIGNMENT are named deferrals);
+# plus everything 26–30 named — the LOS-driven half of the bend the gyro cannot see, the
+# PITCH→AZIMUTH cross-term, a SYMMETRIC radome with ONE scalar curve per axis, no seeker FOV/gimbal
+# limit, ONE isotropic σ and a TRUTH Vc, diagonal inertia, lift drag-free, and constant ρ — a FLIGHT
+# CONDITION, so say "low dynamic pressure", never "high altitude".
+#
+# Class 4a: DRAW-INVARIANT (2 randn/tick — both gyro error terms are DETERMINISTIC and add no draw)
+# YET TRAJECTORY-CHANGING. SEVENTH consecutive RNG-live slice (25–31): the seed is load-bearing and
+# conventions 3/11 apply. Draw-count identity is ASSERTED, not assumed.
+# UNITS (§1 trifecta): pos/vel SI; angles rad; σ_seek in RADIANS; `gyro_scale_err` DIMENSIONLESS and
+# SIGNED (+0.05 = the gyro reads 5% high on every axis); `gyro_bias_z` in RAD/S and SIGNED, on the
+# BODY YAW axis; `radome_slope`, `radome_ripple` and `radome_slope_est` DIMENSIONLESS and SIGNED
+# (dε/d(look angle)); `radome_ripple_k` per RADIAN of look angle; I in kg·m²; ρ in kg/m³; launch
+# ELEVATION in DEGREES → radians at the loader.
+# dt = 1e-3 / emit_every = 16.
+name: slice31_gyro
+seed: 31
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # FIVE keys, NONE toggled — the lesson is the SLIDERS (the slice-16/20/26/27/28/29/30 shape).
+  # `airframe` HELD at :six_dof (the radome, its compensator and therefore its gyro are ALL inert
+  # without it — there is no attitude to look through; the gate is on the LIVE rung, never on
+  # `:att_q`, which is minted once and never deleted: the slice-21/23/26/27/28/29 latent-bug class),
+  # `seeker_axes` HELD at :az_el (a two-angle seeker is what HAS a look angle in azimuth at all),
+  # `seeker` HELD at :filtered, `autopilot` :alpha and `guidance` :pn as in 23–30. `steering` is
+  # OMITTED (the loader default IS :skid_to_turn — slice 24 measured BTT binding the aero ceiling
+  # 93.2% of its approach, which would confound the metric).
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+
+entities:
+  # The interceptor — slices 23–30's plant and launch condition, UNCHANGED. n_pn = 8 is slice 27's,
+  # AUTHORED and NEVER A KNOB (26–30 all disqualified it: it moves the loop gain the lesson is
+  # ABOUT, so a student could cross the boundary with the belief untouched — the confounded-lever
+  # rule).
+  #
+  # THE GLASS (slice 30's, AUTHORED WHOLE — slice 31's claim is per-engagement and per-radome, so
+  # the glass is held while the SENSOR is varied):
+  #   radome_slope    = −0.03  the boresight slope R₀
+  #   radome_ripple   = −0.15  the amplitude A ⇒ radome_slope_worst = R₀+2A = −0.33, slice 30's rule
+  #   radome_ripple_k = 12.0   a 30° ripple period, so the curve's extremum sits at look = 15°, just
+  #                            above the ~13.6° lead this crossing geometry holds. ⚠ STILL NOT A KNOB
+  #                            (slice 28's non-monotonicity finding stands) — and it is WHY a bias
+  #                            can walk a marginal design onto the steepest glass.
+  #
+  # THE BELIEF AND ITS SENSOR (the disease, and the two cures):
+  #   radome_slope_est = −0.27  R̂ "SHARPENED" to just past the onset measured on this wire (−0.260)
+  #     instead of to slice 30's conservative −0.33. A KNOB, and cure B.
+  #   gyro_scale_err   = −0.05  a realistic cheap-MEMS scale-factor error. A KNOB, and cure A.
+  #   gyro_bias_z      =  0.0   the OTHER currency, opening at zero so the student adds it. A KNOB.
+  #     ⚠ Authored AT ITS OFF-VALUE ON PURPOSE: `0.0` is BIT-IDENTICAL to the key being absent
+  #     (measured), so the wire opens with the bias inert and the slider is what makes it real — the
+  #     knob-vs-rung discriminator, visible in the scenario file itself.
+  #   sigma_seek = 5e-5 — slices 26–30's AUTHORED CONSTANT, not a knob (a knob that DEGRADES the
+  #     lesson beside it).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               radome_slope: -0.03, radome_ripple: -0.15, radome_ripple_k: 12.0,
+               radome_slope_est: -0.27, gyro_scale_err: -0.05, gyro_bias_z: 0.0}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # THE CROSSING TARGET — slice 28/29/30's geometry, and here it is AUTHORED WHOLE (no
+  # `cross_speed_mps` pin): slice 30's envelope axis is deliberately NOT stacked on this wire, because
+  # slice 31's claim is PER-ENGAGEMENT and a second axis would violate convention 9. A crossing target
+  # is still REQUIRED — a static one settles the seeker onto boresight (look 0.04–0.54°, slice 28
+  # measured) where R(look) = R₀ and the whole radome-curve family is a dead knob.
+  # AERODYNAMICALLY FREE (no target airframe — the lesson is about the interceptor's sensor).
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 200.0, 0.0]
+    target: {rcs_m2: 1.0}
+
+knobs:
+  # ⭐⭐ THREE KNOBS, AND CONVENTION 9 IS SATISFIED BY A MEASUREMENT, NOT BY COUNTING SLIDERS. They are
+  # legal iff they are three terms of ONE quantity — and here they literally are: they are the three
+  # terms of the product the compensator subtracts, `R̂·((1+s)·ω + b)`. The discriminator this arc uses
+  # (reach the same state from different directions and check the VERDICT agrees) is MEASURED TWICE:
+  # the scale factor and the belief reach the SAME FLIGHT (max|Δpos| 6.4e−11 m), and the RING/QUIET
+  # flip sits at the same EFFECTIVE belief `R̂(1+s)` across four aim points spanning 1.67× in R̂.
+  #
+  # KNOB 1 (`gyro_scale_err` s — CURE A, and the STABILITY currency). Domain MEASURED: the negative
+  # end must RING at every aim point the R̂ slider can reach (at R̂ = −0.45 the flip is at s = −0.42),
+  # and the positive end shows the DE-TUNE face (ω_ratio 0.567 → 0.350, miss 3.4 m at s = +0.40)
+  # while staying inside the 30° small-angle budget (0.0% past 30° across the whole domain).
+  # ⚠ ONE-SIDED: only UNDER-reading destabilizes. ⚠ `s = −1` — the DEAD GYRO, bit-identical to slice
+  # 26's uncompensated missile — sits OUTSIDE this domain but is reachable in the core and is not a
+  # crash path (nothing divides by 1+s; `radome_aim_gyro` floors its denominator).
+  #
+  # KNOB 2 (`gyro_bias_z` b — the OTHER currency, and the term NO other knob reaches). Domain set by
+  # the 30° SMALL-ANGLE VALIDITY BUDGET, endpoints MEASURED rather than inferred (slice 26's
+  # post-commit correction): it blows at −0.14 and +0.18 (72% / 78% of in-band frames past 30°), and
+  # ±0.08 holds max|look| ≤ 23.9° with margin. ⚠ ±0.08 rad/s is ±4.6 °/s ≈ 16,500 °/hr — see the
+  # visibility-not-realism note above.
+  #
+  # KNOB 3 (`radome_slope_est` R̂ — CURE B, slice 30's aim point). Domain INHERITED from slice 30
+  # unchanged: the floor contains `R_worst/(1+s)` = −0.55 for the whole `s` domain, and the ceiling
+  # (0.00) is physical — a POSITIVE R̂ compensates the WRONG WAY and is exactly a worse radome.
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED, AND THE VERIFIER ASSERTS THEIR ABSENCE: `n_pn` and `rho`
+  # move the LOOP GAIN the lesson is about; `radome_slope` is the level the belief was characterized
+  # against; `radome_ripple` is slice 30's knob and would move the rule's own target underneath the
+  # comparison; `radome_ripple_k` is non-monotone (slice 28); `cross_speed_mps` is slice 30's axis
+  # (convention 9); `radome_ripple_est`/`radome_ripple_k_est` would put slice 29's SCHEDULE on a wire
+  # whose claim is about a SCALAR; `gyro_bias_y` drives the ELEVATION channel (10.7× smaller here);
+  # `af_alpha_max` sets the cycle's AMPLITUDE; `sigma_seek` compresses the contrast; `speed` is the
+  # slice-19 DEAD knob.
+  - {target: m1, key: gyro_scale_err, min: -0.4, max: 0.4,
+     label: "GYRO: scale-factor error s — CURE A. Drag to 0 and the ring dies; only UNDER-reading destabilizes"}
+  - {target: m1, key: gyro_bias_z, min: -0.08, max: 0.08,
+     label: "GYRO: yaw-rate bias b (rad/s) — the OTHER currency. It moves the AIM POINT, not the boundary"}
+  - {target: m1, key: radome_slope_est, min: -0.55, max: 0.0,
+     label: "COMPENSATOR: belief R̂ — CURE B. Drag to the HUD's R_worst = -0.33 and the SAME bad gyro is harmless"}

@@ -1682,6 +1682,7 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # glass you do not have is a real configuration (residual = −R̂ ⇒ it de-tunes), not a no-op.
     ȧz_ff = 0.0; ėl_ff = 0.0; R̂_rad = 0.0
     _sched_on = false; Â_est = 0.0; k̂_est = 0.0; look_az_c = 0.0; look_el_c = 0.0
+    _gyro_on = false; s_gyro = 0.0; by_gyro = 0.0; bz_gyro = 0.0      # slice 31
     _comp_on = haskey(c, :radome_slope_est) && haskey(c, :att_q) &&
                get(w.fidelity, :airframe, :point_mass) === :six_dof
     if _comp_on
@@ -1712,16 +1713,50 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # slice-27/28 wire is bit-for-bit unchanged BY CONSTRUCTION. (The kernels' own reduction IS
         # pinned bit-for-bit in `test_frames.jl` — that exactness is the knob-vs-rung argument,
         # atmosphere.jl's discriminator; it is not the seam's mechanism.)
+        #
+        # SLICE 31 — AN IMPERFECT GYRO. Slices 27/28/29/30 all fed the feed-forward the TRUE body
+        # rate and all four named that as a §1 approximation. Here the compensator reads what a real
+        # rate gyro REPORTS, `ω̃ = (1+s)·ω + b` (frames.jl `gyro_reading`), and the two error terms
+        # land in DIFFERENT CURRENCIES:
+        #   • a SCALE FACTOR is common-mode on the product `R̂·ω̃`, so the belief that reaches the loop
+        #     is EXACTLY `R̂(1+s)` — back onto slice 26/27's RESIDUAL, moving the STABILITY BOUNDARY,
+        #     and ONE-SIDED like slice 26/30's constraint (with `R̂ < 0`, a gyro that UNDER-reads
+        #     walks the effective belief toward the ringing side; over-reading merely de-tunes);
+        #   • a BIAS never touches the belief. It injects a CONSTANT spurious LOS rate `R̂·b` — the
+        #     arc's FIRST ADDITIVE entry — which moves the AIM POINT, not the boundary, and is
+        #     TWO-SIDED: no safe direction.
+        # ⭐ Both are scaled by `|R̂|`, which slice 30's design rule DELIBERATELY MAXIMIZES: the
+        # scalar that buys unconditional stability buys the gyro's own errors with it, so the aim
+        # point becomes `R_worst/(1+s)`. See `docs/plans/slice31.md`.
+        #
+        # ⚠ THE EQUIVALENCE IS A TOOTH, NOT A HEADLINE (the FALSE-FIDELITY trap, slice 15's `k_δ` /
+        # slice 19's dead `speed`): `R̂(1+s)` is a value `radome_slope_est` can already take, so the
+        # scale-factor half adds NO mechanism by itself. What it adds is that the error is
+        # MULTIPLICATIVE — absolute size `|R̂|·|s|` — which no additive parameterization expresses.
+        #
+        # ⚠ STRUCTURAL BYTE-IDENTITY (the slice-20/21/26/27/28/29 shape, FIFTH nesting level): with
+        # no gyro-error key the TRUTH rate is passed VERBATIM by a TERNARY that does no arithmetic on
+        # it — never `gyro_reading(ω, 0.0, zero(Vec3))` trusting the zeros (the `-0.0` trap and float
+        # non-associativity). A slice-27/28/29/30 wire is bit-for-bit unchanged BY CONSTRUCTION.
+        # ⚠ GYRO NOISE IS ABSENT ON DRAW-TOPOLOGY GROUNDS, not by oversight: a per-tick random rate
+        # error is an unconditional THIRD `randn` on a path that has drawn exactly two since slice
+        # 25, so it would desync every 25–30 replay (convention 3; the slice-13 `:scan` 4b shape).
+        ω_tru_g = get(c, :omega_body, zero(Vec3))::Vec3
+        _gyro_on = haskey(c, :gyro_scale_err) || haskey(c, :gyro_bias_y) || haskey(c, :gyro_bias_z)
+        s_gyro  = Float64(get(c, :gyro_scale_err, 0.0))
+        by_gyro = Float64(get(c, :gyro_bias_y, 0.0))
+        bz_gyro = Float64(get(c, :gyro_bias_z, 0.0))
+        ω_gyro = _gyro_on ?
+                 gyro_reading(ω_tru_g, s_gyro, Vec3(0.0, by_gyro, bz_gyro)) :
+                 ω_tru_g
         _sched_on = haskey(c, :radome_ripple_est)
         if _sched_on
             Â_est = Float64(c[:radome_ripple_est])
             k̂_est = Float64(get(c, :radome_ripple_k_est, 12.0))
             ȧz_ff, ėl_ff = radome_compensation_scheduled(R̂_rad, Â_est, k̂_est,
-                                                         look_az_c, look_el_c,
-                                                         get(c, :omega_body, zero(Vec3))::Vec3)
+                                                         look_az_c, look_el_c, ω_gyro)
         else
-            ȧz_ff, ėl_ff = radome_compensation(R̂_rad, look_az_c,
-                                               get(c, :omega_body, zero(Vec3))::Vec3)
+            ȧz_ff, ėl_ff = radome_compensation(R̂_rad, look_az_c, ω_gyro)
         end
     end
 
@@ -1917,6 +1952,68 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # The feed-forward the gyro actually contributed this tick, on the loop-closing axis — the
         # MECHANISM made visible beside `radome_eps`, which is the disease it is treating.
         tel["$sid.radome_ff_el"]     = _finite_coord(ėl_ff)                  # rad/s
+        # SLICE 31 — the IMPERFECT GYRO's readouts, shipped ONLY while a gyro-error key is authored
+        # (the never-stale discipline; a slice-25…30 wire is byte-identical). All SCALARS.
+        if _gyro_on
+            tel["$sid.gyro_scale_err"] = _finite_coord(s_gyro)               # the live knob s
+            tel["$sid.gyro_bias_z"]    = _finite_coord(bz_gyro)              # the live knob b (rad/s)
+            # ⭐⭐ THE BELIEF THE LOOP ACTUALLY SEES, shipped as a NUMBER (convention 13 — the client
+            # never multiplies physics). A scale-factor error is COMMON-MODE on the feed-forward
+            # product `R̂·ω̃`, so what closes the loop is `R̂(1+s)` and NOT the `radome_slope_est` the
+            # designer set. ⚠ THAT EQUIVALENCE IS EXACT (gate-0 §1: the same flight to 1e−11 m), which
+            # is why this key is the one the HUD must show beside `radome_slope_worst` — a student who
+            # reads only the authored belief cannot see why a competent design rings.
+            tel["$sid.radome_slope_est_eff"] = _finite_coord(R̂_rad * (1.0 + s_gyro))
+            # ⭐ THE DESIGN RULE, RE-AIMED FOR THE GYRO SPEC. Slice 30's rule aims `R̂` at
+            # `radome_slope_worst`; with a scale-factor error the rule survives while `R̂(1+s)` clears
+            # it, so the aim point becomes `R_worst/(1+s)`. ⚠ Convention 5: `s = −1` (the DEAD GYRO)
+            # is inside the reach of a live slider and would divide by zero — floored, and the floor
+            # is on the DENOMINATOR rather than on the knob, because `s = −1` must stay FLYABLE (it is
+            # slice 26's uncompensated missile, a legitimate degenerate).
+            # ⚠ Shipped only where there is glass to aim at (`_ripple_on`), the gate its slice-30
+            # companion `radome_slope_worst` carries — a lone half is the stale-readout class.
+            _ripple_on && (tel["$sid.radome_aim_gyro"] =
+                _finite_coord(radome_slope_worst(R_rad, A_rip) / max(1.0 + s_gyro, 1.0e-6)))
+            # ⭐ THE ENGAGEMENT RESIDUAL READ AGAINST THE EFFECTIVE BELIEF — the number that predicts
+            # the verdict once the gyro is imperfect.
+            # ⚠⚠ SHIPPED ALONGSIDE `radome_residual_az`, WHICH KEEPS SLICE 28's MEANING UNCHANGED
+            # (advisor). Slice 28's headline IS that the HARDWARE residual reads exactly 0.000 while
+            # the missile rings; folding the gyro into that key would make its meaning depend on which
+            # keys happen to be present, and would leave the 28/29/30 verifiers passing by equal
+            # values rather than by construction. TWO numbers from the SAME frames that DISAGREE is
+            # this arc's own shape (28's hardware-vs-engagement pair, 29's bench-vs-loop pair) — and
+            # the HUD must label both.
+            if _ripple_on
+                tel["$sid.radome_residual_az_eff"] = _finite_coord(
+                    radome_slope_curve(R_rad, A_rip, k_rip, look_az) -
+                    (_sched_on ? radome_slope_curve(R̂_rad, Â_est, k̂_est, look_az_c) : R̂_rad) *
+                    (1.0 + s_gyro))
+            end
+            # THE OTHER CURRENCY, AS A NUMBER: the constant spurious LOS rate the BIAS injects on the
+            # loop-closing axis, `R̂·b` — additive, with no residual to move, and the one term of this
+            # sensor that no belief whatsoever can reproduce (`gyro_reading`'s tooth at ω = 0).
+            # ⚠ THIS IS THE FORMULA, NOT THE CONSEQUENCE — it is `R̂·b` and nothing else, so it is
+            # EXACTLY proportional to `R̂` by construction and must NEVER be used to evidence the
+            # amplification claim (that would be the formula restated, convention 11's tautology
+            # trap; the first draft of the gate-3 verifier did exactly this and its ratio was
+            # 0.3474/0.27 = 1.29 by arithmetic alone). It is a HUD number: what the bias is worth
+            # right now, beside the belief that scales it.
+            tel["$sid.gyro_inject_az"] = _finite_coord(R̂_rad * bz_gyro)      # rad/s
+            # ⭐ THE CLOSED-LOOP CONSEQUENCE, which is a different number: the TRUE LOS azimuth rate.
+            # PN drives the MEASURED rate toward zero, so whatever the compensator injects has to be
+            # carried by the TRUE geometry — the aim-point error, per frame, with no CPA sampling in
+            # it ([[ewsim-missile-verifier-sampling]]: a HIT samples COARSELY, so a frame-sampled
+            # miss cannot carry this claim — slice 27's verifier ate exactly that defect and slice
+            # 30 states the rule).
+            # ⚠ A TRUTH DIAGNOSTIC, exactly like `omega_ratio` beside it, and labelled as one: the
+            # seeker never sees this. Closed form rather than a difference of angles, so it carries
+            # no finite-difference noise: `d(atan2(dy,dx))/dt = (dx·vy − dy·vx)/(dx² + dy²)`.
+            let d = tgt.pos - e.pos, v = tgt.vel - e.vel
+                den = d[1] * d[1] + d[2] * d[2]
+                tel["$sid.los_azdot_true"] = _finite_coord(
+                    den > 1.0e-12 ? (d[1] * v[2] - d[2] * v[1]) / den : 0.0)   # rad/s
+            end
+        end
     end
     return nothing
 end

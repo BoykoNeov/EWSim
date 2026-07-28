@@ -5398,3 +5398,318 @@ end
         end
     end
 end
+
+@testset "AN IMPERFECT GYRO in the radome loop (slice 31 — two terms, two currencies)" begin
+    dt = 1.0e-3
+
+    # Slice 30's wire (its glass, its engagement), with the compensator's GYRO now imperfect. The
+    # engagement stays AUTHORED here — slice 31's claim is PER-ENGAGEMENT, and stacking slice 30's
+    # envelope axis on top of it would violate convention 9.
+    # `s`/`bz`/`by === nothing` mints NO key: that is the byte-identity reference, and the ONLY path
+    # slices 25–30 take.
+    function gyro_world(; Rhat = -0.27, s = nothing, bz = nothing, by = nothing,
+                          A = -0.15, seed = 31)
+        w = World(seed = seed,
+                  fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                 :autopilot => :alpha, :airframe => :six_dof,
+                                                 :seeker => :filtered, :seeker_axes => :az_el))
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.0,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => 0.3, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => 8.0, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => 5.0e-5, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true,
+                                :radome_slope => -0.03, :radome_ripple => A,
+                                :radome_ripple_k => 12.0, :radome_slope_est => Rhat)
+        s  === nothing || (comp[:gyro_scale_err] = s)
+        bz === nothing || (comp[:gyro_bias_z]    = bz)
+        by === nothing || (comp[:gyro_bias_y]    = by)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 2000.0, 4200.0),
+                                 vel = Vec3(0.0, 200.0, 0.0),
+                                 comp = Dict{Symbol,Any}(:cross_speed_mps => 200.0))
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:t1)]
+    end
+
+    # the missile's own body-rate trace, which is what the ring lives in (the slice-26…30 metric)
+    function trace(; n = 900, kw...)
+        w, sub = gyro_world(; kw...)
+        out = Float64[]
+        for _ in 1:n
+            tick!(w, sub, dt); empty!(w.events)
+            m = w.entities[:m1]
+            ω = get(m.comp, :omega_body, zero(Vec3))
+            append!(out, (m.pos[1], m.pos[2], m.pos[3], ω[2], ω[3]))
+        end
+        return out
+    end
+
+    @testset "BYTE-IDENTITY — no gyro key ⇒ the slice-25…30 path, bit-for-bit" begin
+        # Convention 2, and it is the CENTRAL risk of this seam: slice 31 is a FIFTH nesting level
+        # inside `_observe_point3d!`, where a mis-nested else-arm would silently re-route every
+        # earlier radome wire. The key-absent path passes the TRUTH rate through a ternary that does
+        # NO arithmetic on it — never `gyro_reading(ω, 0, 0)` trusting the zeros (the `-0.0` trap and
+        # float non-associativity), so this is bit-for-bit BY CONSTRUCTION and not by cancellation.
+        base = trace()
+        @test trace() == base                                   # determinism, same-config
+        # …and authoring the keys AT THEIR OFF-VALUES is bit-identical TOO, which is the
+        # KNOB-not-rung discriminator measured rather than argued (atmosphere.jl's).
+        @test trace(s = 0.0)              == base
+        @test trace(bz = 0.0)             == base
+        @test trace(s = 0.0, bz = 0.0)    == base
+        # …and the paired does-differ case, so the equality above is not vacuous.
+        @test trace(s = -0.05) != base
+        @test trace(bz = 0.01) != base
+    end
+
+    @testset "DRAW-COUNT INVARIANCE — class 4a, and it is ASSERTED not assumed" begin
+        # Both gyro error terms are DETERMINISTIC: they add no `randn`, at any value. (Gyro NOISE is
+        # deferred on exactly this ground — an unconditional third draw would desync every 25–30
+        # replay, convention 3.) Comparing the FINAL RNG state is the draw-COUNT assert.
+        function endrng(; kw...)
+            w, sub = gyro_world(; kw...)
+            for _ in 1:500
+                tick!(w, sub, dt); empty!(w.events)
+            end
+            return copy(w.rng)
+        end
+        r0 = endrng()
+        @test endrng(s = -0.40)   == r0
+        @test endrng(s = +0.40)   == r0
+        @test endrng(s = -1.0)    == r0
+        @test endrng(bz = 0.08)   == r0
+        @test endrng(bz = -0.08, s = -0.2) == r0
+    end
+
+    @testset "⭐ THE REPARAMETERIZATION — a scale factor IS a belief error, exactly" begin
+        # The slice's central risk, named by the advisor before any code and MEASURED at gate 0: a
+        # common-mode scale factor is common-mode on the feed-forward product, so `(R̂, s)` flies the
+        # SAME MISSILE as `(R̂(1+s), perfect gyro)`. That is why the scale-factor half ships as a
+        # TOOTH and the slice's claim is a DESIGN RULE — the FALSE-FIDELITY class (slice 15's `k_δ`,
+        # slice 16's refused toggle, slice 19's dead `speed`) caught in the open.
+        # ⚠ `atol`, NEVER `==`: `R̂·((1+s)·ω)` and `(R̂·(1+s))·ω` differ in the last ULPs by float
+        # non-associativity (gate 0: two of five wire pairs came out bit-identical, three did not),
+        # so an equality here would be a false claim about the same physics.
+        for (Rh, s) in ((-0.27, -0.05), (-0.33, -0.20), (-0.33, +0.10), (-0.45, +0.30))
+            a = trace(Rhat = Rh, s = s)
+            b = trace(Rhat = Rh * (1 + s))
+            @test maximum(abs.(a .- b)) < 1.0e-8            # metres / rad·s⁻¹ over 900 ticks
+        end
+        # the PAIRED does-differ case: without the rescale the two beliefs are different missiles.
+        @test maximum(abs.(trace(Rhat = -0.27, s = -0.05) .- trace(Rhat = -0.27))) > 1.0
+    end
+
+    @testset "⭐ THE DEAD GYRO — `s = −1` IS slice 26's uncompensated missile" begin
+        # The reading collapses to the bias alone, so the feed-forward vanishes with it and what is
+        # left driving the loop is the FULL slope `R − 0`. Bit-exact on the wire (gate-0 P2), not an
+        # `atol`: `(1 + (−1))·ω` is exactly zero and `R̂·0.0` is exactly ±0.0, so both arms add the
+        # same signed zero.
+        for Rh in (-0.03, -0.27, -0.33)
+            @test trace(Rhat = Rh, s = -1.0) == trace(Rhat = 0.0)
+        end
+    end
+
+    # ⚠⚠ THE WINDOW IS THE RANGE BAND, NOT A TICK SLICE, AND THE FIRST DRAFT OF THIS FILE GOT IT
+    # WRONG: slice 28 measured that a crossing wire's rms r carries a LEGITIMATE FRONT-LOADED baseline
+    # (0.172 whole-approach against 0.0138 in band), so a tick window over the first second reads the
+    # launch transient on EVERY arm and every verdict collapses to "0.14". Fly to CPA and window on
+    # `r ∈ [500, 3000] m`, exactly as the verifier and gate 0 do — arms with different ToF would
+    # otherwise compare different parts of the engagement.
+    function flight(; max_t = 25.0, kw...)
+        w, sub = gyro_world(; kw...)
+        rs = Float64[]; ωr = Float64[]; azt = Float64[]
+        r_prev = Inf
+        for _ in 1:Int(round(max_t / dt))
+            tick!(w, sub, dt); empty!(w.events)
+            m = w.entities[:m1]; t = w.entities[:t1]
+            d = t.pos - m.pos; rr = sqrt(d[1]^2 + d[2]^2 + d[3]^2)
+            û = los_unit(m.pos, t.pos)
+            push!(rs, rr); push!(ωr, get(m.comp, :omega_body, zero(Vec3))[3])
+            push!(azt, atan(û[2], û[1]))
+            rr > r_prev && break                       # first CPA (the [[ewsim-missile-verifier-
+            r_prev = rr                                #  sampling]] discipline)
+        end
+        win = findall(r -> 500.0 < r < 3000.0, rs)
+        azdot = [(azt[i] - azt[i-1]) / dt for i in win if i > 1]
+        return (; rms_r = sqrt(sum(abs2, ωr[win]) / length(win)),
+                  azdot = sort(azdot)[cld(length(azdot), 2)],      # median, no extra dependency
+                  miss = minimum(rs), reached = r_prev < Inf && length(rs) < Int(round(max_t / dt)))
+    end
+
+    @testset "⭐⭐ THE TWO CURRENCIES — a scale factor RINGS, a bias does not" begin
+        quiet = flight(Rhat = -0.27)                       # the "tightened" aim point, perfect gyro
+        ring  = flight(Rhat = -0.27, s = -0.05)            # …and a realistic cheap-MEMS gyro
+        @test quiet.reached && ring.reached                # every arm reached CPA (slice 30's rule)
+        @test quiet.rms_r < 0.30                           # the slice-28…30 ring threshold
+        @test ring.rms_r  > 0.30
+        @test ring.rms_r  > 5 * quiet.rms_r                # THE STABILITY CURRENCY
+        # THE OTHER CURRENCY: the same sensor, its other error term — and the verdict does NOT move,
+        # at either sign or any magnitude in the knob domain. It has no residual to move.
+        for b in (0.005, 0.02, -0.005, -0.02, 0.08, -0.08)
+            f = flight(Rhat = -0.33, bz = b)
+            @test f.reached
+            @test f.rms_r < 0.30                           # slice 30's aim point: quiet at every b
+        end
+        # …and it is NOT inert while it fails to ring: the aim point moves, LINEARLY in b and with the
+        # sign of `R̂·b` (the additive injection, the arc's first).
+        let n = flight(Rhat = -0.33), p = flight(Rhat = -0.33, bz = 0.02),
+            m = flight(Rhat = -0.33, bz = -0.02)
+            @test p.azdot > n.azdot > m.azdot
+        end
+        # ⚠ AND THE HONEST NARROWING (gate-0 P10): a bias CAN flip a MARGINAL design, because it
+        # steers the missile and so moves the LOOK ANGLE, which on CURVED glass moves the ENGAGEMENT
+        # residual (slice 28's mechanism arriving through the sensor). It cannot touch a design
+        # carrying slice 30's margin — which is the same margin the scale-factor budget is made of.
+        @test flight(Rhat = -0.265, bz = -0.02).rms_r > 0.30
+        @test flight(Rhat = -0.265, bz = +0.02).rms_r < 0.30
+    end
+
+    @testset "the AXIS SPLIT — `b_z` is the crossing wire's loop-closing channel" begin
+        # `b_z` drives the AZIMUTH correction, `b_y` the ELEVATION one (frames.jl's kernel tooth), and
+        # on a CROSSING engagement the lead — hence the ring — is in AZIMUTH. So the same bias on the
+        # two axes must NOT do the same thing; that is why only `b_z` ships as a knob.
+        # ⚠ Measured on the AIM POINT in the band, not on max|Δstate| over an early tick window: the
+        # launch transient responds to both axes and inverts the comparison (this file's first draft).
+        base = flight(Rhat = -0.33)
+        dz = abs(flight(Rhat = -0.33, bz = 0.03).azdot - base.azdot)
+        dy = abs(flight(Rhat = -0.33, by = 0.03).azdot - base.azdot)
+        @test dz > 0.0 && dy > 0.0                          # both are live…
+        @test dz > 3 * dy                                   # …and the azimuth axis dominates
+    end
+
+    @testset "the telemetry keys — shipped as NUMBERS, and 27/28's are NOT redefined" begin
+        # Convention 13: the client never multiplies physics, so the belief the LOOP sees ships as a
+        # number. ⚠⚠ AND slice 27/28's `radome_residual`/`radome_residual_az` KEEP THEIR MEANING: slice
+        # 28's headline IS that the HARDWARE residual reads 0.000 while the missile rings, so the
+        # gyro-effective residual ships ALONGSIDE rather than replacing it (two numbers from the same
+        # frames that disagree — this arc's own shape).
+        w, sub = gyro_world(Rhat = -0.27, s = -0.05, bz = 0.02)
+        local tel
+        for _ in 1:400
+            tick!(w, sub, dt); empty!(w.events)
+            tel = w.env[:telemetry]::Dict{String,Any}
+        end
+        @test tel["m1.gyro_scale_err"] == -0.05
+        @test tel["m1.gyro_bias_z"]    == 0.02
+        # the EFFECTIVE belief — the number the HUD must show beside the authored one
+        @test tel["m1.radome_slope_est_eff"] ≈ -0.27 * 0.95 atol = 1e-12
+        @test tel["m1.radome_slope_est"]     == -0.27          # …and the authored one is UNTOUCHED
+        # the design rule re-aimed for the gyro spec: `R_worst/(1+s)`
+        @test tel["m1.radome_aim_gyro"] ≈ (-0.03 + 2 * -0.15) / 0.95 atol = 1e-12
+        @test tel["m1.radome_slope_worst"] ≈ -0.03 + 2 * -0.15 atol = 1e-12
+        # the two residuals DISAGREE by exactly the belief rescale, and BOTH are shipped
+        @test haskey(tel, "m1.radome_residual_az") && haskey(tel, "m1.radome_residual_az_eff")
+        @test tel["m1.radome_residual_az_eff"] - tel["m1.radome_residual_az"] ≈
+              -(-0.27 * -0.05) atol = 1e-9                     # = R̂ − R̂(1+s) = −R̂·s
+        # the other currency, as a number — ⚠ and it is the FORMULA, `R̂·b`, nothing else
+        @test tel["m1.gyro_inject_az"] ≈ -0.27 * 0.02 atol = 1e-14
+        # ⭐ …and the CLOSED-LOOP consequence beside it, which is a DIFFERENT number: the TRUE LOS
+        # azimuth rate. PN nulls the MEASURED rate, so whatever the compensator injects is carried by
+        # the true geometry. ⚠ The two must NOT be confused — `gyro_inject_az` is exactly
+        # proportional to R̂ BY CONSTRUCTION, so evidencing the amplification with it would be the
+        # formula restated (the gate-3 verifier's first draft did exactly that). Pinned against an
+        # INDEPENDENT recompute from the entities' own state (convention 11's different-algorithm
+        # oracle), not against the expression in missile.jl.
+        let mm = w.entities[:m1], tt = w.entities[:t1],
+            d = tt.pos - mm.pos, v = tt.vel - mm.vel
+            @test tel["m1.los_azdot_true"] ≈
+                  (d[1] * v[2] - d[2] * v[1]) / (d[1]^2 + d[2]^2) atol = 1e-12
+            @test tel["m1.los_azdot_true"] != tel["m1.gyro_inject_az"]
+        end
+        # …and NONE of them ships without a gyro key (the never-stale discipline).
+        w2, sub2 = gyro_world(Rhat = -0.27)
+        local t2
+        for _ in 1:400
+            tick!(w2, sub2, dt); empty!(w2.events)
+            t2 = w2.env[:telemetry]::Dict{String,Any}
+        end
+        for k in ("m1.gyro_scale_err", "m1.gyro_bias_z", "m1.radome_slope_est_eff",
+                  "m1.radome_aim_gyro", "m1.radome_residual_az_eff", "m1.gyro_inject_az",
+                  "m1.los_azdot_true")
+            @test !haskey(t2, k)
+        end
+        @test haskey(t2, "m1.radome_residual_az")               # …while slice 28's still ships
+    end
+
+    @testset "no live gyro knob can crash a tick (conventions 5/6)" begin
+        # A throw inside observe! lands in the session's IO/EOF-only catch and drops the connection.
+        # `s = −1` drives `radome_aim_gyro`'s denominator to zero — floored at the CONSUMER, and the
+        # floor is on the denominator rather than on the knob because the dead gyro must stay FLYABLE.
+        for (s, bz) in ((-1.0, 0.0), (-1.0 - 1e-12, 0.05), (-50.0, -5.0), (5.0e3, 5.0e3),
+                        (0.0, 1.0e6), (-0.999999, 0.0))
+            w, sub = gyro_world(s = s, bz = bz)
+            for _ in 1:60
+                tick!(w, sub, dt)
+                empty!(w.events)
+            end
+            tel = w.env[:telemetry]::Dict{String,Any}
+            for k in ("m1.radome_slope_est_eff", "m1.radome_aim_gyro", "m1.gyro_inject_az",
+                      "m1.radome_residual_az_eff", "m1.los_azdot_true")
+                @test isfinite(tel[k])
+            end
+        end
+    end
+
+    @testset "loader: the gyro is PRESENCE-gated, and refuses to be a DEAD knob" begin
+        mktempdir() do dir
+            function write_scn(extra)
+                p = joinpath(dir, "g.yaml")
+                open(p, "w") do io
+                    print(io, "name: g\nseed: 31\ndt_physics: 1.0e-3\n",
+                              "fidelity: {airframe: six_dof, autopilot: alpha, guidance: pn,\n",
+                              "           seeker: filtered, seeker_axes: az_el}\n",
+                              "entities:\n",
+                              "  - id: m1\n    kind: missile\n    pos: [0.0, 0.0, 3000.0]\n",
+                              "    missile:\n      mass_kg: 140.0\n      speed: 700.0\n",
+                              "      elevation_deg: 12.0\n",
+                              "      seeker: {two_angle: true, radome_slope: -0.03", extra, "}\n",
+                              "      guidance: {n_pn: 8.0}\n",
+                              "      airframe: {inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0,\n",
+                              "                 cmq: -150.0, cla: 20.0, cy_beta: 20.0}\n",
+                              "  - id: t1\n    kind: target\n    pos: [6000.0, 2000.0, 4200.0]\n",
+                              "    vel: [0.0, 200.0, 0.0]\n    target: {rcs_m2: 1.0}\n")
+                end
+                return p
+            end
+            # a gyro error with NO compensator to corrupt is a DEAD knob (the slice-19 `speed` class)
+            # — REFUSED at load, not silently ignored (the slice-21/28/29 "refused, not
+            # branch-ordered" precedent).
+            for k in ("gyro_scale_err", "gyro_bias_z", "gyro_bias_y")
+                @test_throws ErrorException load_scenario(write_scn(", $k: -0.05"))
+            end
+            # …with a compensator it loads, and mints ONLY the keys authored.
+            s1 = load_scenario(write_scn(", radome_slope_est: -0.27, gyro_scale_err: -0.05"))
+            m1 = first(e for (_, e) in s1.world.entities if e.kind === :missile)
+            @test m1.comp[:gyro_scale_err] == -0.05
+            @test !haskey(m1.comp, :gyro_bias_z) && !haskey(m1.comp, :gyro_bias_y)
+            # non-finite is a LOAD error (convention 5: validate-at-load for authored inputs)
+            @test_throws ErrorException load_scenario(
+                write_scn(", radome_slope_est: -0.27, gyro_scale_err: .nan"))
+            @test_throws ErrorException load_scenario(
+                write_scn(", radome_slope_est: -0.27, gyro_bias_z: .inf"))
+            # ⚠ `s = −1` is NOT refused — the DEAD GYRO is a legitimate degenerate, not a crash path.
+            s2 = load_scenario(write_scn(", radome_slope_est: -0.27, gyro_scale_err: -1.0"))
+            @test first(e for (_, e) in s2.world.entities
+                        if e.kind === :missile).comp[:gyro_scale_err] == -1.0
+        end
+        # THE PRESENCE GATE FROM THE OTHER SIDE: no earlier wire carries a gyro key, so none of them
+        # grows the readouts (slices 1–30 byte-identical).
+        base = joinpath(@__DIR__, "..", "..", "scenarios")
+        for f in ("slice26_radome.yaml", "slice27_radome_comp.yaml", "slice28_radome_curve.yaml",
+                  "slice29_radome_schedule.yaml", "slice30_envelope.yaml")
+            s = load_scenario(joinpath(base, f))
+            for (_, e) in s.world.entities
+                @test !haskey(e.comp, :gyro_scale_err)
+                @test !haskey(e.comp, :gyro_bias_z)
+                @test !haskey(e.comp, :gyro_bias_y)
+            end
+        end
+    end
+end

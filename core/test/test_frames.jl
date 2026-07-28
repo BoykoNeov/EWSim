@@ -689,6 +689,81 @@
         @test isfinite(radome_slope_worst(0.0, -1.0e-300))
     end
 
+    @testset "AN IMPERFECT GYRO — two error terms, two currencies (slice 31)" begin
+        # The kernel is three lines; what has to be pinned is that its two terms enter the
+        # FEED-FORWARD differently, because that split is the whole slice.
+        ω = Vec3(0.3, -0.7, 0.45)
+
+        # ⭐ THE REPARAMETERIZATION, AND IT IS PINNED AS AN `atol` — NEVER AS BIT-IDENTITY. A
+        # common-mode scale factor is common-mode on the product `R̂·ω̃`, so the belief that reaches
+        # the loop is exactly `R̂(1+s)`. ⚠ `R̂·((1+s)·ω)` and `(R̂·(1+s))·ω` differ in the last ULP by
+        # float non-associativity, so a `===` here would be a FALSE claim about the same physics
+        # (gate 0 measured both: two of five wire pairs came out bit-identical and three did not).
+        for (R̂, s) in ((-0.27, -0.05), (-0.33, -0.20), (-0.03, +1.00), (-0.45, +0.30))
+            with_err = radome_compensation(R̂, 0.31, gyro_reading(ω, s, zero(Vec3)))
+            as_belief = radome_compensation(R̂ * (1 + s), 0.31, ω)
+            @test with_err[1] ≈ as_belief[1] atol = 1e-15
+            @test with_err[2] ≈ as_belief[2] atol = 1e-15
+        end
+        # …and the PAIRED does-differ case: without the scale factor the two are NOT the same
+        # correction (a test that only checks the equivalence passes for a kernel that ignores `s`).
+        @test radome_compensation(-0.27, 0.31, gyro_reading(ω, -0.05, zero(Vec3)))[1] !=
+              radome_compensation(-0.27, 0.31, ω)[1]
+
+        # ⭐⭐ THE BIAS IS NOT A BELIEF ERROR — the split that makes the two terms different currencies.
+        # No `R̂′` whatsoever reproduces a biased reading, because the bias contributes a term that
+        # does NOT scale with ω: at ω = 0 the scale factor produces EXACTLY nothing while the bias
+        # still injects `R̂·b`. That is the additive-vs-multiplicative distinction, as a tooth.
+        let b = Vec3(0.0, 0.0, 0.02)
+            @test gyro_reading(zero(Vec3), -0.5, zero(Vec3)) == zero(Vec3)          # scale: nothing
+            @test gyro_reading(zero(Vec3), 0.0, b)[3] == 0.02                       # bias: something
+            @test radome_compensation(-0.33, 0.31, gyro_reading(zero(Vec3), 0.0, b))[1] ==
+                  -0.33 * 0.02                                                      # the injection
+            @test radome_compensation(-0.33, 0.31, gyro_reading(zero(Vec3), -0.5, zero(Vec3)))[1] == 0.0
+        end
+
+        # THE AXIS SPLIT (gate-0 P6, and slice 27's own axis-asymmetry tooth inherited): `b_z` drives
+        # the AZIMUTH correction ONLY and `b_y` the ELEVATION correction ONLY. A kernel that put the
+        # bias on the wrong axis, or on both, still cancels at ω = 0 and would pass a magnitude test.
+        let Δz = radome_compensation(-0.33, 0.31, gyro_reading(zero(Vec3), 0.0, Vec3(0.0, 0.0, 0.05))),
+            Δy = radome_compensation(-0.33, 0.31, gyro_reading(zero(Vec3), 0.0, Vec3(0.0, 0.05, 0.0)))
+            @test Δz[1] != 0.0 && Δz[2] == 0.0
+            @test Δy[2] != 0.0 && Δy[1] == 0.0
+        end
+
+        # ⚠ THE DEAD GYRO `s = −1`: the reading collapses to the bias alone, the feed-forward vanishes
+        # with it, and the missile IS slice 26's uncompensated missile. Measured bit-identical on the
+        # wire at gate 0 (max|Δpos| = 0.0 against `R̂ = 0`), so it is pinned bit-exact here too.
+        @test gyro_reading(ω, -1.0, zero(Vec3)) == zero(Vec3)
+        @test radome_compensation(-0.33, 0.31, gyro_reading(ω, -1.0, zero(Vec3))) ==
+              radome_compensation(0.0, 0.31, ω)
+
+        # The KNOB-not-rung discriminator (atmosphere.jl's): the off-state is knob-reachable and EXACT.
+        # ⚠ Bit-exact componentwise, and it must hold for a NEGATIVE zero component too (the `-0.0`
+        # trap) — which is precisely why the shipped seam still BRANCHES upstream rather than calling
+        # this at zero.
+        for v in (ω, Vec3(0.0, -0.0, 0.0), Vec3(-1e-300, 0.0, 1e6))
+            @test gyro_reading(v, 0.0, zero(Vec3)) == v
+        end
+
+        # …and it is not vacuous: a non-zero `s` or `b` DOES move the reading (the paired does-perturb).
+        @test gyro_reading(ω, 0.01, zero(Vec3)) != ω
+        @test gyro_reading(ω, 0.0, Vec3(0.0, 0.0, 1e-6)) != ω
+
+        # The scale factor is COMMON-MODE across all three axes (a §1 named approximation — per-axis
+        # scale factors and misalignment are a named deferral). Pin the ratio, not just the change.
+        let g = gyro_reading(ω, 0.25, zero(Vec3))
+            for i in 1:3
+                @test g[i] ≈ 1.25 * ω[i] atol = 1e-15
+            end
+        end
+
+        # conventions 5/6 — a live slider can never make this manufacture a non-finite from finite
+        # input, at any magnitude either knob's domain can reach (and well beyond it).
+        @test all(isfinite, gyro_reading(Vec3(1e6, -1e6, 1e6), -1.0e3, Vec3(1e6, 1e6, 1e6)))
+        @test all(isfinite, gyro_reading(zero(Vec3), -1.0, zero(Vec3)))
+    end
+
     @testset "SEEKER_AXES_MODES — the one-list-no-drift const (convention 7)" begin
         @test SEEKER_AXES_MODES == (:pitch_plane, :az_el)
         @test :az_el in SEEKER_AXES_MODES && :pitch_plane in SEEKER_AXES_MODES
