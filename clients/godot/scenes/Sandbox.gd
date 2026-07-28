@@ -1376,7 +1376,12 @@ func _draw_airframe3d_hud() -> void:
 			if qr > 0.5:
 				lbl = "ENVELOPE — RINGING at this crossing"
 			else:
-				lbl = "AIMED AT R₀+2A — the SAFE side" if rh30 <= aim30 \
+				# ⚠ THE TOLERANCE IS NOT COSMETIC: the aim point is a Float64 sum that lands at
+				# −0.32999999999999996, not −0.33 (gate 2's own note), and the slider a student drags
+				# carries the decimal. Without the epsilon the verdict flips on a rounding direction
+				# at EXACTLY the value the lesson asks them to hit. Nothing headless can catch this —
+				# `_draw` never runs there — so the shot is the only evidence this branch has.
+				lbl = "AIMED AT R₀+2A — the SAFE side" if rh30 <= aim30 + 1.0e-9 \
 					  else "QUIET HERE — R̂ above the aim point"
 		elif _telemetry.has(_af3d_missile + ".radome_sched_slope"):
 			qr = _radome_qpeak                    # rides |r| here too (a schedule wire has a ripple)

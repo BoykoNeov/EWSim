@@ -531,4 +531,11 @@ headline to exactly that class of proof-not-physics defect).
       measured the aim point as ADDITIVE on every ripple-carrying wire, so 28/29 grow it and
       switching on it would capture their views (both UI mirrors now CARRY it, so the wrong choice
       would be caught).
-- [ ] Docs — `docs/STATUS.md` as-built, `CLAUDE.md` status line, `HANDOFF.md` §11, memory.
+- [x] Docs — `docs/STATUS.md` as-built, `CLAUDE.md` status line, `HANDOFF.md` §11, memory. Plus the
+      gate-3 post-review pass (advisor): the verifier's pass text claimed "at every glass depth
+      measured" when this file flies ONE depth (the five-depth table is gate 0's, at seed 28) — the
+      slice-21/25 defect class in its SCOPE rather than its numbers, on a green run; the HUD's
+      "SAFE side" verdict compared `R̂ <= R₀+2A` with NO tolerance, and that sum is
+      `-0.32999999999999996`, so the verdict flipped on a rounding direction at exactly the value
+      the lesson asks a student to dial; and the 26/27/28 UI tests were re-run after the shared
+      `Sandbox.gd` edit.

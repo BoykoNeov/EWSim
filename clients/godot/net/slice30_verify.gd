@@ -671,7 +671,8 @@ func _pass() -> bool:
 		"exactly 0.000) RINGS AT %d OF %d — quiet only at the dead point vy = 0, where there is no " +
 		"lead at all and the engagement residual is %+.6f. Aim the SAME KIND of scalar at the " +
 		"glass's worst-case slope instead — %+.4f, read off the wire as `radome_slope_worst`, never " +
-		"recomputed in the client — and it rings at %d OF %d, at every glass depth measured. The " +
+		"recomputed in the client — and it rings at %d OF %d, at THIS glass depth (gate 0 measured " +
+		"the same 0/7 across five depths spanning a 3x range of slope; this file flies one). The " +
 		"smallest ring clears the %.2f verdict line by %.2fx and the largest quiet sits %.2fx under " +
 		"it, so the COUNT does not rest on a marginal cell. ⇒ STABILITY IS UNCONDITIONALLY " +
 		"PURCHASABLE WITH A SCALAR — it is not accurate anywhere, it errs in the harmless direction " +

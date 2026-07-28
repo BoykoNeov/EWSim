@@ -115,8 +115,9 @@ ENGAGEMENT addressable (a presence-gated `cross_speed_mps` on ConstantVelocity, 
 ⭐⭐ THE HEADLINE IS A RING COUNT, NOT A RATIO: 26–29 each flew ONE engagement, so "the residual" could be spoken of
 as a number; here the crossing speed is a SLIDER and the envelope is the worst cell over vy ∈ {0,80,130,200,260,320,
 400}. The BORESIGHT-characterized scalar (hardware residual EXACTLY 0.000) rings 6/7; a scalar aimed at the glass's
-worst-case slope (`radome_slope_worst` = min(R₀,R₀+2A) = −0.33, READ OFF THE WIRE) rings 0/7 — at every glass depth
-measured. ⇒ STABILITY IS UNCONDITIONALLY PURCHASABLE WITH A SCALAR (it errs in the HARMLESS direction everywhere),
+worst-case slope (`radome_slope_worst` = min(R₀,R₀+2A) = −0.33, READ OFF THE WIRE) rings 0/7 — and gate 0 measured
+the same 0/7 across FIVE glass depths (a 3× range of slope span; the shipped verifier flies ONE — attribute it).
+⇒ STABILITY IS UNCONDITIONALLY PURCHASABLE WITH A SCALAR (it errs in the HARMLESS direction everywhere),
 so GAIN SCHEDULING BUYS PERFORMANCE, NOT STABILITY. ⚠ SUFFICIENT, NEVER TIGHT — 0/7 already at −0.28, and the
 bracket is MEASURED (last decisive ring −0.24/0.709; the boundary between −0.26 [1.06× the line, MARGINAL, NOT
 asserted] and −0.27). ⭐ THE BOUND IS NOT FREE ⇒ TWO BOUNDS, STABILITY FROM BELOW AND ACCURACY FROM ABOVE, closing on
