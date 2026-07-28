@@ -323,7 +323,7 @@ Loader (`core/src/scenario.jl`): the key lands beside `alt_hold_m`, validated fi
 - a maneuvering target carrying it is a LOAD ERROR;
 - draw-count identity across the knob (class 4a, asserted).
 
-## Gate 2 — telemetry and the wire — **COMPLETE (2026-07-28), 5542 → 5608 tests**
+## Gate 2 — telemetry and the wire — **COMPLETE (2026-07-28), 5542 → 5617 tests**
 
 No new physics ⇒ no new telemetry is strictly required: `radome_residual_az`, `omega_ratio` and the
 look angle have all shipped since 28. What the LESSON needs is the number the design rule TARGETS —
@@ -367,6 +367,12 @@ never-stale ZEROS below it, this key does NOT go stale post-impact: the target k
 speed the knob says. Both new keys take `_finite_coord` — both are SIGN-meaningful (a negative
 crossing flies the mirror engagement), and `_finite` clamps only from above, which is the exact trap
 slice 29 caught on `k̂`.
+
+⚠ **AND THE SCOPE THAT FOLLOWS FROM THAT SITE, WRITTEN DOWN SO A LATER SLICE DOES NOT ASSUME MORE**
+(advisor): `decide!` runs only for a GUIDED missile, so a wire with a crossing target and no
+`Autopilot` — a radar-only scenario, say — carries the KNOB but ships no key. That is correct (no
+engagement, no engagement label) and it is not a gap; but "slice 30 ships the crossing speed" is
+true wherever there is an engagement, not wherever the knob exists.
 
 ### 3. ⚠⚠ "BYTE-IDENTITY ON THE WIRE" IS NOT LITERALLY TRUE, AND THE PRECISE CLAIM IS THIS (advisor)
 
@@ -447,6 +453,11 @@ headline to exactly that class of proof-not-physics defect).
    `R₀+2A`, so it MOVES with A). At the boresight compensator most arms RING, and §6 forbids reading
    `ω_ratio` off a ringing arm — implemented naively this phase becomes a ring-vs-quiet comparison
    and the slice states §6 and violates it in the same file.
+   ⭐ **AND GATE 2 MADE THAT MECHANICAL: READ `radome_slope_worst` OFF THE WIRE AND SET `R̂` TO IT**
+   (advisor). The verifier must NOT recompute `R₀+2A` in GDScript — that is convention 13's forbidden
+   move AND it is the version that silently drifts when A moves. `ω_ratio` itself needs no new key
+   (shipped since 26); what phase 3 needed was the aim point as a NUMBER, which it now has, so the
+   loop is: drag A → read `radome_slope_worst` → `set_param radome_slope_est` to it → measure.
 4. **SUFFICIENT-NOT-TIGHT** — the envelope goes quiet at R̂ ≈ -0.28, above the rule's -0.33 (§3).
 5. **REPLAY** — held-seed bit-identical across a knob change (posdiff 0.0).
 6. **DOMAIN ENDPOINTS** — the dead point at vy = 0 (residual -0.0000) and the validity budget at the
@@ -490,7 +501,9 @@ headline to exactly that class of proof-not-physics defect).
       byte-identity claim STATED PRECISELY (trajectory/RNG identical, telemetry ADDITIVE on
       ripple-carrying wires — 28/29 DO grow a key); the second-seed check over all 14 envelope arms
       (**6/7 vs 6/7, 0/7 vs 0/7** — the ring count is seed-invariant, cells move < 0.2%). **5542 →
-      5608 (+66), full suite green.** Three advisor calls landed: the `min` instead of the literal
+      5617 (+75), full suite green.** Post-review: the live-slider guard widened from the new key to
+      the WHOLE radome wire at both signs of A and R̂ (advisor — a single-key clamp assert can pass
+      while the same amplitude NaNs its neighbours; measured finite, no defect). Three advisor calls landed: the `min` instead of the literal
       `R₀+2A`, the phase-4 `decide!` site for `cross_speed_mps`, and the target-scoped `set_param`
       check that gate 3's whole approach depends on.
 - [ ] Gate 3 — scenario + the four proofs; the 26/27/28/29 verifiers re-run to the digit.

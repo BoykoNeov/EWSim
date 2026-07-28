@@ -5249,10 +5249,20 @@ end
         # conventions 5/6 — a live slider can neither crash a tick nor ship a non-finite. `A` is
         # load-validated finite only, and the SIGNED clamp is `_finite_coord` (`_finite` bounds only
         # from above and would let a huge NEGATIVE reach the JSON — the slice-29 `k̂` catch).
-        let t = tel_after(50; A = -1.0e12)
-            @test isfinite(t["m1.radome_slope_worst"])
-            @test t["m1.radome_slope_worst"] == -FINITE_CEIL
+        # ⚠⚠ AND THE ASSERT COVERS THE WHOLE WIRE, NOT JUST THE NEW KEY (advisor). Convention 5 is
+        # "no throw inside a tick" and convention 6 is "no Inf/NaN to JSON" — a single-key clamp
+        # assert can pass while the SAME absurd amplitude NaNs its neighbours, since it also flows
+        # into `radome_error_curve`, bends the LOS by an absurd amount, and reaches `look_angles`
+        # through the attitude. Measured finite at both signs of A and of R̂ (`probe11_absurd_knobs`).
+        for kw in ((; A = -1.0e12), (; A = +1.0e12), (; Rhat = -1.0e12))
+            t = tel_after(50; kw...)
+            ks = [k for k in keys(t) if occursin("radome", k) || occursin("look", k) ||
+                                        occursin("omega_ratio", k)]
+            @test length(ks) ≥ 12                       # the set is really there to be checked
+            @test all(k -> t[k] isa Real && isfinite(t[k]), ks)
         end
+        @test tel_after(50; A = -1.0e12)["m1.radome_slope_worst"] == -FINITE_CEIL
+        @test tel_after(50; A = +1.0e12)["m1.radome_slope_worst"] === -0.03   # …the `min` again
     end
 
     @testset "the ENGAGEMENT LABEL on the wire — `cross_speed_mps`, sign and all" begin
@@ -5281,8 +5291,17 @@ end
             @test w.env[:telemetry]["m1.cross_speed_mps"] === 200.0
             @test w.env[:telemetry]["m1.a_cmd"] === 0.0          # the paired never-stale ZERO
         end
-        # conventions 5/6 — a live slider at an absurd magnitude ships finite, clamped, SIGNED.
+        # conventions 5/6 — a live slider at an absurd magnitude ships finite, clamped, SIGNED, and
+        # (advisor) leaves the REST of the wire finite too: a target at 1e12 m/s drives the look
+        # angle to ~90° within a few ticks, which is the neighbouring keys' worst case, not this
+        # key's. Measured at both signs.
         @test tel_after(50; cross = -1.0e12)["m1.cross_speed_mps"] == -FINITE_CEIL
+        @test tel_after(50; cross = +1.0e12)["m1.cross_speed_mps"] ==  FINITE_CEIL
+        for v in (-1.0e12, +1.0e12)
+            t = tel_after(50; cross = v)
+            @test all(k -> t[k] isa Real && isfinite(t[k]),
+                      [k for k in keys(t) if occursin("radome", k) || occursin("look", k)])
+        end
     end
 
     @testset "⭐ THE VERDICT SURVIVES A SECOND SEED (the headline is a ring COUNT)" begin
