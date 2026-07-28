@@ -122,6 +122,21 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             isfinite(comp[:alt_hold_m]) ||
                 error("target '$id': alt_hold_m must be finite (got $(comp[:alt_hold_m]))")
         end
+        # Slice 30: an OPTIONAL CROSSING-SPEED hold — `cross_speed_mps` pins the ConstantVelocity
+        # mover's vel_y each integrate! (radar.jl), making the ENGAGEMENT a knob-addressable comp
+        # key (a raw vel component is not sliderable). The envelope scenario's lesson lever: drag
+        # the crossing speed and the seeker's sustained lead — hence the look angle, hence the
+        # slope the radome presents there (slice 28) — moves with it. PRESENCE-gated at the
+        # consumer, so a target without the key (every slice-1..29 scenario) is byte-identical.
+        # Load-validated FINITE ONLY (the `alt_hold_m` / slice-28 `radome_ripple` posture): the
+        # SIGN matters — a negative crossing flies the mirror engagement — and every magnitude is
+        # crash-safe, so there is no positivity guard and no second clamp site.
+        if haskey(tb, "cross_speed_mps")
+            comp[:cross_speed_mps] = _f64(tb["cross_speed_mps"])
+            isfinite(comp[:cross_speed_mps]) ||
+                error("target '$id': cross_speed_mps must be finite " *
+                      "(got $(comp[:cross_speed_mps]))")
+        end
         # Slice 12: a `maneuver:` sub-block turns the straight-line target into a CURVING one — swap
         # ConstantVelocity → ManeuveringTarget (the augmented-PN foil). `a_lat_mps2`/`turn_sign` land
         # at KNOB-ADDRESSABLE comp keys, read with DEFAULTS at the consumer (a bare block / live
@@ -130,6 +145,20 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
         # validated FINITE (a huge live value just curves harder — the "a live slider can't crash a
         # tick" discipline; `turn_sign` defaults to +1, the clean direction — gate-0 probe).
         if haskey(tb, "maneuver")
+            # Slice 30: the ONE meaningless corner of the target product, REFUSED at LOAD rather
+            # than silently branch-ordered (the slice-21 "stall × ρ(z) is a LOAD ERROR" / slice-25
+            # ":scan × two_angle" precedent). `cross_speed_mps` is a `ConstantVelocity` pin, and a
+            # `maneuver:` block swaps that mover out for `ManeuveringTarget` — whose `_lateral_accel`
+            # is hard-coded to the x–z plane. So the key would be read by NOTHING: a dead knob a
+            # student could drag all day (the slice-19 `speed` trap). ⚠ The guard reads the YAML
+            # BLOCK, not the comp bag — `haskey(comp, :cross_speed_mps)` would work only because
+            # the parse above happens to sit above this fork, and a later reorder would silently
+            # disarm it (the slice-28/29 loader shape).
+            haskey(tb, "cross_speed_mps") &&
+                error("target '$id': cross_speed_mps is incompatible with a `maneuver:` block — " *
+                      "the crossing-speed pin lives in the ConstantVelocity mover, which a " *
+                      "maneuver block replaces with ManeuveringTarget (whose lateral accel is " *
+                      "in-plane by construction), so the key would be a DEAD knob (slice 30)")
             mn = tb["maneuver"]
             comp[:a_lat_mps2] = _f64(get(mn, "a_lat_mps2", 0.0))
             comp[:turn_sign]  = _f64(get(mn, "turn_sign", 1.0))

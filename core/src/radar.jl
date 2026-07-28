@@ -29,6 +29,25 @@ end
 
 function integrate!(cv::ConstantVelocity, w::World, dt::Float64)
     e = w.entities[cv.id]
+    # Slice 30: an OPTIONAL CROSSING-SPEED hold — a `comp[:cross_speed_mps]` key (a declared knob
+    # in the envelope scenario) pins the mover's vel_y so a LIVE slider can fly the ENGAGEMENT
+    # itself: the crossing speed sets the lead angle the seeker holds, hence the look angle at
+    # which the radome's slope curve is sampled (slice 28), hence the residual that closes slice
+    # 26's parasitic loop. The engagement becomes an AXIS the client can drive — which is what
+    # turns slice 26's one-sidedness observation into a design rule over an ENVELOPE.
+    # PRESENCE-gated (the `:alt_hold_m` / `:af_cma` precedent): no key → the `pos` line below is
+    # the whole mover, bit-identical for every slice-1..29 scenario. Any finite value is safe at
+    # the consumer (a live slider can't crash a tick — convention 5); vel_x/vel_z stay as authored.
+    #
+    # ⚠⚠ THE PIN GOES **BEFORE** THE INTEGRATE LINE, AND THIS IS NOT WHERE `alt_hold_m` PUTS IT
+    # (advisor, load-bearing — `docs/plans/slice30.md` gate 1). `alt_hold_m` pins a POSITION: the
+    # pin is idempotent AND is itself the observable, so after the update is correct. This pins a
+    # VELOCITY that the `pos` update on the same tick has already consumed — pinned after, the
+    # first step of every run advances on the AUTHORED vel_y and the knob is dead for one tick.
+    # ⚠ An EQUAL-VALUE byte-identity test cannot see that bug (both orders agree when the pin
+    # equals the authored value); only a DISAGREEING pair can (test_radar.jl, "THE ORDERING").
+    haskey(e.comp, :cross_speed_mps) &&
+        (e.vel = Vec3(e.vel[1], Float64(e.comp[:cross_speed_mps]), e.vel[3]))
     e.pos = e.pos + e.vel * dt
     # Slice 18: an OPTIONAL altitude hold — a `comp[:alt_hold_m]` key (a declared knob in a
     # terrain scenario) pins the mover's z so a LIVE slider can fly the target up/down through

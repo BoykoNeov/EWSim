@@ -274,3 +274,130 @@ end
         @test_throws ErrorException tick!(w, subs, 1.0e-3)
     end
 end
+
+# --- slice 30: the CROSSING-SPEED pin on ConstantVelocity (the ENGAGEMENT axis) -------------
+#
+# `ConstantVelocity` is the most-shared mover in the project (targets, decoys, jammers, DF
+# emitters/sensors, pulse emitters, ESM, GPS satellites all mount it), so a new key inside its
+# `integrate!` is exactly the shared-symbol hazard convention 2 is about. These teeth pin the
+# MECHANICS of the pin; the loader half lives in test_scenario.jl and the draw-count identity
+# in test_missile.jl.
+#
+# ⭐⭐ THE ONE THAT MATTERS IS "THE ORDERING". Every EQUAL-VALUE test — including the byte-identity
+# and knob-vs-rung ones below — passes with the pin written on the WRONG side of the `pos` update,
+# because both orders agree when the pinned value equals the authored one. Only a DISAGREEING pair
+# separates them (`docs/plans/slice30.md` gate 1: gate 0's own bit-identity probe could not see
+# the bug, and the plan's first draft shipped it).
+
+# A bare phase-1 mover: one target, one `ConstantVelocity`, no sensors. `cross`/`alt` mint their
+# comp keys only when non-`nothing` — the presence gate is the thing under test.
+function _mover_world(; vel = Vec3(-200.0, 0.0, 0.0), pos = Vec3(10_000.0, 0.0, 100.0),
+                        cross = nothing, alt = nothing)
+    w = World(seed = 30)
+    comp = Dict{Symbol,Any}(:rcs_m2 => 1.0)
+    cross === nothing || (comp[:cross_speed_mps] = cross)
+    alt   === nothing || (comp[:alt_hold_m]      = alt)
+    w.entities[:tgt1] = Entity(:tgt1, :target; pos = pos, vel = vel, comp = comp)
+    return w, Subsystem[ConstantVelocity(:tgt1)]
+end
+
+# The full state trace (pos+vel, every tick) — a bit-for-bit record, not a summary.
+function _mover_trace(; n = 400, dt = 1.0e-3, kw...)
+    w, subs = _mover_world(; kw...)
+    out = Float64[]
+    for _ in 1:n
+        tick!(w, subs, dt)
+        e = w.entities[:tgt1]
+        append!(out, (e.pos[1], e.pos[2], e.pos[3], e.vel[1], e.vel[2], e.vel[3]))
+    end
+    return out
+end
+
+@testset "the CROSSING-SPEED pin on ConstantVelocity (slice 30 — the engagement axis)" begin
+
+    @testset "BYTE-IDENTITY — no `cross_speed_mps` key ⇒ the slice-1..29 mover, bit-for-bit" begin
+        # The presence gate short-circuits before any arithmetic, so the key-absent path is
+        # TEXTUALLY the shipped `pos += vel·dt`. Paired with a does-pin arm so the claim is not
+        # vacuous (a test that only ever compares two no-key runs proves determinism, not gating).
+        base = _mover_trace()
+        @test _mover_trace() == base                        # determinism, and the control
+        @test _mover_trace(cross = 200.0) != base           # …PAIRED with an arm that DOES pin
+        @test _mover_trace(cross = -200.0) != _mover_trace(cross = 200.0)   # the SIGN is live
+    end
+
+    @testset "THE KNOB-vs-RUNG DISCRIMINATOR — pinning the AUTHORED value is bit-identical" begin
+        # The off-state is knob-REACHABLE (atmosphere.jl's discriminator): a `cross_speed_mps`
+        # equal to the authored `vel_y` is the same run, bit-for-bit — so this is a KNOB, and the
+        # fact is MEASURED rather than argued (the slice-26/28/29 rule).
+        auth = _mover_trace(vel = Vec3(-200.0, 200.0, 0.0))
+        @test _mover_trace(vel = Vec3(-200.0, 200.0, 0.0), cross = 200.0) == auth
+        @test _mover_trace(vel = Vec3(-200.0, 0.0, 0.0), cross = 0.0) == _mover_trace()
+    end
+
+    @testset "⭐⭐ THE ORDERING — the DISAGREEING pair, the only tooth that sees the bug" begin
+        # Authored vel_y = 200 pinned to 0 must be the SAME RUN as a target authored vel_y = 0
+        # with no key at all: the pin runs BEFORE the `pos` update, so the 200 is never integrated.
+        # Written after the update, tick 1 advances y by 200·dt = 0.2 m and every later tick
+        # carries that offset — a permanent 0.2 m the equal-value teeth above cannot see.
+        @test _mover_trace(vel = Vec3(-200.0, 200.0, 0.0), cross = 0.0) == _mover_trace()
+        # …and the same fact in the observable the plan states, legible because this fixture is
+        # authored at y = 0: EXACTLY zero, not "small".
+        w, subs = _mover_world(vel = Vec3(-200.0, 200.0, 0.0), cross = 0.0)
+        ymax = 0.0
+        for _ in 1:400
+            tick!(w, subs, 1.0e-3)
+            ymax = max(ymax, abs(w.entities[:tgt1].pos[2]))
+        end
+        @test ymax == 0.0
+    end
+
+    @testset "the pin HOLDS every tick, and a live write lands on the very next one" begin
+        # Not just the first tick: the pin is re-applied each `integrate!`, so it overrides an
+        # authored vel_y for the whole run (a one-shot assignment would drift back only if some
+        # other subsystem wrote vel — but the CONTRACT is a per-tick pin, and that is what
+        # composes with a slider).
+        dt = 1.0e-3
+        w, subs = _mover_world(vel = Vec3(-200.0, 200.0, 0.0), cross = 50.0)
+        for _ in 1:100; tick!(w, subs, dt); end
+        e = w.entities[:tgt1]
+        @test e.vel[2] == 50.0                              # THE PIN — exact, it is an assignment
+        @test e.vel[1] == -200.0                            # …and vel_x/vel_z are untouched
+        @test e.vel[3] == 0.0
+        # the POSITION is an accumulation of 100 floats and is NOT exactly 5.0 (convention 11:
+        # an explicit atol, never an `==` on a summed float).
+        @test e.pos[2] ≈ 100 * 50.0 * dt atol = 1.0e-9
+        @test e.pos[1] ≈ 10_000.0 - 100 * 200.0 * dt atol = 1.0e-9   # x still integrates
+        # the LIVE slider write (the test_terrain.jl:335 `alt_hold_m` shape): it takes effect on
+        # the NEXT tick, which is what a `set_param` mid-run needs.
+        e.comp[:cross_speed_mps] = -300.0
+        tick!(w, subs, dt)
+        @test e.vel[2] == -300.0
+    end
+
+    @testset "it COMPOSES with `alt_hold_m` — disjoint coordinates, one pins vel.y one pos.z" begin
+        dt = 1.0e-3
+        w, subs = _mover_world(vel = Vec3(-200.0, 0.0, 40.0), pos = Vec3(10_000.0, 0.0, 100.0),
+                               cross = 120.0, alt = 300.0)
+        for _ in 1:100; tick!(w, subs, dt); end
+        e = w.entities[:tgt1]
+        @test e.pos[3] == 300.0                             # the altitude hold, exact (a pos pin)
+        @test e.vel[2] == 120.0                             # the crossing pin, exact (a vel pin)
+        @test e.pos[2] ≈ 100 * 120.0 * dt atol = 1.0e-9     # y integrates on the PINNED speed
+        @test e.pos[1] ≈ 10_000.0 - 100 * 200.0 * dt atol = 1.0e-9
+        # order-independence of the two keys: the composed run is the composition, not a fight.
+        @test _mover_trace(vel = Vec3(-200.0, 0.0, 40.0), cross = 120.0, alt = 300.0) !=
+              _mover_trace(vel = Vec3(-200.0, 0.0, 40.0), cross = 120.0)
+    end
+
+    @testset "no live value can crash a tick (convention 5 — finite in, finite out)" begin
+        # There is no consumer clamp by design (the `alt_hold_m` / slice-28 `radome_ripple`
+        # posture: the sign matters and every magnitude is crash-safe), so pin the claim.
+        dt = 1.0e-3
+        for v in (0.0, -1.0e6, 1.0e6)
+            w, subs = _mover_world(cross = v)
+            for _ in 1:50; tick!(w, subs, dt); end
+            p = w.entities[:tgt1].pos
+            @test all(isfinite, (p[1], p[2], p[3]))
+        end
+    end
+end

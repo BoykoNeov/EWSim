@@ -5103,3 +5103,92 @@ end
         @test m29.comp[:radome_ripple_k]     == 12.0       # …and its k is still AUTHORED
     end
 end
+
+@testset "THE ENGAGEMENT AXIS in the radome loop (slice 30 — the crossing-speed knob)" begin
+    dt = 1.0e-3
+
+    # Slice 29's wire, with the target's crossing speed moved OFF the authored `vel` and ONTO the
+    # `cross_speed_mps` comp key the mover pins (radar.jl `integrate!`). That is the whole enabling
+    # change of slice 30: the ENGAGEMENT — which sets the sustained lead, hence the look angle at
+    # which the glass is sampled — becomes a knob a client can drag. `cross === nothing` mints NO
+    # key and authors `vel_y` directly: the byte-identity reference.
+    function eng_world(; vy = 200.0, cross = nothing, seed = 30)
+        w = World(seed = seed,
+                  fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                 :autopilot => :alpha, :airframe => :six_dof,
+                                                 :seeker => :filtered, :seeker_axes => :az_el))
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.0,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => 0.3, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => 8.0, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => 5.0e-5, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true,
+                                :radome_slope => -0.03, :radome_ripple => -0.15,
+                                :radome_ripple_k => 12.0, :radome_slope_est => -0.03)
+        # `vy` (AUTHORED on `vel`) and `cross` (PINNED on the comp key) are INDEPENDENT here on
+        # purpose: the two must be free to DISAGREE, because an equal-value pair cannot see the
+        # ordering bug (`docs/plans/slice30.md` gate 1).
+        tc = Dict{Symbol,Any}()
+        cross === nothing || (tc[:cross_speed_mps] = cross)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 2000.0, 4200.0),
+                                 vel = Vec3(0.0, vy, 0.0), comp = tc)
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:t1)]
+    end
+
+    @testset "DRAW-COUNT INVARIANCE — class 4a, and it is ASSERTED not assumed" begin
+        # A target-velocity pin is arithmetic on state that already exists: the seeker's 2 randn/tick
+        # are untouched, at any crossing speed. A draw-topology flip would desync replay (convention
+        # 3) — so this is pinned, not inferred from "we added no `randn` call". Comparing the FINAL
+        # RNG state is the draw-COUNT assert: a Xoshiro advances by steps taken, not values used.
+        function endrng(; kw...)
+            w, s = eng_world(; kw...)
+            for _ in 1:500
+                tick!(w, s, dt); empty!(w.events)
+            end
+            return copy(w.rng)
+        end
+        r0 = endrng()
+        @test endrng(cross = 0.0)   == r0
+        @test endrng(cross = 200.0) == r0
+        @test endrng(cross = 400.0) == r0
+        @test endrng(cross = -260.0) == r0
+    end
+
+    @testset "the pin is BIT-IDENTICAL to the same engagement authored on `vel`" begin
+        # The knob-vs-rung discriminator carried onto the FULL missile wire, not just the bare mover
+        # (test_radar.jl): pinning the crossing speed the target already flies changes NOTHING, so
+        # slice 29's shipped numbers are reachable through the new key — which is what lets slice 30
+        # keep 29's geometry and add only an axis.
+        function trace(; kw...)
+            w, s = eng_world(; kw...)
+            out = Float64[]
+            for _ in 1:900
+                tick!(w, s, dt); empty!(w.events)
+                m = w.entities[:m1]; t = w.entities[:t1]
+                append!(out, (m.pos[1], m.pos[2], m.pos[3], m.vel[1], m.vel[2], m.vel[3],
+                              t.pos[1], t.pos[2], t.pos[3]))
+            end
+            return out
+        end
+        base = trace()                                       # vy = 200 authored on `vel`, NO key
+        @test trace() == base                                # determinism, and the control
+        @test trace(vy = 200.0, cross = 200.0) == base       # the pin AT the authored value: EXACT
+        @test trace(vy = 200.0, cross = 0.0)   != base       # …PAIRED with arms that DO move it
+        @test trace(vy = 200.0, cross = 400.0) != base
+        # ⭐⭐ THE ORDERING, on the real missile wire — the DISAGREEING pairs, both directions.
+        # A target authored at REST and pinned to 200 must be the same run as one authored at 200:
+        # pinned AFTER the `pos` update, tick 1 would advance y on the AUTHORED value (0 here, 200
+        # there) and the two would part by 0.2 m forever, while the equal-value test above still
+        # passed. And the mirror: authored 200, pinned to rest, must equal a target authored at rest.
+        @test trace(vy = 0.0, cross = 200.0) == base
+        @test trace(vy = 200.0, cross = 0.0) == trace(vy = 0.0)
+    end
+end

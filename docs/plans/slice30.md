@@ -246,7 +246,35 @@ Slices 1–29 stay byte-identical by PRESENCE gating.
 
 ---
 
-## Gate 1 — the core seam
+## Gate 1 — the core seam — **COMPLETE (2026-07-28), 5500 → 5542 tests**
+
+⭐⭐ **THE ORDERING TOOTH WAS PROVEN BY DELIBERATE INVERSION, NOT BY INSPECTION** (advisor: "the
+single highest-value five minutes in this gate"). With the pin moved to the WRONG side of the `pos`
+update and the suite re-run, **exactly 6 asserts go red** — both `⭐⭐ THE ORDERING` teeth
+(`test_radar.jl`: the full-trace `==`, and `ymax` reading **0.2 vs 0.0**), both disagreeing pairs on
+the real missile wire (`test_missile.jl`), and — as corroboration — the two `pos[2] ≈ n·v·dt` atol
+checks in the "holds every tick" / "composes with `alt_hold_m`" teeth.
+
+⚠⚠ **AND THE EQUAL-VALUE TEETH PASSED UNDER THE BUG — MEASURED, NOT PREDICTED**: `BYTE-IDENTITY`
+went 3/3 and `THE KNOB-vs-RUNG DISCRIMINATOR` 2/2 with the seam wrong. That is the plan's own §gate-1
+warning turned into evidence: a gate built only from equal-value comparisons ships the ordering bug
+GREEN, and gate 0's P4d (`cross_speed_mps = 200` vs an authored `vel: [0,200,0]`) is exactly such a
+comparison.
+
+⭐ **THREE TEST FILES, NOT THE TWO THE DRAFT NAMED** (advisor): mover mechanics → `test_radar.jl`
+(`ConstantVelocity` lives in `radar.jl`); loader / LOAD ERROR / knob declaration → `test_scenario.jl`
+beside the `alt_hold_m` tooth, which is the established precedent; draw-count identity → the new
+`test_missile.jl` slice-30 testset on slice 29's own wire.
+
+⚠ **THE MANEUVER GUARD READS THE YAML BLOCK, NOT THE COMP BAG** (advisor): `haskey(comp,
+:cross_speed_mps)` would work today only because the parse happens to sit above the fork — a later
+reorder would silently disarm it. `haskey(tb, "cross_speed_mps")` is the slice-28/29 loader shape.
+
+⚠ **VALIDATED FINITE ONLY — no positivity guard, no consumer clamp.** The SIGN is meaningful (a
+negative crossing flies the mirror engagement) and every magnitude is crash-safe: the `alt_hold_m` /
+slice-28 `radome_ripple` posture, not a second guard site invented for this key.
+
+
 
 `ConstantVelocity.integrate!` (`core/src/radar.jl`) gains ONE presence-gated key, pinned EVERY tick
 (slice 29's probes did a one-shot `t.vel = ...`; for a constant the difference is nil — P2a measured
@@ -365,7 +393,10 @@ headline to exactly that class of proof-not-physics defect).
       convention 9 settled by measurement (P8, 196/196). Two advisor passes — the false-fidelity
       check that opened gate 0, and the design review that set the glass, the headline, the corner
       and the HUD requirement.
-- [ ] Gate 1 — the `ConstantVelocity` seam + loader key + teeth.
+- [x] Gate 1 — the `ConstantVelocity` seam + loader key + teeth. **5500 → 5542 (+42), full suite
+      green.** The ordering tooth PROVEN by deliberate inversion (6 red, and the equal-value teeth
+      green under the bug); the maneuver × crossing-speed corner refused at LOAD; teeth split across
+      `test_radar.jl` / `test_scenario.jl` / `test_missile.jl`.
 - [ ] Gate 2 — the `R₀+2A` telemetry; byte-identity on the wire; the second-seed check.
 - [ ] Gate 3 — scenario + the four proofs; the 26/27/28/29 verifiers re-run to the digit.
 - [ ] Docs — `docs/STATUS.md` as-built, `CLAUDE.md` status line, `HANDOFF.md` §11, memory.

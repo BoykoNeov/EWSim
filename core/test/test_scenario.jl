@@ -1127,6 +1127,76 @@ end
         @test :propagation ∉ Set(k.key for k in scn18.knobs)       # the button, not a slider
     end
 
+    @testset "loader: `cross_speed_mps` — the ENGAGEMENT axis as a comp key (slice 30)" begin
+        # Slice 30 makes the ENGAGEMENT client-drivable: the crossing speed sets the sustained lead
+        # the seeker holds, hence the look angle at which the radome's slope curve is sampled
+        # (slice 28), hence the residual that closes slice 26's parasitic loop. It lands beside
+        # `alt_hold_m` as an OPTIONAL, PRESENCE-gated key on the ConstantVelocity mover — and, like
+        # `alt_hold_m`, its whole reason for existing is that a raw `vel` component is not
+        # knob-addressable (a `Knob` must name a real comp key — `_parse_knobs`).
+        mkx(extra, mvr = "") = begin
+            f = tempname() * ".yaml"
+            write(f, """
+            name: s30_cross
+            seed: 30
+            entities:
+              - id: tgt1
+                kind: target
+                pos: [6000.0, 0.0, 4200.0]
+                vel: [0.0, 0.0, 0.0]
+                target:
+                  rcs_m2: 1.0
+            $extra
+            $mvr
+            knobs:
+              - {target: tgt1, key: rcs_m2, min: 0.1, max: 10.0, label: "RCS"}
+            """)
+            f
+        end
+        cross(v) = "      cross_speed_mps: $v"
+        # the key lands at the comp key the mover PINS (radar.jl `integrate!`), sign preserved.
+        @test load_scenario(mkx(cross(200.0))).world.entities[:tgt1].comp[:cross_speed_mps] == 200.0
+        @test load_scenario(mkx(cross(-130.0))).world.entities[:tgt1].comp[:cross_speed_mps] == -130.0
+        @test load_scenario(mkx(cross(0.0))).world.entities[:tgt1].comp[:cross_speed_mps] == 0.0
+        # PRESENCE-gated: no key at all is the slice-1..29 shape (nothing minted, nothing default).
+        @test !haskey(load_scenario(mkx("")).world.entities[:tgt1].comp, :cross_speed_mps)
+        # FINITE-validated at LOAD (convention 5/6) — a NaN/Inf vel_y would poison pos → the JSON
+        # wire. Validated FINITE ONLY: the SIGN is meaningful (a negative crossing flies the mirror
+        # engagement) and every magnitude is crash-safe, so there is deliberately no positivity
+        # guard and no second clamp site (the `alt_hold_m` / slice-28 `radome_ripple` posture).
+        @test_throws Exception load_scenario(mkx(cross(".nan")))
+        @test_throws Exception load_scenario(mkx(cross(".inf")))
+        # ⭐ A MANEUVERING TARGET CARRYING IT IS A LOAD ERROR — refused rather than silently
+        # branch-ordered (the slice-21 "stall × ρ(z)" / slice-25 ":scan × two_angle" precedent).
+        # A `maneuver:` block swaps ConstantVelocity out for ManeuveringTarget, whose lateral accel
+        # is hard-coded in-plane, so NOTHING would read the key: a DEAD knob a student could drag
+        # all day (the slice-19 `speed` trap, caught at LOAD instead of at gate 3).
+        man = "      maneuver: {a_lat_mps2: 30.0, turn_sign: 1.0}"
+        @test load_scenario(mkx("", man)) isa EWSim.Scenario           # the control: maneuver alone loads
+        @test any(s -> s isa ManeuveringTarget, load_scenario(mkx("", man)).subs)
+        @test_throws Exception load_scenario(mkx(cross(200.0), man))   # …the product is refused
+        # …and the guard reads the YAML BLOCK, so a plain target still gets the ConstantVelocity
+        # mover that owns the pin (the pairing that makes the refusal meaningful).
+        @test any(s -> s isa ConstantVelocity, load_scenario(mkx(cross(200.0))).subs)
+        # a KNOB can address it (the point of the key): `_parse_knobs` requires the comp key to
+        # exist at LOAD, so a scenario declaring the slider must author the key even at its default.
+        f = tempname() * ".yaml"
+        write(f, """
+        name: s30_knob
+        seed: 30
+        entities:
+          - id: tgt1
+            kind: target
+            pos: [6000.0, 0.0, 4200.0]
+            vel: [0.0, 0.0, 0.0]
+            target: {rcs_m2: 1.0, cross_speed_mps: 200.0}
+        knobs:
+          - {target: tgt1, key: cross_speed_mps, min: 0.0, max: 400.0, label: "Crossing speed (m/s)"}
+        """)
+        scn30 = load_scenario(f)
+        @test any(k -> k.key === :cross_speed_mps && k.target === :tgt1, scn30.knobs)
+    end
+
     @testset "loader parses slice19_alpha_limit.yaml (the inner α/g autopilot, spatial view)" begin
         # The slice-19 showcase: the guidance command inverted through the aero (a_cmd → α_cmd → δ), so
         # the achievable g IS the flight-condition ceiling `a_max_aero = Q·S·C_Lα·α_max/m`. Keeps the
