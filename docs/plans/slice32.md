@@ -152,7 +152,30 @@ operational changes. Both facts are pinned in `test_frames.jl`.
 two differ by aerodynamic incidence (−0.06…+0.03° against a ~29° lead, gate-0 §5) — that is a
 statement about a flying missile and it needs a wire, so it is gate 3's.
 
+### Gate-1 post-review (advisor)
+
+* **The one-shot-lead misuse is now IN the docstring**, in the same register as the saturation
+  sentinel: a lead computed from the LAUNCH geometry instead of the live one is **32.90° against the
+  28.84° the engagement holds — 14 % strict** (gate-0 §5), because the LOS rotates as the target
+  crosses. Evaluating this kernel once is the natural misuse for a HUD or a pass text, and the
+  0.997–1.006 agreement with the look angle is a PER-TICK agreement resting on nothing else.
+* **`fov_rad` is deliberately UNASSIGNED on the non-FOV path.** A first draft set it to `Inf` in the
+  else-arm, which silently supplies a plausible value where an unassigned local throws and the suite
+  catches it — and gate 2 ships `<sid>.seeker_fov_deg` telemetry. **Gate-2 telemetry reads
+  `c[:seeker_fov_deg]` under `_fov_on`, never this local.**
+* **The P4d radome × FOV corollary was re-measured under the kernel seam** — the one branch
+  combination the showcase check does not exercise (radome LIVE + FOV LIVE). All six arms reproduce
+  gate 0 exactly, headline included: **3774.59302 m at fov 20 + ringing glass, 72.0 % out of window**,
+  against 0.14117 m radome-free at the same fov, and the re-acquisition arm at 1.06672 m / 0.4 %
+  (`M:\claud_projects\temp\slice32\g1_wire_check_radome.jl`).
+
 ### Still open, carried into gate 2 (advisor)
+
+* ⚠⚠ **GATE 2's OPENING MOVE — NOTHING IN THIS SLICE HAS EVER GONE THROUGH THE LOADER.** Every
+  gate-0 probe and both gate-1 wire checks inject `m.comp[:seeker_fov_deg] = fov` PROGRAMMATICALLY;
+  `scenarios/slice32_fov.yaml` will not. Verify the YAML→comp path admits the key, and decide
+  whether `scenario.jl` needs a validate-at-LOAD entry (convention 5), BEFORE building on top of it
+  — the whole evidence base rests on a path the shipped scenario does not use.
 
 * `look_angle` telemetry must become `_rad_on || _fov_on`-gated — **never unconditional**, which
   would add a key to slice 25's wire.

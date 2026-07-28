@@ -1645,11 +1645,14 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # slice-21 `_atm_on` / 23 / 26 / 27 latent-bug class, whose FIFTH occurrence this would be).
     _fov_on = haskey(c, :seeker_fov_deg) && haskey(c, :att_q) &&
               get(w.fidelity, :airframe, :point_mass) === :six_dof
+    # ⚠ `fov_rad` is DELIBERATELY LEFT UNASSIGNED on the non-FOV path (advisor) — an `= Inf`
+    # else-arm would SILENTLY supply a plausible value to any future reader, where an unassigned
+    # local throws and the suite catches it. Gate-2 telemetry must read `c[:seeker_fov_deg]` under
+    # `_fov_on`, never this local. The convention-6 "no Inf/NaN to JSON" hazard, one step upstream.
     if _fov_on
         fov_rad = deg2rad(Float64(c[:seeker_fov_deg]))
         in_fov  = seeker_in_fov(c[:att_q]::Quat, û_tru, fov_rad)
     else
-        fov_rad = Inf
         in_fov  = true
     end
     _fov_on && (c[:seek_in_fov] = in_fov)   # probe/telemetry readout (gate-2 ships it on the wire)

@@ -795,6 +795,14 @@ velocities and the LOS. Measured against each other per tick over the whole cros
 agree to a ratio of **0.997–1.006** (gate-0 P3b) — which is what licenses the slice's claim that
 the critical FOV *is* the engagement's lead angle rather than merely correlating with it.
 
+⚠⚠ **AND IT MUST BE RECOMPUTED PER TICK — a ONE-SHOT lead angle is the natural misuse of this
+kernel, and it is WRONG BY 14 %.** The LOS ROTATES as the target crosses, so the collision triangle
+at LAUNCH is not the one the missile ends up flying: on the shipped wire the launch-geometry lead
+reads **32.90°** against the **28.84°** the engagement actually holds (gate-0 §5). A HUD that
+evaluates this once, or a verifier pass text that quotes a launch-time number, is quoting a
+requirement that is 4° too strict. The agreement with the look angle (0.997–1.006 above) is a
+PER-TICK agreement and holds on no other basis.
+
 ⚠ **SPEED, NOT VELOCITY — the signature is deliberate.** `V_m` is a SCALAR. Handing this a missile
 velocity vector invites computing the angle the missile has ACHIEVED, which is the look angle, a
 different quantity measured a different way; this function answers what the geometry REQUIRES.
