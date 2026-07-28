@@ -276,6 +276,11 @@ func _process(_dt_frame: float) -> bool:
 				return _fail("with k_hat = k and A_hat = A the BENCH error must be EXACTLY zero (the belief IS the glass), got median %.9f over [%.9f, %.9f]" % [_cure_mde, _mde_min, _mde_max])
 			if not (_cure_rez > 0.01):
 				return _fail("⭐ AND THE LOOP RESIDUAL MUST NOT BE ZERO EVEN SO (> 0.01): a PERFECT model evaluated at a BENT index is not a perfect compensator. Got median %.6f — if this is ~0 the compensator is being indexed on truth somewhere" % _cure_rez)
+			# ⚠ THE GLASS DID NOT CHANGE — only the BELIEF did. Pinning that the cured arm is STILL
+			# REFRACTING is what stops "the cure" from being read as "the radome went away", and it
+			# is slice 26's post-commit lesson (shipped telemetry gets a tooth) applied to `eps`.
+			if not (_max_eps > 1.0e-5):
+				return _fail("the cured arm must still be REFRACTING — the LOOP is what changed, not the glass (max|radome_eps| > 1e-5), got %.9f" % _max_eps)
 			if not (_pos_max_diff(_ring_pos, _pos_trace) > 0.0):
 				return _fail("radome_ripple_k_est must be a LIVE knob — changing it must MOVE the trajectory (the slice-19 NOT-A-DEAD-KNOB tripwire)")
 			if not (_min_los < HIT_MAX):
@@ -310,6 +315,8 @@ func _process(_dt_frame: float) -> bool:
 			# centrepiece, on the same two keys. Bench and loop disagree in BOTH directions.
 			if not (_inv_mde > CROSS_MIN * _inv_rez):
 				return _fail("on the quiet arm the BENCH error (%.5f) must exceed the LOOP residual (%.5f) by more than %.1fx — the exact mirror of the shipped arm, where the ordering runs the other way" % [_inv_mde, _inv_rez, CROSS_MIN])
+			if not (_max_eps > 1.0e-5):
+				return _fail("the quiet arm must still be REFRACTING (the glass is UNCHANGED across every phase — only the belief moves): max|radome_eps| > 1e-5, got %.9f" % _max_eps)
 			if not (_min_los < HIT_MAX):
 				return _fail("the quiet arm must still intercept (< %.0f m), got %.2f" % [HIT_MAX, _min_los])
 			if not _look_ok():
@@ -336,6 +343,8 @@ func _process(_dt_frame: float) -> bool:
 			# sensitivity left for them to disagree through. The paired opposite of the centrepiece.
 			if not (absf(_mean_mde() - _mean_rez()) < EXACT):
 				return _fail("with A_hat = 0 the BENCH error and the LOOP residual must be the SAME NUMBER (a scalar gives the same value at any index) — got %.9f vs %.9f. That coincidence is exactly what slice 27 enjoyed and slice 29 loses" % [_mean_mde(), _mean_rez()])
+			if not (_max_eps > 1.0e-5):
+				return _fail("the scalar-collapse arm must still be REFRACTING: max|radome_eps| > 1e-5, got %.9f" % _max_eps)
 			if not (_pos_max_diff(_ring_pos, _pos_trace) > 0.0):
 				return _fail("radome_ripple_est must be a LIVE knob — changing it must MOVE the trajectory")
 			if not (_min_los < HIT_MAX):
@@ -358,6 +367,8 @@ func _process(_dt_frame: float) -> bool:
 				return _fail("the k_hat knob's declared CEILING (%.0f) must ring UNAMBIGUOUSLY (rms omega_r > %.2f), got %.5f. ⚠ This endpoint was MOVED off 20 for exactly this reason: at 20 the metric is only ~0.47, a marginal edge, and slice 26's post-commit lesson is that declared endpoints are measured rather than inferred from the interior" % [KE_DOM, RING_RMS_MIN, _dom_rms])
 			if not _look_ok():
 				return _fail("the DECLARED DOMAIN ENDPOINT must stay inside the small-angle bend model's budget: " + _look_msg())
+			if not (_max_eps > 1.0e-5):
+				return _fail("the domain-ceiling arm must still be REFRACTING: max|radome_eps| > 1e-5, got %.9f" % _max_eps)
 			if not (_min_los < HIT_MAX):
 				return _fail("the domain-ceiling arm must still intercept (< %.0f m), got %.2f" % [HIT_MAX, _min_los])
 			if not _isolation_ok():

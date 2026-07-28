@@ -5055,6 +5055,28 @@ end
         r = schedfly(T = 2.0, airframe = :pitch_coupled)
         @test !haskey(r.w.env[:telemetry], "m1.radome_sched_slope")
         @test !haskey(r.w.env[:telemetry], "m1.radome_model_err_az")
+
+        # ⚠⚠ THE OTHER BRANCH COMBINATION, AND IT IS THE ONE WITH NO NATURAL PROOF (advisor): a
+        # SCHEDULE LIVE WITH NO GLASS. `_sched_on` does NOT imply `_rad_on` — compensating for glass
+        # you do not have is a REAL configuration (slice 27's docstring, and it de-tunes rather than
+        # no-ops), and in it `R_rad`/`A_rip`/`k_rip`/`look_az` are the else-arm ZEROS. So the two
+        # COMPARISON keys must be ABSENT rather than shipping a plausible number computed from a
+        # stale zeroed look angle — the slice-21 `_atm_on` / slice-23 stale-readout class, whose
+        # SIXTH occurrence this would be. ⭐ The two keys go together: `radome_model_err_az` carries
+        # the SAME `_ripple_on` gate as `radome_residual_az`, so a lone half can never reach the HUD.
+        let n = schedfly(T = 2.0, radome = nothing, ripple = nothing)
+            tel = n.w.env[:telemetry]
+            @test !haskey(tel, "m1.radome_model_err_az")     # no glass ⇒ no comparison…
+            @test !haskey(tel, "m1.radome_residual_az")      # …and its slice-28 twin, together
+            # …while the BELIEF-ONLY readouts DO ship, because they are well defined without glass:
+            # the compensator exists, it has a slope, and it has a real (bent-free) index.
+            @test haskey(tel, "m1.radome_sched_slope")
+            @test haskey(tel, "m1.look_angle_est")
+            @test isfinite(Float64(tel["m1.radome_sched_slope"]))
+            # and slice 27's hardware residual still reports −R̂₀, which is CORRECT and documented
+            # (the true slope defaults to 0 because there is no radome)
+            @test Float64(tel["m1.radome_residual"]) ≈ 0.03 atol = 1e-12
+        end
         # every live knob value keeps the wire finite (convention 6 — no Inf/NaN to JSON)
         for (Â, k̂) in ((-1.0e6, 12.0), (1.0e6, 12.0), (-0.15, 0.0), (-0.15, -5.0),
                        (-0.15, 1.0e6), (0.0, 12.0))

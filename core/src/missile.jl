@@ -1830,7 +1830,11 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # OWN INDEX, because that is where the belief actually acts.
         if _sched_on
             tel["$sid.radome_ripple_est"] = _finite_coord(Â_est)                 # the live knob Â
-            tel["$sid.radome_ripple_k_est"] = _finite(k̂_est)                     # the live knob k̂
+            # ⚠ `_finite_coord`, NOT `_finite`: `_finite` clamps only the UPPER bound, so a large
+            # NEGATIVE slider value would reach the JSON unclamped. `k̂` is load-validated finite but
+            # NOT sign-constrained (nothing divides by it — see the loader), so it is a SIGNED
+            # readout and takes the signed clamp, like every other radome scalar (convention 6).
+            tel["$sid.radome_ripple_k_est"] = _finite_coord(k̂_est)               # the live knob k̂
             # ⭐ THE SENSITIVITY, NOT A LOOP GAIN — say it that way (the slice's own gate-0
             # correction, made twice). `R̂' = Â·k̂·sin(k̂·look)` sizes and signs what the indexing
             # error costs; the RESIDUAL above is what actually decides. Shipped as a NUMBER so the
@@ -1856,9 +1860,22 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             # quiet, because indexed 2.4–2.7° low they land the other way round. Shipped so the
             # comparison is a READING of two core numbers rather than a claim (convention 13); it is
             # a diagnostic in the slice-26 `omega_ratio` sense, and must be labelled as one.
-            tel["$sid.radome_model_err_az"] = _finite_coord(
-                radome_slope_curve(R_rad, A_rip, k_rip, look_az) -
-                radome_slope_curve(R̂_rad, Â_est, k̂_est, look_az))
+            #
+            # ⚠ GATED ON `_ripple_on`, i.e. on THERE BEING GLASS TO COMPARE AGAINST — the same gate
+            # `radome_residual_az` carries, so the PAIR ships together or not at all (and a lone
+            # half would be exactly the reading the four-way HUD mirror exists to prevent).
+            # ⚠⚠ AND THAT GATE IS NOT COSMETIC: `_sched_on` can be true while `_rad_on` is FALSE —
+            # compensating for glass you do not have is a REAL configuration (slice 27's docstring),
+            # and there `R_rad`/`A_rip`/`k_rip`/`look_az` are all the else-arm ZEROS, so an ungated
+            # key would ship `0 − R̂(0) = −R̂₀` computed from a look angle that is not the one anything
+            # is looking at — a plausible NUMBER from stale state, which is the slice-21 `_atm_on` /
+            # slice-23 stale-readout class this arc has now caught six times. Pinned by a test rather
+            # than reasoned about (advisor).
+            if _ripple_on
+                tel["$sid.radome_model_err_az"] = _finite_coord(
+                    radome_slope_curve(R_rad, A_rip, k_rip, look_az) -
+                    radome_slope_curve(R̂_rad, Â_est, k̂_est, look_az))
+            end
         end
         # The feed-forward the gyro actually contributed this tick, on the loop-closing axis — the
         # MECHANISM made visible beside `radome_eps`, which is the disease it is treating.
