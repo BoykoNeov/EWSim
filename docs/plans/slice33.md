@@ -219,9 +219,13 @@ to carry no THIRD thing:
 
 - `af_alpha_max` is **HELD** on the shipped wire and stays a gate-0 causation probe (§P3a).
 - The two live sliders are the two halves of ONE quantity, and convention 9 is satisfied **by
-  MEASUREMENT, not by counting sliders** — the slice-27 precedent: the DIAGONAL
-  `fov = ⌈excursion(R̂)⌉` HOLDS as both move together (P2's critical-fov column read as a path), so
-  the pair is one axis, not two lessons.
+  MEASUREMENT, not by counting sliders** — the slice-27 precedent: the DIAGONAL is `fov` TRACKING
+  the excursion, and moving both together leaves `held` UNCHANGED (P2's critical-fov column read as
+  a path), so the pair is one axis, not two lessons.
+  ⚠ **State the diagonal as tracking, NEVER as `fov = ⌈excursion(R̂)⌉`** (advisor) — seam item 2
+  forbids asserting the `ceil` identity, and letting the `ceil` form carry the convention-9 argument
+  puts the two statements in tension in one document and invites gate 3 to reach for exactly the
+  identity it was told not to pin.
 
 ### The wire (proposed — gate 1 confirms)
 
@@ -229,6 +233,17 @@ Slice 32's geometry and glass: seed 32, vy = 200, R₀ = −0.03, A = −0.15, `
 slides. Ladder at fov = 21°: HELD at R̂ = −0.33 (18.14°) and −0.24 (20.62°), LOST at −0.18 (22.12°),
 −0.09, −0.03. Both cures are one slider each: **widen the window** (fov → 26 holds everything) or
 **aim `R̂` at `radome_slope_worst`** (free, and depth-independent).
+
+⚠⚠ **THE INTEGER LADDER STEPS STRAIGHT OVER THE SURVIVABLE BAND, AND THE TEST SET MUST NOT**
+(advisor). Every cell above is either 0.000 % out or kilometres out, while P4's interesting regime
+— 0.10 % out, still HITS, `t_break` ≈ 10.3 s — lives within ~0.4° of the excursion. **Slice 32 put
+BOTH DIRECTIONS IN THE SAME TEST for exactly this reason**: the survivable arm is what proves the
+coasting branch RE-ACQUIRES CLEANLY, and without it that branch is live-looking with no tooth (its
+"⭐ AND THIS IS THE PROOF THE COASTING BRANCH RE-ACQUIRES CLEANLY"). ⇒ the sub-degree cell
+**R̂ = −0.03, fov = 25.00 against a measured excursion of 25.011°** joins the test set.
+⚠ **PIN IT AGAINST THE MEASURED EXCURSION, NEVER A HARDCODED 25.0** — the margin there is 0.011°,
+below the measuring grid, so a literal becomes a magic number the next retune silently breaks
+(the slice-21 magic-multiple tooth, now pinned against a measured quantity).
 
 ### The four proofs (convention 14)
 
