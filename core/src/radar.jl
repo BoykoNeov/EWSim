@@ -46,6 +46,14 @@ function integrate!(cv::ConstantVelocity, w::World, dt::Float64)
     # first step of every run advances on the AUTHORED vel_y and the knob is dead for one tick.
     # ⚠ An EQUAL-VALUE byte-identity test cannot see that bug (both orders agree when the pin
     # equals the authored value); only a DISAGREEING pair can (test_radar.jl, "THE ORDERING").
+    #
+    # ⚠ SCOPE, CHECKED (advisor): the loader mints this key in the `:target` arm ONLY, but this
+    # mover is also mounted by `:decoy`/`:jammer`/`:emitter`/`:df_sensor`/`:df_station`/
+    # `:pulse_emitter`/`:esm`/`:gps_satellite`, and the pin fires on ANY comp bag carrying it.
+    # No guard here on purpose: no loader arm can mint it on those kinds, so the path is
+    # unreachable — and `alt_hold_m` below has the identical shape and has shipped since slice 18.
+    # (The one soft edge: `_parse_knobs` only checks that entity+key EXIST, so a knob aimed at a
+    # key no arm mints is a load error by absence, not by kind.)
     haskey(e.comp, :cross_speed_mps) &&
         (e.vel = Vec3(e.vel[1], Float64(e.comp[:cross_speed_mps]), e.vel[3]))
     e.pos = e.pos + e.vel * dt
