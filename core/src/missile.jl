@@ -1649,9 +1649,12 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # ⚠ THE PREDICATE IS THE SHIPPED KERNEL, NOT AN INLINE RESTATEMENT OF IT (advisor, gate 1;
     # convention 14's "anything computed inside `_draw` has no headless proof", one layer down): an
     # inline `hypot(look_angles(...)...) ≤ fov` would make `test_frames.jl` prove a SECOND
-    # implementation and nothing about what flies. ⚠ And `seeker_in_fov` is the SINGLE site of the
-    # negative-`fov` clamp (convention 5) — this converts degrees to radians and hands the result
-    # straight in, deliberately NOT clamping twice.
+    # implementation and nothing about what flies. ⚠ And the negative-`fov` clamp (convention 5)
+    # still has exactly ONE owner — `seeker_fov_margin` since slice 33, which `seeker_in_fov` now
+    # DELEGATES to (the predicate is defined as that margin's sign, which is how slice 33's shipped
+    # number got onto the flying path with no edit here). This converts degrees to radians and hands
+    # the result straight in, deliberately NOT clamping twice — unchanged, and the reason this line
+    # is a REWORD and not a behaviour note.
     # ⚠ The FOV quantity is the TOTAL off-boresight angle — a CIRCULAR window. That is the quantity
     # the radome comments above correctly warn is the WRONG one for the per-axis glass, and the
     # RIGHT one here (a rectangular / per-axis FOV is a named deferral).

@@ -234,7 +234,17 @@ the same boolean, but this project's discipline is to measure it:
   1.450 m; windowed 936.312 m, 37.620 % out, `t_break` 6.632. −0.03 → 1.07211 / 25.01° / 2.070 m;
   3759.992 m, 72.226 %, 1.883.
 * **Slice 32's four showcase arms reproduce to the digit** — 1140.63505 / 0.16777 / 0.06197 /
-  0.16777 m, ToF 15.40 / 15.31 / 12.93 s (its own gate-1 commit's numbers).
+  0.16777 m, ToF 15.40 / 15.31 / 12.93 s (its own gate-1 commit's numbers), `look_max` 103.14 /
+  29.02 / 23.86 / 29.02°.
+  ⚠ **THAT CLAIM COVERS MISS / ToF / `look_max` AND NOT THE `out%` COLUMN, WHICH IS DEAD** (advisor):
+  `slice32/g1_wire_check.jl` read `comp[:seek_in_fov]` — the key **slice 32's own gate 2 removed**,
+  as its stale-readout catch — so it defaulted to `true` and printed `0.0 %` on all four arms where
+  slice 32 measured 67.98 %. A column that reproduces because it counts nothing is not a
+  reproduction ("a number that does not print is not a proof", slice 21). ⭐ **FIXED to read the
+  shipped `seeker_valid` telemetry, and the column then reproduces slice 32's own gate-1 number
+  EXACTLY: 69.6 % / 0.0 / 0.0 / 0.0** — so the claim now covers all four columns, but it did so only
+  after the dead one was found. P1's `out%` reads that same key and reproduces independently
+  (37.620 / 43.261 / 44.736 / 49.034 / 62.783 / 65.869 / 69.271 / 72.226).
 * Full suite green, **6028 → 6062**.
 
 ⭐ **AND THE RUN CONFIRMED THE SEAM DISCIPLINE'S PREMISE AS A NUMBER**: the windowed arms'
@@ -250,6 +260,15 @@ sliders already ship); and no proof that `critical fov == excursion` — that ne
 as slice 32's gate 1 deferred `look == lead`. **Seam item 1 is a DOCSTRING deliverable at gate 1,
 not a test**: a pure kernel cannot exercise a two-run discipline, and manufacturing a test for it
 would be a fake tooth.
+
+⚠ **THE CLAMP CHANGED OWNER, AND THIS CODEBASE REPEATS THAT FACT DELIBERATELY** (advisor). The
+seam comment at `missile.jl:1652` and the test comment at `test_frames.jl:907` both named
+`seeker_in_fov` as the single clamp site; after the redefinition it DELEGATES and does not clamp,
+so both were REWORDED (the seam's "deliberately NOT clamping twice" stays true and unchanged — the
+edit is a reword, not a behaviour note). ⚠ `docs/STATUS.md:4284` says it too, inside **slice 32's
+dated as-built entry**, and is deliberately LEFT ALONE: it records what slice 32 shipped, and
+rewriting a per-slice ledger entry to match a later slice would make the ledger stop being a
+history. **Gate 3's STATUS entry must state the relocation** — this line is the carry-forward.
 
 **Carried into gate 2:** ship `<sid>.seeker_fov_margin_deg` under `_fov_on` with **`_finite_coord`,
 never `_finite`** (the margin goes hugely negative on the never-locked side, and `_finite` clamps

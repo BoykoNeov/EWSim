@@ -755,6 +755,13 @@ boresight_angle(att::Quat, los::Vec3) = hypot(look_angles(att, los)...)
 # halves already fly (26–31's glass, 32's window) and both sliders already ship; what is new is the
 # COMPOSITION and the quantity that measures it. Slice 30's shape exactly: its only new core
 # quantity was `radome_slope_worst`, and its payload was a count over a swept engagement.
+#
+# ⚠ THIS BANNER DELIBERATELY INTERLEAVES WITH SLICE 32's — `seeker_in_fov` and
+# `collision_lead_angle` BELOW it are slice 32's, not this slice's, and the file's usual
+# one-banner-per-slice-block reading does not apply here. The margin sits where it does because
+# [`seeker_in_fov`](@ref) is DEFINED from it and must be adjacent to read at all; moving it above
+# `boresight_angle` (which it calls) or below the predicate (which calls it) would put the
+# definition out of order to preserve a banner convention.
 
 """
     seeker_fov_margin(att::Quat, los::Vec3, fov::Real) -> Float64   (radians, SIGNED)

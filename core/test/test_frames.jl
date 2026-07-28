@@ -904,7 +904,8 @@
 
             # THE SEAM'S OWN EXPRESSION (advisor, gate 1): the shipped predicate is THIS kernel,
             # so degrees→radians is the only step `missile.jl` performs, and it does NOT clamp —
-            # this function is the single clamp site. Both orders agree at every sign.
+            # the clamp has exactly one owner (`seeker_fov_margin`, which this delegates to since
+            # slice 33; it was this function's own until then). Both orders agree at every sign.
             for fov_deg in (-5.0, 0.0, 12.5, 25.0, 180.0)
                 @test seeker_in_fov(q, û, deg2rad(fov_deg)) ==
                       (boresight_angle(q, û) ≤ deg2rad(max(fov_deg, 0.0)))
