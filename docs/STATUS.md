@@ -4182,6 +4182,229 @@ stopped), the out-of-plane MANEUVERING target.
 
 ---
 
+**Slice 32 — THE SEEKER'S FIELD OF VIEW: THE ENVELOPE IS SET BY WHAT THE SEEKER CAN SEE (HANDOFF §11
+Tier-A)** — the TENTH slice of the bank-to-turn / 3-D arc, and a deferral every one of 26–31 named
+and each one sharpened. Those six made the LOOK ANGLE the central quantity of the whole radome family
+and then bounded every knob domain by it reaching 30° — declared five times as a §1 MODEL-VALIDITY
+caveat. A real seeker makes the same angle a **PHYSICAL STOP**: past its field of view there is no
+measurement at all. So the caveat and the hardware coincide, and the arc's **FIRST SENSOR-SIDE CAP**
+lands — every previous cap in this project is airframe or actuator (10/12's authored magnitude clamp,
+15's jerk and deflection caps, 19's flight-condition lift ceiling, 22's interior peak of the lift
+curve).
+
+⭐⭐ **AND WHAT IT CAPS IS THE ENGAGEMENT, NOT THE ACCURACY.** A crossing target must be LED; the lead
+is a closed-form property of the collision triangle (`V_m·sin λ = V_t·sin θ`, `frames.jl`
+`collision_lead_angle`, shipped live as `lead_angle_deg`); and the missile must hold that lead ALL THE
+WAY IN. If the lead exceeds the window the seeker loses the target **while the lead is still
+building**, the α-β tracker coasts on a rate that was right for a smaller lead, and the geometry runs
+away monotonically.
+
+> **THE LESSON, IN ONE SENTENCE.** The FOV a seeker needs is not a seeker number — it is the
+> ENGAGEMENT's own lead angle, so a field of view does not cost you accuracy, it costs you the
+> ENVELOPE: the set of targets you may engage at all.
+
+⭐ **TWO CURES, ONE SLIDER EACH, AND THE ASYMMETRY IS THE PAYLOAD**: widen the seeker 25° → 30° and
+the engagement is KEPT (free); slow the crossing 400 → 320 m/s and the engagement is DECLINED (not
+free).
+
+**THE SEAM** — `_observe_point3d!`, a branch AHEAD of the tracker update, rung-gated on the LIVE
+`:airframe === :six_dof` (never `haskey(:att_q)` — the slice-21/23/26/27/29 latent-bug class, 6th
+occurrence): `in_fov = seeker_in_fov(att, û_tru, deg2rad(fov))` with three tracker branches — NEVER
+LOCKED, COASTING (the α-β predict step alone: the angle extrapolates and **the rate is FROZEN**, and
+the rate is what PN consumes), and the existing in-window path VERBATIM. ⚠ The window quantity is the
+TOTAL off-boresight angle `hypot(look_az, look_el)` — a CIRCULAR window, precisely the quantity the
+radome comments correctly warn is the WRONG one for per-axis glass and the RIGHT one here. ⚠ Computed
+from the **TRUTH LOS**: whether the target is inside the window is PHYSICS, not an estimate. ⚠ SCOPE:
+a **STRAPDOWN** FOV, not a gimbal servo — there is no head state anywhere in this codebase, and a real
+gimbal would add a dynamical state AND rewrite 26–31's `look_az` (the bend would key off head-vs-body
+rather than LOS-vs-body). Named deferral, written at the seam.
+
+⚠⚠ **THE SIGNATURE IS SLICE 23's AND SLICE 25's AND THE MECHANISM IS NEITHER** (the copy-paste
+false-claim trap, 3rd occurrence in this arc): 23's autopilot THREW the out-of-plane command away and
+25's seeker NEVER FORMED it, both leaving `max|y| = 0.0` EXACTLY. Here it **WAS formed and flown, and
+the sensor stopped supplying it MID-FLIGHT** — the missile turns hard out of plane (`max|y| = 8125 m`)
+and only then loses the target. ⭐ And `fov = 0` reaches the 23/25 signature by a **FOURTH route** (a
+seeker that never locks reports no LOS rate, so PN commands nothing out of plane) — which is exactly
+why **`max|y|` is the discriminating tooth and the ~2000 m miss is not.**
+
+⚠ **THE METRIC IS THE MISS, AND THAT INVERTS 28–31's.** `rms r` must NOT be inherited: losing the
+measurement CUTS the parasitic feed, so on a ringing wire a tight FOV would LOWER rms r while OPENING
+the miss and the slice would be written backwards. Here the miss opens ~10⁴× and a big miss samples
+FAITHFULLY ([[ewsim-missile-verifier-sampling]] cuts the right way for once — the HIT arms are the
+coarse ones, so every hit assert is ONE-SIDED). ⚠ The miss MAGNITUDE is not an ordering inside the
+broken region (2487 m at fov 20 against 1505 at fov 25 on the same crossing); the VERDICT is asserted
+and the miss quoted.
+
+⚠ **ISOLATION: `aero_sat` AND `defl_sat` ARE BOTH 0 in the r ∈ [500, 3000] m band in EVERY arm** ⇒ a
+**POINTING** miss, not the arc's ceiling miss (19–24) — a missile with every bit of the authority it
+needs and no idea where to point it. The whole-approach figure is ~6.5 % and it is ~6.5 % in the
+REFERENCE arm too: a launch transient, the front-loaded baseline 28/31 measured in `rms r` arriving in
+a different quantity.
+
+**GATE 0 (5 probes)** settled the shape and KILLED two framings. ⭐ **P3b, the EXTERNAL ANCHOR
+(convention 11): the critical FOV EQUALS the collision-triangle lead**, recomputed per tick by a
+different algorithm — ratio 0.997–1.006 over vy ∈ [80, 400]. ⚠⚠ **P5 was the advisor's BLOCKING check
+and it FIRED**: the 18.12° never-acquires floor is the scenario's authored LAUNCH ATTITUDE, not a
+seeker property (it tracks the tick-1 look angle to 0.008° and moves with `elevation_deg`;
+minimized-not-zeroed at 12° because the target's launch BEARING is ~18.4° in azimuth). ⭐ The
+terminal-lead half is INVARIANT to the same change ⇒ **ONE binding constraint, the "max of two curves"
+framing DROPPED**, and the domain floor set ABOVE the cliff so the slider measures the SEEKER. The
+second killed framing: **slice 28's "know your slope curve over the BAND the engagement visits" does
+NOT transfer** — this engagement holds a FROZEN lead (a 1° band over the whole approach), so the FOV
+requirement is a SINGLE number against a SINGLE sustained angle. Importing 28's structure would be
+this project's own false-fidelity reflex; the kinship is only that both quantities belong to the
+ENGAGEMENT rather than to the hardware.
+
+**GATE 1 (5798 → 5872)** — three kernels in `frames.jl`: `boresight_angle` (the CIRCULAR-window
+total), `seeker_in_fov` (the predicate, and the SINGLE site of the `max(fov, 0)` clamp), and
+`collision_lead_angle` (`λ = asin(‖v_t × û‖ / V_m)`). ⭐ **THE SEAM CALLS THE KERNEL** — the gate-0
+seam computed `hypot(fa, fe) ≤ fov_rad` INLINE, and shipping kernels beside it would have proved a
+SECOND implementation and nothing about what flies (convention 14's slice-31 lesson one layer down);
+behaviour-preserving PROVEN ON THE WIRE, all four showcase arms reproducing gate 0 to the digit.
+⚠⚠ **THE GATE-1 CORRECTION: "180° is the whole sphere" is FALSE** — the angle-space radius
+`hypot(az, el)` has supremum `hypot(π, π/2) ≈ 201.246°`, so a `fov = π` window genuinely REJECTS a LOS
+at `(az, el) = (180°, 20°)` (181.108°). The identity claim is therefore worded **"`seeker_fov_deg =
+180` is bit-identical to the key being absent ON THIS WIRE"** — an empirical statement about the look
+angles the engagement REACHES, which is exactly the reachable-set reasoning slice 22 used to refute
+"the off-state is a limit point ⇒ RUNG". Also measured: the radius is **not** the exact cone half-angle
+(`acos(u_body[1])`), overstating by at most **+0.364° at a true 30° cone**, peaking at a ~47° clock
+angle — a §1 approximation, named and measured in both directions.
+
+**GATE 2 (5872 → 5985, +113)** — the LOADER and the WIRE. ⚠⚠ **THE ADVISOR'S BLOCKING CATCH, AND IT
+WOULD HAVE SHIPPED THE WRONG NUMBER**: the plan said to gate the `look_angle` telemetry on
+`_rad_on || _fov_on`, but slice 26's `look_angle` is built from `look_az`/`look_el`, which are the
+radome else-arm's **ZEROS** when no glass is authored — and slice 32's showcase has the radome keys
+ABSENT BY DESIGN. That edit would have shipped **0.0** on the one wire the whole lesson runs on (the
+slice-29 stale-readout class, 7th occurrence). It ships instead from `boresight_angle(att, û_tru)` at
+its own site under `_fov_on`, which also makes every 26–31 wire byte-identical BY GATING. ⭐ **AND A
+GATE-0 NUMBER WAS CORRECTED: "0.0 %" was a ROUNDING** — the quiet arms leave the window for ONE OR TWO
+TICKS at r = 0.1–0.6 m as the LOS unit vector swings through a large angle in the last millisecond
+before impact, which `%.1f` hid. Range-gated at **r > 200 m** the quiet arms are **EXACTLY 0.000 %**.
+The loader is presence-gated on the key and validated **FINITE ONLY** (no positivity guard —
+`seeker_in_fov` is the single clamp site and `fov = 0` is the DEFINED never-locked state, so a bound
+would be a fake constraint), and ⚠⚠ **REFUSED WITHOUT `two_angle: true`** (the window is applied in
+`_observe_point3d!`, so without that host the key is read by NOTHING — the slice-19 `speed` DEAD-knob
+class). It is NOT refused without `:airframe = :six_dof`: that is a LIVE fidelity a student may toggle
+mid-run, and 26/27 have the identical inert-without-it shape without refusing it.
+
+**GATE 3 (5990 → 6028)** — `scenarios/slice32_fov.yaml` (seed 32, `STEPS = 16000 = 16 × 1000`, sized
+off the slowest arm's 15.313 s). The shipped YAML **reproduces gate 2's programmatic world to the
+digit**, which is itself the loader's proof. Frame-sampled, r > 200 m gate, closing leg only:
+
+| arm | miss (m) | out-of-window % | max look° | lead° | max\|y\| | `aero_sat` |
+|---|---|---|---|---|---|---|
+| **OPEN — fov 25°, vy 400** | **1504.679** | **67.982** | 99.47 | 32.69 | **8125.0** | 0/442 |
+| CURE A — fov 30° | 0.480 | 0.000 | 29.01 | 28.89 | 8124.5 | 0/409 |
+| CURE B — vy 320 | 1.126 | 0.000 | 23.86 | 23.76 | 6137.5 | 0/332 |
+| fov 180 / fov 40 | 0.480 (`===` cure A on the approach) | 0.000 | 29.01 | 28.89 | 8124.5 | 0/409 |
+| `fov = 0` — NEVER LOCKED | 4786.388 | 100.000 | — | — | **0.0 EXACTLY** | (no band) |
+
+Break at **t = 4.688 s / r = 4120.1 m**, with the lead still building. Ratios **3134× / 1336×**,
+understated because the numerator samples faithfully and the denominator coarsely.
+
+⚠⚠ **TWO GATE-3 CORRECTIONS, BOTH ABOUT *WHERE* A NUMBER IS MEASURED:**
+
+1. **THE 180° IDENTITY IS ON THE CLOSING LEG, AND OVER THE WHOLE RUN IT IS FALSE BY 35.7 m** — the
+   verifier's first run FAILED here. Past CPA the target is BEHIND the missile, the LOS swings through
+   150–180°, and a 30 or 40 deg window correctly drops it while a 180 deg one does not; the arms
+   separate *after* the engagement is over. That is gate 0's own post-CPA LOS flip (it saw 3.5e−9 m on
+   a shorter tail). Restricted to the closing leg the identity is **EXACT (0.0 m)** across 30/40/180.
+2. ⭐⭐ **A BROKEN ARM'S OWN LEAD IS INFLATED BY THE RUNAWAY IT IS IN — SLICE 29's P10a IN A NEW
+   QUANTITY.** At the same 400 m/s crossing the broken arm's in-band median lead reads **32.69°**
+   against **28.89°** on the arm that held: once the track breaks, the coasting missile's geometry runs
+   away and the "lead the collision triangle demands" becomes a property of the runaway. Every demand
+   in the envelope table is therefore read off the arm that **HELD** at that crossing speed, and the
+   inflation is itself ASSERTED — a broken arm's lead would have made the predicate partly
+   self-fulfilling.
+
+⭐⭐ **THE ENVELOPE AS A PREDICATE — `held ⟺ lead < fov` over six cells, from BOTH directions**:
+(20°, 260) lead 19.52 HELD · (20°, 320) lead 23.76 BROKEN · (25°, 320) HELD · (25°, 400) lead 28.89
+BROKEN · (30°, 400) HELD · (20°, 400) BROKEN. ⚠ The two quantities come from **different code paths** —
+`collision_lead_angle` against `seeker_in_fov`'s verdict on `boresight_angle` — so it is a measurement,
+not a restatement. ⚠ And it is NOT the look-angle anchor: that INDEPENDENT recompute (an `acos` of the
+LOS·v̂_t dot then `sin`) stays in `test_missile.jl`, or it becomes the self-calibrated round-trip this
+project names as a trap.
+
+**Class 4a** — draw-invariant YET trajectory-changing; the **EIGHTH consecutive RNG-live slice**
+(25–32), so the seed is load-bearing, conventions 3/11 apply, and the draw-count identity is ASSERTED
+(an out-of-window tick DRAWS `n_az`/`n_el` and DISCARDS them — slice 25's own lockstep: the foil
+discards, it does not skip). **KNOB, not rung** (the 180° bit-identity, measured on the closing leg).
+Knob domains MEASURED: `seeker_fov_deg ∈ [20, 40]` — the FLOOR stated with its reason (the 18.120°
+cliff is the LAUNCH ATTITUDE), the CEILING **inert** (30/40/180 are the same flight, which is the
+measured reason it stops at 40 rather than 180); `cross_speed_mps ∈ [0, 400]`, slice 30's, INHERITED.
+DISQUALIFIED and asserted absent: `n_pn`/`rho` (the guidance loop the lesson is not about), every
+`radome_*` (a SECOND mechanism), `sigma_seek` (degrades the lesson beside it), `elevation_deg` (TWICE:
+the slice-19 DEAD-knob class AND gate 0's P5 artifact), `af_alpha_max` (the arc's ceiling, held at 0 %
+here on purpose).
+
+⚠ **THE CLIENT IS NOT ZERO CODE, and the gap was a MECHANISM the plan never named.** It asserted
+"Button DROPPED" and nothing in the tree shipped one. A FOV wire holds `seeker_axes` at az_el, so the
+dispatch falls through to slice 25's CYCLER — whose other position (`:pitch_plane`) leaves the WINDOW
+LIVE on a missile that ALSO misses by 2000 m for a wholly unrelated reason (two mechanisms in one
+view, which convention 9 exists to prevent). ⇒ a NEW core marker **`seeker_fov_view`**
+(`_airframe_view_info`, presence-gated on `:seeker_fov_deg`, every 16–31 handshake byte-identical),
+slice-16's Option-P′ for the **EIGHTH** time, and the UI test proves it **by mirror**: the same
+handshake minus the marker takes the cycler with the button VISIBLE. ⚠ A SEPARATE marker rather than a
+reuse of `radome_view` — the two select different HUD branches, and the radome cascade reads keys a FOV
+wire does not have (it would print a confident 0.000). ⚠ The drop needs **BOTH sites** (mode entry AND
+`_update_fid_btn`) — slice 26's finding, unchanged. ⭐ **`_fov_verdict_label` is a PURE HELPER**
+(convention 14, slice 31's lesson), pinned in all THREE states — the middle one, *the lead has passed
+the window but the tracker has not dropped yet*, is what a two-way label would hide. ⭐ **`_fov_lost`
+is a LATCH where slice 27's peak-hold DECAYS**, and the difference is principled: a limit cycle crosses
+zero twice per cycle so its verdict must FORGET, while a track break is a thing that HAPPENED and an
+instantaneous `seeker_valid` blinks green when the runaway swings the LOS back through the window.
+⚠ RANGE-GATED at r > 200 m so the endgame excursion cannot paint a healthy intercept as a lost track.
+
+⚠ **THE SHOT CAUGHT A CLIPPED HEADLINE — the slice-26/28 defect, third occurrence**: "TRACK BROKEN —
+the lead outgrew the FOV" (39 chars) ran off the right edge at 20 px from `vp.x − 430`, and the clipped
+word was *FOV*. Budget ~34; all three strings shortened and re-shot.
+
+**Four proofs green.** S32V (11 arms, replay posdiff **0.0**, `aero_sat`/`defl_sat` 0 in band in every
+arm, the quiet arms inside the 30° budget at 29.01° peak while the broken ones deliberately are not —
+that runaway IS the mechanism); S32UI (8 teeth: the marker mirror, the three-state verdict, the latch
+in both directions, the two-ENTITY slider pair [a first for this arc — the WINDOW belongs to the
+missile and the LEAD to the engagement], and a **FOURTEEN-way** value guard); the smoke-load
+(`EWSIM_SERVER_DONE`); and TWO windowed shots at the same range (~2450 m) — "TRACK BROKEN — lead
+outgrew FOV" / *look 45.6° vs FOV 25.0° ← OUTSIDE* / *seeker: COASTING* against "IN THE WINDOW — FOV
+holds the lead" / *look 28.5° vs FOV 30.0°* / *seeker: MEASURING*. ⚠ Observation, not a slice-32
+defect: the shared readout panel overlaps the HUD column in a 1152-wide window on this view, so the
+lines read dim — every quantity is also in the readout, and the layout is 26–31's.
+
+**Byte-identity PROVEN ON THE WIRE**: `slice30_verify.gd` and `slice31_verify.gd` re-run against live
+servers (31 reproduces rms_r **0.42395**, cures **13.3×** / **7.2×**, `radome_aim_gyro` **−0.3474**,
+replay 0.0); all **sixteen** prior UI tests (16–31) re-run green.
+
+**Run it:** `& tools/julia.ps1 --project=core tools/server.jl scenarios/slice32_fov.yaml`, then
+`godot --headless --path clients/godot --script res://net/slice32_verify.gd` (exit 0 = pass). The UI
+test needs no server.
+
+**Deferred (NAMED):** a REAL GIMBAL (a head with its own state, servo bandwidth, rate limit and
+mechanical stop — it adds a dynamical state AND rewrites 26–31's `look_az`); a RECTANGULAR / PER-AXIS
+FOV (this slice ships ONE circular window; the per-axis habit belongs to the glass, not to the window);
+**THE GIMBAL ON THE RADOME WIRE** — measured here as the corollary, kept off the showcase by convention
+9, and the strongest successor because it is the first mechanism in the arc that turns slice 26's ring
+into a LOCK LOSS; THE HANDOVER BASKET as an authored quantity (P5 found the launch look angle is a live
+physical constraint this wire holds fixed); SEEKER RANGE / SNR ACQUISITION LIMITS (the other half of
+"can the seeker see it" — this slice models only the ANGLE); plus everything 26–31 named and did not
+spend.
+
+⭐ **THE COROLLARY THAT STAYS OFF THE WIRE** (`test_missile.jl`, the slice-28 precedent for relocating
+a non-client-drivable claim, and it asserts THREE directions): **slice 26's parasitic loop can shake
+the seeker out of its own window.** At `fov = 20` / `vy = 200` the radome-free missile hits (0.14 m)
+while a RINGING one is out of the window 72 % of the approach and misses by **3774.59 m**. At `fov =
+25` the same ringing arm loses lock for only **0.4 %**, in brief episodes, **and still hits (1.07 m)**
+— a short loss is survivable; what is terminal is a loss while the lead is still building. ⚠⚠ **AND
+THE THIRD DIRECTION IS WHAT MAKES THE SENTENCE TRUE** (advisor): the arm does not ring *because it has
+a radome* — it rings because its compensator is the **BORESIGHT-characterized** one slice 30 exists to
+condemn (hardware residual exactly 0.000). Aim `R̂` at `radome_slope_worst` = −0.33 — slice 30's rule —
+and **the same glass flies the same 20° window** (0.00 % out, peak look 18.14° against the radome-free
+18.13°, and a miss BIT-IDENTICAL to the same wire with no window at all). ⇒ write it as *"a
+compensator that RINGS can shake the seeker out of its own window, and slice 30's design rule prevents
+it"*, never as "the radome breaks the FOV" — and **the FOV bound is NOT tighter than the stability
+bound on this glass.**
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

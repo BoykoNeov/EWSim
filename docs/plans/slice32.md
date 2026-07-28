@@ -14,7 +14,9 @@ of them and got sharper each time:
 **Status: GATE 0 COMPLETE (5 probes, 2026-07-28). The advisor's blocking check FIRED and removed
 half the planned framing (§4 below). Raw findings and probe scripts in
 `M:\claud_projects\temp\slice32\GATE0_FINDINGS.md`. GATE 1 COMPLETE (2026-07-28, 5798 → 5872).
-GATE 2 COMPLETE (2026-07-28, 5872 → 5985). Gate 3 NOT STARTED.**
+GATE 2 COMPLETE (2026-07-28, 5872 → 5985). GATE 2 POST-REVIEW (5985 → 5990). GATE 3 COMPLETE
+(2026-07-28, 5990 → 6028) — the wire, the four proofs, and two corrections the run itself forced
+(§ Gate 3 — as built).**
 
 ---
 
@@ -419,6 +421,114 @@ the FOV verdict goes in a pure helper the UI test calls (slice 31's aim-point co
 wrong and only the SHOT caught it). ⚠ Re-run the 26–31 verifiers **on the wire** as the byte-identity
 check, not a reading of the diff. ⚠ ToF varies arm to arm (12.9–15.4 s) — size `STEPS` off the
 SLOWEST arm and assert every arm REACHED CPA (slice 30's discipline).
+
+---
+
+## Gate 3 — AS BUILT (5990 → 6028)
+
+`scenarios/slice32_fov.yaml` (seed 32, dt 1e−3, emit 16), `net/slice32_verify.gd`,
+`net/slice32_ui_test.gd`, the smoke-load, and two windowed shots. **`STEPS = 16000 = 16 × 1000`**,
+sized off the slowest arm measured on the YAML wire (15.313 s) — convention 14's multiple-of-
+`emit_every` rule, satisfied deliberately rather than by luck.
+
+### ⭐ THE FOURTH NUMBER TABLE, AND IT IS THE ONE THE VERIFIER PRINTS
+
+The plan's own provenance warning said there would be three; the shipped YAML is a fourth. It
+**reproduces gate 2's programmatic world to the digit** (same seed, same parameters), which is
+itself the loader's proof. Frame-sampled, r > 200 m gate, closing leg only:
+
+| arm | miss (m) | out-of-window % | max look° | lead° | max\|y\| | `aero_sat` |
+|---|---|---|---|---|---|---|
+| **OPEN — fov 25°, vy 400** | **1504.679** | **67.982** | 99.47 | 32.69 | **8125.0** | 0/442 |
+| CURE A — fov 30° | 0.480 | 0.000 | 29.01 | 28.89 | 8124.5 | 0/409 |
+| CURE B — vy 320 | 1.126 | 0.000 | 23.86 | 23.76 | 6137.5 | 0/332 |
+| fov 180 / fov 40 | 0.480 (`===` cure A on the approach) | 0.000 | 29.01 | 28.89 | 8124.5 | 0/409 |
+| `fov = 0` — NEVER LOCKED | 4786.388 | 100.000 | — | — | **0.0 EXACTLY** | (no band) |
+
+Break at **t = 4.688 s / r = 4120.1 m**, with the lead still building. Ratios **3134× / 1336×**,
+understated because the numerator samples faithfully and the denominator coarsely.
+
+### ⚠⚠ TWO CORRECTIONS THE RUN FORCED, BOTH ABOUT *WHERE* A NUMBER IS MEASURED
+
+1. **THE 180° IDENTITY IS ON THE CLOSING LEG, AND OVER THE WHOLE RUN IT IS FALSE BY 35.7 m.** The
+   verifier's first run FAILED here. Past CPA the target is BEHIND the missile, the LOS swings
+   through 150–180°, and a 30 or 40 deg window correctly drops it while a 180 deg one does not — so
+   the three arms separate *after* the engagement is over. That is the post-CPA LOS flip gate 0's
+   P4 already named (it saw 3.5e−9 m between 45/60/90 there, on a shorter tail). Restricted to the
+   closing leg the identity is **EXACT (0.0 m)** across 30 / 40 / 180, and 30-vs-40 is exact over
+   the whole run too. ⇒ the knob-vs-rung claim and the domain ceiling both stand, with the window
+   the claim is made in now stated.
+2. **⭐⭐ A BROKEN ARM'S OWN LEAD IS INFLATED BY THE RUNAWAY IT IS IN — SLICE 29's P10a IN A NEW
+   QUANTITY.** At the same 400 m/s crossing the broken arm's in-band median lead reads **32.69°**
+   against **28.89°** on the arm that held: once the track breaks, the coasting missile's geometry
+   runs away and the "lead the collision triangle demands" becomes a property of the runaway. The
+   envelope predicate therefore reads every demand off the arm that **HELD** at that crossing
+   speed, and the inflation is itself **asserted** — a broken arm's lead would have made the
+   predicate partly self-fulfilling. (This is exactly slice 29's rule that a ringing arm's look
+   band swings *because* it rings, arriving in a quantity nobody had looked at.)
+
+### The envelope as a PREDICATE (six cells, both directions)
+
+| fov° | vy (m/s) | lead° (from the HELD arm) | verdict | miss (m) |
+|---|---|---|---|---|
+| 20 | 260 | 19.52 | HELD | 3.720 |
+| 20 | 320 | 23.76 | BROKEN | 1076.029 |
+| 25 | 320 | 23.76 | HELD | 1.126 |
+| 25 | 400 | 28.89 | BROKEN | 1504.679 |
+| 30 | 400 | 28.89 | HELD | 0.480 |
+| 20 | 400 | 28.89 | BROKEN | 2487.271 |
+
+`held ⟺ lead < fov` in all six. ⚠ The two quantities come from **different code paths** —
+`collision_lead_angle` (the engagement's geometry) against `seeker_in_fov`'s verdict on
+`boresight_angle` (the hardware's) — so this is a measurement, not a restatement. ⚠ And it is **not
+the look-angle anchor**: that independent recompute stays in `test_missile.jl` (gate 2).
+⚠ The miss magnitude is **not** an ordering inside the broken region (2487 at fov 20 against 1505 at
+fov 25 on the same crossing) — the verdict is asserted, the miss quoted.
+
+### The client (NOT zero code — the button had to be dropped, and nothing shipped it)
+
+* **A NEW CORE MARKER, `seeker_fov_view`** (`_airframe_view_info`, presence-gated on
+  `:seeker_fov_deg` — every 16–31 handshake byte-identical). The plan asserted "Button DROPPED" and
+  named no mechanism; nothing in the tree had one. Without it the dispatch falls through to slice
+  25's `seeker_axes` cycler, whose other position (`:pitch_plane`) leaves the WINDOW LIVE on a
+  missile that also misses by 2000 m for an unrelated reason. **The UI test proves this by mirror**:
+  the same handshake minus the marker takes the cycler with the button VISIBLE.
+* ⚠ **A SEPARATE MARKER, NOT A REUSE OF `radome_view`** — the two select different HUD branches, and
+  the radome cascade reads keys a FOV wire does not have (it would print a confident 0.000: the
+  stale-readout class, 8th occurrence). The button outcome is identical either way, so the ORDER is
+  a statement of intent; a wire carrying both is not client-drivable (the corollary lives in
+  `test_missile.jl`).
+* **The drop needs BOTH sites** (mode entry AND `_update_fid_btn`) — slice 26's finding, unchanged.
+* ⭐ **`_fov_verdict_label` is a PURE HELPER** (convention 14, slice 31's lesson), pinned in all
+  THREE states. The middle one — *the lead has passed the window but the tracker has not dropped
+  yet* — is what a two-way label would hide, and it is where a student dragging the crossing-speed
+  slider is about to lose the engagement.
+* ⭐ **`_fov_lost` is a LATCH, where slice 27's `_radome_qpeak` DECAYS**, and the difference is
+  principled: a limit cycle crosses zero twice per cycle so its verdict must FORGET, while a track
+  break is a thing that HAPPENED. An instantaneous `seeker_valid` blinks back to 1 when the runaway
+  swings the LOS through the window. ⚠ RANGE-GATED at r > 200 m so the endgame excursion cannot
+  paint a healthy intercept as a lost track. Both directions asserted.
+* ⚠ **THE SHOT CAUGHT A CLIPPED HEADLINE — the slice-26/28 defect, third occurrence.** "TRACK BROKEN
+  — the lead outgrew the FOV" (39 chars) ran off the right edge at 20 px from `vp.x − 430`, and the
+  clipped word was *FOV*. The budget is ~34; all three strings were shortened and re-shot.
+
+### The four proofs
+
+* **S32V OK** — 11 arms, exit 0. Replay posdiff **0.0**; `aero_sat` and `defl_sat` **0 in the
+  [500, 3000] m band in every arm** ⇒ a POINTING miss; the quiet arms stay inside the 30° small-angle
+  budget (29.01° peak) while the broken arms deliberately do not (that runaway IS the mechanism).
+* **S32UI OK** — 8 teeth including the marker mirror, the three-state verdict, the latch in both
+  directions, the two-ENTITY slider pair (a first for this arc), and a **FOURTEEN-way** value guard.
+* **Smoke-load** — server reaches `EWSIM_SERVER_DONE`.
+* **Two windowed shots at the same range (~2450 m)**: "TRACK BROKEN — lead outgrew FOV" with
+  *look 45.6° vs FOV 25.0° ← OUTSIDE* and *seeker: COASTING* against "IN THE WINDOW — FOV holds the
+  lead" with *look 28.5° vs FOV 30.0°* and *seeker: MEASURING*. ⚠ Observation, not a slice-32 defect:
+  the shared readout panel overlaps the HUD column in a 1152-wide window on this view, so the lines
+  read dim — every quantity is also in the readout, and the layout is 26–31's.
+* **Byte-identity PROVEN ON THE WIRE**: `slice30_verify.gd` and `slice31_verify.gd` re-run against
+  live servers (31 reproduces rms_r **0.42395**, cures **13.3×** / **7.2×**, `radome_aim_gyro`
+  **−0.3474**, replay 0.0). All **sixteen** prior UI tests (16–31) re-run green. Julia suite
+  **6028**.
 
 ---
 

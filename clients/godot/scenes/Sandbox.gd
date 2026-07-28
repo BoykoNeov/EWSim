@@ -148,9 +148,26 @@ var _airframe_6dof := false        # handshake airframe_6dof — the 3-D-airfram
 # UNCHANGED; its only effect is that _enter_airframe3d_mode DROPS the shared fidelity button (there
 # is no rung to cycle — the lesson is the radome_slope slider). Slice-16's Option-P′, second use.
 var _radome_view := false          # handshake radome_view — the DROP-THE-BUTTON marker
+# Slice-32 SEEKER FOV: a missile carrying an authored :seeker_fov_deg. Same job as `_radome_view` for
+# the same reason — a FOV wire is also a two-angle host, so without a marker the dispatch would fall
+# through to slice 25's `seeker_axes` cycler, whose other position (`:pitch_plane`) leaves the WINDOW
+# LIVE on a missile that ALSO misses by 2000 m for a wholly unrelated reason (two mechanisms in one
+# view, which convention 9 exists to prevent). A SEPARATE marker rather than a reuse of `radome_view`
+# because the two select different HUD BRANCHES: the radome cascade reads `radome_slope`/
+# `radome_residual`/…, none of which a FOV wire has, and reading them would print 0.0 into a label —
+# the stale-readout class this arc has caught seven times.
+var _seeker_fov_view := false      # handshake seeker_fov_view — the DROP-THE-BUTTON marker, 3rd use
 # Slice-27 DISPLAY-ONLY peak-hold on the body rate (see _airframe3d_on_state): a limit cycle crosses
 # zero twice per cycle, so an instantaneous verdict mislabels half the frames. Instrument, not physics.
 var _radome_qpeak := 0.0
+# Slice-32 DISPLAY-ONLY LATCH on "this run has lost lock". A LATCH rather than slice 27's decaying
+# peak-hold, because the two instruments answer different questions: a limit cycle crosses zero twice
+# per cycle so its verdict must FORGET (else a cured missile reads ringing forever), while a track
+# break is a THING THAT HAPPENED — the missile is coasting on a stale rate from then on, and an
+# instantaneous `seeker_valid` would blink back to 1 the moment the runaway geometry swings the LOS
+# back through the window and label a lost missile "tracking". Instrument, not physics; cleared on
+# reset with the trails.
+var _fov_lost := false
 var _af3d_missile := ""            # the interceptor id (the trail source)
 var _af3d_target := ""             # the target id (the +Y off-plane marker)
 var _af3d_nose_mesh: ImmediateMesh = null   # the nose-direction vector (from att_q), coupled/six_dof only
@@ -464,6 +481,11 @@ func _on_scenario(obj: Dictionary) -> void:
 	# _enter_airframe3d_mode DROP the shared button, because slice 26 has no fidelity rung at all
 	# (the lesson is the radome_slope slider). Slice-16's Option-P′ mechanism, second use.
 	_radome_view = bool(obj.get("radome_view", false))
+	# Slice-32 SEEKER-FOV discriminator (a missile carrying an authored :seeker_fov_deg). Same shape:
+	# it does NOT pick a view — the slice-23 3-D airframe view is reused wholesale — its only job is
+	# to make _enter_airframe3d_mode DROP the shared button, because slice 32 has no fidelity rung
+	# either (the lesson is the FOV slider against the crossing-speed slider). Option-P′, third use.
+	_seeker_fov_view = bool(obj.get("seeker_fov_view", false))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -1108,6 +1130,24 @@ func _enter_airframe3d_mode(obj: Dictionary) -> void:
 	# that ALSO misses by 2000 m for a wholly unrelated reason: two mechanisms compounding in one
 	# view, which is what convention 9 exists to prevent, and the "identical signature, different
 	# mechanism" trap slice 25 spent a section on. So the button goes, and the slider stays.
+	# SLICE 32 — THE SEEKER'S FIELD OF VIEW, checked FIRST (the "check the NEW key first" rule, 6th
+	# occurrence) and the SECOND case in this dispatch that DROPS the button rather than re-pointing
+	# it. Slice 26's whole argument transfers verbatim: a FOV wire is a two-angle host, so the
+	# inherited cycler would be the `seeker_axes` one below, and its other position (`:pitch_plane`)
+	# leaves the WINDOW LIVE on a missile that ALSO misses by 2000 m for a wholly unrelated reason.
+	# There is no rung to cycle here either — the lesson is the FOV slider against the crossing-speed
+	# slider, `fov = 180` being an in-domain value that flies the key-absent trajectory.
+	# ⚠ THE ORDER AGAINST `_radome_view` IS A STATEMENT OF INTENT, NOT A SHIPPED PATH: the two markers
+	# never co-occur on any scenario in the tree (the radome × FOV corollary is a SECOND mechanism and
+	# convention 9 keeps it off the wire — it lives in `test_missile.jl`). The BUTTON outcome is
+	# identical either way; only the HUD branch differs, and the FOV framing is the right headline for
+	# a wire that has a window at all.
+	if _seeker_fov_view:
+		_fid_kind = "airframe"                      # the 3-D view's drawing/badge treatment, unchanged
+		_prop_btn.visible = false
+		_prop_btn.tooltip_text = ""
+		_build_airframe3d_scene()
+		return
 	if _radome_view:
 		_fid_kind = "airframe"                      # the 3-D view's drawing/badge treatment, unchanged
 		_prop_btn.visible = false
@@ -1257,6 +1297,16 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 		# decay ~0.97 per state frame at 62.5 Hz ⇒ a ~0.5 s hold, comfortably longer than the
 		# ~2 Hz ring's half-period, so the verdict is steady across a whole cycle.
 		_radome_qpeak = maxf(qn, _radome_qpeak * 0.97)
+	# SLICE 32 — the TRACK-BREAK LATCH, the FOV view's equivalent instrument (see `_fov_lost`). It is
+	# RANGE-GATED at r > 200 m for exactly the reason every look-angle number in this slice is: a quiet
+	# arm leaves the window for one or two ticks at r = 0.1–0.6 m as the LOS unit vector swings through
+	# a large angle in the last millisecond before impact, and latching on THAT would paint every
+	# healthy intercept as a lost track at the moment of the hit. The core's own `seeker_valid` is the
+	# verdict; the client only remembers it (convention 13).
+	if _telemetry.has(_af3d_missile + ".seeker_valid"):
+		if float(_telemetry[_af3d_missile + ".seeker_valid"]) < 0.5 \
+		   and float(_telemetry.get(_af3d_missile + ".los_range", 0.0)) > 200.0:
+			_fov_lost = true
 	if _t3d_layer == null or _t3d_los_mesh == null:
 		return
 	var mpos: Array = _entities.get(_af3d_missile, {}).get("pos", [0, 0, 0])
@@ -1329,12 +1379,72 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 # at the gyro you will be shipped.
 # ⚠ the same 1e−9 tolerance slice 30 needed, for the same reason: both sides are Float64 products
 # a student is asked to match with a decimal slider.
+# ⚠⚠ EXTRACTED FOR THE SAME REASON `_gyro_verdict_label` was, and the reason is now a convention:
+# anything the verdict computes inside `_draw` has NO headless proof, because `_draw` never runs
+# under `--headless` (convention 14, slice 31 — whose aim-point comparison shipped WRONG and only the
+# windowed SHOT caught it). The UI test calls this directly.
+# ⭐ THE COMPARISON IS THE WHOLE LESSON IN ONE LINE: the ENGAGEMENT's demand (`lead_angle_deg`, the
+# collision triangle's own lead — `V_m·sin λ = V_t·sin θ`) against the HARDWARE's limit
+# (`seeker_fov_deg`), in the same degrees. Both arrive from the CORE as numbers; the client evaluates
+# no geometry (convention 13, the slice-21 `rho_air` precedent).
+# ⚠ THREE STATES, BECAUSE THE SITUATION REALLY HAS THREE. `lost` is the LATCH on the core's own
+# `seeker_valid` (see `_fov_lost`) and it wins outright — once the track has broken, the missile is
+# coasting on a stale rate and nothing about the current geometry changes that. The middle state is
+# the one a two-way label would hide: the lead has passed the window but the tracker has not dropped
+# yet, which is where a student watching the crossing-speed slider is about to lose the engagement.
+# ⚠ THE MARGIN IS 0.0 AND DELIBERATELY SO — no client-side "about to break" threshold on the physics.
+# The lead and the window are compared as they are; the ~1 % gap between the lead and the LOOK angle
+# is the missile's aerodynamic incidence, a core-side fact this label makes no claim about.
+# ⚠ WIDTHS ARE MEASURED, NOT GUESSED, AND THE FIRST CAPTURE OF THIS SLICE PAID FOR IT AGAIN: at
+# 20 px from `vp.x − 430` about 34 characters fit, and "TRACK BROKEN — the lead outgrew the FOV" (39)
+# ran off the right edge with the clipped word being "FOV" — the part that names the mechanism. Slice
+# 26 ate this on its headline and slice 28 on two body lines. Every string below is counted.
+func _fov_verdict_label(lost: bool, lead: float, fov: float) -> String:
+	if lost:
+		return "TRACK BROKEN — lead outgrew FOV"
+	if lead <= fov:
+		return "IN THE WINDOW — FOV holds the lead"
+	return "LEAD PAST WINDOW — about to break"
+
 func _gyro_verdict_label(ringing: bool, eff: float, worst: float) -> String:
 	if ringing:
 		return "GYRO — RINGING: loop sees R̂(1+s)"
 	if eff <= worst + 1.0e-9:
 		return "AIMED PAST THE GYRO — the SAFE side"
 	return "QUIET HERE — the gyro eats the margin"
+
+# SLICE 32 — the four lines that ARE the lesson, split out so the label above stays one screenful.
+# ⚠ WIDTHS ARE MEASURED, NOT GUESSED: ~55 characters fit at 15 px from `vp.x − 430` (slice 28's
+# first capture ran two lines off the right edge; slice 26 ate the same defect at 20 px).
+# ⭐ THE PAIR A STUDENT MUST SEE IS *DEMAND BESIDE LIMIT*: the lead this collision triangle requires
+# against the window this seeker has, in the same degrees. That pairing is the entire claim — the FOV
+# a seeker needs is not a seeker number, it is the ENGAGEMENT's — and both sliders move one of the
+# two numbers, so the comparison is what the student is actually dragging.
+# ⚠ THE LOOK ANGLE IS *NOT* THE LEAD, and both are on screen because the difference is real: the look
+# angle is what the WINDOW tests (off the body boresight, so it carries the missile's aerodynamic
+# incidence — about 1 % against a ~29° lead), while the lead is the geometry's own requirement. On a
+# BROKEN arm they diverge completely as the coasting missile's geometry runs away, and that
+# divergence is the mechanism made visible.
+# ⚠ EVERY NUMBER ARRIVES FROM THE CORE (convention 13): the client compares two shipped degrees and
+# reports a shipped boolean. It evaluates no triangle.
+# ⚠ THE RANGE AND CROSS-RANGE LINES ARE *NOT* HERE — the shared block above already draws them at
+# y = 66/88 for every 3-D airframe wire, and the cross-range one is a DISCRIMINATING TOOTH on this
+# slice rather than decoration: 23 and 25 produce the same ≈2000 m signature with `max|y| = 0.0`
+# (the command thrown away; the command never formed), while here it WAS formed and flown, so it
+# runs to thousands. The `fov = 0` degenerate reaches the 0.0 signature by a FOURTH route, which is
+# exactly why the miss alone cannot carry the claim.
+func _draw_fov_hud_lines(vp: Vector2, fov: float, lead: float) -> void:
+	var look32 := float(_telemetry.get(_af3d_missile + ".look_angle", 0.0))
+	var valid := float(_telemetry.get(_af3d_missile + ".seeker_valid", 1.0)) >= 0.5
+	draw_string(_font, Vector2(vp.x - 430, 110), "look %.1f°  vs  FOV %.1f°%s" % [look32, fov, "" if valid else "   ← OUTSIDE"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK if valid else Color(1.00, 0.62, 0.30))
+	draw_string(_font, Vector2(vp.x - 430, 132), "ENGAGEMENT needs a lead of %.1f°  ← the requirement" % lead,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45))
+	# coloured by the LATCH, not the instantaneous flag, for the same reason slice 27's headline rides
+	# a peak-hold: a runaway geometry swings the LOS back through the window and this line would blink
+	# green on a missile that lost its target seconds ago.
+	draw_string(_font, Vector2(vp.x - 430, 154), "seeker: %s" % ("COASTING — no measurement since the break" if _fov_lost else ("MEASURING" if valid else "outside the window")),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _fov_lost else Color(0.55, 1.00, 0.65))
 
 func _draw_airframe3d_hud() -> void:
 	# The 3-D layer renders the world; the 2-D canvas only LABELS it (the terrain-view discipline).
@@ -1353,7 +1463,20 @@ func _draw_airframe3d_hud() -> void:
 	# `seeker_axes` (HELD at az_el), so without this the label would read slice 25's and name the wrong
 	# lesson. There is no rung here, so the label is driven by the KNOB's own sign: only NEGATIVE
 	# slopes close the loop, and the threshold is a LOOP GAIN, not a slope value.
-	if _radome_view:
+	# SLICE 32 — checked FIRST (the same order as _enter_airframe3d_mode, and the "check the NEW key
+	# first" rule's 6th occurrence). A FOV wire ALSO carries `seeker_axes` (HELD at az_el), so without
+	# this the label would read slice 25's and name the wrong lesson entirely — "BLIND out of plane"
+	# on a missile whose seeker sees perfectly well until the lead outgrows its window.
+	# ⚠ IT IS ITS OWN BRANCH, NEVER A RUNG OF THE RADOME CASCADE BELOW: that cascade reads
+	# `radome_slope`/`radome_residual`/`radome_slope_worst`/…, and a FOV wire has NONE of them, so
+	# every one would `get(..., 0.0)` and print a confident 0.000 — the stale-readout class this arc
+	# has now caught seven times, and the exact defect gate 2's advisor catch was about.
+	if _seeker_fov_view:
+		lbl = _fov_verdict_label(_fov_lost,
+				float(_telemetry.get(_af3d_missile + ".lead_angle_deg", 0.0)),
+				float(_telemetry.get(_af3d_missile + ".seeker_fov_deg", 0.0)))
+		col = Color(1.00, 0.62, 0.30) if _fov_lost else Color(0.45, 0.90, 1.00)
+	elif _radome_view:
 		var slope := float(_telemetry.get(_af3d_missile + ".radome_slope", 0.0))
 		var qr := absf(float(_telemetry.get(_af3d_missile + ".omega_q", 0.0)))
 		# ⚠ The label reports the MEASURED body rate, not a threshold comparison: |R_crit| moves with
@@ -1480,7 +1603,15 @@ func _draw_airframe3d_hud() -> void:
 	# (the mechanism that makes it ring), both straight from core telemetry. Presence-gated on
 	# `radome_eps`, which only a radome wire ships, so slices 23/24/25 are untouched; checked before
 	# the omega_oop line for the same reason the label is (a radome wire carries BOTH keys).
-	if _telemetry.has(_af3d_missile + ".radome_eps"):
+	# SLICE 32 — checked FIRST, matching the label chain above, and it is a SWITCH ahead of the whole
+	# radome cascade (not an `or`): a FOV wire has NONE of the `radome_*` keys, so every line below
+	# would `get(..., 0.0)` and print a confident 0.000 — the stale-readout class this arc has caught
+	# seven times, and precisely what gate 2's blocking advisor catch was about one layer up.
+	if _seeker_fov_view:
+		_draw_fov_hud_lines(vp,
+				float(_telemetry.get(_af3d_missile + ".seeker_fov_deg", 0.0)),
+				float(_telemetry.get(_af3d_missile + ".lead_angle_deg", 0.0)))
+	elif _telemetry.has(_af3d_missile + ".radome_eps"):
 		# ⚠ SLICE 28 — THE RATE LINE FOLLOWS THE RINGING CHANNEL, and that is not cosmetic. On a
 		# slope-CURVE wire the lead angle is in AZIMUTH, so the yaw channel sits on the steep part of
 		# the glass while the pitch channel sits on the boresight slope: showing `q` here would put a
@@ -1758,7 +1889,16 @@ func _update_fid_btn() -> void:
 			_prop_btn.visible = true
 			_prop_btn.text = "seeker: %s" % str(_fidelity.get("seeker_axes", "?"))
 		"airframe":
-			if _radome_view:
+			if _seeker_fov_view:
+				# Slice-32 THE SEEKER'S FIELD OF VIEW: same defence as the radome arm below and for
+				# the same reason — the scenario DOES carry an `:airframe` fidelity (HELD at six_dof),
+				# so the `_fidelity.has("airframe")` branch would re-show the button that
+				# _enter_airframe3d_mode deliberately dropped. There is no rung to cycle (the lesson
+				# is the FOV slider), and cycling the HELD :airframe would be the convention-9
+				# "toggle a held key" trap. Option-P′'s third use needs BOTH sites, exactly as slice
+				# 26 found for its second.
+				_prop_btn.visible = false
+			elif _radome_view:
 				# Slice-26 THE RADOME: the scenario DOES carry an `:airframe` fidelity (HELD at six_dof),
 				# so the branch below would re-show the button that _enter_airframe3d_mode deliberately
 				# dropped. There is no rung to cycle here — the lesson is the radome_slope SLIDER — and
@@ -2304,6 +2444,8 @@ func _on_reset_pressed() -> void:
 	_demand_hist.clear()
 	_aero_sat_now = false
 	_post_stall_now = false               # slice-22: the stall tell restarts with the re-launch too
+	_fov_lost = false                     # slice-32: the track-break latch restarts with the re-launch
+	_radome_qpeak = 0.0                   # …and so does the slice-27 peak-hold (same reason)
 	_t3d_trail_pts.clear()                # slice-18: the 3-D target trail restarts with the re-launch
 	# `reset` reloads the YAML server-side → propagation reverts to the scenario default,
 	# but the server sends no new handshake. Resync the local fidelity so the badge/button

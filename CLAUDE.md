@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–31 COMPLETE & green — 5798 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–31
+**Slices 1–32 COMPLETE & green — 6028 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–32
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
@@ -159,6 +159,44 @@ their meaning — the gyro-effective residual ships ALONGSIDE (advisor). ⚠ The
 HARNESS TRAP WORTH MORE THAN THE HOUR IT COST: `STEPS` MUST BE A MULTIPLE OF `emit_every` (15000 with emit 16 ⇒
 the last frame is t = 14.992 and the verifier waits forever for 15.000, hanging SILENTLY — it reads exactly like
 a slow wire; the core runs 27k ticks/s and the verifier drains 5k). Class 4a (7th), button DROPPED (7th). (5798)**
+**And slice 32 THE SEEKER'S FIELD OF VIEW: THE ENVELOPE IS SET BY WHAT THE SEEKER CAN SEE — the deferral EVERY ONE
+of 26–31 named and each one sharpened. Those six made the LOOK ANGLE their central quantity and then bounded every
+knob domain by it reaching 30°, declared FIVE TIMES as a §1 MODEL-VALIDITY caveat. A real seeker makes that same
+angle a PHYSICAL STOP: past its field of view there is NO MEASUREMENT AT ALL. ⇒ the caveat and the hardware
+coincide, and the arc's FIRST SENSOR-SIDE CAP lands (every earlier cap is airframe or actuator: 10/12's magnitude
+clamp, 15's jerk/deflection, 19's flight-condition ceiling, 22's interior peak). ⭐⭐ AND WHAT IT CAPS IS THE
+ENGAGEMENT, NOT THE ACCURACY: a crossing target must be LED, the lead is the collision triangle's own closed form
+(`V_m·sin λ = V_t·sin θ`, shipped live as `lead_angle_deg`), and the missile must hold it ALL THE WAY IN — so THE
+FOV A SEEKER NEEDS IS NOT A SEEKER NUMBER, IT IS THE ENGAGEMENT'S, and a field of view costs you not ACCURACY but
+the ENVELOPE. ⭐ TWO CURES, ONE SLIDER EACH, AND THE ASYMMETRY IS THE PAYLOAD: widen the seeker (free — you KEEP
+the engagement) or slow the crossing (not free — you DECLINE it). Wire (seed 32, frames, r > 200 gate, closing
+leg): fov 25 vs vy 400 BREAKS at t = 4.688 s / r = 4120 m WHILE THE LEAD IS STILL BUILDING, 67.98% out of window,
+miss 1504.7 vs 0.480 (fov 30) and 1.126 (vy 320). ⭐⭐ THE ENVELOPE IS A PREDICATE — `held ⟺ lead < fov` over SIX
+cells from BOTH directions (19.52° flies 20, 23.76° breaks 20 and flies 25, 28.89° breaks 25 and flies 30) — and
+the two quantities come from DIFFERENT CODE PATHS (`collision_lead_angle` vs `seeker_in_fov` on `boresight_angle`),
+so it is a measurement, not a restatement. ⚠⚠ THE SIGNATURE IS 23's AND 25's AND THE MECHANISM IS NEITHER: both
+left `max|y| = 0.0` EXACTLY (thrown away; never formed), and `fov = 0` reaches it by a FOURTH route — here it WAS
+formed and flown (`max|y|` 8125 m) and the SENSOR STOPPED SUPPLYING IT MID-FLIGHT ⇒ `max|y|` is the tooth, the
+~2000 m miss is not. ⚠ THE METRIC IS THE MISS AND THAT INVERTS 28–31's (losing the measurement CUTS the parasitic
+feed, so rms r would FALL while the miss OPENED). ⚠ ISOLATION: `aero_sat` and `defl_sat` BOTH 0 in the [500,3000]
+band in EVERY arm ⇒ a POINTING miss — full authority, no idea where to point it. ⚠⚠ TWO GATE-3 CORRECTIONS, BOTH
+ABOUT *WHERE* A NUMBER IS MEASURED: the 180° knob-vs-rung identity holds ON THE CLOSING LEG and is FALSE by 35.7 m
+over the whole run (past CPA the target is BEHIND the missile and a narrow window correctly drops it — the
+verifier's first run FAILED here); and ⭐⭐ A BROKEN ARM'S OWN LEAD IS INFLATED BY THE RUNAWAY IT IS IN (32.69° vs
+28.89° at the same crossing) — SLICE 29's P10a IN A NEW QUANTITY, so every demand is read off the arm that HELD,
+and the inflation is itself asserted. ⚠⚠ P5 WAS AN ADVISOR BLOCKING CHECK THAT FIRED: the 18.12° never-acquires
+floor is the AUTHORED LAUNCH ATTITUDE, not a seeker property (it tracks the tick-1 look angle to 0.008°), which
+KILLED the "max of two curves" framing and set the domain floor above the cliff. ⚠ Gate 2's blocking catch would
+have shipped 0.0 (gating `look_angle` on `_rad_on || _fov_on` reads slice 26's radome-else-arm ZEROS on a wire with
+no glass — the stale-readout class, 7th). ⚠ SCOPE: a STRAPDOWN window, NOT a gimbal servo (a head with its own
+state would REWRITE 26–31's `look_az`) — the strongest successor is THE GIMBAL ON THE RADOME WIRE, measured here as
+a corollary and kept off the showcase by convention 9: a compensator that RINGS can shake the seeker out of its own
+window (3774.6 m at fov 20), AND SLICE 30's DESIGN RULE PREVENTS IT — aim R̂ at `radome_slope_worst` and the same
+glass flies the same window, bit-identical to no window at all ⇒ the FOV bound is NOT tighter than the stability
+bound. ⚠ NOT zero client code: the plan asserted "button DROPPED" and named no MECHANISM — a FOV wire holds
+`seeker_axes`, so without a marker it inherits slice 25's cycler, whose `:pitch_plane` leaves the WINDOW LIVE
+beside an unrelated 2000 m miss. A NEW `seeker_fov_view` marker drops it (Option-P′, 8th; BOTH sites), proven BY
+MIRROR. Class 4a (8th consecutive RNG-live), button DROPPED (8th). (6028)**
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
@@ -839,7 +877,20 @@ bounds that close on each other as the glass worsens. And slice 31 cashed the §
 26/27/28/29/30 carried — a PERFECT gyro — and found that the sensor's two error terms land in two DIFFERENT
 CURRENCIES (a scale factor on the RESIDUAL, i.e. a stability boundary; a bias on the AIM POINT, additive and with
 no residual to move), which turns slice 30's "sufficient, never tight" margin into a GYRO BUDGET: −21% of scale
-factor at the conservative aim point, ~3% at a sharpened one.** The NEXT named candidates:
+factor at the conservative aim point, ~3% at a sharpened one. And slice 32 cashed the deferral EVERY ONE of 26–31
+named and each one sharpened — THE SEEKER'S FIELD OF VIEW — turning the look angle from a §1 MODEL-VALIDITY caveat
+into a PHYSICAL STOP, and with it the arc's FIRST SENSOR-SIDE CAP. What a field of view caps is not a force or a
+rate but the ENGAGEMENT: the window a seeker needs is the collision triangle's own LEAD ANGLE, so too small a
+window costs not ACCURACY but the ENVELOPE — the set of targets you may engage at all. The track breaks WHILE THE
+LEAD IS STILL BUILDING, the α-β tracker coasts on a rate that was right for a smaller lead, and the geometry runs
+away — a 1505 m miss out of a missile with 0.0% of its approach saturated.** The NEXT named candidates:
+**THE GIMBAL ON THE RADOME WIRE (slice 32's own strongest deferral — it is the first mechanism in the arc that
+turns slice 26's ring into a LOCK LOSS, measured there as a corollary and kept off the showcase by convention 9);
+a REAL GIMBAL SERVO (a head with its own state, bandwidth, rate limit and mechanical stop — ⚠ it REWRITES 26–31's
+`look_az`, because the bend would key off HEAD-vs-body rather than LOS-vs-body, which is exactly why slice 32
+shipped a STRAPDOWN window instead); a RECTANGULAR / PER-AXIS FOV; SEEKER RANGE / SNR ACQUISITION LIMITS (slice 32
+models only the ANGLE half of "can the seeker see it"); THE HANDOVER BASKET as an authored quantity (slice 32's P5
+found the launch look angle is a live physical constraint its wire holds fixed);**
 a SINGLE IMU (slice 31 corrupts the COMPENSATOR's gyro only; feeding the same reading to the α/β autopilot was
 MEASURED at its gate 0 and moves the onset by a DIFFERENT mechanism — plant DAMPING, `k_q` supplying ~98% of it —
 which is why it is a separate slice and not a footnote); GYRO NOISE (⚠ deferred on DRAW-TOPOLOGY grounds, not
@@ -855,10 +906,9 @@ matter); SUSTAINED-TRACKING / route (b) — an out-of-plane MANEUVERING
 target (the demand rotating faster than the roll loop follows, a DISTINCT face from slice 24's cold-start); and
 the AERO + INERTIAL CROSS-COUPLING / DEPARTURE that makes a real BTT airframe go OUT-OF-PLANE during a hard roll
 (non-diagonal I, Clβ/Cnp/Clr; diagonal I + symmetric cruciform + coordinated flight keep 23/24 clean).
-What else remains of §11 Tier-A/B/C: land clutter [terrain banked the heightfield]; a seeker FOV / gimbal limit
-(slice 26 made the look angle a first-class quantity, slice 28 made the whole lesson turn on it, and slice 30's
-crossing-speed CEILING is set by the look angle approaching 30° — exactly where a real gimbal would already have
-stopped, so this is now the sharpest of these); monopulse / az×el CFAR. ⚠ Slice 21 did NOT finish the
+What else remains of §11 Tier-A/B/C: land clutter [terrain banked the heightfield]; monopulse / az×el CFAR.
+(⚠ "a seeker FOV / gimbal limit" is no longer on this list — slice 32 SHIPPED the FOV half; what remains of it is
+the GIMBAL SERVO, named above with the reason it is a bigger slice than it looks.) ⚠ Slice 21 did NOT finish the
 atmosphere: ρ(z) reaches the COUPLED airframe path ONLY. The point-mass/ballistic drag path keeps a constant ρ
 because `dynamics.jl`'s steppers take a `v -> a(v)` closure with NO position in it, and changing that contract to
 `(p,v) -> a` touches slice 8's `rk4_step`/`euler_step` — the byte-identity surface of EVERY ballistic slice — for a

@@ -747,6 +747,22 @@ function _airframe_view_info(w::World)
     # in one view is exactly what convention 9 exists to prevent — and it is the "identical
     # signature, different mechanism" trap slice 25 spent a section on. So: no button, one slider.
     any(haskey(w.entities[m].comp, :radome_slope) for m in missiles) && (info[:radome_view] = true)
+    # SLICE 32 — the SEEKER FOV marker, and it has the SAME job for the SAME reason: drop the shared
+    # button. Slice 26's argument transfers VERBATIM and that is why it is worth restating rather
+    # than cross-referencing — a FOV wire is also a two-angle host, so the inherited cycler would
+    # again be slice 25's `seeker_axes`, whose other position (`:pitch_plane`) leaves the WINDOW LIVE
+    # on a missile that ALSO misses by 2000 m for a wholly unrelated reason. Two mechanisms in one
+    # view is what convention 9 exists to prevent.
+    #
+    # ⚠ IT IS A SEPARATE MARKER, NOT A REUSE OF `radome_view`, because the two select different HUD
+    # BRANCHES (the radome cascade reads `radome_slope`/`radome_residual`, none of which a FOV wire
+    # has — reading them would ship 0.0 into a label, the stale-readout class this arc has caught
+    # seven times). The BUTTON outcome is identical either way, so a wire carrying BOTH is safe on
+    # that axis; the client resolves the HUD order explicitly and says why at the branch. Such a wire
+    # is NOT client-drivable today (the corollary lives in `test_missile.jl` — a second mechanism,
+    # convention 9), so the order is a statement of intent, not a shipped path.
+    any(haskey(w.entities[m].comp, :seeker_fov_deg) for m in missiles) &&
+        (info[:seeker_fov_view] = true)
     return info
 end
 

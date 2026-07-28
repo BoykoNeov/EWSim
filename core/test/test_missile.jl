@@ -6173,4 +6173,87 @@ end
             end
         end
     end
+
+    @testset "gate 3 — the HANDSHAKE MARKER that drops the button, and the SHIPPED wire" begin
+        # ⭐ THE MARKER (`seeker_fov_view`), and the reason it is a SEPARATE key rather than a reuse
+        # of slice 26's `radome_view`: the two select different HUD BRANCHES. The radome cascade
+        # reads `radome_slope`/`radome_residual`/…, NONE of which a FOV wire has, and reading them
+        # would ship 0.0 into a label — the stale-readout class this arc has caught seven times. The
+        # BUTTON outcome is identical either way (both DROP it), which is why a wire carrying both is
+        # safe on that axis.
+        # ⚠ THE BUTTON DROP IS THE WHOLE POINT AND IT IS NOT COSMETIC: a FOV wire is a TWO-ANGLE
+        # host, so without a marker the client falls through to slice 25's `seeker_axes` cycler,
+        # whose other position (`:pitch_plane`) leaves the WINDOW LIVE on a missile that ALSO misses
+        # by 2000 m for a wholly unrelated reason. Slice 26's argument, verbatim, one slice on.
+        scn = load_scenario(joinpath(@__DIR__, "..", "..", "scenarios", "slice32_fov.yaml"))
+        info = EWSim._airframe_view_info(scn.world)
+        @test info[:seeker_fov_view] === true
+        @test info[:airframe_6dof] === true              # it is still the slice-23 3-D view
+        @test !haskey(info, :radome_view)                # ⭐ and there is NO glass on this wire
+        # PRESENCE-gated from the other side: every 23–31 wire keeps its own marker set UNCHANGED
+        # (the handshake is byte-identical there, which is what makes their UI tests still pass).
+        let base = joinpath(@__DIR__, "..", "..", "scenarios")
+            for f in ("slice23_out_of_plane.yaml", "slice25_seeker_3d.yaml", "slice26_radome.yaml",
+                      "slice30_envelope.yaml", "slice31_gyro.yaml")
+                p = joinpath(base, f)
+                isfile(p) || continue
+                @test !haskey(EWSim._airframe_view_info(load_scenario(p).world), :seeker_fov_view)
+            end
+        end
+
+        # THE SHIPPED WIRE ITSELF — convention 9 and the disqualified-knob list, asserted rather
+        # than described in a comment.
+        m1 = scn.world.entities[:m1]; tgt = scn.world.entities[:tgt1]
+        @test m1.comp[:seeker_fov_deg] == 25.0          # ⚠ THE SHOWCASE OPENS ON THE DISEASE
+        @test tgt.comp[:cross_speed_mps] == 400.0
+        @test tgt.vel.y == 400.0                        # the pin and the authored vel AGREE at the
+                                                        # default — slice 30's knob-vs-rung
+                                                        # discriminator, and it must not drift
+        @test m1.comp[:seek_two_angle] === true
+        @test scn.world.fidelity[:airframe] === :six_dof
+        @test scn.world.fidelity[:seeker_axes] === :az_el
+        @test scn.world.fidelity[:seeker] === :filtered
+        # ⚠ `steering` OMITTED — the loader default is :skid_to_turn, and slice 24 measured BTT
+        # binding the aero ceiling 93.2 % of its approach, which would destroy the aero_sat = 0
+        # isolation this slice's whole claim rests on.
+        @test !haskey(scn.world.fidelity, :steering)
+        # ⚠⚠ THE RADOME KEYS ARE ABSENT BY DESIGN (convention 9): a ringing arm's look angle swings
+        # BECAUSE it rings, so the angle measured on one is the LOOP's and not the ENGAGEMENT's.
+        for k in (:radome_slope, :radome_slope_est, :radome_ripple, :radome_ripple_k,
+                  :gyro_scale_err, :gyro_bias_z, :gyro_bias_y)
+            @test !haskey(m1.comp, k)
+        end
+        # EXACTLY TWO KNOBS, and they are the TWO TERMS OF ONE COMPARISON (`fov` vs `lead(vy)`) —
+        # convention 9 satisfied by the measurement, not by counting sliders.
+        let kk = Dict(kb.key => kb for kb in scn.knobs)
+            @test length(scn.knobs) == 2
+            @test kk[:seeker_fov_deg].target === :m1
+            @test (kk[:seeker_fov_deg].min, kk[:seeker_fov_deg].max) == (20.0, 40.0)
+            @test kk[:cross_speed_mps].target === :tgt1
+            @test (kk[:cross_speed_mps].min, kk[:cross_speed_mps].max) == (0.0, 400.0)
+            # DISQUALIFIED AND ASSERTED ABSENT: `n_pn`/`rho` move the guidance loop the lesson is
+            # not about; `radome_*` is a SECOND mechanism; `sigma_seek` degrades the lesson beside
+            # it; `elevation_deg` is the slice-19 DEAD-knob class AND gate 0's P5 artifact;
+            # `af_alpha_max` is the arc's aero ceiling, held at 0.0 % here on purpose.
+            for k in (:n_pn, :rho, :radome_slope, :radome_slope_est, :sigma_seek,
+                      :elevation_deg, :af_alpha_max, :speed)
+                @test !haskey(kk, k)
+            end
+        end
+        # ⭐ THE DOMAIN FLOOR'S REASON, PINNED (slice 26's post-commit discipline — endpoints
+        # MEASURED, never inferred). Below ~18.12° the seeker never acquires ON THIS WIRE, and that
+        # cliff is the SCENARIO's authored launch attitude, not a seeker property (gate 0 P5): it
+        # tracks the TICK-1 look angle, which is set by `elevation_deg` = 12° against a target whose
+        # launch BEARING is ~18.4° in azimuth. The domain therefore starts ABOVE it, so the slider
+        # measures the SEEKER and not the launcher.
+        # ⚠ `:att_q` is MINTED ON THE FIRST TICK, not at load (it is a 6-DOF state, not an authored
+        # input), so this reads the SHIPPED telemetry after one tick rather than reconstructing an
+        # attitude the loader never built — which is also the number gate 0's P5 measured.
+        let w = scn.world
+            tick!(w, scn.subs, scn.dt_physics)
+            look0 = w.env[:telemetry]["m1.look_angle"]
+            @test 18.0 < look0 < 18.3                    # the cliff, from the SHIPPED launch state
+            @test look0 < 20.0                           # …and the domain floor clears it
+        end
+    end
 end
