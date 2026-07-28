@@ -15,7 +15,7 @@ CURVE. Slice 29 builds that curve into the compensator — **and finds that maki
 FUNCTION OF THE LOOK ANGLE gives it a parasitic path of its own**, because the look angle it must
 index on is the one the radome has already bent.
 
-**Status: COMPLETE (2026-07-28) — all three gates green, 5494 tests. Gate 0 — 10 probes, FOUR refutations, THREE advisor passes; raw findings
+**Status: COMPLETE (2026-07-28) — all three gates green, 5500 tests. Gate 0 — 10 probes, FOUR refutations, THREE advisor passes; raw findings
 and the probe scripts live in `M:\claud_projects\temp\slice29\GATE0_FINDINGS.md`.**
 
 ---

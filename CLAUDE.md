@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–29 COMPLETE & green — 5494 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–28
+**Slices 1–29 COMPLETE & green — 5500 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–28
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
@@ -109,7 +109,7 @@ quoted as a median there (the ring/quiet VERDICT is always on rms r) — and the
 this wire (≈ −0.056, from a constant-R̂ sweep, whose R̂' ≡ 0 makes its residual unambiguous). What IS legitimate on a
 ringing arm is comparing the bench and loop numbers TO EACH OTHER, since both come from identical frames — and the
 verifier's first run failed at 1.6× using a MEAN OF ABSOLUTES (inflated by the ring's symmetric excursions); the
-MEDIAN gives 3.7×. (5494)**
+MEDIAN gives 3.7×. (5500)**
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.

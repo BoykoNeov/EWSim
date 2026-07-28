@@ -3880,7 +3880,7 @@ MODEL err **−0.092** against LOOP RESID **−0.013**. Class **4a** (FIFTH cons
 count ASSERTED via end-of-run RNG identity); KNOB not rung (`Â = 0` bit-identical to the key absent,
 measured); the button stays DROPPED (16/26/27/28/29 — Option-P′'s fifth use). Slices 1–28
 byte-identical, proven ON THE WIRE (the 27/28 verifiers re-run to the digit: 0.76836 / 54.7× / 3.305
-and 1.04145 / 0.10057 / 80.7×). 5494 tests.
+and 1.04145 / 0.10057 / 80.7×). 5500 tests.
 
 Run: `pwsh tools/julia.ps1 --project=core tools/server.jl scenarios/slice29_radome_schedule.yaml`,
 then console Godot `--headless --path clients/godot --script res://net/slice29_verify.gd` (exit 0 =
