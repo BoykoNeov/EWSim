@@ -15,7 +15,7 @@ CURVE. Slice 29 builds that curve into the compensator — **and finds that maki
 FUNCTION OF THE LOOK ANGLE gives it a parasitic path of its own**, because the look angle it must
 index on is the one the radome has already bent.
 
-**Status: PLANNED. Gate 0 COMPLETE — 9 probes, three refutations, two advisor passes; raw findings
+**Status: COMPLETE (2026-07-28) — all three gates green, 5494 tests. Gate 0 — 10 probes, FOUR refutations, THREE advisor passes; raw findings
 and the probe scripts live in `M:\claud_projects\temp\slice29\GATE0_FINDINGS.md`.**
 
 ---
@@ -43,18 +43,19 @@ nobody had to notice: a CONSTANT `R̂` has `R̂' ≡ 0`, so it cannot care where
 ⚠ **INHERITED LANGUAGE AND ITS PROHIBITIONS.** The instability is still slice 26's — a true
 positive-feedback loop, a loop gain, a stability boundary, self-excitation from zero input. Slice
 20's "degenerative spiral" language stays forbidden here; slice 26's stays forbidden elsewhere.
-Slice 29 adds **no new instability and no new cap** — it adds a second GAIN to the existing loop,
-exactly as slice 28 made that loop's gain a function of the flight condition.
+Slice 29 adds **no new instability, no new cap and — after §3's correction — no new GAIN either**: it
+adds the fact that a SCHEDULE HAS AN EVALUATION POINT AT ALL, so the existing residual must be read
+where the belief is actually applied.
 
 ---
 
 ## Read these FIRST — the design decisions settled at gate 0 (measured, not assumed)
 
-### 1. ⚠⚠ THE FIRST PLAN WAS REFUTED TWICE, AND THE REFUTATIONS ARE LOAD-BEARING (P1, P2, P3)
+### 1. ⚠⚠ THE FIRST PLAN WAS REFUTED, AND THE REFUTATIONS ARE LOAD-BEARING (P1, P2, P3)
 
 The obvious slice 29 is *"a scalar cannot cancel a curve; schedule it and it can."* **It is false on
-this plant**, and the two measurements that killed it must be written down, because every future
-reader will propose it again.
+this plant**, and the measurements that killed it must be written down, because every future reader
+will propose it again.
 
 **P1 — the look angle does not move.** On a settled PN collision course `V_M·sin(L) = V_T·sin(aspect)`
 with the LOS direction fixed ⇒ **the lead angle `L` is CONSTANT BY CONSTRUCTION**. Measured on a
@@ -429,8 +430,8 @@ CPAs (slice 27); both instruments must follow the RINGING channel — `omega_r` 
       configuration) and which reframed the mechanism from "a second loop gain" into "the same law,
       read at the compensator's own index". Raw findings in
       `M:\claud_projects\temp\slice29\GATE0_FINDINGS.md`.
-- [ ] Gate 1 — `frames.jl` kernels + `test_frames.jl` teeth.
-- [ ] Gate 2 — the `_observe_point3d!` seam + loader keys + telemetry; byte-identity on the wire;
+- [x] Gate 1 — `frames.jl` kernels + `test_frames.jl` teeth.
+- [x] Gate 2 — the `_observe_point3d!` seam + loader keys + telemetry; byte-identity on the wire;
       the second-seed check.
-- [ ] Gate 3 — scenario + the four proofs; the 26/27/28 verifiers re-run to the digit.
-- [ ] Docs — `docs/STATUS.md` as-built, `CLAUDE.md` status line, `HANDOFF.md` §11, memory.
+- [x] Gate 3 — scenario + the four proofs; the 26/27/28 verifiers re-run to the digit.
+- [x] Docs — `docs/STATUS.md` as-built, `CLAUDE.md` status line, `HANDOFF.md` §11, memory.
