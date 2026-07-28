@@ -5903,6 +5903,10 @@ end
         # discipline: do not let the miss carry the claim alone).
         @test open.out  > 60.0
         @test cureA.out == 0.0 && cureB.out == 0.0 && ref.out == 0.0
+        # ⚠ ASSERT THE BREAK EXISTS BEFORE ASSERTING WHEN (advisor): `t_break` is recorded inside the
+        # r > 200 m gate, so an arm that only ever lost lock in the endgame would leave it `NaN` and
+        # the range comparison below would read FALSE rather than erroring — silent on a retuned wire.
+        @test !isnan(open.t_break)
         @test 4.0 < open.t_break < 5.5            # the break, WHILE THE LEAD IS STILL BUILDING
         # ⚠⚠ THE SIGNATURE IS SLICE 23's AND SLICE 25's AND THE MECHANISM IS NEITHER (the copy-paste
         # false-claim trap, 3rd occurrence in this arc). BOTH of those foils fly with `max|y| = 0.0`
@@ -6088,6 +6092,21 @@ end
         # all lands within a metre of it, so the brief coasts cost essentially nothing.
         ringref = arm(vy = 200.0, R = -0.03, Rhat = -0.03)
         @test abs(ring25.miss - ringref.miss) < 1.0
+        # ⭐⭐ DIRECTION 3, AND IT NARROWS THE CLAIM TO THE TRUE ONE (advisor): the arm above does not
+        # ring because it has a RADOME, it rings because its compensator is the BORESIGHT-
+        # characterized one slice 30 exists to condemn (`R̂ = R₀`, hardware residual exactly 0.000).
+        # Aim `R̂` at the glass's worst-case slope instead — slice 30's rule, `radome_slope_worst` =
+        # R₀ + 2A = −0.33 — and THE SAME GLASS FLIES THE SAME 20° WINDOW: 0.00 % out, a peak look
+        # angle of 18.14° against the radome-free 18.13°, and a miss BIT-IDENTICAL to the same wire
+        # with no window at all. ⇒ the honest sentence is "a compensator that RINGS can shake the
+        # seeker out of its own window, and slice 30's design rule prevents it" — the FOV bound is
+        # NOT tighter than the stability bound on this glass.
+        let ruled = arm(fov = 20.0, vy = 200.0, R = -0.03, Rhat = -0.33)
+            @test ruled.out == 0.0
+            @test ruled.miss < 1.0
+            @test ruled.look_max < 20.0
+            @test ruled.miss === arm(vy = 200.0, R = -0.03, Rhat = -0.33).miss   # the window is inert
+        end
     end
 
     @testset "loader: the window is PRESENCE-gated, and refuses to be a DEAD knob" begin

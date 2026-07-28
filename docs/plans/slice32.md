@@ -270,6 +270,14 @@ same rounding.
 * The **corollary** reproduces in both directions: fov 20 + ringing glass **1000 m+ / 60 %+ out**
   against **0.19 m / 0.0 %** radome-free; fov 25 + the same glass **0.0 % < out < 5 %** and it still
   HITS, within a metre of the no-window wire.
+* ⭐⭐ **AND A THIRD DIRECTION NARROWS THAT CLAIM TO THE TRUE ONE** (advisor, gate-2 post-review):
+  the ringing arm does not ring because it has a RADOME — it rings because its compensator is the
+  BORESIGHT-characterized one slice 30 exists to condemn. Aim `R̂` at `radome_slope_worst` = R₀+2A =
+  **−0.33** instead — slice 30's rule — and **the same glass flies the same 20° window**: 0.00 %
+  out, peak look **18.14°** against the radome-free 18.13°, miss 0.184 m and **BIT-IDENTICAL to the
+  same wire with no window at all**. ⇒ the honest sentence is *"a compensator that RINGS can shake
+  the seeker out of its own window, and slice 30's design rule prevents it"*, and **the FOV bound
+  is NOT tighter than the stability bound on this glass** — one more knot tying 32 to 30.
 
 ## The seam (gates 1 & 2)
 
@@ -331,6 +339,12 @@ ENGAGEMENT's; deleting them puts the missile on the slice-25 clean path). Opens 
 two terms of ONE comparison, `fov` vs `lead(vy)`, and the verdict flips exactly where the difference
 crosses zero — reached from both directions, agreeing to **0.01–0.03°** (P4b).
 
+⚠ **PROVENANCE (advisor): these are GATE 0's numbers, measured on `slice30_envelope.yaml` MINUS the
+radome keys at seed 30, and they are NOT the gate-2 table above** (a programmatic world at seed 32),
+**nor what the verifier will print** (frame-sampled — and per [[ewsim-missile-verifier-sampling]] the
+HIT arms sample COARSELY, so 0.17 will not reproduce; the MISS arm will). Three honest sets of
+numbers for the same lesson; label every one of them with where it came from.
+
 | arm | miss (m) | out-of-window % | max look° | `aero_sat` % |
 |---|---|---|---|---|
 | **OPEN — fov 25°, vy 400** | **1140.64** | **69.6** | 103.14 | 0.0 |
@@ -385,6 +399,16 @@ claim), and **that one test must assert BOTH directions**, because it is also th
 evidence: at `fov = 25` the same ringing arm loses lock for **0.4 %** of the approach, in brief
 episodes, **and still hits (1.07 m)**. A short loss is survivable; what is terminal is a loss while
 the lead is still building.
+
+⚠⚠ **AND A THIRD DIRECTION, WHICH IS THE ONE THAT MAKES THE SENTENCE TRUE** (advisor, gate-2
+post-review — it shipped as a third arm of that test): the ringing arm does not ring *because it has
+a radome*, it rings because its compensator is the **BORESIGHT-characterized** one slice 30 exists
+to condemn (`R̂ = R₀`, hardware residual exactly 0.000). Aim `R̂` at `radome_slope_worst` = R₀+2A =
+−0.33 — slice 30's rule — and **the same glass flies the same 20° window** (0.00 % out, peak look
+18.14° against the radome-free 18.13°, and a miss BIT-IDENTICAL to the same wire with no window).
+⇒ write it as *"a compensator that RINGS can shake the seeker out of its own window, and slice 30's
+design rule prevents it"*, never as "the radome breaks the FOV". **The FOV bound is NOT tighter than
+the stability bound on this glass** — which is a claim gate 3 may state, because it was measured.
 
 ### The four proofs (convention 14)
 
