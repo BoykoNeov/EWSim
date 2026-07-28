@@ -877,6 +877,26 @@ function decide!(a::Autopilot, w::World)
     tel = get!(() -> Dict{String,Any}(), w.env, :telemetry)
     tgt = _nearest_target(w, e)
 
+    # SLICE 30 — THE ENGAGEMENT AXIS, labelled. The crossing speed the `ConstantVelocity` mover is
+    # pinned to (radar.jl `integrate!`) is what sets the sustained lead angle the seeker holds, hence
+    # WHERE ON THE GLASS slice 28's slope curve is sampled, hence the residual that closes slice 26's
+    # loop — so the HUD must be able to say which engagement is being flown, not just what the radome
+    # believes. Published HERE, in the block that already owns engagement geometry (`los_range`,
+    # `closing_speed`, `range_rate`) rather than in the seeker's readout: a target's crossing speed is
+    # not a sensor quantity, and siting it there would needlessly couple it to the `:seeker_axes`
+    # host (advisor).
+    #
+    # ⚠ PRESENCE-gated on the TARGET's own comp key, and it ships the KNOB VALUE — never `tgt.vel[2]`,
+    # which would grow a key on every prior wire (slices 1–29 byte-identical) and would read the
+    # authored velocity on a target that carries no pin. Placed ABOVE the no-target early return so
+    # both arms ship it once: unlike the never-stale ZEROS below, this one does not go stale
+    # post-impact — the target keeps crossing at the speed the knob says.
+    # ⚠ SIGNED ⇒ `_finite_coord`: a negative crossing flies the MIRROR engagement, which is exactly
+    # the sign the loader deliberately declines to forbid.
+    if tgt !== nothing && haskey(tgt.comp, :cross_speed_mps)
+        tel["$sid.cross_speed_mps"] = _finite_coord(Float64(tgt.comp[:cross_speed_mps]))
+    end
+
     # No target (misconfigured — load validates ≥1) or already impacted (engagement over): no
     # command, coast/frozen. Publish zero/finite telemetry so the readout never blanks.
     if tgt === nothing || get(c, :impacted, false)
@@ -1789,6 +1809,23 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
                 radome_slope_curve(R_rad, A_rip, k_rip, look_az))
             tel["$sid.radome_slope_el"] = _finite_coord(
                 radome_slope_curve(R_rad, A_rip, k_rip, look_el))
+            # SLICE 30 — ⭐⭐ THE NUMBER THE DESIGN RULE AIMS AT: the most negative local slope this
+            # glass reaches ANYWHERE (`min(R₀, R₀+2A)`, frames.jl `radome_slope_worst`). Because the
+            # radome constraint is ONE-SIDED — only a NEGATIVE residual closes slice 26's loop, a
+            # positive one merely de-tunes — a SCALAR `R̂` at or below this value is stable in EVERY
+            # engagement, without knowing which engagement will be flown. That is the slice: gain
+            # scheduling buys PERFORMANCE, not STABILITY.
+            #
+            # ⚠ SHIPPED AS A NUMBER because the client must not evaluate the curve (convention 13,
+            # the slice-21 `rho_air` / slice-28 `radome_slope_az` precedent) — and it is LIVE for a
+            # second reason the HUD depends on: dragging `A` MOVES THE RULE'S OWN TARGET, so a
+            # student who deepens the glass silently invalidates the `R̂` they already set.
+            # ⚠ A BOUND, NOT A THRESHOLD (§3): the loop needs the residual to reach the ONSET, not
+            # merely to be negative, so the envelope goes quiet ABOVE this value (−0.28 vs the rule's
+            # −0.33 on the shipped glass). Sufficient, never tight — label it that way in the HUD.
+            # ⚠ SIGNED ⇒ `_finite_coord`, not `_finite` (which clamps only the upper bound and would
+            # let a large negative slider reach the JSON unclamped — the slice-29 `k̂` catch).
+            tel["$sid.radome_slope_worst"] = _finite_coord(radome_slope_worst(R_rad, A_rip))
         end
     end
     # SLICE 27 — the COMPENSATOR readouts, shipped ONLY while the compensator is live (the

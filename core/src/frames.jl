@@ -463,6 +463,50 @@ function radome_error_curve(slope0::Real, ripple::Real, k::Real, look_az::Real, 
     return (f(look_az), f(look_el))
 end
 
+"""
+    radome_slope_worst(slope0, ripple) -> R_worst   (dimensionless, signed)
+
+The MOST NEGATIVE local slope [`radome_slope_curve`](@ref) reaches ANYWHERE — the number slice 30's
+design rule aims a scalar `R̂` at. Since `1 − cos(k·look) ∈ [0, 2]`, the curve's two extreme values
+are `slope0` and `slope0 + 2·ripple`, so
+
+    R_worst = min(slope0, slope0 + 2·ripple)
+
+⭐⭐ **WHY THE WORST CASE IS A DESIGN RULE AT ALL: THE RADOME CONSTRAINT IS ONE-SIDED.** Only a
+NEGATIVE residual `R − R̂` closes slice 26's parasitic loop; a positive one merely DE-TUNES the
+reported LOS rate (slice 26, measured — `ω_app/ω_true → 0.593`, one knob with two failure modes).
+So a scalar set at or below the most negative slope the glass reaches anywhere errs in the HARMLESS
+direction at every look angle, in every engagement — it is not accurate anywhere and does not need
+to be. ⇒ **GAIN SCHEDULING BUYS PERFORMANCE, NOT STABILITY**, and slice 27's two-sided
+"know your slope to within `0.38/(N·ρ)`" is a two-sided reading of a one-sided constraint.
+Measured over an envelope of seven crossing speeds at five glass depths: the boresight scalar rings
+5–6 of 7, this one rings **0 of 7 at every depth** (`docs/plans/slice30.md` §2).
+
+⚠ **SUFFICIENT, NEVER TIGHT — say "a bound", never "the threshold".** The loop needs the residual to
+reach the ONSET (≈ −0.055 on this wire), not merely to be negative, so the envelope actually goes
+quiet ABOVE this value (at `R̂ ≈ −0.28` where the rule says −0.33): the rule carries ~0.05 of
+built-in margin. It is a bound to be exceeded, not an estimate to be matched (§3).
+
+⚠ AND IT IS A BOUND ON THE CURVE, NOT ON THE BAND THE ENGAGEMENT VISITS. The extremum needs
+`k·look = π`, so for a small authored `k` the minimum sits outside the reachable look angles and the
+bound is MORE conservative than the glass ever presents in flight. That extra conservatism is the
+point — the rule's whole value is that it never has to know which engagement will be flown, which is
+also why it survives the trap that catches a pre-flight rule sized from the nominal
+collision-course look angle (§5: the band's CENTRE is not the band).
+
+⚠ `min`, not the literal `slope0 + 2·ripple`, and the difference only shows up OUTSIDE slice 30's
+`A ∈ [−0.20, 0]` knob domain (inside it the two agree exactly). A POSITIVE authored `ripple` is a
+meaningful configuration in this codebase — positive slopes de-tune — and there `slope0 + 2·ripple`
+is the most POSITIVE slope, i.e. the maximally de-tuned aim point: it would INVERT the rule this
+function exists to serve. Both signs are pinned in `test_frames.jl`.
+
+`ripple == 0` gives exactly `slope0` (the flat glass's only slope, and the boresight scalar's own
+target), so the off-state is knob-reachable — the KNOB-not-rung discriminator, as everywhere in this
+family.
+"""
+radome_slope_worst(slope0::Real, ripple::Real) =
+    min(Float64(slope0), Float64(slope0) + 2.0 * Float64(ripple))
+
 # --- the SCHEDULED COMPENSATOR (slice 29, §11 Tier-A — the answer slice 28 named) ---------------
 #
 # Slice 27 gave the missile a rate-gyro feed-forward with a SCALAR belief `R̂`. Slice 28 showed the

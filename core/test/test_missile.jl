@@ -5112,7 +5112,10 @@ end
     # change of slice 30: the ENGAGEMENT — which sets the sustained lead, hence the look angle at
     # which the glass is sampled — becomes a knob a client can drag. `cross === nothing` mints NO
     # key and authors `vel_y` directly: the byte-identity reference.
-    function eng_world(; vy = 200.0, cross = nothing, seed = 30)
+    # `Rhat`/`A` are the compensator's belief and the glass's ripple amplitude — the two knobs the
+    # gate-2 wire teeth move (the aim point `R₀+2A` is a function of `A`, so the fixture must be able
+    # to change the glass without re-authoring the whole comp bag).
+    function eng_world(; vy = 200.0, cross = nothing, seed = 30, Rhat = -0.03, A = -0.15)
         w = World(seed = seed,
                   fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
                                                  :autopilot => :alpha, :airframe => :six_dof,
@@ -5129,8 +5132,8 @@ end
                                 :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
                                 :sigma_seek => 5.0e-5, :alpha => 0.30, :beta => 0.05,
                                 :seek_two_angle => true,
-                                :radome_slope => -0.03, :radome_ripple => -0.15,
-                                :radome_ripple_k => 12.0, :radome_slope_est => -0.03)
+                                :radome_slope => -0.03, :radome_ripple => A,
+                                :radome_ripple_k => 12.0, :radome_slope_est => Rhat)
         # `vy` (AUTHORED on `vel`) and `cross` (PINNED on the comp key) are INDEPENDENT here on
         # purpose: the two must be free to DISAGREE, because an equal-value pair cannot see the
         # ordering bug (`docs/plans/slice30.md` gate 1).
@@ -5190,5 +5193,144 @@ end
         # passed. And the mirror: authored 200, pinned to rest, must equal a target authored at rest.
         @test trace(vy = 0.0, cross = 200.0) == base
         @test trace(vy = 200.0, cross = 0.0) == trace(vy = 0.0)
+    end
+
+    # ------------------------------------------------------------------ gate 2: the wire ----------
+    # Run `n` ticks and hand back the telemetry dict of the LAST one (convention 10: every number
+    # below is pinned against the ACTUAL build_env!→observe!→decide! path, never a hand-recompute).
+    function tel_after(n; drop = Symbol[], kw...)
+        w, s = eng_world(; kw...)
+        for k in drop; delete!(w.entities[:m1].comp, k); end
+        for _ in 1:n
+            tick!(w, s, dt); empty!(w.events)
+        end
+        return w.env[:telemetry]
+    end
+
+    @testset "⭐ THE AIM POINT ON THE WIRE — `radome_slope_worst`, and it is a `min`" begin
+        # Slice 30 ships ONE new radome number: the most negative local slope the glass reaches
+        # ANYWHERE (`min(R₀, R₀+2A)`, frames.jl `radome_slope_worst`) — the value the one-sided design
+        # rule aims a scalar `R̂` at. It is shipped as a NUMBER because the client must not evaluate
+        # the curve (convention 13, the slice-21 `rho_air` / slice-28 `radome_slope_az` precedent),
+        # and because dragging `A` MOVES the rule's own target: a HUD that showed only `R̂` would let
+        # a student deepen the glass and silently invalidate the scalar they had already set.
+        for (A, want) in ((-0.15, -0.03 + 2 * -0.15), (-0.20, -0.03 + 2 * -0.20),
+                          (-0.05, -0.03 + 2 * -0.05), (0.0, -0.03))
+            @test tel_after(50; A = A)["m1.radome_slope_worst"] === want
+        end
+        # ⚠⚠ THE `min`, ON THE WIRE. A POSITIVE amplitude is a meaningful configuration here (positive
+        # slopes DE-TUNE rather than ring — slice 26), and there `R₀+2A` is the most POSITIVE slope:
+        # the maximally de-tuned aim point, which would INVERT the rule. The shipped key stays `R₀`.
+        @test tel_after(50; A = +0.15)["m1.radome_slope_worst"] === -0.03
+        @test tel_after(50; A = +0.15)["m1.radome_slope_worst"] != -0.03 + 2 * 0.15
+
+        # ⭐ IT IS A PROPERTY OF THE GLASS, NOT OF THE ENGAGEMENT — the DISCRIMINATING PAIR, and the
+        # reason it is a second key rather than a relabelling of slice 28's `radome_slope_az`. The
+        # crossing speed moves WHERE the seeker looks, so `radome_slope_az` (the slope THERE) moves
+        # with it; the worst case over the whole curve cannot. That split is the whole one-sidedness
+        # argument: the rule needs no knowledge of the engagement, which is exactly why it holds
+        # across an envelope.
+        let a = tel_after(1500; cross = 0.0), b = tel_after(1500; cross = 300.0)
+            @test a["m1.radome_slope_worst"] === b["m1.radome_slope_worst"]
+            @test a["m1.radome_slope_az"]    != b["m1.radome_slope_az"]
+        end
+
+        # NEVER-STALE, both gates: no ripple is a slice-26/27 wire (the glass HAS no curve, and
+        # `radome_slope` already ships its only slope), no radome at all is a slice-25 wire.
+        @test !haskey(tel_after(50; drop = [:radome_ripple, :radome_ripple_k]), "m1.radome_slope_worst")
+        @test  haskey(tel_after(50; drop = [:radome_ripple, :radome_ripple_k]), "m1.radome_slope")
+        @test !haskey(tel_after(50; drop = [:radome_slope, :radome_ripple, :radome_ripple_k]),
+                      "m1.radome_slope_worst")
+        # ⚠ ADDITIVE, NOT byte-identical: slices 28 and 29 DO author a ripple, so their wires GROW
+        # this key. Trajectory and RNG stay bit-identical (telemetry is write-only) — the precise
+        # claim is stated here rather than left as "byte-identity on the wire".
+        @test haskey(tel_after(50), "m1.radome_slope_worst")
+
+        # conventions 5/6 — a live slider can neither crash a tick nor ship a non-finite. `A` is
+        # load-validated finite only, and the SIGNED clamp is `_finite_coord` (`_finite` bounds only
+        # from above and would let a huge NEGATIVE reach the JSON — the slice-29 `k̂` catch).
+        let t = tel_after(50; A = -1.0e12)
+            @test isfinite(t["m1.radome_slope_worst"])
+            @test t["m1.radome_slope_worst"] == -FINITE_CEIL
+        end
+    end
+
+    @testset "the ENGAGEMENT LABEL on the wire — `cross_speed_mps`, sign and all" begin
+        # The HUD must be able to say which ENGAGEMENT is being flown, not only what the radome
+        # believes — the crossing speed IS the new axis. Published from the phase-4 `decide!` block
+        # that already owns engagement geometry (`los_range`/`closing_speed`/`range_rate`), not from
+        # the seeker: a target's crossing speed is not a sensor quantity, and siting it there would
+        # couple it to the `:seeker_axes` host for no reason.
+        @test tel_after(50; cross = 200.0)["m1.cross_speed_mps"] === 200.0
+        @test tel_after(50; cross = 0.0)["m1.cross_speed_mps"]   === 0.0
+        # ⚠ SIGNED, and the loader deliberately declines to forbid it: a negative crossing flies the
+        # MIRROR engagement. `_finite_coord`, so this survives the clamp with its sign.
+        @test tel_after(50; cross = -260.0)["m1.cross_speed_mps"] === -260.0
+        # PRESENCE-gated on the TARGET's own comp key — and it ships the KNOB VALUE, never
+        # `tgt.vel[2]`, which would grow a key on every slice-1..29 wire and would report the
+        # authored velocity of a target that carries no pin at all.
+        @test !haskey(tel_after(50; vy = 200.0), "m1.cross_speed_mps")
+        @test  haskey(tel_after(50; vy = 0.0, cross = 200.0), "m1.cross_speed_mps")
+        # NEVER-STALE past impact — and unlike the zeroed engagement keys beside it, this one does
+        # not go stale: the target keeps crossing at the speed the knob says. So it is published
+        # ABOVE the no-target/impacted early return, and BOTH arms ship it exactly once.
+        let (w, s) = eng_world(cross = 200.0)
+            for _ in 1:50; tick!(w, s, dt); empty!(w.events); end
+            w.entities[:m1].comp[:impacted] = true
+            tick!(w, s, dt)
+            @test w.env[:telemetry]["m1.cross_speed_mps"] === 200.0
+            @test w.env[:telemetry]["m1.a_cmd"] === 0.0          # the paired never-stale ZERO
+        end
+        # conventions 5/6 — a live slider at an absurd magnitude ships finite, clamped, SIGNED.
+        @test tel_after(50; cross = -1.0e12)["m1.cross_speed_mps"] == -FINITE_CEIL
+    end
+
+    @testset "⭐ THE VERDICT SURVIVES A SECOND SEED (the headline is a ring COUNT)" begin
+        # ⚠ LOAD-BEARING, NOT HYGIENE (advisor). Slice 30's headline is a RING COUNT over an
+        # envelope (6/7 → 0/7), so a single cell flipping on a different seed would change the
+        # published number — unlike a ratio, a count has no tolerance to absorb it. Class 4a means
+        # the seed is live (5th consecutive slice), so this is asserted rather than assumed: slice
+        # 26 measured self-excitation at `σ_seek = 0`, but that is 26's measurement, not this one's.
+        #
+        # Only the two MARGINAL cells are teeth — the largest QUIET arm under the worst-case scalar
+        # and the smallest RINGING arm under the boresight one. They bracket the transition; the
+        # other twelve arms of the envelope are probe territory (`probe9_gate2.jl`, which runs all
+        # 14 on the scenario wire and reproduces gate 0's emulated numbers to the digit).
+        WORST = -0.03 + 2 * -0.15                     # the aim point the shipped key carries
+        function rms_r_in_band(; kw...)
+            w, s = eng_world(; kw...)
+            acc = 0.0; n = 0
+            for _ in 1:12000
+                tick!(w, s, dt); empty!(w.events)
+                m = w.entities[:m1]; t = w.entities[:t1]
+                d = t.pos - m.pos; r = sqrt(d[1]^2 + d[2]^2 + d[3]^2)
+                # the RANGE BAND (slice 28's window): a crossing wire's rms r has a legitimate
+                # front-loaded baseline, and arms with different ToF would otherwise compare
+                # different parts of the engagement. Stop at the low edge — the endgame is outside.
+                r < 500.0 && break
+                r < 3000.0 || continue
+                acc += get(m.comp, :omega_body, Vec3(0.0, 0.0, 0.0))[3]^2; n += 1
+            end
+            return sqrt(acc / n)
+        end
+        # the QUIET margin cell: vy = 200 under the worst-case scalar (the largest of the seven)
+        q30 = rms_r_in_band(cross = 200.0, Rhat = WORST, seed = 30)
+        q42 = rms_r_in_band(cross = 200.0, Rhat = WORST, seed = 4242)
+        # the RING margin cell: vy = 80 under the boresight scalar (the smallest of the six)
+        g30 = rms_r_in_band(cross = 80.0, Rhat = -0.03, seed = 30)
+        g42 = rms_r_in_band(cross = 80.0, Rhat = -0.03, seed = 4242)
+        @test q30 ≈ 0.0588 atol = 2e-3
+        @test q42 ≈ 0.0588 atol = 2e-3
+        @test g30 ≈ 0.8546 atol = 5e-3
+        @test g42 ≈ 0.8546 atol = 5e-3
+        # the VERDICT (the 0.30 line), at BOTH seeds — the assert the ring count is made of
+        @test q30 < 0.30 && q42 < 0.30
+        @test g30 > 0.30 && g42 > 0.30
+        # ⭐ AND THE MARGIN IS THE POINT: the two arms differ from EACH OTHER by ~14.5×, while each
+        # moves under 1% with the seed. The verdict gap is orders above the seed sensitivity, which
+        # is what makes a COUNT a legitimate headline on a noisy plant.
+        @test abs(q30 - q42) < 0.005
+        @test abs(g30 - g42) < 0.005
+        @test g30 / q30 > 10.0
     end
 end

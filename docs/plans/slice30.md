@@ -323,14 +323,103 @@ Loader (`core/src/scenario.jl`): the key lands beside `alt_hold_m`, validated fi
 - a maneuvering target carrying it is a LOAD ERROR;
 - draw-count identity across the knob (class 4a, asserted).
 
-## Gate 2 — telemetry and the wire
+## Gate 2 — telemetry and the wire — **COMPLETE (2026-07-28), 5542 → 5608 tests**
 
 No new physics ⇒ no new telemetry is strictly required: `radome_residual_az`, `omega_ratio` and the
 look angle have all shipped since 28. What the LESSON needs is the number the design rule TARGETS —
 `R₀ + 2A`, the glass's most negative slope anywhere — which the core must ship rather than let the
-client compute (convention 13: physics never in GDScript).
+client compute (convention 13: physics never in GDScript). Plus the crossing speed itself, so the HUD
+can label the engagement being flown. Raw findings in
+`M:\claud_projects\temp\slice30\GATE2_FINDINGS.md` (probes 9 and 10).
 
-⚠ Also ship the crossing speed itself, so the HUD can label the engagement being flown.
+**TWO KEYS, and a new one-line kernel.** `frames.jl` gains `radome_slope_worst(slope0, ripple)`
+beside the curve it bounds; `missile.jl` ships `<m>.radome_slope_worst` (inside the `_ripple_on`
+block, beside slice 28's `radome_slope_az`/`_el`) and `<m>.cross_speed_mps`.
+
+### 1. ⚠⚠ IT IS A `min`, NOT THE LITERAL `R₀ + 2A` (advisor) — and the wire exercises both branches
+
+`radome_slope_worst = min(slope0, slope0 + 2·ripple)`. Over the declared `A ∈ [-0.20, 0]` knob domain
+the two forms are IDENTICAL, so the prose above is implemented rather than contradicted. The
+difference is outside it: the loader validates `radome_ripple` FINITE ONLY, and a POSITIVE amplitude
+is a meaningful configuration in this codebase (slice 26: positive slopes DE-TUNE rather than ring) —
+there the literal `R₀+2A` is the most POSITIVE slope, i.e. the maximally de-tuned aim point, which
+**inverts the one-sided rule the key exists to serve**. `min` keeps §3's "sufficient, never tight"
+property in BOTH signs. MEASURED on the wire, not just in the kernel test: at `A = +0.15` the shipped
+key is `-0.03`, not `+0.27`.
+
+⚠ **AND IT IS A BOUND ON THE CURVE, NOT ON THE BAND** — stated in the docstring because a reader will
+otherwise take it for "the slope the engagement sees at worst". The extremum needs `k·look = π`, so
+for a small authored `k` the minimum sits OUTSIDE the reachable look angles and the bound is even more
+conservative than the glass ever presents in flight. That extra conservatism is the whole value: the
+rule never has to know which engagement will be flown, which is also why it survives the trap of §5
+(a pre-flight rule sized from the nominal collision-course look angle under-compensates).
+
+### 2. THE SITE: `cross_speed_mps` SHIPS FROM PHASE-4 `decide!`, NOT FROM THE SEEKER (advisor)
+
+The question is which block already owns ENGAGEMENT geometry — that is the one carrying `los_range` /
+`closing_speed` / `range_rate` / `los_rate`. A target's crossing speed is not a SENSOR quantity, and
+siting it in the seeker's readout would needlessly couple it to the `:seeker_axes` host. It ships the
+**KNOB VALUE** (`tgt.comp[:cross_speed_mps]`), never `tgt.vel[2]` — which would grow a key on every
+prior wire and would report the authored velocity of a target carrying no pin at all.
+
+⚠ Published ABOVE the no-target/impacted early return, so both arms ship it exactly once. Unlike the
+never-stale ZEROS below it, this key does NOT go stale post-impact: the target keeps crossing at the
+speed the knob says. Both new keys take `_finite_coord` — both are SIGN-meaningful (a negative
+crossing flies the mirror engagement), and `_finite` clamps only from above, which is the exact trap
+slice 29 caught on `k̂`.
+
+### 3. ⚠⚠ "BYTE-IDENTITY ON THE WIRE" IS NOT LITERALLY TRUE, AND THE PRECISE CLAIM IS THIS (advisor)
+
+Slices 28 and 29 both AUTHOR `radome_ripple`, so `_ripple_on` is true there and their wires **GROW**
+`radome_slope_worst`. That is the right gate — the worst-case slope is a property of the GLASS, and
+coupling it to the target's knob would be wrong — but the claim must be stated as: **trajectory and
+RNG bit-identical, telemetry ADDITIVE on ripple-carrying wires.** A `cross_speed_mps`-free target
+grows nothing; a no-ripple (26/27) or no-radome (25) wire grows nothing. All four gates are teeth.
+
+### 4. ⭐ THE DISCRIMINATING PAIR: A PROPERTY OF THE GLASS, NOT OF THE ENGAGEMENT
+
+The reason this is a second key and not a relabelling of `radome_slope_az`: the crossing speed moves
+WHERE the seeker looks, so `radome_slope_az` (the slope THERE) moves with it — and the worst case over
+the whole curve cannot. Pinned as a pair on one wire (`cross = 0` vs `300`: `_worst` bit-identical,
+`_az` different). That split IS the one-sidedness argument — the rule needs no knowledge of the
+engagement, which is exactly why it holds across an envelope.
+
+### 5. ⭐ THE SECOND SEED — LOAD-BEARING, BECAUSE THE HEADLINE IS A COUNT (advisor)
+
+A ratio has tolerance to absorb noise; a RING COUNT does not — one cell flipping changes the published
+number. All 14 envelope arms were re-run at seed 4242 beside the scenario's own 28:
+
+**6/7 vs 6/7 (boresight), 0/7 vs 0/7 (worst-case).** Every cell moves **< 0.2%** with the seed, against
+a ~14.5× gap between the two arms. Margins to the 0.30 verdict line: the largest QUIET arm sits
+**5.10× below** it, the smallest RING arm **2.84× above**. The two MARGINAL cells (vy = 200 under the
+worst-case scalar, vy = 80 under boresight) are TEETH in `test_missile.jl`; the other twelve stay
+probe territory, `log`-style, so nothing is silently sampled.
+
+### 6. ⭐ THE SHIPPED SEAM REPRODUCES GATE 0's EMULATION TO THE DIGIT
+
+All twelve cells of §8's table come back identical off the real `comp[:cross_speed_mps]` pin (gate 0
+set `tgt.vel` once per tick before `tick!`; gate 1 pins inside `integrate!`, before the `pos` update).
+P2a asserted the agreement; this measures it, and it is the evidence that §2/§3/§8's tables transfer
+to the shipped code unchanged.
+
+### 7. THE GATE-3 DEPENDENCY, CHECKED HERE RATHER THAN DISCOVERED THERE (advisor)
+
+`set_param` on a **target** entity works: `handle_command!` needs only the entity to exist plus a
+declared `Knob` matching `(target, key)`, gate 1's `test_scenario.jl` tooth already asserts
+`cross_speed_mps` lands in `scn.knobs` for a target, and slice 18's `alt_hold_m` is driven exactly
+that way from `slice18_ui_test.gd`. ⇒ P1's licence to drive the envelope with a LIVE slider stands,
+and the verifier does not need a different approach.
+
+**Teeth** (`test_frames.jl` / `test_missile.jl`): the kernel against a DENSE SWEEP of
+`radome_slope_curve` over a full ripple period (convention 11 — an independent recompute as the
+oracle, in six (R₀, A, k) combinations spanning both signs), `A = 0 ⇒ exactly R₀` bit-exact,
+monotone-in-depth over the shipped domain, the `min` branch PAIRED with a does-differ case; and on the
+wire: the four gating cases, the glass-vs-engagement pair, the signed/clamped live-slider guards, the
+post-impact never-stale case, and the two second-seed marginal cells with their margins.
+
+⚠ The `R₀+2A` teeth are pinned against the EXPRESSION, never the decimal `-0.33` — the Float64 sum is
+`-0.32999999999999996`, so a literal would assert float formatting instead of the identity (caught by
+the first run of the new frames testset).
 
 ## Gate 3 — scenario, client, four proofs
 
@@ -397,6 +486,12 @@ headline to exactly that class of proof-not-physics defect).
       green.** The ordering tooth PROVEN by deliberate inversion (6 red, and the equal-value teeth
       green under the bug); the maneuver × crossing-speed corner refused at LOAD; teeth split across
       `test_radar.jl` / `test_scenario.jl` / `test_missile.jl`.
-- [ ] Gate 2 — the `R₀+2A` telemetry; byte-identity on the wire; the second-seed check.
+- [x] Gate 2 — the `R₀+2A` telemetry (`frames.jl radome_slope_worst` + two wire keys); the
+      byte-identity claim STATED PRECISELY (trajectory/RNG identical, telemetry ADDITIVE on
+      ripple-carrying wires — 28/29 DO grow a key); the second-seed check over all 14 envelope arms
+      (**6/7 vs 6/7, 0/7 vs 0/7** — the ring count is seed-invariant, cells move < 0.2%). **5542 →
+      5608 (+66), full suite green.** Three advisor calls landed: the `min` instead of the literal
+      `R₀+2A`, the phase-4 `decide!` site for `cross_speed_mps`, and the target-scoped `set_param`
+      check that gate 3's whole approach depends on.
 - [ ] Gate 3 — scenario + the four proofs; the 26/27/28/29 verifiers re-run to the digit.
 - [ ] Docs — `docs/STATUS.md` as-built, `CLAUDE.md` status line, `HANDOFF.md` §11, memory.

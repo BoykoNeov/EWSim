@@ -641,6 +641,54 @@
         @test isfinite(radome_schedule_slope(A, 0.0, 0.3))
     end
 
+    @testset "the WORST-CASE SLOPE — a BOUND on the curve, in both signs (slice 30)" begin
+        # ⭐ THE TOOTH IS AGAINST THE CURVE, NOT AGAINST THE FORMULA (convention 11: an INDEPENDENT
+        # recompute as the oracle). `radome_slope_worst` claims to be the minimum of
+        # `radome_slope_curve` over ALL look angles, so the oracle is a DENSE SWEEP of that kernel —
+        # which is the thing slice 30's design rule actually needs to be true, and a `min` written
+        # the other way round (or a `+2A` with no `min`) fails it on one of the two signs.
+        for (R₀, A, k) in ((-0.03, -0.15, 12.0), (-0.03, -0.20, 12.0), (0.02, -0.10, 6.0),
+                           (-0.03, +0.09, 12.0), (0.05, +0.20, 4.0), (-0.10, 0.0, 12.0))
+            # a full period of the ripple, so the extremum at `k·look = π` is genuinely reached
+            sweep = [radome_slope_curve(R₀, A, k, u) for u in range(0.0, 2π / k; length = 4001)]
+            @test radome_slope_worst(R₀, A) ≈ minimum(sweep) atol = 1e-9
+            @test radome_slope_worst(R₀, A) ≤ minimum(sweep) + 1e-9      # it is a BOUND: never above
+        end
+
+        # ⚠⚠ THE TWO SIGNS SPLIT, AND THAT IS WHY IT IS A `min` AND NOT THE LITERAL `R₀+2A`. Inside
+        # slice 30's `A ∈ [−0.20, 0]` knob domain the two agree exactly (first pair); for a POSITIVE
+        # authored amplitude — a meaningful configuration here, since positive slopes DE-TUNE rather
+        # than ring (slice 26) — `R₀+2A` is the most POSITIVE slope, i.e. the maximally de-tuned aim
+        # point, which would INVERT the one-sided rule this kernel exists to serve.
+        # ⚠ pinned against the EXPRESSION `R₀+2A`, not against the decimal −0.33: the sum is
+        # −0.32999999999999996 in Float64, so a literal would be asserting float formatting rather
+        # than the identity (and `≈` here would hide which of the two branches was taken).
+        @test radome_slope_worst(-0.03, -0.15) === -0.03 + 2 * -0.15      # == R₀+2A (the knob domain)
+        @test radome_slope_worst(-0.03, +0.15) === -0.03                  # == R₀ — NOT R₀+2A = +0.27
+        @test radome_slope_worst(-0.03, +0.15) != -0.03 + 2 * 0.15        # the paired does-differ case
+
+        # `A = 0` gives EXACTLY `R₀` — the flat glass's only slope, and the boresight scalar's own
+        # target: the off-state is knob-reachable (the KNOB-not-rung discriminator, as everywhere in
+        # this family). Bit-exact, not `≈`.
+        for R in (0.0, -0.03, -0.30, +0.06, -0.0)
+            @test radome_slope_worst(R, 0.0) === Float64(R)
+        end
+
+        # MONOTONE in the glass depth over the shipped domain — the "price of the identical guarantee"
+        # half of the slice needs the aim point to MOVE with A, and to move DOWN (deeper glass ⇒ a
+        # more negative scalar ⇒ more de-tune). A rule that stalled would make the two bounds
+        # incomparable.
+        let ws = [radome_slope_worst(-0.03, A) for A in (0.0, -0.05, -0.10, -0.15, -0.20)]
+            @test issorted(ws; rev = true)
+            @test ws[end] < ws[1]
+        end
+
+        # conventions 5/6 — the live-slider guard. Both arguments are load-validated finite, but the
+        # kernel must not manufacture a non-finite from finite input at any magnitude.
+        @test isfinite(radome_slope_worst(-1.0e6, -1.0e6))
+        @test isfinite(radome_slope_worst(0.0, -1.0e-300))
+    end
+
     @testset "SEEKER_AXES_MODES — the one-list-no-drift const (convention 7)" begin
         @test SEEKER_AXES_MODES == (:pitch_plane, :az_el)
         @test :az_el in SEEKER_AXES_MODES && :pitch_plane in SEEKER_AXES_MODES

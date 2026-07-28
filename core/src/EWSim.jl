@@ -106,6 +106,15 @@ export radome_slope_curve, radome_error_curve
 # (`radome_ripple_est`, `radome_ripple_k_est`), no rung — `Â = 0` is an in-domain slider value AND
 # bit-identical to the schedule not existing.
 export radome_schedule_slope, radome_compensation_scheduled
+# Slice 30 (§11 Tier-A): the ENVELOPE, and the ONE-SIDED constraint. Only a NEGATIVE residual rings
+# (slice 26, measured and never used), so a SCALAR aimed at the most negative slope the glass reaches
+# ANYWHERE is stable in EVERY engagement — `radome_slope_worst` is that aim point, shipped as a number
+# because the client must never evaluate the curve (convention 13). ⇒ gain scheduling buys
+# PERFORMANCE, not STABILITY; what a schedule buys is ACCURACY, and the price of the bound is
+# navigation ratio (the two bounds close on each other as the glass worsens). ⚠ SUFFICIENT, never
+# tight. The ENGAGEMENT itself becomes the new axis via the `cross_speed_mps` knob (scenario.jl /
+# radar.jl `ConstantVelocity`) — no new instability, no new cap, no new gain.
+export radome_slope_worst
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step
 export INTEGRATOR_MODES, G_ACCEL
