@@ -1620,8 +1620,50 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         λ_m  = λ_tru  + σ * n_el
     end
 
+    # SLICE 32 (EXPERIMENTAL, gate-0 probe seam) — THE SEEKER'S FIELD OF VIEW. Slices 26–31 made
+    # the LOOK ANGLE a first-class quantity and then bounded every knob domain by it reaching 30° —
+    # a §1 MODEL-VALIDITY caveat. A real seeker has a FIELD OF VIEW, which makes that same angle a
+    # PHYSICAL STOP: past it there is NO MEASUREMENT AT ALL and the tracker must COAST.
+    # ⚠ The FOV quantity is the TOTAL off-boresight angle `hypot(look_az, look_el)` — a CIRCULAR
+    # FOV. That is the quantity the radome comments above correctly warn is the WRONG one for the
+    # per-axis glass, and the RIGHT one here (a rectangular FOV is a named deferral).
+    # ⚠ Computed from the TRUTH LOS: whether the target is inside the seeker's window is PHYSICS,
+    # not an estimate. And rung-gated on the LIVE `:airframe`, never on `haskey(:att_q)` alone.
+    _fov_on = haskey(c, :seeker_fov_deg) && haskey(c, :att_q) &&
+              get(w.fidelity, :airframe, :point_mass) === :six_dof
+    if _fov_on
+        fov_rad = deg2rad(max(Float64(c[:seeker_fov_deg]), 0.0))
+        fa, fe  = look_angles(c[:att_q]::Quat, û_tru)
+        in_fov  = hypot(fa, fe) ≤ fov_rad
+    else
+        in_fov = true
+    end
+    _fov_on && (c[:seek_in_fov] = in_fov)   # probe/telemetry readout (gate-1 will ship it on the wire)
+
     # Lazy first-tick init (the `_observe_point!` shape): seed every memory, all rates 0.
-    if !get(c, :seek_init, false)
+    if !in_fov && !get(c, :seek_init, false)
+        # NEVER LOCKED — out of the window before the tracker ever had a measurement. A DEFINED,
+        # finite, non-throwing state (conventions 5/6): no estimate, no rate, `seek_init` stays
+        # false so the first in-window tick initializes normally.
+        ȧz_raw = 0.0; ėl_raw = 0.0; λ̇_raw = 0.0
+        az_est = 0.0; el_est = 0.0; λ_est = 0.0
+        ȧz_est = 0.0; ėl_est = 0.0; λ̇_est = 0.0
+    elseif !in_fov
+        # COASTING — the target is outside the window, so there is no measurement to correct with.
+        # The α-β tracker runs its PREDICT step alone (innovation ≡ 0): the angle extrapolates on
+        # the last rate, and the RATE — which is what PN consumes — is FROZEN.
+        az_est = Float64(c[:seek_az_est])     + Float64(c[:seek_azdot_est])     * dt
+        el_est = Float64(c[:seek_el_est])     + Float64(c[:seek_eldot_est])     * dt
+        λ_est  = Float64(c[:seek_lambda_est]) + Float64(c[:seek_lambdadot_est]) * dt
+        ȧz_est = Float64(c[:seek_azdot_est])
+        ėl_est = Float64(c[:seek_eldot_est])
+        λ̇_est  = Float64(c[:seek_lambdadot_est])
+        c[:seek_az_est] = az_est; c[:seek_el_est] = el_est; c[:seek_lambda_est] = λ_est
+        # `_prev` tracks the PREDICTION while coasting, so the `:raw` foil differences a sane pair
+        # on re-acquisition instead of one spanning the whole gap.
+        c[:seek_az_prev] = az_est; c[:seek_el_prev] = el_est; c[:seek_lambda_prev] = λ_est
+        ȧz_raw = 0.0; ėl_raw = 0.0; λ̇_raw = 0.0
+    elseif !get(c, :seek_init, false)
         c[:seek_az_prev]  = az_m; c[:seek_el_prev]  = el_m; c[:seek_lambda_prev]   = λ_m
         c[:seek_az_est]   = az_m; c[:seek_el_est]   = el_m; c[:seek_lambda_est]    = λ_m
         c[:seek_azdot_est] = 0.0; c[:seek_eldot_est] = 0.0; c[:seek_lambdadot_est] = 0.0
