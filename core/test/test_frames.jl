@@ -896,6 +896,11 @@
                 @test  seeker_in_fov(id, Vec3(1.0, 0.0, 0.0), bad) # clamps to 0, never throws
             end
             @test seeker_in_fov(q, û, Inf)
+            # ⚠ NaN (slice 33) — a claim about `max`, not a tautology: `max(NaN, 0.0)` PROPAGATES,
+            # so both forms are false and the never-locked side stays the defined state. A `max`
+            # written the other way round (or an `ifelse` that swallowed it) would admit everything.
+            @test !seeker_in_fov(q, û, NaN)
+            @test !seeker_in_fov(id, Vec3(1.0, 0.0, 0.0), NaN)
 
             # THE SEAM'S OWN EXPRESSION (advisor, gate 1): the shipped predicate is THIS kernel,
             # so degrees→radians is the only step `missile.jl` performs, and it does NOT clamp —
@@ -985,5 +990,119 @@
                 end
             end
         end
+    end
+
+    # --- SLICE 33 — THE RING IS AN FOV BUDGET ITEM (§11 Tier-A) ---------------------------
+    #
+    # ⚠ WHAT THIS TESTSET DOES NOT PROVE, deliberately — the slice-32 shape one slice on. The
+    # slice's claim is that a limit cycle's look-angle EXCURSION is spent out of the FOV budget,
+    # i.e. that the critical window tracks the excursion. That is a statement about a flying
+    # missile with glass in front of it, measured over TWO runs (§ the seam discipline below),
+    # and no pure kernel can reach it. What gate 1 owns is the ONE new quantity: that its SIGN
+    # is exactly the shipped verdict, and that the subtraction it is written as agrees with the
+    # comparison it replaced — including at the boundary, where a tolerance would hide the only
+    # place they could differ.
+    @testset "seeker_fov_margin (slice 33) — the budget, and its SIGN as the verdict" begin
+        q  = quat_from_axis_angle(Vec3(0.3, 1.0, -0.4), 0.35)
+        û  = los_unit_from_angles(0.21, -0.13)
+
+        # the definitional pin, at both signs of the slider — `max(fov,0) − boresight_angle`
+        for fov in (-1.0, -0.0, 0.0, 0.05, 0.35, 3.0)
+            @test seeker_fov_margin(q, û, fov) ===
+                  max(fov, 0.0) - boresight_angle(q, û)
+        end
+
+        # PAIRED polarity with the magnitude pinned (house style — not merely "one of each"):
+        # a 20° LOS inside a 25° window has 5° of budget left; the same LOS against a 15°
+        # window is 5° over. Exact degrees, because `id` + a pure-azimuth LOS makes the radius
+        # the azimuth itself (`boresight_angle` above).
+        let û20 = los_unit_from_angles(deg2rad(20.0), 0.0)
+            @test rad2deg(seeker_fov_margin(id, û20, deg2rad(25.0))) ≈ +5.0 atol = 1e-12
+            @test rad2deg(seeker_fov_margin(id, û20, deg2rad(15.0))) ≈ -5.0 atol = 1e-12
+            @test  seeker_in_fov(id, û20, deg2rad(25.0))
+            @test !seeker_in_fov(id, û20, deg2rad(15.0))
+        end
+
+        # ⭐⭐ THE SIGN IS THE VERDICT — AND THE TOOTH IS AGAINST THE COMPARISON FORM WRITTEN
+        # LONGHAND, NEVER AGAINST THE PREDICATE (which is now DEFINED from this margin, so
+        # `(margin ≥ 0) == seeker_in_fov(...)` would be `x == x`, convention 11's tautology).
+        # The oracle is the expression slice 32 shipped: `boresight_angle ≤ max(fov, 0)`.
+        # ⚠ AND IT IS SWEPT AT THE BOUNDARY, because that is the ONLY place a subtraction could
+        # diverge from a comparison. Two distinct finite doubles never subtract to zero (their
+        # difference is at least an ulp, and Sterbenz makes it exact when they are close) and
+        # rounding to nearest preserves sign — so the equivalence is EXACT, with no tolerance.
+        # That is a fact about IEEE doubles, not about the algebra, and it is what licenses
+        # defining the predicate from the margin at all. Its own Xoshiro (convention 11).
+        # ⚠ Accumulate and assert ONCE (the house style of the rotation sweep above) — an `@test`
+        # inside a 6000-cell loop would move the suite's own ledger by more than the whole slice.
+        let rng = Xoshiro(3333), n_mismatch = 0, n_in = 0, n_out = 0,
+            n_edge_zero = 0, n_edge_neg = 0, b_hi = 0.0
+            for _ in 1:600
+                att = qnormalize(quat_from_axis_angle(Vec3(randn(rng), randn(rng), randn(rng)),
+                                                      3.0 * randn(rng)))
+                los = let v = Vec3(randn(rng), randn(rng), randn(rng))
+                    v / sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+                end
+                b = boresight_angle(att, los)
+                b_hi = max(b_hi, b)
+                for fov in (b, prevfloat(b), nextfloat(b), b * (1 - 1e-15), b * (1 + 1e-15),
+                            b - 1e-12, b + 1e-12, 0.5 * b, 2.0 * b, -b)
+                    m = seeker_fov_margin(att, los, fov)
+                    # THE EQUIVALENCE, EXACT — the subtraction's sign IS the comparison
+                    (m ≥ 0.0) == (b ≤ max(fov, 0.0)) || (n_mismatch += 1)
+                    (m ≥ 0.0) ? (n_in += 1) : (n_out += 1)
+                end
+                # ...and the boundary itself: `x − x` is EXACTLY +0.0 (never `−0.0`, which would
+                # still pass `≥ 0` but would break any client testing `margin > 0`), while ONE
+                # ULP tighter is STRICTLY negative — the slice-32 `prevfloat` tooth, inherited.
+                seeker_fov_margin(att, los, b) === 0.0            && (n_edge_zero += 1)
+                seeker_fov_margin(att, los, prevfloat(b)) < 0.0   && (n_edge_neg  += 1)
+            end
+            @test n_mismatch  == 0                  # 6000 cells, no tolerance anywhere
+            @test n_edge_zero == 600 == n_edge_neg
+            # the sweep really did land on BOTH sides — not "everything is out" — and really did
+            # reach wide angles, so the boundary cases are not all crowded near zero
+            @test n_in == n_out == 3000
+            @test b_hi > 2.0
+        end
+
+        # STRICTLY MONOTONE IN THE WINDOW above the clamp, FLAT below it. This is what makes
+        # "widen the seeker" a one-slider cure with a well-posed bracket at gate 3 (seam
+        # discipline 2: assert the INEQUALITY, never a `ceil` of the excursion — a bracketing
+        # pair needs the margin to cross zero exactly once in `fov`).
+        let ms = [seeker_fov_margin(q, û, f) for f in (0.1, 0.2, 0.3, 0.4, 0.5)]
+            @test issorted(ms) && ms[1] < ms[end]
+            @test all(diff(ms) .> 0.0)
+            for dead in (-0.0, -1e-9, -1.0, -1e9, -Inf)      # the clamp: all one value
+                @test seeker_fov_margin(q, û, dead) === -boresight_angle(q, û)
+            end
+        end
+
+        # ⚠⚠ THE DIVERGENCE THAT MUST BE WRITTEN DOWN: THE SHIPPED KEYS DO NOT RECONSTRUCT THIS
+        # ONE ON A NEGATIVE SLIDER (advisor). The wire ships `seeker_fov_deg` AUTHORED (slice 32
+        # — a HUD showing 0° for a negative slider would hide what the student is holding) while
+        # the margin uses the CLAMPED window, so a client deriving `fov − look_angle` disagrees
+        # with the core. ⭐ And it does not merely differ in MAGNITUDE — it FLIPS THE VERDICT on
+        # exactly the LOS the never-locked state is defined by: an on-boresight target is IN a
+        # `fov = −1` window (only that one is), where the subtraction says OUT.
+        let f_neg = deg2rad(-5.0), û20 = los_unit_from_angles(deg2rad(20.0), 0.0)
+            @test rad2deg(seeker_fov_margin(id, û20, f_neg)) ≈ -20.0 atol = 1e-12  # CLAMPED
+            @test rad2deg(f_neg - boresight_angle(id, û20))  ≈ -25.0 atol = 1e-12  # the naive
+            # the verdict flip, and the PAIRED case where the two forms agree exactly
+            @test seeker_fov_margin(id, Vec3(1.0, 0.0, 0.0), -1.0) === 0.0     # IN (never-locked)
+            @test seeker_in_fov(id, Vec3(1.0, 0.0, 0.0), -1.0)
+            @test -1.0 - boresight_angle(id, Vec3(1.0, 0.0, 0.0)) < 0.0        # naive: OUT
+            @test seeker_fov_margin(id, û20, deg2rad(25.0)) ===
+                  deg2rad(25.0) - boresight_angle(id, û20)                     # agree at fov > 0
+        end
+
+        # conventions 5/6 — a live slider can never crash a tick, and the kernel must not
+        # manufacture a non-finite from finite input at any magnitude. NaN PROPAGATES (the
+        # predicate's own degenerate table asserts the resulting verdict is `false`).
+        @test isfinite(seeker_fov_margin(q, û, 1.0e9))
+        @test isfinite(seeker_fov_margin(q, û, -1.0e9))
+        @test seeker_fov_margin(q, û, Inf) == Inf
+        @test isnan(seeker_fov_margin(q, û, NaN))
+        @test seeker_fov_margin(q, û, 25) === seeker_fov_margin(q, û, 25.0)   # Real, not Float64
     end
 end

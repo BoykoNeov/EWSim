@@ -736,19 +736,97 @@ cannot see truth.
 """
 boresight_angle(att::Quat, los::Vec3) = hypot(look_angles(att, los)...)
 
+# --- THE RING IS AN FOV BUDGET ITEM (slice 33, §11 Tier-A — the COMPOSITION of 26–31 with 32) ---
+#
+# Slice 32 asked what field of view a seeker needs and answered with the ENGAGEMENT: the collision
+# triangle's own lead angle. ⭐ THAT IS THE QUIET-GLASS ANSWER. Slices 26–31 spent six slices on a
+# missile that shakes itself, and every one of them recorded as a standing fact that THE RINGING
+# ARM STILL HITS (slice 26: "the MISS is NOT the metric — the ringing arm STILL HITS (2.18 m)"),
+# which is why that whole family measures `rms q` / `rms r` instead of a miss. It is true on this
+# wire too: across three glass depths and the full R̂ ladder, not one ringing arm misses by more
+# than 3.53 m. ⭐⭐ THE RING WAS BENIGN BECAUSE THE SEEKER HAD AN INFINITE WINDOW. Give it a real
+# one and the same ring — same glass, same R̂, same seed — misses by ONE TO FOUR KILOMETRES, because
+# the excursion the limit cycle adds to the look angle is spent out of the very budget slice 32
+# measured. ⇒ the FOV a seeker needs is the engagement's lead PLUS the parasitic loop's excursion,
+# and slice 30's design rule (aim R̂ at `radome_slope_worst`) buys the whole envelope back — at
+# A = −0.10, −0.15 AND −0.20, i.e. DEPTH-INDEPENDENTLY. See `docs/plans/slice33.md`.
+#
+# ⚠ NO NEW PHYSICS AND NO NEW KERNEL BEHAVIOUR — this slice ships a NUMBER, not a mechanism. Both
+# halves already fly (26–31's glass, 32's window) and both sliders already ship; what is new is the
+# COMPOSITION and the quantity that measures it. Slice 30's shape exactly: its only new core
+# quantity was `radome_slope_worst`, and its payload was a count over a swept engagement.
+
+"""
+    seeker_fov_margin(att::Quat, los::Vec3, fov::Real) -> Float64   (radians, SIGNED)
+
+How much field of view is LEFT: the window minus the angle it is against,
+
+    max(fov, 0) - boresight_angle(att, los)
+
+in RADIANS (the wire carries degrees, this does not; the units trifecta, HANDOFF §1).
+
+⭐ **THE SIGN IS THE VERDICT — `margin ≥ 0 ⟺ `[`seeker_in_fov`](@ref)**, structurally, because
+that predicate is DEFINED as this sign. The precedent is slice 18's `terrain_clearance_m` exactly:
+a signed margin shipped so the client never re-derives the test (convention 13 — the client NEVER
+re-tests occlusion). What it buys here is a HUD needle that a ringing radome is visibly seen to
+eat, in the same degrees as the window and the lead angle.
+
+**THIS FUNCTION OWNS THE NEGATIVE-`fov` CLAMP** (convention 5 — a live slider can never crash a
+tick), and it is the ONLY site that clamps: [`seeker_in_fov`](@ref) delegates, and the seam in
+`missile.jl` converts degrees to radians and hands the result straight in. `fov ≤ 0` is not a
+throw and not a sentinel — it is the defined NEVER-LOCKED state (see the predicate).
+
+⚠⚠ **SO THE SHIPPED KEYS DO NOT RECONSTRUCT EACH OTHER ON A NEGATIVE SLIDER, AND THAT IS
+DELIBERATE.** The wire ships `seeker_fov_deg` as the AUTHORED value rather than the effective
+`max(fov, 0)` (a HUD that silently showed 0° for a negative slider would hide what the student is
+holding — `missile.jl`, slice 32), while this margin uses the CLAMPED one, because otherwise its
+sign would stop agreeing with the predicate — which is the entire reason it exists. ⇒
+`margin_deg ≠ seeker_fov_deg − look_angle` when the slider is negative, and a client that derives
+the margin by subtracting the other two keys DISAGREES WITH THE CORE there. The two forms differ
+only on that degenerate never-locked side. Ship the number; never re-derive it.
+
+⚠ **THE SUBTRACTION FORM AND THE COMPARISON FORM AGREE EXACTLY, WITH NO TOLERANCE** — a fact about
+IEEE doubles, not about the algebra, and the reason this refactor is legitimate at all: two
+distinct finite doubles never subtract to zero (their difference is at least an ulp, which is
+representable — Sterbenz makes it exact when they are close), and rounding to nearest preserves
+sign. `prevfloat` of the boundary therefore still REJECTS. PINNED by a randomized near-boundary
+sweep in `test_frames.jl`, not asserted here.
+
+⚠⚠ **A MARGIN MEASURED ON A WINDOWED ARM IS NOT A READ OF THE RING** (slice 33's seam discipline 1;
+the slice-29 stale-readout class in a NEW quantity). Once the window is exceeded the track breaks,
+the tracker coasts on a rate that was right for a smaller lead, and the geometry RUNS AWAY: a
+broken arm's own look angle reaches ~90°, which is slice 32's post-lock-loss signature and not the
+excursion the parasitic loop adds. ⇒ **the predictor and the predicted must not come from the same
+run** — the excursion that predicts a window is measured on an arm with NO window at all, and only
+the verdict is read off the windowed one. This kernel cannot enforce that (it is a two-run
+discipline); it is enforced by the verifier's structure at gate 3.
+
+⚠ **INSTANTANEOUS — there is no running peak here, deliberately.** Peak-hold is DISPLAY STATE, and
+slice 27 settled that a peak-hold is an instrument, not physics (its shot harness needed one
+because a limit cycle crosses zero twice per cycle, so an instantaneous verdict mislabels half the
+frames — a display fix, and it stayed in the client).
+"""
+seeker_fov_margin(att::Quat, los::Vec3, fov::Real) =
+    max(Float64(fov), 0.0) - boresight_angle(att, los)
+
 """
     seeker_in_fov(att::Quat, los::Vec3, fov::Real) -> Bool
 
 Whether a line-of-sight direction is inside a CIRCULAR field of view of half-angle `fov`
 (RADIANS — the wire carries degrees, this does not; the units trifecta, HANDOFF §1):
 
-    boresight_angle(att, los) ≤ max(fov, 0)
+    seeker_fov_margin(att, los, fov) ≥ 0        ⟺        boresight_angle(att, los) ≤ max(fov, 0)
 
-**THIS FUNCTION OWNS THE NEGATIVE-`fov` CLAMP** (convention 5 — a live slider can never crash a
-tick), and it is the ONLY site that clamps: the seam in `missile.jl` converts degrees to radians
-and hands the result straight in. `fov ≤ 0` is therefore not a throw and not a sentinel — it is
-the defined NEVER-LOCKED state, in which only an exactly-on-boresight LOS is visible and in
-practice nothing ever is.
+⚠ **DEFINED FROM THE MARGIN, NOT BESIDE IT** (slice 33). The two forms are exactly equivalent on
+IEEE doubles ([`seeker_fov_margin`](@ref)), so this could have been left as the comparison with the
+margin shipped alongside — and that is precisely the arrangement slice 32's own gate 1 rejected one
+layer up: a quantity that does not fly is a quantity `test_frames.jl` proves a SECOND implementation
+of. Defining the predicate FROM the margin puts the shipped number on the flying path with no seam
+edit at all, and leaves exactly ONE comparison site and ONE clamp site.
+
+`fov ≤ 0` is not a throw and not a sentinel — it is the defined NEVER-LOCKED state, in which only
+an exactly-on-boresight LOS is visible and in practice nothing ever is. The clamp that makes it so
+lives in [`seeker_fov_margin`](@ref), which this delegates to; the seam does NOT clamp twice.
 
 ⚠ **THE BOUNDARY IS `≤`, AND IT IS PINNED WITHOUT A TOLERANCE.** No float LOS lands bit-exactly on
 `deg2rad(25.0)`, so the boundary tooth is built backwards from the kernel itself: a window of
@@ -773,7 +851,7 @@ off-state is a limit point ⇒ RUNG" turns on the same thing, that the reachable
 the knob's own top IS the in-scenario twin. A window that admits every direction unconditionally is
 `fov ≥ hypot(π, π/2)`. Both facts are pinned in `test_frames.jl`.
 """
-seeker_in_fov(att::Quat, los::Vec3, fov::Real) = boresight_angle(att, los) ≤ max(fov, 0.0)
+seeker_in_fov(att::Quat, los::Vec3, fov::Real) = seeker_fov_margin(att, los, fov) ≥ 0.0
 
 """
     collision_lead_angle(V_m::Real, v_t::Vec3, û::Vec3) -> Float64   (radians)

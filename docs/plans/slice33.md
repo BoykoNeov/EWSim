@@ -179,6 +179,87 @@ the WINDOW instead of the crossing speed.
 
 ---
 
+## §1 — Gate 1 (COMPLETE, 2026-07-28 — 6028 → 6062)
+
+**ONE kernel, in `frames.jl` beside slice 32's three:**
+
+```julia
+seeker_fov_margin(att, los, fov) = max(Float64(fov), 0.0) - boresight_angle(att, los)
+seeker_in_fov(att, los, fov)     = seeker_fov_margin(att, los, fov) ≥ 0.0     # ← REDEFINED
+```
+
+⭐ **THE REDEFINITION IS THE GATE, NOT THE ADDITION** (advisor, before any code). Shipping the
+margin *beside* the predicate and wiring it at gate 2 would leave gate 1 with a kernel nothing
+calls — which is precisely the arrangement **slice 32's own gate 1 rejected one layer up** ("the
+gate-0 seam computed `hypot(fa,fe) ≤ fov` INLINE, so kernels shipped beside it would have had
+`test_frames.jl` prove a SECOND implementation and nothing about what flies"). Defining the
+predicate FROM the margin puts the shipped number on the flying path with **zero seam edits** —
+`missile.jl:1670` still calls `seeker_in_fov` — and leaves exactly ONE comparison site and ONE
+clamp site. The clamp-ownership claim RELOCATED from `seeker_in_fov`'s docstring rather than being
+duplicated there.
+
+⚠ **AND THAT MAKES THE OBVIOUS TEST VACUOUS.** `(margin ≥ 0) == seeker_in_fov(...)` is now `x == x`
+(convention 11's tautology), so it is NOT shipped. The tooth is the subtraction form against **the
+comparison form written longhand** — the expression slice 32 shipped, `boresight_angle ≤
+max(fov,0)` — **swept at the boundary**, because that is the only place a subtraction could diverge
+from a comparison: 600 seeded `(att, los)` × 10 near-boundary windows (`b`, `prevfloat(b)`,
+`nextfloat(b)`, `b·(1∓1e−15)`, `b∓1e−12`, `0.5b`, `2b`, `−b`) = **6000 cells, 0 mismatches, no
+tolerance anywhere**, landing 3000/3000 on the two sides. The underlying fact is about IEEE doubles
+and not about the algebra — two distinct finite doubles never subtract to zero, and rounding to
+nearest preserves sign — which is what licenses the refactor at all; it is PINNED by that sweep,
+not asserted in a comment. `x − x` is EXACTLY `+0.0` (600/600) and one ULP tighter is STRICTLY
+negative (600/600), so slice 32's `prevfloat` boundary tooth is inherited intact.
+
+⚠⚠ **THE DIVERGENCE THE ADVISOR CAUGHT, AND IT FLIPS A VERDICT — NOT JUST A MAGNITUDE.** The wire
+ships `seeker_fov_deg` **AUTHORED** (slice 32: a HUD showing 0° for a negative slider would hide
+what the student is holding), while the margin must use the **CLAMPED** window or its sign stops
+agreeing with the predicate — which is the entire reason it exists. ⇒ **the shipped keys do not
+reconstruct this one on a negative slider**, and a client deriving `fov − look_angle` disagrees
+with the core. It is not merely a magnitude gap (−20° vs −25° at `fov = −5°`, `b = 20°`): it flips
+the verdict on **exactly the LOS the never-locked state is defined by** — an on-boresight target is
+IN a `fov = −1` window (only that one is), where the subtraction says OUT. Written into the kernel
+docstring and pinned with a PAIRED agree-at-positive-`fov` case.
+
+Also new: `NaN` in the predicate's degenerate table (a claim about `max`, which PROPAGATES — a
+`max` written the other way round would admit everything); strict monotonicity in `fov` above the
+clamp and flatness below it (what makes "widen the seeker" a one-slider cure with a well-posed
+**bracket**, seam discipline 2); the exact-degree PAIRED polarity case (20° LOS: +5° inside a 25°
+window, −5° against a 15° one).
+
+**BEHAVIOUR-PRESERVING, PROVEN ON THE WIRE — not by reading the diff.** The predicate is provably
+the same boolean, but this project's discipline is to measure it:
+
+* **§0's P1 table reproduces CELL FOR CELL** — all 11 R̂ rows in both arms, plus the reference
+  (0.01589 / 18.13° / 0.191 m). Spot: −0.24 → free rms r 0.70983, excursion 20.62°, free miss
+  1.450 m; windowed 936.312 m, 37.620 % out, `t_break` 6.632. −0.03 → 1.07211 / 25.01° / 2.070 m;
+  3759.992 m, 72.226 %, 1.883.
+* **Slice 32's four showcase arms reproduce to the digit** — 1140.63505 / 0.16777 / 0.06197 /
+  0.16777 m, ToF 15.40 / 15.31 / 12.93 s (its own gate-1 commit's numbers).
+* Full suite green, **6028 → 6062**.
+
+⭐ **AND THE RUN CONFIRMED THE SEAM DISCIPLINE'S PREMISE AS A NUMBER**: the windowed arms'
+`look_max` column reads **96.29 / 90.95 / 89.42 / 89.27 / 90.32 / 90.08 / 90.14 / 90.40°** across
+every broken cell — the post-lock-loss runaway, ~90° regardless of a ring whose actual excursion
+was 20.62–25.01°. **The predictor and the predicted must not come from the same run**, and that is
+now measured rather than argued (docstring; enforced by the verifier's structure at gate 3).
+
+**What gate 1 deliberately does NOT own** (advisor's checklist): no `ceil` / `critical_fov` helper
+(seam item 2 — it would pin the 1° measuring grid); no excursion or running-peak accumulator (peak
+-hold is DISPLAY state, settled at slice 27); no telemetry key (gate 2); no knob and no rung (both
+sliders already ship); and no proof that `critical fov == excursion` — that needs a wire, exactly
+as slice 32's gate 1 deferred `look == lead`. **Seam item 1 is a DOCSTRING deliverable at gate 1,
+not a test**: a pure kernel cannot exercise a two-run discipline, and manufacturing a test for it
+would be a fake tooth.
+
+**Carried into gate 2:** ship `<sid>.seeker_fov_margin_deg` under `_fov_on` with **`_finite_coord`,
+never `_finite`** (the margin goes hugely negative on the never-locked side, and `_finite` clamps
+only the upper bound — the slice-29 `k̂` catch, which slice 32's own comment at `missile.jl:2111`
+already names); decide whether the seam hoists one margin local or telemetry calls the kernel again
+(three `boresight_angle` calls/tick is nothing at 27k ticks/s, and hoisting risks ambiguity about
+which kernel flies); and the byte-identity re-run of the 26–32 verifiers.
+
+---
+
 ## What ships
 
 ### The core

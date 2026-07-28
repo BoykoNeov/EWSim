@@ -136,6 +136,17 @@ export gyro_reading
 # key being absent (measured, gate-0 P4a). ⚠ STRAPDOWN, not a gimbal servo: a head with its own
 # state is a named deferral, and it would rewrite 26–31's `look_az`.
 export boresight_angle, seeker_in_fov, collision_lead_angle
+# Slice 33 (§11 Tier-A): THE RING IS AN FOV BUDGET ITEM — the COMPOSITION of the radome family
+# (26–31) with the window (32), and NO new mechanism. Slices 26–31 each recorded, as a standing
+# fact, that the RINGING ARM STILL HITS — which is why they measure `rms q` / `rms r` and not a
+# miss. ⭐ That was true only because the seeker had an INFINITE WINDOW: the excursion a limit cycle
+# adds to the look angle is spent out of the very budget slice 32 measured, so the same ring at a
+# real window misses by KILOMETRES. ⇒ the FOV a seeker needs is the engagement's lead PLUS the
+# loop's excursion, and slice 30's design rule buys the whole envelope back, depth-independently.
+# ⭐ ONE new quantity, and its SIGN IS THE VERDICT (slice 18's `terrain_clearance_m` precedent) —
+# `seeker_in_fov` is now DEFINED from it, so the shipped number is the one that flies. No rung, no
+# knob, no new cap: both sliders already ship.
+export seeker_fov_margin
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step
 export INTEGRATOR_MODES, G_ACCEL
