@@ -1655,7 +1655,6 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     else
         in_fov  = true
     end
-    _fov_on && (c[:seek_in_fov] = in_fov)   # probe/telemetry readout (gate-2 ships it on the wire)
 
     # Lazy first-tick init (the `_observe_point!` shape): seed every memory, all rates 0.
     if !in_fov && !get(c, :seek_init, false)
@@ -1678,6 +1677,10 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         c[:seek_az_est] = az_est; c[:seek_el_est] = el_est; c[:seek_lambda_est] = λ_est
         # `_prev` tracks the PREDICTION while coasting, so the `:raw` foil differences a sane pair
         # on re-acquisition instead of one spanning the whole gap.
+        # ⚠ AND IT IS EXERCISED, not merely defensive (advisor, gate 2 — "do not leave a
+        # live-looking branch with no proof"): the RE-ACQUISITION arm of `test_missile.jl`'s slice-32
+        # COROLLARY testset (a ringing radome at `fov = 25`) leaves and re-enters the window in brief
+        # episodes and still lands within a metre of the same wire with no window at all.
         c[:seek_az_prev] = az_est; c[:seek_el_prev] = el_est; c[:seek_lambda_prev] = λ_est
         ȧz_raw = 0.0; ėl_raw = 0.0; λ̇_raw = 0.0
     elseif !get(c, :seek_init, false)
@@ -2073,6 +2076,56 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
                     den > 1.0e-12 ? (d[1] * v[2] - d[2] * v[1]) / den : 0.0)   # rad/s
             end
         end
+    end
+    # SLICE 32 — the FIELD-OF-VIEW readouts, shipped ONLY while a window is authored (the never-stale
+    # discipline; a slice-11/13/25…31 wire is byte-identical BY GATING — `_fov_on` is false on every
+    # one of them, so not a single key here is even evaluated there). All SCALARS (convention 13 —
+    # the client recomputes nothing; convention 6 — `_finite`/`_finite_coord` on every one).
+    if _fov_on
+        # ⭐ THE DISCRIMINATOR, per slice 22's `post_stall` discipline: do NOT let the miss carry the
+        # mechanism claim alone, and do NOT expect an existing flag to discriminate (`aero_sat` is
+        # 0.0 % in EVERY arm of this slice, broken or not — the miss is a POINTING miss). 1/0, and
+        # the fraction of the approach it spends at 0 IS the verdict gate 3 asserts.
+        # ⚠ FROM THE LOCAL `in_fov`, never from a comp key: a first draft parked it in
+        # `c[:seek_in_fov]`, which is the stale-readout class this arc has now caught six times
+        # (`_atm_on` 21 / 23 / 26 / 27 / 29) — comp keys are never deleted, so a cross-toggle off
+        # `:six_dof` would leave a plausible-looking validity flag frozen at its last value.
+        tel["$sid.seeker_valid"]   = in_fov ? 1.0 : 0.0
+        # The live knob — the LIMIT itself, so the client can draw it beside the angle.
+        # ⚠ `_finite_coord`, NOT `_finite` (the slice-29 `k̂` catch): `_finite` clamps only the UPPER
+        # bound, so a large NEGATIVE slider value would reach the JSON unclamped. And it ships the
+        # AUTHORED value rather than the effective `max(fov, 0)` — the clamp lives at exactly one
+        # site (`seeker_in_fov`), and a HUD that silently showed 0° for a negative slider would hide
+        # what the student is holding. The two differ only on the degenerate never-locked side.
+        tel["$sid.seeker_fov_deg"] = _finite_coord(Float64(c[:seeker_fov_deg]))
+        # ⭐ THE ANGLE THE LIMIT IS AGAINST — the TOTAL off-boresight angle, i.e. the CIRCULAR-window
+        # quantity the predicate actually tests (`boresight_angle`, the shipped kernel — never an
+        # inline restatement of it, gate 1's load-bearing correction).
+        # ⚠⚠ COMPUTED HERE FROM `û_tru`, NOT HOISTED OUT OF THE RADOME BLOCK (advisor). Slice 26's
+        # `look_angle` above is built from `look_az`/`look_el`, which are the else-arm ZEROS when
+        # `_rad_on` is false — and THIS SLICE'S SHOWCASE WIRE HAS THE RADOME KEYS ABSENT BY DESIGN
+        # (convention 9: a ringing arm's look angle swings BECAUSE it rings, so it would be the
+        # LOOP's angle and not the ENGAGEMENT's). A `_rad_on || _fov_on` gate on that expression —
+        # the obvious edit, and what the plan wrote — would ship 0.0 on the one wire the lesson runs
+        # on, the slice-29 `radome_model_err_az` stale-readout catch verbatim.
+        # ⚠ On a wire that has BOTH, this is provably the SAME number the radome block already
+        # shipped (`boresight_angle ≡ hypot(look_angles(att, û_tru)...)`, same inputs, same ops), so
+        # the duplicate write is bit-for-bit consistent rather than a second opinion.
+        tel["$sid.look_angle"] = _finite(rad2deg(boresight_angle(c[:att_q]::Quat, û_tru)))
+        # ⭐⭐ THE ENGAGEMENT'S OWN REQUIREMENT, BESIDE THE WINDOW THE HARDWARE HAS — the pair IS the
+        # slice. `V_m·sin λ = V_t·sin θ` (frames.jl `collision_lead_angle`): the lead this collision
+        # triangle DEMANDS, in the same degrees as `look_angle` and `seeker_fov_deg`, so a student
+        # reads the verdict off three numbers rather than being told it.
+        # ⚠ PER TICK, WHICH IS THE POINT: the kernel's docstring warns that evaluating it ONCE off
+        # the LAUNCH geometry reads 32.90° against the 28.84° the engagement actually holds (14 %
+        # strict) because the LOS rotates as the target crosses. Telemetry is per-tick by
+        # construction, so shipping it here is the CURE for that misuse, not an instance of it.
+        # ⚠⚠ AND GATE 3 MAY NOT USE THIS KEY AS THE ANCHOR FOR THE LOOK-ANGLE CLAIM. The P3b
+        # external anchor (convention 11) is that the critical FOV EQUALS this lead — proven by an
+        # INDEPENDENT recompute. Reading the core's own key back and comparing it to the core's own
+        # look angle is the self-calibrated round-trip this project names as a trap.
+        tel["$sid.lead_angle_deg"] = _finite(rad2deg(
+            collision_lead_angle(_norm3(e.vel), tgt.vel, û_tru)))
     end
     return nothing
 end

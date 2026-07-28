@@ -14,7 +14,7 @@ of them and got sharper each time:
 **Status: GATE 0 COMPLETE (5 probes, 2026-07-28). The advisor's blocking check FIRED and removed
 half the planned framing (§4 below). Raw findings and probe scripts in
 `M:\claud_projects\temp\slice32\GATE0_FINDINGS.md`. GATE 1 COMPLETE (2026-07-28, 5798 → 5872).
-Gates 2–3 NOT STARTED.**
+GATE 2 COMPLETE (2026-07-28, 5872 → 5985). Gate 3 NOT STARTED.**
 
 ---
 
@@ -169,7 +169,7 @@ statement about a flying missile and it needs a wire, so it is gate 3's.
   against 0.14117 m radome-free at the same fov, and the re-acquisition arm at 1.06672 m / 0.4 %
   (`M:\claud_projects\temp\slice32\g1_wire_check_radome.jl`).
 
-### Still open, carried into gate 2 (advisor)
+### Gate 1's open items, carried into gate 2 (advisor) — ALL CLOSED, see § Gate 2
 
 * ⚠⚠ **GATE 2's OPENING MOVE — NOTHING IN THIS SLICE HAS EVER GONE THROUGH THE LOADER.** Every
   gate-0 probe and both gate-1 wire checks inject `m.comp[:seeker_fov_deg] = fov` PROGRAMMATICALLY;
@@ -185,6 +185,91 @@ statement about a flying missile and it needs a wire, so it is gate 3's.
 * The draw-count assertion (convention 3) is gate 2/3, not gate 1.
 
 ---
+
+## Gate 2 — COMPLETE (the loader, the telemetry and the wired lesson, 5872 → 5985)
+
+The seam itself landed at gate 1; gate 2 gave it the two ends it did not have — a **LOADER** and a
+**WIRE** — and pinned the lesson as numbers in `test_missile.jl` (nine testsets, +113 tests).
+
+### ⚠⚠ THE ADVISOR'S BLOCKING CATCH, AND IT WOULD HAVE SHIPPED THE WRONG NUMBER
+
+The plan said *"`look_angle` telemetry must become `_rad_on || _fov_on`-gated"*. **That edit is
+WRONG, and it is wrong in exactly this project's most-repeated way.** Slice 26's `look_angle` is
+built from `look_az`/`look_el`, which are the **radome else-arm's ZEROS** when no glass is
+authored — and slice 32's showcase wire has the radome keys **ABSENT BY DESIGN** (convention 9: a
+ringing arm's look angle swings *because* it rings, so it is the LOOP's angle, not the
+ENGAGEMENT's). Gating that expression would have shipped **0.0** on the one wire the whole lesson
+runs on, into the HUD and the shots — the slice-29 `radome_model_err_az` stale-readout class, 7th
+occurrence. It ships instead from `boresight_angle(att, û_tru)` under `_fov_on`, at its own site,
+which also makes every 26–31 wire byte-identical **by gating** rather than by key-order luck. On a
+wire that has BOTH it is provably the same number (`boresight_angle ≡ hypot(look_angles(att,
+û_tru)...)`, same inputs, same ops) — pinned in the telemetry testset.
+
+### ⭐ THE GATE-2 MEASUREMENT THAT CORRECTS A GATE-0 NUMBER: "0.0 %" WAS A ROUNDING
+
+Gate 0 reported the out-of-window fraction as **0.0 %** on every quiet arm. It is not zero: those
+arms leave the window for **ONE OR TWO TICKS at r = 0.1–0.6 m**, because the LOS unit vector swings
+through a large angle in the last millisecond before impact. `%.1f` hid it. That is the endgame
+spike [[ewsim-missile-verifier-sampling]] names — GEOMETRY, not the window's verdict — so the
+fraction is **RANGE-GATED at r > 200 m**, exactly as every look-angle number already is. Gated, the
+quiet arms are **EXACTLY 0.000 %** and the broken arm does not move (**67.943 %**, whose out-ticks
+live at r = 1504–4123 m). ⚠ **The gate-3 verifier must carry the same gate**, or its "0.0 %" is the
+same rounding.
+
+### The other decisions gate 2 settled
+
+* **The loader (`scenario.jl`, seeker block)** — presence-gated on the key (the `radome_slope`
+  posture), validated **FINITE ONLY**: no positivity guard, because `seeker_in_fov` is the single
+  clamp site and `fov = 0` is the DEFINED never-locked state, so a bound would be a fake
+  constraint. ⚠⚠ **REFUSED WITHOUT `two_angle: true`** (advisor — the load error the plan never
+  named): the window is applied in `_observe_point3d!`, which only runs on the two-angle host, so
+  without it the key is read by NOTHING — the slice-19 `speed` DEAD-KNOB class. It is **NOT**
+  refused without `:airframe = :six_dof`: that is a LIVE fidelity a student may toggle mid-run, and
+  26/27 have the identical inert-without-it shape without refusing it. `_parse_knobs` needed
+  nothing new (verified, not assumed — the knob-registerable case is a test).
+* **`collision_lead_angle` SHIPS**, as `<sid>.lead_angle_deg` — the engagement's own requirement
+  beside the window the hardware has, in the same degrees. Telemetry is per-tick BY CONSTRUCTION,
+  which is the **cure** for the one-shot misuse the kernel's docstring warns about (measured through
+  the shipped key: **32.90°** at tick 1 against the ~28.8° the engagement holds). ⚠⚠ **The gate-3
+  verifier may NOT use this key as the anchor for the look-angle claim** — that prohibition is now
+  written at the seam, not just here.
+* **`c[:seek_in_fov]` DELETED.** Nothing in src read it, and a comp key is never deleted — the
+  stale-state class again. `seeker_valid` ships from the LOCAL `in_fov`, and the CROSS-TOGGLE test
+  (fly 6-DOF, flip to `:pitch_coupled` live, assert the key vanishes while `:att_q` remains) is what
+  proves the rung gate rather than the `haskey` guard.
+* **The `_prev`-tracks-the-prediction line is EXERCISED, not defensive** — the corollary's
+  re-acquisition arm drives it, and the seam comment now names that test.
+* **The isolation carries its window**: `aero_sat` is **0.00 % in the r ∈ [500, 3000] m band in
+  every arm** ⇒ a POINTING miss. The whole-approach number is ~6.5 % **and it is ~6.5 % in the
+  REFERENCE arm too** — a launch transient, the front-loaded baseline 28/31 measured in `rms r`,
+  arriving here in a different quantity.
+* **Byte-identity PROVEN ON THE WIRE, not by reading the diff**: `slice28_verify.gd` re-run against
+  a live server reproduces STATUS to the digit (rms_r 1.04145, ring/flat 72.1×, cured 80.7×, DOMAIN
+  bound −0.23000, replay posdiff 0.0).
+
+### The numbers gate 2 pinned (programmatic world, seed 32 — the YAML wire is gate 3's)
+
+| arm | miss (m) | out-of-window % (r > 200) | max look° | max\|y\| | `aero_sat` band % |
+|---|---|---|---|---|---|
+| **OPEN — fov 25°, vy 400** | **1504.68** | **67.94** | 99.6 | 8130 | 0.00 |
+| CURE A — fov 30° | 0.106 | 0.00 | 29.0 | 8126 | 0.00 |
+| CURE B — vy 320 | 0.197 | 0.00 | 23.9 | 6137 | 0.00 |
+| reference — no window | 0.106 (`===` cure A) | 0.00 | 29.0 | 8126 | 0.00 |
+| `fov = 0` — NEVER LOCKED | 4786.4 | 100.0 | — | **0.0 EXACTLY** | 0.00 |
+
+* The **envelope** flips where `fov` crosses the lead, from both directions: vy 260 flies a 20°
+  window, vy 320 breaks it and flies 25°, vy 400 breaks that and flies 30°.
+* The **external anchor** (convention 11, an INDEPENDENT recompute — `acos` of the LOS·v̂_t dot then
+  `sin`, never the core's own kernel): the per-tick look/lead ratio sits in **[0.965, 1.008]** in
+  band, and the in-band median lead **brackets the critical window** (23.75° ∈ (20, 25), 28.84° ∈
+  (25, 30)). ⚠ The residual ~1 % gap IS the missile's aerodynamic incidence — gate 1 deliberately
+  refused to prove it because it needs a flying missile.
+* ⭐ **`fov = 0` reaches slice 23's and 25's `max|y| = 0.0` signature by a FOURTH route** (a seeker
+  that never locks reports no LOS rate, so PN commands nothing out of plane) — which is precisely
+  why the shipped arm's **`max|y| > 5000`** is the discriminating tooth and the miss is not.
+* The **corollary** reproduces in both directions: fov 20 + ringing glass **1000 m+ / 60 %+ out**
+  against **0.19 m / 0.0 %** radome-free; fov 25 + the same glass **0.0 % < out < 5 %** and it still
+  HITS, within a metre of the no-window wire.
 
 ## The seam (gates 1 & 2)
 

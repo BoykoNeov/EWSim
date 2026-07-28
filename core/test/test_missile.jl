@@ -5713,3 +5713,445 @@ end
         end
     end
 end
+
+@testset "THE SEEKER'S FIELD OF VIEW wired (slice 32 — the envelope is what the seeker can see)" begin
+    dt = 1.0e-3
+
+    # Slice 30's plant and geometry with the RADOME KEYS ABSENT — the showcase posture, and it is a
+    # convention-9 decision, not a simplification: 26–31's wire RINGS by construction, and a ringing
+    # arm's look angle swings BECAUSE it rings, so the angle measured on it would be the LOOP's and
+    # not the ENGAGEMENT's. `R !== nothing` puts the glass back for the COROLLARY testset only.
+    # `fov === nothing` mints NO `:seeker_fov_deg` key: the byte-identity reference, and the ONLY
+    # path slices 25–31 take.
+    function fov_world(; fov = nothing, vy = 400.0, seed = 32, airframe = :six_dof,
+                         R = nothing, A = -0.15, Rhat = nothing)
+        w = World(seed = seed,
+                  fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                 :autopilot => :alpha, :airframe => airframe,
+                                                 :seeker => :filtered, :seeker_axes => :az_el))
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.0,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => 0.3, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => 8.0, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => 5.0e-5, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true)
+        if R !== nothing
+            comp[:radome_slope] = R; comp[:radome_ripple] = A; comp[:radome_ripple_k] = 12.0
+            Rhat === nothing || (comp[:radome_slope_est] = Rhat)
+        end
+        fov === nothing || (comp[:seeker_fov_deg] = fov)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 2000.0, 4200.0),
+                                 vel = Vec3(0.0, vy, 0.0),
+                                 comp = Dict{Symbol,Any}(:cross_speed_mps => vy))
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:t1)]
+    end
+
+    # ⚠ 6000 TICKS, NOT SLICE 31's 900: the break on the SHIPPED arm happens at t = 4.68 s, so a
+    # 0.9 s trace would report "bit-identical" for two arms that end 1500 m apart. The window has to
+    # contain the event the byte-identity claim is about.
+    function trace(; n = 6000, kw...)
+        w, sub = fov_world(; kw...)
+        out = Float64[]
+        for _ in 1:n
+            tick!(w, sub, dt); empty!(w.events)
+            m = w.entities[:m1]
+            ω = get(m.comp, :omega_body, zero(Vec3))
+            append!(out, (m.pos[1], m.pos[2], m.pos[3], ω[2], ω[3]))
+        end
+        return out
+    end
+
+    # The whole engagement, to FIRST CPA ([[ewsim-missile-verifier-sampling]]: the post-CPA
+    # re-crossing is not the miss). PER-TICK, so the miss is exact rather than frame-sampled.
+    #
+    # ⚠⚠ THE OUT-OF-WINDOW FRACTION IS RANGE-GATED AT r > 200 m, AND THE GATE IS A GATE-2 FINDING,
+    # not a convenience: a "quiet" arm is out of the window for ONE OR TWO TICKS at r = 0.1–0.6 m,
+    # because the LOS unit vector swings through a large angle as r → 0 in the last millisecond
+    # before impact. That is the endgame spike [[ewsim-missile-verifier-sampling]] names, it is
+    # GEOMETRY and not the window's verdict, and gate 0's "0.0 %" was a `%.1f` rounding of
+    # 0.007–0.017 %. Gated, the quiet arms are EXACTLY 0.000 % and the broken arm does not move
+    # (67.943 %, whose out-ticks live at r = 1504–4123 m). The gate-3 verifier must carry it too.
+    #
+    # ⚠ TWO SATURATION WINDOWS, AND THE PAIR IS ITSELF A GATE-2 FINDING: `sat_band` is the arc's
+    # inherited r ∈ [500, 3000] m band and is 0.00 % in EVERY arm — the isolation. The whole-approach
+    # number is ~6.5 % and it is ~6.5 % IN THE REFERENCE ARM TOO: a LAUNCH TRANSIENT, the
+    # front-loaded baseline slices 28/31 measured in rms r, arriving here in a different quantity.
+    # Quote the window with the number.
+    function arm(; n = 22000, kw...)
+        w, sub = fov_world(; kw...)
+        miss = Inf; t_cpa = 0.0; r_prev = Inf; maxy = 0.0; look_max = 0.0
+        nt = 0; n_out = 0; n_band = 0; n_sat = 0; t_break = NaN
+        for k in 1:n
+            tick!(w, sub, dt); empty!(w.events)
+            m = w.entities[:m1]; t = w.entities[:t1]
+            tel = get(w.env, :telemetry, Dict{String,Any}())
+            r = los_range(m.pos, t.pos)
+            if r > 200
+                nt += 1
+                if get(tel, "m1.seeker_valid", 1.0) == 0.0
+                    n_out += 1
+                    isnan(t_break) && (t_break = k * dt)
+                end
+            end
+            500 < r < 3000 && (n_band += 1;
+                               get(tel, "m1.aero_sat", 0.0) == 1.0 && (n_sat += 1))
+            r > 200 && haskey(m.comp, :att_q) && (look_max = max(look_max,
+                rad2deg(boresight_angle(m.comp[:att_q]::Quat, los_unit(m.pos, t.pos)))))
+            maxy = max(maxy, abs(m.pos[2]))
+            r < miss && (miss = r; t_cpa = k * dt)
+            r > r_prev && r_prev < 5000 && break
+            r_prev = r
+        end
+        return (; miss, t_cpa, maxy, look_max, t_break, w,
+                  out = 100n_out / max(nt, 1), sat_band = 100n_sat / max(n_band, 1))
+    end
+
+    @testset "BYTE-IDENTITY — no `seeker_fov_deg` key ⇒ the slice-25…31 path, bit-for-bit" begin
+        # Convention 2. The key-absent path is TEXTUALLY the pre-slice-32 one (`in_fov = true` and
+        # every tracker branch below unchanged), so this is bit-for-bit BY CONSTRUCTION and not by a
+        # predicate that happens to return true.
+        base = trace()
+        @test trace() == base                                   # determinism, same-config
+        # ⭐ AND THE KNOB-vs-RUNG DISCRIMINATOR, MEASURED (atmosphere.jl's): a window wide enough to
+        # admit everything this engagement reaches is an IN-DOMAIN SLIDER VALUE that flies the
+        # key-absent trajectory bit-for-bit ⇒ KNOB, no fidelity rung, button stays DROPPED.
+        # ⚠⚠ WORDED "ON THIS WIRE", NEVER "180° ADMITS EVERYTHING" (gate 1's correction): the
+        # angle-space radius `hypot(az, el)` is NOT bounded by π — its supremum is `hypot(π, π/2)` —
+        # so a 180° window genuinely REJECTS a LOS behind the missile. This is an empirical statement
+        # about the look angles the ENGAGEMENT reaches, and `test_frames.jl` pins the other fact.
+        @test trace(fov = 180.0) == base
+        @test trace(fov = 40.0)  == base                        # the domain CEILING, also inert here
+        # …and the paired does-differ case, so the equalities above are not vacuous. 15° is inside
+        # the launch look angle (18.1°), so this arm is out of the window from tick 1.
+        @test trace(fov = 15.0) != base
+        @test trace(fov = 25.0) != base                         # the shipped arm, past its break
+    end
+
+    @testset "DRAW-COUNT INVARIANCE — class 4a, and it is ASSERTED not assumed" begin
+        # Convention 3, the sharpest determinism trap and the reason the seam sits BELOW the two
+        # `randn` at the top of `_observe_point3d!`: an out-of-window tick DRAWS `n_az`/`n_el` and
+        # discards them (slice 25's own lockstep — the foil DISCARDS, it does not SKIP). Gating the
+        # DRAW instead of the VALUE would desync every 25–31 replay.
+        function draws(fov)
+            w, s = fov_world(fov = fov)
+            for _ in 1:3000; tick!(w, s, dt); empty!(w.events); end
+            return randn(w.rng)             # the NEXT draw is the stream's fingerprint
+        end
+        d0 = draws(nothing)
+        @test draws(180.0) == d0
+        @test draws(25.0)  == d0            # 67.9 % of this arm's approach is out of the window
+        @test draws(0.0)   == d0            # NEVER LOCKED — not one measurement, all ticks drawn
+        @test draws(-5.0)  == d0            # a negative slider: clamped at the consumer, still draws
+        # ⚠ AND THE FINGERPRINT MUST BE LIVE (advisor, slice 28), or the four lines above cannot tell
+        # "lockstep preserved" from "the probe is insensitive". A different SEED must move it.
+        let w, s2
+            w, s2 = fov_world(fov = 25.0, seed = 99)
+            for _ in 1:3000; tick!(w, s2, dt); empty!(w.events); end
+            @test randn(w.rng) != d0
+        end
+    end
+
+    @testset "INERTNESS — the window needs a 6-DOF plant (the latent-bug class, 6th occurrence)" begin
+        # Rung-gated on the LIVE `:airframe`, never on `haskey(:att_q)` alone — the slice-21 `_atm_on`
+        # / 23 / 26 / 27 / 29 class. Without `:six_dof` there is no attitude to measure a look angle
+        # OFF, so an absurdly tight window must be unreachable and no telemetry may be shipped.
+        r = arm(n = 3000, airframe = :pitch_coupled, fov = 1.0)
+        @test !haskey(r.w.env[:telemetry], "m1.seeker_valid")
+        @test !haskey(r.w.env[:telemetry], "m1.seeker_fov_deg")
+        @test !haskey(r.w.env[:telemetry], "m1.look_angle")
+        # ⭐ AND THE CROSS-TOGGLE, which is what the latent-bug class is actually about: `:att_q` is
+        # minted once by `_integrate_6dof!` and NEVER deleted, so a key-gated window would keep
+        # blinding the seeker through a FROZEN attitude after a live flip off `:six_dof`.
+        let w, sub
+            w, sub = fov_world(fov = 1.0)                       # blind from tick 1 while 6-DOF
+            for _ in 1:500; tick!(w, sub, dt); empty!(w.events); end
+            @test haskey(w.entities[:m1].comp, :att_q)           # the key exists…
+            @test w.env[:telemetry]["m1.seeker_valid"] == 0.0    # …and the window is biting
+            w.fidelity[:airframe] = :pitch_coupled               # the live flip
+            for _ in 1:200; tick!(w, sub, dt); empty!(w.events); end
+            @test haskey(w.entities[:m1].comp, :att_q)           # still there, still stale
+            @test !haskey(w.env[:telemetry], "m1.seeker_valid")  # and the window is GONE
+        end
+    end
+
+    @testset "⭐ THE LESSON — the sensor stops supplying the command, and the miss opens 10⁴×" begin
+        # THE OPEN ARM: a 25° seeker against a 400 m/s crossing target. The lead this collision
+        # triangle demands is ~28.8°, so the target leaves the window WHILE THE LEAD IS STILL
+        # BUILDING (t ≈ 4.7 s), the α-β tracker coasts on a rate that was right for a smaller lead,
+        # and the geometry runs away monotonically.
+        open  = arm(fov = 25.0, vy = 400.0)
+        cureA = arm(fov = 30.0, vy = 400.0)      # WIDEN THE SEEKER — free
+        cureB = arm(fov = 25.0, vy = 320.0)      # SLOW THE CROSSING — i.e. DECLINE the engagement
+        ref   = arm(vy = 400.0)                  # no window at all
+        @test open.miss  > 1000.0
+        @test cureA.miss < 1.0
+        @test cureB.miss < 1.0
+        @test open.miss > 5000 * cureA.miss
+        @test open.miss > 5000 * cureB.miss
+        # ⭐ CURE A IS EXACTLY THE REFERENCE — widening the seeker past the lead RESTORES the
+        # engagement, it does not merely improve it. Bit-for-bit, because the predicate never fires.
+        @test cureA.miss === ref.miss
+        # THE MECHANISM, as the fraction of the approach with NO measurement (slice 22's `post_stall`
+        # discipline: do not let the miss carry the claim alone).
+        @test open.out  > 60.0
+        @test cureA.out == 0.0 && cureB.out == 0.0 && ref.out == 0.0
+        @test 4.0 < open.t_break < 5.5            # the break, WHILE THE LEAD IS STILL BUILDING
+        # ⚠⚠ THE SIGNATURE IS SLICE 23's AND SLICE 25's AND THE MECHANISM IS NEITHER (the copy-paste
+        # false-claim trap, 3rd occurrence in this arc). BOTH of those foils fly with `max|y| = 0.0`
+        # EXACTLY — the command was thrown away (23) or never formed (25). Here it WAS formed and
+        # flown: the missile turns 8 km out of plane and then loses the target mid-flight.
+        @test open.maxy > 5000.0
+        @test open.look_max > 90.0                # and the look angle runs away, 25° → 100°
+        # ⚠ THE ISOLATION, WITH ITS WINDOW: `aero_sat` is 0.00 % in the r ∈ [500, 3000] m band in
+        # EVERY arm ⇒ a POINTING miss, not the arc's ceiling miss (19/20/21/22/23/24). The missile
+        # has every bit of the authority it needs and no idea where to point it. ⚠ Assert the FLAG
+        # as a number; never hand-roll the compare (the sets nest — slices 19/25/26).
+        for a in (open, cureA, cureB, ref)
+            @test a.sat_band == 0.0
+        end
+    end
+
+    @testset "⭐⭐ THE ENVELOPE — the verdict flips where `fov` crosses the ENGAGEMENT's lead" begin
+        # TWO KNOBS, AND CONVENTION 9 IS SATISFIED BY A MEASUREMENT (never by counting sliders):
+        # they are two terms of ONE comparison, `fov` vs `lead(vy)`, and the verdict is reached from
+        # BOTH directions. Widening the window and slowing the crossing are the same move.
+        @test arm(fov = 20.0, vy = 260.0).out == 0.0     # lead 19.5° — inside a 20° window
+        @test arm(fov = 20.0, vy = 320.0).out  > 50.0    # lead 23.8° — outside it
+        @test arm(fov = 25.0, vy = 320.0).out == 0.0     # …and a 25° window takes it back
+        @test arm(fov = 25.0, vy = 400.0).out  > 50.0    # lead 28.8° — outside again
+        @test arm(fov = 30.0, vy = 400.0).out == 0.0     # …and a 30° window flies the WHOLE envelope
+        # ⚠ THE VERDICT IS THE ASSERTION, THE MISS IS A QUOTE: the miss MAGNITUDE is NOT monotone in
+        # `fov` inside the broken region (a ballistic-scatter number — 4th occurrence of the
+        # non-monotone-knob pattern, [[ewsim-df-ellipse-sigma-monotonicity]]).
+        let a = arm(fov = 20.0, vy = 320.0), b = arm(fov = 20.0, vy = 400.0)
+            @test a.miss > 500.0 && b.miss > 500.0        # both broken…
+            @test a.out > 50.0 && b.out > 50.0
+        end
+        # ⭐ THE FLOOR OF THE AXIS IS A DEAD POINT, AND IT IS DEAD EXACTLY (slice 30's shape): a
+        # static target's collision course carries NO lead, so the seeker sits on boresight and the
+        # tightest window in the domain is invisible.
+        @test arm(fov = 20.0, vy = 0.0).out == 0.0
+        @test arm(fov = 20.0, vy = 0.0).miss < 1.0
+    end
+
+    @testset "⭐ THE EXTERNAL ANCHOR — the window a seeker needs IS the collision lead" begin
+        # Convention 11: an EXTERNAL anchor, not a self-calibrated round-trip. The claim is that the
+        # critical FOV is a property of the ENGAGEMENT — `V_m·sin λ = V_t·sin θ` — so it is checked
+        # against an INDEPENDENT recompute (acos of the LOS·v̂_t dot, then sin) rather than against
+        # the core's own `collision_lead_angle`, whose decomposition is `‖v_t × û‖ / V_m`.
+        # ⚠ MEASURED IN THE r ∈ [500, 3000] m BAND, on a NO-WINDOW arm: a broken arm's look angle
+        # runs away BECAUSE it is broken, so the anchor may only be read where the seeker still sees.
+        function anchor(vy)
+            w, sub = fov_world(vy = vy)
+            ratios = Float64[]; looks = Float64[]; r_prev = Inf
+            for _ in 1:22000
+                tick!(w, sub, dt); empty!(w.events)
+                m = w.entities[:m1]; t = w.entities[:t1]
+                r = los_range(m.pos, t.pos)
+                if 500 < r < 3000 && haskey(m.comp, :att_q)
+                    û  = los_unit(m.pos, t.pos)
+                    Vt = sqrt(sum(abs2, t.vel)); Vm = sqrt(sum(abs2, m.vel))
+                    θ  = acos(clamp(sum(t.vel .* û) / max(Vt, 1e-12), -1.0, 1.0))
+                    lead = rad2deg(asin(clamp(Vt * sin(θ) / Vm, -1.0, 1.0)))
+                    look = rad2deg(boresight_angle(m.comp[:att_q]::Quat, û))
+                    push!(looks, look); lead > 1.0 && push!(ratios, look / lead)
+                end
+                r > r_prev && r_prev < 5000 && break
+                r_prev = r
+            end
+            sort!(looks)
+            return (; look_med = looks[cld(length(looks), 2)],
+                      lo = minimum(ratios), hi = maximum(ratios))
+        end
+        for vy in (80.0, 200.0, 320.0, 400.0)
+            a = anchor(vy)
+            @test 0.96 < a.lo && a.hi < 1.01       # the look angle IS the lead, per tick, to ~1 %
+        end
+        # ⭐ AND THE ANCHOR PREDICTS THE VERDICT: the critical window BRACKETS the lead this
+        # engagement holds (the testset above measures 320 breaking at 20 and flying at 25, and 400
+        # breaking at 25 and flying at 30). That is the whole slice as an inequality — the FOV
+        # requirement is not a seeker number, it is read off the collision triangle.
+        @test 20.0 < anchor(320.0).look_med < 25.0
+        @test 25.0 < anchor(400.0).look_med < 30.0
+        # ⚠ THE GAP THAT IS NOT ZERO, AND GATE 1 DELIBERATELY REFUSED TO PROVE IT: look angle and
+        # collision lead differ by the missile's AERODYNAMIC INCIDENCE. It is small (~1 %) and it
+        # needs a FLYING missile, which is why it is measured here and not in `test_frames.jl`.
+        @test anchor(400.0).lo < 1.0               # the incidence is real, not a rounding artifact
+    end
+
+    @testset "the DEFINED DEGENERATES — never locked, and a window that never opens" begin
+        # `fov = 0` (and any negative slider value, clamped at the single consumer site) is the
+        # NEVER-LOCKED state: out of the window before the tracker ever had a measurement. It must be
+        # DEFINED, FINITE and NON-THROWING (conventions 5/6), not a special case bolted on.
+        z = arm(fov = 0.0, vy = 400.0)
+        @test z.out == 100.0                       # not one measurement, the whole flight
+        @test z.miss > 1000.0
+        # ⭐ AND THE SIGNATURE IS SLICE 23's AND 25's, EXACTLY — `max|y| = 0.0` — because a seeker
+        # that never locks reports no LOS rate at all, so PN commands nothing out of plane and the
+        # missile flies its launch plane. The FOURTH way to that number, and the reason the shipped
+        # arm's `max|y| > 5000` above is the discriminating tooth rather than the miss.
+        @test z.maxy == 0.0
+        # negative is the same state (the clamp lives in `seeker_in_fov` and nowhere else)…
+        @test trace(fov = -5.0, n = 2000) == trace(fov = 0.0, n = 2000)
+        # …and every readout stays finite through it (convention 6 — no Inf/NaN to JSON).
+        for fov in (0.0, -5.0, -1.0e9, 1.0e9, 1.0e-12)
+            w, sub = fov_world(fov = fov)
+            for _ in 1:400; tick!(w, sub, dt); empty!(w.events); end
+            tel = w.env[:telemetry]::Dict{String,Any}
+            for k in ("m1.seeker_valid", "m1.seeker_fov_deg", "m1.look_angle", "m1.lead_angle_deg")
+                @test isfinite(tel[k])
+            end
+        end
+    end
+
+    @testset "the telemetry keys — and `look_angle` is NOT the radome's zeros" begin
+        # ⚠ SAMPLED AT t = 4 s, NOT 0.8 s: the lead BUILDS as the target crosses (2.6° at 0.8 s,
+        # 23.6° at 4 s), and a tooth read during the launch transient measures the transient.
+        w, sub = fov_world(fov = 25.0, vy = 400.0)
+        for _ in 1:4000; tick!(w, sub, dt); empty!(w.events); end
+        tel = w.env[:telemetry]::Dict{String,Any}
+        m = w.entities[:m1]; t = w.entities[:t1]
+        @test tel["m1.seeker_fov_deg"] == 25.0          # the live knob, the LIMIT
+        @test tel["m1.seeker_valid"] == 1.0             # still inside it at t = 4 s (it breaks at 4.7)
+        # ⚠⚠ THE ADVISOR'S GATE-2 CATCH, PINNED: slice 26's `look_angle` is built from `look_az` /
+        # `look_el`, which are the radome else-arm's ZEROS when no glass is authored — and THIS
+        # SLICE'S WIRE HAS NO GLASS. A `_rad_on || _fov_on` gate on that expression (the obvious
+        # edit, and the one the plan wrote) would ship 0.0 on the one wire the lesson runs on: the
+        # slice-29 `radome_model_err_az` stale-readout class, 7th occurrence. It is computed HERE
+        # from `û_tru` via the shipped kernel, and this test is the proof it carries a real angle.
+        @test tel["m1.look_angle"] > 15.0
+        @test tel["m1.look_angle"] ≈
+              rad2deg(boresight_angle(m.comp[:att_q]::Quat, los_unit(m.pos, t.pos))) atol = 1e-12
+        # ⭐ THE ENGAGEMENT'S OWN REQUIREMENT BESIDE THE HARDWARE'S WINDOW — the pair IS the slice.
+        @test tel["m1.lead_angle_deg"] > 25.0
+        # ⚠ AND THE ONE-SHOT MISUSE, MEASURED THROUGH THE SHIPPED KEY (the kernel's own docstring
+        # warning): evaluated ONCE off the LAUNCH geometry this lead reads 32.90°, against the ~28.8°
+        # the engagement actually holds — 14 % strict, because the LOS rotates as the target crosses.
+        # Telemetry is per-tick BY CONSTRUCTION, which is the cure; a HUD that samples it once is
+        # the disease.
+        let w2, sub2
+            w2, sub2 = fov_world(fov = 25.0, vy = 400.0)
+            tick!(w2, sub2, dt); empty!(w2.events)
+            @test w2.env[:telemetry]["m1.lead_angle_deg"] ≈ 32.90 atol = 0.02
+        end
+        # THE NEVER-STALE DISCIPLINE FROM THE OTHER SIDE: without the key, not one of them ships, so
+        # every slice-11/13/25…31 wire is byte-identical.
+        let w3, sub3
+            w3, sub3 = fov_world(vy = 400.0)
+            for _ in 1:4000; tick!(w3, sub3, dt); empty!(w3.events); end
+            for k in ("m1.seeker_valid", "m1.seeker_fov_deg", "m1.look_angle", "m1.lead_angle_deg")
+                @test !haskey(w3.env[:telemetry], k)
+            end
+        end
+        # …and on a wire that has BOTH, this key is the SAME number the radome block ships —
+        # provably, since `boresight_angle ≡ hypot(look_angles(att, û_tru)...)` on the same inputs.
+        let w4, sub4
+            w4, sub4 = fov_world(fov = 25.0, vy = 200.0, R = -0.03, Rhat = -0.03)
+            for _ in 1:4000; tick!(w4, sub4, dt); empty!(w4.events); end
+            t4 = w4.env[:telemetry]::Dict{String,Any}
+            @test t4["m1.look_angle"] > 10.0
+            @test haskey(t4, "m1.radome_eps")          # the radome block ran…
+            @test t4["m1.seeker_valid"] == 1.0         # …and so did this one
+        end
+    end
+
+    @testset "⭐ THE COROLLARY — slice 26's ring can shake the seeker out of its OWN window" begin
+        # ⚠ A SECOND MECHANISM ⇒ convention 9 keeps this OFF the showcase wire; it ships here (the
+        # slice-28 precedent for relocating a claim that is not client-drivable). BOTH DIRECTIONS
+        # ARE ASSERTED, because the second one is also the RE-ACQUISITION evidence.
+        #
+        # DIRECTION 1 — the ring inflates the look-angle excursion past a window the same engagement
+        # would otherwise have flown: at fov 20 / vy 200 the radome-free missile HITS, while the
+        # ringing one is out of the window most of the approach and misses by kilometres.
+        ring20 = arm(fov = 20.0, vy = 200.0, R = -0.03, Rhat = -0.03)
+        free20 = arm(fov = 20.0, vy = 200.0)
+        @test free20.out == 0.0 && free20.miss < 1.0
+        @test ring20.out > 60.0
+        @test ring20.miss > 1000.0
+        @test free20.look_max < 20.0 && ring20.look_max > 20.0   # the ring is what breaks the window
+        # DIRECTION 2 — A SHORT LOSS IS SURVIVABLE. At fov 25 the SAME ringing arm leaves the window
+        # in brief episodes and still HITS. What is terminal is losing the target while the lead is
+        # still BUILDING (the shipped arm), not losing it at all.
+        ring25 = arm(fov = 25.0, vy = 200.0, R = -0.03, Rhat = -0.03)
+        @test 0.0 < ring25.out < 5.0
+        @test ring25.miss < 10.0
+        # ⭐ AND THIS IS THE PROOF THE COASTING BRANCH RE-ACQUIRES CLEANLY — the line that would
+        # otherwise be a live-looking branch with no tooth: the same ringing arm with NO window at
+        # all lands within a metre of it, so the brief coasts cost essentially nothing.
+        ringref = arm(vy = 200.0, R = -0.03, Rhat = -0.03)
+        @test abs(ring25.miss - ringref.miss) < 1.0
+    end
+
+    @testset "loader: the window is PRESENCE-gated, and refuses to be a DEAD knob" begin
+        mktempdir() do dir
+            function write_scn(seekextra; two_angle = true)
+                p = joinpath(dir, "f.yaml")
+                open(p, "w") do io
+                    print(io, "name: f\nseed: 32\ndt_physics: 1.0e-3\n",
+                              "fidelity: {airframe: six_dof, autopilot: alpha, guidance: pn,\n",
+                              "           seeker: filtered, seeker_axes: az_el}\n",
+                              "entities:\n",
+                              "  - id: m1\n    kind: missile\n    pos: [0.0, 0.0, 3000.0]\n",
+                              "    missile:\n      mass_kg: 140.0\n      speed: 700.0\n",
+                              "      elevation_deg: 12.0\n",
+                              "      seeker: {two_angle: ", two_angle ? "true" : "false",
+                              seekextra, "}\n",
+                              "      guidance: {n_pn: 8.0}\n",
+                              "      airframe: {inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0,\n",
+                              "                 cmq: -150.0, cla: 20.0, cy_beta: 20.0}\n",
+                              "  - id: t1\n    kind: target\n    pos: [6000.0, 2000.0, 4200.0]\n",
+                              "    vel: [0.0, 400.0, 0.0]\n    target: {rcs_m2: 1.0}\n")
+                end
+                return p
+            end
+            # ⚠⚠ THE PATH NOTHING IN THIS SLICE HAD EVER TAKEN UNTIL GATE 2 (advisor): every gate-0
+            # probe and both gate-1 wire checks injected the key PROGRAMMATICALLY. This is the YAML
+            # → comp path the shipped scenario will actually use.
+            s1 = load_scenario(write_scn(", seeker_fov_deg: 25.0"))
+            m1 = first(e for (_, e) in s1.world.entities if e.kind === :missile)
+            @test m1.comp[:seeker_fov_deg] == 25.0
+            # PRESENCE-GATED: no key authored ⇒ no key minted (convention 2 — every earlier wire).
+            @test !haskey(first(e for (_, e) in load_scenario(write_scn("")).world.entities
+                                if e.kind === :missile).comp, :seeker_fov_deg)
+            # A DEAD KNOB IS REFUSED, NOT SILENTLY IGNORED (the slice-21/28/29/31 "refused, not
+            # branch-ordered" precedent): the window is applied in `_observe_point3d!`, which only
+            # runs on the TWO-ANGLE host, so without it the key would be read by nothing — the
+            # slice-19 `speed` class.
+            @test_throws ErrorException load_scenario(
+                write_scn(", seeker_fov_deg: 25.0"; two_angle = false))
+            # non-finite is a LOAD error (convention 5: validate-at-load for authored inputs)…
+            @test_throws ErrorException load_scenario(write_scn(", seeker_fov_deg: .nan"))
+            @test_throws ErrorException load_scenario(write_scn(", seeker_fov_deg: .inf"))
+            # …but a NEGATIVE window is NOT refused: it is the never-locked degenerate, clamped at
+            # the single consumer site (`seeker_in_fov`), and a live slider can reach it anyway.
+            @test first(e for (_, e) in load_scenario(write_scn(", seeker_fov_deg: -1.0")).world.entities
+                        if e.kind === :missile).comp[:seeker_fov_deg] == -1.0
+            # and it is KNOB-REGISTERABLE (`_parse_knobs` checks entity + key exist)
+            let p = write_scn(", seeker_fov_deg: 25.0")
+                txt = read(p, String)
+                write(p, txt * "knobs:\n  - {target: m1, key: seeker_fov_deg, min: 20.0, max: 40.0, label: FOV}\n")
+                kk = Dict(kb.key => kb.target for kb in load_scenario(p).knobs)
+                @test kk[:seeker_fov_deg] === :m1
+            end
+        end
+        # THE PRESENCE GATE FROM THE OTHER SIDE: no earlier wire carries the key, so none of them
+        # grows a window (slices 1–31 byte-identical).
+        base = joinpath(@__DIR__, "..", "..", "scenarios")
+        for f in ("slice25_seeker_3d.yaml", "slice26_radome.yaml", "slice27_radome_comp.yaml",
+                  "slice28_radome_curve.yaml", "slice29_radome_schedule.yaml",
+                  "slice30_envelope.yaml", "slice31_gyro.yaml")
+            s = load_scenario(joinpath(base, f))
+            for (_, e) in s.world.entities
+                @test !haskey(e.comp, :seeker_fov_deg)
+            end
+        end
+    end
+end

@@ -521,6 +521,40 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                 isfinite(comp[Symbol(gk)]) ||
                     error("missile '$id': seeker.$gk must be finite (got $(comp[Symbol(gk)]))")
             end
+            # Slice 32 — THE SEEKER'S FIELD OF VIEW. Slices 26–31 made the LOOK ANGLE the central
+            # quantity of the whole radome family and then bounded every knob domain by it reaching
+            # 30° — a §1 MODEL-VALIDITY caveat. A real seeker makes that same angle a PHYSICAL STOP:
+            # past `seeker_fov_deg` off the boresight there is NO MEASUREMENT AT ALL and the tracker
+            # COASTS (`_observe_point3d!`, frames.jl `seeker_in_fov`). ⭐ And what it caps is not a
+            # force or a rate but the ENGAGEMENT: the window a seeker needs is the collision
+            # triangle's own LEAD ANGLE, so too small a window costs not ACCURACY but the ENVELOPE.
+            # PRESENCE-GATED ON THE KEY (the `radome_slope` posture, and for the same convention-2
+            # reason: every slice-11/13/25…31 scenario HAS a `seeker:` block, so gating on the block
+            # would grow them all a window and kill byte-identity). Only a YAML that AUTHORS it mints
+            # the key, and `_observe_point3d!` gates on `haskey(:seeker_fov_deg)`.
+            # ⚠ VALIDATED FINITE ONLY — no positivity guard, deliberately. `seeker_in_fov` is the
+            # SINGLE site of the `max(fov, 0)` clamp (convention 5's clamp-at-CONSUMER), and
+            # `fov = 0` is the DEFINED never-locked state rather than a crash path, so a bound here
+            # would be a fake constraint. Degrees at the YAML boundary, radians inside the core (the
+            # `elevation_deg` posture): the seam converts once.
+            # ⚠⚠ REFUSED WITHOUT `two_angle: true`, RATHER THAN SILENTLY IGNORED (the slice-21/28/
+            # 29/31 "refused, not branch-ordered" precedent — advisor). The window lives in
+            # `_observe_point3d!`, which ONLY runs on the two-angle host, so on a slice-11/13 wire
+            # this key would be read by nothing: a DEAD KNOB a student could drag all day, the
+            # slice-19 `speed` class this project hunts. ⚠ It is NOT refused without
+            # `:airframe = :six_dof` — that is a LIVE fidelity a student may toggle mid-run, and the
+            # radome keys (26/27) have the identical INERT-without-it shape without refusing it.
+            if haskey(sb, "seeker_fov_deg")
+                comp[:seek_two_angle] ||
+                    error("missile '$id': seeker.seeker_fov_deg authored without " *
+                          "seeker.two_angle: true — the field of view is applied in the two-angle " *
+                          "seeker (`_observe_point3d!`), so without that host the key is read by " *
+                          "NOTHING and the knob is DEAD (slice 32)")
+                comp[:seeker_fov_deg] = _f64(sb["seeker_fov_deg"])
+                isfinite(comp[:seeker_fov_deg]) ||
+                    error("missile '$id': seeker.seeker_fov_deg must be finite " *
+                          "(got $(comp[:seeker_fov_deg]))")
+            end
             # Slice 13: the `:scan` seeker (fidelity `seeker: scan`) forms a NOISY angular-power
             # PROFILE over a FIXED grid (the slice-3 CFAR sandbox on the LOS-ANGLE axis) instead of
             # ONE noisy truth bearing. The grid/beam/CFAR/gate config lands here (STATIC — draw-count/
