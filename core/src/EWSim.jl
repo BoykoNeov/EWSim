@@ -125,6 +125,17 @@ export radome_slope_worst
 # sensor, and slice 30's aim point becomes `R_worst/(1+s)`. KNOBS, no rung. ⚠ Gyro NOISE is deferred
 # on DRAW-TOPOLOGY grounds (convention 3), not overlooked.
 export gyro_reading
+# Slice 32 (§11 Tier-A): THE SEEKER'S FIELD OF VIEW — the deferral slices 26/28/29/30/31 each named,
+# and the arc's FIRST SENSOR-SIDE CAP (every prior cap is airframe or actuator). Slices 26–31 each
+# bounded their knob domains by the look angle reaching 30°, declared as a §1 model-validity caveat;
+# a real seeker makes that same angle a PHYSICAL STOP, past which there is NO MEASUREMENT and the
+# α-β tracker must COAST. ⭐ And what it caps is not a force or a rate — it is the ENGAGEMENT: the
+# FOV a seeker needs is the collision triangle's own LEAD ANGLE (`collision_lead_angle`, the
+# INDEPENDENT oracle for the look angle, convention 11), so a window that is too small costs you not
+# ACCURACY but the ENVELOPE. KNOB (`seeker_fov_deg`), no rung — `fov = 180°` is bit-identical to the
+# key being absent (measured, gate-0 P4a). ⚠ STRAPDOWN, not a gimbal servo: a head with its own
+# state is a named deferral, and it would rewrite 26–31's `look_az`.
+export boresight_angle, seeker_in_fov, collision_lead_angle
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step
 export INTEGRATOR_MODES, G_ACCEL

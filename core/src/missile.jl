@@ -1620,25 +1620,39 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         λ_m  = λ_tru  + σ * n_el
     end
 
-    # SLICE 32 (EXPERIMENTAL, gate-0 probe seam) — THE SEEKER'S FIELD OF VIEW. Slices 26–31 made
-    # the LOOK ANGLE a first-class quantity and then bounded every knob domain by it reaching 30° —
-    # a §1 MODEL-VALIDITY caveat. A real seeker has a FIELD OF VIEW, which makes that same angle a
-    # PHYSICAL STOP: past it there is NO MEASUREMENT AT ALL and the tracker must COAST.
-    # ⚠ The FOV quantity is the TOTAL off-boresight angle `hypot(look_az, look_el)` — a CIRCULAR
-    # FOV. That is the quantity the radome comments above correctly warn is the WRONG one for the
-    # per-axis glass, and the RIGHT one here (a rectangular FOV is a named deferral).
+    # SLICE 32 — THE SEEKER'S FIELD OF VIEW. Slices 26–31 made the LOOK ANGLE a first-class
+    # quantity and then bounded every knob domain by it reaching 30° — a §1 MODEL-VALIDITY caveat.
+    # A real seeker has a FIELD OF VIEW, which makes that same angle a PHYSICAL STOP: past it there
+    # is NO MEASUREMENT AT ALL and the tracker must COAST. ⭐ And what it caps is not a force or a
+    # rate but the ENGAGEMENT — the window a seeker needs is the collision triangle's own LEAD
+    # ANGLE (frames.jl `collision_lead_angle`), so too small a window costs not ACCURACY but the
+    # ENVELOPE. The arc's FIRST SENSOR-SIDE CAP (10/12 magnitude, 15 jerk + deflection, 19
+    # flight-condition, 22 the lift curve's interior peak — all airframe or actuator).
+    # See `docs/plans/slice32.md`.
+    #
+    # ⚠ THE PREDICATE IS THE SHIPPED KERNEL, NOT AN INLINE RESTATEMENT OF IT (advisor, gate 1;
+    # convention 14's "anything computed inside `_draw` has no headless proof", one layer down): an
+    # inline `hypot(look_angles(...)...) ≤ fov` would make `test_frames.jl` prove a SECOND
+    # implementation and nothing about what flies. ⚠ And `seeker_in_fov` is the SINGLE site of the
+    # negative-`fov` clamp (convention 5) — this converts degrees to radians and hands the result
+    # straight in, deliberately NOT clamping twice.
+    # ⚠ The FOV quantity is the TOTAL off-boresight angle — a CIRCULAR window. That is the quantity
+    # the radome comments above correctly warn is the WRONG one for the per-axis glass, and the
+    # RIGHT one here (a rectangular / per-axis FOV is a named deferral).
     # ⚠ Computed from the TRUTH LOS: whether the target is inside the seeker's window is PHYSICS,
-    # not an estimate. And rung-gated on the LIVE `:airframe`, never on `haskey(:att_q)` alone.
+    # not an estimate — the contrast with the compensator two blocks below, which must use the BENT
+    # measurement. And rung-gated on the LIVE `:airframe`, never on `haskey(:att_q)` alone (the
+    # slice-21 `_atm_on` / 23 / 26 / 27 latent-bug class, whose FIFTH occurrence this would be).
     _fov_on = haskey(c, :seeker_fov_deg) && haskey(c, :att_q) &&
               get(w.fidelity, :airframe, :point_mass) === :six_dof
     if _fov_on
-        fov_rad = deg2rad(max(Float64(c[:seeker_fov_deg]), 0.0))
-        fa, fe  = look_angles(c[:att_q]::Quat, û_tru)
-        in_fov  = hypot(fa, fe) ≤ fov_rad
+        fov_rad = deg2rad(Float64(c[:seeker_fov_deg]))
+        in_fov  = seeker_in_fov(c[:att_q]::Quat, û_tru, fov_rad)
     else
-        in_fov = true
+        fov_rad = Inf
+        in_fov  = true
     end
-    _fov_on && (c[:seek_in_fov] = in_fov)   # probe/telemetry readout (gate-1 will ship it on the wire)
+    _fov_on && (c[:seek_in_fov] = in_fov)   # probe/telemetry readout (gate-2 ships it on the wire)
 
     # Lazy first-tick init (the `_observe_point!` shape): seed every memory, all rates 0.
     if !in_fov && !get(c, :seek_init, false)

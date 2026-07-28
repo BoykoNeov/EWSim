@@ -770,4 +770,220 @@
         # it is a SEPARATE key from SEEKER_MODES (the tracker), NOT a fourth rung of it
         @test isempty(intersect(SEEKER_AXES_MODES, SEEKER_MODES))
     end
+
+    # --- SLICE 32 — THE SEEKER'S FIELD OF VIEW (§11 Tier-A) -------------------------------
+    #
+    # The window (`boresight_angle` / `seeker_in_fov`) and the ENGAGEMENT that sets it
+    # (`collision_lead_angle`). ⚠ WHAT THESE TESTS DO NOT PROVE, deliberately: that the look
+    # angle EQUALS the collision lead. That is a statement about a flying missile — the two
+    # differ by the aerodynamic incidence (α/β), MEASURED at −0.06…+0.03° against a ~29° lead
+    # on the shipped wire (gate-0 §5) — and it needs a wire, so it is gate 3's, not gate 1's.
+    # What gate 1 owns is that each kernel is the quantity it claims to be.
+    @testset "seeker FOV (slice 32) — the window, and the engagement that sets it" begin
+
+        exact_cone(q, los) = acos(clamp(rotate_inv(q, los)[1], -1.0, 1.0))   # the INDEPENDENT
+        rect_in(q, los, f) = maximum(abs.(look_angles(q, los))) ≤ f          # angle + the FOIL
+
+        @testset "boresight_angle — the total off-boresight angle" begin
+            # the degenerate: the nose pointing straight at the target reads EXACTLY zero
+            @test boresight_angle(id, Vec3(1.0, 0.0, 0.0)) === 0.0
+            # and it is the angle-space RADIUS of the look angles (the definitional pin)
+            for (a, e) in ((0.2, -0.1), (-0.4, 0.35), (0.9, 0.0), (0.0, -0.8))
+                û = los_unit_from_angles(a, e)
+                @test boresight_angle(id, û) ≈ hypot(a, e) atol = 1e-12
+            end
+
+            # ⚠ THE §1 APPROXIMATION, MEASURED IN BOTH DIRECTIONS. The radius equals the EXACT
+            # cone half-angle `acos(u_body[1])` on either axis plane, and OVERSTATES it off them.
+            ψ = deg2rad(30.0)
+            for û in (Vec3(cos(ψ),  sin(ψ), 0.0),        # pure azimuth  (clock  0°)
+                      Vec3(cos(ψ), -sin(ψ), 0.0),        # pure azimuth  (clock 180°)
+                      Vec3(cos(ψ), 0.0,  sin(ψ)),        # pure elevation (clock  90°)
+                      Vec3(cos(ψ), 0.0, -sin(ψ)))        # pure elevation (clock 270°)
+                @test boresight_angle(id, û) ≈ exact_cone(id, û) atol = 1e-12
+                @test boresight_angle(id, û) ≈ ψ atol = 1e-12
+            end
+            # off the axes it is LARGER — never smaller — and the excess peaks near a 45° clock
+            # angle at +0.364° for a true 30° cone (measured; the number bounds the approximation)
+            excess = Float64[]
+            for φd in 0.0:1.0:360.0
+                φ = deg2rad(φd)
+                û = Vec3(cos(ψ), sin(ψ) * cos(φ), sin(ψ) * sin(φ))
+                push!(excess, boresight_angle(id, û) - exact_cone(id, û))
+            end
+            @test minimum(excess) ≥ -1e-15                       # NEVER under-reports
+            @test rad2deg(maximum(excess)) ≈ 0.3642 atol = 5e-4  # and by at most this much
+            let φ = deg2rad(47.0), û = Vec3(cos(ψ), sin(ψ)*cos(φ), sin(ψ)*sin(φ))
+                @test boresight_angle(id, û) - exact_cone(id, û) ≈ maximum(excess) atol = 1e-6
+            end
+
+            # ⚠⚠ AND IT IS NOT BOUNDED BY π — the counterexample that keeps anyone from writing
+            # "180° is the whole sphere". The supremum is hypot(π, π/2) ≈ 201.246°.
+            û_corner = los_unit_from_angles(deg2rad(180.0), deg2rad(20.0))
+            @test rad2deg(boresight_angle(id, û_corner)) ≈ 181.108 atol = 1e-3
+            @test boresight_angle(id, û_corner) > π
+            @test !seeker_in_fov(id, û_corner, π)                # a 180° window REJECTS it
+            @test  seeker_in_fov(id, û_corner, hypot(π, π/2))    # the true sup admits it
+            let sup = 0.0
+                for azd in -180.0:1.0:180.0, eld in -90.0:1.0:90.0
+                    sup = max(sup, boresight_angle(id, los_unit_from_angles(deg2rad(azd),
+                                                                            deg2rad(eld))))
+                end
+                @test sup ≤ hypot(π, π/2) + 1e-12
+                @test rad2deg(sup) ≈ 201.246 atol = 1e-2
+            end
+
+            # ⭐ ROTATION INVARIANCE (the transpose / frame-error catch, and the stochastic half
+            # of convention 1 — there is nothing else random to test here). Rotating the WHOLE
+            # configuration must not move the angle: the body-frame LOS is unchanged, so the
+            # radius is too. Its own Xoshiro, never `w.rng` (convention 11). ⚠ Note this is NOT
+            # invariance under ROLL about the boresight — the radius genuinely varies with the
+            # clock angle (the excess sweep above IS that variation).
+            let rng = Xoshiro(3232), dev_comp = 0.0, dev_inv = 0.0, spread = 0.0
+                for _ in 1:400
+                    att = qnormalize(quat_from_axis_angle(Vec3(randn(rng), randn(rng),
+                                                               randn(rng)), 3.0 * randn(rng)))
+                    los = let v = Vec3(randn(rng), randn(rng), randn(rng))
+                        v / sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+                    end
+                    g = qnormalize(quat_from_axis_angle(Vec3(randn(rng), randn(rng),
+                                                              randn(rng)), 3.0 * randn(rng)))
+                    # `qmul(g, att)` is the composition R(g)·R(att) — pinned here, not assumed
+                    dev_comp = max(dev_comp, maximum(abs.(rotate(qmul(g, att), los) .-
+                                                          rotate(g, rotate(att, los)))))
+                    b = boresight_angle(att, los)
+                    dev_inv = max(dev_inv, abs(boresight_angle(qmul(g, att), rotate(g, los)) - b))
+                    spread = max(spread, b)
+                end
+                @test dev_comp ≤ 1e-12
+                @test dev_inv  ≤ 1e-12
+                @test spread   > 2.0      # the sweep really did reach wide angles, not just small
+            end
+        end
+
+        @testset "seeker_in_fov — the predicate, its boundary and its degenerates" begin
+            q = quat_from_axis_angle(Vec3(0.3, 1.0, -0.4), 0.35)
+            û = los_unit_from_angles(0.21, -0.13)
+
+            # ⚠ THE `≤` BOUNDARY, PINNED WITHOUT A TOLERANCE — built BACKWARDS from the kernel,
+            # because no float LOS lands bit-exactly on `deg2rad(25.0)`.
+            let b = boresight_angle(q, û)
+                @test  seeker_in_fov(q, û, b)              # x ≤ x, exact by construction
+                @test !seeker_in_fov(q, û, prevfloat(b))   # one ULP tighter REJECTS
+                @test  seeker_in_fov(q, û, nextfloat(b))
+            end
+
+            # ⭐ THE CIRCULAR-vs-RECTANGULAR DISCRIMINATOR — the tooth that kills a per-axis
+            # implementation. At (0.8f, 0.8f) the radius is 1.131·f (OUT of a circular window)
+            # while `max(|az|,|el|)` is 0.8·f (IN a rectangular one): the two windows DISAGREE,
+            # and the assert says which one ships. PAIRED with (0.6f, 0.6f), where the radius is
+            # 0.849·f and both agree — so this is not merely "everything is out".
+            let f = deg2rad(25.0)
+                out = los_unit_from_angles(0.8f, 0.8f)
+                @test boresight_angle(id, out) ≈ hypot(0.8f, 0.8f) atol = 1e-12
+                @test !seeker_in_fov(id, out, f)          # CIRCULAR: outside
+                @test  rect_in(id, out, f)                # RECTANGULAR: would be inside
+                inn = los_unit_from_angles(0.6f, 0.6f)
+                @test  seeker_in_fov(id, inn, f) && rect_in(id, inn, f)   # both agree
+            end
+
+            # conventions 5/6 — a live slider can never throw, and `fov ≤ 0` is the DEFINED
+            # NEVER-LOCKED state (not a sentinel): only an exactly-on-boresight LOS is admitted.
+            @test !seeker_in_fov(id, los_unit_from_angles(1e-9, 0.0), 0.0)
+            @test  seeker_in_fov(id, Vec3(1.0, 0.0, 0.0), 0.0)     # boresight_angle === 0.0
+            for bad in (-0.0, -1e-9, -1.0, -1e9, -Inf)
+                @test !seeker_in_fov(q, û, bad)
+                @test  seeker_in_fov(id, Vec3(1.0, 0.0, 0.0), bad) # clamps to 0, never throws
+            end
+            @test seeker_in_fov(q, û, Inf)
+
+            # THE SEAM'S OWN EXPRESSION (advisor, gate 1): the shipped predicate is THIS kernel,
+            # so degrees→radians is the only step `missile.jl` performs, and it does NOT clamp —
+            # this function is the single clamp site. Both orders agree at every sign.
+            for fov_deg in (-5.0, 0.0, 12.5, 25.0, 180.0)
+                @test seeker_in_fov(q, û, deg2rad(fov_deg)) ==
+                      (boresight_angle(q, û) ≤ deg2rad(max(fov_deg, 0.0)))
+            end
+        end
+
+        @testset "collision_lead_angle — the ENGAGEMENT's own requirement" begin
+            x̂ = Vec3(1.0, 0.0, 0.0)
+
+            # the degenerates: a target running directly along the LOS needs NO lead, either way
+            @test collision_lead_angle(300.0, Vec3( 200.0, 0.0, 0.0), x̂) === 0.0   # receding
+            @test collision_lead_angle(300.0, Vec3(-200.0, 0.0, 0.0), x̂) === 0.0   # head-on
+            @test collision_lead_angle(300.0, zero(Vec3), x̂) === 0.0               # static
+            # and the pure crossing is the closed form exactly: asin(100/200) = π/6
+            @test collision_lead_angle(200.0, Vec3(0.0, 100.0, 0.0), x̂) ≈ π/6 atol = 1e-15
+            @test collision_lead_angle(200.0, Vec3(0.0, 0.0, -100.0), x̂) ≈ π/6 atol = 1e-15
+
+            # ⭐ THE DEFINING RELATION, recomputed by a DIFFERENT algorithm (convention 11):
+            # `V_m·sin λ = V_t·sin θ` with θ from `acos(v̂_t·û)` — an angle-domain route where the
+            # kernel takes a cross-product one.
+            let rng = Xoshiro(32032), dev_rel = 0.0, max_perp = 0.0, λ_lo = Inf, λ_hi = -Inf,
+                n_closing = 0, n_planar = 0
+                for _ in 1:400
+                    û = let v = Vec3(randn(rng), randn(rng), randn(rng))
+                        v / sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+                    end
+                    v_t = Vec3(80.0*randn(rng), 80.0*randn(rng), 80.0*randn(rng))
+                    V_t = sqrt(v_t[1]^2 + v_t[2]^2 + v_t[3]^2)
+                    V_m = 400.0 + 400.0 * rand(rng)          # fast enough that λ never saturates
+                    θ   = acos(clamp((v_t[1]*û[1] + v_t[2]*û[2] + v_t[3]*û[3]) / V_t, -1.0, 1.0))
+                    λ   = collision_lead_angle(V_m, v_t, û)
+                    dev_rel = max(dev_rel, abs(V_m * sin(λ) - V_t * sin(θ)))
+                    λ_lo = min(λ_lo, λ); λ_hi = max(λ_hi, λ)
+
+                    # ⭐⭐ AND IT REALLY IS A COLLISION LEAD, not merely an arcsine: fly the
+                    # missile at that lead in the (û, v_t) plane and the relative velocity's
+                    # PERPENDICULAR component cancels to zero — checked with the projection
+                    # subtraction the kernel deliberately avoids.
+                    w = v_t - (v_t[1]*û[1] + v_t[2]*û[2] + v_t[3]*û[3]) * û
+                    nw = sqrt(w[1]^2 + w[2]^2 + w[3]^2)
+                    if nw > 1e-9
+                        n_planar += 1
+                        ŵ    = w / nw
+                        v_m  = V_m * (cos(λ) * û + sin(λ) * ŵ)
+                        rel  = v_t - v_m
+                        perp = rel - (rel[1]*û[1] + rel[2]*û[2] + rel[3]*û[3]) * û
+                        max_perp = max(max_perp, sqrt(perp[1]^2 + perp[2]^2 + perp[3]^2))
+                        # V_m > V_t here ⇒ the geometry CLOSES (negative range rate)
+                        (rel[1]*û[1] + rel[2]*û[2] + rel[3]*û[3]) < 0.0 && (n_closing += 1)
+                    end
+                end
+                @test dev_rel  ≤ 1e-9            # the closed form IS `V_m·sin λ = V_t·sin θ`
+                @test max_perp ≤ 1e-9            # ...and flying it actually cancels the crossing
+                @test n_closing == n_planar == 400
+                @test 0.0 ≤ λ_lo && λ_hi < π/2   # never saturated on this (fast-missile) sweep
+                @test λ_hi > deg2rad(20.0)       # and the sweep did reach real lead angles
+            end
+
+            # ⚠ THE SATURATION SENTINEL, PAIRED — and its meaning is "NO FOV SUFFICES", never
+            # "you need 90°". Below the limit it is continuous and strictly interior; at and past
+            # it there is no collision course at all and the value is FLAT at exactly π/2, which
+            # is why nothing downstream may read it as a requirement number.
+            @test collision_lead_angle(100.0, Vec3(0.0, 100.0 * (1 - 1e-9), 0.0), x̂) < π/2
+            @test collision_lead_angle(100.0, Vec3(0.0, 100.0 * (1 - 1e-9), 0.0), x̂) >
+                  deg2rad(89.99)
+            for V_perp in (100.0, 100.0 + 1e-9, 250.0, 1.0e6)
+                @test collision_lead_angle(100.0, Vec3(0.0, V_perp, 0.0), x̂) === π/2
+            end
+            # the zero-speed guard saturates the same way and never divides by zero
+            @test collision_lead_angle(0.0, Vec3(0.0, 100.0, 0.0), x̂) === π/2
+            @test isfinite(collision_lead_angle(0.0, zero(Vec3), x̂))
+            @test all(isfinite, (collision_lead_angle(1e-30, Vec3(1e6, -1e6, 1e6), x̂),
+                                 collision_lead_angle(1e9, Vec3(1e-30, 1e-30, 1e-30), x̂)))
+
+            # SPEED, NOT VELOCITY (the signature that keeps "required" from becoming "achieved"):
+            # the lead depends only on the target's CROSS-LOS speed, so any along-LOS component
+            # is invisible to it — the sharpest statement of what this quantity is.
+            let v_perp = Vec3(0.0, 120.0, 0.0)
+                base = collision_lead_angle(500.0, v_perp, x̂)
+                for along in (-900.0, -1.0, 0.0, 1.0, 900.0)
+                    @test collision_lead_angle(500.0, v_perp + Vec3(along, 0.0, 0.0), x̂) ≈
+                          base atol = 1e-15
+                end
+            end
+        end
+    end
 end

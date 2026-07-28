@@ -662,3 +662,159 @@ gyro_reading(ω_true::Vec3, scale_err::Real, bias::Vec3) =
     Vec3((1.0 + scale_err) * ω_true[1] + bias[1],
          (1.0 + scale_err) * ω_true[2] + bias[2],
          (1.0 + scale_err) * ω_true[3] + bias[3])
+
+# --- THE SEEKER'S FIELD OF VIEW (slice 32, §11 Tier-A — the deferral 26/28/29/30/31 each named) ---
+#
+# Slices 26–31 made the LOOK ANGLE the central quantity of the whole radome family, and then each
+# of them bounded its knob domains by that angle reaching 30° — declared every time as a §1
+# MODEL-VALIDITY caveat, a place where the small-angle linear bend stops being trustworthy. A real
+# seeker makes the same angle a **PHYSICAL STOP**: it has a field of view, and past it there is no
+# measurement at all. The caveat and the hardware coincide, and the arc's FIRST SENSOR-SIDE CAP
+# lands — every previous cap in this project is airframe or actuator (slices 10/12's authored
+# magnitude clamp, 15's jerk and deflection caps, 19's flight-condition lift ceiling, 22's interior
+# peak of the lift curve).
+#
+# ⭐ AND WHAT A FIELD OF VIEW CAPS IS NOT A FORCE OR A RATE — IT IS THE ENGAGEMENT. A crossing
+# target must be LED; the lead is a closed-form property of the collision triangle
+# (`V_m·sin λ = V_t·sin θ`, [`collision_lead_angle`](@ref)); and the missile must hold that lead all
+# the way in. So the FOV a seeker NEEDS is not a seeker number at all — it is the engagement's own
+# lead angle, and a window that is too small does not cost you ACCURACY, it costs you the
+# ENVELOPE: the set of targets you may engage at all.
+#
+# ⚠ WHY THE ENGAGEMENT-SIDE KERNEL LIVES IN THIS FILE, against its own charter. This file is
+# "measurement geometry in the BODY frame" (the comment above `look_angles`), and
+# `collision_lead_angle` has no attitude and no body frame in it — on species grounds it would sit
+# beside guidance.jl's `time_to_go`. It is here because it is the ENGAGEMENT-side term of the
+# comparison [`seeker_in_fov`](@ref) is the HARDWARE side of, and that adjacency IS the slice.
+#
+# ⚠ SCOPE: A STRAPDOWN FOV, NOT A GIMBAL SERVO. There is no head state anywhere in this codebase —
+# the seeker is strapdown with (until now) an infinite window, and `look_angles` measures the LOS
+# off the BODY boresight. What ships here is the TRACK-BREAK: outside the window there is no
+# measurement and the α-β tracker coasts. A REAL gimbal — a head with its own state, servo
+# bandwidth, rate limit and mechanical stop — is a different and bigger slice, because it adds a
+# dynamical state AND it rewrites 26–31's `look_az` (the bend would key off the HEAD-vs-body angle
+# rather than the LOS-vs-body angle). A named deferral.
+#
+# ⚠ NO NEW INSTABILITY, NO NEW LOOP GAIN, NO NEW PLANT. Slice 26's positive-feedback / limit-cycle
+# language stays with 26–31 and slice 20's "degenerative spiral" stays forbidden; what is new is a
+# HARD SENSOR LIMIT and, through it, an engagement envelope.
+
+"""
+    boresight_angle(att::Quat, los::Vec3) -> Float64   (radians)
+
+The TOTAL off-boresight angle of a line-of-sight direction: `hypot(look_angles(att, los)...)`.
+Zero when the nose points straight at the target, and the quantity a CIRCULAR field of view is
+compared against ([`seeker_in_fov`](@ref)).
+
+⚠ **CIRCULAR — and this is the one place in this file where the per-axis habit is WRONG.** The
+radome kernels above are emphatic that the glass acts PER AXIS (`ε_az = f(look_az)` separately,
+`ε_el = f(look_el)`), and combining them into one magnitude there would be a modelling error. A
+FIELD OF VIEW is the opposite case: it is one window around the boresight, so the total angle is
+the right quantity and a per-axis test would be the error. **A RECTANGULAR / per-axis FOV is a
+named deferral** — a two-axis gimbal with independent mechanical stops really does have one — and
+the reason it is not folded in here is that this slice ships ONE window.
+
+⚠ **IT IS THE ANGLE-SPACE RADIUS, NOT THE EXACT CONE HALF-ANGLE — a §1 named approximation,
+MEASURED rather than waved at.** The exact angle between the nose and the LOS is
+`acos(rotate_inv(att, los)[1])`. `hypot(az, el)` agrees with it EXACTLY on either axis plane (a
+pure-azimuth or pure-elevation LOS) and OVERSTATES it off them, maximally near a 45° clock angle:
+at a true 30° cone the radius peaks at 30.364° (+0.364°, at φ ≈ 47°). Both are defensible windows
+and the departure is an order below the domain's own scale, so what matters is that ONE of them is
+named: this ships the angle-space radius because it is what the shipped seam computes and what
+every gate-0 number was measured with. The exact cone angle is the alternative, not a correction.
+
+⚠⚠ **AND THE RADIUS IS NOT BOUNDED BY π — so "180° is the whole sphere" is FALSE** (gate 1;
+`test_frames.jl` exhibits the counterexample). Its supremum is `hypot(π, π/2) ≈ 3.5124 rad =
+201.246°`, approached at the anti-boresight: a LOS at `(az, el) = (180°, 20°)` reads **181.108°**
+and a `fov = π` window REJECTS it. The consequence is only for how the knob-vs-rung identity is
+WORDED — see [`seeker_in_fov`](@ref) — never for the shipped domain, whose ceiling is 40°.
+
+⚠ Computed from whatever LOS it is handed. The shipped consumer hands it the TRUTH LOS, because
+whether the target is inside the seeker's window is PHYSICS, not an estimate — the contrast with
+[`radome_compensation`](@ref), which must use the BENT measurement because a guidance computer
+cannot see truth.
+"""
+boresight_angle(att::Quat, los::Vec3) = hypot(look_angles(att, los)...)
+
+"""
+    seeker_in_fov(att::Quat, los::Vec3, fov::Real) -> Bool
+
+Whether a line-of-sight direction is inside a CIRCULAR field of view of half-angle `fov`
+(RADIANS — the wire carries degrees, this does not; the units trifecta, HANDOFF §1):
+
+    boresight_angle(att, los) ≤ max(fov, 0)
+
+**THIS FUNCTION OWNS THE NEGATIVE-`fov` CLAMP** (convention 5 — a live slider can never crash a
+tick), and it is the ONLY site that clamps: the seam in `missile.jl` converts degrees to radians
+and hands the result straight in. `fov ≤ 0` is therefore not a throw and not a sentinel — it is
+the defined NEVER-LOCKED state, in which only an exactly-on-boresight LOS is visible and in
+practice nothing ever is.
+
+⚠ **THE BOUNDARY IS `≤`, AND IT IS PINNED WITHOUT A TOLERANCE.** No float LOS lands bit-exactly on
+`deg2rad(25.0)`, so the boundary tooth is built backwards from the kernel itself: a window of
+exactly `boresight_angle(att, los)` must ADMIT (`x ≤ x`), and one of `prevfloat` of it must
+REJECT.
+
+⚠ **A WIDE-ENOUGH WINDOW IS BIT-IDENTICAL TO NO WINDOW AT ALL, AND THAT IS THE KNOB-VS-RUNG
+ARGUMENT** (atmosphere.jl's discriminator): `seeker_fov_deg = 180` flies the key-absent trajectory
+to the last bit — MEASURED, gate-0 P4a, max|Δpos| = 0.000e+00 across the whole crossing-speed
+envelope. ⇒ KNOB, no fidelity rung, and the client button stays DROPPED. ⚠ Smaller-but-large
+values are NOT the right test and the reason is measured too: `fov ∈ {45°, 60°, 90°}` differs by
+3.5e−9 m at the top cell, because the POST-CPA LOS FLIP runs the look angle to ~151° on the final
+ticks — after the intercept, where nothing is being decided.
+
+⚠⚠ **BUT SAY "BIT-IDENTICAL ON THIS WIRE", NEVER "180° IS THE WHOLE SPHERE"** (gate 1 — the
+statement is EMPIRICAL, and the loose wording is FALSE). The angle-space radius is not bounded by π
+([`boresight_angle`](@ref)): its supremum is `hypot(π, π/2) ≈ 201.246°`, so a `fov = π` window
+REJECTS a LOS at `(az, el) = (180°, 20°)`, which reads 181.108°. The 180° identity therefore says
+that the look angles this engagement REACHES never enter that corner — a measurement about the
+REACHABLE SET, which is exactly the right kind of claim here: slice 22's refutation of "the
+off-state is a limit point ⇒ RUNG" turns on the same thing, that the reachable set is bounded so
+the knob's own top IS the in-scenario twin. A window that admits every direction unconditionally is
+`fov ≥ hypot(π, π/2)`. Both facts are pinned in `test_frames.jl`.
+"""
+seeker_in_fov(att::Quat, los::Vec3, fov::Real) = boresight_angle(att, los) ≤ max(fov, 0.0)
+
+"""
+    collision_lead_angle(V_m::Real, v_t::Vec3, û::Vec3) -> Float64   (radians)
+
+The LEAD ANGLE the collision triangle demands: the angle between the missile's VELOCITY and the
+line of sight `û` (unit, missile→target) that a missile of SPEED `V_m` must hold for the
+perpendicular components to cancel against a target moving at `v_t`.
+
+    V_m·sin λ = V_t·sin θ        ⇒     λ = asin(‖v_t × û‖ / V_m)
+
+(θ = the angle between the target's velocity and the LOS, so `V_t·sin θ = ‖v_t × û‖` for unit
+`û` — the cross product is used rather than the projection subtraction because it is the shorter
+statement and makes the INDEPENDENCE from the attitude path obvious.)
+
+⭐ **THE POINT OF SHIPPING IT: IT IS AN INDEPENDENT ORACLE FOR THE LOOK ANGLE** (convention 11 — a
+DIFFERENT algorithm, not a self-calibrated round-trip). The sim reaches the look angle through
+attitude → `rotate_inv` → `az_el`; this reaches the same number through nothing but the two
+velocities and the LOS. Measured against each other per tick over the whole crossing envelope they
+agree to a ratio of **0.997–1.006** (gate-0 P3b) — which is what licenses the slice's claim that
+the critical FOV *is* the engagement's lead angle rather than merely correlating with it.
+
+⚠ **SPEED, NOT VELOCITY — the signature is deliberate.** `V_m` is a SCALAR. Handing this a missile
+velocity vector invites computing the angle the missile has ACHIEVED, which is the look angle, a
+different quantity measured a different way; this function answers what the geometry REQUIRES.
+
+⚠ **IT IS A VELOCITY-vs-LOS ANGLE; A FIELD OF VIEW IS A BODY-vs-LOS ANGLE.** They differ by the
+aerodynamic incidence (α/β), which this kernel cannot know and does not model. On the shipped wire
+that gap is −0.06…+0.03° against a ~29° lead (gate-0 §5), so `look ≈ lead` there — but that is a
+MEASUREMENT ON A WIRE, not an identity, and nothing in gate 1 can prove it.
+
+⚠ **THE `asin` SATURATION IS A SENTINEL, AND ITS MEANING IS "NO FOV SUFFICES" — NEVER "YOU NEED
+90°."** When `‖v_t × û‖ > V_m` the target's cross-LOS speed exceeds the missile's entire speed and
+**no collision course exists at all**: there is no lead angle to hold, so the returned π/2 is the
+angle-domain saturation (convention 6's `FINITE_CEIL` idea in the natural units of the codomain —
+a finite, defined value where the honest answer is "undefined"), not a requirement a wider seeker
+could meet. Quoting it as a design number would be a false claim. The approach to it is continuous
+from below, and both sides are pinned.
+
+⚠ Zero-speed guard (`V_m → 0`) floors the divisor at `_FRAME_EPS` and saturates the same way: a
+motionless missile leads nothing. `û` is assumed UNIT (every caller builds it with
+[`los_unit`](@ref)); a non-unit `û` scales the sine and is a caller error, not a case handled here.
+"""
+collision_lead_angle(V_m::Real, v_t::Vec3, û::Vec3) =
+    asin(min(_norm3(_cross(v_t, û)) / max(Float64(V_m), _FRAME_EPS), 1.0))

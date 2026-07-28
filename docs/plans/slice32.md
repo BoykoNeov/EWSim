@@ -13,7 +13,8 @@ of them and got sharper each time:
 
 **Status: GATE 0 COMPLETE (5 probes, 2026-07-28). The advisor's blocking check FIRED and removed
 half the planned framing (§4 below). Raw findings and probe scripts in
-`M:\claud_projects\temp\slice32\GATE0_FINDINGS.md`. Gates 1–3 NOT STARTED.**
+`M:\claud_projects\temp\slice32\GATE0_FINDINGS.md`. GATE 1 COMPLETE (2026-07-28, 5798 → 5872).
+Gates 2–3 NOT STARTED.**
 
 ---
 
@@ -86,6 +87,82 @@ false-claim trap, 3rd occurrence in this arc — write the distinction, never in
 
 ---
 
+## Gate 1 — COMPLETE (the kernels and their teeth, 5798 → 5872)
+
+Three kernels in `frames.jl`, exported, beside `look_angles`:
+
+| kernel | what it is |
+|---|---|
+| `boresight_angle(att, los)` | the TOTAL off-boresight angle `hypot(look_angles(...)...)` — the CIRCULAR-window quantity, i.e. the one the radome comments correctly warn is the WRONG one for the per-axis glass |
+| `seeker_in_fov(att, los, fov)` | the predicate, `≤ max(fov, 0)` — **the single site of the negative-`fov` clamp** (convention 5) |
+| `collision_lead_angle(V_m, v_t, û)` | the ENGAGEMENT side: `λ = asin(‖v_t × û‖ / V_m)`, the P3b external anchor |
+
+⭐ **THE SEAM NOW CALLS THE KERNEL — that is the load-bearing half of this gate** (advisor, before
+any code). The gate-0 seam computed `hypot(fa, fe) ≤ fov_rad` INLINE; had gate 1 shipped kernels
+beside it, `test_frames.jl` would have proved a SECOND implementation and nothing about what flies.
+That is convention 14's slice-31 lesson ("anything the verdict computes inside `_draw` has no
+headless proof — extract it to a pure helper") one layer down. ⚠ The clamp moved WITH it, to exactly
+one site: `missile.jl` converts degrees → radians and hands the result in, deliberately not clamping
+twice. **Behaviour-preserving, PROVEN on the wire, not by reading the diff** — all four P4c showcase
+arms reproduce gate 0 to the digit (1140.635 / 0.16777 / 0.06197 / 0.16777 m, out-of-window 69.6 %,
+look_max 103.14 / 29.02 / 23.86°, ToF 15.40 / 15.31 / 12.93 s; `M:\claud_projects\temp\slice32\
+g1_wire_check.jl`).
+
+⚠ **`collision_lead_angle` has NO src caller yet** — normal at gate 1 (slice 25 shipped
+`los_unit_from_angles` at gate 1 and wired it at gate 2), but **gate 2 must DECIDE**: ship it as
+`<sid>.lead_angle_deg` telemetry (the client could then draw the lead the engagement DEMANDS beside
+the window it HAS) or drop it. It may not reach gate 3 as a core function whose only caller is a
+test. ⚠ And if it ships, **the verifier may NOT use that telemetry as the anchor for the look-angle
+claim** — the P3b anchor has to stay an independent recompute, or it becomes the self-calibrated
+round-trip this project names as a trap.
+
+### ⚠⚠ THE GATE-1 CORRECTION: "180° IS THE WHOLE SPHERE" IS FALSE
+
+The angle-space radius `hypot(az, el)` is **not bounded by π**. Its supremum is
+`hypot(π, π/2) ≈ 201.246°`, approached at the anti-boresight: a LOS at `(az, el) = (180°, 20°)`
+reads **181.108°**, and a `fov = π` window **REJECTS** it. So P4a's measured identity must be worded
+**"`seeker_fov_deg = 180` is bit-identical to the key being absent ON THIS WIRE"** — an empirical
+statement about the look angles the engagement REACHES, never "180° admits everything". The
+knob-vs-rung argument is undamaged and in fact rests on exactly that reachable-set reasoning (slice
+22's refutation of "the off-state is a limit point ⇒ RUNG"). The domain ceiling is 40°, so nothing
+operational changes. Both facts are pinned in `test_frames.jl`.
+
+### The other measured facts gate 1 added
+
+* **The radius is NOT the exact cone half-angle** `acos(u_body[1])` — a §1 approximation, now
+  MEASURED in both directions: EXACT on either axis plane, and OVERSTATING off them by at most
+  **+0.364° at a true 30° cone** (peaking at a ~47° clock angle). Both windows are defensible; what
+  matters is that the shipped one is named, and it is the one every gate-0 number was measured with.
+* **The circular-vs-rectangular tooth**: at `(0.8f, 0.8f)` the radius is `1.131·f` (OUT) while
+  `max(|az|,|el|)` is `0.8·f` (IN) — the two windows DISAGREE and the assert says which ships,
+  PAIRED with `(0.6f, 0.6f)` where they agree.
+* **The `≤` boundary is pinned without a tolerance**, built backwards from the kernel
+  (`prevfloat(boresight_angle(...))` rejects) — no float LOS lands bit-exactly on `deg2rad(25)`.
+* **The `asin` saturation is a SENTINEL meaning "no FOV suffices", NEVER "you need 90°"** — pinned
+  flat at exactly π/2 from the limit outward, so gate 3 cannot quote it as a requirement number.
+* **`collision_lead_angle` really is a collision lead, not an arcsine**: flying the missile at that
+  lead in the `(û, v_t)` plane cancels the relative velocity's ⟂-LOS component to ≤1e−9 over a
+  400-case seeded sweep — checked with the projection subtraction the kernel deliberately avoids.
+* **Rotation invariance** of `boresight_angle` under a common rotation of attitude and LOS (400
+  cases, its own `Xoshiro`) — the transpose / frame-error catch, and the stochastic half of
+  convention 1, which has nothing else random here. ⚠ It is NOT roll-invariance: the radius
+  genuinely varies with the clock angle, and that variation IS the approximation measured above.
+
+⚠ **What gate 1 deliberately does NOT prove**: that the look angle EQUALS the collision lead. The
+two differ by aerodynamic incidence (−0.06…+0.03° against a ~29° lead, gate-0 §5) — that is a
+statement about a flying missile and it needs a wire, so it is gate 3's.
+
+### Still open, carried into gate 2 (advisor)
+
+* `look_angle` telemetry must become `_rad_on || _fov_on`-gated — **never unconditional**, which
+  would add a key to slice 25's wire.
+* The `_prev`-tracks-the-prediction line (§ the seam, below) still needs either a tooth on a `:raw`
+  arm or an explicit defensive-and-unexercised marker. Gate 0 §8 already supplies the re-acquisition
+  evidence.
+* The draw-count assertion (convention 3) is gate 2/3, not gate 1.
+
+---
+
 ## The seam (gates 1 & 2)
 
 `missile.jl` `_observe_point3d!`, a new branch AHEAD of the tracker update — the experimental version
@@ -95,7 +172,10 @@ zero — the slice-20/21/26/27/28/29/31 structural shape).
 
     _fov_on = haskey(c, :seeker_fov_deg) && haskey(c, :att_q) &&
               get(w.fidelity, :airframe, :point_mass) === :six_dof
-    in_fov  = !_fov_on || hypot(look_angles(c[:att_q], û_tru)...) ≤ deg2rad(max(fov, 0.0))
+    in_fov  = !_fov_on || seeker_in_fov(c[:att_q], û_tru, deg2rad(c[:seeker_fov_deg]))
+
+(gate 1 replaced the inline `hypot(...) ≤ deg2rad(max(fov,0))` with the shipped kernel, and moved
+the clamp inside it — see the gate-1 section above; the wire numbers are unchanged to the digit)
 
 with three tracker branches: **NEVER LOCKED** (out of the window before the first measurement — a
 defined, finite, non-throwing state; `seek_init` stays false so the first in-window tick initializes
