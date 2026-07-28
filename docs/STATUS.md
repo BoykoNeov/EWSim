@@ -3749,6 +3749,159 @@ it would sweep the look angle through the curve FASTER).
 
 ---
 
+**Slice 29 — `R̂(look)`: THE SCHEDULE THAT LOOKS THROUGH ITS OWN RADOME (HANDOFF §11 Tier-A)** — the
+SEVENTH slice of the bank-to-turn / 3-D arc, and the deferral slice 28 named as its own successor
+("LOOK-ANGLE-SCHEDULED `R̂(look)` — the engineering answer to this slice, exactly as 27 was to 26").
+Slice 27 gave the missile a rate-gyro feed-forward with a SCALAR belief; slice 28 showed the glass has
+no single slope, so the belief must be a CURVE. Making it one is three lines — and it raises a
+question a scalar never had to answer: **EVALUATED WHERE?** The only look angle a guidance computer
+owns is the one it computes from its own measurement, and that measurement is exactly what the radome
+bent. **⇒ THE LESSON: what closes the loop is the residual measured at the COMPENSATOR'S OWN INDEX;
+the schedule's own slope `R̂' = dR̂/dlook` is the SENSITIVITY that decides what that indexing error
+costs; and slice 27's rule — "compensate with a signal that is not itself corrupted by what you are
+compensating", the rule that killed its ANGLE-domain corrector — comes back in the RATE domain, the
+place slice 27 concluded was safe, because THE IMMUNITY WAS NEVER THE DOMAIN, IT WAS THE CONSTANCY
+(a scalar has `R̂' ≡ 0`).**
+
+⭐⭐ **THE WHOLE SLICE IS TWO NUMBERS THE CORE SHIPS FROM THE SAME FRAMES, AND THEY DISAGREE.**
+`radome_model_err_az = R(look_az) − R̂(look_az)` is the BENCH number — belief against glass at the
+SAME look angle, what "how good is my schedule?" naturally means. `radome_residual_az` generalizes
+slice 28's key to `R(look_az) − R̂(look_az_c)` — the belief where the compensator ACTUALLY EVALUATES
+it. On the shipped arm (`k̂ = 10`) the bench number is **0.01394** and the loop residual **0.05210**
+(3.7×) and it RINGS at rms `omega_r` 0.63631 in the [500,3000] m band. At `k̂ = 17` the schedule is a
+**6.3× WORSE model of the glass** (bench 0.08795) and it stays QUIET (0.01723, 36.9× down), because
+at its own index it is wrong by only 0.01200. **The bench ordering and the loop ordering are
+REVERSED, and the ring follows the loop.** ⭐ And the cleanest single statement: at `k̂ = 12, Â = A`
+the bench error is **EXACTLY 0.000000000** — the belief IS the glass — while the loop residual is
+**still 0.02288**, because the belief is evaluated 2.49–2.59° off. *A perfect model evaluated at a
+bent index is not a perfect compensator*, and a scalar could never show it.
+
+⚠⚠ **FOUR GATE-0 REFUTATIONS, AND THEY ARE LOAD-BEARING — every future reader will re-propose the
+naive slice.** (1) *"A scalar cannot cancel a curve"* is **FALSE here**: on a settled PN collision
+course `V_M·sin L = V_T·sin(aspect)` with the LOS direction fixed, so **the lead angle is CONSTANT BY
+CONSTRUCTION** and slice 28's wire holds `look_az` to a **0.2° band** (14.9→15.1 at the 5–95
+percentiles, measured on a STABLE arm) — a schedule there is observationally a scalar, i.e. FALSE
+FIDELITY (the slice-15 `k_δ` / slice-16 refusal class). (2) Opening the band with a maneuvering target
+does not license it either: the **BEST POST-HOC SCALAR MATCHES the exact schedule** (1.06 / 0.97 /
+1.07 / 1.40× at bands of 0.2 / 10.0 / 14.2 / 16.8°) — ⭐ **because the parasitic loop needs DWELL at a
+supercritical residual, and a band the engagement SWEEPS THROUGH is visited briefly everywhere.**
+⇒ **the frozen look angle is the ENABLING condition, not an obstacle**, and slice 29 keeps slice 28's
+geometry untouched — the first slice of the arc with a measured reason NOT to move the wire. ⚠ Say
+"the geometry is inherited, the GLASS is deepened" (`A` −0.05 → −0.15, AUTHORED — it is what gives
+the `k̂` tolerance band an interior). (3) ⭐⭐ **THE ENVELOPE FRAMING IS ALSO REFUTED, AND THAT
+REFUTATION IS ITSELF A RESULT: THE RADOME STABILITY CONSTRAINT IS ONE-SIDED.** Only a NEGATIVE
+residual rings; a positive one merely DE-TUNES (slice 26's own finding, never before used as a design
+rule). So a scalar set at or below the most negative slope the glass reaches ANYWHERE in the envelope
+is **unconditionally stable across all of it** (measured across crossing speeds 80–260 → sustained
+leads 6.1°/9.8°/15.0°/19.1°). ⇒ **GAIN SCHEDULING BUYS PERFORMANCE, NOT STABILITY**, and slice 27's
+"know your slope to within `0.38/(N·ρ)`" is a TWO-SIDED reading of a ONE-SIDED constraint — the rule
+is *"know the most NEGATIVE slope your glass reaches over the envelope, and set `R̂` at or below it"*,
+a bound to be exceeded rather than an estimate to be matched. ⚠ It is not free: the purchase DE-TUNES
+(`ω_ratio` → 0.25, envelope miss 0.20 → 1.08 → 4.15 → 14.14 → **47.23 m** as the slope span goes
+0.2→0.6), so the scalar has TWO bounds that close on each other. **That whole claim is
+MULTI-ENGAGEMENT and NOT client-drivable** (target velocity is not a comp key — the slice-27/28
+precedent), so it is NOT shipped and is the named strongest successor. (4) ⚠ The **residual-RANGE**
+mechanism was killed too: evaluated at the OPERATING POINT rather than as a band range, `k̂ = 10` has
+residual −0.016 (nearly exact) and RINGS while `k̂ = 16` has −0.057 (past onset) and is QUIET — the
+copy-paste false-claim trap, caught before it was written down.
+
+⚠⚠ **AND A FIFTH CATCH, IN THE CENTREPIECE ITSELF (advisor, blocking).** The draft asserted "the
+residual stays inside ±0.055 while it rings" and BOTH halves were unmeasured. (a) **A ringing arm's
+look band is not the frozen one** — the shipped arm spans **7.4–18.7°** against 14.5–15.0° for the
+quiet arms, so any residual quoted as a median THERE describes the ring, not its cause (slice 28 §1's
+own rule). (b) **The ≈0.055 onset was inherited from a different configuration** and had to be
+re-measured on this wire: a CONSTANT-`R̂` sweep (constant ⇒ `R̂' ≡ 0` ⇒ no index sensitivity ⇒ its
+residual is unambiguous) puts it at **≈ −0.056** (the least-compensating QUIET arm, `R̂ = −0.27`,
+sustains −0.0556; every arm with less compensation rings). ⇒ **every residual claim that ships is
+ONE-SIDED, and the ring/quiet VERDICT is always on `rms r`, never on a residual threshold.** What IS
+legitimate on a ringing arm is comparing the bench and loop numbers **to each other**, because both
+come from identical frames — and that is the shipped centrepiece. ⚠ The verifier's FIRST run failed
+on exactly this at 1.6×: it used a MEAN OF ABSOLUTES, which a ringing arm inflates via its symmetric
+excursions through zero; the MEDIAN of the signed series is the operating point and gives 3.7×.
+
+⭐ **THE ALIGNMENT WORRY, RAISED AND REFUTED** (advisor): slice 28 chose `k = 12` so the ripple PEAK
+lands on the ~15° lead, i.e. a correctly-specified schedule sits exactly where `R̂' = 0`. Measured and
+killed: a perfect schedule is quiet at EVERY `k` from 6 to 20 (0.0101/0.0093/0.0090/0.0093/0.0104/
+0.0122/0.0167) even where `R̂'(op)` reaches +2.9.
+
+⚠ **THE TRUTH-INDEX COUNTERFACTUAL IS A GATE-0 MEASUREMENT AND MUST NOT SHIP** — it proves the
+mechanism in BOTH directions (`k̂` = 9/10 ring on the bent index and go QUIET on a truth one, 0.829 →
+0.026 and 0.637 → 0.009 = 71×; `k̂` = 17/18/19 are QUIET on the bent index and RING on a truth one,
+0.017 → 0.627 / 0.019 → 0.767 / 0.021 → 0.794 — **the index error is STABILISING there**, so a
+confound cannot produce a sign-reversing response). But a truth-indexed schedule requires the guidance
+computer to read the true LOS, which slice 27 established would make the slice fake. It lives in
+`M:\claud_projects\temp\slice29\probe9_window.jl`, the slice-26 frozen-geometry precedent.
+
+**GATE 1** — `frames.jl` gains `radome_schedule_slope(ripple_est, k_est, look) = Â·k̂·sin(k̂·look)`
+and `radome_compensation_scheduled(...)`, the latter **PER AXIS** (slice 28's gate-2 hardening applied
+to the compensator: the azimuth channel's belief at `look_az`, the elevation channel's at `look_el`;
+one value at `hypot(...)` is the belief of NEITHER and would agree numerically on exactly this wire).
+Teeth: ⭐ **the DERIVATIVE IDENTITY** (finite-difference `radome_slope_curve`, compare to
+`radome_schedule_slope` — the sibling of slice 28's integral identity, pinning the two kernels to each
+other rather than restating either); ⭐ **the INDEX TOOTH — the #1 SIGN TRAP's 11th occurrence, and it
+claimed a victim**: the sign of the index perturbation must FLIP between a `k̂` below the true `k` and
+one above, and the first draft asserted BOTH backwards (the shift is in the BELIEF; the residual moves
+the other way) — a test at ONE `k̂` passes for a constant-slope compensator and proves nothing; the
+SECOND-ORDER pin (at `k̂ = k` the first-order sensitivity vanishes EXACTLY while the actual shift is
+`½·R̂''·δ²`, which is why the shipped claim quotes the exact residual and uses `R̂'` only to explain
+it); and `ripple_est == 0` reducing to `radome_compensation` **bit-for-bit**, paired with a
+does-schedule case and with the control that a CONSTANT belief cannot be shifted by its index at all.
+
+**GATE 2** — the seam branches inside the existing `_comp_on` block on `haskey(:radome_ripple_est)`,
+the FOURTH nesting level of the structural byte-identity shape, else-arm VERBATIM. ⚠⚠ **WHICH LOOK
+ANGLE EACH KEY USES IS THE SLICE, so it is written into the seam and not left to a reader**: the glass
+bends at `look_az` (truth, off `û_tru`), the belief is evaluated at `look_az_c` (bent). Both were
+already in scope and the surrounding slice-28 code uses truth throughout, so picking truth for both
+would have silently deleted the finding. Telemetry: `radome_model_err_az` (a DIAGNOSTIC, labelled as
+one — the slice-26 `omega_ratio` sense), `radome_sched_slope` (**a SENSITIVITY, never "the loop
+gain"**), `radome_slope_est_az`/`_el` (per axis), `look_angle_est` beside slice 26's truth
+`look_angle` (**the gap between them IS the bend**, pinned against a no-glass control). The `k̂`
+tolerance band is measured CONNECTED and ASYMMETRIC — rings at 6/9/10, quiet 11–19, rings at 20/22 —
+so unlike slice 28's GLASS `k` it **IS** a knob (do not copy 28's disqualification across; it was
+measured on the other side of the comparison). The isolation is **slice 26's shape, not slice 25's**:
+`defl_sat == 0` in-window everywhere, but `aero_sat == 0` is IMPOSSIBLE on a ringing arm and is not
+asserted (584/4342 ringing vs 0/4360 cured). ⚠ Counting `defl_sat` over the WHOLE FLIGHT fails on
+every arm and says nothing — the fin pegs in the launch transient regardless.
+
+**GATE 3** — `scenarios/slice29_radome_schedule.yaml`: slice 28's geometry and crossing target
+verbatim; glass `R₀ = −0.03, A = −0.15, k = 12`; belief `R̂₀ = −0.03, Â = −0.15` (level EXACT),
+**`k̂ = 10`** (shape 17% low — the showcase OPENS ON THE DISEASE). TWO knobs, `radome_ripple_k_est ∈
+[6, 22]` (⚠ the ceiling MOVED off 20, where `rms r` is only 0.447, a marginal edge — slice 26's
+post-commit rule) and `radome_ripple_est ∈ [−0.30, 0]`. Four proofs green: **S29V** six phases —
+RINGING 0.63631 / REPLAY posdiff **0.0** / CURED 0.00890 (**71.5×**, bench error exactly
+0.000000000, loop residual still 0.02288) / INVERSION 0.01723 (**36.9×**, a 6.3× worse model) / LEVEL
+`Â = 0` rings at 1.07220 with `radome_sched_slope` **EXACTLY 0** and the bench and loop numbers the
+SAME NUMBER / DOMAIN `k̂ = 22` rings at 0.78773 inside the 30° budget (23.9° peak); **S29UI** the
+ELEVEN-way value guard + ⭐⭐ **a FOUR-WAY HUD mirror (26/27/28/29 are all indistinguishable BY
+ROUTING** — what separates them is a switch on each slice's own telemetry key) + the channel switch
+proven on IDENTICAL telemetry; smoke-load `DONE`; TWO windowed shots at the same range (1442 vs
+1478 m) — the ringing arm showing MODEL err **−0.049** against LOOP RESID **−0.084**, the quiet arm
+MODEL err **−0.092** against LOOP RESID **−0.013**. Class **4a** (FIFTH consecutive RNG-live; draw
+count ASSERTED via end-of-run RNG identity); KNOB not rung (`Â = 0` bit-identical to the key absent,
+measured); the button stays DROPPED (16/26/27/28/29 — Option-P′'s fifth use). Slices 1–28
+byte-identical, proven ON THE WIRE (the 27/28 verifiers re-run to the digit: 0.76836 / 54.7× / 3.305
+and 1.04145 / 0.10057 / 80.7×). 5494 tests.
+
+Run: `pwsh tools/julia.ps1 --project=core tools/server.jl scenarios/slice29_radome_schedule.yaml`,
+then console Godot `--headless --path clients/godot --script res://net/slice29_verify.gd` (exit 0 =
+pass). The UI test needs NO server: `… res://net/slice29_ui_test.gd`. Live: the wire OPENS ON THE
+DISEASE — drag **k̂ UP** from 10 and the ring dies at ~11 and stays dead all the way to 19, even
+though the schedule is getting STEADILY WORSE as a model of the glass; or drag **Â to 0** and watch
+the schedule collapse to slice 27's scalar.
+DEFERRED (NAMED): **THE ENVELOPE / ONE-SIDEDNESS SLICE** — "gain scheduling buys performance, not
+stability; over-compensate deliberately to the envelope's worst-case slope and pay for it in
+`ω_ratio`", fully measured at gate 0 and not shipped because it is multi-engagement. ⚠ **Its enabling
+change is small and precedented — a presence-gated `cross_speed_mps` on `ConstantVelocity`, exactly
+slice 18's `alt_hold_m` — and it would ALSO retire the constraint that forced slice 28 to relocate two
+proofs. The strongest single successor.** Then: ESTIMATING `R̂` IN FLIGHT (⚠ slice 29 SHARPENS slice
+26's P7A obstacle — the estimator would have to identify a SHAPE from a signal whose index is bent);
+an IMPERFECT GYRO; a 2-D slope `R(look_az, look_el)`; an ASYMMETRIC error curve; **seeker FOV / gimbal
+limit** (sharper again — this slice makes the compensator's INDEX first-class, and a gimbal limit
+truncates exactly that index); the out-of-plane MANEUVERING target (⚠ it should inherit this slice's
+finding about DWELL).
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

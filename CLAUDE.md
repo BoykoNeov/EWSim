@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–28 COMPLETE & green — 5013 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–28
+**Slices 1–29 COMPLETE & green — 5494 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–28
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
@@ -85,6 +85,31 @@ a compensator characterized at BORESIGHT is exactly right where the loop is neve
 `R₀ − R̂` is EXACTLY 0.000 AND IT RINGS, because the ENGAGEMENT residual `R(look_az) − R̂` is −0.078. "Know your
 slope" sharpens into "KNOW YOUR SLOPE CURVE OVER THE BAND THE ENGAGEMENT VISITS".** (−0.078 is the MEDIAN of
 that residual; it spans −0.100…−0.052 over the measurement band, and the verifier asserts the whole range.)
+**And slice 29 `R̂(look)`: THE SCHEDULE THAT LOOKS THROUGH ITS OWN RADOME — the engineering answer 28 named. Make the
+belief a curve too and a question a scalar never had to answer appears: EVALUATED WHERE? The only look angle a
+guidance computer owns is the one the radome already bent, so what closes the loop is the residual at the
+COMPENSATOR'S OWN INDEX. The core ships BOTH numbers from the SAME frames and they DISAGREE: the shipped k̂ = 10 is a
+BETTER model of the glass (bench error 0.014) than k̂ = 17 (0.088, 6.3× worse) and it RINGS while 17 stays QUIET,
+because at their own indices they are wrong by 0.052 and 0.012. ⭐ And a PERFECT model (k̂ = k, bench error EXACTLY
+0.000000000) still leaves a loop residual of 0.023. Slice 27's rule — compensate with a signal not itself corrupted
+by what you are compensating — returns in the RATE domain: THE IMMUNITY WAS NEVER THE DOMAIN, IT WAS THE CONSTANCY
+(a scalar has R̂' ≡ 0). ⚠⚠ FOUR GATE-0 REFUTATIONS ARE LOAD-BEARING: "a scalar cannot cancel a curve" is FALSE (the
+lead angle is CONSTANT BY CONSTRUCTION on a settled collision course — slice 28's wire holds look_az to a 0.2° band,
+so a schedule there IS a scalar, i.e. false fidelity); opening the band with a maneuvering target does not license it
+either (the BEST POST-HOC scalar MATCHES the schedule, 1.06/0.97/1.07/1.40×, because the loop needs DWELL at a
+supercritical residual and a swept band is visited briefly everywhere — ⇒ THE FROZEN LOOK ANGLE IS THE ENABLING
+CONDITION, so 29 keeps 28's geometry and deepens only the GLASS to A = −0.15); ⭐⭐ THE RADOME CONSTRAINT IS ONE-SIDED
+(only a NEGATIVE residual rings, a positive one de-tunes) so a scalar at the envelope's worst-case slope is
+UNCONDITIONALLY STABLE ⇒ GAIN SCHEDULING BUYS PERFORMANCE, NOT STABILITY, and slice 27's 0.38/(N·ρ) is a TWO-sided
+reading of a ONE-sided constraint — ⚠ that claim is MULTI-ENGAGEMENT and NOT client-drivable, so it is deferred as
+the strongest successor (its enabling change is a presence-gated `cross_speed_mps` on ConstantVelocity, exactly slice
+18's `alt_hold_m`); and the residual-RANGE mechanism was killed at the operating point. ⚠⚠ A FIFTH advisor catch hit
+the centrepiece: a RINGING arm's look band is 7.4–18.7° against the quiet arms' 14.5–15.0°, so no residual may be
+quoted as a median there (the ring/quiet VERDICT is always on rms r) — and the ≈0.055 onset had to be RE-MEASURED on
+this wire (≈ −0.056, from a constant-R̂ sweep, whose R̂' ≡ 0 makes its residual unambiguous). What IS legitimate on a
+ringing arm is comparing the bench and loop numbers TO EACH OTHER, since both come from identical frames — and the
+verifier's first run failed at 1.6× using a MEAN OF ABSOLUTES (inflated by the ring's symmetric excursions); the
+MEDIAN gives 3.7×. (5494)**
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
@@ -753,13 +778,22 @@ being a property of the HARDWARE and becomes a property of the ENGAGEMENT, becau
 curve's LOCAL DERIVATIVE where the seeker is actually looking. A crossing target holds a sustained lead, so a
 BORESIGHT-characterized compensator has a HARDWARE residual of exactly 0.000 and rings anyway; the same glass
 goes quiet when R̂ is set to the slope the ENGAGEMENT flies. ⇒ "know your slope" becomes "KNOW YOUR SLOPE CURVE
-OVER THE BAND THE ENGAGEMENT VISITS".** The NEXT named candidates: LOOK-ANGLE-SCHEDULED `R̂(look)` (the
-engineering answer to slice 28 exactly as 27 was to 26 — its single-point version is already measured);
+OVER THE BAND THE ENGAGEMENT VISITS". And slice 29 cashed 28's OWN named successor, `R̂(look)` — the SCHEDULED
+compensator — where the answer turns out to hinge on something a scalar never had to face: a schedule must be
+EVALUATED somewhere, and the only look angle a guidance computer owns is the one the radome already bent. ⇒ what
+closes the loop is the residual at the COMPENSATOR'S OWN INDEX, and a schedule that is a BETTER model of the glass
+can ring while a much worse one stays quiet.** The NEXT named candidates: ⭐ THE ENVELOPE / ONE-SIDEDNESS SLICE
+(slice 29's own strongest successor, fully measured at ITS gate 0 and not shipped because it is
+MULTI-ENGAGEMENT: over-compensate deliberately to the envelope's worst-case slope and pay for it in ω_ratio /
+miss. ⚠ Its enabling change is small and precedented — a presence-gated `cross_speed_mps` on ConstantVelocity,
+exactly slice 18's `alt_hold_m` — and it would ALSO retire the constraint that forced slice 28 to relocate two
+proofs);
 an IMPERFECT GYRO (noise / bias / scale-factor — slice 27's gyro is
 PERFECT by §1, and a scale-factor error is exactly a multiplicative error on R̂, i.e. it lands back on the
 residual, which makes it the cheapest well-motivated successor); ESTIMATING R̂ IN FLIGHT (⚠ slice 26's P7A is a
 REAL obstacle — the parasitic gain is NOT identifiable in closed loop, so such a slice must first answer *what
-excites the estimate?*); the ANGLE-DOMAIN corrector as its own A/B on worse glass (built and measured at slice
+excites the estimate?* — and ⚠ slice 29 SHARPENS it: the estimator would have to identify a SHAPE from a signal
+whose own index is bent); the ANGLE-DOMAIN corrector as its own A/B on worse glass (built and measured at slice
 27's gate 0, not shipped); a 2-D slope `R(look_az, look_el)` or an ASYMMETRIC error curve (slice 28 ships ONE
 ODD scalar curve PER AXIS — a symmetric radome, and a manufacturing asymmetry would make the crossing DIRECTION
 matter); SUSTAINED-TRACKING / route (b) — an out-of-plane MANEUVERING

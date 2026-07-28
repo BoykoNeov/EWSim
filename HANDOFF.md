@@ -673,9 +673,23 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   `dε/dlook` rather than `ε`: a radome inside its boresight-ERROR spec everywhere can still ring
   (matched-secant quiet, matched-derivative ringing, same bend at the operating point). ⚠ It also
   measured that **slice 26/27's `≈ 0.38` is NOT geometry-free** (`≈ 0.52` on a crossing wire, with no
-  curve involved) — the FORM of the law transfers, not the constant. The remaining deferrals from that
-  thread: **LOOK-ANGLE-SCHEDULED `R̂(look)`** (the engineering answer to slice 28 exactly as 27 was to
-  26; its single-point version is already measured), an IMPERFECT GYRO (noise /
+  curve involved) — the FORM of the law transfers, not the constant. **Slice 29 then CASHED that thread's own named successor — `R̂(look)`, the SCHEDULED compensator — and
+  found that making the belief a FUNCTION raises a question a scalar never had to answer: EVALUATED
+  WHERE? The only look angle a guidance computer owns is the one the radome already bent, so what
+  closes the loop is the residual at the COMPENSATOR'S OWN INDEX. The core ships both numbers and they
+  DISAGREE: a schedule that is a BETTER model of the glass RINGS while a 6.3× worse one stays QUIET,
+  and a PERFECT model still leaves a non-zero loop residual. Slice 27's "compensate with a signal not
+  itself corrupted by what you are compensating" returns in the RATE domain — THE IMMUNITY WAS NEVER
+  THE DOMAIN, IT WAS THE CONSTANCY. ⚠⚠ And its gate 0 REFUTED four framings, two of which are results:
+  the lead angle on a settled collision course is CONSTANT BY CONSTRUCTION (so a schedule on slice
+  28's wire IS a scalar), the loop needs DWELL at a supercritical residual (so a SWEPT band does not
+  license one either — the best post-hoc scalar matches the schedule), and ⭐⭐ THE RADOME CONSTRAINT
+  IS ONE-SIDED, so a scalar at the envelope's worst-case slope is unconditionally stable ⇒ GAIN
+  SCHEDULING BUYS PERFORMANCE, NOT STABILITY.** The remaining deferrals from that thread:
+  ⭐ **THE ENVELOPE / ONE-SIDEDNESS SLICE** (slice 29's strongest successor — measured at its gate 0,
+  not shipped because it is multi-engagement; its enabling change is a presence-gated
+  `cross_speed_mps` on `ConstantVelocity`, exactly slice 18's `alt_hold_m`, which would ALSO retire
+  the constraint that forced slice 28 to relocate two proofs), an IMPERFECT GYRO (noise /
   bias / scale-factor, the cheapest successor — a scale-factor error lands back on the residual),
   ESTIMATING `R̂` IN FLIGHT (blocked on slice 26's non-identifiability in closed loop), the
   ANGLE-DOMAIN corrector as its own A/B, a 2-D slope `R(look_az, look_el)` or an ASYMMETRIC error
