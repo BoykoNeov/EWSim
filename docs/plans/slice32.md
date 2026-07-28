@@ -520,11 +520,46 @@ fov 25 on the same crossing) — the verdict is asserted, the miss quoted.
 * **S32UI OK** — 8 teeth including the marker mirror, the three-state verdict, the latch in both
   directions, the two-ENTITY slider pair (a first for this arc), and a **FOURTEEN-way** value guard.
 * **Smoke-load** — server reaches `EWSIM_SERVER_DONE`.
-* **Two windowed shots at the same range (~2450 m)**: "TRACK BROKEN — lead outgrew FOV" with
-  *look 45.6° vs FOV 25.0° ← OUTSIDE* and *seeker: COASTING* against "IN THE WINDOW — FOV holds the
-  lead" with *look 28.5° vs FOV 30.0°* and *seeker: MEASURING*. ⚠ Observation, not a slice-32 defect:
-  the shared readout panel overlaps the HUD column in a 1152-wide window on this view, so the lines
-  read dim — every quantity is also in the readout, and the layout is 26–31's.
+* **Two windowed shots at the same range (~2450 m)**: "TRACK BROKEN — lead outgrew FOV" /
+  *cross-range +4496 m* / *look 45.6° vs FOV 25.0° ← OUTSIDE* / *ENGAGEMENT needs a lead of 30.4°* /
+  *seeker: COASTING*, against "IN THE WINDOW — FOV holds the lead" / *cross-range +4153 m* /
+  *look 28.5° vs FOV 30.0°* / *lead 28.9°* / *seeker: MEASURING*.
+
+### ⚠⚠ THE POST-REVIEW CATCH: THE THIRD WIDTH DEFECT, AND MY FIRST DIAGNOSIS OF IT WAS WRONG
+
+The first shot pair was missing **the y = 88 CROSS-RANGE line entirely** — this slice's own
+DISCRIMINATING TOOTH, the number that separates its mechanism from 23's and 25's and the one the
+verifier asserts as `max|y|` — and the y = 132 LEAD line survived only as `he requirement`, i.e. half
+of the "demand beside limit" pairing the whole slice exists to show. It was written up as *"the
+shared readout panel overlaps the HUD column… the layout is 26–31's"*, which is **FALSE**: the
+occluders sit at y ≈ 83 and y ≈ 127, ABOVE the readout panel, and they are **slice 32's OWN KNOB
+LABELS** — drawn full-width in the UI CanvasLayer, which paints over the Node2D `_draw`. At 172 and
+157 characters they were the longest in the arc (slice 30's longest is ~137 and stops short of the
+HUD column). ⇒ the budget is **~110 characters** against the HUD column at `vp.x − 430`, both labels
+were shortened to 76/68, and the pair was re-shot. **This is the THIRD occurrence of the width class
+in this one slice** (the clipped headline was the second), and the generalization is worth the entry:
+*measure the KNOB-LABEL width against `vp.x − 430`, not only the HUD strings.* Slice 21's rule, in a
+third costume — **a number that does not print is not a proof**, and convention 14's fourth proof
+exists precisely because headless skips `_draw`.
+
+### The other two post-review items
+
+* ⚠ **ONE BEHAVIOUR CHANGE TO SLICES 26–31, NOW NAMED AND GIVEN A TOOTH.** `_radome_qpeak` was never
+  cleared on `reset`, so pressing Reset on a RINGING wire carried a stale RINGING verdict ~0.5 s into
+  the re-launch — the headline and the residual line both lying about a missile just re-launched.
+  That is exactly the defect slice 32's LATCH is built to avoid one slice later, so leaving the two
+  instruments asymmetric in the same HUD would have been the bug this arc keeps catching. It is
+  cleared beside `_fov_lost`, and `slice32_ui_test.gd` now drives `_on_reset_pressed()` on the
+  slice-26 mirror and asserts it — the sixteen prior UI tests are static-fixture and never call that
+  handler, so their passing said nothing about it.
+* ⚠ **THE VERIFIER FLIES TWO OUT-OF-DOMAIN VALUES**, `fov = 0` and `fov = 180`, reached through
+  `set_param` (which validates knob-ness, not range) — the **SLICE-24 PRECEDENT**, now stated at the
+  constant rather than left implicit. It matters most for `fov = 180`, which carries the knob-vs-rung
+  IDENTITY: a claim about the domain, made at a value a student cannot drag to. It stands as a
+  KEY-ABSENT PROXY (there is no way to un-author a comp key over the wire), and the domain CEILING
+  claim rests on `fov = 40`, which IS reachable and IS asserted bit-identical beside it.
+* Noted, not changed: the tightest envelope cell is **(20°, 260) at lead 19.52 vs fov 20 — 0.48° of
+  margin**. It is the cell that flips first if the wire is ever retuned.
 * **Byte-identity PROVEN ON THE WIRE**: `slice30_verify.gd` and `slice31_verify.gd` re-run against
   live servers (31 reproduces rms_r **0.42395**, cures **13.3×** / **7.2×**, `radome_aim_gyro`
   **−0.3474**, replay 0.0). All **sixteen** prior UI tests (16–31) re-run green. Julia suite

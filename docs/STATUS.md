@@ -4355,9 +4355,31 @@ zero twice per cycle so its verdict must FORGET, while a track break is a thing 
 instantaneous `seeker_valid` blinks green when the runaway swings the LOS back through the window.
 ⚠ RANGE-GATED at r > 200 m so the endgame excursion cannot paint a healthy intercept as a lost track.
 
-⚠ **THE SHOT CAUGHT A CLIPPED HEADLINE — the slice-26/28 defect, third occurrence**: "TRACK BROKEN —
-the lead outgrew the FOV" (39 chars) ran off the right edge at 20 px from `vp.x − 430`, and the clipped
-word was *FOV*. Budget ~34; all three strings shortened and re-shot.
+⚠⚠ **THE SHOT HARNESS CAUGHT THE WIDTH CLASS TWICE IN THIS ONE SLICE, AND THE SECOND DIAGNOSIS WAS
+WRONG BEFORE THE ADVISOR CORRECTED IT.** (a) The HEADLINE was CLIPPED — "TRACK BROKEN — the lead
+outgrew the FOV" (39 chars) ran off the right edge at 20 px from `vp.x − 430`, and the clipped word was
+*FOV*; budget ~34, all three strings shortened. (b) Then the re-shot pair was **missing the y = 88
+CROSS-RANGE line entirely** — this slice's own DISCRIMINATING TOOTH, the number that separates its
+mechanism from 23's and 25's — with the y = 132 LEAD line surviving only as *"he requirement"*. That
+was first written up as "the shared readout panel overlaps the HUD column, the layout is 26–31's",
+which is **FALSE**: the occluders sit at y ≈ 83 and y ≈ 127, ABOVE the readout panel, and they are
+**slice 32's OWN KNOB LABELS**, drawn full-width in the UI CanvasLayer which paints over the Node2D
+`_draw`. At 172 and 157 characters they were the longest in the arc (slice 30's longest is ~137 and
+stops short of the column). ⇒ the budget is **~110 characters** against `vp.x − 430`, both were
+shortened to 76/68, and the pair re-shot. **THE GENERALIZATION: measure the KNOB-LABEL width against
+`vp.x − 430`, not only the HUD strings** — slice 21's *a number that does not print is not a proof*, in
+a third costume, and the reason convention 14's fourth proof exists at all.
+
+⚠ **ONE BEHAVIOUR CHANGE TO SLICES 26–31, NAMED AND GIVEN A TOOTH** (advisor): `_radome_qpeak` was
+never cleared on `reset`, so pressing Reset on a RINGING wire carried a stale RINGING verdict ~0.5 s
+into the re-launch. That is exactly the defect slice 32's LATCH is built to avoid one slice later, so
+the asymmetry is fixed rather than left; `slice32_ui_test.gd` drives `_on_reset_pressed()` on the
+slice-26 mirror and asserts it (the sixteen prior UI tests are static-fixture and never call that
+handler). ⚠ **AND THE VERIFIER FLIES TWO OUT-OF-DOMAIN VALUES** — `fov = 0` and `fov = 180`, through
+`set_param`, which validates knob-ness and not range: the **SLICE-24 PRECEDENT**, now stated at the
+constant. It matters most for `fov = 180`, which carries the knob-vs-rung IDENTITY at a value a student
+cannot drag to; it stands as a KEY-ABSENT PROXY, and the domain CEILING claim rests on the reachable
+`fov = 40` asserted bit-identical beside it.
 
 **Four proofs green.** S32V (11 arms, replay posdiff **0.0**, `aero_sat`/`defl_sat` 0 in band in every
 arm, the quiet arms inside the 30° budget at 29.01° peak while the broken ones deliberately are not —
@@ -4365,10 +4387,9 @@ that runaway IS the mechanism); S32UI (8 teeth: the marker mirror, the three-sta
 in both directions, the two-ENTITY slider pair [a first for this arc — the WINDOW belongs to the
 missile and the LEAD to the engagement], and a **FOURTEEN-way** value guard); the smoke-load
 (`EWSIM_SERVER_DONE`); and TWO windowed shots at the same range (~2450 m) — "TRACK BROKEN — lead
-outgrew FOV" / *look 45.6° vs FOV 25.0° ← OUTSIDE* / *seeker: COASTING* against "IN THE WINDOW — FOV
-holds the lead" / *look 28.5° vs FOV 30.0°* / *seeker: MEASURING*. ⚠ Observation, not a slice-32
-defect: the shared readout panel overlaps the HUD column in a 1152-wide window on this view, so the
-lines read dim — every quantity is also in the readout, and the layout is 26–31's.
+outgrew FOV" / *cross-range +4496 m* / *look 45.6° vs FOV 25.0° ← OUTSIDE* / *ENGAGEMENT needs a lead
+of 30.4°* / *seeker: COASTING*, against "IN THE WINDOW — FOV holds the lead" / *cross-range +4153 m* /
+*look 28.5° vs FOV 30.0°* / *lead 28.9°* / *seeker: MEASURING*.
 
 **Byte-identity PROVEN ON THE WIRE**: `slice30_verify.gd` and `slice31_verify.gd` re-run against live
 servers (31 reproduces rms_r **0.42395**, cures **13.3×** / **7.2×**, `radome_aim_gyro` **−0.3474**,

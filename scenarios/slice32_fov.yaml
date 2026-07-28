@@ -215,7 +215,19 @@ knobs:
   # corollary note above); `sigma_seek` degrades the lesson beside it; `elevation_deg` is the
   # slice-19 DEAD-knob class AND gate 0's P5 artifact; `af_alpha_max` is the arc's aero ceiling,
   # held at 0.0 % here on purpose.
+  #
+  # ⚠⚠ THE LABELS ARE LENGTH-BUDGETED, AND THAT IS NOT COSMETIC — THE SHOTS CAUGHT IT (advisor).
+  # Knob labels are drawn FULL-WIDTH in the UI CanvasLayer, which paints OVER the Node2D `_draw`
+  # HUD, and the HUD column starts at `vp.x − 430` (x = 722 in a 1152-wide window). At ~6.2 px per
+  # character from x = 16 that is a budget of ~110 CHARACTERS. The first draft ran 172 and 157 —
+  # the longest in the arc, against slice 30's ~137 — and they covered the y = 88 CROSS-RANGE line
+  # (this slice's DISCRIMINATING TOOTH: the number that separates its mechanism from slices 23's
+  # and 25's, and the one the verifier asserts as `max|y|`) and the y = 132 LEAD line (half of the
+  # "demand beside limit" pairing the whole slice exists to show, which survived as "he
+  # requirement"). ⇒ slice 21's rule, in a third costume: A NUMBER THAT DOES NOT PRINT IS NOT A
+  # PROOF — and the width to measure is the KNOB LABEL's, not only the HUD string's. The reasoning
+  # those long labels carried lives in the comments above, where it belongs.
   - {target: m1, key: seeker_fov_deg, min: 20.0, max: 40.0,
-     label: "SEEKER: field of view (deg, total off-boresight) — widen past the ENGAGEMENT's lead and the track holds; below it the seeker loses the target while the lead is still building"}
+     label: "SEEKER: field of view (deg) — it must contain the lead the ENGAGEMENT demands"}
   - {target: tgt1, key: cross_speed_mps, min: 0.0, max: 400.0,
-     label: "ENGAGEMENT: target crossing speed (m/s) — it sets the LEAD the missile must hold, and the lead is what the window has to contain; at 0 there is no lead at all"}
+     label: "ENGAGEMENT: target crossing speed (m/s) — it sets the LEAD to contain"}

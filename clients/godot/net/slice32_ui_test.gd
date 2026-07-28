@@ -261,6 +261,18 @@ func _initialize() -> void:
 		return _fail("⭐ the slice-26 MIRROR must still latch its PITCH peak-hold (fed |omega_q| = 1.31) — the FOV branch is inserted AHEAD of the radome cascade and must not have disturbed it. Got %.4f" % _sb26._radome_qpeak)
 	if _sb26._fov_lost:
 		return _fail("the slice-26 MIRROR must not latch a track break — it ships no `seeker_valid` at all, so the latch must be gated on the key's presence and not default to 'lost'")
+	# ⚠ AND THE ONE BEHAVIOUR CHANGE SLICE 32 MAKES TO 26–31, GIVEN A PROOF RATHER THAN A COMMENT
+	# (advisor): `_radome_qpeak` was never cleared on `reset`, so pressing Reset on a RINGING wire
+	# carried a stale RINGING verdict ~0.5 s into the re-launch — the headline and the residual line
+	# both lying about a missile that has just been re-launched. That is precisely the defect the
+	# slice-32 LATCH is built to avoid one slice later, so leaving the two instruments asymmetric in
+	# the same HUD would have been the bug this arc keeps catching. ⚠ The sixteen prior UI tests are
+	# static-fixture and never call `_on_reset_pressed`, so their passing says NOTHING about this.
+	_sb26._on_reset_pressed()
+	if _sb26._radome_qpeak != 0.0:
+		return _fail("`reset` must clear the slice-27 peak-hold (got %.4f) — otherwise the re-launched missile inherits the previous run's RINGING verdict for the length of the hold" % _sb26._radome_qpeak)
+	if _sb26._fov_lost:
+		return _fail("`reset` must also clear the slice-32 track-break latch")
 	# (b) slice 31 — the deepest radome wire, still routed by `radome_view` and NOT by the FOV marker
 	_sb31 = _build_sandbox()
 	_sb31._on_scenario({

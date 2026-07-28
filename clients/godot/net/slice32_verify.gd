@@ -104,6 +104,14 @@ const VY_SHIP := 400.0            # the shipped crossing: the top of slice 30's 
 const FOV_CURE := 30.0            # CURE A — widen the seeker (free)
 const VY_CURE := 320.0            # CURE B — decline the crossing (not free)
 const FOV_MAX := 40.0             # the declared domain ceiling
+# ⚠ TWO OF THE ARMS BELOW FLY VALUES OUTSIDE THE DECLARED [20, 40] SLIDER DOMAIN — `fov = 0` and
+# `fov = 180` — reached through `set_param`, which validates that a key is a KNOB and not that a value
+# is in range. That is legitimate and it is the SLICE-24 PRECEDENT, stated rather than left implicit
+# (its recovery arm drove `af_tau_roll` to 0.01, below the slider's own 0.1 floor: "a headless
+# causation probe, not in-range"). ⚠ It matters most for `fov = 180`, which carries the knob-vs-rung
+# IDENTITY — a claim about the domain, made at a value a student cannot drag to. It stands as a
+# KEY-ABSENT PROXY (there is no way to un-author a comp key over the wire), and the domain CEILING
+# claim rests on `fov = 40`, which IS reachable and IS asserted bit-identical beside it.
 const FOV_WIDE := 180.0           # the knob-vs-rung identity value (⚠ NOT "the whole sphere" — the
                                   # angle-space radius hypot(az, el) has supremum ~201.246 deg; this
                                   # is an EMPIRICAL statement about what THIS engagement reaches, and

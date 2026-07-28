@@ -2445,7 +2445,14 @@ func _on_reset_pressed() -> void:
 	_aero_sat_now = false
 	_post_stall_now = false               # slice-22: the stall tell restarts with the re-launch too
 	_fov_lost = false                     # slice-32: the track-break latch restarts with the re-launch
-	_radome_qpeak = 0.0                   # …and so does the slice-27 peak-hold (same reason)
+	# ⚠ AND THIS IS A DELIBERATE BEHAVIOUR CHANGE TO SLICES 26–31, NAMED RATHER THAN SLIPPED IN
+	# (advisor): `_radome_qpeak` was never cleared on reset, so pressing Reset on a RINGING wire
+	# carried a stale RINGING verdict ~0.5 s into the re-launch (the hold is ~0.5 s at 62.5 Hz) —
+	# the headline and the residual line both lying about a missile that has just been re-launched.
+	# It is the same defect the slice-32 latch is built to avoid one slice later, so it is fixed
+	# here rather than left as an asymmetry between two instruments in the same HUD. A tooth in
+	# `slice32_ui_test.gd` drives `_on_reset_pressed()` on the slice-26 mirror and asserts it.
+	_radome_qpeak = 0.0
 	_t3d_trail_pts.clear()                # slice-18: the 3-D target trail restarts with the re-launch
 	# `reset` reloads the YAML server-side → propagation reverts to the scenario default,
 	# but the server sends no new handshake. Resync the local fidelity so the badge/button
