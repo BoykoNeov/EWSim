@@ -1666,8 +1666,12 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
               get(w.fidelity, :airframe, :point_mass) === :six_dof
     # ⚠ `fov_rad` is DELIBERATELY LEFT UNASSIGNED on the non-FOV path (advisor) — an `= Inf`
     # else-arm would SILENTLY supply a plausible value to any future reader, where an unassigned
-    # local throws and the suite catches it. Gate-2 telemetry must read `c[:seeker_fov_deg]` under
-    # `_fov_on`, never this local. The convention-6 "no Inf/NaN to JSON" hazard, one step upstream.
+    # local throws and the suite catches it. The convention-6 "no Inf/NaN to JSON" hazard, one step
+    # upstream. ⚠ SO THE `seeker_fov_deg` READOUT SHIPS `c[:seeker_fov_deg]`, NEVER THIS LOCAL: it
+    # is the AUTHORED value in DEGREES, where this is the converted radians AND the wrong number on
+    # a negative slider. Slice 33's `seeker_fov_margin_deg` DOES pass this local to the kernel —
+    # legally, because that readout sits under the very same `_fov_on` gate, and because the margin
+    # is defined on the CLAMPED window (which the kernel owns) rather than the authored one.
     if _fov_on
         fov_rad = deg2rad(Float64(c[:seeker_fov_deg]))
         in_fov  = seeker_in_fov(c[:att_q]::Quat, û_tru, fov_rad)
@@ -2131,6 +2135,29 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # shipped (`boresight_angle ≡ hypot(look_angles(att, û_tru)...)`, same inputs, same ops), so
         # the duplicate write is bit-for-bit consistent rather than a second opinion.
         tel["$sid.look_angle"] = _finite(rad2deg(boresight_angle(c[:att_q]::Quat, û_tru)))
+        # SLICE 33 — ⭐ HOW MUCH WINDOW IS LEFT, SIGNED. `max(fov,0) − boresight_angle`, in the same
+        # degrees as the two keys above, and its SIGN IS THE VERDICT (`margin ≥ 0 ⟺ seeker_valid`)
+        # — slice 18's `terrain_clearance_m` precedent exactly: ship the margin so the client never
+        # re-derives the test (convention 13 — the client NEVER re-tests occlusion). What it buys is
+        # a HUD needle that a ringing radome is visibly seen to EAT, which is slice 33's whole
+        # lesson: the parasitic loop's excursion is spent out of THIS budget.
+        # ⚠ THE KERNEL IS CALLED AGAIN HERE rather than hoisting a local out of the `_fov_on` block
+        # above (advisor). `look_angle` on the line above already has exactly this posture, and it
+        # keeps ONE flying comparison site (`seeker_in_fov`, ~line 1673) instead of creating an
+        # ambiguity about which kernel flies; three `boresight_angle` calls a tick is nothing at 27k
+        # ticks/s. Same `att`, same `û_tru`, same `fov_rad` ⇒ the shipped sign and the flying
+        # verdict are the SAME BITS, not two opinions — which is what `test_missile.jl` pins by
+        # walking a broken trace and finding the 1→0 flip on the exact tick this crosses zero.
+        # ⚠ `_finite_coord`, NOT `_finite` (the slice-29 `k̂` catch, and here it is not hypothetical):
+        # the margin is NEGATIVE on the whole out-of-window side, by ~65° on a broken arm's runaway
+        # and by `-fov` on the never-locked degenerate, and `_finite` clamps only the UPPER bound.
+        # ⚠⚠ AND IT USES THE CLAMPED WINDOW WHILE `seeker_fov_deg` ABOVE SHIPS THE AUTHORED ONE, so
+        # the two keys DO NOT RECONSTRUCT THIS ONE on a negative slider (gate 1's catch — the
+        # kernel's docstring carries the reasoning). That divergence is the reason convention 13
+        # requires the key rather than letting the client subtract: a client doing `fov − look` is
+        # off by exactly `|fov|` there, on the very side the never-locked state is defined by.
+        tel["$sid.seeker_fov_margin_deg"] =
+            _finite_coord(rad2deg(seeker_fov_margin(c[:att_q]::Quat, û_tru, fov_rad)))
         # ⭐⭐ THE ENGAGEMENT'S OWN REQUIREMENT, BESIDE THE WINDOW THE HARDWARE HAS — the pair IS the
         # slice. `V_m·sin λ = V_t·sin θ` (frames.jl `collision_lead_angle`): the lead this collision
         # triangle DEMANDS, in the same degrees as `look_angle` and `seeker_fov_deg`, so a student

@@ -6257,3 +6257,431 @@ end
         end
     end
 end
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+# SLICE 33 — THE RING IS AN FOV BUDGET ITEM: WHAT THE PARASITIC LOOP COSTS YOU IS THE ENVELOPE.
+#
+# Slices 26–31 spent six slices on a missile that shakes itself, and every one of them recorded,
+# as a standing fact, that THE RINGING ARM STILL HITS (slice 26: "the MISS is NOT the metric —
+# the ringing arm STILL HITS (2.18 m)"), which is why the whole family measures `rms q` / `rms r`.
+# It is true here too: across the R̂ ladder below, not one ringing arm misses by more than 3.6 m.
+# ⭐ THE RING WAS BENIGN BECAUSE THE SEEKER HAD AN INFINITE WINDOW. Slice 32 gave it a real one
+# and measured what FOV an engagement demands — the collision triangle's own lead. Give the SAME
+# ring a real window and it misses by KILOMETRES, because the excursion the limit cycle adds to
+# the look angle is spent out of exactly the budget slice 32 measured.
+#
+# ⇒ THE FOV A SEEKER NEEDS IS THE ENGAGEMENT'S LEAD **PLUS THE PARASITIC LOOP'S EXCURSION**, and
+# slice 30's design rule buys the whole second term back.
+#
+# ⚠ NO new knob, no new rung, no new instability, no new cap, and NO new draw: both halves already
+# fly (26–31's glass, 32's window) and both sliders already ship. What is new is the COMPOSITION,
+# ONE telemetry number that measures it (`seeker_fov_margin_deg`), and the design rule it yields.
+# There is therefore NO draw-count testset here, deliberately: no new branch and no new `randn` —
+# slice 32's own corollary already flew radome × FOV arms under its asserted 2-draw lockstep.
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+@testset "THE RING IS AN FOV BUDGET ITEM wired (slice 33 — the loop costs you the ENVELOPE)" begin
+    dt = 1.0e-3
+
+    # Slice 32's `fov_world` with THE GLASS PUT BACK — and that inversion is the slice. Slice 32
+    # deleted the radome keys BY DESIGN (convention 9: a ringing arm's look angle swings BECAUSE it
+    # rings, so it would be the LOOP's angle and not the ENGAGEMENT's). Here the composition IS the
+    # lesson, which is the legitimate exemption — so the glass is on by default, and `R = nothing`
+    # is the radome-free REFERENCE rather than the showcase.
+    # ⚠ `af_alpha_max` is a KEYWORD here because slice 26's own instrument for the ring's AMPLITUDE
+    # is exactly that knob ("the ceiling BOUNDS the cycle, the radome decides whether there IS
+    # one") — it is the CAUSATION probe below and it is HELD on the shipped wire; it is a
+    # confounded lever (slice 20 disqualified it for the induced-drag bill) and must never become
+    # a slider.
+    function budget_world(; fov = nothing, vy = 200.0, seed = 32, R = -0.03, A = -0.15,
+                            Rhat = nothing, alpha_max = 0.3)
+        w = World(seed = seed,
+                  fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                 :autopilot => :alpha, :airframe => :six_dof,
+                                                 :seeker => :filtered, :seeker_axes => :az_el))
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.0,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => alpha_max, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => 8.0, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => 5.0e-5, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true)
+        if R !== nothing
+            comp[:radome_slope] = R; comp[:radome_ripple] = A; comp[:radome_ripple_k] = 12.0
+            Rhat === nothing || (comp[:radome_slope_est] = Rhat)
+        end
+        fov === nothing || (comp[:seeker_fov_deg] = fov)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 2000.0, 4200.0),
+                                 vel = Vec3(0.0, vy, 0.0),
+                                 comp = Dict{Symbol,Any}(:cross_speed_mps => vy))
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:t1)]
+    end
+
+    # ⚠⚠ SEAM DISCIPLINE 1, BUILT INTO THE RETURN VALUE: `look_max` IS ONLY THE RING'S EXCURSION ON
+    # AN ARM WITH NO WINDOW. On a windowed arm it is the POST-LOCK-LOSS RUNAWAY (~90°, slice 32's
+    # signature) and reads nothing about the loop. The two are therefore bound at the CALL SITE as
+    # `free_*` and `win_*` below, and the ISOLATION testset asserts the difference rather than
+    # leaving it to a comment. ⇒ THE PREDICTOR AND THE PREDICTED NEVER COME FROM THE SAME RUN.
+    #
+    # ⚠⚠ AND `rms_r` IS `NaN`, NOT `0.0`, WHEN THE BAND IS EMPTY — a GATE-2 FINDING and the reason
+    # `n_band` is returned at all. A badly broken arm's CPA is 3697 m, so it NEVER ENTERS the arc's
+    # r ∈ [500, 3000] m band: a `sum/max(n,1)` would have printed a beautifully quiet `0.00000`
+    # computed from ZERO SAMPLES, which is the gate-1 post-review's own catch ("a column that
+    # reproduces because it counts nothing is not a reproduction") one gate later, in a new
+    # quantity. Every test that quotes a band number asserts `n_band > 0` first.
+    #
+    # Range gates are slice 32's, inherited with their reasons: `r > 200` on every look-angle and
+    # out-of-window number (ungated, the endgame LOS swing makes a QUIET arm read a few hundredths
+    # of a percent out — [[ewsim-missile-verifier-sampling]]), band [500, 3000] on `rms r`/`aero_sat`.
+    #
+    # ⚠⚠ AND `r_firstout` IS UNGATED ON PURPOSE — IT IS THE GATE'S OWN AUDIT, AND A GATE-2 FINDING
+    # PAID FOR IN FIVE FAILING ASSERTS. The first draft claimed a window that fits the excursion is
+    # BIT-IDENTICAL to no window at all (slice 32's `cureA.miss === ref.miss`, inherited). IT IS
+    # NOT, and the reason is the very thing the r > 200 gate exists to exclude: EVERY held arm here
+    # leaves the window in the last metres — first out at r = 0.18–8.5 m — because the LOS unit
+    # vector swings through a huge angle as r → 0 (look angle 21–162° at those ticks). Those few
+    # coasting ticks perturb the CPA by 5e−13…1.4e−7 m. ⇒ THE EXACT CLAIM BELONGS ON THE GATED
+    # QUANTITIES (`out`, `look_max` — both bit-exact) and the miss carries a NAMED TOLERANCE with a
+    # measured reason. Slice 32's `===` passed only because its 30° window happened not to be
+    # crossed before ITS CPA — luck of a wider window, not a law.
+    function arm(; n = 22000, kw...)
+        w, sub = budget_world(; kw...)
+        miss = Inf; r_prev = Inf; look_max = 0.0; marg_min = Inf; worst = NaN
+        nt = 0; n_out = 0; n_band = 0; n_sat = 0; sum_r2 = 0.0; t_break = NaN; r_firstout = NaN
+        for k in 1:n
+            tick!(w, sub, dt); empty!(w.events)
+            m = w.entities[:m1]; t = w.entities[:t1]
+            tel = get(w.env, :telemetry, Dict{String,Any}())
+            r = los_range(m.pos, t.pos)
+            haskey(tel, "m1.radome_slope_worst") && (worst = tel["m1.radome_slope_worst"])
+            get(tel, "m1.seeker_valid", 1.0) == 0.0 && isnan(r_firstout) && (r_firstout = r)
+            if r > 200
+                nt += 1
+                if get(tel, "m1.seeker_valid", 1.0) == 0.0
+                    n_out += 1
+                    isnan(t_break) && (t_break = k * dt)
+                end
+                haskey(m.comp, :att_q) && (look_max = max(look_max,
+                    rad2deg(boresight_angle(m.comp[:att_q]::Quat, los_unit(m.pos, t.pos)))))
+                haskey(tel, "m1.seeker_fov_margin_deg") &&
+                    (marg_min = min(marg_min, tel["m1.seeker_fov_margin_deg"]))
+            end
+            if 500 < r < 3000
+                n_band += 1
+                ω = get(m.comp, :omega_body, zero(Vec3)); sum_r2 += ω[3]^2
+                get(tel, "m1.aero_sat", 0.0) == 1.0 && (n_sat += 1)
+            end
+            r < miss && (miss = r)
+            r > r_prev && r_prev < 5000 && break
+            r_prev = r
+        end
+        return (; miss, look_max, t_break, marg_min, worst, n_band, r_firstout, w,
+                  rms_r    = n_band == 0 ? NaN : sqrt(sum_r2 / n_band),
+                  out      = 100n_out / max(nt, 1),
+                  sat_band = n_band == 0 ? NaN : 100n_sat / n_band)
+    end
+
+    # HELD, spelled out once and used by every testset below, so the claim is made in exactly one
+    # place: the arm never lost the target ANYWHERE ON THE APPROACH (bit-exact, in the gated
+    # quantity), it flew the free arm's own excursion to the last bit, and its miss matches the
+    # free arm's to within the endgame perturbation measured above.
+    function held(win, free)
+        @test win.out == 0.0                              # not one out-of-window tick, r > 200
+        @test win.look_max === free.look_max              # …and the SAME excursion, bit-for-bit
+        @test isnan(win.r_firstout) || win.r_firstout < 200.0   # any drop-out is ENDGAME ONLY
+        @test abs(win.miss - free.miss) < 1.0e-6          # the last few coasting ticks, and no more
+    end
+
+    # THE SHARED LADDER, computed ONCE. Glass R₀ = −0.03, A = −0.15 ⇒ `radome_slope_worst` = −0.33
+    # (slice 30's aim point), against a vy = 200 m/s crossing target — slice 28's geometry, which is
+    # what holds a SUSTAINED lead. `R̂` walks from slice 30's design rule to slice 28's boresight
+    # characterization, and the ring grows monotonically along it.
+    free_rule = arm(Rhat = -0.33)      # slice 30's rule: quiet
+    free_24   = arm(Rhat = -0.24)      # the onset (slice 30's "last decisive ring", −0.24 / 0.709)
+    free_18   = arm(Rhat = -0.18)
+    free_03   = arm(Rhat = -0.03)      # slice 28's boresight compensator: the loudest ring
+    ref_free  = arm(R = nothing)       # NO GLASS AT ALL — the engagement's own requirement
+
+    @testset "the MARGIN on the wire — ONE number whose SIGN is the flying verdict" begin
+        # ⭐ `seeker_fov_margin_deg` = `max(fov,0) − boresight_angle`, SIGNED, slice 18's
+        # `terrain_clearance_m` precedent: shipped so the client never re-derives the test
+        # (convention 13). The HUD needle a ringing radome is visibly seen to EAT.
+        let (w, sub) = budget_world(Rhat = -0.03, fov = 21.0)
+            flip = 0; cross = 0; agree_max = 0.0
+            for k in 1:8000
+                tick!(w, sub, dt); empty!(w.events)
+                tel = w.env[:telemetry]::Dict{String,Any}
+                v = tel["m1.seeker_valid"]; mg = tel["m1.seeker_fov_margin_deg"]
+                # AT A POSITIVE WINDOW the shipped keys DO reconstruct it, exactly — same kernel,
+                # same `û_tru`, same tick.
+                agree_max = max(agree_max,
+                                abs(mg - (tel["m1.seeker_fov_deg"] - tel["m1.look_angle"])))
+                v == 0.0 && flip == 0 && (flip = k)
+                mg < 0.0 && cross == 0 && (cross = k)
+            end
+            @test agree_max < 1.0e-12
+            # ⭐⭐ THE TOOTH THAT IS NOT A TAUTOLOGY (advisor). `margin ≥ 0 ⟺ seeker_in_fov` is
+            # `x == x` AT THE KERNEL (gate 1 refused to ship it for exactly that reason), but ON
+            # THE WIRE it is a claim about the SEAM: that the readout site passes the PREDICATE'S
+            # OWN inputs — the TRUTH LOS `û_tru` and the CLAMPED radian window — and not an
+            # estimate, not the authored degrees, not a stale comp key. Walk a trace that breaks
+            # and the 1→0 flip lands on the exact tick the shipped margin crosses zero.
+            @test flip > 0 && cross > 0
+            @test flip == cross
+            @test flip == 1935                     # …and it is where slice 33's ladder says it is
+        end
+        # ⚠⚠ AND AT A NEGATIVE WINDOW THEY DIVERGE BY EXACTLY `|fov|` — gate 1's clamp-ownership
+        # catch, reproduced ON THE WIRE, and the whole reason convention 13 requires the key rather
+        # than letting the client subtract two others. `seeker_fov_deg` ships the AUTHORED value (a
+        # HUD showing 0° for a negative slider would hide what the student is holding); the margin
+        # uses the CLAMPED one, because otherwise its sign would stop agreeing with the predicate.
+        let (w, sub) = budget_world(Rhat = -0.03, fov = -5.0)
+            for _ in 1:100; tick!(w, sub, dt); empty!(w.events); end
+            tel = w.env[:telemetry]::Dict{String,Any}
+            @test tel["m1.seeker_fov_deg"] == -5.0
+            @test tel["m1.seeker_valid"]   == 0.0                       # the never-locked state
+            @test tel["m1.seeker_fov_margin_deg"] ≈ -tel["m1.look_angle"] atol = 1e-12
+            @test tel["m1.seeker_fov_margin_deg"] -
+                  (tel["m1.seeker_fov_deg"] - tel["m1.look_angle"]) ≈ 5.0 atol = 1e-12
+        end
+        # NEVER STALE: the key is gated with slice 32's four, so no 11/13/25…31 wire grows one, and
+        # a live flip off `:six_dof` takes it away (the `_atm_on` latent-bug class — the gate is on
+        # the LIVE rung, never on `haskey(:att_q)`).
+        let (w, sub) = budget_world(Rhat = -0.03)
+            for _ in 1:500; tick!(w, sub, dt); empty!(w.events); end
+            @test !haskey(w.env[:telemetry], "m1.seeker_fov_margin_deg")
+        end
+        let (w, sub) = budget_world(Rhat = -0.03, fov = 21.0)
+            for _ in 1:500; tick!(w, sub, dt); empty!(w.events); end
+            @test haskey(w.env[:telemetry], "m1.seeker_fov_margin_deg")
+            w.fidelity[:airframe] = :pitch_coupled
+            for _ in 1:200; tick!(w, sub, dt); empty!(w.events); end
+            @test haskey(w.entities[:m1].comp, :att_q)                   # the state survives…
+            @test !haskey(w.env[:telemetry], "m1.seeker_fov_margin_deg") # …the readout does not
+        end
+        # `_finite_coord`, NOT `_finite` (the slice-29 `k̂` catch, and here it is not hypothetical):
+        # the margin is NEGATIVE across the whole out-of-window side, by ~65° on a broken arm.
+        @test arm(Rhat = -0.03, fov = 21.0).marg_min < -50.0
+    end
+
+    @testset "⭐ THE LESSON — every ringing arm HITS, and the SAME ring with a window misses by km" begin
+        # THE STANDING FACT OF SLICES 26–31, RE-MEASURED: on an arm with NO WINDOW, the ring costs
+        # nothing you can see in the miss. The loudest arm here rings at rms r 1.07 against the
+        # radome-free 0.016 — 67× — and still lands 2.07 m from the target.
+        for a in (free_rule, free_24, free_18, free_03, ref_free)
+            @test a.miss < 3.6
+            @test a.out == 0.0
+        end
+        @test free_03.rms_r > 60 * ref_free.rms_r          # it RINGS, loudly…
+        @test free_03.miss  < 3.6                          # …and it HITS anyway
+        # ⭐ AND NOW THE SAME FOUR DESIGNS THROUGH A 21° WINDOW. The two whose excursion fits keep
+        # their engagement (`held` — the predicate never fires on the approach); the two whose ring
+        # overruns it lose the target while the lead is still building and miss by kilometres.
+        win_rule = arm(Rhat = -0.33, fov = 21.0)
+        win_24   = arm(Rhat = -0.24, fov = 21.0)
+        win_18   = arm(Rhat = -0.18, fov = 21.0)
+        win_03   = arm(Rhat = -0.03, fov = 21.0)
+        held(win_rule, free_rule)
+        held(win_24,   free_24)
+        @test win_18.miss > 2000.0 && win_18.out > 40.0
+        @test win_03.miss > 3000.0 && win_03.out > 70.0
+        # THE HEADLINE RATIO — the SAME glass, the SAME R̂, the SAME seed, one arm with a window.
+        @test win_18.miss > 2000 * free_18.miss
+        @test win_03.miss > 1500 * free_03.miss
+        # …and the break is EARLY, while the lead is still BUILDING (slice 32's discriminator).
+        # ⚠ Assert the break EXISTS before asserting WHEN (slice 32's advisor catch): `t_break` is
+        # recorded inside the r > 200 gate, so a NaN would read FALSE rather than erroring.
+        @test !isnan(win_18.t_break) && win_18.t_break < 6.0
+        @test !isnan(win_03.t_break) && win_03.t_break < 2.5
+        @test isnan(win_rule.t_break) && isnan(win_24.t_break)     # never lost, not "lost late"
+    end
+
+    @testset "⭐⭐ THE PREDICATE — `held ⟺ fov > excursion`, BRACKETED against the MEASURED angle" begin
+        # ⚠⚠ ASSERT THE INEQUALITY, NEVER `ceil` (seam discipline 2). Gate 0 measured
+        # `critical fov == ⌈excursion⌉` in 16 of 16 cells, but that identity is an artifact of the
+        # 1° measuring grid; the PHYSICAL claim is the inequality, and the tooth is built backwards
+        # from the measurement as a BRACKETING PAIR — exactly as slice 32 built its `≤` boundary
+        # tooth with `prevfloat`. A `ceil` assert would pin a test to the grid it was never about.
+        #
+        # ⚠⚠ AND THE BRACKET IS BUILT ON ROWS CLEAR OF THE LAUNCH CLIFF (advisor, before any code).
+        # Slice 32's P5 measured this wire's NEVER-ACQUIRES floor at ~18.12°, and it is the
+        # SCENARIO'S AUTHORED LAUNCH ATTITUDE, not a seeker property. A bracket straddling the quiet
+        # arm's 18.14° excursion would straddle the LAUNCHER — slice 32's own confound shipped as
+        # slice 33's headline. Both rows below sit well above it, and that is ASSERTED, not
+        # commented.
+        for (Rhat, free) in ((-0.18, free_18), (-0.03, free_03))
+            exc = free.look_max
+            @test exc - 0.1 > 18.2                           # clear of slice 32's P5 cliff
+            below = arm(Rhat = Rhat, fov = exc - 0.1)
+            above = arm(Rhat = Rhat, fov = exc + 0.1)
+            @test below.out > 0.0                            # a tenth of a degree short: it BREAKS
+            # ⭐ AND A TENTH OF A DEGREE OVER, IT HOLDS THE WHOLE APPROACH AND FLIES THE FREE ARM'S
+            # OWN EXCURSION BIT-FOR-BIT — so the angle the FREE arm measured is exactly the budget
+            # the WINDOWED one needs, which is the whole predicate.
+            held(above, free)
+        end
+    end
+
+    @testset "⭐ TWO THRESHOLDS, NOT ONE — the LOCK bracket and the MISS bracket are ~0.1° apart" begin
+        # ⚠⚠ `held` AND `hits` ARE DIFFERENT PREDICATES AND THEY BREAK AT DIFFERENT WINDOWS
+        # (advisor). Letting one threshold silently do both jobs is what would read wrong at gate 3.
+        # The LOCK threshold is the excursion, sharp to a hundredth of a degree. The MISS threshold
+        # sits BELOW it, and the gap between them is the SURVIVABLE BAND — which is also slice 32's
+        # re-acquisition evidence, the thing that makes the coasting branch's `_prev`-tracks-the-
+        # prediction line EXERCISED rather than defensive.
+        exc = free_03.look_max
+        # ⚠ PINNED AGAINST THE MEASURED EXCURSION, NEVER A HARDCODED 25.0 — the margin here is
+        # 0.011°, below any measuring grid, so a literal would be a magic number the next retune
+        # silently breaks (the slice-21 magic-multiple tooth, now pinned against a measured
+        # quantity).
+        @test 25.0 < exc < 25.1                              # the row this band lives on
+        band = arm(Rhat = -0.03, fov = exc - 0.011)          # a HUNDREDTH of a degree short
+        lost = arm(Rhat = -0.03, fov = exc - 0.1)            # a TENTH of a degree short
+        @test band.out > 0.0 && band.out < 0.5               # ⇒ NOT held: it leaves the window…
+        @test band.miss < 2.1                                # …and STILL HITS
+        @test abs(band.miss - free_03.miss) < 0.1            # within a tenth of a metre of no window
+        @test lost.out > 40.0 && lost.miss > 1000.0          # a tenth of a degree: kilometres
+        # ⭐⭐ AND `t_break` IS THE DISCRIMINATOR — SLICE 32's OWN MECHANISM REACHED BY MOVING THE
+        # WINDOW instead of the crossing speed: the survivable arm loses lock NEAR CPA, the lost one
+        # loses it while the lead is still BUILDING. "A short loss is survivable; what is terminal
+        # is a loss while the lead is still building" (slice 32), measured on a new axis.
+        @test !isnan(band.t_break) && band.t_break > 9.0
+        @test !isnan(lost.t_break) && lost.t_break < 6.0
+    end
+
+    @testset "⭐⭐ THE PAYLOAD — slice 30's rule returns the requirement to the RADOME-FREE number" begin
+        # Slice 30 shipped `radome_slope_worst` as the aim point that makes a SCALAR compensator
+        # unconditionally stable (only a NEGATIVE residual rings, so aiming at the glass's worst-case
+        # slope errs in the harmless direction everywhere). ⇒ ITS RULE IS AN ENVELOPE RULE TOO, AND
+        # THAT IS SLICE 33's PAYLOAD: aim there and the FOV requirement collapses back onto the
+        # engagement's own lead — the requirement a missile with NO GLASS AT ALL would have.
+        #
+        # ⚠ ASSERTED AS AN EXCURSION COMPARISON, NEVER A CRITICAL-FOV ONE (advisor): seam discipline
+        # 2 forbids the `ceil` currency, and this compares like with like.
+        # ⚠ AND THE AIM POINT IS READ OFF SLICE 30's SHIPPED TELEMETRY, never recomputed as R₀ + 2A
+        # — the cure uses the number the wire computes (it is −0.32999999999999996, not −0.33, which
+        # is exactly the kind of literal this project refuses to hardcode).
+        for A in (-0.10, -0.15, -0.20)
+            worst = arm(n = 50, A = A, Rhat = -0.30).worst   # 50 ticks: the key is per-tick constant
+            @test isfinite(worst)
+            ruled = arm(A = A, Rhat = worst)
+            # THE REQUIREMENT IS THE RADOME-FREE ENGAGEMENT'S OWN, TO WITHIN THE MISSILE'S
+            # AERODYNAMIC INCIDENCE — at every depth, i.e. DEPTH-INDEPENDENTLY. The glass gets 2×
+            # worse and the number does not move.
+            @test abs(ruled.look_max - ref_free.look_max) < 0.02
+            @test ruled.miss < 1.0
+            # …and a 19° window — sized for the RADOME-FREE engagement — flies it, at every depth.
+            held(arm(A = A, Rhat = worst, fov = 19.0), ruled)
+        end
+        # THE CONTRAST, at the SAME depth as the ladder: slice 28's boresight-characterized
+        # compensator — hardware residual EXACTLY 0.000 — demands 6.5°+ MORE window than the same
+        # glass under slice 30's rule.
+        @test free_03.look_max - free_rule.look_max > 6.5
+    end
+
+    @testset "⭐ CAUSATION — the ring's AMPLITUDE is the budget item, not the value of `R̂`" begin
+        # ⚠ THE OBVIOUS ALTERNATIVE STORY is that the excursion tracks `R̂` for some reason other
+        # than the ring — so move the ring's AMPLITUDE with `R̂` and the glass BOTH HELD. `α_max` is
+        # slice 26's own instrument for exactly this: it grows the limit cycle's amplitude while
+        # leaving its ONSET where it was ("the ceiling BOUNDS the cycle, the radome decides whether
+        # there IS one"). ⚠ A CAUSATION PROBE, NEVER A SLIDER — a confounded lever (slice 20
+        # disqualified it for the induced-drag bill), HELD on the shipped wire.
+        a20 = arm(Rhat = -0.18, alpha_max = 0.20)
+        a30 = free_18                                        # the ladder's own arm, α_max = 0.30
+        a45 = arm(Rhat = -0.18, alpha_max = 0.45)
+        @test a20.rms_r < a30.rms_r < a45.rms_r               # the ring grows…
+        @test a20.look_max < a30.look_max < a45.look_max      # …and so does the budget it eats
+        # ⇒ THE SAME 21° WINDOW FLIES THE QUIETEST OF THE THREE AND BREAKS ON THE OTHER TWO, at a
+        # FIXED `R̂` and FIXED glass. The excursion is the budget item; `R̂` only sets it.
+        @test a20.look_max < 21.0 && a45.look_max > 21.0
+        held(arm(Rhat = -0.18, alpha_max = 0.20, fov = 21.0), a20)
+        @test arm(Rhat = -0.18, alpha_max = 0.45, fov = 21.0).miss > 3000.0
+    end
+
+    @testset "⚠⚠ THE ISOLATION — the predictor and the predicted must not come from the same run" begin
+        # SEAM DISCIPLINE 1, ASSERTED. Slice 32 warned that its metric INVERTS: losing the
+        # measurement CUTS the parasitic feed, so on a windowed arm `rms r` FALLS while the miss
+        # OPENS. That makes a low `rms r` on a windowed arm indistinguishable between "this design
+        # is stable" and "the seeker lost lock and stopped driving the loop" — so every `R̂` is flown
+        # TWICE, and only the FREE arm may be read for the ring.
+        win_18 = arm(Rhat = -0.18, fov = 21.0)
+        @test free_18.n_band > 0 && win_18.n_band > 0         # …before quoting a band number at all
+        @test win_18.rms_r < 0.25 && free_18.rms_r > 0.9      # the metric FALLS, ~4.7×…
+        @test win_18.miss > 2000 * free_18.miss               # …while the miss OPENS ~2400×
+        # AND THE SAME INVERSION IN THE LOOK ANGLE, which is the quantity this slice predicts WITH:
+        # the windowed arm's own peak is the POST-LOCK-LOSS RUNAWAY (~90°, slice 32's signature) and
+        # is no read of a ring whose actual excursion was 22.1°.
+        @test win_18.look_max > 85.0
+        @test free_18.look_max < 25.0
+        # ⚠⚠ AND THE SHARPEST FORM OF THE SAME HAZARD, A GATE-2 FINDING: on a BADLY broken arm the
+        # band metric is not merely misleading, it is UNDEFINED. Its CPA is 3697 m, so it never
+        # enters r ∈ [500, 3000] at all — a `sum/max(n,1)` would have printed a beautifully quiet
+        # `0.00000` COMPUTED FROM ZERO SAMPLES. The gate-1 post-review's own catch, one gate on:
+        # a column that reproduces because it counts nothing is not a reproduction.
+        let win_03 = arm(Rhat = -0.03, fov = 21.0)
+            @test win_03.miss > 3000.0
+            @test win_03.n_band == 0
+            @test isnan(win_03.rms_r) && isnan(win_03.sat_band)
+        end
+        # ⚠⚠ AND DO NOT IMPORT SLICE 32's ISOLATION — IT INVERTS HERE. Slice 32 could write
+        # "`aero_sat` is 0.00 % in EVERY arm ⇒ a POINTING miss", because its wire had NO GLASS. On
+        # THIS wire the FREE ringing arm saturates HALF its band and HITS at 0.92 m (slice 26's
+        # ceiling BOUNDING the cycle), while the broken arm saturates 0.00 % and misses by 2.2 km.
+        # ⇒ saturation does not discriminate in either direction here; the WINDOW does.
+        @test free_18.sat_band > 40.0 && free_18.miss < 1.0
+        @test win_18.sat_band == 0.0  && win_18.miss  > 2000.0
+    end
+
+    @testset "loader: the COMPOSITION loads — glass AND a window in ONE yaml, a first" begin
+        # ⚠ SLICE 33 ADDS NO KEY, NO KNOB AND NO RUNG, so there is nothing to presence-gate and
+        # nothing to refuse (`radome_*` is 26–29's, `seeker_fov_deg` is 32's, and each already has
+        # its own loader testset above). THE ONE GENUINELY NEW LOADER FACT is that the COMPOSITION
+        # goes through: no scenario has ever authored glass and a window together, every gate-0
+        # probe and both gate-1 wire checks injected the keys PROGRAMMATICALLY, and gate 3's wire
+        # will be the first YAML to carry both.
+        mktempdir() do dir
+            p = joinpath(dir, "c.yaml")
+            open(p, "w") do io
+                print(io, "name: c\nseed: 32\ndt_physics: 1.0e-3\nemit_every: 16\n",
+                          "fidelity: {airframe: six_dof, autopilot: alpha, guidance: pn,\n",
+                          "           seeker: filtered, seeker_axes: az_el}\n",
+                          "entities:\n",
+                          "  - id: m1\n    kind: missile\n    pos: [0.0, 0.0, 3000.0]\n",
+                          "    missile:\n      mass_kg: 140.0\n      speed: 700.0\n",
+                          "      elevation_deg: 12.0\n",
+                          "      seeker: {two_angle: true, sigma_seek: 5.0e-5, alpha: 0.30,\n",
+                          "               beta: 0.05, radome_slope: -0.03, radome_ripple: -0.15,\n",
+                          "               radome_ripple_k: 12.0, radome_slope_est: -0.18,\n",
+                          "               seeker_fov_deg: 21.0}\n",
+                          "      guidance: {n_pn: 8.0}\n",
+                          "      airframe: {inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0,\n",
+                          "                 cmq: -150.0, cla: 20.0, cy_beta: 20.0}\n",
+                          "  - id: t1\n    kind: target\n    pos: [6000.0, 2000.0, 4200.0]\n",
+                          "    vel: [0.0, 200.0, 0.0]\n",
+                          "    target: {rcs_m2: 1.0, cross_speed_mps: 200.0}\n")
+            end
+            s = load_scenario(p)
+            m1 = s.world.entities[:m1]
+            for (k, v) in ((:radome_slope, -0.03), (:radome_ripple, -0.15), (:radome_ripple_k, 12.0),
+                           (:radome_slope_est, -0.18), (:seeker_fov_deg, 21.0))
+                @test m1.comp[k] == v
+            end
+            # ⭐ AND THE HANDSHAKE MARKER SET IS THE FIRST TO CARRY BOTH — FLAGGED HERE, BUILT AT
+            # GATE 3 (advisor). Slice 32's own gate-3 testset asserts `!haskey(info, :radome_view)`
+            # on its wire AS A FEATURE; slice 33's wire has glass, so both markers ship. The BUTTON
+            # outcome is safe either way (slice 32 wrote that both DROP it), but which HUD BRANCH
+            # the client selects is a gate-3 decision, and pinning the fact here means gate 3
+            # discovers nothing.
+            info = EWSim._airframe_view_info(s.world)
+            @test info[:seeker_fov_view] === true
+            @test info[:radome_view]     === true
+            @test info[:airframe_6dof]   === true
+        end
+    end
+end
