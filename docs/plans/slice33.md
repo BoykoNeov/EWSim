@@ -10,11 +10,12 @@ successor slice 32 itself nominated:
 > convention 9. **The strongest successor: it is the first mechanism in the arc that turns slice
 > 26's ring into a LOCK LOSS.**"* — `docs/plans/slice32.md`, Deferred (NAMED)
 
-**Status: GATES 0, 1 AND 2 COMPLETE (2026-07-29, suite 6028 → 6169). Gate 0 = 4 probes; the
-advisor's opening hypothesis was REFUTED by probe 1 and the live claim was found in a DIFFERENT
-CURRENCY by probes 2–4 (§0). Gate 1 = the kernel, shipped by REDEFINING the predicate from it (§1).
-Gate 2 = the readout, the wired lesson, and the loader composition (§2). GATE 3 REMAINS: the
-scenario, the client view, and the four proofs. Probe scripts in `M:\claud_projects\temp\slice33\`.**
+**Status: COMPLETE (2026-07-29, suite 6028 → 6215). Gate 0 = 4 probes; the advisor's opening
+hypothesis was REFUTED by probe 1 and the live claim was found in a DIFFERENT CURRENCY by probes
+2–4 (§0). Gate 1 = the kernel, shipped by REDEFINING the predicate from it (§1). Gate 2 = the
+readout, the wired lesson, and the loader composition (§2). Gate 3 = the wire, the client's
+COMPOSITION branch, and the four proofs (§3). Probe scripts in `M:\claud_projects\temp\slice33\`;
+the full as-built ledger is in `docs/STATUS.md`.**
 
 ⚠ **THE DEFERRAL'S NAME IS LOOSE AND THE PLAN DOES NOT INHERIT IT.** Its § points at slice 32's
 FOV × radome corollary, not at head state. A REAL GIMBAL — a head with its own state, servo
@@ -446,6 +447,67 @@ one slider each); the HUD-branch decision above; `net/slice33_verify.gd` + `net/
 pure so the UI test can call it; ⚠ size `STEPS` off the SLOWEST arm and assert every arm reached
 CPA — ToF varies); the 26–31 verifier re-runs; and the STATUS entry, which **must state the
 clamp-ownership relocation** (§1's carry-forward).
+
+---
+
+## §3 — Gate 3 (COMPLETE, 2026-07-29 — 6169 → 6215)
+
+`scenarios/slice33_budget.yaml` (seed 32, `STEPS = 12800 = 16 × 800`, sized off the slowest arm's
+11.25 s, every arm asserting it REACHED CPA) — **the FIRST scenario in the project to author GLASS
+AND A WINDOW in one file**, and it reproduces gate 2's programmatic world cell for cell. The
+as-built detail lives in `docs/STATUS.md`; what belongs HERE is the three things gate 3 discovered
+that the plan above did not predict.
+
+### ⚠⚠ THE EMIT GRID UNDER-READS THE EXCURSION BY MORE THAN THE SURVIVABLE BAND IS WIDE
+
+The plan carried the sub-degree cell into the verifier's test set as a requirement (§ the wire:
+"the sub-degree cell **R̂ = −0.03, fov = 25.00 against a measured excursion of 25.011°** joins the
+test set"). **It cannot, and the reason is a measurement.** A verifier reads FRAMES (every 16th
+tick), so the peak look angle it sees is the largest SAMPLED one: **24.9946° against the 25.0108°
+the core flies — a 0.016° deficit**, where §2 measured the survivable band at ~0.011–0.05°. Pinning
+the cell against the verifier's OWN frame excursion therefore lands ~0.027° under the true one —
+the tens-of-metres regime (**20.6 m**), not the **2.002 m** cell `test_missile.jl` measures per
+tick. ⇒ the sub-degree claim stays per-tick in the suite; the verifier makes the claim its own
+resolution supports, which is still the whole of TWO THRESHOLDS because `t_break` separates them
+cleanly (**r = 707 m near CPA** vs **r = 3543 m with the lead still building**). This is
+[[ewsim-missile-verifier-sampling]] in a NEW quantity — not the miss but the EXCURSION — and the
+general form is: **a bracket is only assertable at a frame verifier if it is wider than the emit
+grid's own deficit in the bracketed quantity.**
+
+### ⭐⭐ THE CLIENT NEEDED A BRANCH, AND THE DEFECT IT PREVENTS IS ASSERTABLE AS A NUMBER
+
+§2 flagged the HUD-branch decision as gate 3's and said the button outcome was safe either way.
+Both halves held, and the second is sharper than expected. **The button needs NO EDIT AT EITHER
+SITE** — both marker branches already hide it and build the same scene, the OPPOSITE of slice 26's
+"the drop needs BOTH sites", and that is now asserted rather than assumed. **The HUD is not safe**:
+without a composition branch `_seeker_fov_view` wins and slice 32's `_fov_verdict_label` compares
+the **LEAD** against the **WINDOW** — and on this wire the lead is ~18.1° inside a 21° window, so it
+prints *"IN THE WINDOW — FOV holds the lead"* on the arm that misses by 3.7 km, then *"TRACK BROKEN
+— lead outgrew FOV"*. **THE LEAD NEVER OUTGREW THE WINDOW; THE RING DID.** The UI test calls BOTH
+helpers with the SAME numbers and asserts they DISAGREE, so the branch is proven necessary rather
+than argued for; 32's helper is left VERBATIM and asserted still correct on 32's glass-free wire.
+⭐ And the advisor's blocking concern — that a composition is where a chained dispatch silently
+freezes one instrument — is discharged by assert: `_radome_qpeak` and `_fov_lost` are two
+INDEPENDENT `if` blocks, and both are driven live on ONE wire (the peak-hold on the YAW channel,
+1.31 against pitch's 0.10).
+
+### ⚠ THE SHOT'S AIMING DEFECT IS THIS SLICE'S OWN METRIC INVERSION
+
+A 4300 m gate cleared the broken arm's 3696.9 m CPA (slice 32's lesson, inherited) and **still
+captured the wrong thing**: 1.8 s after the break the look angle reads **56°** — the post-lock-loss
+RUNAWAY, not the ring — and the yaw rate has decayed to 0.205 rad/s, because the parasitic feed is
+CUT once the seeker stops measuring. Re-aimed at **5000 m**, just past the break, the pair shows the
+MECHANISM: `look 30.1° vs FOV 21.0° / BUDGET LEFT −9.1°` beside a `lead_angle_deg` of **15.32°** —
+the engagement's own demand, comfortably inside the window, i.e. exactly the number proving slice
+32's verdict would have reported health. **AIM AT THE MECHANISM, NOT ITS AFTERMATH.** Three shots,
+one per verdict state; the third (the FREE arm) is the only one that can fire the `← RINGING` tag,
+for the same inversion reason.
+
+⚠ **One plan claim was CORRECTED at gate 3.** The scenario's first draft said a 26° ceiling "would
+NOT do" because it sits inside the survivable band. **Measured, that is false**: 26 is 0.99° ABOVE
+the loudest excursion and reads 0.000 % out. The ceiling is 40 for a different and real reason —
+**26 is CURE A's own value, and a free-read endpoint that coincides with a shipped cure would make
+one number do two jobs** (the reading that DEFINES the requirement and the one that SATISFIES it).
 
 ---
 

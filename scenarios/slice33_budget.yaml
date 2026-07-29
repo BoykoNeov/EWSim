@@ -1,0 +1,280 @@
+# slice33_budget — THE RING IS AN FOV BUDGET ITEM: WHAT THE PARASITIC LOOP COSTS YOU IS THE ENVELOPE
+# (HANDOFF §11 Tier-A, slice 33 gate 3). The ELEVENTH slice of the bank-to-turn / 3-D arc (23 = the
+# 6-DOF substrate + skid-to-turn, 24 = bank-to-turn + roll-lag, 25 = a seeker in the 6-DOF loop,
+# 26 = the radome parasitic loop, 27 = the compensation autopilot, 28 = the slope CURVE, 29 = the
+# SCHEDULED compensator, 30 = the ENVELOPE and the one-sided constraint, 31 = an imperfect gyro,
+# 32 = the seeker's field of view), and the successor slice 32 itself nominated.
+#
+# ⭐⭐ THIS IS THE FIRST SCENARIO IN THE PROJECT TO AUTHOR GLASS AND A WINDOW IN ONE FILE. Slices
+# 26–31 gave the missile a radome and an INFINITE seeker window; slice 32 gave it a real window and
+# NO GLASS AT ALL (convention 9, deliberately: a ringing arm's look angle swings BECAUSE it rings,
+# so it would be the LOOP's angle and not the ENGAGEMENT's). Neither could see what the other cost.
+#
+# Slices 26–31 each recorded, as a standing fact, that THE RINGING ARM STILL HITS — slice 26 wrote
+# "the MISS is NOT the metric — the ringing arm STILL HITS (2.18 m)", and 27/28/29/30/31 each
+# inherited it, which is why the whole family measures `rms q` / `rms r` instead of a miss. It is
+# true on this wire too, everywhere: across three glass depths and the full R̂ ladder, NOT ONE
+# RINGING ARM MISSES BY MORE THAN 3.53 m. The ring was benign BECAUSE THE SEEKER HAD AN INFINITE
+# WINDOW. Give it a real one and the same ring — same glass, same R̂, same seed — misses by
+# KILOMETRES, because the excursion the limit cycle adds to the look angle is spent out of exactly
+# the budget slice 32 measured.
+#
+# > THE LESSON, IN ONE SENTENCE. A limit cycle you were told to measure in rad/s is spent in DEGREES
+# > OF FIELD OF VIEW — the ring costs you not accuracy but the ENVELOPE, and slice 30's scalar buys
+# > the whole envelope back.
+#
+# ⇒ THE FOV A SEEKER NEEDS IS THE ENGAGEMENT'S LEAD **PLUS THE PARASITIC LOOP'S EXCURSION**. Slice
+# 32 answered the question with the collision triangle alone (18.13° on this geometry); that is the
+# QUIET-GLASS answer. The second term is continuous and monotone in the ring's amplitude — 18.14° →
+# 20.62° → 22.12° → 23.92° → 25.01° as R̂ walks from slice 30's design rule to slice 28's boresight
+# characterization — and slice 30's rule buys ALL of it back.
+#
+# ⭐⭐ THE PAYLOAD IS THAT SLICE 30's RULE IS AN ENVELOPE RULE, NOT ONLY A STABILITY RULE. Slice 30
+# shipped `radome_slope_worst` = min(R₀, R₀+2A) as the aim point that makes a SCALAR compensator
+# unconditionally stable (only a NEGATIVE residual rings, so aiming at the glass's worst-case slope
+# errs in the harmless direction everywhere). Aim R̂ there and the FOV requirement returns to 18.14°
+# — the radome-free engagement's own 18.13°, to within the missile's aerodynamic incidence — and it
+# does so at A = −0.10, −0.15 AND −0.20, i.e. DEPTH-INDEPENDENTLY. The glass gets 2× worse and the
+# requirement does not move.
+#
+# ⚠⚠ THE TWO-RUN DISCIPLINE IS THE SHIPPED SEAM, NOT A PROBE CONVENIENCE (gate 0, before any code):
+# `rms r` IS NOT A STABILITY READ ON A WINDOWED ARM. Slice 32 warned its own metric inverts —
+# losing the measurement CUTS the parasitic feed, so `rms r` FALLS while the miss OPENS — so a low
+# `rms r` on a windowed arm cannot tell "this design is stable" from "the seeker lost lock and
+# stopped driving the loop" (measured: 0.932 → 0.197, a 4.7× FALL, while the miss opens 2383×). And
+# the same inversion hits the quantity this slice predicts WITH: a windowed arm's own `look_max` is
+# ~90° in every broken cell — the POST-LOCK-LOSS RUNAWAY, slice 32's signature — against the ring's
+# actual 22.1°. ⇒ THE PREDICTOR AND THE PREDICTED MUST NOT COME FROM THE SAME RUN. Every R̂ is flown
+# TWICE: the FOV slider at its MAX supplies the excursion, the shipped window supplies the envelope.
+#
+# ⚠⚠ AND ON THIS WIRE THE FOV SLIDER'S CEILING IS THAT FREE ARM, so it is MEASURED and not assumed
+# (see the knob block).
+#
+# ⚠ CONVENTION 9 — WHY A TWO-MECHANISM WIRE IS PERMITTED HERE, AND WHAT IT STILL FORBIDS. Slice 32
+# kept this composition OFF its showcase because two mechanisms in one view is a confound. HERE THE
+# COMPOSITION IS THE LESSON, which is the legitimate exemption — but it obliges the wire to carry no
+# THIRD thing. `af_alpha_max` is HELD at 0.3 and stays a gate-0 CAUSATION PROBE (it is slice 26's own
+# instrument for the ring's AMPLITUDE — "the ceiling BOUNDS the cycle, the radome decides whether
+# there IS one" — and a confounded lever slice 20 disqualified for the induced-drag bill). The two
+# live sliders are the TWO HALVES OF ONE QUANTITY, and convention 9 is satisfied BY MEASUREMENT, not
+# by counting sliders (the slice-27 DIAGONAL precedent): the diagonal is `fov` TRACKING the
+# excursion, and moving both together leaves `held` UNCHANGED. ⚠ STATE THE DIAGONAL AS TRACKING,
+# NEVER AS `fov = ⌈excursion(R̂)⌉` — seam discipline 2 forbids the `ceil` currency (see the knobs).
+#
+# ⚠ NO NEW RUNG, NO NEW KNOB, NO NEW INSTABILITY, NO NEW CAP, AND NO NEW DRAW. Both halves already
+# fly (26–31's glass, 32's window) and both sliders already ship (`radome_slope_est` from 27/28,
+# `seeker_fov_deg` from 32). What is new is the COMPOSITION, ONE telemetry number that measures it
+# (`seeker_fov_margin_deg` — how much window is LEFT, SIGNED, slice 18's `terrain_clearance_m`
+# precedent: the SIGN IS THE VERDICT, shipped so the client never re-derives the test), and the
+# design rule it yields. Slice 30's shape precisely — its only new core quantity was
+# `radome_slope_worst`, and its payload was a ring count over a swept engagement.
+#
+# ⚠ INHERITED LANGUAGE AND ITS PROHIBITIONS. The positive-feedback / limit-cycle / loop-gain
+# language is slice 26's and it IS earned here (this wire rings). Slice 20's "degenerative spiral"
+# stays forbidden. Slice 32's "the metric is the miss" is INHERITED (the FOV half), and 28–31's
+# "the metric is rms r" is inherited too — for the FREE arm ONLY. Both, with their two-run rule.
+#
+# ⚠ ISOLATION — AND DO NOT IMPORT SLICE 32's, IT INVERTS HERE. Slice 32 could write "`aero_sat` is
+# 0.00 % in EVERY arm ⇒ a POINTING miss" because its wire had NO GLASS. On this wire the FREE
+# ringing arm saturates 48.5 % of its band and HITS at 0.92 m (slice 26's ceiling BOUNDING the
+# cycle), while the broken arm saturates 0.00 % and misses by 2.2 km. Saturation does not
+# discriminate in either direction here; THE WINDOW does.
+#
+# ⚠ AND ON A BADLY BROKEN ARM A BAND METRIC IS NOT MERELY MISLEADING, IT IS UNDEFINED (a gate-2
+# finding). This wire's DEFAULT arm misses by 3697 m, so it NEVER ENTERS the arc's r ∈ [500, 3000] m
+# band: n_band = 0, and `rms r` / `aero_sat` are NaN there BY CONSTRUCTION. A `sum/max(n,1)` would
+# have printed a beautifully quiet 0.00000 computed from ZERO SAMPLES. Never quote a band number for
+# the default arm.
+#
+# NO FIDELITY BUTTON, DELIBERATELY — the NINTH slice in that family (16, 26, 27, 28, 29, 30, 31, 32,
+# 33) whose lesson is sliders with no button at all. ⭐ AND THIS WIRE IS THE FIRST TO CARRY BOTH
+# DROP-THE-BUTTON MARKERS (`radome_view` AND `seeker_fov_view`, plus `airframe_6dof`): slice 32's own
+# gate-3 testset asserts `!haskey(info, :radome_view)` on ITS wire AS A FEATURE. The BUTTON outcome
+# is identical either way (both markers drop it, at both sites), but THE HUD BRANCH IS NOT, and that
+# is a real gate-3 defect avoided: `_fov_verdict_label` compares the LEAD against the WINDOW, and on
+# this wire the lead is ~18.1° inside a 21° window — so slice 32's branch would print "IN THE WINDOW
+# — FOV holds the lead" on the arm that misses by 3.7 km, and after the latch "TRACK BROKEN — lead
+# outgrew FOV", naming the WRONG CAUSE confidently. The lead never outgrew the window; THE RING did.
+# ⇒ a COMPOSITION branch, checked FIRST, whose verdict rides the shipped MARGIN (which is exactly
+# what earns that key its place under convention 13) and which draws BOTH instruments.
+#
+# NAMED APPROXIMATIONS (§1): everything 26–32 named, unchanged — a STRAPDOWN window, not a gimbal
+# (a head with its own state would REWRITE 26–31's `look_az`, because the bend would key off
+# HEAD-vs-body rather than LOS-vs-body: the NAMED successor, and gate 0 banked its lesson — THE
+# GIMBAL THAT SAVES YOUR ENVELOPE PARKS YOU ON THE WORST GLASS); a CIRCULAR window
+# `hypot(look_az, look_el)`; no seeker RANGE / SNR acquisition limit (this models only the ANGLE
+# half); ONE odd scalar slope curve PER AXIS (a symmetric radome); a PERFECT gyro (slice 31's terms
+# are absent here); ONE isotropic σ and a TRUTH Vc (slice 11's scope); diagonal inertia, symmetric
+# cruciform, lift drag-free (23/24); constant ρ — a FLIGHT CONDITION, so say "low dynamic pressure",
+# never "high altitude". ⚠ AND THE 30° MODEL-VALIDITY CAVEAT 28/29/30/31 EACH DECLARED IS WHAT BOUNDS
+# THE R̂ SLIDER'S CEILING HERE — see the knob block: it is now a measured domain edge, not a caveat.
+#
+# Class 4a: DRAW-INVARIANT (2 randn/tick — an out-of-window tick DRAWS `n_az`/`n_el` and DISCARDS
+# them, slice 25's own lockstep: the foil discards, it does not skip) YET TRAJECTORY-CHANGING. NINTH
+# consecutive RNG-live slice (25–33): the seed is load-bearing and conventions 3/11 apply. ⚠ There is
+# NO fresh draw-count testset, deliberately — no new branch and no new `randn`, and slice 32's own
+# corollary already flew radome × FOV arms under its asserted 2-draw lockstep.
+# UNITS (§1 trifecta): pos/vel SI; angles rad INSIDE the core; `seeker_fov_deg` and
+# `seeker_fov_margin_deg` in DEGREES at the wire boundary (a TOTAL off-boresight HALF-angle, and the
+# margin SIGNED); radome slopes DIMENSIONLESS (rad of bend per rad of look); σ_seek in RADIANS;
+# `cross_speed_mps` in m/s and SIGNED; I in kg·m²; ρ in kg/m³; launch ELEVATION in DEGREES → radians
+# at the loader. dt = 1e-3 / emit_every = 16.
+name: slice33_budget
+seed: 32
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # FIVE keys, NONE toggled — the lesson is the SLIDERS (the 16/20/26/27/28/29/30/31/32 shape).
+  # `airframe` HELD at :six_dof (BOTH halves are inert without it — there is no attitude to measure a
+  # look angle off, and the radome block is gated on the LIVE rung, never on `:att_q`, which is
+  # minted once and never deleted: the slice-21/23/26/27/28/29 latent-bug class), `seeker_axes` HELD
+  # at :az_el (a two-angle seeker is what HAS a look angle at all — and the loader REFUSES
+  # `seeker_fov_deg` without `two_angle: true` for exactly that reason), `seeker` HELD at :filtered,
+  # `autopilot` :alpha and `guidance` :pn as in 23–32. `steering` is OMITTED (the loader default IS
+  # :skid_to_turn — slice 24 measured BTT binding the aero ceiling 93.2 % of its approach, which
+  # would put a THIRD mechanism on a wire convention 9 already stretched to two).
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+
+entities:
+  # The interceptor — slices 23–32's plant and launch condition, UNCHANGED. n_pn = 8 is slice 27's,
+  # AUTHORED and NEVER A KNOB (26–32 all disqualified it: it moves the guidance loop the lesson is
+  # not about — and here it moves BOTH halves, since the parasitic boundary is N·|R − R̂|/ρ).
+  #
+  # ⚠ elevation_deg = 12.0 IS LOAD-CONSUMED AND IS NOT A KNOB — twice over. It is the slice-19 DEAD
+  # KNOB class (position/attitude are built once at load and `reset` re-reads the YAML), AND slice
+  # 32's gate-0 P5 found it is the thing that sets this wire's NEVER-ACQUIRES FLOOR: below a ~18.12°
+  # window the seeker never gets a first measurement at all, and that cliff tracks the TICK-1 look
+  # angle to 0.008° while moving with `elevation_deg`. ⇒ THE FOV DOMAIN STARTS ABOVE THAT CLIFF so
+  # the slider measures THE SEEKER and not the launcher — see the knob block.
+  #
+  # THE GLASS (26–29's, unchanged in form):
+  #   radome_slope    R₀ = −0.03 — the boresight slope. ⚠ Slice 28's OWN wire: at R̂ = R₀ the HARDWARE
+  #     residual is EXACTLY 0.000 (the compensator matches the glass it was characterized against,
+  #     perfectly) and the missile RINGS ANYWAY, because the ENGAGEMENT residual at the ~15° look
+  #     angle a crossing target sustains is −0.100…−0.052.
+  #   radome_ripple   A  = −0.15 — the slope CURVE's depth, so `radome_slope_worst` = R₀ + 2A = −0.33.
+  #   radome_ripple_k k  = 12.0  — AUTHORED and DISQUALIFIED BY NON-MONOTONICITY at slice 28.
+  #   radome_slope_est R̂ = −0.03 — ⚠ THE SHOWCASE OPENS ON THE DISEASE (the 25/26/27/28/29/30/31/32
+  #     shape): the default is slice 28's BORESIGHT-CHARACTERIZED compensator, the natural and
+  #     dangerous choice, which is the LOUDEST ring on the ladder (excursion 25.01°) and therefore
+  #     the largest FOV bill. It is a SLIDER, and dragging it to −0.33 is cure B.
+  #
+  # THE WINDOW:
+  #   seeker_fov_deg = 21.0 — the ladder's window: it FITS the two quiet designs' excursions
+  #     (18.14°, 20.62°) and NOT the two loud ones (22.12°, 25.01°). ⚠ It is NOT sized for the
+  #     ENGAGEMENT — a 19° window flies the radome-free 18.13° requirement and every arm under slice
+  #     30's rule — so a student who reads only slice 32 would call 21° generous. It is the ring that
+  #     spends the other 4°.
+  #   sigma_seek = 5e-5 — 26–32's AUTHORED CONSTANT, not a knob (a knob that DEGRADES the lesson
+  #     beside it).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               radome_slope: -0.03, radome_ripple: -0.15, radome_ripple_k: 12.0,
+               radome_slope_est: -0.03, seeker_fov_deg: 21.0}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # ⭐ THE CROSSING TARGET, AND THE CROSSING IS WHAT MAKES THE GLASS MATTER AT ALL. Same start point
+  # as 23–32 (cross-range +Y = 2000 m off the x–z plane), at slice 28's vy = 200 m/s — which is the
+  # geometry that holds a SUSTAINED ~15° lead, so the seeker parks on the steep part of the slope
+  # curve and the loop is closed by its LOCAL DERIVATIVE there. ⚠ A STATIC target would make BOTH
+  # halves dead at once: slice 28 measured the lead at 0.04°→0.54° there (so `R(look)` is a dead knob
+  # and the ring never starts), and slice 32's own floor note says a boresight-sitting seeker can
+  # never reach any window in the domain. AERODYNAMICALLY FREE (no target airframe).
+  # ⚠ `cross_speed_mps` IS AUTHORED AND IS NOT A KNOB HERE, unlike slices 30 and 32 — it is the
+  # THIRD thing convention 9 forbids on this wire (it moves the lead, i.e. slice 32's whole axis,
+  # while the two shipped sliders move the ring and the window). The authored `vel` and the pin AGREE
+  # at the default, which is slice 30's knob-vs-rung discriminator measured bit-identical to the key
+  # being absent.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 200.0, 0.0]
+    target: {rcs_m2: 1.0, cross_speed_mps: 200.0}
+
+knobs:
+  # ⭐⭐ TWO KNOBS, AND THEY ARE THE TWO HALVES OF ONE COMPARISON — `fov` vs `excursion(R̂)` — exactly
+  # as slice 32's were `fov` vs `lead(vy)`. Convention 9 is satisfied BY MEASUREMENT (the slice-27
+  # DIAGONAL precedent): move both together along the diagonal and `held` does not change, so the
+  # pair is ONE axis and not two lessons. ⚠ THE DIAGONAL IS STATED AS TRACKING, NEVER AS
+  # `fov = ⌈excursion(R̂)⌉` — seam discipline 2 forbids asserting the `ceil` identity (gate 0 measured
+  # it 16/16, but that is an artifact of a 1° measuring grid; the PHYSICAL claim is the inequality
+  # `held ⟺ fov > excursion`, and letting the `ceil` form carry the convention-9 argument would put
+  # two statements of this document in tension).
+  #
+  # ⚠ AND THE ASYMMETRY IS THE PAYLOAD, AS IT WAS IN SLICE 32 — BUT IT HAS MOVED. There, widening the
+  # seeker was FREE and slowing the crossing meant DECLINING the engagement. Here BOTH cures are free
+  # in that sense (neither declines anything), and the asymmetry is different: cure A (widen to 26°)
+  # buys back THIS engagement on THIS glass, while cure B (aim R̂ at `radome_slope_worst`) returns the
+  # requirement to the RADOME-FREE 18.14° at A = −0.10, −0.15 AND −0.20 — DEPTH-INDEPENDENTLY. One
+  # cure is sized to a number you measured; the other stops the bill being charged.
+  #
+  # KNOB 1 (`seeker_fov_deg`, the HARDWARE side) — slice 32's axis, re-domained, and BOTH ENDPOINTS
+  # ARE MEASURED WITH THEIR REASONS (slice 26's post-commit discipline: endpoints MEASURED, never
+  # inferred from the interior).
+  #   FLOOR 19.0: it is the smallest window that flies the RADOME-FREE engagement (excursion 18.13°)
+  #     and every arm under slice 30's rule (18.14° at all three depths), so the floor is the
+  #     QUIET-GLASS REQUIREMENT — the whole point being that the shipped 21° is above it and still
+  #     not enough. ⚠ It is also clear of slice 32's P5 NEVER-ACQUIRES CLIFF at ~18.12°, which is THE
+  #     SCENARIO'S AUTHORED LAUNCH ATTITUDE AND NOT A SEEKER PROPERTY: below it the seeker never gets
+  #     a first measurement, and a slider that reached there would measure the LAUNCHER.
+  #   CEILING 40.0: THE FREE-ARM READ, and this is a functional domain edge, not decoration. Seam
+  #     discipline 1 says the excursion must be measured on an arm with NO WINDOW; a live wire always
+  #     has the key, so the free read IS this endpoint, and its adequacy is MEASURED rather than
+  #     assumed: 0.000 % out at r > 200 on EVERY ladder arm, and a `look_max` bit-identical to the
+  #     excursion those arms fly — so it reads THE RING and never the post-lock-loss runaway.
+  #     ⚠ IT IS DELIBERATELY NOT 26, THOUGH 26 MEASURES FREE TOO (0.000 % out against the loudest
+  #     arm's 25.011°): 26 is CURE A's OWN VALUE, and a free-read endpoint that coincides with a
+  #     shipped cure would make one number do two jobs — the reading that DEFINES the requirement and
+  #     the reading that SATISFIES it. 40 is slice 32's own ceiling, inherited, with ~15° of headroom
+  #     over the loudest excursion the R̂ domain can produce.
+  #
+  # KNOB 2 (`radome_slope_est`, the DESIGN side) — 27/28's R̂ slider, re-domained for this wire.
+  #   FLOOR −0.36: BELOW slice 30's aim point (`radome_slope_worst` = R₀ + 2A = −0.33) so cure B is
+  #     REACHABLE and so the student can overshoot it and see that the requirement STOPS FALLING —
+  #     slice 30's one-sided constraint (only a NEGATIVE residual rings; a positive one de-tunes).
+  #   CEILING −0.03: the AUTHORED default, i.e. slice 28's boresight characterization, and THE
+  #     CEILING IS THE 30° MODEL-VALIDITY BUDGET 28/29/30/31 EACH DECLARED AS A CAVEAT — here it is a
+  #     measured domain edge. The excursion is already 25.01° at R̂ = −0.03, so the small-angle linear
+  #     bend has ~5° of headroom left and a slider running to 0 would spend it.
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED, AND THE VERIFIER ASSERTS THEIR ABSENCE: `af_alpha_max`
+  # is the ring's AMPLITUDE instrument and a confounded lever (gate-0 causation probe, HELD);
+  # `cross_speed_mps` is slice 32's own axis and would be a THIRD mechanism; `n_pn` and `rho` move
+  # the parasitic boundary AND the guidance loop; `sigma_seek` degrades the lesson beside it;
+  # `radome_slope`/`radome_ripple` are the GLASS (a hardware property — the whole arc's point since
+  # 27 is that what you can change is what you BELIEVE about it); `elevation_deg` is the slice-19
+  # DEAD-knob class AND slice 32's P5 artifact.
+  #
+  # ⚠⚠ THE LABELS ARE LENGTH-BUDGETED AND THAT IS NOT COSMETIC — SLICE 32's SHOTS PAID FOR IT. Knob
+  # labels are drawn FULL-WIDTH in the UI CanvasLayer, which paints OVER the Node2D `_draw` HUD whose
+  # column starts at `vp.x − 430`; at ~6.2 px per character that is a budget of ~110 CHARACTERS.
+  # Slice 32's first draft ran 172 and 157 and covered its own DISCRIMINATING TOOTH. Slice 21's rule
+  # in a third costume: a number that does not print is not a proof.
+  - {target: m1, key: seeker_fov_deg, min: 19.0, max: 40.0,
+     label: "SEEKER: field of view (deg) — the budget the ring is spending"}
+  - {target: m1, key: radome_slope_est, min: -0.36, max: -0.03,
+     label: "DESIGN: believed slope R̂ — aim it at R₀+2A and the bill stops"}

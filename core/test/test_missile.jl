@@ -6704,4 +6704,102 @@ end
             @test info[:airframe_6dof]   === true
         end
     end
+
+    @testset "gate 3 — the SHIPPED wire, and the FIRST scenario to raise BOTH view markers" begin
+        # The gate-2 loader testset above built the composition in a `mktempdir`; this one asserts
+        # the SHIPPED YAML, which is the artifact a student actually runs.
+        scn = load_scenario(joinpath(@__DIR__, "..", "..", "scenarios", "slice33_budget.yaml"))
+        m1 = scn.world.entities[:m1]; tgt = scn.world.entities[:tgt1]
+
+        # ⭐⭐ BOTH MARKERS, WHICH NO SCENARIO IN THE PROJECT HAS EVER SHIPPED TOGETHER. Slice 32's
+        # own gate-3 testset asserts `!haskey(info, :radome_view)` on ITS wire AS A FEATURE (its
+        # radome keys are absent by convention 9), and that assert MUST STILL PASS — the two wires
+        # have to stay distinguishable from the core side, because the client's composition HUD
+        # branch keys off exactly this conjunction.
+        # ⚠ THE BUTTON OUTCOME IS IDENTICAL EITHER WAY (both markers drop it, at both client sites),
+        # so what the conjunction selects is the HUD BRANCH ALONE — and that is not cosmetic: slice
+        # 32's `_fov_verdict_label` compares the LEAD against the WINDOW, and on this wire the lead
+        # is ~18.1° inside a 21° window, so it would report "IN THE WINDOW — FOV holds the lead" on
+        # the arm that misses by 3.7 km. THE LEAD NEVER OUTGREW THE WINDOW; THE RING DID.
+        let info = EWSim._airframe_view_info(scn.world)
+            @test info[:seeker_fov_view] === true
+            @test info[:radome_view]     === true
+            @test info[:airframe_6dof]   === true            # still the slice-23 3-D view
+        end
+        let base = joinpath(@__DIR__, "..", "..", "scenarios")
+            # …and every 26–32 wire keeps EXACTLY ONE of the two, so none of them takes the new
+            # branch and all their UI tests keep passing.
+            for (f, fov, rad) in (("slice32_fov.yaml", true, false),
+                                  ("slice26_radome.yaml", false, true),
+                                  ("slice30_envelope.yaml", false, true),
+                                  ("slice31_gyro.yaml", false, true))
+                p = joinpath(base, f)
+                isfile(p) || continue
+                inf = EWSim._airframe_view_info(load_scenario(p).world)
+                @test haskey(inf, :seeker_fov_view) === fov
+                @test haskey(inf, :radome_view)     === rad
+            end
+        end
+
+        # THE WIRE ITSELF — convention 9 and the disqualified-knob list, asserted rather than
+        # described in a comment.
+        @test m1.comp[:seeker_fov_deg]  == 21.0      # the ladder's window: it fits the two quiet
+                                                     # designs' excursions and NOT the two loud ones
+        @test m1.comp[:radome_slope]    == -0.03
+        @test m1.comp[:radome_ripple]   == -0.15     # ⇒ radome_slope_worst = R₀ + 2A = −0.33
+        @test m1.comp[:radome_slope_est] == -0.03    # ⚠ THE SHOWCASE OPENS ON THE DISEASE: slice
+                                                     # 28's BORESIGHT characterization, whose
+                                                     # HARDWARE residual is EXACTLY 0.000
+        @test m1.comp[:radome_slope] - m1.comp[:radome_slope_est] == 0.0
+        @test m1.comp[:seek_two_angle] === true
+        @test m1.comp[:af_alpha_max] == 0.3          # HELD — slice 26's amplitude instrument stays
+                                                     # a gate-0 causation probe, never a slider
+        @test tgt.comp[:cross_speed_mps] == 200.0    # slice 28's geometry: a SUSTAINED lead, which
+                                                     # is what parks the seeker on steep glass
+        @test tgt.vel.y == 200.0                     # the pin and the authored vel AGREE at the
+                                                     # default (slice 30's knob-vs-rung
+                                                     # discriminator — it must not drift)
+        @test scn.world.fidelity[:airframe]    === :six_dof
+        @test scn.world.fidelity[:seeker_axes] === :az_el
+        @test scn.world.fidelity[:seeker]      === :filtered
+        @test !haskey(scn.world.fidelity, :steering) # the loader default :skid_to_turn is the held
+                                                     # plant — BTT would be a THIRD mechanism
+        # ⚠ NO GYRO KEYS: slice 31's errors are absent, so the compensator here reads a PERFECT
+        # rate. Composing three mechanisms is exactly what convention 9 forbids.
+        for k in (:gyro_scale_err, :gyro_bias_z, :gyro_bias_y)
+            @test !haskey(m1.comp, k)
+        end
+
+        # EXACTLY TWO KNOBS — the two halves of ONE comparison, `fov` vs `excursion(R̂)`.
+        let kk = Dict(kb.key => kb for kb in scn.knobs)
+            @test length(scn.knobs) == 2
+            # ⚠ BOTH TARGET THE INTERCEPTOR, unlike slice 30's and 32's two-entity pairs: the window
+            # its seeker has and the belief its guidance computer carries are BOTH the missile's.
+            @test kk[:seeker_fov_deg].target   === :m1
+            @test kk[:radome_slope_est].target === :m1
+            # THE DOMAINS, WITH THEIR MEASURED REASONS. The FOV floor 19 is the QUIET-GLASS
+            # requirement (it flies the radome-free 18.13° and every arm under slice 30's rule) and
+            # is clear of slice 32's P5 never-acquires cliff at ~18.12°, which is the scenario's
+            # AUTHORED LAUNCH ATTITUDE and not a seeker property. The ceiling 40 is the FREE READ
+            # itself (seam discipline 1: the excursion must come from an arm the window never
+            # bites), measured at 0.000 % out on every ladder arm.
+            @test (kk[:seeker_fov_deg].min, kk[:seeker_fov_deg].max) == (19.0, 40.0)
+            @test kk[:seeker_fov_deg].min > 18.12
+            # The R̂ floor reaches PAST slice 30's aim point so cure B is reachable AND overshootable
+            # (the one-sided constraint: a positive residual de-tunes, it does not ring); the ceiling
+            # is the authored default, bounded by the 30° small-angle budget 28/29/30/31 each
+            # declared — the excursion is already 25.01° there.
+            @test (kk[:radome_slope_est].min, kk[:radome_slope_est].max) == (-0.36, -0.03)
+            @test kk[:radome_slope_est].min <
+                  m1.comp[:radome_slope] + 2 * m1.comp[:radome_ripple]
+            # DISQUALIFIED AND ASSERTED ABSENT. ⚠ `cross_speed_mps` heads this list and is the one
+            # that is new: it is slice 32's OWN axis (it moves the LEAD), so on a wire convention 9
+            # already stretches to two mechanisms it would be a THIRD.
+            for k in (:cross_speed_mps, :radome_slope, :radome_ripple, :radome_ripple_k,
+                      :af_alpha_max, :n_pn, :rho, :sigma_seek, :elevation_deg, :speed,
+                      :gyro_scale_err, :gyro_bias_z)
+                @test !haskey(kk, k)
+            end
+        end
+    end
 end

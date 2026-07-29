@@ -4426,6 +4426,205 @@ bound on this glass.**
 
 ---
 
+**Slice 33 — THE RING IS AN FOV BUDGET ITEM: WHAT THE PARASITIC LOOP COSTS YOU IS THE ENVELOPE
+(HANDOFF §11 Tier-A)** — the ELEVENTH slice of the bank-to-turn / 3-D arc, and the successor slice 32
+itself nominated. ⚠ **THE DEFERRAL'S NAME IS LOOSE AND THE SLICE DID NOT INHERIT IT**: slice 32's §
+points at its FOV × radome corollary, not at head state. A REAL GIMBAL is a separate and bigger slice
+and `frames.jl` says so in terms. This slice stays **STRAPDOWN**.
+
+Slices 26–31 each recorded, as a standing fact, that **THE RINGING ARM STILL HITS** — slice 26 wrote
+it first ("the MISS is NOT the metric — the ringing arm STILL HITS (2.18 m)") and 27/28/29/30/31 each
+inherited it, which is why the whole family measures `rms q` / `rms r` instead of a miss. It is true
+on this wire too, everywhere: across three glass depths and the full `R̂` ladder, **not one ringing arm
+misses by more than 3.53 m**. **The ring was benign BECAUSE THE SEEKER HAD AN INFINITE WINDOW.** Give
+it a real one and the same ring — same glass, same `R̂`, same seed — misses by **kilometres**.
+
+> **THE LESSON, IN ONE SENTENCE.** A limit cycle you were told to measure in rad/s is spent in
+> DEGREES OF FIELD OF VIEW — the ring costs you not accuracy but the ENVELOPE, and slice 30's scalar
+> buys the whole envelope back.
+
+⇒ **THE FOV A SEEKER NEEDS IS THE ENGAGEMENT'S LEAD PLUS THE PARASITIC LOOP'S EXCURSION.** Slice 32
+answered the question with the collision triangle alone (18.13° on this geometry); that is the
+**QUIET-GLASS answer**. The second term is continuous and monotone in the ring's amplitude — 18.14° →
+20.62° → 22.12° → 23.92° → 25.01° as `R̂` walks from slice 30's design rule to slice 28's boresight
+characterization.
+
+⭐⭐ **THE PAYLOAD IS THAT SLICE 30's RULE IS AN ENVELOPE RULE, NOT ONLY A STABILITY RULE.** Slice 30
+shipped `radome_slope_worst` = min(R₀, R₀+2A) as the aim point that makes a SCALAR compensator
+unconditionally stable. Aim `R̂` there and the FOV requirement returns to **18.14°** — the radome-free
+engagement's own 18.13°, to within the missile's aerodynamic incidence — and it does so at
+A = −0.10, −0.15 AND −0.20, i.e. **DEPTH-INDEPENDENTLY**. The glass gets 2× worse and the requirement
+does not move.
+
+⚠ **NO new rung, knob, instability, cap or draw.** Both halves already fly (26–31's glass, 32's
+window) and both sliders already ship. What is new is the **COMPOSITION**, ONE telemetry number that
+measures it, and the design rule it yields — **slice 30's shape precisely** (its only new core
+quantity was `radome_slope_worst`, and its payload was a ring count over a swept engagement).
+
+**GATE 0 (4 probes, 2026-07-28).** ⚠⚠ **THE ADVISOR'S OPENING HYPOTHESIS WAS REFUTED, AND THE
+REFUTATION IS LOAD-BEARING** — it is why this slice does NOT claim to invert slice 32's closing
+sentence. The hypothesis was that the band between slice 32's two endpoints might contain a
+*marginally* stable design whose look excursion is nonetheless past the window — the first regime
+where the FOV bound binds BEFORE the stability bound. **P1 killed it in its own currency**: the
+stability onset and the FOV break arrive at the SAME `R̂` bracket (quiet at −0.27, rms r 0.031 / 0.000 %
+out; ringing at −0.24, **0.70983** / 37.6 % out), reproducing slice 30's measured boundary to the digit.
+⇒ **slice 32's "the FOV bound is NOT tighter than the stability bound on this glass" STANDS.** What
+slice 33 changes is that the FOV *requirement* becomes a CONTINUOUS function of the residual where
+slice 32 had a single number. P2 measured `critical fov == ⌈excursion⌉` in **16 of 16** cells across
+three independent axes; P3 moved the ring's AMPLITUDE with `α_max` at FIXED `R̂` and FIXED glass and
+the budget followed; P4 found a **SURVIVABLE BAND** below the excursion.
+
+**GATE 1 (6028 → 6062)** — ONE kernel in `frames.jl`, shipped by **REDEFINING the predicate from it**:
+`seeker_fov_margin(att, los, fov) = max(fov,0) − boresight_angle(att, los)` and
+`seeker_in_fov(…) = seeker_fov_margin(…) ≥ 0`. ⭐ **THE REDEFINITION IS THE GATE, NOT THE ADDITION** —
+shipping the margin *beside* the predicate would have left gate 1 with a kernel nothing calls, the
+arrangement slice 32's own gate 1 rejected one layer up. ⚠ That makes the obvious test VACUOUS
+(`(margin ≥ 0) == seeker_in_fov` is `x == x`), so the tooth is the subtraction form against the
+COMPARISON form written longhand, **swept at the boundary**: 6000 cells, 0 mismatches, no tolerance.
+⚠⚠ **THE DIVERGENCE THE ADVISOR CAUGHT FLIPS A VERDICT, NOT JUST A MAGNITUDE**: the wire ships
+`seeker_fov_deg` AUTHORED while the margin uses the CLAMPED window, so the shipped keys do not
+reconstruct this one on a negative slider — and an on-boresight target is IN a `fov = −1` window where
+the subtraction says OUT. ⚠ **THE CLAMP CHANGED OWNER**: `seeker_in_fov` now DELEGATES and does not
+clamp, so the seam comment at `missile.jl` and the test comment at `test_frames.jl` were both reworded.
+`docs/STATUS.md`'s slice-32 entry still names `seeker_in_fov` as the clamp site and is deliberately
+**LEFT ALONE** — it records what slice 32 shipped, and rewriting a per-slice ledger entry to match a
+later slice would make the ledger stop being a history. **This paragraph is that carry-forward.**
+
+**GATE 2 (6062 → 6169, +107)** — the readout (`<sid>.seeker_fov_margin_deg`, `_finite_coord` never
+`_finite`), the wired lesson, and the loader composition. ⚠⚠ **FIVE ASSERTS FAILED AND THEY WERE
+RIGHT TO — "HELD" IS NOT BIT-IDENTITY.** The first draft inherited slice 32's `cureA.miss === ref.miss`;
+EVERY held arm leaves the window in the last metres (first out at **r = 0.18 / 1.0 / 1.98 / 2.81 /
+8.55 m**, at look angles of 21–162°) because the LOS unit vector swings through a huge angle as r → 0,
+perturbing the CPA by 5e−13…1.4e−7 m. Slice 32's `===` passed only by **luck of a wider window**. ⇒ a
+`held(win, free)` helper puts the exact claim on the GATED quantities. ⚠⚠ **AND A COLUMN THAT WOULD
+HAVE COUNTED NOTHING**: a badly broken arm's CPA is 3697 m so it NEVER ENTERS the r ∈ [500, 3000] band
+— `sum/max(n,1)` would have printed a quiet **`rms r = 0.00000` from ZERO SAMPLES** on the arm missing
+by 3.7 km. `arm` now yields `NaN`, and every test quoting a band number asserts `n_band > 0` first.
+
+**GATE 3 (6169 → 6215)** — `scenarios/slice33_budget.yaml` (seed 32, `STEPS = 12800 = 16 × 800`, sized
+off the slowest arm's 11.25 s, every arm asserting it REACHED CPA). **The FIRST scenario in the project
+to author GLASS AND A WINDOW in one file**, and the shipped YAML reproduces gate 2's programmatic world
+cell for cell. Frame-sampled, r > 200 m gate, closing leg only:
+
+| `R̂` | FREE (fov 40): rms r | excursion° | miss (m) | THROUGH fov 21 | out % | `t_break` |
+|---|---|---|---|---|---|---|
+| −0.33 (slice 30's rule) | 0.05887 | 18.115 | 1.429 | **held** | 0.000 | — |
+| −0.24 (the onset) | 0.70969 | 20.608 | 2.401 | **held** | 0.000 | — |
+| −0.18 | 0.93167 | 22.113 | 3.628 | **2191.99 m** | 42.385 | 5.040 |
+| −0.03 (boresight, SHIPPED) | 1.07151 | 24.995 | 3.896 | **3696.89 m** | 72.603 | 1.936 |
+
+Break at **t = 1.936 s / r = 5247.0 m**, with the lead still building; the budget floor is **−69.84°**;
+the headline ratio is **949×**. **CURE A** widens the seeker to 26° → 3.896 m; **CURE B** aims `R̂` at
+the wire's own `radome_slope_worst` (read off telemetry, −0.3300, never recomputed) → 1.429 m, and the
+requirement falls 24.995° → 18.115°. Replay **bit-identical (0.000000 m)**.
+
+⚠⚠ **THE GATE-3 FINDING: THE EMIT GRID UNDER-READS THE EXCURSION BY MORE THAN THE SURVIVABLE BAND IS
+WIDE, AND IT DECIDES WHAT THE VERIFIER MAY CLAIM.** A verifier reads FRAMES (every 16th tick), so the
+peak look angle it sees is the largest SAMPLED one: **24.9946° against the 25.0108° the core flies — a
+0.016° deficit**, where gate 2 measured the survivable band at ~0.011–0.05°. ⇒ **the finest cell in
+that band is BELOW the verifier's resolution**: a window placed 0.011° under the FRAME excursion is
+really ~0.027° under the true one and lands in the tens-of-metres regime (**20.6 m**) rather than the
+**2.002 m** `test_missile.jl` measures PER TICK. So the sub-degree claim stays per-tick in the suite,
+and the verifier makes the claim its own resolution supports — which is still the whole of **TWO
+THRESHOLDS**, because `t_break` separates them cleanly: the survivable cell loses lock at **r = 707 m
+(NEAR CPA)** and the 0.1° cell at **r = 3543 m, with the lead still building**. This is
+[[ewsim-missile-verifier-sampling]] arriving in a NEW quantity — not the miss but the EXCURSION.
+
+⚠⚠ **THE ISOLATION IS NOT SLICE 32's AND MUST NOT BE COPIED FROM IT — IT INVERTS.** Slice 32 could
+assert `aero_sat == 0` in EVERY arm because its wire had NO GLASS. Here the FREE ringing arm saturates
+**80.67 %** of its band **AND HITS at 3.896 m** (slice 26's ceiling BOUNDING the cycle) while the broken
+arm saturates **0.00 %** and misses by kilometres. Saturation discriminates in neither direction; **THE
+WINDOW does.** What IS invariant, and asserted on every arm, is **`defl_sat == 0`**.
+
+⚠⚠ **AND THE PREDICTOR AND THE PREDICTED NEVER COME FROM THE SAME RUN — the verifier is STRUCTURED
+that way, not commented.** On a windowed arm `rms r` FALLS **4.72×** (0.93167 → 0.19744) while the miss
+OPENS **604×**, and the arm's own `look_max` reads **90.563°** — the post-lock-loss runaway — against
+the ring's actual 22.113°. So every design is flown TWICE. ⚠ **The FREE read is itself a MEASUREMENT**:
+a live wire always carries the key, so `fov = 40` stands in for "no window" and the verifier asserts
+`out == 0.0` on every free arm — otherwise the excursion column would be the runaway.
+
+⭐⭐ **THE CLIENT: A COMPOSITION HUD BRANCH, AND THE DEFECT IT PREVENTS IS ASSERTED AS A NUMBER.** This
+wire is the FIRST to raise BOTH `seeker_fov_view` AND `radome_view` (slice 32's gate-3 testset asserts
+`!haskey(info, :radome_view)` on ITS wire AS A FEATURE, and that still passes). ⚠ **The BUTTON outcome
+is identical either way — both markers drop it at both sites, so slice 33 needs NO EDIT at either, the
+OPPOSITE of slice 26's "the drop needs BOTH sites"** — **but the HUD BRANCH is not.** Without a
+composition branch `_seeker_fov_view` wins and slice 32's `_fov_verdict_label` runs, comparing the
+**LEAD** against the **WINDOW**: on this wire the lead is ~18.1° inside a 21° window, so it prints
+**"IN THE WINDOW — FOV holds the lead" on the arm that misses by 3.7 km**, and after the latch "TRACK
+BROKEN — lead outgrew FOV", naming the wrong cause confidently. **THE LEAD NEVER OUTGREW THE WINDOW;
+THE RING DID.** `slice33_ui_test.gd` calls BOTH helpers with the SAME wire's numbers and asserts they
+DISAGREE. ⇒ a branch on the CONJUNCTION, checked FIRST, a SWITCH ahead of both (32's helper left
+VERBATIM and still correct on 32's glass-free wire), with a verdict riding the shipped **MARGIN** —
+which is what earns that key its place under convention 13 — and drawing BOTH instruments.
+
+⭐ **AND BOTH INSTRUMENTS MUST BE LIVE, which is the other thing a composition can silently break**
+(the advisor's blocking concern). `_radome_qpeak` (the ring, slice 27) and `_fov_lost` (the track
+break, slice 32) are two INDEPENDENT `if` blocks gated on their own telemetry keys — **not a chain** —
+and the UI test proves it on ONE wire carrying both. A chained dispatch would freeze the peak-hold at
+0 and print "loop STABLE" forever on a missile shaking itself out of its own window, with nothing
+headless to catch it. The peak-hold is asserted to ride the **YAW** channel (slice 28's switch: this
+wire's lead is in AZIMUTH, and a pitch meter reads 0.10 where yaw reads 1.31).
+
+⚠ **`_budget_verdict_label` TAKES THE RANGE AS AN ARGUMENT, AND THAT IS GATE 2's FINDING IN THE
+CLIENT.** Every held arm leaves the window in the last metres, so an ungated "breaking" state would
+fire at the instant of a CLEAN INTERCEPT and paint the **CURE** arm a failure. The gate lives INSIDE
+the pure helper so the UI test pins it — convention 14, slice 31's aim-point comparison shipped WRONG
+with only a shot to catch it — and its mirror OUTSIDE the gate is asserted too, so the gate is proven
+to be a RANGE gate and not a blanket suppression.
+
+⚠ **THE SHOT HARNESS CAUGHT AN AIMING DEFECT, AND IT IS THIS SLICE'S OWN METRIC INVERSION.** A 4300 m
+gate worked (the broken arm's CPA is 3696.9 m, so anything below that would never trigger — slice 32's
+lesson, inherited) and **still captured the wrong thing**: by then the track had been broken ~1.8 s, so
+the look angle read **56°** (the post-lock-loss RUNAWAY, not the ring) and the yaw rate had decayed to
+0.205 rad/s, because the parasitic feed is CUT once the seeker stops measuring. Re-aimed at **5000 m**,
+just past the t = 1.936 s break, the pair shows the MECHANISM: `look 30.1° vs FOV 21.0° / BUDGET LEFT
+−9.1°` beside a `lead_angle_deg` of **15.32°** — the engagement's own demand, comfortably inside the
+window, which is exactly the number that proves slice 32's verdict would have reported health. **AIM
+AT THE MECHANISM, NOT ITS AFTERMATH.** THREE shots taken, one per verdict state (the third, on the FREE
+arm, is the only one that can fire the `← RINGING` tag — for the same inversion reason).
+
+**Knobs (2, both at the interceptor — unlike slice 30's and 32's two-entity pairs, because both halves
+of this comparison belong to the missile):** `seeker_fov_deg ∈ [19, 40]` — floor = the QUIET-GLASS
+requirement and clear of slice 32's P5 never-acquires cliff at ~18.12° (**the scenario's AUTHORED
+LAUNCH ATTITUDE, not a seeker property**); ceiling = **the FREE READ itself**, measured, and
+deliberately not 26 (though 26 measures free too) because 26 is CURE A's own value and one number must
+not do both jobs. `radome_slope_est ∈ [−0.36, −0.03]` — floor reaches PAST slice 30's aim point so cure
+B is reachable AND overshootable (the requirement then STOPS FALLING: 18.1379° at −0.36 against
+18.1376° at −0.33, while `rms r` RISES 0.05879 → 0.06911 — the one-sided constraint, a positive
+residual de-tunes); ceiling is the authored default, bounded by the **30° small-angle budget** 28/29/30/31
+each declared, with the excursion already at 25.01° there. ⚠ **`cross_speed_mps` is DISQUALIFIED and
+asserted absent** — slice 32's OWN axis, and a THIRD mechanism on a wire convention 9 already stretches
+to two; `af_alpha_max` is HELD as the gate-0 causation probe. Convention 9 is satisfied **BY
+MEASUREMENT** (the slice-27 DIAGONAL precedent): `fov` TRACKING the excursion leaves `held` unchanged,
+4/4 cells. ⚠ **Stated as TRACKING, never as `fov = ⌈excursion(R̂)⌉`** — seam discipline 2 forbids
+asserting the `ceil` identity (16/16 at gate 0 is an artifact of the 1° measuring grid; the physical
+claim is the inequality, bracketed at ±0.1°).
+
+Class **4a** (the NINTH consecutive RNG-live slice; no new branch and no new `randn`, so there is **no
+fresh draw-count testset, deliberately** — slice 32's corollary already flew radome × FOV arms under
+its asserted 2-draw lockstep). Button **DROPPED** (9th: 16, 26, 27, 28, 29, 30, 31, 32, 33).
+
+**Four proofs green.** `slice33_verify.gd` (13 arms, 8 phases, exit 0); `slice33_ui_test.gd` (9 teeth,
+FIFTEEN-way value-guard, exit 0); `Sandbox.tscn` headless smoke-load reaching `EWSIM_SERVER_DONE`;
+three windowed shots. **Slices 1–32 byte-identical — gate 3 touched NO core file** — proven ON THE WIRE
+anyway: `slice26/27/28/29/30/31/32_verify.gd` all re-run against live servers, exit 0, reproducing
+STATUS to the digit, and all 31 prior UI tests re-run green.
+
+Run it: `pwsh tools/julia.ps1 --project=core tools/server.jl scenarios/slice33_budget.yaml`, then
+`godot --headless --path clients/godot --script res://net/slice33_verify.gd`. The UI test needs no
+server.
+
+**Deferred (NAMED):** ⭐ **A REAL GIMBAL — and gate 0 banked its lesson: THE GIMBAL THAT SAVES YOUR
+ENVELOPE PARKS YOU ON THE WORST GLASS.** A strapdown seeker's body chases the LOS so the look angle
+stays near the lead; a gimbal deliberately holds the head at the FULL lead angle, which is exactly the
+steep part of the curve slice 28 showed closes the loop. So it buys the envelope back and hands the
+radome a worse operating point — the same trade in a new place. ⚠ It REWRITES 26–31's `look_az`, the
+byte-identity surface of six slices, so it needs a presence-gated head state with the strapdown
+else-arm VERBATIM. Plus a RECTANGULAR / PER-AXIS FOV; SEEKER RANGE / SNR ACQUISITION LIMITS; THE
+HANDOVER BASKET as an authored quantity; and everything 26–32 named and did not spend.
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

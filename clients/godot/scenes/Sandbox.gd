@@ -1406,6 +1406,42 @@ func _fov_verdict_label(lost: bool, lead: float, fov: float) -> String:
 		return "IN THE WINDOW — FOV holds the lead"
 	return "LEAD PAST WINDOW — about to break"
 
+# SLICE 33 — THE RING IS AN FOV BUDGET ITEM. The COMPOSITION verdict, and it exists because slice
+# 32's would be CONFIDENTLY WRONG on this wire.
+# ⚠⚠ THE DEFECT IT REPLACES, MEASURED: `_fov_verdict_label` compares the LEAD against the WINDOW, and
+# on this wire the lead is ~18.1° inside a 21° window — so on the arm that misses by 3.7 km it would
+# print "IN THE WINDOW — FOV holds the lead", and after the latch "TRACK BROKEN — lead outgrew FOV".
+# THE LEAD NEVER OUTGREW THE WINDOW; THE RING DID. Slice 32's own numbers are still right on slice
+# 32's wire (no glass ⇒ look ≡ lead + incidence), which is why that helper is left VERBATIM and this
+# is a SWITCH ahead of it, never an edit to it.
+# ⭐ THE COMPARISON IS THE LESSON: what is being spent (`seeker_fov_margin_deg`, the SIGNED budget
+# this slice ships) against the one slider that stops the bill (`radome_slope_est` vs slice 30's
+# `radome_slope_worst`). Both sides arrive from the CORE as numbers — the client evaluates no
+# geometry and no stability threshold (convention 13; |R_crit| moves with N and ρ).
+# ⚠⚠ FOUR STATES, AND THE RANGE GATE IS THE THIRD ARGUMENT FOR A MEASURED REASON (advisor). EVERY
+# held arm on this wire leaves the window in the last metres — first out at r = 0.18–8.55 m, at look
+# angles of 21–162°, because the LOS unit vector swings through a huge angle as r → 0 (gate 2 paid
+# for this in five failing asserts). Without the gate the "breaking" state would fire at the instant
+# of a CLEAN INTERCEPT and paint the CURE arm as a failure. It is the same 200 m gate `_fov_lost`
+# already carries and the same one every look-angle number in 32/33 is measured behind.
+# ⚠ EXTRACTED, LIKE `_fov_verdict_label` AND `_gyro_verdict_label`, BECAUSE ANYTHING THE VERDICT
+# COMPUTES INSIDE `_draw` HAS NO HEADLESS PROOF — `_draw` never runs under `--headless` (convention
+# 14; slice 31's aim-point comparison shipped WRONG and only the windowed shot caught it). The UI
+# test calls this directly, including the endgame case.
+# ⚠ WIDTHS ARE MEASURED: ~34 characters at 20 px from `vp.x − 430`. All four are counted (30/31/30/27).
+func _budget_verdict_label(lost: bool, margin: float, r: float, rhat: float, aim: float) -> String:
+	if lost:
+		return "TRACK BROKEN — the RING ate it"
+	if margin < 0.0 and r > 200.0:
+		return "RING PAST THE WINDOW — breaking"
+	# ⚠ the same 1e−9 tolerance slices 30 and 31 needed, for the same reason: the aim point is a
+	# Float64 sum that lands at −0.32999999999999996, not −0.33, and the slider a student drags
+	# carries the decimal. Without it the verdict flips on a rounding direction at EXACTLY the value
+	# the lesson asks them to hit.
+	if rhat <= aim + 1.0e-9:
+		return "AIMED AT R₀+2A — budget intact"
+	return "RING IS SPENDING THE BUDGET"
+
 func _gyro_verdict_label(ringing: bool, eff: float, worst: float) -> String:
 	if ringing:
 		return "GYRO — RINGING: loop sees R̂(1+s)"
@@ -1446,6 +1482,48 @@ func _draw_fov_hud_lines(vp: Vector2, fov: float, lead: float) -> void:
 	draw_string(_font, Vector2(vp.x - 430, 154), "seeker: %s" % ("COASTING — no measurement since the break" if _fov_lost else ("MEASURING" if valid else "outside the window")),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _fov_lost else Color(0.55, 1.00, 0.65))
 
+# SLICE 33 — the four lines that ARE the composition, split out so the label chain stays readable
+# (slice 32's `_draw_fov_hud_lines` precedent, and the same measured width: ~55 characters at 15 px
+# from `vp.x − 430`; every line below is counted).
+# ⭐ THE PAIRING A STUDENT MUST SEE IS *WHAT IS SPENDING* BESIDE *WHAT IS BEING SPENT*. The ring is
+# the body YAW rate (slice 28's channel choice, and it is not cosmetic here either: this wire's lead
+# is in AZIMUTH, so the yaw channel sits on the steep part of the slope curve while pitch sits near
+# the boresight slope). The budget is `seeker_fov_margin_deg` — SIGNED, so a student watches a needle
+# go to zero rather than being told a boolean. Slice 18's `terrain_clearance_m` is the precedent
+# exactly: the SIGN IS THE VERDICT, and the client never re-derives the test (convention 13).
+# ⚠ AND THE THIRD LINE IS THE CURE, AS TWO NUMBERS THE CORE SHIPS: the belief the student is
+# dragging (`radome_slope_est`) against slice 30's aim point (`radome_slope_worst`, computed core-
+# side as min(R₀, R₀+2A)). No client-side stability test — |R_crit| moves with N and ρ.
+# ⚠ THE MARGIN LINE IS COLOURED BY THE SHIPPED SIGN, NOT BY A CLIENT COMPARISON of `look` and `fov`:
+# gate 1 measured that those two keys DO NOT reconstruct the margin on a negative slider (the window
+# ships AUTHORED, the margin uses the CLAMPED one), diverging by exactly |fov| on the very side the
+# never-locked state is defined by. That divergence is why this key exists.
+# ⚠ THE RANGE AND CROSS-RANGE LINES ARE NOT HERE — the shared block above already draws them at
+# y = 66/88 for every 3-D airframe wire.
+func _draw_budget_hud_lines(vp: Vector2) -> void:
+	var rr := float(_telemetry.get(_af3d_missile + ".omega_r", 0.0))
+	var look := float(_telemetry.get(_af3d_missile + ".look_angle", 0.0))
+	var fov := float(_telemetry.get(_af3d_missile + ".seeker_fov_deg", 0.0))
+	var marg := float(_telemetry.get(_af3d_missile + ".seeker_fov_margin_deg", 0.0))
+	var rhat := float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0))
+	var aim := float(_telemetry.get(_af3d_missile + ".radome_slope_worst", 0.0))
+	# WHAT IS SPENDING. Coloured by the peak-hold, for the reason slice 27 settled: a limit cycle
+	# crosses zero twice per cycle, so an instantaneous verdict mislabels half the frames.
+	draw_string(_font, Vector2(vp.x - 430, 110), "body yaw rate r: %+.3f rad/s%s" % [rr, "   ← RINGING" if _radome_qpeak > 0.5 else ""],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _radome_qpeak > 0.5 else COL_TICK)
+	# WHAT IS BEING SPENT — and the ring is visibly seen to EAT it.
+	draw_string(_font, Vector2(vp.x - 430, 132), "look %.1f°  vs  FOV %.1f°   BUDGET LEFT %+.1f°" % [look, fov, marg],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45) if marg >= 0.0 else Color(1.00, 0.62, 0.30))
+	# THE CURE, as two shipped numbers.
+	draw_string(_font, Vector2(vp.x - 430, 154), "R̂ %+.3f   aim point R₀+2A %+.3f   ← drag R̂ here" % [rhat, aim],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	# THE STATE — slice 32's line verbatim, coloured by the LATCH rather than the instantaneous flag
+	# for the reason it gives: a runaway geometry swings the LOS back through the window and this
+	# would blink green on a missile that lost its target seconds ago.
+	var valid := float(_telemetry.get(_af3d_missile + ".seeker_valid", 1.0)) >= 0.5
+	draw_string(_font, Vector2(vp.x - 430, 176), "seeker: %s" % ("COASTING — no measurement since the break" if _fov_lost else ("MEASURING" if valid else "outside the window")),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _fov_lost else Color(0.55, 1.00, 0.65))
+
 func _draw_airframe3d_hud() -> void:
 	# The 3-D layer renders the world; the 2-D canvas only LABELS it (the terrain-view discipline).
 	# The headline: the plant, the cross-range miss (los_range), and the out-of-plane excursion.
@@ -1471,7 +1549,30 @@ func _draw_airframe3d_hud() -> void:
 	# `radome_slope`/`radome_residual`/`radome_slope_worst`/…, and a FOV wire has NONE of them, so
 	# every one would `get(..., 0.0)` and print a confident 0.000 — the stale-readout class this arc
 	# has now caught seven times, and the exact defect gate 2's advisor catch was about.
-	if _seeker_fov_view:
+	# SLICE 33 — THE COMPOSITION, checked FIRST and it is a SWITCH ahead of BOTH branches below (not
+	# an `or`, and not an edit to either). This is the FIRST wire in the project to carry glass AND a
+	# window, so it is the first to raise BOTH markers — slice 32's own gate-3 testset asserts
+	# `!haskey(info, :radome_view)` on ITS wire AS A FEATURE, and gate 2 pinned both `=== true` here.
+	# ⚠⚠ THE BUTTON OUTCOME IS IDENTICAL EITHER WAY (both markers DROP it, at both sites, so
+	# `_enter_airframe3d_mode` and `_update_fid_btn` need no edit at all — the OPPOSITE of slice 26's
+	# "the drop needs BOTH sites"), BUT THE HUD BRANCH IS NOT: without this, `_seeker_fov_view` would
+	# win and print slice 32's lead-vs-window verdict, which is wrong here in the way that matters
+	# (see `_budget_verdict_label`) AND would silence the radome cascade entirely — the ring, the
+	# residual and the aim point would all vanish from a view whose whole subject is what the ring
+	# costs. The stale-readout class this arc has caught eight times, in its mirror form: not a stale
+	# number printed confidently, but the LIVE half of a composition never drawn.
+	if _seeker_fov_view and _radome_view:
+		lbl = _budget_verdict_label(_fov_lost,
+				float(_telemetry.get(_af3d_missile + ".seeker_fov_margin_deg", 0.0)),
+				float(_telemetry.get(_af3d_missile + ".los_range", 0.0)),
+				float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0)),
+				float(_telemetry.get(_af3d_missile + ".radome_slope_worst", 0.0)))
+		# ⚠ THE COLOUR RIDES THE LATCH, NOT `_radome_qpeak`, AND THAT IS THE SLICE IN ONE CHOICE: on
+		# this wire the ring is LOUD on the cure-A arm too (rms r 1.072 at fov 26) and it HITS — the
+		# ring is not the failure, spending more budget than you have is. A peak-hold colour would
+		# paint the successful intercept orange.
+		col = Color(1.00, 0.62, 0.30) if _fov_lost else Color(0.45, 0.90, 1.00)
+	elif _seeker_fov_view:
 		lbl = _fov_verdict_label(_fov_lost,
 				float(_telemetry.get(_af3d_missile + ".lead_angle_deg", 0.0)),
 				float(_telemetry.get(_af3d_missile + ".seeker_fov_deg", 0.0)))
@@ -1607,7 +1708,15 @@ func _draw_airframe3d_hud() -> void:
 	# radome cascade (not an `or`): a FOV wire has NONE of the `radome_*` keys, so every line below
 	# would `get(..., 0.0)` and print a confident 0.000 — the stale-readout class this arc has caught
 	# seven times, and precisely what gate 2's blocking advisor catch was about one layer up.
-	if _seeker_fov_view:
+	# SLICE 33 — THE COMPOSITION, checked FIRST and a SWITCH ahead of both (the same order as the
+	# label chain above). It draws BOTH instruments because the lesson is a TRANSACTION: what is
+	# spending (the ring, in the yaw channel — the lead is in AZIMUTH on this crossing geometry, so a
+	# `q` meter would show a calm number in front of a shaking missile, slice 28's catch) and what is
+	# being spent (`seeker_fov_margin_deg`, this slice's one new number). Slice 32's block draws only
+	# the second half and the whole radome cascade draws only the first; neither can show a budget.
+	if _seeker_fov_view and _radome_view:
+		_draw_budget_hud_lines(vp)
+	elif _seeker_fov_view:
 		_draw_fov_hud_lines(vp,
 				float(_telemetry.get(_af3d_missile + ".seeker_fov_deg", 0.0)),
 				float(_telemetry.get(_af3d_missile + ".lead_angle_deg", 0.0)))
