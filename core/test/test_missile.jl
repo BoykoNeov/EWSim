@@ -6391,11 +6391,23 @@ end
     # place: the arm never lost the target ANYWHERE ON THE APPROACH (bit-exact, in the gated
     # quantity), it flew the free arm's own excursion to the last bit, and its miss matches the
     # free arm's to within the endgame perturbation measured above.
-    function held(win, free)
-        @test win.out == 0.0                              # not one out-of-window tick, r > 200
-        @test win.look_max === free.look_max              # …and the SAME excursion, bit-for-bit
-        @test isnan(win.r_firstout) || win.r_firstout < 200.0   # any drop-out is ENDGAME ONLY
-        @test abs(win.miss - free.miss) < 1.0e-6          # the last few coasting ticks, and no more
+    # ⚠ `tag` IS NOT DECORATION AND THE INNER `@testset` IS NOT EITHER (advisor): this is called
+    # from EIGHT sites, and a bare helper would report the SAME FOUR LINE NUMBERS for every one of
+    # them — a regression in the A = −0.20 payload row and a regression in `win_24` would produce
+    # byte-identical failure output. A proof that cannot say WHICH ARM broke is a weaker proof.
+    function held(win, free, tag)
+        @testset "held: $tag" begin
+            @test win.out == 0.0                          # not one out-of-window tick, r > 200
+            @test win.look_max === free.look_max          # …and the SAME excursion, bit-for-bit
+            @test isnan(win.r_firstout) || win.r_firstout < 200.0  # any drop-out is ENDGAME ONLY
+            # ⚠ AND THE MARGIN IS STATED, NOT IMPLIED (slice 22's "a ~1.03× margin, stated rather
+            # than hidden"; slice 26's "endpoints MEASURED, never inferred"): the endgame
+            # perturbation MEASURED across every held arm here spans 5e−13 … 1.4e−7 m, so this is a
+            # ~7× margin. It is deliberately NOT tightened to 1.4e−7 — the perturbation is a
+            # PHYSICAL quantity that legitimately moves with the wire, and a tripwire that fires on
+            # a benign retune is worse than a bound that says what it is.
+            @test abs(win.miss - free.miss) < 1.0e-6
+        end
     end
 
     # THE SHARED LADDER, computed ONCE. Glass R₀ = −0.03, A = −0.15 ⇒ `radome_slope_worst` = −0.33
@@ -6434,7 +6446,14 @@ end
             # and the 1→0 flip lands on the exact tick the shipped margin crosses zero.
             @test flip > 0 && cross > 0
             @test flip == cross
-            @test flip == 1935                     # …and it is where slice 33's ladder says it is
+            # ⚠ AND THE ONLY OTHER CLAIM MADE ABOUT THAT TICK IS A PHYSICAL ONE (advisor). A first
+            # draft pinned `flip == 1935` — a tick index on one arm of one wire, which is EXACTLY
+            # the magic literal the TWO THRESHOLDS testset below forbids two screens later (the
+            # slice-21 magic-multiple tooth), and which would fail on any retune with no indication
+            # of whether the SEAM broke or the WIRE moved. The structural claim above IS the tooth;
+            # this one ties the tick to the MECHANISM instead of to the grid, and it is the same
+            # claim `win_03.t_break` carries: the break is EARLY, while the lead is still building.
+            @test flip * dt < 2.5
         end
         # ⚠⚠ AND AT A NEGATIVE WINDOW THEY DIVERGE BY EXACTLY `|fov|` — gate 1's clamp-ownership
         # catch, reproduced ON THE WIRE, and the whole reason convention 13 requires the key rather
@@ -6487,8 +6506,8 @@ end
         win_24   = arm(Rhat = -0.24, fov = 21.0)
         win_18   = arm(Rhat = -0.18, fov = 21.0)
         win_03   = arm(Rhat = -0.03, fov = 21.0)
-        held(win_rule, free_rule)
-        held(win_24,   free_24)
+        held(win_rule, free_rule, "ladder R̂=−0.33 (slice 30's rule) @ fov 21")
+        held(win_24,   free_24,   "ladder R̂=−0.24 (the onset) @ fov 21")
         @test win_18.miss > 2000.0 && win_18.out > 40.0
         @test win_03.miss > 3000.0 && win_03.out > 70.0
         # THE HEADLINE RATIO — the SAME glass, the SAME R̂, the SAME seed, one arm with a window.
@@ -6524,7 +6543,7 @@ end
             # ⭐ AND A TENTH OF A DEGREE OVER, IT HOLDS THE WHOLE APPROACH AND FLIES THE FREE ARM'S
             # OWN EXCURSION BIT-FOR-BIT — so the angle the FREE arm measured is exactly the budget
             # the WINDOWED one needs, which is the whole predicate.
-            held(above, free)
+            held(above, free, "bracket R̂=$Rhat @ excursion + 0.1°")
         end
     end
 
@@ -6577,7 +6596,7 @@ end
             @test abs(ruled.look_max - ref_free.look_max) < 0.02
             @test ruled.miss < 1.0
             # …and a 19° window — sized for the RADOME-FREE engagement — flies it, at every depth.
-            held(arm(A = A, Rhat = worst, fov = 19.0), ruled)
+            held(arm(A = A, Rhat = worst, fov = 19.0), ruled, "payload A=$A @ fov 19")
         end
         # THE CONTRAST, at the SAME depth as the ladder: slice 28's boresight-characterized
         # compensator — hardware residual EXACTLY 0.000 — demands 6.5°+ MORE window than the same
@@ -6600,7 +6619,8 @@ end
         # ⇒ THE SAME 21° WINDOW FLIES THE QUIETEST OF THE THREE AND BREAKS ON THE OTHER TWO, at a
         # FIXED `R̂` and FIXED glass. The excursion is the budget item; `R̂` only sets it.
         @test a20.look_max < 21.0 && a45.look_max > 21.0
-        held(arm(Rhat = -0.18, alpha_max = 0.20, fov = 21.0), a20)
+        held(arm(Rhat = -0.18, alpha_max = 0.20, fov = 21.0), a20,
+             "causation α_max=0.20 @ fov 21")
         @test arm(Rhat = -0.18, alpha_max = 0.45, fov = 21.0).miss > 3000.0
     end
 

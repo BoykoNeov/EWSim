@@ -369,6 +369,11 @@ standing fact of 26–31 — and the SAME design through a 21° window misses by
   **t = 10.36 s (near CPA)**, the lost one at **4.79 s, while the lead is still building**. Slice
   32's sentence reached by moving the WINDOW instead of the crossing speed. ⚠ Pinned against the
   MEASURED excursion, never a literal 25.0 — the margin is below any measuring grid.
+  ⚠⚠ **AND THIS CORRECTS §0's "ABOUT 0.4° WIDE" — GATE 3 MUST NOT INHERIT IT** (advisor). That
+  figure came from conflating P4's TWO `R̂` rows (`−0.18`'s 0.374° and `−0.03`'s 0.011° read as one
+  band). Measured on the 0.011° grid at `R̂ = −0.03` the survivable band is **~0.05–0.1° wide**:
+  0.011° short still hits at 2.002 m, 0.05° short misses by 20.5 m, 0.1° short by 1.37 km. The
+  verifier's prose takes the §2 number.
 * ⭐⭐ **THE PAYLOAD, as an EXCURSION comparison** (advisor — seam item 2 forbids the `ceil`
   currency, so compare like with like). At `R̂ = radome_slope_worst`, **read off slice 30's SHIPPED
   telemetry** (it is `−0.32999999999999996`, not `−0.33` — exactly the literal this project refuses
