@@ -608,3 +608,33 @@ WIRE as the byte-identity check.
   by 29); a 2-D slope `R(look_az, look_el)`; an asymmetric error curve; a SINGLE IMU; gyro NOISE
   (draw-topology, convention 3); per-axis scale factors and misalignment; the out-of-plane
   MANEUVERING target.
+
+---
+
+## §3b — Gate-3 post-review (advisor, 2026-07-29)
+
+Two findings, both about a HUD/verifier line rather than the physics. Neither changed a shipped
+number; the wire, the verifier's arms and all three shots are unaffected.
+
+⭐⭐ **THE HARDCODED RING CHANNEL WOULD HAVE BEEN SILENTLY CORRECT FOREVER ON THIS WIRE.**
+`_draw_budget_hud_lines` read `omega_r` outright. The shipped wire has a ripple, so that is right
+*here* and every test would have kept agreeing. But the composition branch fires on
+`_seeker_fov_view and _radome_view`, and `radome_view` is ALSO raised by slice-26/27-shaped FLAT
+glass — which rings in **PITCH**, and whose peak-hold correctly rides `omega_q` via slice 28's own
+switch. On the next glass+window composition the HUD would have drawn a near-zero `omega_r`
+underneath an orange `← RINGING` tag. **That is slice 28's defect in a new place**, and the fix is
+not to duplicate the switch but to remove the possibility: `_ring_channel_key()` is now the single
+decision both the peak-hold and the HUD read, with a UI tooth in BOTH directions (a ripple fixture
+→ `.omega_r`; the same fixture with `radome_slope_az` stripped → `.omega_q`).
+
+⚠ **AND `_held`'s BIT-IDENTITY ASSERT WAS CHALLENGED AS POSSIBLY VACUOUS** — could it pass because
+the emit grid quantizes both arms to the same sampled peak, given §3's own 0.016° deficit? **No, and
+the reason is where the gate sits.** `look_max` accumulates ONLY inside r > 200 m, while gate 2
+measured the held arms' perturbation at **r = 0.18–8.55 m** — inside the endgame, i.e. OUTSIDE that
+window — so on the gated segment the arms genuinely are one trajectory, and both sample the SAME
+emit-grid indices, so a difference would land on the same frame rather than be rounded away. (It is
+also exactly why the MISS needs a tolerance and this does not: the miss is measured where the
+perturbation lives.) ⭐ And it claims something `out == 0.0` cannot: that the window had **no other
+effect**. The two coincide only because `seeker_fov_deg` couples to the flight through exactly one
+gate — which is the invariant worth pinning, since a second coupling would leave `out` at 0.0 and
+drift this. The reasoning is now written at the assert.

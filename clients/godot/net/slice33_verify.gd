@@ -523,6 +523,18 @@ func _held(win: Dictionary, free: Dictionary, tag: String) -> String:
 	if not (float(win["out"]) == 0.0):
 		return ("HELD FAILED for %s: not one out-of-window frame is permitted on the APPROACH " +
 				"(r > 200 m), got %.3f %%") % [tag, float(win["out"])]
+	# ⭐ AND THIS IS A TOOTH RATHER THAN A RESTATEMENT OF `out == 0.0`, FOR TWO MEASURED REASONS
+	# (advisor asked whether the frame grid could be hiding a perturbation here).
+	# (i) IT IS GENUINE BIT-IDENTITY, NOT QUANTIZATION AGREEMENT. `look_max` is accumulated ONLY
+	#     inside r > 200 m, and gate 2 measured the held arms' perturbation living at r = 0.18-8.55 m
+	#     — INSIDE the endgame, i.e. OUTSIDE this window. So on the gated segment the two arms really
+	#     are the same trajectory, and both sample the SAME emit-grid indices, so a difference would
+	#     appear at the same frame rather than being rounded away. (That is also why the MISS below
+	#     needs a tolerance and this does not: the miss is measured where the perturbation lives.)
+	# (ii) IT CLAIMS SOMETHING `out` CANNOT. `out == 0.0` says the PREDICATE never fired; this says
+	#     the window had NO OTHER EFFECT. They coincide only because `seeker_fov_deg` couples to the
+	#     flight through exactly one gate — which is the invariant worth pinning, since a future
+	#     second coupling (a window-dependent noise or gain) would leave `out` at 0.0 and drift this.
 	if not (absf(float(win["look"]) - float(free["look"])) <= EXACT):
 		return ("HELD FAILED for %s: it must fly the FREE arm's own excursion (%.6f vs %.6f deg). If " +
 				"these differ, the window PERTURBED the trajectory it was supposed to merely contain, " +

@@ -1292,8 +1292,7 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 	# would meter the quiet channel and label a shaking missile STABLE — the same class of defect the
 	# instantaneous verdict had. Gated on the slice-28 telemetry key, so 26/27 keep |q| verbatim.
 	if _telemetry.has(_af3d_missile + ".radome_residual"):
-		var chan := ".omega_r" if _telemetry.has(_af3d_missile + ".radome_slope_az") else ".omega_q"
-		var qn := absf(float(_telemetry.get(_af3d_missile + chan, 0.0)))
+		var qn := absf(float(_telemetry.get(_af3d_missile + _ring_channel_key(), 0.0)))
 		# decay ~0.97 per state frame at 62.5 Hz ⇒ a ~0.5 s hold, comfortably longer than the
 		# ~2 Hz ring's half-period, so the verdict is steady across a whole cycle.
 		_radome_qpeak = maxf(qn, _radome_qpeak * 0.97)
@@ -1406,6 +1405,21 @@ func _fov_verdict_label(lost: bool, lead: float, fov: float) -> String:
 		return "IN THE WINDOW — FOV holds the lead"
 	return "LEAD PAST WINDOW — about to break"
 
+# ⭐ WHICH BODY-RATE CHANNEL THE RING IS IN — SLICE 28's SWITCH, EXTRACTED AT SLICE 33 SO THE TWO
+# SITES THAT NEED IT CANNOT DIVERGE (advisor). Slice 28 measured that on a slope-CURVE wire the lead
+# is in AZIMUTH, so the YAW channel sits on the steep part of the glass while pitch sits near the
+# boresight slope (rms r 1.042 against rms q 0.101) — a meter left on `q` reads the QUIET channel of
+# a shaking missile. Slice 26/27's FLAT glass has no such split and rings in PITCH.
+# ⚠⚠ THE REASON THIS IS A FUNCTION AND NOT A COPIED LINE: slice 33's composition HUD branch fires on
+# `_seeker_fov_view and _radome_view`, and `radome_view` is ALSO raised by slice-26-shaped glass with
+# NO ripple. The shipped slice-33 wire has a ripple, so a hardcoded `omega_r` is correct THERE and
+# would stay silently correct through every test — but on a future no-ripple composition the HUD
+# would print a near-zero `omega_r` underneath an orange "← RINGING" tag driven by the peak-hold's
+# `omega_q`. That is slice 28's own defect in a new place, and sharing the decision removes the
+# possibility structurally rather than by remembering to duplicate the switch.
+func _ring_channel_key() -> String:
+	return ".omega_r" if _telemetry.has(_af3d_missile + ".radome_slope_az") else ".omega_q"
+
 # SLICE 33 — THE RING IS AN FOV BUDGET ITEM. The COMPOSITION verdict, and it exists because slice
 # 32's would be CONFIDENTLY WRONG on this wire.
 # ⚠⚠ THE DEFECT IT REPLACES, MEASURED: `_fov_verdict_label` compares the LEAD against the WINDOW, and
@@ -1501,7 +1515,13 @@ func _draw_fov_hud_lines(vp: Vector2, fov: float, lead: float) -> void:
 # ⚠ THE RANGE AND CROSS-RANGE LINES ARE NOT HERE — the shared block above already draws them at
 # y = 66/88 for every 3-D airframe wire.
 func _draw_budget_hud_lines(vp: Vector2) -> void:
-	var rr := float(_telemetry.get(_af3d_missile + ".omega_r", 0.0))
+	# ⚠ THE CHANNEL COMES FROM THE SHARED HELPER, NOT A HARDCODED KEY — see `_ring_channel_key`. The
+	# shipped wire has a ripple so this reads `omega_r`, but the branch above is reachable by any
+	# glass+window composition, and a rate line on the wrong channel would print a calm number under
+	# the peak-hold's orange RINGING tag.
+	var chan := _ring_channel_key()
+	var rr := float(_telemetry.get(_af3d_missile + chan, 0.0))
+	var yaw_ch := chan == ".omega_r"
 	var look := float(_telemetry.get(_af3d_missile + ".look_angle", 0.0))
 	var fov := float(_telemetry.get(_af3d_missile + ".seeker_fov_deg", 0.0))
 	var marg := float(_telemetry.get(_af3d_missile + ".seeker_fov_margin_deg", 0.0))
@@ -1509,7 +1529,7 @@ func _draw_budget_hud_lines(vp: Vector2) -> void:
 	var aim := float(_telemetry.get(_af3d_missile + ".radome_slope_worst", 0.0))
 	# WHAT IS SPENDING. Coloured by the peak-hold, for the reason slice 27 settled: a limit cycle
 	# crosses zero twice per cycle, so an instantaneous verdict mislabels half the frames.
-	draw_string(_font, Vector2(vp.x - 430, 110), "body yaw rate r: %+.3f rad/s%s" % [rr, "   ← RINGING" if _radome_qpeak > 0.5 else ""],
+	draw_string(_font, Vector2(vp.x - 430, 110), "body %s rate %s: %+.3f rad/s%s" % ["yaw" if yaw_ch else "pitch", "r" if yaw_ch else "q", rr, "   ← RINGING" if _radome_qpeak > 0.5 else ""],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _radome_qpeak > 0.5 else COL_TICK)
 	# WHAT IS BEING SPENT — and the ring is visibly seen to EAT it.
 	draw_string(_font, Vector2(vp.x - 430, 132), "look %.1f°  vs  FOV %.1f°   BUDGET LEFT %+.1f°" % [look, fov, marg],

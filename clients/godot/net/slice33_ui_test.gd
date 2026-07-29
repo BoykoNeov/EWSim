@@ -226,7 +226,19 @@ func _initialize() -> void:
 		return _fail("⭐ AND THE TRACK-BREAK LATCH MUST BE LIVE TOO — a frame with `seeker_valid` 0 at r = 5247 m must latch it. Both instruments, one wire: that is the whole point of a composition view")
 	if not (sb._radome_qpeak > 0.5):
 		return _fail("…and latching the break must not disturb the ring instrument")
-	print("S33UI_INSTRUMENTS both live on ONE wire — the ring peak-hold rides the YAW channel to %.3f and the track-break latch fires at r = 5247 m, independently" % sb._radome_qpeak)
+	# ⭐⭐ AND THE CHANNEL IS CHOSEN ONCE, SHARED BY BOTH SITES — a post-review hardening (advisor).
+	# The composition branch fires on `_seeker_fov_view and _radome_view`, and `radome_view` is ALSO
+	# raised by slice-26-shaped glass with NO ripple, which rings in PITCH. A hardcoded `omega_r` in
+	# the HUD would have stayed silently correct on the shipped wire (it HAS a ripple) and printed a
+	# near-zero rate under an orange "← RINGING" tag driven by the peak-hold's `omega_q` on the next
+	# composition — slice 28's own defect in a new place. `_ring_channel_key` is what both read.
+	if sb._ring_channel_key() != ".omega_r":
+		return _fail("a RIPPLE wire (ships `radome_slope_az`) must select the YAW channel — slice 28's switch. Got %s" % sb._ring_channel_key())
+	let_no_ripple(sb)
+	if sb._ring_channel_key() != ".omega_q":
+		return _fail("⭐⭐ …and a wire WITHOUT `radome_slope_az` — slice 26/27's FLAT glass, which rings in PITCH — must select `omega_q`. If this ever returns yaw, a no-ripple composition would draw a calm number under an orange RINGING tag. Got %s" % sb._ring_channel_key())
+	sb._telemetry = _budget_tel(false, 5247.0, 26.0, -5.0, 1.20)   # restore the fixture
+	print("S33UI_INSTRUMENTS both live on ONE wire — the ring peak-hold rides the YAW channel to %.3f and the track-break latch fires at r = 5247 m, independently; and BOTH sites take the channel from ONE shared helper, proven in both directions" % sb._radome_qpeak)
 
 	# ══ TOOTH 6 — every key the composition HUD reads is PRESENT ══════════════════════════════════
 	# ⚠ The stale-readout class, in its MIRROR form: not a stale number printed confidently, but a
@@ -376,6 +388,13 @@ func _process(_d: float) -> bool:
 	return true
 
 # --- helpers (the slice19..32_ui_test contract) --------------------------------------------
+
+# Strip the slice-28 ripple key from the current fixture — the FLAT-glass composition (slice 26/27
+# shaped glass behind a window), which rings in PITCH.
+func let_no_ripple(sb) -> void:
+	var t: Dictionary = sb._telemetry.duplicate()
+	t.erase("m1.radome_slope_az")
+	sb._telemetry = t
 
 func _build_sandbox():
 	var sb = SandboxScript.new()
