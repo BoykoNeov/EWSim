@@ -12,14 +12,14 @@ an FOV budget item), and the successor slices 32 AND 33 both nominated:
 > so it needs a presence-gated head state with the strapdown else-arm VERBATIM."*
 > — `docs/plans/slice33.md`, Deferred (NAMED)
 
-**Status: GATE 1 COMPLETE (2026-08-09, suite 6215 → 6295, incl. the post-review fold-ins). Gate 0 =
-9 probes. Gates 2–3 PENDING. ⚠ GATE 2 MUST NOT RE-VERIFY THE BIT-IDENTITY (advisor) — three
-independent measurements already exceed what convention 2 asks, and re-running it would crowd out
-the measurement that actually matters there: whether the head's telemetry is STALE-READOUT-SAFE
-under the rung gate, the SEVENTH occurrence of the slice-21 `_atm_on` class.
+**Status: GATE 2 COMPLETE (2026-08-09, suite 6295 → 6505). Gate 0 = 9 probes, gate 1 = the kernels,
+gate 2 = the seam + the loader + the wired testset. GATE 3 PENDING (the scenario, the client, the
+four proofs).
 ⚠⚠ BOTH HALVES OF THE BANKED DEFERRAL WERE REFUTED AT GATE 0 (§0.1, §0.2) and the live claim was
 found in a THIRD place (§0.4) — the slice-33 shape exactly, and the refutations are load-bearing.
-Probe scripts in `M:\claud_projects\temp\slice34\`.**
+⚠⚠ AND GATE 2 CORRECTED THREE OF GATE 0's OWN READINGS (§2.1, §2.3, §2.4) — including §0.2's, whose
+collapse is a property of the `:truth` head and NOT of the head that ships. Probe scripts in
+`M:\claud_projects\temp\slice34\`.**
 
 ---
 
@@ -397,6 +397,208 @@ is untouched at gate 1, and the comp keys `:head_az` / `:head_el` are gate 2's.
 
 ---
 
+---
+
+## §2 — Gate 2 (COMPLETE, 2026-08-09 — 6295 → 6505, +210)
+
+The seam in `missile.jl::_observe_point3d!`, the loader in `scenario.jl`, and the wired testset.
+**FOUR FINDINGS, THREE OF WHICH CORRECT GATE 0's OWN READING OF ITS PROBE** — the probe was a
+hand-copy (`gimbal_lib.jl`) and gate 0 said so; what it did not say is which of its columns were
+properties of the *variant it flew* rather than of the *head that ships*.
+
+### The seam, and the four disciplines it had to enforce
+
+```julia
+_gim = haskey(c, :gimbal_tau_s) && haskey(c, :att_q) && :airframe === :six_dof   # discipline 1
+```
+
+1. **RUNG-GATED, never `haskey(:head_az)`** — the SEVENTH occurrence of the slice-21 `_atm_on`
+   class. `:head_az` is minted by the seam and never deleted, so a key-gated head would keep
+   slewing — and keep indexing the glass — off a FROZEN attitude after a cross-toggle off
+   `:six_dof`. ⭐ And the head and the attitude it is measured against are gated by the SAME rung
+   (`:att_q` is written only by the rung-gated `_integrate_6dof!`), so they freeze and resume
+   TOGETHER — asserted, not assumed, and it converts a "probably fine" into an invariant.
+2. **THE HEAD SLEWS BEFORE THE BEND IS TAKEN** (the block sits above the radome).
+3. **THE SERVO TRACKS THE BENT, ONE-TICK-DELAYED MEASUREMENT** (`:head_tgt_*`, stored *after*
+   `az_m`/`el_m` are formed). ⚠ **There is deliberately NO truth fallback** (advisor): the probe has
+   `get(c, :head_tgt_az, look_az_b)`, a TRUTH read on the one path whose whole thesis is that the
+   head never sees truth. `:head_az` and `:head_tgt_az` are minted on the SAME tick, so the slew
+   branch indexes both directly and the un-exercised branch does not exist.
+4. **THE HANDOVER CALLS `head_clamp` UNCONDITIONALLY** — gate 1's Finding 2 made enforceable. The
+   probe's per-axis `clamp` is exactly the bug that finding predicted would be copied.
+
+⚠ **THE DETECTOR WINDOW IS EVALUATED TWICE, AGAINST DIFFERENT QUANTITIES, and collapsing them
+changes the physics**: the SLEW is gated on the error BEFORE this tick's slew (no error signal, no
+slew — the head HOLDS), AVAILABILITY on the error AFTER. The hold is the mechanism behind §0.7's
+metric inversion and it is wired, not commented.
+
+### ⚠⚠ §2.0 — THE LOADER REFUSES `seeker_fov_deg` BESIDE A HEAD, AND THAT IS PHYSICS
+
+A gimballed seeker has NO body-fixed window: its body-fixed limit is the mechanical STOP and its
+window is the DETECTOR's, about the head axis. Slice 32's key under a head would be an unmodelled
+THIRD window — the slice-21 "refused, not branch-ordered" precedent. ⭐ **And it closes a real
+defect** (advisor): the `_fov_on` telemetry block rewrites `look_angle` from the TRUTH LOS *after*
+the radome block wrote the head-indexed value, so a wire authoring both would silently ship the
+NOSE's index where the glass used the HEAD's — the slice-29 stale-readout catch in a new place.
+Refusing makes that choice unnecessary rather than silent.
+
+⚠ **BUT REFUSAL COSTS TWO KEYS GATE 3 NEEDS** (advisor, and it is the non-obvious half):
+`lead_angle_deg` and the truth-referenced look angle live ONLY under `_fov_on`. So `_gim` ships them
+itself, plus `look_body_deg` (the strapdown quantity slice 32 called `look_angle`, kept under its own
+name because slice 26's `look_angle` now carries the HEAD's index) and a SIGNED
+`gimbal_fov_margin_deg` — slice 18's `terrain_clearance_m` / slice 33's `seeker_fov_margin_deg`
+shape, **THE SIGN IS THE VERDICT**, built from the SAME `fov_h` and `off_head` the flying predicate
+tested so the two are the same bits and not two opinions. Decided at gate 2 rather than a gate late,
+which is what slice 33's ledger records the cost of.
+
+### ⚠⚠ §2.1 — FINDING 1: §0.2's COLLAPSE DOES NOT REPRODUCE, AND THAT IS THE SLICE
+
+§0.2 measured `max|Δpos| = 0` at τ → 0 and concluded that "the bend keys off head-vs-body" is the
+FALSE-FIDELITY class. ⚠ **That arm tracked the TRUTH LOS** (`gimbal_lib.jl`'s default). The head that
+SHIPS tracks its own BENT, one-tick-delayed measurement, so at τ = 0 it lands on the PREVIOUS tick's
+BENT angle and not on this tick's LOS-vs-body. Measured on the shipped seam, 9 000 ticks:
+
+| R̂ | `max|Δpos|` vs the strapdown `Seeker` |
+|---|---|
+| −0.03 | **77.10 m** |
+| −0.18 | **58.21 m** |
+| −0.33 | **55.13 m** |
+
+⭐⭐ **AND IT IS NOT MERELY NON-ZERO — AT τ = 0 THE MARGIN IS ALREADY THERE IN FULL.** The
+minimum-lag head, whose only remaining departure from strapdown is the INDEX, reads `rms r`
+**0.03394 (QUIET)** where the strapdown seeker reads 0.93194 (RINGING), 27.5×. ⇒ **§0.5's isolation
+reproduced at the seam without needing its `:truth` / `:delay` probe arms: THE MARGIN IS BOUGHT BY
+THE INDEX.**
+
+⇒ the false-fidelity control §0.2 promised is not available, and **THREE BIT-IDENTITY CONTROLS SHIP
+IN ITS PLACE, ALL EXACTLY 0**:
+
+* **A — NO GLASS, NO WINDOW ⇒ inert at EVERY τ** (0.0, 0.05, 0.5). The head reaches the trajectory
+  through exactly two channels, the radome's INDEX and the detector WINDOW; this is the structural
+  claim that there is no third.
+* **B — A WIDE `gimbal_fov_deg` IS BIT-IDENTICAL TO THE KEY ABSENT** — atmosphere.jl's KNOB-vs-RUNG
+  discriminator applied to the slice's ONE slider ⇒ KNOB, no rung, button stays dropped. The free
+  arms of every table below rely on it.
+* **C — A NON-BINDING STOP IS INERT**, which is what licenses the unconditional `head_clamp` at the
+  handover.
+
+### ⭐⭐ §2.2 — THE LESSON, WIRED, AND THE BRACKET'S SECOND TELL
+
+Same glass (R₀ = −0.03, A = −0.15), same residual, same seed, τ = 0.05, a 30° stop:
+
+| R̂ | strapdown `rms r` | gimballed `rms r` | `off_max` | `head_max` | miss |
+|---|---|---|---|---|---|
+| −0.33 | 0.05879 | 0.05917 | 1.599° | 18.117° | 0.161 m |
+| −0.27 | 0.03070 | 0.03701 | 1.761° | 18.117° | 0.032 m |
+| −0.24 | **0.70983** | 0.02497 | 1.831° | 18.117° | 0.050 m |
+| −0.18 | **0.93194** | **0.01181** | 1.956° | 18.117° | 0.187 m |
+| −0.17 | 0.95537 | 0.03934 | 3.762° | 18.117° | 3.631 m |
+| −0.16 | 0.97044 | **0.35338** | 5.237° | **20.619°** | 5.695 m |
+| −0.12 | 1.03165 | 0.70207 | 5.587° | 22.026° | 6.500 m |
+| −0.03 | 1.07211 | 0.88465 | 5.916° | 23.601° | 5.246 m |
+
+**THE HEADLINE: 0.93194 RINGS vs 0.01181 QUIET, 78.9×.** Onset bracket **(−0.18, −0.16]** gimballed
+against **(−0.27, −0.24]** strapdown — quoted BRACKET TO BRACKET, with −0.17 MARGINAL and pinned as
+a NUMBER rather than asserted as a verdict. ⭐ **AND `head_max` STEPS AT THE SAME PLACE** — flat at
+18.117° through every quiet arm and 20.619° at the first ringing one: a SECOND tell from a DIFFERENT
+quantity, which is what makes the bracket a measurement and not a threshold read off the metric that
+defined it. ⚠ **THE MISS IS NOT THE METRIC** — every arm on both ladders HITS (< 7 m), the arc's
+standing fact since slice 26.
+
+### ⚠⚠ §2.3 — FINDING 2: τ IS AUTHORED, BUT NOT FOR §0.4's REASON
+
+§0.4 concluded *"τ does NOT move the onset anywhere in `[0.02, 0.2]` — only the amplitude sags"* and
+made that the reason τ is authored. ⚠ **ITS LADDER SKIPPED −0.17 AND −0.16, WHICH IS EXACTLY WHERE
+THE BRACKET IS.** The sag is monotone EVERYWHERE, and at the line that same sag crosses the verdict:
+
+| R̂ | τ=0 | τ=0.02 | τ=0.05 | τ=0.10 | τ=0.20 |
+|---|---|---|---|---|---|
+| −0.18 | 0.03394 | 0.01166 | 0.01181 | 0.01162 | 0.01042 |
+| −0.17 | **0.64469** | 0.26854 | 0.03934 | 0.01562 | 0.01261 |
+| −0.16 | **0.86787** | **0.62591** | **0.35338** | 0.07508 | 0.02061 |
+| −0.12 | 1.01270 | 0.83567 | 0.70207 | 0.57877 | 0.42355 |
+
+⇒ the bracket walks from **(−0.18, −0.17] at τ ≤ 0.02** to **(−0.16, −0.12] at τ = 0.20**. τ is a
+**CONFOUNDED LEVER**, which is a STRONGER reason to keep it authored than a dead one: it moves the
+amplitude on every arm, so a student dragging it moves the verdict without moving the mechanism.
+⭐ **AND THE SLICE'S CLAIM SURVIVES THE WHOLE SPAN** — at EVERY τ the showcase arm is quiet where
+strapdown rings, so the margin is not a τ artifact anywhere in the domain.
+
+### ⚠⚠ §2.4 — FINDING 3: §0.7's `⌈off_max⌉` RULE IS SUFFICIENT BUT NOT TIGHT
+
+Gate 0 swept a **1° grid**, on which the ceiling happens to be the first held cell — so it read
+*"`⌈off_max⌉` calls the critical window exactly in both rows (2 and 6)"*. On a **0.1° grid** the
+−0.16 row holds already at **5.30**, 0.7° BELOW the ceiling. The real predicate is the free arm's own
+`off_max`:
+
+| R̂ | free `off_max` | last BREAK | first HOLD | verdict |
+|---|---|---|---|---|
+| −0.18 (quiet) | **1.955643°** | 1.9550° | 1.9600° | straddled to **0.005°** |
+| −0.16 (ringing) | **5.236820°** | 5.2400° | 5.3000° | CONSERVATIVE by ~1 % |
+
+⇒ **SLICE 32's PREDICATE RETURNS IN THE CURRENCY A GIMBAL HAS: `held ⟺ tracking error < detector
+window`**, and the two sides come from DIFFERENT RUNS (the error off a FREE arm, the verdict off a
+WINDOWED one), which is what makes it a measurement rather than a restatement. ⚠ The ~1 % slack on
+the ringing arm is the two-run divergence itself — a windowed arm is a DIFFERENT TRAJECTORY and a
+ring diverges faster once it clips. Both directions stated rather than tuned away. ⭐ **AND THE RING
+IS SPENT IN DETECTOR WINDOW, 2.7×** (1.956° → 5.237°) — slice 33's payload in the new currency.
+
+### ⭐⭐ §2.5 — FINDING 4: THE STOP AND THE WINDOW ARE ONE BUDGET, NOT TWO LIMITS
+
+**No gate-0 arm could have seen this**: every one ran the stop at 30° or 1e6° against a head travel
+of at most 23.4°, so THE STOP NEVER BOUND IN ANY ARM THAT HAS EVER FLOWN — gate 1 wrote that down
+as the reason `head_clamp`'s circular shape rests on a species argument. Bind it, and the two limits
+are coupled: a clamped head cannot reach the LOS, so its DEFICIT is spent out of the DETECTOR budget.
+
+    off_head ≈ (head travel requirement − stop) + free tracking error
+
+| detector window | critical stop | `off_max` at the first holding stop |
+|---|---|---|
+| 8° | (10, 11] | 7.133° |
+| 4° | (14, 16] | 2.227° |
+| 2° | (16, 18] | 1.956° |
+
+against an 18.1172° travel requirement and a 1.956° free tracking error. ⇒ **the plan's "the stop
+reproduces slice 33's excursion — a RESTATEMENT" is CONFIRMED AND SHARPENED**: the stop must cover
+slice 33's number, and whatever it fails to cover is charged to the window. A stop below the lead is
+fatal on its own (100 % out, 3619 m, and the band is EMPTY so `rms r` is undefined — slice 33's own
+gate-2 catch).
+
+### ⚠⚠ §2.6 — THE TWO-RUN DISCIPLINE, MEASURED RATHER THAN INHERITED
+
+At R̂ = −0.16 through a 1° window: the miss OPENS **220×** (5.695 → 1254.83 m) while `rms r` FALLS
+**4.2×** (0.35338 → 0.08491) and the arm's own `off_max` reads **89.2°** — the post-lock-loss runaway
+— against the ring's actual 5.24°. ⇒ **NO STABILITY VERDICT MAY EVER BE READ ON A WINDOWED ARM**;
+the predictor comes off a FREE arm and the predicted off a WINDOWED one, bound at the call sites.
+
+### The knob domain — MEASURED here, because the plan filed it to gate 1 (which shipped kernels only)
+
+**`gimbal_fov_deg` ∈ [1, 8]°.** The CEILING because the metric is FLAT above the requirement
+(CONTROL B: a wider window is bit-identical to no window at all), and 8 clears the ringing arm's
+5.24° with room to see the cliff either side. The FLOOR because below 1° the arm never enters
+r ∈ [500, 3000] at all, so a band column would count NOTHING — slice 33's gate-2 catch, live again.
+⚠ **The broken regime is NOT monotone in the miss** (1.9° → 546 m vs 2.0° → 569 m, ~4 %) because a
+windowed arm is a different trajectory rather than a degraded copy of one; the LESSON is the CLIFF,
+which is sharp in both rows, and the domain brackets it rather than resting on that ordering. Pinned
+as a fact rather than hidden.
+
+### Class, and what convention 2 got
+
+**4a**, the 10th consecutive RNG-live slice. **Draw count ASSERTED, both bounds** — 2 `randn`/tick on
+all four configurations (a config drawing 1 and 3 on alternate ticks could not pass; the topology is
+what convention 3 is about, not the mean). Byte-identity read ON THE WIRE rather than off the diff:
+the key-absent arms reproduce slices 30/33's ladder to the digit in the suite, and **`slice33_verify`
+was re-run against the live server** — `S33V OK`, exit 0, reproducing STATUS exactly (rms r 1.07151 /
+0.93167 / 0.70969 / 0.05887, excursions 24.995 / 22.113 / 20.608 / 18.115°, break at t = 1.936 s /
+r = 5247.0 m, 3696.892 m and 949×, replay `max|Δpos| = 0.000000`). The remaining 26–32 verifiers
+belong at gate 3 beside the shipped wire, the slice-33 precedent.
+
+⚠ Per the gate-1 note, gate 2 did NOT re-verify the `boresight_angle` REDEFINITION — that is
+measured three ways already. The three bit-identity claims are separate things and only that one was
+skipped.
+
+---
+
 ## What ships (gates 1–3, PLANNED)
 
 ### The core
@@ -444,6 +646,13 @@ which under a head is the head's own angle. ⚠ **`seeker_fov_deg` / `seeker_fov
 THEIR SLICE-32/33 MEANING** (LOS-vs-body) and the head quantities ship ALONGSIDE — slice 28's
 `radome_residual*` precedent. Redefining them would silently rewrite two slices' asserts.
 
+⚠ **SUPERSEDED BY §2.0 — SHIPPED LARGER, AND FOR A MEASURED REASON.** The loader REFUSES
+`seeker_fov_deg` beside a head (a gimballed seeker has no body-fixed window), which removes
+`lead_angle_deg` and the truth-referenced look angle from the wire entirely — so `_gim` ships them
+itself, plus `look_body_deg`, `gimbal_fov_deg`, `gimbal_stop_deg` and a SIGNED
+`gimbal_fov_margin_deg`. The "keep their meaning" instruction is satisfied by ABSENCE rather than by
+coexistence.
+
 ### Convention 9 and the knob count
 
 ONE live slider: **`gimbal_fov_deg`** (the detector window) — **and §0.7 measured that it BINDS
@@ -453,6 +662,12 @@ measured it does not move the onset over any realistic band (the dead-knob disci
 the knob exists), the stop because it reproduces slice 33's excursion and is therefore a
 RESTATEMENT. Domain to be MEASURED at gate 1; the non-monotone `head_max` peak of §0.3 and the
 acquisition transient of §0.8 are the two constraints to bracket against.
+
+⚠ **CORRECTED AT GATE 2 ON BOTH COUNTS.** The domain was MISFILED to gate 1, which shipped kernels
+only — it is measured at §2, `gimbal_fov_deg ∈ [1, 8]°`. And τ's authored-ness rests on §2.3's
+reading, not §0.4's: τ DOES move the bracket at the line (§0.4's ladder skipped −0.17/−0.16), so it
+is a CONFOUNDED lever rather than a dead one — a stronger reason for the same decision. §2.5 also
+CONFIRMS the stop's "restatement" status by binding it for the first time in the slice's history.
 
 ### Class and the button
 
