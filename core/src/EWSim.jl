@@ -160,7 +160,12 @@ export seeker_fov_margin
 # — an identity about the ANGLE, never a licence to collapse slice 32/33's window keys onto the head
 # ones. KNOB (`gimbal_fov_deg`), no rung; `τ` and the stop are AUTHORED (τ because gate 0 measured it
 # does not move the onset — the dead-knob discipline applied before the knob exists).
-export off_axis_angle, head_slew, head_clamp
+# Slice 35 (§11 Tier-A): A RATE-LIMITED HEAD — `head_slew` gains a defaulted `rate_max`, and with it
+# the arc's FIRST TWO-SIDED KNOB: slowing the servo ATTENUATES the ring and GROWS the tracking error
+# the detector window must cover, because the motion that holds the track is the motion that feeds
+# the loop. `head_slew_full` is its implementation, exported so gate 2's telemetry reads the DEMAND
+# and the saturation FLAG off the shipped kernel instead of re-deriving the step at the seam.
+export off_axis_angle, head_slew, head_clamp, head_slew_full
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step
 export INTEGRATOR_MODES, G_ACCEL

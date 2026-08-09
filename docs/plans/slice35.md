@@ -11,7 +11,10 @@ an FOV budget item, 34 = the gimbal), and the deferral slice 34 named SECOND:
 > slew-rate-limited lock loss."*
 > — `docs/plans/slice34.md`, Deferred (NAMED)
 
-**Status: GATE 0 COMPLETE (2026-08-09, 5 probes). Gates 1–3 PLANNED.
+**Status: GATE 1 COMPLETE (2026-08-09) — the kernel + 52 teeth, suite 6628 → 6680 green, and
+`missile.jl` UNTOUCHED, so every prior slice is bit-identical BY CONSTRUCTION (no call site passes
+`rate_max`). Gates 2–3 PLANNED. See §1 below for gate 1's two findings, BOTH of which change what
+gate 2 may write. GATE 0 COMPLETE (2026-08-09, 5 probes).
 ⚠⚠ THE OPENING FRAMING WAS REFUTED BEFORE ANY CODE (§0.1, advisor) — "a finite slew rate breaks
 lock in the endgame at `r ≈ V⊥/ω_max`" is a PURSUIT geometry and a DEAD KNOB on a collision course.
 ⚠⚠ AND THE ADVISOR'S OWN SHIP/NO-SHIP GATE CAME BACK NEGATIVE (§0.3) — a wider window DOES rescue a
@@ -208,6 +211,83 @@ THE TRAJECTORY ONLY THROUGH THE GLASS.** Slice 34's "exactly two channels" (the 
 the detector WINDOW) re-measured for the new knob, as a column rather than an inference. ⚠ And
 `head_max` FREEZES at 18.117° on every rate-broken arm — slice 34's THIRD two-run quantity, the
 dangerous one (plausible, in range, too small), reconfirmed here in a new failure mode.
+
+---
+
+## §1 — Gate 1 (2026-08-09) — THE KERNEL, AND TWO FINDINGS
+
+`frames.jl` `head_slew` gains the defaulted keyword `rate_max = Inf`; the radial clamp on the step
+is INNER to `head_clamp` (the stop keeps the last word); 52 teeth in `test_frames.jl`.
+
+### ⚠⚠ FINDING 1 — THE PLAN'S OWN BRANCH POLARITY IS BACKWARDS, AND THE GATE-0 PROBE PATCH CARRIES
+### THE BUG (advisor, before any code)
+
+"What ships" below writes the inert branch as `step ≤ cap || …`, and `g0_probe_patch.diff`
+implements exactly that. **It regresses three of slice 34's shipped degenerates to NaN.**
+`cap = max(rate_max, 0)·Δt`, so the DEFAULT `rate_max = Inf` at `Δt = 0` gives `cap = Inf·0.0 =
+NaN`; `step ≤ NaN` is FALSE, so the LIMITING branch runs and `sc = NaN/step` propagates. The three:
+`test_frames.jl`'s `dt = 0`, `dt < 0`, and `τ = 0 ∧ dt = 0` rows, all of which demand `===`.
+
+⇒ **the shipped form guards the BINDING branch** (`sat = dem > cap`), which makes every non-finite
+cap inert for free and is `head_clamp`'s own `m > s || return (a, e)` semantics — ONE kernel shape,
+not two. A NaN `rate_max` therefore degenerates to NO limit with no special case. ⚠ The NaN-cap rows
+are now in the degenerate table explicitly, so a later cleanup of the `Inf·0` NaN cannot silently
+reintroduce it.
+
+### ⭐ FINDING 2 — `τ = 0 ∧ dt = 0` PARTS COMPANY WITH SLICE 34, AND IT IS THE PHYSICAL ANSWER
+
+The one row where a finite limit is STRICTLY STRONGER than the unlimited head: `cap = rate·Δt` is
+ZERO at `Δt ≤ 0`, so the exact-landing ASSIGNMENT is unreachable and the head FREEZES where slice
+34's servo lands on the target — **a servo with a finite rate cannot teleport in zero time.** It
+freezes to the SAME BITS as the `τ = Inf` head, so the `rate_max ≤ 0` ≡ `τ = Inf` identity arrives
+from a THIRD direction; slice 34's row is untouched under the default (cap NaN ⇒ no limit) and is
+asserted as such beside it. ⚠ The first draft of the tooth asserted slice 34's answer and FAILED —
+the kernel was right and the test was wrong.
+
+### ⚠⚠ THE BIT-IDENTITY CONTROL IS THE ABSENT KEY / `Inf`, NEVER `gimbal_rate_dps = 60` (advisor,
+### blocking — and it constrains GATE 3, not gate 1)
+
+The domain CEILING is measurably NOT inert: §0.2's peak demand is an identical **72.542 °/s** on
+every arm (the tick-2 HANDOVER transient, and at `τ → 0` the step is the full error EVERY tick,
+which is exactly where a cap bites), and §0.6's rate-60 row already reads `sat_band` 8.64 % with
+`rms r` 0.88469 against the free 0.88465. An arm authored at 60 expecting `max|Δpos| = 0` would land
+as a NEAR-MISS and read like a rounding residual in the new branch. Pinned as arithmetic in
+`test_frames.jl` so gate 3 cannot author it.
+
+### What gate 1 PROVED (and what it deliberately did not)
+
+* **BIT-IDENTITY, three ways, 4 000 randomized cells each `===`**: the absent kwarg, `rate_max =
+  Inf`, and a NON-BINDING FINITE rate all take the OLD CODE PATH — with the non-vacuity counter
+  beside it (a limit BELOW the demand moved the answer in **4 000 / 4 000** cells).
+* **The kernel half of the τ → 0 collapse**: with a non-binding limit PRESENT, the `τ ≤ dt` exact
+  landing is still `=== (tgt_az, tgt_el)`. ⚠ **The WIRE half is gate 2/3's** — `missile.jl` is
+  untouched here, so no flying arm can yet carry a `rate_max` at all.
+* **Contraction survives the limit** — `n_grew == 0`, and across FOUR DECADES of `rate_max`
+  (`10^(0.5…3)` … `10^(2…5)`), so it is not a property of the shipped band. ⚠ The sweep's band is
+  CHOSEN and the reason is measured: a tighter one starves the STOP counter (1570 rate-bound vs
+  only 156 stop-bound at `10^(0.5…3)`), and it is the **83 cells where BOTH bind** that pin the
+  ORDERING in a sweep rather than in one constructed case.
+* **RADIAL, not per-axis**, EXHIBITED differing on the diagonal (`√2·cap`) — `head_clamp`'s own
+  tooth in the new quantity, and the same species argument. The direction of the demanded step is
+  preserved EXACTLY while only its magnitude moves: the limit spends bandwidth, it does not re-aim.
+* **The ORDERING is a measurement, not a comment** — the rate limit is radial about the HEAD and
+  the stop radial about the ORIGIN, so the two orders are NOT the same map; the reverse order is
+  exhibited giving a different head, which is what makes the pin meaningful.
+
+### ⚠ THE RETURN SHAPE WAS SETTLED AT GATE 1 BECAUSE IT FIXES THE SIGNATURE (advisor)
+
+Gate 2 must ship the pre-clamp DEMAND and the saturation FLAG, and the plan forbids reconstructing
+them from a post-hoc difference of `:head_az`. The alternative — the seam re-forming
+`wrap_angle(tgt − head)·gain/dt` and the `step > cap` comparison — is a SECOND IMPLEMENTATION of the
+kernel, the trap `missile.jl` names for `off_axis_angle`, and here it is worse than cosmetic: a flag
+built from a re-derived predicate can DISAGREE with the branch it claims to report, at the boundary
+tick where the disagreement is least visible. ⚠ Widening `head_slew`'s return is OUT (~15 shipped
+asserts and the seam depend on the `=== (t_az, t_el)` 2-tuple idiom), so the kernel is SPLIT:
+**`head_slew_full` → `(az, el, demand, rate_sat)`** is the implementation and `head_slew` is its
+first two elements, pinned over 2 000 cells. `demand` is a STEP in RADIANS, not a rate — `step/Δt`
+at `Δt = 0` would manufacture a non-finite from finite input, so the division and the degrees belong
+to the seam, where this family's unit conversions already live. ⚠ ONE caller today, and gate 2's
+telemetry is the named second — `head_clamp`'s own story at slice 34's gate 1.
 
 ---
 

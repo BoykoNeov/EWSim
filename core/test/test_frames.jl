@@ -1420,5 +1420,227 @@
             @test head_slew(-0.0, 0.5, 0.4, 0.5, Inf, dt, Inf)[1] === 0.0
             @test head_slew(-0.0, 0.5, 0.4, 0.5, Inf, dt, Inf)[1] == -0.0
         end
+
+        @testset "head_slew — THE RATE LIMIT (slice 35), and the control it must not break" begin
+            dt = 1.0e-3
+
+            # ⚠⚠ THE BIT-IDENTITY CONTROL, AND IT IS THE WHOLE REASON THE LIMIT IS INERT BY BRANCH.
+            # Slice 34's `τ → 0 ⇒ max|Δpos| = 0` strapdown collapse carries a REFUTATION, so a
+            # rounding residual here would turn that control into a near-miss and read like a bug in
+            # the new branch. Three claims, and the third is the one the wire rests on: the ABSENT
+            # kwarg, an `Inf` rate, and a NON-BINDING FINITE rate all take the OLD CODE PATH.
+            let rng = Xoshiro(3538), n_absent = 0, n_free = 0, n_land = 0, n_moved = 0
+                for _ in 1:4000
+                    h_az = 0.6 * randn(rng); h_el = 0.3 * randn(rng)
+                    t_az = 0.6 * randn(rng); t_el = 0.3 * randn(rng)
+                    τ = 10.0^(-3 + 3 * rand(rng)); stop = deg2rad(30.0)
+                    ref = head_slew(h_az, h_el, t_az, t_el, τ, dt, stop)
+                    dem = head_slew_full(h_az, h_el, t_az, t_el, τ, dt, stop)[3]
+                    head_slew(h_az, h_el, t_az, t_el, τ, dt, stop; rate_max = Inf) === ref ||
+                        (n_absent += 1)
+                    # a limit ABOVE the demand — inert, and `===`, never "rounds to the same"
+                    head_slew(h_az, h_el, t_az, t_el, τ, dt, stop;
+                              rate_max = 1.0e3 * dem / dt + 1.0) === ref || (n_free += 1)
+                    # ⭐ the EXACT LANDING with a non-binding limit PRESENT — the kernel half of the
+                    # τ → 0 collapse (the wire half is gate 2/3's, and it is stated there)
+                    head_slew(h_az, h_el, t_az, t_el, 0.0, dt, Inf;
+                              rate_max = 1.0e6) === (t_az, t_el) || (n_land += 1)
+                    # ...and the non-vacuity: a limit BELOW the demand really does move the answer
+                    head_slew(h_az, h_el, t_az, t_el, τ, dt, stop;
+                              rate_max = 0.5 * dem / dt) === ref && (n_moved += 1)
+                end
+                @test n_absent == 0 && n_free == 0 && n_land == 0
+                @test n_moved == 0            # 4 000 cells, EVERY one moved — not a vacuous sweep
+            end
+
+            # ⚠⚠ AND THE CONTROL ARM IS THE ABSENT KEY / `Inf`, NOT THE DOMAIN CEILING (advisor,
+            # blocking): gate 0 §0.2 measures the PEAK demand at an identical 72.542 °/s on every
+            # arm — the tick-2 HANDOVER transient — so a `gimbal_rate_dps = 60` control BINDS, and
+            # §0.6's rate-60 row agrees on the wire (`sat_band` 8.64 %, `rms r` 0.88469 vs the free
+            # 0.88465). Pinned as arithmetic here so gate 3 cannot author 60 as a bit-identity arm.
+            let h = (0.20, -0.10), τ = 0.0, stop = Inf,
+                t = (0.20 + deg2rad(72.542) * dt, -0.10)            # a step demanding EXACTLY §0.2
+                f = head_slew_full(h[1], h[2], t[1], t[2], τ, dt, stop)
+                @test rad2deg(f[3] / dt) ≈ 72.542 atol = 1e-9        # the demand, in the same units
+                @test f[4] === false                                 # free: nothing bound
+                @test head_slew(h..., t..., τ, dt, stop; rate_max = deg2rad(60.0)) !== (t[1], t[2])
+                @test head_slew(h..., t..., τ, dt, stop; rate_max = Inf) === (t[1], t[2])
+            end
+
+            # ⚠ RADIAL, NOT PER AXIS — `head_clamp`'s own tooth in the new quantity, and the same
+            # species argument (the limit must have the shape of the telemetry that reads it). A
+            # per-axis rate clamp leaves the STEP at `√2·cap` on the diagonal, EXHIBITED differing.
+            let h = (0.0, 0.0), t = (0.4, 0.4), cap_r = 10.0        # rad/s ⇒ cap = 0.01 rad
+                p = head_slew(h..., t..., 0.0, dt, Inf; rate_max = cap_r)
+                @test hypot(p...) ≈ cap_r * dt atol = 1e-15          # ON the cap circle
+                @test p[1] ≈ p[2] atol = 1e-15                       # ...along the demanded ray
+                per_axis = (clamp(t[1], -cap_r * dt, cap_r * dt), clamp(t[2], -cap_r * dt, cap_r * dt))
+                @test hypot(per_axis...) ≈ sqrt(2) * cap_r * dt atol = 1e-15
+            end
+            # ...and off the diagonal: the DIRECTION of the demanded step is preserved exactly while
+            # only its magnitude moves — the property that makes the limit a servo bound and not a
+            # re-aiming (the `head_clamp` "same ray" tooth, about the HEAD rather than the origin)
+            let h = (0.31, -0.17), t = (-0.44, 0.22), τ = 0.05, cap_r = 3.0
+                fr = head_slew_full(h..., t..., τ, dt, Inf)
+                p  = head_slew(h..., t..., τ, dt, Inf; rate_max = cap_r)
+                @test hypot(p[1] - h[1], p[2] - h[2]) ≈ cap_r * dt atol = 1e-15
+                @test (p[1] - h[1]) / (p[2] - h[2]) ≈
+                      (fr[1] - h[1]) / (fr[2] - h[2]) atol = 1e-12
+                # the demanded step points AT the target, so a step of length `cap` moves the error
+                # down by EXACTLY `cap` — the limit spends bandwidth, it does not re-aim
+                @test off_axis_angle(p..., t...) ≈
+                      off_axis_angle(h..., t...) - cap_r * dt atol = 1e-12
+            end
+
+            # ⚠ THE ORDERING IS PINNED: the rate limit shapes the STEP, then the stop has the last
+            # word (the stop is the OUTER authority). The two orders are NOT the same map — the
+            # rate limit is radial about the HEAD, the stop radial about the ORIGIN — so the reverse
+            # order is EXHIBITED giving a different head, which is what makes this a measurement.
+            let stop = deg2rad(30.0), h = (deg2rad(25.0), 0.0), t = (deg2rad(25.0), deg2rad(60.0)),
+                cap_r = deg2rad(10.0) / dt
+                p = head_slew(h..., t..., 0.0, dt, stop; rate_max = cap_r)
+                @test hypot(p[1] - h[1], p[2] - h[2]) ≈ deg2rad(10.0) atol = 1e-15  # rate bound…
+                @test hypot(p...) < stop                                            # …stop did not
+                # the REVERSE order (clamp first, then rate-limit the step to the clamped point)
+                let c = head_clamp(t..., stop), v = (c[1] - h[1], c[2] - h[2]), m = hypot(v...),
+                    sc = min(1.0, deg2rad(10.0) / m)
+                    @test !isapprox(h[1] + v[1] * sc, p[1]; atol = 1e-6)
+                end
+                # ...and a step the rate limit leaves LONGER than the stop allows is still stopped
+                let p2 = head_slew(0.0, 0.0, deg2rad(70.0), 0.0, 0.0, dt, stop;
+                                   rate_max = deg2rad(50.0) / dt)
+                    @test hypot(p2...) ≈ stop atol = 1e-15
+                end
+            end
+
+            # ⚠⚠ CONTRACTION SURVIVES THE LIMIT — the 4 000-cell sweep above this testset, re-run
+            # with a randomized rate limit sized so that BOTH limits bind on a healthy share of the
+            # cells (advisor). The limited step is a point ON the segment to the unlimited endpoint,
+            # so it cannot grow the error; measured rather than argued, and the counters below are
+            # what say the sweep exercised the branch. ⚠ The rate band is CHOSEN, and the reason is
+            # a measurement: a tighter band starves the STOP counter (at `10^(0.5…3)` the steps are
+            # so short the head rarely reaches the disc edge — 1570 rate-bound but only 156
+            # stop-bound), and it is the cells where BOTH bind that pin the ORDERING in a sweep
+            # rather than in one constructed case. ⭐ `n_grew == 0` holds across FOUR DECADES of
+            # limit (`10^(0.5…3)` through `10^(2…5)`), so the claim is not a property of this band.
+            let rng = Xoshiro(3539), n_grew = 0, n_rate = 0, n_stop = 0, n_both = 0,
+                stop = deg2rad(20.0)
+                for _ in 1:4000
+                    r = deg2rad(20.0) * rand(rng); φ = 2π * rand(rng)
+                    h_az = r * cos(φ); h_el = r * sin(φ)             # INSIDE or ON the stop
+                    t_az = 0.9 * randn(rng); t_el = 0.6 * randn(rng)
+                    τ = 10.0^(-3 + 3 * rand(rng))
+                    rate = 10.0^(1 + 3 * rand(rng))                  # rad/s
+                    e0 = off_axis_angle(h_az, h_el, t_az, t_el)
+                    f = head_slew_full(h_az, h_el, t_az, t_el, τ, dt, stop; rate_max = rate)
+                    off_axis_angle(f[1], f[2], t_az, t_el) > e0 + 1e-15 && (n_grew += 1)
+                    on_stop = hypot(f[1], f[2]) ≥ prevfloat(stop)
+                    f[4] && (n_rate += 1)
+                    on_stop && (n_stop += 1)
+                    f[4] && on_stop && (n_both += 1)
+                end
+                @test n_grew == 0
+                @test n_rate > 200 && n_stop > 200   # BOTH limits really bound — not vacuous
+                @test n_both > 50                    # ...and both on the SAME tick, 83 measured
+            end
+
+            # ⭐ THE DEMAND IS PRE-LIMIT, AND IT IS WHAT §0.2's PROBE MEASURED. Gate 0 read the
+            # demanded rate as a finite difference on the head's own angles with NO limit present —
+            # i.e. what the head ACTUALLY DID, which is exactly what a limit would clip — so the
+            # kernel's `demand` is pinned AGAINST that finite difference, not against its own
+            # formula. ⚠ And it does NOT move when the limit binds: it is the demand, not the
+            # delivery, which is what makes it a telemetry quantity worth shipping.
+            let h = (0.10, -0.05), t = (0.90, 0.40), τ = 0.05, stop = deg2rad(80.0)
+                fr = head_slew_full(h..., t..., τ, dt, stop)
+                @test fr[3] ≈ hypot(fr[1] - h[1], fr[2] - h[2]) atol = 1e-15   # the finite diff
+                @test fr[4] === false
+                let cap_r = 0.5 * fr[3] / dt, fl = head_slew_full(h..., t..., τ, dt, stop;
+                                                                  rate_max = cap_r)
+                    @test fl[3] === fr[3]                                      # UNMOVED by the cap
+                    @test fl[4] === true
+                    @test hypot(fl[1] - h[1], fl[2] - h[2]) ≈ cap_r * dt atol = 1e-15
+                end
+            end
+            # ...and `head_slew` IS its first two elements — the delegation, so there is ONE
+            # implementation and the flag cannot disagree with the pointing it reports on
+            let rng = Xoshiro(3540), n_bad = 0
+                for _ in 1:2000
+                    a = (0.5 * randn(rng), 0.3 * randn(rng), 0.5 * randn(rng), 0.3 * randn(rng))
+                    τ = 10.0^(-3 + 3 * rand(rng)); rt = 10.0^(0.5 + 2.5 * rand(rng))
+                    f = head_slew_full(a..., τ, dt, deg2rad(30.0); rate_max = rt)
+                    head_slew(a..., τ, dt, deg2rad(30.0); rate_max = rt) === (f[1], f[2]) ||
+                        (n_bad += 1)
+                end
+                @test n_bad == 0
+            end
+
+            # ⚠ THE DEGENERATE TABLE (convention 5), and the NaN-cap rows are here because the
+            # gate-0 probe patch GOT THEM WRONG: under the plan's own `step ≤ cap` shorthand the
+            # DEFAULT `rate_max = Inf` at `Δt = 0` gives `cap = Inf·0.0 = NaN`, falls into the
+            # limiting branch, and returns NaN — regressing three of slice 34's shipped degenerates.
+            # Guarding the BINDING branch (`step > cap`) makes every non-finite cap inert for free.
+            let h_az = 0.31, h_el = -0.17, t_az = -0.44, t_el = 0.22
+                @test head_slew(h_az, h_el, t_az, t_el, 0.05, 0.0, Inf;
+                                rate_max = 1.0) === (h_az, h_el)     # dt = 0, FINITE rate
+                @test head_slew(h_az, h_el, t_az, t_el, 0.05, -1.0, Inf;
+                                rate_max = 1.0) === (h_az, h_el)     # dt < 0
+                @test head_slew(h_az, h_el, t_az, t_el, 0.05, 0.0, Inf;
+                                rate_max = Inf) === (h_az, h_el)     # the DEFAULT's own NaN cap
+                # ⭐ AND `τ = 0 ∧ dt = 0` PARTS COMPANY WITH SLICE 34 — the one row where a finite
+                # limit is STRICTLY STRONGER than the unlimited head, and it is the physical
+                # answer: `cap = rate·Δt` is ZERO at `Δt = 0`, so a servo with a finite rate cannot
+                # teleport in zero time, and the exact-landing ASSIGNMENT is unreachable. Slice
+                # 34's row survives for the DEFAULT (`cap = Inf·0.0 = NaN` ⇒ no limit) and is
+                # asserted as such above. ⚠ Written as an EQUALITY to the frozen head rather than
+                # as "it did not land": the two are the same bits, which is the `rate_max ≤ 0`
+                # identity below arriving from a third direction.
+                @test head_slew(h_az, h_el, t_az, t_el, 0.0, 0.0, Inf;
+                                rate_max = 1.0) === (h_az, h_el)
+                @test head_slew(h_az, h_el, t_az, t_el, 0.0, 0.0, Inf; rate_max = 1.0) ===
+                      head_slew(h_az, h_el, t_az, t_el, Inf, dt, Inf)
+                @test head_slew(h_az, h_el, t_az, t_el, 0.0, 0.0, Inf) === (t_az, t_el)  # slice 34
+                # a NaN rate is NO limit, never a NaN head (convention 6's direction — the same
+                # posture `head_clamp` takes for a NaN stop, and by the same `>` branch)
+                @test head_slew(h_az, h_el, t_az, t_el, 0.05, dt, Inf; rate_max = NaN) ===
+                      head_slew(h_az, h_el, t_az, t_el, 0.05, dt, Inf)
+                @test head_slew_full(h_az, h_el, t_az, t_el, 0.05, dt, Inf; rate_max = NaN)[4] ===
+                      false
+                # ⭐ `rate_max ≤ 0` FREEZES THE HEAD — and by `off_axis_angle`'s identity that is
+                # slice 34's `τ = Inf` reductio reached from the OTHER SIDE, so the two are pinned
+                # to AGREE bit-for-bit rather than merely to "both be frozen". Both reduce to
+                # `head + wrap_angle(err)·(…)·0.0`, which is why `===` is reachable at all.
+                let frozen = head_slew(h_az, h_el, t_az, t_el, Inf, dt, Inf)
+                    for dead in (0.0, -0.0, -1.0, -1.0e9)
+                        p = head_slew(h_az, h_el, t_az, t_el, 0.05, dt, Inf; rate_max = dead)
+                        @test p === frozen
+                        @test p === (h_az, h_el)
+                    end
+                end
+                # ⚠ the SIGNED-ZERO corner, paired exactly as the `τ = Inf` freeze is above: the
+                # frozen head adds `±0.0`, and `-0.0 + 0.0` is `+0.0` — so the freeze is `===` for
+                # every head this slice can reach and `==` at that one point
+                @test head_slew(-0.0, 0.5, 0.4, 0.5, 0.05, dt, Inf; rate_max = 0.0)[1] === 0.0
+                @test head_slew(-0.0, 0.5, 0.4, 0.5, 0.05, dt, Inf; rate_max = 0.0)[1] == -0.0
+                # a caged head under a live rate limit is still the STRAPDOWN seeker, to the bit
+                for dead in (0.0, -1.0)
+                    p = head_slew(h_az, h_el, t_az, t_el, 0.05, dt, dead; rate_max = 5.0)
+                    @test iszero(p[1]) && iszero(p[2])
+                    @test off_axis_angle(p[1], p[2], 0.21, -0.13) ===
+                          off_axis_angle(0.0, 0.0, 0.21, -0.13)
+                end
+                # convention 6 — finite in, finite out, at any magnitude, under a live limit
+                @test all(isfinite, head_slew(h_az, h_el, 1.0e9, -1.0e9, 1.0e-9, dt, 1.0e9;
+                                              rate_max = 1.0e-9))
+                @test all(isfinite, head_slew(h_az, h_el, 1.0e9, -1.0e9, 1.0e-9, dt, 1.0e9;
+                                              rate_max = 1.0e9))
+                # a NaN τ still PROPAGATES (validate-at-LOAD's business), and does not bind the cap
+                @test all(isnan, head_slew(h_az, h_el, t_az, t_el, NaN, dt, Inf; rate_max = 5.0))
+                @test head_slew_full(h_az, h_el, t_az, t_el, NaN, dt, Inf; rate_max = 5.0)[4] ===
+                      false
+                # `Real`, not `Float64` — the kwarg takes the same widening as the positionals
+                @test head_slew(0, 0, 1, 1, 0, 1, 10; rate_max = 1) ===
+                      head_slew(0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 10.0; rate_max = 1.0)
+            end
+        end
     end
 end

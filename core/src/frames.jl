@@ -864,9 +864,54 @@ convention-6 direction (never manufacture a non-finite from finite input). Those
 [`head_clamp`](@ref), which owns every stop decision. A NaN `τ` DOES propagate:
 it is an AUTHORED input, so it is validate-at-LOAD's business, not this consumer's.
 
-⚠ **A RATE LIMIT IS A NAMED DEFERRAL, NOT AN OVERSIGHT.** `gimbal_rate_max` exists in the gate-0
-probe and was NEVER EXERCISED by any arm, so shipping it would be a knob with no measurement behind
-it. It is also the natural home of a slew-rate-limited lock loss.
+⭐⭐ **THE RATE LIMIT (slice 35) — `rate_max`, A DEFAULTED KEYWORD, AND THE MOTION IT BOUNDS IS THE
+MOTION THAT FEEDS THE LOOP.** A real gimbal's servo has a maximum slew rate, so the head's motion
+stops being free and becomes a RESOURCE spent against a demand — and the demand is set by the
+parasitic loop. On a settled collision course the head barely moves (slice 34's `head_angle_deg` is
+a *constant* 17.190°) and the band demand is **0.600 °/s**; let the loop ring and the same head must
+chase its own oscillation at **60.831 °/s, 53.6× more, across slice 34's own onset bracket**
+(slice-35 gate 0 §0.2). ⚠ It is the arc's FIRST TWO-SIDED KNOB: slowing the head ATTENUATES the ring
+(`rms r` 0.88465 → 0.38591) while GROWING the tracking error the detector window must cover
+(5.916° → 12.828°) — every cure since slice 32 ends "widen it, it's free" and **that cure does not
+transfer**, because bandwidth is what the loop feeds on.
+
+⚠⚠ **THE BRANCH POLARITY IS `step > cap`, NOT `step ≤ cap`, AND THE PLAN'S OWN SHORTHAND HAS IT
+BACKWARDS** (`docs/plans/slice35.md`, "What ships" — settled by the NaN bullet two lines below it,
+and by the gate-0 probe patch, which carries the bug). `cap = max(rate_max, 0)·Δt`, so the DEFAULT
+`rate_max = Inf` at `Δt = 0` gives `cap = Inf·0.0 = NaN` — and under `step ≤ cap` that falls into the
+LIMITING branch with `sc = NaN/step`, turning slice 34's three shipped `dt ≤ 0` degenerates
+(`dt = 0`, `dt < 0`, `τ = 0 ∧ dt = 0`) into NaN. Guarding the BINDING branch instead makes every
+non-finite cap inert for free, which is exactly [`head_clamp`](@ref)'s own `m > s || return (a, e)`
+semantics — one kernel shape, not two. ⇒ a NaN `rate_max` degenerates to NO limit (convention 6:
+never manufacture a non-finite from finite input) and needs no special case.
+
+⚠ **RADIAL, NEVER PER-AXIS — the same species argument as the circular stop and the circular
+window**, and for the same reason: the limit must have the shape of the telemetry that reads it. A
+per-axis rate clamp leaves the step at `√2·cap` on the diagonal while the readout compares against
+`cap`. ⚠ And it is INNER to the stop: the rate limit shapes the STEP, then [`head_clamp`](@ref) has
+the last word — the stop is the outer authority, and the ordering is pinned.
+
+⚠⚠ **INERT BY BRANCH, BECAUSE THE CONTROL IT PROTECTS IS A BIT-IDENTITY CLAIM.** Slice 34's
+`τ → 0 ⇒ max|Δpos| = 0` strapdown collapse carries a REFUTATION (the "`look_az` rewrite" framing),
+and a rounding residual on this path would turn it into a near-miss that reads like a bug in this
+branch. So a non-binding limit does not merely round to the old answer, it takes the old code path:
+the exact-landing ASSIGNMENT above is reached unchanged. ⚠⚠ **AND THE CONTROL ARM IS THE ABSENT
+KEY / `Inf`, NOT THE DOMAIN CEILING** — `gimbal_rate_dps = 60` is measurably NOT inert (gate 0 §0.6:
+`sat_band` 8.64 %, `rms r` 0.88469 vs the free 0.88465), because the peak demand is an identical
+**72.542 °/s** on every arm — the tick-2 HANDOVER transient (§0.2), and at `τ → 0` the step is the
+full error every tick, which is precisely where a cap bites.
+
+⚠ Convention 5/6 degenerates, all pinned: `rate_max ≤ 0` FREEZES the head, and by
+[`off_axis_angle`](@ref)'s identity that is slice 34's `τ = Inf` reductio reached from the other
+side — the two agree BIT-FOR-BIT, signed zeros included, because both reduce to
+`head + wrap_angle(err)·(…)·0.0`; a NaN or `Inf` `rate_max` is NO limit (above).
+
+⭐ **ONE ROW OF SLICE 34's DEGENERATE TABLE PARTS COMPANY, AND IT IS THE PHYSICAL ANSWER.** With a
+FINITE `rate_max`, `cap = rate·Δt` is ZERO at `Δt ≤ 0`, so the limit is STRICTLY STRONGER than the
+exact-landing branch and `τ = 0 ∧ dt = 0` FREEZES the head where slice 34's unlimited servo lands on
+the target: a servo with a finite rate cannot teleport in zero time. It freezes to the same bits as
+the `τ = Inf` head, so the identity above arrives from a third direction; and slice 34's own row is
+untouched under the DEFAULT, where the cap is NaN and there is no limit at all.
 
 ⚠ **WHAT THE SERVO TRACKS IS NOT THIS KERNEL'S BUSINESS** — it takes a target angle pair. The seam
 hands it the BENT, one-tick-delayed measurement, because a real head slews on its own detector's
@@ -878,18 +923,58 @@ from both — **so the margin is bought by the INDEX, not by the delay.** ⚠ An
 constraint, not a kernel one: the head must slew BEFORE the bend is taken, or a one-tick lag survives
 `τ → 0` and fakes a mechanism the isolation just measured to be worth nothing.
 """
-function head_slew(head_az::Real, head_el::Real, tgt_az::Real, tgt_el::Real,
-                   τ::Real, dt::Real, stop::Real)
+head_slew(head_az::Real, head_el::Real, tgt_az::Real, tgt_el::Real,
+          τ::Real, dt::Real, stop::Real; rate_max::Real = Inf) =
+    (r = head_slew_full(head_az, head_el, tgt_az, tgt_el, τ, dt, stop; rate_max = rate_max);
+     (r[1], r[2]))
+
+"""
+    head_slew_full(head_az, head_el, tgt_az, tgt_el, τ, dt, stop; rate_max = Inf)
+        -> (az, el, demand, rate_sat)
+
+[`head_slew`](@ref)'s IMPLEMENTATION, returning the two quantities the servo knows and its pointing
+does not: `demand`, the UNLIMITED step it was asked for this tick (RADIANS, post-gain, pre-limit,
+pre-stop — divide by `dt` for the rate), and `rate_sat`, whether `rate_max` actually bound.
+`head_slew` is its first two elements, bit-for-bit.
+
+⚠⚠ **IT EXISTS SO THAT NOTHING RE-DERIVES THE STEP** (advisor). Slice 35's seam ships the demanded
+rate and the saturation flag as telemetry, and the plan forbids reconstructing them as a post-hoc
+difference of `:head_az`; the alternative — the seam re-forming `wrap_angle(tgt − head)·gain/dt` and
+the `step > cap` comparison itself — is a SECOND IMPLEMENTATION of this kernel, which is exactly the
+trap `missile.jl` names for `off_axis_angle` ("an inline form makes `test_frames.jl` prove a SECOND
+implementation and nothing about what flies"). Here it would be worse than cosmetic: a flag formed
+from a re-derived predicate can DISAGREE with the branch it claims to report, at the boundary tick
+where the disagreement is least visible.
+
+⚠ **AND THE RETURN IS SPLIT RATHER THAN WIDENED**, because ~15 shipped asserts and the seam depend
+on `head_slew`'s `=== (t_az, t_el)` 2-tuple idiom. ⚠ ONE CALLER TODAY (`head_slew`), and gate 2's
+telemetry is the named second — the same story as [`head_clamp`](@ref), split at slice 34's gate 1
+with the seam's handover as its second caller. `demand` is a STEP, not a rate: `step/Δt` at `Δt = 0`
+would manufacture a non-finite from finite input, so the division (and the degrees) belong to the
+seam, where every other unit conversion in this family already lives.
+"""
+function head_slew_full(head_az::Real, head_el::Real, tgt_az::Real, tgt_el::Real,
+                        τ::Real, dt::Real, stop::Real; rate_max::Real = Inf)
     Δt   = max(Float64(dt), 0.0)
     gain = Float64(τ) ≤ Δt ? 1.0 : Δt / Float64(τ)
-    if gain ≥ 1.0
+    Δaz  = wrap_angle(Float64(tgt_az) - Float64(head_az)) * gain
+    Δel  = wrap_angle(Float64(tgt_el) - Float64(head_el)) * gain
+    dem  = hypot(Δaz, Δel)                             # the DEMAND — what the servo was asked for
+    cap  = max(Float64(rate_max), 0.0) * Δt
+    sat  = dem > cap                                   # `>`, so a NaN/Inf cap is inert (see above)
+    if sat                                             # the RATE LIMIT — RADIAL, like the stop
+        sc = cap / dem
+        az = Float64(head_az) + Δaz * sc
+        el = Float64(head_el) + Δel * sc
+    elseif gain ≥ 1.0
         az = Float64(tgt_az); el = Float64(tgt_el)     # ASSIGNED — never `head + err` (see above)
     else
-        az = Float64(head_az) + wrap_angle(Float64(tgt_az) - Float64(head_az)) * gain
-        el = Float64(head_el) + wrap_angle(Float64(tgt_el) - Float64(head_el)) * gain
+        az = Float64(head_az) + Δaz
+        el = Float64(head_el) + Δel
     end
-    return head_clamp(az, el, stop)                    # the CIRCULAR stop — the ONE clamp site,
-end                                                    # shared with the seam's handover init
+    p = head_clamp(az, el, stop)                       # the CIRCULAR stop — the ONE clamp site,
+    return (p[1], p[2], dem, sat)                      # shared with the seam's handover init
+end
 
 # --- THE SEEKER'S FIELD OF VIEW (slice 32, §11 Tier-A — the deferral 26/28/29/30/31 each named) ---
 #
