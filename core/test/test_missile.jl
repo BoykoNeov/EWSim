@@ -7701,3 +7701,390 @@ end
         end
     end
 end
+
+# ---------------------------------------------------------------------------------------------
+# SLICE 35 — A RATE-LIMITED HEAD: THE BANDWIDTH THAT HOLDS THE TRACK IS THE BANDWIDTH THAT FEEDS
+# THE LOOP (§11 Tier-A, gate 2 — the seam, the loader and the telemetry).
+#
+# Slice 34's head was INFINITELY FAST: `head_slew` moved it a full first-order step every tick with
+# no bound on how far. A real gimbal has a servo with a maximum slew rate, and the moment it does the
+# head's motion stops being free — it becomes a RESOURCE spent against a demand. THE DEMAND IS SET BY
+# THE PARASITIC LOOP: on a settled collision course the head barely moves (slice 34's
+# `head_angle_deg` is a *constant* 17.190°) and the band demand is 0.600 °/s; let the loop ring and
+# the same head must chase its own oscillation at 60.831 °/s — 53.6× more, ACROSS SLICE 34's OWN
+# ONSET BRACKET. See `docs/plans/slice35.md`.
+#
+# ⭐⭐ AND IT IS THE ARC'S FIRST TWO-SIDED KNOB. Slices 32, 33 and 34 all end "widen it — it is free"
+# (a wider FOV, a wider detector window, costing nothing but glass). THAT CURE DOES NOT TRANSFER:
+# servo bandwidth is not a window, it is what the parasitic loop FEEDS ON. Slow the head and the ring
+# is attenuated while the tracking error it must cover GROWS — one knob, two bounds, pulling in
+# opposite directions.
+#
+# ⚠ NO new rung, no new cap, no new instability, no new draw (class 4a, the ELEVENTH consecutive
+# RNG-live slice — 2 randn/tick, the seed load-bearing). Gate 1 shipped the kernel; this is the WIRE.
+@testset "A RATE-LIMITED HEAD wired (slice 35 — the bandwidth that feeds the loop)" begin
+    dt = 1.0e-3
+
+    # Slice 34's `gim_world` with the SERVO key added, held to the digit for the same reason: the
+    # rate-absent column must reproduce slice 34 exactly, so any movement is the servo and nothing
+    # else. ⚠ `gfov = nothing` (an ABSENT window ⇒ the 1e6 default) IS THE DEFAULT HERE and slice
+    # 34's 4° is not — see the two-sided-knob block below, where it is a load-bearing condition and
+    # not a convenience.
+    function rate_world(; vy = 200.0, seed = 32, R = -0.03, A = -0.15, Rhat = -0.18,
+                          tau = 0.05, stop = 30.0, gfov = nothing, rate = nothing)
+        w = World(seed = seed,
+                  fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                 :autopilot => :alpha, :airframe => :six_dof,
+                                                 :seeker => :filtered, :seeker_axes => :az_el))
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.0,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => 0.3, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => 8.0, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => 5.0e-5, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true)
+        if R !== nothing
+            comp[:radome_slope] = R; comp[:radome_ripple] = A; comp[:radome_ripple_k] = 12.0
+            Rhat === nothing || (comp[:radome_slope_est] = Rhat)
+        end
+        if tau !== nothing
+            comp[:gimbal_tau_s] = tau
+            stop === nothing || (comp[:gimbal_stop_deg] = stop)
+            gfov === nothing || (comp[:gimbal_fov_deg]  = gfov)
+            rate === nothing || (comp[:gimbal_rate_dps] = rate)   # DEGREES PER SECOND at the wire
+        end
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 2000.0, 4200.0),
+                                 vel = Vec3(0.0, vy, 0.0),
+                                 comp = Dict{Symbol,Any}(:cross_speed_mps => vy))
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:t1)]
+    end
+
+    # ⚠ TWO REQUIREMENT COLUMNS, AND KEEPING THEM APART IS THIS GATE'S OWN FINDING (see the
+    # ACQUISITION block): `off_band` is the tracking error inside the arc's [500, 3000] m band —
+    # the only one attributable to the LOOP, because the band excludes the launch turn BY
+    # CONSTRUCTION — while `off_max` is the whole-approach maximum, which a rate limit moves for a
+    # completely different reason. `dem` is the SHIPPED `head_rate_dps` (PRE-limit) and `ach` the
+    # finite difference on the head's own state (what it actually DID); on a bound arm they must
+    # DISAGREE, which is the entire reason the telemetry key exists.
+    function rarm(; n = 22000, trace = false, kw...)
+        w, sub = rate_world(; kw...)
+        miss = Inf; r_prev = Inf
+        off_band = 0.0; off_max = 0.0; r_at_max = NaN
+        n_band = 0; sum_r2 = 0.0; n_sat_band = 0; nt = 0; n_out = 0
+        dem = Float64[]; ach = Float64[]; ach_sat = Float64[]
+        haz_p = NaN; hel_p = NaN; tel1 = Dict{String,Any}()
+        tr = Vec3[]
+        for k in 1:n
+            tick!(w, sub, dt); empty!(w.events)
+            m = w.entities[:m1]; t = w.entities[:t1]; c = m.comp
+            tel = get(w.env, :telemetry, Dict{String,Any}())
+            k == 1 && (tel1 = copy(tel))
+            trace && push!(tr, m.pos)
+            r = los_range(m.pos, t.pos)
+            haz = Float64(get(c, :head_az, NaN)); hel = Float64(get(c, :head_el, NaN))
+            fd = (!isnan(haz_p) && !isnan(haz)) ?
+                 rad2deg(hypot(haz - haz_p, hel - hel_p)) / dt : NaN
+            haz_p = haz; hel_p = hel
+            if r > 200                       # slice 32's endgame-spike gate, inherited with it
+                nt += 1
+                get(tel, "m1.gimbal_valid", 1.0) == 0.0 && (n_out += 1)
+                o = get(tel, "m1.head_off_deg", 0.0)
+                o > off_max && (off_max = o; r_at_max = r)
+            end
+            if 500 <= r <= 3000
+                n_band += 1
+                off_band = max(off_band, get(tel, "m1.head_off_deg", 0.0))
+                ω = get(c, :omega_body, zero(Vec3))::Vec3
+                sum_r2 += ω[3]^2
+                if haskey(tel, "m1.head_rate_dps")
+                    tel["m1.head_rate_sat"] == 1.0 && (n_sat_band += 1)
+                    push!(dem, tel["m1.head_rate_dps"])
+                    if !isnan(fd)
+                        push!(ach, fd)
+                        tel["m1.head_rate_sat"] == 1.0 && push!(ach_sat, fd)
+                    end
+                end
+            end
+            r > r_prev && miss == Inf && (miss = r_prev)
+            r_prev = r
+            miss < Inf && k > 200 && break
+        end
+        pct(v, q) = isempty(v) ? NaN : sort(v)[max(1, ceil(Int, q * length(v)))]
+        return (; miss, off_band, off_max, r_at_max, n_band, trace = tr, tel1, ach_sat,
+                  rms_r    = n_band == 0 ? NaN : sqrt(sum_r2 / n_band),
+                  sat_band = n_band == 0 ? NaN : 100 * n_sat_band / n_band,
+                  dem_p95  = pct(dem, 0.95), ach_p95 = pct(ach, 0.95),
+                  out      = nt == 0 ? 0.0 : 100 * n_out / nt)
+    end
+
+    posdiff35(a, b) = (@assert length(a) == length(b);
+                       maximum(hypot((x - y)...) for (x, y) in zip(a, b)))
+
+    @testset "BYTE-IDENTITY — the ABSENT key is slice 34, and it is the ONLY control" begin
+        # Convention 2's master check, read off the WIRE. The seam defaults `rate_max` to `Inf`,
+        # which gate 1's `sat = dem > cap` polarity makes take the OLD CODE PATH — so slice 34 is
+        # bit-identical BY CONSTRUCTION and not by a value that happens to agree.
+        for Rh in (-0.33, -0.18, -0.16, -0.03)
+            a = rarm(n = 9000, trace = true, Rhat = Rh)
+            b = rarm(n = 9000, trace = true, Rhat = Rh, rate = 1.0e6)
+            @test posdiff35(a.trace, b.trace) == 0.0
+        end
+        # …and the slice-34 ladder itself, to the digit (`rate_world` holds everything else).
+        @test rarm(Rhat = -0.18).rms_r ≈ 0.01181 atol = 2.0e-5
+        @test rarm(Rhat = -0.03).rms_r ≈ 0.88465 atol = 2.0e-5
+        @test rarm(Rhat = -0.33).rms_r ≈ 0.05917 atol = 2.0e-5
+
+        # ⚠⚠ AND THE DOMAIN CEILING IS **NOT** THE CONTROL — pinned as a POSITIVE fact so that gate 3
+        # cannot author `gimbal_rate_dps = 60` expecting `max|Δpos| == 0` and read the near-miss as a
+        # rounding residual in the new branch. The peak demand is an identical 72.542 °/s on EVERY
+        # arm (the tick-2 HANDOVER transient), so a 60 °/s servo clips it and the trajectory moves.
+        for (Rh, floor_m) in ((-0.33, 0.6), (-0.18, 0.04), (-0.03, 0.16))
+            a = rarm(n = 9000, trace = true, Rhat = Rh)
+            b = rarm(n = 9000, trace = true, Rhat = Rh, rate = 60.0)
+            @test posdiff35(a.trace, b.trace) > floor_m       # measurably NOT inert
+        end
+
+        # THE NEVER-STALE DISCIPLINE: no head ⇒ not one servo key is even evaluated.
+        let (w, sub) = rate_world(Rhat = -0.18, tau = nothing)
+            for k in 1:200; tick!(w, sub, dt); empty!(w.events); end
+            tel = w.env[:telemetry]::Dict{String,Any}
+            for key in ("m1.head_rate_dps", "m1.head_rate_sat", "m1.gimbal_rate_dps")
+                @test !haskey(tel, key)
+            end
+        end
+        # …and WITH a head but no authored rate the cap ships as the FINITE_CEIL sentinel, never the
+        # `Inf` that is its true default (convention 6 — no non-finite reaches the wire).
+        let a = rarm(n = 3, Rhat = -0.18)
+            @test a.tel1["m1.gimbal_rate_dps"] == FINITE_CEIL
+        end
+    end
+
+    @testset "⭐⭐ THE SHIPPED DEMAND IS PRE-LIMIT — on a BOUND arm it DISAGREES with the motion" begin
+        # This is the whole reason `head_slew_full` exists. The plan FORBIDS reconstructing the
+        # demand as a post-hoc difference of `:head_az`; here is the measurement that says why —
+        # a post-hoc difference reads the CLIPPED motion and would report the CAP as the demand,
+        # i.e. it would report the answer as the question.
+        let a = rarm(Rhat = -0.03, rate = 8.0)
+            @test a.n_band > 0
+            @test a.dem_p95 ≈ 214.958 atol = 0.01     # what the servo was ASKED for
+            @test a.ach_p95 ≈ 8.000   atol = 1.0e-6   # what it DID — the cap, exactly
+            @test a.dem_p95 > 25 * a.ach_p95          # ~27×, and they are not the same number
+            # ⭐ ON EVERY SATURATED TICK THE HEAD MOVES EXACTLY THE CAP — both ends of the set, so
+            # this is the whole distribution and not one lucky tick. (RADIAL, so the achieved step
+            # is `cap` and not `√2·cap` on the diagonal — gate 1's species argument, on the wire.)
+            @test !isempty(a.ach_sat)
+            @test maximum(a.ach_sat) ≈ 8.0 atol = 1.0e-9
+            @test minimum(a.ach_sat) ≈ 8.0 atol = 1.0e-9
+        end
+        # …and where NOTHING binds the two methods AGREE, which is what makes the disagreement above
+        # a measurement rather than a units bug: same arm, same band, one number.
+        let a = rarm(Rhat = -0.18, rate = 8.0)
+            @test a.sat_band == 0.0
+            @test a.dem_p95 ≈ a.ach_p95 atol = 1.0e-9
+            @test isempty(a.ach_sat)
+        end
+        # THE FLAG IS THE KERNEL'S OWN BRANCH, never a hand-rolled compare (the `aero_sat`/
+        # `defl_sat`/`gimbal_valid` shape).
+        @test rarm(Rhat = -0.03, rate = 8.0).sat_band ≈ 97.14 atol = 0.05
+        # THE HANDOVER TICK SHIPS ZERO, AND IT IS THE ABSENCE OF A SLEW: tick 1 calls `head_clamp`
+        # and never `head_slew`, so there is no demand to report. A verifier reading tick 1 must not
+        # mistake this for a quiet servo.
+        let a = rarm(n = 3, Rhat = -0.03, rate = 8.0)
+            @test a.tel1["m1.head_rate_dps"]   == 0.0
+            @test a.tel1["m1.head_rate_sat"]   == 0.0
+            @test a.tel1["m1.gimbal_rate_dps"] == 8.0
+        end
+    end
+
+    @testset "⭐⭐ THE DEMAND STEPS ACROSS SLICE 34's OWN ONSET BRACKET — 0.600 → 32.155 °/s" begin
+        # §0.2's headline, off the SHIPPED key rather than gate 0's finite difference. The quiet
+        # ladder sits under 2.5 °/s and the first ringing arm asks for 32 — so a limit anywhere in
+        # ~8–40 °/s is inert quiet and binding ringing BY CONSTRUCTION, which is a knob domain that
+        # writes itself.
+        d = Dict(Rh => rarm(Rhat = Rh).dem_p95 for Rh in (-0.33, -0.24, -0.18, -0.16, -0.03))
+        @test d[-0.33] ≈  2.468 atol = 0.01
+        @test d[-0.24] ≈  1.663 atol = 0.01
+        @test d[-0.18] ≈  0.600 atol = 0.01
+        @test d[-0.16] ≈ 32.155 atol = 0.05
+        @test d[-0.03] ≈ 60.831 atol = 0.05
+        @test d[-0.16] > 50 * d[-0.18]                                # THE STEP: 53.6×
+        @test maximum(d[Rh] for Rh in (-0.33, -0.24, -0.18)) < 2.5    # the whole QUIET ladder
+    end
+
+    @testset "⭐⭐ THE FIRST TWO-SIDED KNOB — the ring falls while the requirement grows" begin
+        # ⚠ AN INFINITE WINDOW IS A LOAD-BEARING CONDITION AND NOT A CONVENIENCE (§0.5): a
+        # rate-limited head LAGS, so slice 34's own 4°/8° detector window BREAKS it, the band
+        # EMPTIES and every column here goes NaN. Measured on a windowed arm this whole block would
+        # report slice 34's frozen-index artefact instead of the servo.
+        free = rarm(Rhat = -0.03)
+        slow = rarm(Rhat = -0.03, rate = 8.0)
+        @test free.n_band > 0 && slow.n_band > 0
+        @test free.rms_r    ≈ 0.88465 atol = 2.0e-5     # the ring, ATTENUATED…
+        @test slow.rms_r    ≈ 0.38591 atol = 2.0e-5
+        @test free.rms_r / slow.rms_r ≈ 2.29 atol = 0.02
+        @test free.off_band ≈  5.916  atol = 0.01       # …and PAID FOR in tracking error
+        @test slow.off_band ≈ 12.828  atol = 0.01
+        @test slow.off_band / free.off_band ≈ 2.17 atol = 0.02
+        # ⇒ ONE KNOB, TWO BOUNDS, PULLING IN OPPOSITE DIRECTIONS. Every cure since slice 32 ends
+        # "widen it, it's free"; this one cannot, because bandwidth is what the loop feeds on.
+        @test slow.rms_r < free.rms_r && slow.off_band > free.off_band
+
+        # ⭐ AND THE SAME SERVO COSTS ~0 ON THE SHIPPED DESIGN — §0.6's better discriminator, a
+        # 0-vs-97 split at ONE rate, from two code paths (the demand is formed unconditionally, the
+        # flag is the branch predicate).
+        let good = rarm(Rhat = -0.18, rate = 8.0)
+            @test good.sat_band == 0.0
+            @test slow.sat_band ≈ 97.14 atol = 0.05
+            @test good.off_band ≈ 2.022 atol = 0.01     # against the free arm's 1.956 — ~0
+        end
+        # ⭐ SLICE 30's RULE PAYS A THIRD TIME (33 = FOV, 34 = detector window, 35 = servo
+        # bandwidth): at R̂ = `radome_slope_worst` = −0.33 the requirement is FLAT across the whole
+        # rate domain, so aiming the compensator at the glass's worst-case slope lets you fly the
+        # cheapest servo in the catalogue.
+        for rt in (nothing, 25.0, 15.0, 10.0, 8.0)
+            @test rarm(Rhat = -0.33, rate = rt).off_band ≈ 1.60 atol = 0.02
+        end
+    end
+
+    @testset "⚠⚠ THE QUIET END IS THE REDUCTIO — 100 % saturation is an open-loop RAMP" begin
+        # §0.6's advisor BLOCKING CHECK, and it FIRED. Two different claims produce the falling
+        # `rms r` column: (a) the limit ATTENUATED the parasitic feed — the head still closes its own
+        # loop, a LOW-PASS, a mechanism; or (b) the servo can no longer follow ANYTHING — an
+        # OPEN-LOOP RAMP whose output is `∫ rate_max`, whose bend is therefore nearly constant, and
+        # which is quiet for precisely slice 34's FROZEN-HEAD reason. THE DISCRIMINATOR is what
+        # fraction of band ticks the limit actually BINDS — and at 2–3 °/s it is ALL of them.
+        # ⇒ THE 43× RATIO DOWN THERE IS UNQUOTABLE and this end ships as the REDUCTIO, which is what
+        # sets the domain FLOOR. Only the PARTIALLY-saturated region above is a defensible trade.
+        for rt in (3.0, 2.0), Rh in (-0.03, -0.18)
+            @test rarm(Rhat = Rh, rate = rt).sat_band == 100.0
+        end
+        # …while the shipped floor is genuinely partial on the loud arm and inert on the quiet one.
+        @test 0.0 < rarm(Rhat = -0.03, rate = 8.0).sat_band < 100.0
+        @test rarm(Rhat = -0.18, rate = 8.0).sat_band == 0.0
+        # ⚠ AND THE STOP CANNOT CONFOUND ANY OF IT: the head's tracking error stays well inside the
+        # 30° stop on every arm, so only the RATE limit can hold a step at its cap.
+        for rt in (nothing, 8.0, 3.0)
+            @test rarm(n = 9000, Rhat = -0.03, rate = rt).off_max < 30.0
+        end
+    end
+
+    @testset "⭐ THE ISOLATION — the rate limit reaches the trajectory ONLY through the glass" begin
+        # Slice 34's "exactly two channels" (the radome INDEX and the detector WINDOW) re-measured
+        # for the new knob, as a COLUMN rather than an inference: with no glass to index and no
+        # window to gate, a servo bound to 2 °/s — lagging by TWENTY DEGREES — moves the missile not
+        # at all. ⚠ NO GLASS **AND NO WINDOW**: leaving the window at 8° measures channel 2.
+        base  = rarm(n = 9000, trace = true, R = nothing, Rhat = nothing)
+        bmiss = rarm(R = nothing, Rhat = nothing).miss
+        for rt in (60.0, 15.0, 8.0, 5.0, 2.0)
+            a = rarm(n = 9000, trace = true, R = nothing, Rhat = nothing, rate = rt)
+            @test posdiff35(base.trace, a.trace) == 0.0
+            @test rarm(R = nothing, Rhat = nothing, rate = rt).miss === bmiss
+        end
+        @test bmiss ≈ 0.19116 atol = 1.0e-5
+        # …and the head IS lagging while the trajectory does not move, which is what makes the zero
+        # above a measurement and not a dead knob.
+        @test rarm(R = nothing, Rhat = nothing, rate = 2.0).off_max > 15.0
+        @test rarm(R = nothing, Rhat = nothing).off_max < 3.0
+    end
+
+    @testset "⚠⚠ GATE 2's FINDING — a rate limit makes the ACQUISITION TURN the binding requirement" begin
+        # The arc's [500, 3000] m band is what makes a tracking-error number attributable to the
+        # LOOP: the missile's initial turn onto the collision course happens at r ≈ 6000 m, so the
+        # band excludes it BY CONSTRUCTION (§0.4). Under a rate limit that turn becomes the LARGEST
+        # tracking error of the whole engagement — and `off_band` cannot see it.
+        let a = rarm(Rhat = -0.18, rate = 15.0)
+            @test a.off_band ≈ 1.986 atol = 0.01      # the LOOP's requirement — barely moved…
+            @test a.off_max  ≈ 5.497 atol = 0.01      # …against the whole-approach maximum, 2.8×
+            @test a.r_at_max > 5000.0                 # and it is out at LAUNCH RANGE, not in the band
+        end
+        # ⚠⚠ AND IT IS THE MISSILE'S TURN, NOT THE LOOP'S — the discriminator is a wire with NO GLASS
+        # AT ALL, where `off_band` is a flat 0.031° at every rate while `off_max` runs to twelve
+        # degrees. Nothing is ringing; the body is simply rotating faster than the servo can follow.
+        for (rt, om) in ((nothing, 2.112), (15.0, 7.223), (8.0, 12.346))
+            let a = rarm(R = nothing, Rhat = nothing, rate = rt)
+                @test a.off_band ≈ 0.031 atol = 0.005
+                @test a.off_max  ≈ om    atol = 0.01
+            end
+        end
+        # ⇒ CONSEQUENCE FOR GATE 3, AND IT SETTLES THE KNOB COUNT: a LIVE detector window would make
+        # this wire's break an ACQUISITION break — §0.4's confound promoted to the headline, and
+        # slice 34's own lesson re-run as a third mechanism (convention 9). `gimbal_fov_deg` ships
+        # AUTHORED AND WIDE, and here is the number it must clear: the worst whole-approach
+        # requirement over the R̂ domain at the servo domain's FLOOR.
+        @test maximum(rarm(Rhat = Rh, rate = 8.0).off_max
+                      for Rh in (-0.36, -0.33, -0.24, -0.18, -0.16, -0.12, -0.03)) ≈ 19.279 atol = 0.02
+    end
+
+    @testset "loader: the servo rate is PRESENCE-gated on the head, and refused without one" begin
+        mktempdir() do dir
+            function write_scn(seekextra; two_angle = true)
+                p = joinpath(dir, "r.yaml")
+                open(p, "w") do io
+                    print(io, "name: r\nseed: 32\ndt_physics: 1.0e-3\n",
+                              "fidelity: {airframe: six_dof, autopilot: alpha, guidance: pn,\n",
+                              "           seeker: filtered, seeker_axes: az_el}\n",
+                              "entities:\n",
+                              "  - id: m1\n    kind: missile\n    pos: [0.0, 0.0, 3000.0]\n",
+                              "    missile:\n      mass_kg: 140.0\n      speed: 700.0\n",
+                              "      elevation_deg: 12.0\n",
+                              "      seeker: {two_angle: ", two_angle ? "true" : "false",
+                              seekextra, "}\n",
+                              "      guidance: {n_pn: 8.0}\n",
+                              "      airframe: {inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0,\n",
+                              "                 cmq: -150.0, cla: 20.0, cy_beta: 20.0}\n",
+                              "  - id: t1\n    kind: target\n    pos: [6000.0, 2000.0, 4200.0]\n",
+                              "    vel: [0.0, 200.0, 0.0]\n    target: {rcs_m2: 1.0}\n")
+                end
+                return p
+            end
+            mis(p) = first(e for (_, e) in load_scenario(p).world.entities if e.kind === :missile)
+            # THE YAML → COMP PATH: DEGREES PER SECOND at the boundary, stored verbatim, and the
+            # seam converts ONCE (the `gimbal_stop_deg`/`gimbal_fov_deg` posture).
+            let m = mis(write_scn(", gimbal_tau_s: 0.05, gimbal_stop_deg: 30.0, gimbal_rate_dps: 8.0"))
+                @test m.comp[:gimbal_rate_dps] == 8.0
+            end
+            # PRESENCE-GATED: not authored ⇒ not minted, so slices 1–34 are byte-identical by GATING.
+            @test !haskey(mis(write_scn(", gimbal_tau_s: 0.05")).comp, :gimbal_rate_dps)
+            # A DEAD KNOB IS REFUSED, NOT SILENTLY IGNORED — a rate limit on a STRAPDOWN seeker names
+            # a component that is not there (the slice-31/34 posture, third key in the same loop).
+            @test_throws ErrorException load_scenario(write_scn(", gimbal_rate_dps: 8.0"))
+            @test_throws ErrorException load_scenario(
+                write_scn(", gimbal_rate_dps: 8.0"; two_angle = false))
+            # non-finite is a LOAD error (validate-at-LOAD for an authored input)…
+            @test_throws ErrorException load_scenario(
+                write_scn(", gimbal_tau_s: 0.05, gimbal_rate_dps: .nan"))
+            @test_throws ErrorException load_scenario(
+                write_scn(", gimbal_tau_s: 0.05, gimbal_rate_dps: .inf"))
+            # …but NO positivity guard, deliberately: `rate_max ≤ 0` FREEZES the head, which by
+            # `off_axis_angle`'s identity is slice 34's `τ = Inf` reductio reached from the other
+            # side — a DEFINED degenerate the kernel owns, not a crash path.
+            let m = mis(write_scn(", gimbal_tau_s: 0.05, gimbal_rate_dps: -1.0"))
+                @test m.comp[:gimbal_rate_dps] == -1.0
+            end
+            # …and it is knob-registerable (`_parse_knobs` checks the entity + key exist).
+            let p = write_scn(", gimbal_tau_s: 0.05, gimbal_stop_deg: 30.0, gimbal_rate_dps: 8.0")
+                write(p, read(p, String) *
+                      "knobs:\n  - {target: m1, key: gimbal_rate_dps, min: 8.0, max: 60.0, label: R}\n")
+                @test Dict(kb.key => kb.target
+                           for kb in load_scenario(p).knobs)[:gimbal_rate_dps] === :m1
+            end
+        end
+        # THE PRESENCE GATE FROM THE OTHER SIDE: no shipped wire carries a servo rate, so slices
+        # 1–34 are byte-identical by GATING and not by a value that happens to agree.
+        let base = joinpath(@__DIR__, "..", "..", "scenarios")
+            for f in readdir(base)
+                endswith(f, ".yaml") || continue
+                for (_, e) in load_scenario(joinpath(base, f)).world.entities
+                    @test !haskey(e.comp, :gimbal_rate_dps)
+                end
+            end
+        end
+    end
+end

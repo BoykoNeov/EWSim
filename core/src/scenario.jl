@@ -605,18 +605,34 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                     error("missile '$id': seeker.gimbal_tau_s must be finite " *
                           "(got $(comp[:gimbal_tau_s]))")
             end
-            # The head's two ANGULAR limits, both in DEGREES at the YAML boundary and radians inside
-            # (the `seeker_fov_deg` posture — the seam converts once, and `head_clamp` owns the
-            # `max(stop, 0)` / NaN-stop degenerates so there is no bound here either).
+            # The head's ANGULAR limits and its SERVO RATE, all in DEGREES at the YAML boundary and
+            # radians inside (the `seeker_fov_deg` posture — the seam converts once, and
+            # `head_clamp` owns the `max(stop, 0)` / NaN-stop degenerates so there is no bound here
+            # either).
             # ⚠ INERT WITHOUT `gimbal_tau_s`, AND REFUSED RATHER THAN SILENTLY IGNORED (the slice-31
-            # gyro precedent): both keys are read ONLY inside the head branch, so without a head
+            # gyro precedent): all three keys are read ONLY inside the head branch, so without a head
             # they are DEAD KNOBS a student could drag all day.
-            for hk in ("gimbal_stop_deg", "gimbal_fov_deg")
+            #
+            # ⭐⭐ SLICE 35 — `gimbal_rate_dps`, THE SERVO'S MAXIMUM SLEW RATE, and it joins this loop
+            # rather than growing a block of its own precisely because the posture is identical (one
+            # source, no drift — convention 7's shape applied to a validation pattern). ⚠ ITS NAME
+            # CARRIES ITS UNIT and the other two do not, deliberately: `gimbal_stop_deg` and
+            # `gimbal_fov_deg` are ANGLES, where "deg" is the whole story, while a RATE has a time in
+            # it and `gimbal_rate_deg` would read as an angle. The seam's conversion is still a plain
+            # `deg2rad` — the per-second denominator is untouched by it, since deg→rad is a pure
+            # scale factor — and that is worth writing down because a `deg2rad` on a per-second
+            # quantity reads like a units bug to the next reader.
+            # ⚠ NO POSITIVITY GUARD, the `gimbal_tau_s` posture exactly: `rate_max ≤ 0` is a real
+            # degenerate the kernel OWNS (it FREEZES the head, which by `off_axis_angle`'s identity
+            # is slice 34's `τ = Inf` reductio reached from the other side) and a NaN degenerates to
+            # NO limit. Only the non-finite AUTHORED input is refused here, which is
+            # validate-at-LOAD's business — the same split slice 34 wrote for τ.
+            for hk in ("gimbal_stop_deg", "gimbal_fov_deg", "gimbal_rate_dps")
                 haskey(sb, hk) || continue
                 haskey(sb, "gimbal_tau_s") ||
                     error("missile '$id': seeker.$hk authored without seeker.gimbal_tau_s — " *
                           "it is read only inside the gimbal head, so without one this knob is " *
-                          "DEAD (slice 34)")
+                          "DEAD (slice $(hk == "gimbal_rate_dps" ? 35 : 34))")
                 comp[Symbol(hk)] = _f64(sb[hk])
                 isfinite(comp[Symbol(hk)]) ||
                     error("missile '$id': seeker.$hk must be finite (got $(comp[Symbol(hk)]))")

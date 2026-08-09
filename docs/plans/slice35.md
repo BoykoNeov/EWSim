@@ -11,10 +11,12 @@ an FOV budget item, 34 = the gimbal), and the deferral slice 34 named SECOND:
 > slew-rate-limited lock loss."*
 > — `docs/plans/slice34.md`, Deferred (NAMED)
 
-**Status: GATE 1 COMPLETE (2026-08-09) — the kernel + 52 teeth, suite 6628 → 6680 green, and
-`missile.jl` UNTOUCHED, so every prior slice is bit-identical BY CONSTRUCTION (no call site passes
-`rate_max`). Gates 2–3 PLANNED. See §1 below for gate 1's two findings, BOTH of which change what
-gate 2 may write. GATE 0 COMPLETE (2026-08-09, 5 probes).
+**Status: GATE 2 COMPLETE (2026-08-09) — the seam + the loader + the telemetry, suite 6685 → 6874
+green. See §2 for its ONE FINDING (a rate limit makes the ACQUISITION TURN the binding requirement,
+which SETTLES the knob count) and for the two conditions every gate-2 number carries. GATE 1 COMPLETE
+(2026-08-09) — the kernel + 52 teeth, and `missile.jl` was UNTOUCHED there, so every prior slice was
+bit-identical BY CONSTRUCTION; §1's two findings both changed what gate 2 wrote. GATE 0 COMPLETE
+(2026-08-09, 5 probes).
 ⚠⚠ THE OPENING FRAMING WAS REFUTED BEFORE ANY CODE (§0.1, advisor) — "a finite slew rate breaks
 lock in the endgame at `r ≈ V⊥/ω_max`" is a PURSUIT geometry and a DEAD KNOB on a collision course.
 ⚠⚠ AND THE ADVISOR'S OWN SHIP/NO-SHIP GATE CAME BACK NEGATIVE (§0.3) — a wider window DOES rescue a
@@ -300,6 +302,117 @@ first two elements, pinned over 2 000 cells. `demand` is a STEP in RADIANS, not 
 at `Δt = 0` would manufacture a non-finite from finite input, so the division and the degrees belong
 to the seam, where this family's unit conversions already live. ⚠ ONE caller today, and gate 2's
 telemetry is the named second — `head_clamp`'s own story at slice 34's gate 1.
+
+---
+
+## §2 — Gate 2 (2026-08-09) — THE SEAM, THE LOADER, THE TELEMETRY, AND ONE FINDING
+
+**Status: GATE 2 COMPLETE. Suite 6685 → 6874 (+189). Four edits and nothing else:**
+
+* `scenario.jl` — `gimbal_rate_dps` joins the EXISTING `for hk in ("gimbal_stop_deg",
+  "gimbal_fov_deg")` loop rather than growing a block of its own (one source, no drift). ⚠ Its name
+  carries its UNIT where the other two do not, deliberately: they are ANGLES, where "deg" is the
+  whole story, while a RATE has a time in it and `gimbal_rate_deg` would read as an angle. The seam's
+  conversion is still a plain `deg2rad` — deg→rad is a pure scale factor and the seconds are
+  untouched — and that is written down in both files, because a `deg2rad` on a per-second quantity
+  reads like a units bug to the next reader.
+* `missile.jl` seam — `head_slew` → `head_slew_full` with `rate_max = deg2rad(get(c,
+  :gimbal_rate_dps, Inf))`. ⚠ **THE ZERO INITIALISER OF `head_dem`/`head_sat` IS LOAD-BEARING ON TWO
+  PATHS**: the HANDOVER tick calls `head_clamp` and never slews, and a tick with the target outside
+  the detector window HOLDS — both ship 0, so a zero is the ABSENCE of a slew and not a quiet servo.
+* `missile.jl` telemetry — `head_rate_dps` (the demand, `rad2deg(dem)/dt`), `head_rate_sat` (the
+  kernel's own branch predicate as a FLAG) and `gimbal_rate_dps` (the cap, so demand and cap are read
+  in the same units off the same wire). ⚠ The `dt ≤ 0` degenerate is the SEAM's: it ships `0.0`
+  rather than an `Inf` the `_finite` ceiling would then disguise as a real 1e9 °/s.
+* `test_missile.jl` — the gate-2 testset, eight blocks.
+
+### ⭐ WHAT THE WIRE CONFIRMED (and it confirmed gate 0 EXACTLY)
+
+The shipped kernel reproduces every gate-0 number **to the digit**, which retires the worry gate 1's
+Finding 1 opened — the probe patch's backwards polarity differs from the shipped `sat = dem > cap`
+only for NON-FINITE caps, and every flying tick has a finite one. Band demand p95 off the SHIPPED
+key: 2.468 / 1.663 / **0.600** / 32.155 / 48.536 / **60.831** at R̂ = −0.33 / −0.24 / −0.18 / −0.16 /
+−0.12 / −0.03, identical to §0.2's finite-difference column.
+
+⭐⭐ **AND THE PRE-LIMIT TOOTH IS SHARPER THAN THE PLAN EXPECTED.** The reason `head_slew_full` exists
+is that a post-hoc difference of `:head_az` reads the CLIPPED motion — it would report the CAP as the
+demand, i.e. report the answer as the question. Measured at R̂ = −0.03 / 8 °/s: demand p95
+**214.958 °/s** against an achieved **8.000**, ~27×, and **on EVERY saturated tick the achieved step
+is EXACTLY the cap** (max and min of the whole saturated set both 8.000000000, so it is the
+distribution and not one lucky tick — and `cap`, not `√2·cap`, which is gate 1's RADIAL species
+argument arriving on the wire). Where nothing binds the two methods agree to 1e−9, which is what
+makes the disagreement a measurement rather than a units bug.
+
+### ⚠⚠ FINDING — A RATE LIMIT MAKES THE **ACQUISITION TURN** THE BINDING REQUIREMENT, AND IT
+### SETTLES THE KNOB COUNT
+
+Gate 0 §0.4 named the acquisition confound and gated it away with the [500, 3000] m band. Gate 2
+found what that gating COSTS: the band is what makes a tracking-error number attributable to the
+LOOP, and it is therefore blind to the requirement that actually breaks the track.
+
+| R̂ = −0.18 | `off_band` | `off_max` | r @ max |
+|---|---|---|---|
+| free | 1.956 | 1.956 | 533 m |
+| 25 °/s | 1.986 | 4.023 | 6219 m |
+| 15 °/s | 1.986 | **5.497** | **6062 m** |
+| 8 °/s | 2.022 | **8.051** | **5662 m** |
+
+The loop's requirement barely moves (1.956 → 2.022) while the whole-approach one triples, **out at
+LAUNCH RANGE**. ⚠⚠ **AND IT IS THE MISSILE'S TURN, NOT THE LOOP'S** — the discriminator is a wire
+with NO GLASS AT ALL, where `off_band` is a flat **0.031°** at every rate while `off_max` runs
+2.112 → 7.223 → **12.346** at free / 15 / 8 °/s. Nothing is ringing; the body is simply rotating
+faster than the servo can follow.
+
+⇒ this is why `g2_knobs.jl` §C found slice 32/34's predicate **FALSE** on rate-limited arms (at
+R̂ = −0.18 / 15 °/s a 2.20° window — comfortably above the 1.986° band requirement — BROKE 97.4 % of
+the approach). **THE PREDICATE IS NOT THIS SLICE'S TO RE-SHIP**: on a rate-limited arm it is a
+statement about the HANDOVER BASKET, which is slice 34's FIRST named deferral and a different slice.
+
+⇒ **CONVENTION 9, MEASURED RATHER THAN ASSUMED (the plan's own instruction), AND THE EXPECTATION
+HOLDS**: `gimbal_rate_dps` + `radome_slope_est` ship as the two knobs and **`gimbal_fov_deg` goes
+AUTHORED AND WIDE** — not on §0.3's argument alone but on a number. A LIVE window would make this
+wire's break an ACQUISITION break, i.e. §0.4's confound promoted to the headline and slice 34's own
+lesson re-run as a third mechanism. **The window must clear 19.279°** — the worst whole-approach
+requirement over the R̂ domain at the servo domain's FLOOR (8 °/s), measured across
+R̂ ∈ {−0.36 … −0.03} and asserted in the suite.
+
+⭐ **AND THE TWO SHIPPED KNOBS ARE ONE AXIS, WHICH IS WHAT CONVENTION 9 ACTUALLY ASKS** — the
+`(rate, R̂)` grid, `off_band` on a free window:
+
+| R̂ \ rate | free | 40 | 25 | 15 | 10 | 8 |
+|---|---|---|---|---|---|---|
+| −0.33 | 1.599 | 1.603 | 1.602 | 1.601 | 1.600 | 1.598 |
+| −0.24 | 1.831 | 1.837 | 1.840 | 1.839 | 1.837 | 1.836 |
+| −0.18 | 1.956 | 1.959 | 1.986 | 1.986 | 1.981 | 2.022 |
+| −0.16 | 5.167 | 5.156 | 4.945 | 4.349 | 5.018 | 4.414 |
+| −0.03 | 5.916 | 7.496 | 9.524 | 13.244 | 13.228 | 12.828 |
+
+The rate knob's COST is charged by the ring, and the ring is what R̂ sets: FLAT across the whole rate
+domain at slice 30's aim point, 2.17× at the boresight characterization. ⭐ **SLICE 30's RULE PAYS A
+THIRD TIME** (33 = FOV, 34 = detector window, 35 = servo bandwidth) — aim R̂ at `radome_slope_worst`
+and you may fly the cheapest servo in the catalogue. ⚠ The −0.16 row's NON-MONOTONICITY (§0.4)
+reproduces exactly and nothing is built on it.
+
+### ⚠ THE TWO CONDITIONS EVERY GATE-2 NUMBER CARRIES
+
+1. **AN INFINITE DETECTOR WINDOW.** A rate-limited head LAGS, so slice 34's own 4°/8° window breaks
+   it, the band EMPTIES and every column goes NaN. The first draft of the gate-2 probe ran at the
+   inherited `fov = 8.0` and produced exactly that — `sat_band` NaN with `out` 60–97 %. Measured on a
+   windowed arm the whole two-sided-knob block would report slice 34's frozen-index artefact instead
+   of the servo. ⚠ This is the two-run discipline meeting its FOURTH quantity, as the plan predicted.
+2. **NO GLASS *AND* NO WINDOW for the isolation.** The window is the head's OTHER channel to the
+   trajectory, so leaving it at 8° measures channel 2. With both removed the isolation is
+   **EXACTLY 0** at every rate from 60 down to 2 °/s (`max|Δpos| == 0`, miss `===` 0.19116 by
+   identity) **while the head lags by 21.7°** — which is what makes the zero a measurement and not a
+   dead knob. Slice 34's "exactly two channels", re-measured for the new knob as a column.
+
+### The blocking pin that is now a POSITIVE fact
+
+`rate = 60` is measurably NOT inert and the suite says so as a `>` rather than leaving it unsaid:
+`max|Δpos|` 0.652 / 0.041 / 0.165 m at R̂ = −0.33 / −0.18 / −0.03, against an EXACT 0.0 for the
+absent key and for `1e6`. Gate 3 cannot author the ceiling as a control.
+
+Probe scripts: `M:\claud_projects\temp\slice35\` (`g2_seam.jl`, `g2_knobs.jl`, `g2_acq.jl`).
 
 ---
 

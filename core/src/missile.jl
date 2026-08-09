@@ -1656,6 +1656,16 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     look_az_b = 0.0; look_el_b = 0.0     # the LOS in the BODY frame — what a STRAPDOWN seeker indexes
     head_az   = 0.0; head_el   = 0.0     # the HEAD's pointing angles, in the body frame
     off_head  = 0.0; fov_h     = 0.0     # the detector's off-head-axis error, and its window
+    # SLICE 35 — the SERVO's own two numbers: the STEP it was asked for this tick (radians,
+    # post-gain, pre-limit, pre-stop) and whether `rate_max` actually bound. ⚠ THEIR ZERO INITIALISER
+    # IS LOAD-BEARING ON TWO PATHS AND IS NOT DEFENSIVE PADDING. (1) THE HANDOVER tick calls
+    # `head_clamp` and never `head_slew`, so there is no demand to report and tick 1 ships 0 — a
+    # verifier reading tick 1 sees a zero that is the ABSENCE of a slew, not a quiet servo. (2) When
+    # the target is OUTSIDE the detector window the head HOLDS (seam discipline 3), so again nothing
+    # is demanded and nothing saturates: `head_rate_sat` reads 0 on a BROKEN arm for exactly the
+    # reason `rms r` falls there, which is why the plan's two-run discipline covers FOUR quantities
+    # and not slice 34's three. A frozen head does not saturate.
+    head_dem  = 0.0; head_sat  = false
     if _gim
         look_az_b, look_el_b = look_angles(c[:att_q]::Quat, û_tru)
         # Degrees at the YAML boundary, radians inside (the `seeker_fov_deg` posture — the seam
@@ -1665,6 +1675,25 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # the shipped margin below read THIS local — so the sign and the verdict are the same bits.
         stop_h = deg2rad(Float64(get(c, :gimbal_stop_deg, 1.0e6)))
         fov_h  = max(deg2rad(Float64(get(c, :gimbal_fov_deg, 1.0e6))), 0.0)
+        # ⭐⭐ SLICE 35 — THE SERVO'S MAXIMUM SLEW RATE. Slice 34's head was INFINITELY FAST: it moved
+        # a full first-order step every tick with no bound on how far. A real gimbal has a servo, and
+        # the moment it does the head's motion stops being free and becomes a RESOURCE spent against
+        # a demand — and THE DEMAND IS SET BY THE PARASITIC LOOP. On a settled collision course the
+        # head barely moves (slice 34's `head_angle_deg` is a *constant* 17.190°) and the band demand
+        # is 0.600 °/s; let the loop ring and the same head must chase its own oscillation at
+        # 60.831 °/s, 53.6× more, ACROSS SLICE 34's OWN ONSET BRACKET (gate 0 §0.2). See
+        # `docs/plans/slice35.md`.
+        # ⚠ THE ABSENT-KEY DEFAULT IS `Inf` AND THAT IS THE BIT-IDENTITY CONTROL — never a large
+        # finite number, and specifically NOT the domain ceiling: gate 0 §0.6 measured
+        # `gimbal_rate_dps = 60` reading `sat_band` 8.64 % with `rms r` 0.88469 against the free
+        # 0.88465, because the PEAK demand is an identical 72.542 °/s on every arm (the tick-2
+        # HANDOVER transient). An arm authored at 60 expecting `max|Δpos| == 0` lands as a NEAR-MISS
+        # that reads like a rounding bug in the new branch. `Inf` takes the OLD CODE PATH (gate 1's
+        # `sat = dem > cap` polarity), so slice 34 is bit-identical BY CONSTRUCTION.
+        # ⚠ `deg2rad` ON A PER-SECOND QUANTITY IS STILL JUST `deg2rad`: deg→rad is a pure scale
+        # factor and the seconds are untouched. The seam converts ONCE, here, as it does for the stop
+        # and the window — the loader stores the authored degrees.
+        rate_h = deg2rad(Float64(get(c, :gimbal_rate_dps, Inf)))
         if !haskey(c, :head_az)
             # THE HANDOVER — the head is handed the target at launch, and it is LOAD-BEARING rather
             # than a nicety (§0.8, slice 32's P5 vindicated). Against a head that starts CAGED at
@@ -1683,9 +1712,19 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             head_az = Float64(c[:head_az]); head_el = Float64(c[:head_el])
             # discipline 3, first evaluation: the error the detector HAD, before this tick's slew.
             if off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h
-                head_az, head_el = head_slew(head_az, head_el,
-                                             Float64(c[:head_tgt_az]), Float64(c[:head_tgt_el]),
-                                             Float64(c[:gimbal_tau_s]), dt, stop_h)
+                # ⚠ `head_slew_full`, NOT `head_slew` — the SHIPPED kernel returning the two
+                # quantities the servo knows and its pointing does not. The plan FORBIDS
+                # reconstructing them as a post-hoc difference of `:head_az`, and forbids the seam
+                # re-forming `wrap_angle(tgt − head)·gain/dt` and the `step > cap` comparison itself:
+                # that is a SECOND IMPLEMENTATION of the kernel — the trap this file already names
+                # for `off_axis_angle` — and here it is worse than cosmetic, because a FLAG built
+                # from a re-derived predicate can DISAGREE with the branch it claims to report, at
+                # the boundary tick where the disagreement is least visible. `head_slew` is these
+                # four values' first two, bit-for-bit (pinned over 2 000 cells at gate 1).
+                head_az, head_el, head_dem, head_sat =
+                    head_slew_full(head_az, head_el,
+                                   Float64(c[:head_tgt_az]), Float64(c[:head_tgt_el]),
+                                   Float64(c[:gimbal_tau_s]), dt, stop_h; rate_max = rate_h)
             end
         end
         c[:head_az] = head_az; c[:head_el] = head_el
@@ -2381,6 +2420,38 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # predicate returning in the quantity a gimbal actually has.
         tel["$sid.gimbal_fov_margin_deg"] = _finite_coord(rad2deg(fov_h - off_head))
         tel["$sid.gimbal_valid"] = in_fov ? 1.0 : 0.0
+        # ⭐⭐ SLICE 35 — THE SERVO'S OWN TWO NUMBERS, and they are the two SIDES of one claim: what
+        # the head was ASKED for, and whether it could deliver it. Gate 0 measured both, and they
+        # come from DIFFERENT code paths in the kernel (the demand is formed unconditionally, the
+        # flag is the branch predicate) — which is what makes the pair a measurement rather than one
+        # fact told twice: the band demand STEPS 0.600 → 60.831 °/s across slice 34's onset bracket
+        # (§0.2) and at the SAME 8 °/s servo the shipped design saturates 0.00 % of the band against
+        # the boresight-characterized one's 97.14 % (§0.6).
+        #
+        # ⚠ THE DIVISION LIVES HERE AND THAT IS THE KERNEL'S OWN DECISION. `head_slew_full` returns
+        # the demand as a STEP IN RADIANS, deliberately: `step/Δt` at `Δt = 0` would manufacture a
+        # non-finite from finite input (convention 6), so the division — and the degrees — belong to
+        # the seam, where this family's unit conversions already live. The `dt ≤ 0` degenerate is
+        # therefore the SEAM's to own, and it ships 0.0 rather than an `Inf` the `_finite` ceiling
+        # would then disguise as a real 1e9 °/s.
+        # ⚠ A ZERO HERE IS AMBIGUOUS BY CONSTRUCTION and the plan's two-run discipline is why it is
+        # written down: tick 1 (the HANDOVER, which calls `head_clamp` and never slews) and every
+        # tick with the target OUTSIDE the detector window (the head HOLDS — no error signal, no
+        # slew) both ship 0.0 demand and 0.0 sat. ⇒ `head_rate_sat` READS 0 ON A BROKEN ARM for the
+        # same reason `rms r` FALLS there, and it joins `rms r` / `head_off_deg` / `head_angle_deg`
+        # as the FOURTH quantity that may not be read off a windowed run.
+        tel["$sid.head_rate_dps"]  = _finite(dt > 0.0 ? rad2deg(head_dem) / dt : 0.0)
+        # ⚠ THE FLAG, never a hand-rolled compare of the two keys above against the authored rate
+        # (the `aero_sat` / `defl_sat` / `gimbal_valid` shape): it is the kernel's OWN branch
+        # predicate, so what ships is what BOUND, not what a reader would infer bound. The demand is
+        # PRE-limit and the rate is authored in deg/s, so a client reconstructing `dem > rate` would
+        # be re-deriving the comparison across two unit conversions and a `max(·, 0)`.
+        tel["$sid.head_rate_sat"]  = head_sat ? 1.0 : 0.0
+        # The authored servo rate beside them, so the demand and its cap are read in the SAME units
+        # off the SAME wire (the `gimbal_stop_deg` / `gimbal_fov_deg` precedent — the client
+        # recomputes nothing, convention 13). A head with no authored rate ships the FINITE_CEIL
+        # sentinel rather than the `Inf` that is its true default (convention 6).
+        tel["$sid.gimbal_rate_dps"] = _finite(Float64(get(c, :gimbal_rate_dps, Inf)))
         # ⚠ THE TWO QUANTITIES THE STOP AND THE WINDOW ARE READ AGAINST ARE DIFFERENT ANGLES, and
         # shipping both is what stops a HUD comparing the wrong pair (the plan's gate-3 note): the
         # ENGAGEMENT's lead is what the head's TRAVEL must cover (vs the STOP), while the TRACKING

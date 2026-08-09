@@ -4790,6 +4790,99 @@ everything 26–33 named and did not spend.
 
 ---
 
+**Slice 35 — A RATE-LIMITED HEAD: THE BANDWIDTH THAT HOLDS THE TRACK IS THE BANDWIDTH THAT FEEDS THE
+LOOP (HANDOFF §11 Tier-A)** — GATES 0–2 COMPLETE (2026-08-09), gate 3 PLANNED. The deferral slice 34
+named SECOND. Slice 34's head was INFINITELY FAST: `head_slew` moved it a full first-order step every
+tick with no bound on how far. A real gimbal has a servo with a maximum slew rate, and the moment it
+does the head's motion stops being free — it becomes a RESOURCE spent against a demand, and **THE
+DEMAND IS SET BY THE PARASITIC LOOP.**
+
+**GATE 0 (5 probes)** — ⚠⚠ THE OPENING FRAMING WAS REFUTED BEFORE ANY CODE (advisor): "a finite slew
+rate breaks lock in the endgame at `r ≈ V⊥/ω_max`" is a PURSUIT geometry and a DEAD KNOB on a
+collision course (this arc has measured λ̇ ≈ 0 three times — slice 28's 0.2° band, slice 29's
+refutation #1, slice 34's *constant* 17.190° head angle). ⚠⚠ AND THE ADVISOR'S OWN SHIP/NO-SHIP GATE
+CAME BACK NEGATIVE: a WIDER WINDOW DOES rescue a rate-limited arm ⇒ the BREAK is slice 34's mechanism
+and is NOT this slice's claim. ⭐⭐ The live claim was found in a THIRD place — **the arc's FIRST
+TWO-SIDED KNOB**: slices 32/33/34 all end "widen it, it's free", and that cure does NOT transfer,
+because bandwidth is what the loop FEEDS ON. Slow the head and the ring is attenuated (`rms r`
+0.88465 → 0.38591, 2.29×) while the tracking error it must cover GROWS (5.916° → 12.828°, 2.17×).
+⚠⚠ A SECOND advisor BLOCKING CHECK fired on the headline: at 2–3 °/s the limit binds on **100.00 %**
+of band ticks — the head is an OPEN-LOOP RAMP, not a filtered servo, quiet for precisely slice 34's
+FROZEN-HEAD reason — so **the 43× is UNQUOTABLE** and that end ships as THE REDUCTIO, which is what
+sets the domain FLOOR.
+
+**GATE 1 (6628 → 6680, + a post-review commit to 6685)** — `frames.jl` `head_slew` gains a defaulted
+keyword `rate_max = Inf`, clamped **RADIALLY** and INNER to `head_clamp` (the stop keeps the last
+word). ⚠⚠ FINDING 1: **the plan's own branch polarity was BACKWARDS and the gate-0 probe patch
+carried the bug** — `cap = max(rate_max,0)·Δt`, so the DEFAULT `Inf` at `Δt = 0` gives `Inf·0.0 =
+NaN`, and under `step ≤ cap` that falls into the LIMITING branch and regresses three of slice 34's
+shipped `dt ≤ 0` degenerates to NaN. The shipped form guards the BINDING branch (`sat = dem > cap`),
+which makes every non-finite cap inert for free — `head_clamp`'s own semantics, one kernel shape not
+two. ⭐ FINDING 2: `τ = 0 ∧ dt = 0` PARTS COMPANY with slice 34 and it is the PHYSICAL answer — a
+servo with a finite rate cannot teleport in zero time. ⚠ The return was SPLIT rather than widened
+(`head_slew_full → (az, el, demand, rate_sat)`), because ~15 shipped asserts depend on the 2-tuple
+idiom, and `demand` is a STEP IN RADIANS, not a rate (the division would manufacture a non-finite
+from finite input at `Δt = 0`). ⚠ THREE test-integrity defects were caught AFTER the first green run
+(advisor, slice 26's post-commit precedent): a bare `!isapprox` ordering tooth, a SEED-DEPENDENT hole
+in the non-vacuity counter, and a four-band claim measured in a temp file rather than the suite.
+
+**GATE 2 (6685 → 6874)** — the seam, the loader and the telemetry, and FOUR edits total. `scenario.jl`
+adds `gimbal_rate_dps` to the EXISTING `("gimbal_stop_deg", "gimbal_fov_deg")` validation loop rather
+than growing a block of its own (refused without `gimbal_tau_s`, `isfinite`-validated, NO positivity
+guard — `rate_max ≤ 0` is a degenerate the kernel OWNS). ⚠ Its name carries its UNIT where the other
+two do not, deliberately: they are ANGLES; a RATE has a time in it. The seam swaps `head_slew` →
+`head_slew_full` and ships `head_rate_dps` / `head_rate_sat` / `gimbal_rate_dps`.
+
+⭐ THE SHIPPED KERNEL REPRODUCES EVERY GATE-0 NUMBER TO THE DIGIT (band demand p95 2.468 / 1.663 /
+**0.600** / 32.155 / 48.536 / **60.831** at R̂ = −0.33 … −0.03), which retires gate 1's polarity worry
+on the wire: the two forms differ only for NON-FINITE caps, and every flying tick has a finite one.
+⭐⭐ AND THE PRE-LIMIT TOOTH IS SHARPER THAN PLANNED — the reason `head_slew_full` exists is that a
+post-hoc difference of `:head_az` reads the CLIPPED motion, i.e. reports the CAP as the demand
+(the answer as the question). At R̂ = −0.03 / 8 °/s: demand p95 **214.958 °/s** against an achieved
+**8.000**, ~27×, and **on EVERY saturated tick the achieved step is EXACTLY the cap** (max AND min of
+the whole saturated set 8.000000000 — the distribution, not one lucky tick, and `cap` rather than
+`√2·cap`, which is gate 1's RADIAL species argument arriving on the wire). Where nothing binds the
+two methods agree to 1e−9. ⚠ The HANDOVER tick and every HELD tick ship 0.0 — a zero is the ABSENCE
+of a slew, not a quiet servo, and `head_rate_sat` therefore reads 0 on a BROKEN arm for the same
+reason `rms r` falls there (the two-run discipline's FOURTH quantity, as the plan predicted).
+
+⚠⚠ **GATE 2's FINDING — A RATE LIMIT MAKES THE ACQUISITION TURN THE BINDING REQUIREMENT, AND IT
+SETTLES THE KNOB COUNT.** Gate 0 gated the acquisition confound away with the arc's [500, 3000] m
+band; gate 2 found what that costs. At R̂ = −0.18 the LOOP's requirement barely moves under a rate
+limit (`off_band` 1.956 → 2.022) while the whole-approach one TRIPLES (`off_max` 1.956 → 8.051) **out
+at LAUNCH RANGE, r ≈ 5700 m**. ⚠⚠ And it is the MISSILE's turn, not the loop's — on a wire with NO
+GLASS AT ALL `off_band` is a flat **0.031°** at every rate while `off_max` runs 2.112 → 7.223 →
+12.346 at free / 15 / 8 °/s. ⇒ slice 32/34's predicate `held ⟺ requirement < window` is **FALSE** on
+a rate-limited arm (a 2.20° window against a 1.986° requirement BROKE 97.4 % of the approach) and is
+**NOT this slice's to re-ship** — there it is a statement about the HANDOVER BASKET, slice 34's FIRST
+named deferral and a different slice. ⇒ **CONVENTION 9, MEASURED RATHER THAN ASSUMED** (the plan's own
+instruction, and the expectation HOLDS): `gimbal_rate_dps` + `radome_slope_est` ship and
+**`gimbal_fov_deg` goes AUTHORED AND WIDE** — not on argument but on a number, **19.279°**, the worst
+whole-approach requirement over the R̂ domain at the servo domain's FLOOR. ⭐ And the two shipped knobs
+are ONE AXIS: the rate knob's COST is charged by the ring, which R̂ sets — `off_band` FLAT across the
+whole rate domain at slice 30's aim point (1.599 → 1.598) against 2.17× at the boresight
+characterization. **SLICE 30's RULE PAYS A THIRD TIME** (33 = FOV, 34 = detector window, 35 = servo
+bandwidth): aim R̂ at `radome_slope_worst` and fly the cheapest servo in the catalogue.
+
+⚠ **TWO CONDITIONS EVERY GATE-2 NUMBER CARRIES.** (1) AN INFINITE DETECTOR WINDOW — a rate-limited
+head LAGS, so slice 34's own 4°/8° window breaks it, the band EMPTIES and every column goes NaN; the
+first draft of the probe ran at the inherited `fov = 8.0` and produced exactly that. (2) NO GLASS
+**AND NO WINDOW** for the isolation — the window is the head's OTHER channel, so with both removed
+`max|Δpos|` is **EXACTLY 0** at every rate from 60 down to 2 °/s (miss `===` 0.19116 by identity)
+**while the head lags by 21.7°**, which is what makes the zero a measurement and not a dead knob.
+⚠ THE BIT-IDENTITY CONTROL IS THE ABSENT KEY / `Inf`, NEVER `gimbal_rate_dps = 60` — now a POSITIVE
+fact in the suite (`max|Δpos|` 0.652 / 0.041 / 0.165 m at R̂ = −0.33 / −0.18 / −0.03, against an EXACT
+0.0 for the absent key and for `1e6`), because the peak demand is an identical 72.542 °/s on every
+arm (the tick-2 handover transient) and gate 3 must not author the ceiling as a control.
+
+Class **4a** (the ELEVENTH consecutive RNG-live slice — a deterministic servo bound on an existing
+measurement, 2 randn/tick, the seed load-bearing). **KNOB, not rung**; the button stays DROPPED (the
+11th) and slice 34's `gimbal_view` marker already routes this wire — ⚠ to be re-checked at gate 3
+against the MARKER-HOLE class, which is what slice 34's own §3.0 was. Plan + full measured tables in
+`docs/plans/slice35.md` (§0, §1, §2); probe scripts in `M:\claud_projects\temp\slice35\`.
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,
