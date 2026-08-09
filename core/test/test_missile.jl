@@ -7903,6 +7903,61 @@ end
         end
     end
 
+    @testset "⭐ THE FROZEN-HEAD DEGENERATE, **FLOWN** — `rate ≤ 0` IS slice 34's `τ = Inf` reductio" begin
+        # ⚠ THE LOADER PERMITS `gimbal_rate_dps ≤ 0` DELIBERATELY (no positivity guard — it is a
+        # DEFINED degenerate the kernel owns, not a crash path) and the loader block below proves it
+        # LOADS. This block proves it FLIES, which is the part a load test cannot reach: at gate 3
+        # the key is a DECLARED KNOB, and `set_param` writes a knob with NO clamp and NO
+        # revalidation, so a client can put the wire here live (convention 5's clamp-at-CONSUMER —
+        # the consumer is `max(rate_max, 0)`).
+        #
+        # ⭐ AND THE IDENTITY IS EXACT, FROM THE OTHER SIDE. `cap = max(rate, 0)·Δt = 0` ⇒ `sat` is
+        # TRUE on every tick with a demand and `sc = 0/dem = 0`, so the head FREEZES at its handover
+        # pointing — which is what an infinitely SLUGGISH servo does too. The two ways of freezing
+        # the same head agree BIT-FOR-BIT, which is the third direction gate 1's docstring names.
+        function frozen(; n = 4000, kw...)
+            w, sub = rate_world(; kw...)
+            tr = Vec3[]; haz = Float64[]; tel1 = Dict{String,Any}(); telN = Dict{String,Any}()
+            for k in 1:n
+                tick!(w, sub, dt); empty!(w.events)
+                push!(tr, w.entities[:m1].pos)
+                push!(haz, Float64(get(w.entities[:m1].comp, :head_az, NaN)))
+                k == 1 && (tel1 = copy(w.env[:telemetry]::Dict{String,Any}))
+                k == n && (telN = copy(w.env[:telemetry]::Dict{String,Any}))
+            end
+            return (; tr, haz, tel1, telN)
+        end
+        # ⚠ `τ = Inf` is an IN-TEST reductio only — the loader refuses a non-finite τ (a NaN
+        # propagates into the head state and thence into the bend), so it is reachable here and from
+        # no YAML. `rate ≤ 0` is the reachable face of the same state, which is the point.
+        stuck = frozen(tau = Inf)
+        for rt in (-1.0, 0.0)
+            a = frozen(rate = rt)
+            @test maximum(hypot((p - q)...) for (p, q) in zip(a.tr, stuck.tr)) == 0.0
+            @test maximum(abs.(a.haz .- stuck.haz)) == 0.0
+            @test maximum(a.haz) - minimum(a.haz) == 0.0        # the head really is FROZEN
+            # …and WHAT THE THREE KEYS READ THERE, so gate 3's HUD is not left inferring it: the cap
+            # ships its AUTHORED value (a NEGATIVE one means FROZEN, never FAST — `_finite` clamps
+            # only the upper bound, which is correct here and stated so it is not read as the
+            # slice-29 `_finite_coord` catch), the flag is LIT on every tick past the handover, and
+            # the DEMAND keeps climbing because the LOS keeps moving while the head does not.
+            @test a.telN["m1.gimbal_rate_dps"] == rt
+            @test a.telN["m1.head_rate_sat"]   == 1.0
+            @test a.tel1["m1.head_rate_sat"]   == 0.0            # …except the handover tick
+            @test a.telN["m1.head_rate_dps"]   > 100.0           # a demand nothing is answering
+        end
+        # ⚠ AND THE TICK-2 HANDOVER TRANSIENT IS IDENTICAL ON EVERY ARM — §0.2's "the peak is an
+        # artefact and must never be quoted", pinned as the POSITIVE fact behind it (slice 25's
+        # "exclude the init ticks" rule in a new quantity). This is also exactly why the domain
+        # CEILING is not a bit-identity control: at 60 °/s the cap clips THIS, on every arm alike.
+        let peak = [frozen(n = 2, Rhat = Rh).telN["m1.head_rate_dps"]
+                    for Rh in (-0.33, -0.18, -0.16, -0.03)]
+            @test all(p -> p === peak[1], peak)
+            @test peak[1] ≈ 72.542 atol = 0.001
+            @test peak[1] > 60.0                                 # …and a 60 °/s servo clips it
+        end
+    end
+
     @testset "⭐⭐ THE DEMAND STEPS ACROSS SLICE 34's OWN ONSET BRACKET — 0.600 → 32.155 °/s" begin
         # §0.2's headline, off the SHIPPED key rather than gate 0's finite difference. The quiet
         # ladder sits under 2.5 °/s and the first ringing arm asks for 32 — so a limit anywhere in
@@ -7982,12 +8037,15 @@ end
         # at all. ⚠ NO GLASS **AND NO WINDOW**: leaving the window at 8° measures channel 2.
         base  = rarm(n = 9000, trace = true, R = nothing, Rhat = nothing)
         bmiss = rarm(R = nothing, Rhat = nothing).miss
+        # ⚠ THE BASELINE IS PINNED FINITE **BEFORE** THE LOOP, so the `===` below cannot pass
+        # vacuously on `Inf === Inf` (an arm that never reaches CPA within `n`).
+        @test isfinite(bmiss)
+        @test bmiss ≈ 0.19116 atol = 1.0e-5
         for rt in (60.0, 15.0, 8.0, 5.0, 2.0)
             a = rarm(n = 9000, trace = true, R = nothing, Rhat = nothing, rate = rt)
             @test posdiff35(base.trace, a.trace) == 0.0
             @test rarm(R = nothing, Rhat = nothing, rate = rt).miss === bmiss
         end
-        @test bmiss ≈ 0.19116 atol = 1.0e-5
         # …and the head IS lagging while the trajectory does not move, which is what makes the zero
         # above a measurement and not a dead knob.
         @test rarm(R = nothing, Rhat = nothing, rate = 2.0).off_max > 15.0

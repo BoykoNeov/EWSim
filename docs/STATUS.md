@@ -4826,7 +4826,8 @@ from finite input at `Δt = 0`). ⚠ THREE test-integrity defects were caught AF
 (advisor, slice 26's post-commit precedent): a bare `!isapprox` ordering tooth, a SEED-DEPENDENT hole
 in the non-vacuity counter, and a four-band claim measured in a temp file rather than the suite.
 
-**GATE 2 (6685 → 6874)** — the seam, the loader and the telemetry, and FOUR edits total. `scenario.jl`
+**GATE 2 (6685 → 6874, + a post-review commit to 6892)** — the seam, the loader and the telemetry,
+and FOUR edits total. `scenario.jl`
 adds `gimbal_rate_dps` to the EXISTING `("gimbal_stop_deg", "gimbal_fov_deg")` validation loop rather
 than growing a block of its own (refused without `gimbal_tau_s`, `isfinite`-validated, NO positivity
 guard — `rate_max ≤ 0` is a degenerate the kernel OWNS). ⚠ Its name carries its UNIT where the other
@@ -4874,6 +4875,21 @@ first draft of the probe ran at the inherited `fov = 8.0` and produced exactly t
 fact in the suite (`max|Δpos|` 0.652 / 0.041 / 0.165 m at R̂ = −0.33 / −0.18 / −0.03, against an EXACT
 0.0 for the absent key and for `1e6`), because the peak demand is an identical 72.542 °/s on every
 arm (the tick-2 handover transient) and gate 3 must not author the ceiling as a control.
+
+⭐ **GATE-2 POST-REVIEW (advisor, 6874 → 6892)** — the `gimbal_rate_dps ≤ 0` degenerate the loader
+DELIBERATELY permits was proven to LOAD and **never FLOWN**, which matters because at gate 3 the key
+is a DECLARED KNOB and `set_param` writes one with no clamp and no revalidation. Flown, it is
+**BIT-FOR-BIT slice 34's `τ = Inf` reductio** (`max|Δpos|` and `max|Δhead_az|` both EXACTLY 0 over
+4000 ticks, head_az spread exactly 0): `cap = max(rate,0)·Δt = 0` ⇒ `sc = 0` ⇒ the head FREEZES at
+its handover pointing, which is what an infinitely SLUGGISH servo does too — gate 1's third direction
+onto the same identity, now on the wire. ⚠ What the three keys read there is pinned so gate 3's HUD
+is not left inferring it: the cap ships its AUTHORED value (**a NEGATIVE one means FROZEN, never
+FAST**), the flag is LIT on every tick past the handover, and the DEMAND keeps CLIMBING (>100 °/s)
+because the LOS keeps moving while the head does not. ⚠ Also pinned: the tick-2 handover transient is
+`===` IDENTICAL on every arm at **72.542 °/s** — §0.2's "the peak is an artefact, never quote it" as
+the POSITIVE fact behind it, and the measured reason a 60 °/s ceiling is not a bit-identity control.
+⚠ And the isolation's baseline is now pinned FINITE **before** its `===` loop, so an arm that never
+reached CPA could not pass it vacuously on `Inf === Inf`.
 
 Class **4a** (the ELEVENTH consecutive RNG-live slice — a deterministic servo bound on an existing
 measurement, 2 randn/tick, the seed load-bearing). **KNOB, not rung**; the button stays DROPPED (the

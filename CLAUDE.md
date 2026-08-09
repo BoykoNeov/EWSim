@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–34 COMPLETE & green — 6874 tests (slice 35 GATES 0–2 done, gate 3 planned: A RATE-LIMITED HEAD — the
+**Slices 1–34 COMPLETE & green — 6892 tests (slice 35 GATES 0–2 done, gate 3 planned: A RATE-LIMITED HEAD — the
 arc's FIRST TWO-SIDED KNOB, where "widen it, it's free" stops transferring because bandwidth is what the
 parasitic loop FEEDS ON; see `docs/plans/slice35.md` §2 for its finding, that a rate limit makes the ACQUISITION
 TURN the binding requirement, which settles the knob count). The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–34

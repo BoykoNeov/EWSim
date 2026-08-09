@@ -12,7 +12,9 @@ an FOV budget item, 34 = the gimbal), and the deferral slice 34 named SECOND:
 > — `docs/plans/slice34.md`, Deferred (NAMED)
 
 **Status: GATE 2 COMPLETE (2026-08-09) — the seam + the loader + the telemetry, suite 6685 → 6874
-green. See §2 for its ONE FINDING (a rate limit makes the ACQUISITION TURN the binding requirement,
+green, + a post-review commit to 6892 (advisor: the `rate ≤ 0` degenerate the loader PERMITS was
+proven to LOAD and never FLOWN — it is BIT-FOR-BIT slice 34's `τ = Inf` reductio, and at gate 3 the
+key is a declared knob a client can reach live). See §2 for its ONE FINDING (a rate limit makes the ACQUISITION TURN the binding requirement,
 which SETTLES the knob count) and for the two conditions every gate-2 number carries. GATE 1 COMPLETE
 (2026-08-09) — the kernel + 52 teeth, and `missile.jl` was UNTOUCHED there, so every prior slice was
 bit-identical BY CONSTRUCTION; §1's two findings both changed what gate 2 wrote. GATE 0 COMPLETE
@@ -458,8 +460,17 @@ the window is the *account* both bounds are charged to rather than an independen
 `gimbal_rate_dps ∈ [8, 60]`. **FLOOR 8**: below it the no-glass acquisition transient itself breaks
 (§0.4: `off_band` 0.031 → 4.582 between 10 and 5 °/s) and the servo runs to 100 % saturation
 (§0.6) — the floor is where the knob stops being a servo, and it is measured, not chosen.
+⭐ **GATE 2 SHARPENED THAT JUSTIFICATION AND IT IS NOW THE SLICE'S OWN DISCRIMINATOR**: 8 °/s is
+exactly where `sat_band` is **0.00 % on the shipped design and 97.14 % on the boresight-characterized
+one** — one servo, two designs, a 0-vs-97 split. The floor is where the knob is simultaneously free
+for a good design and binding for a bad one, which is a stronger reason than "it stops being a servo".
 **CEILING 60**: the loudest arm's own band demand is 60.831 °/s (§0.2), so at 60 the limit is
-already ~inert (`rms r` 0.88469 vs the free 0.88465) — the free read, and its adequacy is measured.
+already ~inert **ON THE METRIC** (`rms r` 0.88469 vs the free 0.88465).
+⚠⚠ **"INERT ON THE METRIC" IS NOT "BIT-IDENTICAL", AND GATE 3 MUST NOT CONFLATE THEM** (gate 2, and
+the suite now says so as a `>`): at 60 °/s the TRAJECTORY moves — `max|Δpos|` 0.652 / 0.041 / 0.165 m
+at R̂ = −0.33 / −0.18 / −0.03 — because the cap clips the tick-2 HANDOVER transient, an identical
+72.542 °/s on every arm. ⇒ **the free read for a BIT-IDENTITY control is the ABSENT KEY (or `Inf`),
+never the domain ceiling.** The ceiling is the top of a knob's useful range; it is not a control.
 
 ### Class, the button, and the wire
 
