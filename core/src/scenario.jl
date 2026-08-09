@@ -555,6 +555,72 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                     error("missile '$id': seeker.seeker_fov_deg must be finite " *
                           "(got $(comp[:seeker_fov_deg]))")
             end
+            # Slice 34 — THE GIMBALLED HEAD. Slices 26–33 all index the radome on the LOS measured
+            # off the missile's OWN NOSE, which the missile can only move by ROTATING — that is why
+            # slice 26 is a body-rate instability. A gimballed seeker's head has its own pointing
+            # angles and the ray passes through the part of the dome the HEAD is aimed at, and the
+            # head is aimed by the very measurement the dome just bent: the index of the glass
+            # becomes a FIXED POINT of the glass. See `missile.jl::_observe_point3d!`.
+            # PRESENCE-GATED ON `gimbal_tau_s` (the `radome_slope` / `seeker_fov_deg` posture, and
+            # for the same convention-2 reason: every slice-11/13/25…33 scenario HAS a `seeker:`
+            # block, so gating on the block would grow them all a head and kill byte-identity).
+            # ⚠ `τ` IS AUTHORED, NOT A KNOB, AND THAT IS A MEASUREMENT: under the head that ships
+            # (the one tracking its own BENT measurement) τ does NOT move the stability onset
+            # anywhere in [0.02, 0.2] — only the amplitude sags. The slice-19 dead-knob discipline
+            # applied BEFORE the knob exists rather than after it ships. The single live slider is
+            # the DETECTOR WINDOW, `gimbal_fov_deg`.
+            # ⚠ VALIDATED FINITE ONLY — no positivity guard, deliberately: `τ ≤ dt` is the exact
+            # landing (the degenerate that reproduces the strapdown seeker BIT-FOR-BIT, which is
+            # this slice's own false-fidelity control) and `τ < 0` is caught by that same comparison
+            # at the consumer (convention 5's clamp-at-CONSUMER — `head_slew` owns it). A NaN τ
+            # DOES propagate into the head state and thence into the bend, so it is refused HERE,
+            # which is validate-at-LOAD's business and not the consumer's.
+            # ⚠⚠ REFUSED WITHOUT `two_angle: true`, RATHER THAN SILENTLY IGNORED (the slice-21/28/
+            # 29/31/32 "refused, not branch-ordered" precedent): the head lives in
+            # `_observe_point3d!`, so on a slice-11/13 wire it would be read by NOTHING — the
+            # slice-19 `speed` dead-knob class. ⚠ It is NOT refused without `:airframe = :six_dof`,
+            # which is a LIVE fidelity a student may toggle mid-run; the radome keys (26/27) have
+            # the identical INERT-without-it shape without refusing it.
+            if haskey(sb, "gimbal_tau_s")
+                comp[:seek_two_angle] ||
+                    error("missile '$id': seeker.gimbal_tau_s authored without " *
+                          "seeker.two_angle: true — the gimbal head lives in the two-angle seeker " *
+                          "(`_observe_point3d!`), so without that host the key is read by NOTHING " *
+                          "and the knob is DEAD (slice 34)")
+                # ⚠⚠ AND A BODY-FIXED FIELD OF VIEW IS REFUSED BESIDE A HEAD, on the same
+                # "refused, not branch-ordered" precedent — but this one is PHYSICS, not hygiene.
+                # A gimballed seeker has NO body-fixed window: its body-fixed limit is the
+                # mechanical STOP, and its window is the DETECTOR's, about the head axis. Slice
+                # 32's key under a head would be an unmodelled THIRD window — and the seam would
+                # then have to choose which of two `look_angle` readouts wins, the head's index
+                # (what the glass used) or the nose's (what slice 32 means). Refusing the
+                # combination is what makes that choice unnecessary rather than silent.
+                !haskey(sb, "seeker_fov_deg") ||
+                    error("missile '$id': seeker.seeker_fov_deg authored WITH seeker.gimbal_tau_s " *
+                          "— a gimballed seeker has no body-fixed field of view (its body-fixed " *
+                          "limit is gimbal_stop_deg and its window is gimbal_fov_deg, about the " *
+                          "HEAD axis). Author one seeker or the other (slice 34)")
+                comp[:gimbal_tau_s] = _f64(sb["gimbal_tau_s"])
+                isfinite(comp[:gimbal_tau_s]) ||
+                    error("missile '$id': seeker.gimbal_tau_s must be finite " *
+                          "(got $(comp[:gimbal_tau_s]))")
+            end
+            # The head's two ANGULAR limits, both in DEGREES at the YAML boundary and radians inside
+            # (the `seeker_fov_deg` posture — the seam converts once, and `head_clamp` owns the
+            # `max(stop, 0)` / NaN-stop degenerates so there is no bound here either).
+            # ⚠ INERT WITHOUT `gimbal_tau_s`, AND REFUSED RATHER THAN SILENTLY IGNORED (the slice-31
+            # gyro precedent): both keys are read ONLY inside the head branch, so without a head
+            # they are DEAD KNOBS a student could drag all day.
+            for hk in ("gimbal_stop_deg", "gimbal_fov_deg")
+                haskey(sb, hk) || continue
+                haskey(sb, "gimbal_tau_s") ||
+                    error("missile '$id': seeker.$hk authored without seeker.gimbal_tau_s — " *
+                          "it is read only inside the gimbal head, so without one this knob is " *
+                          "DEAD (slice 34)")
+                comp[Symbol(hk)] = _f64(sb[hk])
+                isfinite(comp[Symbol(hk)]) ||
+                    error("missile '$id': seeker.$hk must be finite (got $(comp[Symbol(hk)]))")
+            end
             # Slice 13: the `:scan` seeker (fidelity `seeker: scan`) forms a NOISY angular-power
             # PROFILE over a FIXED grid (the slice-3 CFAR sandbox on the LOS-ANGLE axis) instead of
             # ONE noisy truth bearing. The grid/beam/CFAR/gate config lands here (STATIC — draw-count/

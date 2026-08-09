@@ -1576,6 +1576,108 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     az_tru, el_tru = az_el(û_tru)
     λ_tru        = atan(û_tru[3], û_tru[1])
 
+    # SLICE 34 — THE GIMBALLED HEAD, AND THE INDEX THAT LOOKS AT ITSELF. Slices 26–31 built the
+    # parasitic loop on one geometric fact: the radome bends the ray by an amount set by the LOOK
+    # ANGLE, and the look angle is the LOS measured off the missile's OWN NOSE — a quantity the
+    # missile can only move by ROTATING, which is exactly why slice 26 is a BODY-RATE instability.
+    # A GIMBALLED SEEKER BREAKS THAT IDENTITY. Its head has its own pointing angles, the ray passes
+    # through the part of the dome the HEAD is aimed at, and — this is the whole slice — the head is
+    # aimed by the very measurement the dome just bent. The index of the glass becomes a FIXED POINT
+    # of the glass, so part of the bend's own variation is absorbed by the head's pointing instead of
+    # being handed to guidance: slice 26's loop is partly re-closed through the HEAD, where its sign
+    # is NEGATIVE. See `docs/plans/slice34.md`.
+    #
+    # ⚠⚠ AND THE MARGIN IS NOT BOUGHT BY THE SERVO LAG — gate 0 measured that and the distinction is
+    # the slice. Under the head that actually ships (the one tracking its own BENT measurement) τ
+    # does NOT move the onset anywhere in [0.02, 0.2]; only the amplitude sags, which is why `τ` is
+    # AUTHORED and not a slider. And the ISOLATION arm carried the same ONE-TICK SAMPLING DELAY on
+    # the TRUTH LOS and reproduced the truth-tracking head to three decimals at every R̂ (0.40752 vs
+    # 0.40798, 0.69399 vs 0.69538, 0.97186 vs 0.97277) while the bent head departed from both ⇒ THE
+    # MARGIN IS BOUGHT BY THE INDEX, not by the delay. A slice resting on a one-tick lag would be
+    # resting on noise (§0.5).
+    #
+    # ⚠ THREE SEAM DISCIPLINES, and they are the physics rather than housekeeping:
+    #   1. THE HEAD SLEWS BEFORE THE BEND IS TAKEN (this block sits ABOVE the radome). The other
+    #      ordering leaves a one-tick lag that SURVIVES τ → 0 and would fake exactly the mechanism
+    #      §0.5 measured to be worth nothing.
+    #   2. THE SERVO TRACKS THE BENT, ONE-TICK-DELAYED MEASUREMENT (`:head_tgt_*`, stored below,
+    #      AFTER `az_m`/`el_m` are formed). A real head slews on its own detector's error signal, and
+    #      slice 27's rule names why ("compensate with a signal that is not itself corrupted by what
+    #      you are compensating"). The `:truth`-tracking variant was measured at gate 0 and does NOT
+    #      ship. ⚠ There is deliberately NO FALLBACK to the truth angles here (advisor): `:head_az`
+    #      and `:head_tgt_az` are minted on the SAME tick by the handover below and by the store
+    #      below it, so the else-arm indexes both directly. A `get(c, :head_tgt_az, look_az_b)`
+    #      fallback would put a TRUTH read on the one path whose whole thesis is that the head never
+    #      sees truth — un-exercised, and fake if it ever ran.
+    #   3. THE DETECTOR WINDOW IS EVALUATED TWICE, AGAINST DIFFERENT QUANTITIES, and collapsing them
+    #      changes the physics: the SLEW is gated on the error BEFORE this tick's slew (there is no
+    #      error signal to slew on if the target was already out), AVAILABILITY on the error AFTER.
+    #      When the target is outside the window the head HOLDS — no error signal, no slew — which is
+    #      the α-β tracker's coast one layer out, and the mechanism behind §0.7's METRIC INVERSION:
+    #      a broken window FREEZES the index, and a frozen index is QUIET at every R̂ (§0.4), so
+    #      `rms r` FALLS while the miss opens. ⇒ no stability verdict may be read on a windowed arm.
+    #
+    # ⚠ RUNG-GATED ON THE LIVE `:airframe`, never on `haskey(:head_az)` — the slice-21 `_atm_on` /
+    # 23 / 26 / 27 / 29 / 32 latent-bug class, whose SEVENTH occurrence this would be. `:head_az` is
+    # minted here and NEVER deleted, so a key-gated head would keep slewing (and keep indexing the
+    # glass) off a FROZEN attitude after a cross-toggle off `:six_dof`. ⭐ And the head and the
+    # attitude it is measured against are gated by the SAME rung — `:att_q` is written only by
+    # `_integrate_6dof!`, which is itself rung-gated — so they freeze and resume TOGETHER; the head
+    # never runs against an attitude from a different plant. `haskey(:att_q)` stays ONLY as a crash
+    # guard (convention 5), it is not the semantic gate.
+    #
+    # ⚠ A BODY-FIXED `seeker_fov_deg` IS REFUSED ALONGSIDE THIS AT LOAD (`scenario.jl`, the slice-21
+    # "refused rather than silently branch-ordered" precedent), so the `elseif` on the availability
+    # branch below is unreachable from any YAML. A gimballed seeker has no body-fixed window: the
+    # STOP is that limit, and slice 32's key under a head would be an unmodelled THIRD window.
+    _six = get(w.fidelity, :airframe, :point_mass) === :six_dof
+    _gim = haskey(c, :gimbal_tau_s) && haskey(c, :att_q) && _six
+    look_az_b = 0.0; look_el_b = 0.0     # the LOS in the BODY frame — what a STRAPDOWN seeker indexes
+    head_az   = 0.0; head_el   = 0.0     # the HEAD's pointing angles, in the body frame
+    off_head  = 0.0; fov_h     = 0.0     # the detector's off-head-axis error, and its window
+    if _gim
+        look_az_b, look_el_b = look_angles(c[:att_q]::Quat, û_tru)
+        # Degrees at the YAML boundary, radians inside (the `seeker_fov_deg` posture — the seam
+        # converts once). ⚠ NO DOUBLE CLAMP: `head_clamp` owns `max(stop, 0)` and the NaN-stop
+        # degenerate, `head_slew` owns `τ < 0` / `dt ≤ 0` (slice 33's "the clamp changed owner").
+        # The window's own `max(·, 0)` is clamped HERE and exactly once, and both the predicate and
+        # the shipped margin below read THIS local — so the sign and the verdict are the same bits.
+        stop_h = deg2rad(Float64(get(c, :gimbal_stop_deg, 1.0e6)))
+        fov_h  = max(deg2rad(Float64(get(c, :gimbal_fov_deg, 1.0e6))), 0.0)
+        if !haskey(c, :head_az)
+            # THE HANDOVER — the head is handed the target at launch, and it is LOAD-BEARING rather
+            # than a nicety (§0.8, slice 32's P5 vindicated). Against a head that starts CAGED at
+            # boresight the whole lead must be slewed, so during acquisition the window requirement
+            # DEGENERATES TO THE STRAPDOWN ONE (18.1172° — slice 32's own number) and `off_max` over
+            # a full flight stops measuring the tracking error at all; it even moves the ring verdict
+            # at the bracket's edge. ⇒ THE SHIPPED HEAD IS HANDED OVER, and that is a stated §1
+            # condition of every number this slice quotes. Making the handover itself addressable is
+            # the named successor.
+            # ⚠ `head_clamp`, NEVER A PER-AXIS `clamp` (gate 1's Finding 2, and the gate-0 probe has
+            # exactly that bug): the servo is a contraction toward the target ONLY FROM INSIDE the
+            # disc, and this is the one place a head can be born outside it. The call is
+            # unconditional because the kernel is bit-for-bit inert when it does not bind.
+            head_az, head_el = head_clamp(look_az_b, look_el_b, stop_h)
+        else
+            head_az = Float64(c[:head_az]); head_el = Float64(c[:head_el])
+            # discipline 3, first evaluation: the error the detector HAD, before this tick's slew.
+            if off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h
+                head_az, head_el = head_slew(head_az, head_el,
+                                             Float64(c[:head_tgt_az]), Float64(c[:head_tgt_el]),
+                                             Float64(c[:gimbal_tau_s]), dt, stop_h)
+            end
+        end
+        c[:head_az] = head_az; c[:head_el] = head_el
+        # …and the second evaluation: the error the detector HAS. This one is the availability
+        # verdict and the shipped margin. ⚠ THE SHIPPED KERNEL, never an inline `hypot(wrap_angle(…))`
+        # restatement of it (slice 32's gate-1 correction: an inline form makes `test_frames.jl`
+        # prove a SECOND implementation and nothing about what flies) — and it is `off_axis_angle`
+        # with the HEAD as the reference axis, which is `boresight_angle`'s own shape with the nose
+        # replaced. That a CAGED head reproduces `boresight_angle` exactly is gate 1's finding, and
+        # it is why there is one kernel here and not two.
+        off_head = off_axis_angle(head_az, head_el, look_az_b, look_el_b)
+    end
+
     # SLICE 26 — THE RADOME. The seeker does not look at the target directly: it looks THROUGH a
     # radome, which refracts by `ε = R·(look angle off the boresight)` (frames.jl `radome_error`).
     # The bend therefore depends on the missile's OWN ATTITUDE, which closes a feedback path from
@@ -1598,7 +1700,23 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
               get(w.fidelity, :airframe, :point_mass) === :six_dof
     if _rad_on
         R_rad = Float64(c[:radome_slope])
-        look_az, look_el = look_angles(c[:att_q]::Quat, û_tru)
+        # ⭐⭐ SLICE 34 — THE INDEX. The glass bends the ray where the ANTENNA IS POINTED, so under a
+        # gimballed head the look angle the curve is evaluated at is the HEAD's own angle, not the
+        # LOS-vs-body angle. That is the rewrite `frames.jl` names as the reason this is its own
+        # slice — and gate 0 measured that at ZERO SERVO LAG it collapses: the head angle IS the
+        # LOS-vs-body angle then, so the glass sees the same index and `max|Δpos| = 0` EXACTLY over
+        # 9000 ticks on ringing glass (§0.2). ⇒ "the bend keys off head-vs-body" is a TOOTH, never
+        # the headline; what the slice actually rests on is that the head is aimed by the BENT
+        # measurement, which is the branch above.
+        # ⚠ STRUCTURAL BYTE-IDENTITY (the slice-20/21/26/27/28 shape): a BRANCH, whose else-arm is
+        # the slice-26…33 line VERBATIM. Never `head_az` seeded from the look angle and trusted to
+        # be equal — the `-0.0` trap and float non-associativity both apply, and a no-gimbal wire
+        # must be bit-for-bit slice 33 BY CONSTRUCTION rather than by a value that happens to agree.
+        if _gim
+            look_az, look_el = head_az, head_el
+        else
+            look_az, look_el = look_angles(c[:att_q]::Quat, û_tru)
+        end
         # SLICE 28 — THE SLOPE CURVE. Slices 26/27 both assumed the glass has ONE slope; a real
         # radome's error slope is a CURVE in look angle, because the ray passes through different
         # glass at different look angles. `R(look) = R₀ + A·(1−cos(k·look))` (frames.jl
@@ -1672,11 +1790,35 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # a negative slider. Slice 33's `seeker_fov_margin_deg` DOES pass this local to the kernel —
     # legally, because that readout sits under the very same `_fov_on` gate, and because the margin
     # is defined on the CLAMPED window (which the kernel owns) rather than the authored one.
-    if _fov_on
+    # ⚠ SLICE 34 — UNDER A HEAD THE WINDOW IS THE DETECTOR'S, ABOUT THE HEAD AXIS, and it is
+    # CHECKED FIRST. A gimballed seeker has no body-fixed field of view — the mechanical STOP is its
+    # body-fixed limit — so the two are alternatives and not a conjunction, and `scenario.jl`
+    # REFUSES a YAML that authors both (the slice-21 "refused, not branch-ordered" precedent). The
+    # `elseif` is therefore unreachable from any scenario; the precedence is written down because a
+    # programmatic world can still build both, and because the FOV telemetry block below would
+    # otherwise OVERWRITE slice 26's `look_angle` with the truth-referenced one — the head's index
+    # replaced by the nose's, silently, with a plausible number.
+    # ⚠ This is the SECOND evaluation of the detector error (discipline 3): the error AFTER the
+    # slew, where the slew gate above read the error BEFORE it.
+    if _gim
+        in_fov = off_head ≤ fov_h
+    elseif _fov_on
         fov_rad = deg2rad(Float64(c[:seeker_fov_deg]))
         in_fov  = seeker_in_fov(c[:att_q]::Quat, û_tru, fov_rad)
     else
         in_fov  = true
+    end
+
+    # SEAM DISCIPLINE 2 — the servo's target for the NEXT tick: the MEASURED LOS rotated into the
+    # body frame, i.e. what this tick's detector actually reported, BEND AND NOISE INCLUDED. It must
+    # be stored HERE, after `az_m`/`el_m` are formed, and the head must have slewed on the PREVIOUS
+    # one above — that ordering is the self-referential index the whole slice rests on.
+    # ⚠ UNCONDITIONAL UNDER `_gim`, and paired with the handover's `:head_az` mint: the two keys are
+    # written on the same tick, which is what lets the slew branch index `:head_tgt_az` directly
+    # instead of falling back to a truth read (advisor).
+    if _gim
+        head_tgt_az, head_tgt_el = look_angles(c[:att_q]::Quat, los_unit_from_angles(az_m, el_m))
+        c[:head_tgt_az] = head_tgt_az; c[:head_tgt_el] = head_tgt_el
     end
 
     # Lazy first-tick init (the `_observe_point!` shape): seed every memory, all rates 0.
@@ -2170,6 +2312,53 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # external anchor (convention 11) is that the critical FOV EQUALS this lead — proven by an
         # INDEPENDENT recompute. Reading the core's own key back and comparing it to the core's own
         # look angle is the self-calibrated round-trip this project names as a trap.
+        tel["$sid.lead_angle_deg"] = _finite(rad2deg(
+            collision_lead_angle(_norm3(e.vel), tgt.vel, û_tru)))
+    end
+    # SLICE 34 — the GIMBAL readouts, shipped ONLY while a head is authored (the never-stale
+    # discipline; a slice-11/13/25…33 wire is byte-identical BY GATING — `_gim` is false on every one
+    # of them, so not a single key here is even evaluated there). ⚠ AND THE GATE IS THE RUNG, so a
+    # cross-toggle off `:six_dof` ships NO head keys at all rather than a frozen plausible set — the
+    # latent-bug class this arc has now caught six times. All SCALARS, all `_finite*` (conventions
+    # 6/13 — the client recomputes nothing).
+    if _gim
+        # ⭐ THE PRICE, IN THE ONE CURRENCY A GIMBAL HAS. Slice 33's single number splits in TWO:
+        # a STOP (the head's TRAVEL about the body, which reproduces slice 33's excursion — a
+        # RESTATEMENT, not a new claim) and a DETECTOR WINDOW (about the head axis — new, and where
+        # the margin the self-referential index buys is paid for).
+        # ⚠ `hypot`, DELIBERATELY NOT `off_axis_angle(0, 0, …)` — and the difference is not cosmetic.
+        # This number is read against the STOP, and the stop is `head_clamp`'s UNWRAPPED `hypot`; a
+        # wrapped reading would disagree with the clamp exactly where a head with NO stop leaves the
+        # principal interval, which `head_slew`'s docstring pins as a real state. The telemetry must
+        # have the same shape as the clamp that produced it — the same species argument that made
+        # the stop CIRCULAR in the first place.
+        tel["$sid.head_angle_deg"] = _finite(rad2deg(hypot(head_az, head_el)))
+        tel["$sid.gimbal_stop_deg"] = _finite_coord(Float64(get(c, :gimbal_stop_deg, 1.0e6)))
+        tel["$sid.head_off_deg"]    = _finite(rad2deg(off_head))
+        # ⚠ `_finite_coord`, NOT `_finite`, on the window and the margin (the slice-29 `k̂` catch):
+        # `_finite` clamps only the UPPER bound, and the margin is NEGATIVE across the whole
+        # out-of-window side. The window ships the AUTHORED degrees while the margin is built on the
+        # CLAMPED radians — slice 33's divergence exactly, and for its reason: the two keys must not
+        # be expected to reconstruct the third on a negative slider, which is the defined
+        # never-acquires state.
+        tel["$sid.gimbal_fov_deg"] = _finite_coord(Float64(get(c, :gimbal_fov_deg, 1.0e6)))
+        # ⭐ HOW MUCH DETECTOR WINDOW IS LEFT, SIGNED — slice 18's `terrain_clearance_m` / slice 33's
+        # `seeker_fov_margin_deg` precedent: THE SIGN IS THE VERDICT. Built from the SAME local
+        # `fov_h` and the SAME `off_head` the predicate above tested, so the shipped sign and the
+        # flying verdict are the same bits and not two opinions. ⭐⭐ And it is the currency of §0.7's
+        # measured predicate `held ⟺ tracking error < detector window`, which is slice 32's
+        # predicate returning in the quantity a gimbal actually has.
+        tel["$sid.gimbal_fov_margin_deg"] = _finite_coord(rad2deg(fov_h - off_head))
+        tel["$sid.gimbal_valid"] = in_fov ? 1.0 : 0.0
+        # ⚠ THE TWO QUANTITIES THE STOP AND THE WINDOW ARE READ AGAINST ARE DIFFERENT ANGLES, and
+        # shipping both is what stops a HUD comparing the wrong pair (the plan's gate-3 note): the
+        # ENGAGEMENT's lead is what the head's TRAVEL must cover (vs the STOP), while the TRACKING
+        # ERROR is what the DETECTOR window must cover. `look_body_deg` is the strapdown seeker's own
+        # look angle — the number slice 32 called `look_angle` — kept under its own name because
+        # slice 26's `look_angle` above now ships the HEAD's index, which is what the glass used.
+        tel["$sid.look_body_deg"] = _finite(rad2deg(boresight_angle(c[:att_q]::Quat, û_tru)))
+        # Slice 32's key, VERBATIM in meaning and inputs (`_fov_on` is unreachable beside `_gim`, so
+        # this is the only writer on a gimbal wire): the collision triangle's own demand, per tick.
         tel["$sid.lead_angle_deg"] = _finite(rad2deg(
             collision_lead_angle(_norm3(e.vel), tgt.vel, û_tru)))
     end

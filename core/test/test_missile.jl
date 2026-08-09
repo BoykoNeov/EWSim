@@ -6803,3 +6803,637 @@ end
         end
     end
 end
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+# SLICE 34 — THE GIMBAL: THE HEAD POINTS WHERE THE GLASS SAYS THE TARGET IS.
+#
+# Slices 26–33 built the parasitic loop on one geometric fact: the radome bends the ray by an
+# amount set by the LOOK ANGLE, and the look angle is the LOS measured off the missile's OWN
+# NOSE — a quantity the missile can only move by ROTATING, which is exactly why slice 26 is a
+# BODY-RATE instability. A GIMBALLED SEEKER BREAKS THAT IDENTITY: the ray passes through the part
+# of the dome the HEAD is aimed at, and the head is aimed by the very measurement the dome just
+# bent. The index of the glass becomes a FIXED POINT of the glass.
+#
+# ⇒ SLICE 26's LOOP IS PARTLY RE-CLOSED THROUGH THE HEAD, WHERE ITS SIGN IS NEGATIVE. Same glass,
+# same residual, same seed: strapdown RINGS (rms r 0.93194) and gimballed is QUIET (0.01181).
+#
+# ⚠ AND IT IS NOT FREE, IN THE ONE CURRENCY A GIMBAL HAS. The margin is bought by the head's
+# pointing DECOUPLING from the true LOS, and that decoupling is precisely the tracking error the
+# head's own detector window must cover. Slice 33's single number splits in TWO — a STOP (the
+# head's travel about the body) and a DETECTOR WINDOW (about the head axis) — and gate 2 measures
+# that the two are ONE BUDGET, not two independent limits.
+#
+# ⚠ NO new draw (class 4a, the head is a deterministic servo on an existing measurement), no new
+# rung, no new cap. ONE live slider: `gimbal_fov_deg`. `gimbal_tau_s` and `gimbal_stop_deg` are
+# AUTHORED — see the τ testset for the MEASUREMENT that keeps τ out of the slider list, which is
+# not the one `docs/plans/slice34.md` §0.4 predicted.
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+@testset "THE GIMBALLED HEAD wired (slice 34 — the index that looks at itself)" begin
+    dt = 1.0e-3
+
+    # Slice 33's `budget_world` with the HEAD keys added. Everything else is held to the digit —
+    # the whole point is that the strapdown column must reproduce slices 30/33 exactly, so any
+    # movement in the gimbal column is the head and nothing else.
+    function gim_world(; vy = 200.0, seed = 32, R = -0.03, A = -0.15, Rhat = nothing,
+                         tau = nothing, stop = nothing, gfov = nothing, fov = nothing)
+        w = World(seed = seed,
+                  fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                 :autopilot => :alpha, :airframe => :six_dof,
+                                                 :seeker => :filtered, :seeker_axes => :az_el))
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.0,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => 0.3, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => 8.0, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => 5.0e-5, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true)
+        if R !== nothing
+            comp[:radome_slope] = R; comp[:radome_ripple] = A; comp[:radome_ripple_k] = 12.0
+            Rhat === nothing || (comp[:radome_slope_est] = Rhat)
+        end
+        tau  === nothing || (comp[:gimbal_tau_s]    = tau)
+        stop === nothing || (comp[:gimbal_stop_deg] = stop)
+        gfov === nothing || (comp[:gimbal_fov_deg]  = gfov)
+        fov  === nothing || (comp[:seeker_fov_deg]  = fov)     # slice 32's BODY-fixed window
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 2000.0, 4200.0),
+                                 vel = Vec3(0.0, vy, 0.0),
+                                 comp = Dict{Symbol,Any}(:cross_speed_mps => vy))
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:t1)]
+    end
+
+    # ⚠⚠ SLICE 33's TWO-RUN DISCIPLINE IS INHERITED AND IT IS MANDATORY HERE FOR A SECOND,
+    # INDEPENDENT REASON (§0.7, MEASURED): the head HOLDS when it loses its error signal, so a
+    # broken detector window FREEZES the index — and a frozen index produces a CONSTANT bend, which
+    # is quiet at every R̂. So on a windowed arm `rms r` FALLS while the miss OPENS, and `off_max`
+    # becomes the ~90° post-lock-loss runaway rather than the tracking error. ⇒ THE PREDICTOR
+    # (`rms r`, `off_max`) COMES OFF A FREE ARM AND THE PREDICTED (miss, % out) OFF A WINDOWED ONE,
+    # bound as `free` / `win` at the call sites below, never read off one run.
+    #
+    # `rms_r` is NaN, never 0.0, on an empty band (slice 33's gate-2 finding: a badly broken arm's
+    # CPA is ~3.6 km and never enters r ∈ [500, 3000], so `sum/max(n,1)` would print a beautifully
+    # quiet 0.00000 from ZERO SAMPLES). Every test quoting a band number asserts `n_band > 0`.
+    function arm(; n = 22000, trace = false, kw...)
+        w, sub = gim_world(; kw...)
+        miss = Inf; r_prev = Inf
+        look_body_max = 0.0; head_max = 0.0; off_max = 0.0
+        nt = 0; n_out = 0; n_band = 0; sum_r2 = 0.0; t_break = NaN
+        tr = Vec3[]
+        for k in 1:n
+            tick!(w, sub, dt); empty!(w.events)
+            m = w.entities[:m1]; t = w.entities[:t1]
+            tel = get(w.env, :telemetry, Dict{String,Any}())
+            trace && push!(tr, m.pos)
+            r = los_range(m.pos, t.pos)
+            if r > 200                       # slice 32's endgame-spike gate, inherited with it
+                nt += 1
+                if get(tel, "m1.gimbal_valid", get(tel, "m1.seeker_valid", 1.0)) == 0.0
+                    n_out += 1
+                    isnan(t_break) && (t_break = k * dt)
+                end
+                haskey(m.comp, :att_q) && (look_body_max = max(look_body_max,
+                    rad2deg(boresight_angle(m.comp[:att_q]::Quat, los_unit(m.pos, t.pos)))))
+                head_max = max(head_max, get(tel, "m1.head_angle_deg", 0.0))
+                haskey(tel, "m1.head_off_deg") && (off_max = max(off_max, tel["m1.head_off_deg"]))
+            end
+            if 500 <= r <= 3000
+                n_band += 1
+                ω = get(m.comp, :omega_body, zero(Vec3))::Vec3
+                sum_r2 += ω[3]^2
+            end
+            r > r_prev && miss == Inf && (miss = r_prev)
+            r_prev = r
+            miss < Inf && k > 200 && break
+        end
+        return (; miss, look_body_max, head_max, off_max, t_break, n_band, trace = tr,
+                  rms_r = n_band == 0 ? NaN : sqrt(sum_r2 / n_band),
+                  out   = nt == 0 ? 0.0 : 100n_out / nt)
+    end
+
+    # The arc's ring/quiet line, the same 0.30 slices 30/33 read their brackets against.
+    RING = 0.30
+    posdiff(a, b) = (@assert length(a) == length(b);
+                     maximum(hypot((x - y)...) for (x, y) in zip(a, b)))
+
+    # THE SHARED LADDER, computed once. Glass R₀ = −0.03, A = −0.15 (⇒ `radome_slope_worst` =
+    # −0.33, slice 30's aim point) against slice 28's vy = 200 crossing target. The gimbal column
+    # is the SHIPPED head: τ = 0.05, a 30° stop, no detector window.
+    strap = Dict(Rh => arm(Rhat = Rh) for Rh in (-0.33, -0.27, -0.24, -0.18, -0.17, -0.16, -0.03))
+    gim   = Dict(Rh => arm(Rhat = Rh, tau = 0.05, stop = 30.0)
+                 for Rh in (-0.33, -0.27, -0.24, -0.19, -0.18, -0.17, -0.16, -0.12, -0.03))
+
+    @testset "BYTE-IDENTITY — no `gimbal_tau_s` ⇒ the slice-25…33 path, ON THE WIRE" begin
+        # Convention 2's master check, and read off the WIRE rather than off the diff: the
+        # key-absent arms must reproduce the numbers slices 30 and 33 recorded, to the digit.
+        @test strap[-0.24].rms_r ≈ 0.70983 atol = 2.0e-5     # slice 30's "last decisive ring"
+        @test strap[-0.18].rms_r ≈ 0.93194 atol = 2.0e-5     # slice 33's ladder, verbatim
+        @test strap[-0.03].rms_r ≈ 1.07211 atol = 2.0e-5
+        @test strap[-0.33].rms_r ≈ 0.05879 atol = 2.0e-5
+        # …and not one head key is even evaluated there (the never-stale discipline).
+        let (w, sub) = gim_world(Rhat = -0.18)
+            for k in 1:200; tick!(w, sub, dt); empty!(w.events); end
+            tel = w.env[:telemetry]::Dict{String,Any}
+            for key in ("m1.head_angle_deg", "m1.head_off_deg", "m1.gimbal_valid",
+                        "m1.gimbal_fov_deg", "m1.gimbal_stop_deg", "m1.gimbal_fov_margin_deg",
+                        "m1.look_body_deg")
+                @test !haskey(tel, key)
+            end
+            @test !haskey(w.entities[:m1].comp, :head_az)
+            @test !haskey(w.entities[:m1].comp, :head_tgt_az)
+        end
+    end
+
+    @testset "⭐⭐ THE HEAD IS INERT WHERE IT SHOULD BE — three controls, all EXACTLY 0" begin
+        # The head reaches the trajectory through exactly TWO channels: the radome's INDEX and the
+        # detector WINDOW. Remove both and it must be bit-for-bit absent — which is the structural
+        # claim, not a courtesy, because it is what says the seam has no third path.
+        #
+        # ⚠ CONTROL A — NO GLASS, NO WINDOW: inert at EVERY τ, including a head so slow it lags by
+        # degrees. A servo with nothing to index and nothing to gate cannot move a missile.
+        for τ in (0.0, 0.05, 0.5)
+            a = arm(n = 9000, trace = true, R = nothing)
+            b = arm(n = 9000, trace = true, R = nothing, tau = τ, stop = 30.0)
+            @test posdiff(a.trace, b.trace) == 0.0
+        end
+        # ⚠ CONTROL B — A WIDE DETECTOR WINDOW IS BIT-IDENTICAL TO THE KEY BEING ABSENT. This is
+        # atmosphere.jl's KNOB-vs-RUNG discriminator applied to the slice's ONE slider: the
+        # off-state is knob-reachable, so `gimbal_fov_deg` is a KNOB and there is no fidelity rung
+        # (and the client button stays dropped). The free arms below rely on it.
+        for Rh in (-0.18, -0.16)
+            a = arm(n = 9000, trace = true, Rhat = Rh, tau = 0.05, stop = 30.0)
+            b = arm(n = 9000, trace = true, Rhat = Rh, tau = 0.05, stop = 30.0, gfov = 40.0)
+            @test posdiff(a.trace, b.trace) == 0.0
+        end
+        # ⚠ CONTROL C — A NON-BINDING STOP IS INERT, bit-for-bit, which is what licenses the
+        # UNCONDITIONAL `head_clamp` call at the handover (gate 1's Finding 2: the servo is a
+        # contraction only from INSIDE the disc, and the init is the one place a head can be born
+        # outside it, so the clamp must run every time and cost nothing when it does not bind).
+        for Rh in (-0.18, -0.03)
+            a = arm(n = 9000, trace = true, Rhat = Rh, tau = 0.05, stop = 30.0)
+            b = arm(n = 9000, trace = true, Rhat = Rh, tau = 0.05)          # no stop authored
+            @test posdiff(a.trace, b.trace) == 0.0
+        end
+    end
+
+    @testset "⚠⚠ THE NON-COLLAPSE — §0.2 does NOT reproduce, and that IS the slice" begin
+        # GATE-2 FINDING, and it corrects the plan's own reading of its gate-0 result. §0.2
+        # measured `max|Δpos| = 0` at τ → 0 and concluded that "the bend keys off head-vs-body" is
+        # the FALSE-FIDELITY class — a rewrite with no physics in it. ⚠ THAT ARM TRACKED THE TRUTH
+        # LOS (`gimbal_lib.jl`'s default). The head that SHIPS tracks its own BENT, one-tick-delayed
+        # measurement, so at τ = 0 it lands on the PREVIOUS tick's BENT angle and NOT on this tick's
+        # LOS-vs-body: the collapse is not available, and the amount by which it fails to collapse
+        # is the self-referential index with the servo lag taken out.
+        for (Rh, want) in ((-0.03, 77.10), (-0.18, 58.21), (-0.33, 55.13))
+            a = arm(n = 9000, trace = true, Rhat = Rh)
+            b = arm(n = 9000, trace = true, Rhat = Rh, tau = 0.0, stop = 30.0)
+            @test posdiff(a.trace, b.trace) ≈ want atol = 0.02
+        end
+        # ⭐⭐ AND IT IS NOT MERELY NON-ZERO — AT τ = 0 THE MARGIN IS ALREADY THERE IN FULL. This is
+        # §0.5's isolation reproduced at the seam without needing its `:truth` / `:delay` probe
+        # arms: the minimum-lag head, whose only remaining departure from strapdown is the INDEX,
+        # is quiet where the strapdown seeker rings. ⇒ THE MARGIN IS BOUGHT BY THE INDEX.
+        let z = arm(Rhat = -0.18, tau = 0.0, stop = 30.0)
+            @test z.n_band > 0
+            @test z.rms_r ≈ 0.03394 atol = 2.0e-5
+            @test z.rms_r < RING                 # QUIET…
+            @test strap[-0.18].rms_r > RING      # …where the strapdown seeker RINGS
+            @test strap[-0.18].rms_r / z.rms_r > 27.0
+        end
+    end
+
+    @testset "⭐⭐ THE LESSON — same glass, same residual, same seed: 78.9×" begin
+        f = gim[-0.18]; s = strap[-0.18]
+        @test f.n_band > 0 && s.n_band > 0
+        @test s.rms_r ≈ 0.93194 atol = 2.0e-5
+        @test s.rms_r > RING                                        # RINGS
+        @test f.rms_r ≈ 0.01181 atol = 2.0e-5
+        @test f.rms_r < RING                                        # QUIET
+        @test s.rms_r / f.rms_r ≈ 78.9 atol = 0.2
+        # ⚠ THE MISS IS NOT THE METRIC, and this is the arc's standing fact since slice 26 — every
+        # arm on the whole ladder HITS, ringing or not, so the verdict is always `rms r`.
+        @test all(a.miss < 7.0 for a in values(gim))
+        @test maximum(a.miss for a in values(strap)) < 7.0
+    end
+
+    @testset "⭐ THE BRACKET — two rungs of the ladder, and a SECOND independent tell" begin
+        # Quoted BRACKET TO BRACKET and never as one number (slice 30's "sufficient, never tight"
+        # discipline): the gimballed onset is (−0.18, −0.16] against the strapdown (−0.27, −0.24].
+        @test gim[-0.18].rms_r < RING && gim[-0.16].rms_r > RING     # (−0.18, −0.16]
+        @test strap[-0.27].rms_r < RING && strap[-0.24].rms_r > RING # (−0.27, −0.24]
+        # ⚠ −0.17 IS MARGINAL AND IS DELIBERATELY NOT ASSERTED AS A VERDICT — it is 0.039, an order
+        # above the quiet arms and an order below the ringing one. It is pinned as a NUMBER so a
+        # regression that moved it would be visible, without the bracket resting on it.
+        @test gim[-0.17].rms_r ≈ 0.03934 atol = 2.0e-5
+        @test gim[-0.24].rms_r ≈ 0.02497 atol = 2.0e-5
+        @test gim[-0.16].rms_r ≈ 0.35338 atol = 2.0e-5
+        # ⭐ THE SECOND TELL, FROM A DIFFERENT QUANTITY — `head_max` STEPS AT THE SAME PLACE. The
+        # head's TRAVEL is flat at 18.1172° through every quiet arm (it is tracking the engagement's
+        # own lead and nothing else) and jumps to 20.6193° on the first ringing one, which is what
+        # makes the bracket a MEASUREMENT and not a threshold read off the metric that defined it.
+        for Rh in (-0.33, -0.27, -0.24, -0.19, -0.18, -0.17)
+            @test gim[Rh].head_max ≈ 18.1172 atol = 1.0e-3
+        end
+        @test gim[-0.16].head_max ≈ 20.6193 atol = 1.0e-3
+        @test gim[-0.12].head_max ≈ 22.0259 atol = 1.0e-3
+        @test gim[-0.03].head_max ≈ 23.6010 atol = 1.0e-3
+        @test gim[-0.16].head_max > gim[-0.17].head_max + 2.0
+    end
+
+    @testset "⚠⚠ τ — AUTHORED, and the MEASURED reason is NOT the one §0.4 predicted" begin
+        # GATE-2 FINDING. §0.4 concluded "τ does NOT move the onset anywhere in [0.02, 0.2] — only
+        # the amplitude sags", and made that the reason τ is authored rather than a slider. ⚠ ITS
+        # LADDER SKIPPED −0.17 AND −0.16, which is exactly where the bracket is: the sag is
+        # monotone EVERYWHERE, and AT THE LINE that same sag crosses the verdict.
+        τs = (0.0, 0.02, 0.05, 0.10, 0.20)
+        sweep = Dict(Rh => [arm(Rhat = Rh, tau = τ, stop = 30.0).rms_r for τ in τs]
+                     for Rh in (-0.18, -0.17, -0.16, -0.12))
+        # the sag, on a deep-ringing arm that never goes quiet — §0.4's own row, reproduced
+        @test sweep[-0.12] ≈ [1.01270, 0.83567, 0.70207, 0.57877, 0.42355] atol = 2.0e-5
+        @test issorted(sweep[-0.12]; rev = true)
+        # …and the SAME sag at the line, where it changes the verdict: the bracket walks from
+        # (−0.18, −0.17] at τ ≤ 0.02 to (−0.16, −0.12] at τ = 0.20.
+        @test sweep[-0.17][1] > RING && sweep[-0.17][2] < RING * 0.9   # τ = 0 rings, 0.02 does not
+        @test sweep[-0.16][2] > RING && sweep[-0.16][5] < RING         # τ = 0.02 rings, 0.20 does not
+        @test sweep[-0.16] ≈ [0.86787, 0.62591, 0.35338, 0.07508, 0.02061] atol = 2.0e-5
+        # ⇒ τ IS A CONFOUNDED LEVER, which is a STRONGER reason to keep it authored than a dead
+        # one: it moves the amplitude on every arm, so a student dragging it would be moving the
+        # verdict without moving the mechanism. ⭐ AND THE SLICE'S CLAIM SURVIVES THE WHOLE SPAN —
+        # at EVERY τ the gimballed arm at the showcase residual is quiet where strapdown rings, so
+        # the margin is not a τ artifact at any point in the domain.
+        @test all(v < RING for v in sweep[-0.18])
+        @test strap[-0.18].rms_r > RING
+        # convention 9's real content: ONE slider. τ's own domain would be a second one.
+    end
+
+    @testset "⭐⭐ THE PRICE — `held ⟺ tracking error < detector window`, BRACKETED to 0.005°" begin
+        # SLICE 32's PREDICATE RETURNS IN THE CURRENCY A GIMBAL ACTUALLY HAS. Slice 32 measured
+        # `held ⟺ lead < fov` about the BODY; here the window is the DETECTOR's, about the HEAD,
+        # and what it must cover is the TRACKING ERROR. ⚠ THE TWO SIDES COME FROM DIFFERENT RUNS —
+        # the error off a FREE arm, the verdict off a WINDOWED one — which is what makes it a
+        # measurement rather than a restatement.
+        for (Rh, want_off, brk, held) in ((-0.18, 1.955643, 1.9550, 1.9600),
+                                          (-0.16, 5.236820, 5.2000, 5.3000))
+            free = gim[Rh]
+            @test free.off_max ≈ want_off atol = 1.0e-5
+            @test arm(Rhat = Rh, tau = 0.05, stop = 30.0, gfov = brk).out  > 0.0   # BREAKS
+            @test arm(Rhat = Rh, tau = 0.05, stop = 30.0, gfov = held).out == 0.0  # HOLDS
+            @test brk < free.off_max                        # …and the free arm's error is INSIDE
+        end
+        # ⚠ ON THE QUIET ARM THE BRACKET STRADDLES THE MEASURED ERROR TO 0.005°; on the RINGING one
+        # the predictor is CONSERVATIVE by ~1 % (5.2368 predicted, held only from 5.30), because a
+        # windowed arm is a DIFFERENT RUN and a ring diverges faster once it clips. Both directions
+        # are stated rather than tuned away.
+        @test arm(Rhat = -0.18, tau = 0.05, stop = 30.0, gfov = 1.9600).out == 0.0
+        @test arm(Rhat = -0.16, tau = 0.05, stop = 30.0, gfov = 5.2400).out > 0.0
+        # ⚠ §0.7's `⌈off_max⌉` RULE IS SUFFICIENT BUT NOT TIGHT, and gate 0 could not see that: it
+        # swept a 1° grid, on which the ceiling happens to be the first held cell. On a 0.1° grid
+        # the −0.16 row holds already at 5.30, 0.7° BELOW the ceiling.
+        @test arm(Rhat = -0.18, tau = 0.05, stop = 30.0, gfov = 2.0).out == 0.0
+        @test arm(Rhat = -0.16, tau = 0.05, stop = 30.0, gfov = 6.0).out == 0.0
+        # ⭐ AND THE RING IS SPENT IN DETECTOR WINDOW — slice 33's payload in the new currency: the
+        # requirement is 2.7× larger on the ringing arm than on the quiet one, same glass.
+        @test gim[-0.16].off_max / gim[-0.18].off_max > 2.6
+    end
+
+    @testset "⚠⚠ THE METRIC INVERSION — no stability verdict may be read on a windowed arm" begin
+        # MEASURED, not feared (§0.7). The head HOLDS when it loses its error signal, so a broken
+        # window FREEZES the index — and a frozen index produces a CONSTANT bend, which has nothing
+        # for `dε/dt` to differentiate. So `rms r` FALLS while the miss OPENS by two orders.
+        free = gim[-0.16]
+        win  = arm(Rhat = -0.16, tau = 0.05, stop = 30.0, gfov = 1.0)
+        @test free.n_band > 0 && win.n_band > 0
+        @test win.miss ≈ 1254.83 atol = 0.05          # the miss OPENS, 220×
+        @test win.miss / free.miss > 200.0
+        @test win.rms_r < free.rms_r / 3.9            # …while `rms r` FALLS 4.2×
+        @test win.rms_r ≈ 0.08491 atol = 2.0e-5
+        # …and the arm's OWN `off_max` is the post-lock-loss runaway (slice 33's signature), not
+        # the ring's 5.24° tracking error: 89.2° against a 30° mechanical stop.
+        @test win.off_max > 80.0
+        @test free.off_max < 6.0
+        @test !isnan(win.t_break)
+        @test win.t_break ≈ 3.349 atol = 0.01
+    end
+
+    @testset "⭐⭐ THE STOP AND THE WINDOW ARE ONE BUDGET, NOT TWO LIMITS" begin
+        # GATE-2 FINDING, and no gate-0 arm could have seen it: every one of them ran the stop at
+        # 30° or 1e6° against a head travel of at most 23.4°, so THE STOP NEVER BOUND IN ANY ARM
+        # THAT HAS EVER FLOWN (gate 1 wrote that down as the reason `head_clamp`'s shape rests on a
+        # species argument). Bind it, and the two limits turn out to be coupled: a clamped head
+        # cannot reach the LOS, so its DEFICIT is spent out of the DETECTOR budget.
+        #
+        #     off_head ≈ (head requirement − stop) + free tracking error
+        #
+        # The showcase arm needs 18.1172° of travel and carries 1.956° of tracking error, so at a
+        # detector window `W` the critical stop is ≈ 18.117 − W. MEASURED on three windows:
+        for (W, tight, loose, want_off) in ((8.0, 10.0, 11.0, 7.133),
+                                            (4.0, 14.0, 16.0, 2.227),
+                                            (2.0, 16.0, 18.0, 1.956))
+            @test arm(Rhat = -0.18, tau = 0.05, stop = tight, gfov = W).out  > 0.0   # BREAKS
+            let ok = arm(Rhat = -0.18, tau = 0.05, stop = loose, gfov = W)
+                @test ok.out == 0.0                                                  # HOLDS
+                @test ok.head_max ≈ loose atol = 1.0e-9   # the stop BOUND, exactly, on the circle
+                @test ok.off_max ≈ want_off atol = 2.0e-3 # …and the deficit landed on the detector
+            end
+        end
+        # ⇒ THE PLAN'S "the stop reproduces slice 33's excursion — a RESTATEMENT" IS CONFIRMED AND
+        # SHARPENED: the stop must cover the head's travel requirement (slice 33's number, 18.1172°
+        # here), and whatever it fails to cover is charged to the window. A stop below the lead is
+        # fatal on its own — the head is pinned, the LOS walks away from it, and the seeker never
+        # recovers.
+        let dead = arm(Rhat = -0.18, tau = 0.05, stop = 10.0, gfov = 8.0)
+            @test dead.out == 100.0
+            @test dead.miss > 3000.0
+            @test isnan(dead.rms_r)          # never enters the band at all — slice 33's catch
+        end
+    end
+
+    @testset "THE HANDOVER — `head_clamp` at init, and it is a stated §1 CONDITION" begin
+        # §0.8 promoted slice 32's "handover basket" deferral to a LIVE constraint: a head that
+        # starts CAGED at boresight must slew the WHOLE LEAD, so during acquisition its window
+        # requirement degenerates to the STRAPDOWN one and `off_max` stops measuring the tracking
+        # error at all. What ships is a HANDED-OVER head, and every number above is quoted for it.
+        let (w, sub) = gim_world(Rhat = -0.18, tau = 0.05, stop = 30.0)
+            tick!(w, sub, dt)
+            c = w.entities[:m1].comp
+            û = los_unit(w.entities[:m1].pos, w.entities[:t1].pos)
+            la, le = look_angles(c[:att_q]::Quat, û)
+            ha, he = head_clamp(la, le, deg2rad(30.0))
+            # BIT-EXACT, against the SHIPPED KERNEL — this is gate 1's Finding 2 made enforceable:
+            # a per-axis `clamp` here (which the gate-0 probe has) would hand tick 1 the one state
+            # from which the servo is not a contraction, and nothing downstream could detect it.
+            @test c[:head_az] === ha && c[:head_el] === he
+            @test w.env[:telemetry]["m1.head_off_deg"] == 0.0       # …so the error starts at zero
+            @test haskey(c, :head_tgt_az)      # its partner is minted on the SAME tick, which is
+            @test haskey(c, :head_tgt_el)      # what lets the slew branch index it directly
+        end
+        # …and with a BINDING stop the handover lands ON THE CIRCLE, in the target's direction —
+        # the disc invariant the servo needs, established at tick 1.
+        let (w, sub) = gim_world(Rhat = -0.18, tau = 0.05, stop = 10.0)
+            tick!(w, sub, dt)
+            c = w.entities[:m1].comp
+            @test hypot(c[:head_az], c[:head_el]) ≈ deg2rad(10.0) atol = 1.0e-12
+            @test w.env[:telemetry]["m1.head_angle_deg"] ≈ 10.0 atol = 1.0e-9
+        end
+    end
+
+    @testset "DRAW-COUNT INVARIANCE — class 4a, and it is ASSERTED not assumed" begin
+        # The head is a DETERMINISTIC SERVO on a measurement that already exists, so it adds no
+        # `randn` — convention 3, and what keeps the whole 25–33 family replay-compatible.
+        for kw in ((;), (tau = 0.05, stop = 30.0), (tau = 0.05, stop = 30.0, gfov = 2.0),
+                   (tau = 0.05, stop = 10.0, gfov = 1.0))
+            w, sub = gim_world(; Rhat = -0.18, kw...)
+            lo = 99; hi = 0
+            for k in 1:600
+                before = copy(w.rng)
+                tick!(w, sub, dt); empty!(w.events)
+                # replay the stream forward from the pre-tick state until it matches the post-tick
+                # one: the number of `randn` that takes IS the tick's draw count.
+                probe = copy(before); cnt = 0
+                while probe != w.rng && cnt < 64
+                    randn(probe); cnt += 1
+                end
+                k > 5 && (lo = min(lo, cnt); hi = max(hi, cnt))
+            end
+            # ⚠ BOTH BOUNDS, so a config that drew 2 on average but 1 and 3 on alternate ticks
+            # could not pass — the draw TOPOLOGY is what convention 3 is about, not the mean.
+            @test (lo, hi) == (2, 2)
+        end
+    end
+
+    @testset "STALE READOUT — the rung gate, the SEVENTH occurrence of the `_atm_on` class" begin
+        # `:head_az` / `:head_tgt_az` are minted by the seam and NEVER deleted, so a key-gated head
+        # would keep slewing — and keep indexing the glass — off a FROZEN attitude after a
+        # cross-toggle off `:six_dof`. The gate is the LIVE `:airframe`, and the assert is that the
+        # toggle ships NO head keys rather than a plausible frozen set.
+        let (w, sub) = gim_world(Rhat = -0.18, tau = 0.05, stop = 30.0, gfov = 4.0)
+            for k in 1:500; tick!(w, sub, dt); empty!(w.events); end
+            live = w.env[:telemetry]::Dict{String,Any}
+            @test haskey(live, "m1.gimbal_valid") && haskey(live, "m1.head_off_deg")
+            w.fidelity[:airframe] = :pitch_coupled
+            tick!(w, sub, dt); empty!(w.events)
+            gone = w.env[:telemetry]::Dict{String,Any}
+            for key in ("m1.head_angle_deg", "m1.head_off_deg", "m1.gimbal_valid",
+                        "m1.gimbal_fov_deg", "m1.gimbal_stop_deg", "m1.gimbal_fov_margin_deg",
+                        "m1.look_body_deg")
+                @test !haskey(gone, key)
+            end
+            # ⭐ AND THE HEAD AND THE ATTITUDE IT IS MEASURED AGAINST FREEZE TOGETHER: the comp keys
+            # survive (that is the hazard), but `:att_q` is written only by the rung-gated
+            # `_integrate_6dof!`, so neither advances while the plant is elsewhere.
+            @test haskey(w.entities[:m1].comp, :head_az)
+            let fh = w.entities[:m1].comp[:head_az], fa = w.entities[:m1].comp[:att_q]
+                for k in 1:50; tick!(w, sub, dt); empty!(w.events); end
+                @test w.entities[:m1].comp[:head_az] === fh
+                @test w.entities[:m1].comp[:att_q]   === fa
+            end
+        end
+    end
+
+    @testset "the TELEMETRY keys — and `look_angle` is now the HEAD's index" begin
+        # ⚠ THE PER-TICK CHECKS ARE COUNTED AND ASSERTED ONCE (slice 33's `viol` shape): an `@test`
+        # inside an 8000-tick loop would add 16 000 lines to the suite tally and say nothing more.
+        let (w, sub) = gim_world(Rhat = -0.16, tau = 0.05, stop = 30.0, gfov = 8.0)
+            dmax = 0.0; offmax = 0.0; n_sign = 0; n_tri = 0; n = 8000
+            for k in 1:n
+                tick!(w, sub, dt); empty!(w.events)
+                tel = w.env[:telemetry]::Dict{String,Any}
+                # ⭐ THE SIGN IS THE VERDICT (slice 18's `terrain_clearance_m` / slice 33's
+                # `seeker_fov_margin_deg`): built from the SAME `fov_h` and `off_head` the flying
+                # predicate tested, so the two are the same bits and not two opinions.
+                (tel["m1.gimbal_fov_margin_deg"] >= 0) == (tel["m1.gimbal_valid"] == 1.0) ||
+                    (n_sign += 1)
+                # ⭐⭐ SLICE 26's `look_angle` NOW SHIPS THE INDEX THE GLASS ACTUALLY USED, which
+                # under a head is the HEAD's own angle — while `look_body_deg` carries the
+                # strapdown quantity slice 32 called `look_angle`. They are DIFFERENT NUMBERS, and
+                # their difference is bounded by the tracking error (an angle-space triangle
+                # inequality: `hypot` is a norm, so ‖a‖ − ‖b‖ ≤ ‖a − b‖).
+                d = abs(tel["m1.look_angle"] - tel["m1.look_body_deg"])
+                d <= tel["m1.head_off_deg"] + 1.0e-9 || (n_tri += 1)
+                dmax = max(dmax, d); offmax = max(offmax, tel["m1.head_off_deg"])
+            end
+            @test (n_sign, n_tri) == (0, 0)
+            @test n == 8000                 # …over a flight that actually ran, not an empty loop
+            # …and the two do genuinely diverge — a tooth that a seam quietly indexing on the nose
+            # would fail, which is what makes the claim above a measurement.
+            @test dmax > 2.5
+            @test offmax > 2.5
+        end
+        # the LIMITS ship as AUTHORED numbers so the client draws the needles without recomputing
+        # anything (convention 13), and `_finite_coord` so a negative slider survives the wire.
+        let (w, sub) = gim_world(Rhat = -0.18, tau = 0.05, stop = 25.0, gfov = -1.0)
+            tick!(w, sub, dt)
+            tel = w.env[:telemetry]::Dict{String,Any}
+            @test tel["m1.gimbal_stop_deg"] == 25.0
+            @test tel["m1.gimbal_fov_deg"]  == -1.0        # AUTHORED, not the clamped value…
+            @test tel["m1.gimbal_fov_margin_deg"] == 0.0   # …while the margin uses the CLAMP, so
+            @test tel["m1.gimbal_valid"] == 1.0            # the two do NOT reconstruct each other
+        end                                                # (slice 33's divergence, verbatim)
+        # every key a SCALAR and finite (conventions 6/13) — no Array reaches the client's float()
+        let (w, sub) = gim_world(Rhat = -0.18, tau = 0.05, stop = 30.0, gfov = 2.0)
+            for k in 1:1500; tick!(w, sub, dt); empty!(w.events); end
+            tel = w.env[:telemetry]::Dict{String,Any}
+            for key in ("m1.head_angle_deg", "m1.head_off_deg", "m1.gimbal_valid",
+                        "m1.gimbal_fov_deg", "m1.gimbal_stop_deg", "m1.gimbal_fov_margin_deg",
+                        "m1.look_body_deg", "m1.lead_angle_deg", "m1.look_angle")
+                @test haskey(tel, key)
+                @test tel[key] isa Float64 && isfinite(tel[key])
+            end
+        end
+    end
+
+    @testset "the DEFINED DEGENERATES — a live knob can never crash a tick (conventions 5/6)" begin
+        # Every one of these runs to completion and ships finite telemetry; none of them throws
+        # inside `observe!`, where the session's IO-only catch would silently drop the connection.
+        for kw in ((tau = 0.05, stop = 30.0, gfov = -1.0),   # a window that never opens
+                   (tau = 0.05, stop = 30.0, gfov = 0.0),    # …and its boundary
+                   (tau = -1.0, stop = 30.0),                # τ < 0 ⇒ the exact landing (τ ≤ dt)
+                   (tau = 0.0,  stop = 30.0),                # the minimum-lag head
+                   (tau = 0.05, stop = -1.0, gfov = 8.0),    # a CAGED head — a strapdown seeker
+                   (tau = 0.05, stop = 30.0, gfov = 1.0e9))  # …and an effectively infinite window
+            a = arm(; n = 4000, Rhat = -0.18, kw...)
+            @test isfinite(a.head_max) && isfinite(a.off_max) && a.out >= 0.0
+        end
+        # ⭐ THE CAGED HEAD IS PINNED TO THE ORIGIN, which by `off_axis_angle`'s identity IS the
+        # strapdown seeker — gate 1's argument for one kernel rather than two, on the flying path.
+        let (w, sub) = gim_world(Rhat = -0.18, tau = 0.05, stop = -1.0, gfov = 8.0)
+            n_moved = 0; n_disagree = 0
+            for k in 1:300
+                tick!(w, sub, dt); empty!(w.events)
+                c = w.entities[:m1].comp
+                tel = w.env[:telemetry]::Dict{String,Any}
+                (hypot(c[:head_az], c[:head_el]) == 0.0 && tel["m1.head_angle_deg"] == 0.0) ||
+                    (n_moved += 1)
+                # …and with the head at the nose, the detector error IS the strapdown look angle
+                isapprox(tel["m1.head_off_deg"], tel["m1.look_body_deg"]; atol = 1.0e-9) ||
+                    (n_disagree += 1)
+            end
+            @test (n_moved, n_disagree) == (0, 0)
+        end
+    end
+
+    @testset "loader: the head is PRESENCE-gated, and REFUSES a second window" begin
+        mktempdir() do dir
+            function write_scn(seekextra; two_angle = true)
+                p = joinpath(dir, "g.yaml")
+                open(p, "w") do io
+                    print(io, "name: g\nseed: 32\ndt_physics: 1.0e-3\n",
+                              "fidelity: {airframe: six_dof, autopilot: alpha, guidance: pn,\n",
+                              "           seeker: filtered, seeker_axes: az_el}\n",
+                              "entities:\n",
+                              "  - id: m1\n    kind: missile\n    pos: [0.0, 0.0, 3000.0]\n",
+                              "    missile:\n      mass_kg: 140.0\n      speed: 700.0\n",
+                              "      elevation_deg: 12.0\n",
+                              "      seeker: {two_angle: ", two_angle ? "true" : "false",
+                              seekextra, "}\n",
+                              "      guidance: {n_pn: 8.0}\n",
+                              "      airframe: {inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0,\n",
+                              "                 cmq: -150.0, cla: 20.0, cy_beta: 20.0}\n",
+                              "  - id: t1\n    kind: target\n    pos: [6000.0, 2000.0, 4200.0]\n",
+                              "    vel: [0.0, 200.0, 0.0]\n    target: {rcs_m2: 1.0}\n")
+                end
+                return p
+            end
+            mis(p) = first(e for (_, e) in load_scenario(p).world.entities if e.kind === :missile)
+            # ⚠⚠ THE YAML → COMP PATH, WHICH NOTHING IN THIS SLICE HAD TAKEN UNTIL NOW: every gate-0
+            # probe and every measurement above injects the keys PROGRAMMATICALLY.
+            let m = mis(write_scn(", gimbal_tau_s: 0.05, gimbal_stop_deg: 30.0, gimbal_fov_deg: 4.0"))
+                @test m.comp[:gimbal_tau_s]    == 0.05
+                @test m.comp[:gimbal_stop_deg] == 30.0
+                @test m.comp[:gimbal_fov_deg]  == 4.0
+            end
+            # PRESENCE-GATED: no key authored ⇒ no key minted (convention 2 — every earlier wire).
+            for k in (:gimbal_tau_s, :gimbal_stop_deg, :gimbal_fov_deg)
+                @test !haskey(mis(write_scn("")).comp, k)
+            end
+            # A DEAD KNOB IS REFUSED, NOT SILENTLY IGNORED (the slice-21/28/29/31/32 precedent): the
+            # head lives in `_observe_point3d!`, which only runs on the TWO-ANGLE host.
+            @test_throws ErrorException load_scenario(
+                write_scn(", gimbal_tau_s: 0.05"; two_angle = false))
+            # …and the two limits are read ONLY inside the head branch, so without a head they are
+            # dead too (the slice-31 gyro shape).
+            @test_throws ErrorException load_scenario(write_scn(", gimbal_stop_deg: 30.0"))
+            @test_throws ErrorException load_scenario(write_scn(", gimbal_fov_deg: 4.0"))
+            # ⚠⚠ AND A BODY-FIXED FIELD OF VIEW IS REFUSED BESIDE A HEAD — this one is PHYSICS, not
+            # hygiene. A gimballed seeker has no body-fixed window: its body-fixed limit is the
+            # STOP and its window is the DETECTOR's. Authoring both would also force the seam to
+            # choose which of two `look_angle` readouts wins — the head's index (what the glass
+            # used) or the nose's (what slice 32 means) — and refusing is what makes that choice
+            # unnecessary rather than silent.
+            @test_throws ErrorException load_scenario(
+                write_scn(", gimbal_tau_s: 0.05, seeker_fov_deg: 25.0"))
+            @test_throws ErrorException load_scenario(
+                write_scn(", seeker_fov_deg: 25.0, gimbal_tau_s: 0.05"))   # …in EITHER order
+            # non-finite is a LOAD error: a NaN τ propagates into the head state and thence into the
+            # bend, so it is validate-at-LOAD's business rather than the consumer's.
+            @test_throws ErrorException load_scenario(write_scn(", gimbal_tau_s: .nan"))
+            @test_throws ErrorException load_scenario(write_scn(", gimbal_tau_s: .inf"))
+            @test_throws ErrorException load_scenario(
+                write_scn(", gimbal_tau_s: 0.05, gimbal_fov_deg: .nan"))
+            # …but NO positivity guard, deliberately: `τ ≤ dt` is the exact landing, `τ < 0` is
+            # caught by that same comparison at the consumer, a non-positive stop is the CAGED head
+            # and a non-positive window the never-acquires state — all defined, none a crash path.
+            let m = mis(write_scn(", gimbal_tau_s: -1.0, gimbal_stop_deg: -1.0, gimbal_fov_deg: -1.0"))
+                @test m.comp[:gimbal_tau_s] == -1.0 && m.comp[:gimbal_fov_deg] == -1.0
+            end
+            # THE ONE LIVE SLIDER is knob-registerable (`_parse_knobs` checks entity + key exist).
+            let p = write_scn(", gimbal_tau_s: 0.05, gimbal_stop_deg: 30.0, gimbal_fov_deg: 4.0")
+                write(p, read(p, String) *
+                      "knobs:\n  - {target: m1, key: gimbal_fov_deg, min: 1.0, max: 8.0, label: FOV}\n")
+                @test Dict(kb.key => kb.target for kb in load_scenario(p).knobs)[:gimbal_fov_deg] === :m1
+            end
+        end
+        # THE PRESENCE GATE FROM THE OTHER SIDE: no earlier wire carries a head, so slices 1–33 are
+        # byte-identical by GATING and not by a value that happens to agree.
+        let base = joinpath(@__DIR__, "..", "..", "scenarios")
+            for f in ("slice25_seeker_3d.yaml", "slice26_radome.yaml", "slice27_radome_comp.yaml",
+                      "slice28_radome_curve.yaml", "slice29_radome_schedule.yaml",
+                      "slice30_envelope.yaml", "slice31_gyro.yaml", "slice32_fov.yaml",
+                      "slice33_budget.yaml")
+                p = joinpath(base, f)
+                isfile(p) || continue
+                for (_, e) in load_scenario(p).world.entities
+                    @test !haskey(e.comp, :gimbal_tau_s)
+                    @test !haskey(e.comp, :gimbal_fov_deg)
+                end
+            end
+        end
+    end
+
+    @testset "the KNOB DOMAIN — `gimbal_fov_deg` ∈ [1, 8], MEASURED at both ends" begin
+        # The plan filed this to gate 1, which shipped kernels only. Measured here, on the two
+        # residuals the showcase ladder is read at, against the two constraints the plan names.
+        #
+        # THE CEILING, 8°: the metric is FLAT above the requirement — a wider window is
+        # bit-identical to no window at all (CONTROL B above), so nothing is hidden past it, and
+        # 8 clears the ringing arm's 5.24° requirement with room to see the cliff either side.
+        for wdeg in (8.0, 10.0, 20.0)
+            @test arm(Rhat = -0.16, tau = 0.05, stop = 30.0, gfov = wdeg).out == 0.0
+        end
+        # THE FLOOR, 1°: below it the arm never enters r ∈ [500, 3000] at all, so `rms r` is NaN
+        # and a verifier's own band column would count NOTHING (slice 33's gate-2 catch). At 1.0
+        # both residuals are deep in the broken regime with a live band, which is what the floor
+        # has to guarantee.
+        for Rh in (-0.18, -0.16)
+            let a = arm(Rhat = Rh, tau = 0.05, stop = 30.0, gfov = 1.0)
+                @test a.out > 60.0 && a.miss > 1000.0 && a.n_band > 0 && !isnan(a.rms_r)
+            end
+            @test isnan(arm(Rhat = Rh, tau = 0.05, stop = 30.0, gfov = 0.5).rms_r)
+        end
+        # ⚠ AND THE DOMAIN IS NOT MONOTONE IN THE MISS — stated rather than hidden (slice 22's
+        # "a ~1.03× margin, stated"). On the RINGING arm the broken regime wiggles by ~4 %
+        # (1.9° → 546 m vs 2.0° → 569 m) because a windowed arm is a different trajectory, not a
+        # degraded copy of one. The LESSON is the CLIFF at the requirement, which is sharp in both
+        # rows, and the domain brackets it rather than resting on the broken regime's ordering.
+        let lo = arm(Rhat = -0.16, tau = 0.05, stop = 30.0, gfov = 1.9),
+            hi = arm(Rhat = -0.16, tau = 0.05, stop = 30.0, gfov = 2.0)
+            @test lo.miss > 500.0 && hi.miss > 500.0
+            @test hi.miss > lo.miss              # the non-monotone cell, PINNED as a fact
+        end
+    end
+end
