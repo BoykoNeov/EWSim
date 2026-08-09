@@ -1226,6 +1226,45 @@
             @test isnan(off_axis_angle(NaN, 0.0, 0.1, 0.1))
         end
 
+        @testset "head_clamp — the ONE stop site, shared with the seam's handover" begin
+            # ⚠⚠ IT IS A KERNEL BECAUSE IT HAS TWO CALLERS (advisor). `head_slew` ends in it, and
+            # so must gate 2's HANDOVER init — gate 1 measured that the servo contracts toward the
+            # target only from INSIDE the disc, and it is this clamp every tick that keeps the head
+            # there. A handover that clamped some other way would hand tick 1 the one state that
+            # breaks the invariant, and the servo could not detect it. One site ⇒ one tooth.
+            let stop = deg2rad(30.0)
+                # INERT when it does not bind — bit-for-bit, which is what lets the handover call
+                # it unconditionally (never `min` trusting equality, the `-0.0`/rounding trap)
+                for (a, e) in ((0.1, -0.2), (0.0, 0.0), (-0.0, 0.0), (deg2rad(30.0), 0.0))
+                    @test head_clamp(a, e, stop) === (a, e)
+                end
+                # ...and when it DOES bind: onto the circle, along the same ray, so the direction
+                # is preserved exactly and only the magnitude moves
+                let a = deg2rad(70.0), e = deg2rad(40.0), p = head_clamp(a, e, stop)
+                    @test hypot(p...) ≈ stop atol = 1e-15
+                    @test p[1] / p[2] ≈ a / e atol = 1e-12
+                    @test off_axis_angle(p[1], p[2], a, e) ≈ hypot(a, e) - stop atol = 1e-12
+                end
+                # ⚠ CIRCULAR, NOT PER AXIS — the form the gate-0 probe actually used, EXHIBITED
+                # differing, since no gate-0 arm ever bound the stop and nothing there could tell
+                # them apart. A per-axis clamp leaves the head at `√2·stop` on the diagonal.
+                let a = deg2rad(70.0), e = deg2rad(70.0)
+                    @test hypot(clamp(a, -stop, stop), clamp(e, -stop, stop)) ≈ sqrt(2) * stop atol = 1e-12
+                    @test hypot(head_clamp(a, e, stop)...) ≈ stop atol = 1e-15
+                end
+                # the degenerates this kernel OWNS (relocated from `head_slew`, not duplicated)
+                for dead in (0.0, -0.0, -1.0, -1.0e9)
+                    p = head_clamp(0.3, -0.4, dead)
+                    @test iszero(p[1]) && iszero(p[2])                  # CAGED
+                end
+                @test head_clamp(0.3, -0.4, NaN) === (0.3, -0.4)        # NaN ⇒ NO stop, not NaN
+                @test head_clamp(0.3, -0.4, Inf) === (0.3, -0.4)
+                @test all(isfinite, head_clamp(1.0e9, -1.0e9, 1.0e-9))
+                @test head_clamp(3, 4, 1) === head_clamp(3.0, 4.0, 1.0) # Real, not Float64
+                @test head_clamp(3, 4, 1)[1] ≈ 0.6 atol = 1e-15         # the 3-4-5, projected
+            end
+        end
+
         @testset "head_slew — the servo, the stop, and the exact landing" begin
             dt = 1.0e-3
 
@@ -1286,8 +1325,13 @@
                 for _ in 1:20000
                     az, el = head_slew(az, el, t_az, t_el, τ, dt, stop)
                 end
+                # ⚠ ON the circle, and — the half a converged ratio cannot discriminate (advisor:
+                # after a 20 000-step burn-in `az/el` is far tighter than any loose atol, so it
+                # could not catch a head that settled on the WRONG POINT of the circle) — the EXACT
+                # RESIDUAL a correct radial projection leaves: `‖tgt‖ − stop`, to 1e−12.
                 @test hypot(az, el) ≈ stop atol = 1e-12                 # ON the circle
-                @test az / el ≈ t_az / t_el atol = 1e-6                 # in the TARGET's direction
+                @test off_axis_angle(az, el, t_az, t_el) ≈ hypot(t_az, t_el) - stop atol = 1e-12
+                @test az / el ≈ t_az / t_el atol = 1e-12                # in the TARGET's direction
                 prev = (az, el)
                 for _ in 1:200
                     prev = head_slew(prev[1], prev[2], t_az, t_el, τ, dt, stop)

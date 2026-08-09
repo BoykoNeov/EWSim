@@ -768,6 +768,44 @@ off_axis_angle(ref_az::Real, ref_el::Real, az::Real, el::Real) =
     hypot(wrap_angle(az - ref_az), wrap_angle(el - ref_el))
 
 """
+    head_clamp(az, el, stop) -> (az, el)   (radians)
+
+The gimbal's MECHANICAL STOP: a head pointing at `(az, el)` in the body frame, radially projected
+onto the disc of half-angle `stop` when it would otherwise exceed it. Returns its input UNCHANGED
+(bit-for-bit) when the stop does not bind.
+
+⚠⚠ **ONE CLAMP SITE, AND THE SECOND CALLER IS THE REASON IT IS A KERNEL** (advisor; slice 33's
+`seeker_fov_margin` owning the FOV clamp is the precedent). [`head_slew`](@ref) ends in this, and so
+must the seam's HANDOVER initialisation — because gate 1 measured that the servo is a contraction
+toward the target **only from inside the disc**, and it is `head_slew` clamping every tick that
+keeps the head there. A handover that clamped some OTHER way would hand tick 1 the one state that
+breaks the invariant, and nothing in the servo could detect it. Splitting the clamp out is what
+makes that a single testable site rather than a paragraph in a plan.
+
+⚠ **CIRCULAR, and gate 0 CANNOT DISCRIMINATE — the species argument is the whole justification.**
+The stop must have the same shape as the telemetry that reads it (`head_angle_deg = hypot(head_az,
+head_el)`) and as the detector window, since a PER-AXIS clamp would let the head sit at `√2·stop`
+while the readout compared against `stop`. ⚠ The gate-0 probe DID clamp per axis while reporting the
+`hypot`, and it went unnoticed because **no gate-0 arm bound the stop in either form** — every arm
+ran `stop = 1e6°` or `30°` against a `head_max` of at most 23.42°. So this docstring and
+`test_frames.jl` are the ONLY evidence for the choice, and a later slice authoring a tighter stop
+inherits a branch no flying arm has taken. A RECTANGULAR / per-axis stop is a named deferral.
+
+⚠ Convention 5/6 degenerates: `stop ≤ 0` is the CAGED head, pinned to the origin — which by
+[`off_axis_angle`](@ref)'s identity is exactly a strapdown seeker; a NaN `stop` is neither clamped
+nor propagated but degenerates to NO stop (never manufacture a non-finite from finite input); the
+signs of the returned zeros are inherited from the input (`x·0.0` keeps `x`'s sign — the `-0.0`
+trap), which is harmless downstream and asserted so.
+"""
+function head_clamp(az::Real, el::Real, stop::Real)
+    a = Float64(az); e = Float64(el)
+    s = max(Float64(stop), 0.0)
+    m = hypot(a, e)
+    m > s || return (a, e)
+    return (a * (s / m), e * (s / m))
+end
+
+"""
     head_slew(head_az, head_el, tgt_az, tgt_el, τ, dt, stop) -> (az, el)   (radians)
 
 One tick of the gimbal head's FIRST-ORDER pointing servo, with its mechanical STOP: the head at
@@ -822,7 +860,8 @@ motion that feeds the loop** — which is what makes the trade structural.
 drive the head BACKWARDS, because the step is floored at zero before the gain is formed; `stop ≤ 0`
 is the CAGED head, pinned at `(0, 0)`, which by [`off_axis_angle`](@ref)'s identity is exactly the
 strapdown seeker; a NaN `stop` is neither clamped nor propagated — it degenerates to NO stop, the
-convention-6 direction (never manufacture a non-finite from finite input). A NaN `τ` DOES propagate:
+convention-6 direction (never manufacture a non-finite from finite input). Those last two belong to
+[`head_clamp`](@ref), which owns every stop decision. A NaN `τ` DOES propagate:
 it is an AUTHORED input, so it is validate-at-LOAD's business, not this consumer's.
 
 ⚠ **A RATE LIMIT IS A NAMED DEFERRAL, NOT AN OVERSIGHT.** `gimbal_rate_max` exists in the gate-0
@@ -849,13 +888,8 @@ function head_slew(head_az::Real, head_el::Real, tgt_az::Real, tgt_el::Real,
         az = Float64(head_az) + wrap_angle(Float64(tgt_az) - Float64(head_az)) * gain
         el = Float64(head_el) + wrap_angle(Float64(tgt_el) - Float64(head_el)) * gain
     end
-    s = max(Float64(stop), 0.0)                        # the CIRCULAR stop — one clamp site
-    m = hypot(az, el)
-    if m > s
-        az *= s / m; el *= s / m
-    end
-    return (az, el)
-end
+    return head_clamp(az, el, stop)                    # the CIRCULAR stop — the ONE clamp site,
+end                                                    # shared with the seam's handover init
 
 # --- THE SEEKER'S FIELD OF VIEW (slice 32, §11 Tier-A — the deferral 26/28/29/30/31 each named) ---
 #

@@ -12,7 +12,11 @@ an FOV budget item), and the successor slices 32 AND 33 both nominated:
 > so it needs a presence-gated head state with the strapdown else-arm VERBATIM."*
 > — `docs/plans/slice33.md`, Deferred (NAMED)
 
-**Status: GATE 1 COMPLETE (2026-08-09, suite 6215 → 6276). Gate 0 = 9 probes. Gates 2–3 PENDING.
+**Status: GATE 1 COMPLETE (2026-08-09, suite 6215 → 6295, incl. the post-review fold-ins). Gate 0 =
+9 probes. Gates 2–3 PENDING. ⚠ GATE 2 MUST NOT RE-VERIFY THE BIT-IDENTITY (advisor) — three
+independent measurements already exceed what convention 2 asks, and re-running it would crowd out
+the measurement that actually matters there: whether the head's telemetry is STALE-READOUT-SAFE
+under the rung gate, the SEVENTH occurrence of the slice-21 `_atm_on` class.
 ⚠⚠ BOTH HALVES OF THE BANKED DEFERRAL WERE REFUTED AT GATE 0 (§0.1, §0.2) and the live claim was
 found in a THIRD place (§0.4) — the slice-33 shape exactly, and the refutations are load-bearing.
 Probe scripts in `M:\claud_projects\temp\slice34\`.**
@@ -246,14 +250,15 @@ as a live constraint rather than a nicety.
 
 ---
 
-## §1 — Gate 1 (COMPLETE, 2026-08-09 — 6215 → 6276)
+## §1 — Gate 1 (COMPLETE, 2026-08-09 — 6215 → 6295)
 
-**TWO kernels in `frames.jl`, and the second one REDEFINES a shipped symbol:**
+**THREE kernels in `frames.jl`, and one of them REDEFINES a shipped symbol:**
 
 ```julia
 off_axis_angle(ref_az, ref_el, az, el) = hypot(wrap_angle(az - ref_az), wrap_angle(el - ref_el))
 boresight_angle(att, los) = off_axis_angle(0.0, 0.0, look_angles(att, los)...)     # ← REDEFINED
-head_slew(head_az, head_el, tgt_az, tgt_el, τ, dt, stop) -> (az, el)               # the servo + STOP
+head_clamp(az, el, stop) -> (az, el)                        # the CIRCULAR mechanical stop
+head_slew(head_az, head_el, tgt_az, tgt_el, τ, dt, stop)    # the servo, ending in head_clamp
 ```
 
 ### ⭐⭐ ONE KERNEL GENERALIZED, AND THE ARGUMENT IS PHYSICS, NOT REUSE
@@ -331,6 +336,13 @@ same CIRCULAR clamp, or tick 1 hands in the one state that breaks the invariant.
 as teeth — the sweep asserts the clamp actually bound (200+ cells), and the growth case is the exact
 cell the search returned (0.688 → 3.612 rad).
 
+⚠⚠ **AND A CONSTRAINT STATED IN A PLAN IS NOT ENFORCEABLE** (advisor, post-review). The clamp lives
+in the SEAM at handover, where `head_slew` cannot see it — so nothing at gate 1 could fail if gate 2
+got it wrong, and **the code gate 2 will be copied from already has the bug**: `gimbal_lib.jl`'s init
+clamps PER AXIS, exactly the form Finding 3 rejects. ⇒ the clamp was split out as **`head_clamp`**,
+its own kernel with its own testset, so both callers share ONE site — slice 33's `seeker_fov_margin`
+owning the FOV clamp, precisely. It is also now the fourth numbered seam discipline below.
+
 ### ⚠⚠ FINDING 3 — THE PROBE'S STOP WAS PER-AXIS WHILE ITS OWN TELEMETRY READ THE CIRCULAR MAGNITUDE
 
 `gimbal_lib.jl` clamps `head_az` and `head_el` INDEPENDENTLY (`clamp(x, -stop, stop)`) and then
@@ -353,6 +365,12 @@ with a does-not-wrap case and the naive 358° exhibited; symmetry in the two arg
 cells (`===`); the §1 approximation with its control and its two operating points; hand-computed
 exact cases (a 3-4-5 in angle space); conventions 5/6.
 
+`head_clamp` — INERT bit-for-bit when it does not bind (what lets the handover call it
+unconditionally); onto the circle along the same ray when it does, with the exact residual
+`‖tgt‖ − stop`; ⚠ **the PER-AXIS form EXHIBITED differing** (`√2·stop` on the diagonal), which is
+the only place in the suite the two shapes are ever compared; the CAGED and NaN-stop degenerates,
+relocated here rather than duplicated.
+
 `head_slew` — ⭐ **THE EXACT LANDING BY ASSIGNMENT** over 12 000 cells (`===`), PAIRED with the
 arithmetic form `head + wrap(tgt − head)` **exhibited failing** (100+ of 3000), because §0.2's
 `max|Δpos| = 0` bit-identity control is the slice's own false-fidelity check and a rounding residual
@@ -360,7 +378,10 @@ would turn it into a near-miss; the first-order decay against the EXTERNAL ancho
 the short-way-round wrap paired, plus the fact that a head with NO stop may leave the principal
 interval and still converge (3000 steps); ⭐ **the FIXED POINT at the stop** — on the circle, in the
 target's direction, and `===` stable over 200 further steps (slice 24's killed ±90° bank law is the
-precedent: a projection at a limit is where chatter hides); both contraction regimes; the degenerate
+precedent: a projection at a limit is where chatter hides) — ⚠ **with the WHERE pinned by the exact
+residual `‖tgt‖ − stop`, not by a converged ratio**, which after a 20 000-step burn-in is tighter
+than any loose `atol` and so could not have caught a head settling on the wrong point of the circle
+(advisor); both contraction regimes; the degenerate
 table (`τ = Inf` FROZEN — §0.4's reductio; `dt ≤ 0`; `τ < 0`; `stop ≤ 0` CAGED; NaN `stop` = no
 stop, NaN `τ` propagates as an authored input's problem); and the two `-0.0` corners written down
 rather than dodged (a frozen head's `-0.0 + 0.0` is `+0.0`; a caged head's zeros inherit the step's
@@ -381,7 +402,10 @@ is untouched at gate 1, and the comp keys `:head_az` / `:head_el` are gate 2's.
 ### The core
 
 * `frames.jl` — the head kernels, beside `look_angles`/`boresight_angle` (measurement geometry in
-  the body frame, which is exactly what a head angle is):
+  the body frame, which is exactly what a head angle is). **SHIPPED at gate 1 — see §1, which also
+  records the two things this list got wrong: the angle helper is ONE kernel generalized (with
+  `boresight_angle` redefined from it), and the stop needed its own `head_clamp` because the
+  handover is a second caller:**
   * `head_slew(head_az, head_el, tgt_az, tgt_el, τ, dt, stop) -> (az, el)` — the first-order servo
     with the mechanical STOP. ⚠ `τ ≤ dt` must LAND EXACTLY by ASSIGNMENT, not by arithmetic
     (`head + (tgt − head)` is not `tgt` in IEEE doubles, and §0.2's bit-identity claim is the
@@ -408,6 +432,9 @@ is untouched at gate 1, and the comp keys `:head_az` / `:head_el` are gate 2's.
 3. **THE SERVO TRACKS THE BENT MEASUREMENT (`:bent`), AND THAT IS THE SLICE.** Tracking truth is
    both less realistic and a different physics (§0.4/§0.5); slice 27's rule names why. The
    `:truth` variant does NOT ship — it was measured and is recorded here.
+4. **THE HANDOVER INIT CALLS `head_clamp`, NOT A PER-AXIS `clamp`** (added at gate 1, §1 Finding 2).
+   The servo is a contraction only from INSIDE the disc; the init is the one place a head can be
+   born outside it. `gimbal_lib.jl`'s init has the per-axis form — do not copy it.
 
 ### Telemetry (all scalars, `_finite*`, shipped ONLY under the gimbal gate — the never-stale rule)
 
