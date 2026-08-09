@@ -262,11 +262,23 @@ as a NEAR-MISS and read like a rounding residual in the new branch. Pinned as ar
 * **The kernel half of the τ → 0 collapse**: with a non-binding limit PRESENT, the `τ ≤ dt` exact
   landing is still `=== (tgt_az, tgt_el)`. ⚠ **The WIRE half is gate 2/3's** — `missile.jl` is
   untouched here, so no flying arm can yet carry a `rate_max` at all.
-* **Contraction survives the limit** — `n_grew == 0`, and across FOUR DECADES of `rate_max`
-  (`10^(0.5…3)` … `10^(2…5)`), so it is not a property of the shipped band. ⚠ The sweep's band is
-  CHOSEN and the reason is measured: a tighter one starves the STOP counter (1570 rate-bound vs
-  only 156 stop-bound at `10^(0.5…3)`), and it is the **83 cells where BOTH bind** that pin the
-  ORDERING in a sweep rather than in one constructed case.
+* **Contraction survives the limit** — `n_grew == 0` over **16 000 cells across FOUR BANDS spanning
+  `10^0.5 … 10^5` rad/s**, so it is not a property of one band. ⚠ **All four FLY IN THE SUITE**, not
+  in a gate-1 probe: the first draft measured three of them in a temp file and quoted them here,
+  which is precisely what slice 30 had to attribute ("gate 0 measured the same 0/7 across FIVE glass
+  depths; the shipped verifier flies ONE"). ⚠ The COUNTER band is chosen and the reason is measured:
+  a tighter one starves the STOP counter (1570 rate-bound vs only 156 stop-bound at `10^(0.5…3)`),
+  and it is the **83 cells where BOTH bind** that pin the ORDERING in a sweep rather than in one
+  constructed case.
+* ⚠ **THREE TEST-INTEGRITY DEFECTS WERE CAUGHT AFTER THE FIRST GREEN RUN** (advisor, post-commit —
+  slice 26's post-commit precedent). (a) The reverse-ORDERING tooth was a bare `!isapprox`, which
+  passes whenever the two orders merely DIFFER and would survive a refactor making the shipped
+  order wrong-but-different ⇒ BOTH orders are now pinned positively (`(25.000°, 10.000°)` shipped
+  vs `(20.628°, 8.994°)` reversed, 4.4° apart). (b) The non-vacuity counter had a SEED-DEPENDENT
+  hole: at a zero demand the half-demand limit is `cap = 0.0`, `0.0 > 0.0` is FALSE, the branch is
+  inert, and the counter would fire on a cell where nothing is wrong — seed 3538 draws none, a
+  reseed would ⇒ guarded on `dem > 0` with the live-cell count asserted beside it. (c) The
+  four-band claim above.
 * **RADIAL, not per-axis**, EXHIBITED differing on the diagonal (`√2·cap`) — `head_clamp`'s own
   tooth in the new quantity, and the same species argument. The direction of the demanded step is
   preserved EXACTLY while only its magnitude moves: the limit spends bandwidth, it does not re-aim.

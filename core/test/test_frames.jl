@@ -1429,7 +1429,7 @@
             # rounding residual here would turn that control into a near-miss and read like a bug in
             # the new branch. Three claims, and the third is the one the wire rests on: the ABSENT
             # kwarg, an `Inf` rate, and a NON-BINDING FINITE rate all take the OLD CODE PATH.
-            let rng = Xoshiro(3538), n_absent = 0, n_free = 0, n_land = 0, n_moved = 0
+            let rng = Xoshiro(3538), n_absent = 0, n_free = 0, n_land = 0, n_same = 0, n_demand = 0
                 for _ in 1:4000
                     h_az = 0.6 * randn(rng); h_el = 0.3 * randn(rng)
                     t_az = 0.6 * randn(rng); t_el = 0.3 * randn(rng)
@@ -1445,12 +1445,21 @@
                     # τ → 0 collapse (the wire half is gate 2/3's, and it is stated there)
                     head_slew(h_az, h_el, t_az, t_el, 0.0, dt, Inf;
                               rate_max = 1.0e6) === (t_az, t_el) || (n_land += 1)
-                    # ...and the non-vacuity: a limit BELOW the demand really does move the answer
-                    head_slew(h_az, h_el, t_az, t_el, τ, dt, stop;
-                              rate_max = 0.5 * dem / dt) === ref && (n_moved += 1)
+                    # ...and the non-vacuity: a limit BELOW the demand really does move the answer.
+                    # ⚠ GUARDED ON `dem > 0`, and the hole it closes is SEED-DEPENDENT: at a zero
+                    # demand (head already at target, or a `gain` small enough that the step
+                    # underflows) the half-demand limit is `cap = 0.0`, `dem > cap` is `0.0 > 0.0`
+                    # = FALSE, the branch is inert — and this counter would fire on a cell where
+                    # nothing is wrong. Seed 3538 draws no such cell; a later reseed would.
+                    if dem > 0
+                        n_demand += 1
+                        head_slew(h_az, h_el, t_az, t_el, τ, dt, stop;
+                                  rate_max = 0.5 * dem / dt) === ref && (n_same += 1)
+                    end
                 end
                 @test n_absent == 0 && n_free == 0 && n_land == 0
-                @test n_moved == 0            # 4 000 cells, EVERY one moved — not a vacuous sweep
+                @test n_same == 0             # EVERY cell moved — not a vacuous sweep
+                @test n_demand > 3900         # ...and they were live cells, not zero-demand ones
             end
 
             # ⚠⚠ AND THE CONTROL ARM IS THE ABSENT KEY / `Inf`, NOT THE DOMAIN CEILING (advisor,
@@ -1499,12 +1508,22 @@
             let stop = deg2rad(30.0), h = (deg2rad(25.0), 0.0), t = (deg2rad(25.0), deg2rad(60.0)),
                 cap_r = deg2rad(10.0) / dt
                 p = head_slew(h..., t..., 0.0, dt, stop; rate_max = cap_r)
+                # ⚠ PINNED POSITIVELY, both orders (advisor): a `!isapprox` on its own passes
+                # whenever the two merely DIFFER, so it would survive a refactor that made the
+                # shipped order wrong-but-different. The demand here is pure ELEVATION, so the
+                # shipped order leaves AZIMUTH exactly where it was and spends the whole cap on el.
+                @test p[1] ≈ deg2rad(25.0) atol = 1e-15
+                @test p[2] ≈ deg2rad(10.0) atol = 1e-15
                 @test hypot(p[1] - h[1], p[2] - h[2]) ≈ deg2rad(10.0) atol = 1e-15  # rate bound…
                 @test hypot(p...) < stop                                            # …stop did not
                 # the REVERSE order (clamp first, then rate-limit the step to the clamped point)
+                # lands somewhere else ENTIRELY — the azimuth moves, because the stop is radial
+                # about the ORIGIN and pulls the aim point sideways before the servo ever sees it
                 let c = head_clamp(t..., stop), v = (c[1] - h[1], c[2] - h[2]), m = hypot(v...),
-                    sc = min(1.0, deg2rad(10.0) / m)
-                    @test !isapprox(h[1] + v[1] * sc, p[1]; atol = 1e-6)
+                    sc = min(1.0, deg2rad(10.0) / m), q = (h[1] + v[1] * sc, h[2] + v[2] * sc)
+                    @test rad2deg(q[1]) ≈ 20.628 atol = 1e-3
+                    @test rad2deg(q[2]) ≈ 8.994 atol = 1e-3
+                    @test off_axis_angle(q..., p...) > deg2rad(4.0)   # 4.4° apart — not a rounding
                 end
                 # ...and a step the rate limit leaves LONGER than the stop allows is still stopped
                 let p2 = head_slew(0.0, 0.0, deg2rad(70.0), 0.0, 0.0, dt, stop;
@@ -1521,25 +1540,32 @@
             # a measurement: a tighter band starves the STOP counter (at `10^(0.5…3)` the steps are
             # so short the head rarely reaches the disc edge — 1570 rate-bound but only 156
             # stop-bound), and it is the cells where BOTH bind that pin the ORDERING in a sweep
-            # rather than in one constructed case. ⭐ `n_grew == 0` holds across FOUR DECADES of
-            # limit (`10^(0.5…3)` through `10^(2…5)`), so the claim is not a property of this band.
-            let rng = Xoshiro(3539), n_grew = 0, n_rate = 0, n_stop = 0, n_both = 0,
-                stop = deg2rad(20.0)
-                for _ in 1:4000
-                    r = deg2rad(20.0) * rand(rng); φ = 2π * rand(rng)
-                    h_az = r * cos(φ); h_el = r * sin(φ)             # INSIDE or ON the stop
-                    t_az = 0.9 * randn(rng); t_el = 0.6 * randn(rng)
-                    τ = 10.0^(-3 + 3 * rand(rng))
-                    rate = 10.0^(1 + 3 * rand(rng))                  # rad/s
-                    e0 = off_axis_angle(h_az, h_el, t_az, t_el)
-                    f = head_slew_full(h_az, h_el, t_az, t_el, τ, dt, stop; rate_max = rate)
-                    off_axis_angle(f[1], f[2], t_az, t_el) > e0 + 1e-15 && (n_grew += 1)
-                    on_stop = hypot(f[1], f[2]) ≥ prevfloat(stop)
-                    f[4] && (n_rate += 1)
-                    on_stop && (n_stop += 1)
-                    f[4] && on_stop && (n_both += 1)
+            # rather than in one constructed case. ⭐ `n_grew == 0` holds across FOUR BANDS spanning
+            # `10^0.5 … 10^5` rad/s, so the claim is not a property of one band — and all four FLY
+            # HERE rather than living in a gate-1 probe, because a claim measured in a temp file and
+            # quoted in a plan is the thing slice 30 had to attribute ("gate 0 measured the same
+            # 0/7 across FIVE glass depths; the shipped verifier flies ONE").
+            let n_grew = 0, n_rate = 0, n_stop = 0, n_both = 0, stop = deg2rad(20.0)
+                for (i, (lo, hi)) in enumerate(((0.5, 3.0), (1.0, 4.0), (1.5, 4.5), (2.0, 5.0)))
+                    rng = Xoshiro(3539)                  # the SAME cells, only the limit differs
+                    for _ in 1:4000
+                        r = deg2rad(20.0) * rand(rng); φ = 2π * rand(rng)
+                        h_az = r * cos(φ); h_el = r * sin(φ)         # INSIDE or ON the stop
+                        t_az = 0.9 * randn(rng); t_el = 0.6 * randn(rng)
+                        τ = 10.0^(-3 + 3 * rand(rng))
+                        rate = 10.0^(lo + (hi - lo) * rand(rng))     # rad/s
+                        e0 = off_axis_angle(h_az, h_el, t_az, t_el)
+                        f = head_slew_full(h_az, h_el, t_az, t_el, τ, dt, stop; rate_max = rate)
+                        off_axis_angle(f[1], f[2], t_az, t_el) > e0 + 1e-15 && (n_grew += 1)
+                        on_stop = hypot(f[1], f[2]) ≥ prevfloat(stop)
+                        if i == 2                        # the counters belong to ONE band, named
+                            f[4] && (n_rate += 1)
+                            on_stop && (n_stop += 1)
+                            f[4] && on_stop && (n_both += 1)
+                        end
+                    end
                 end
-                @test n_grew == 0
+                @test n_grew == 0                    # 16 000 cells, four bands
                 @test n_rate > 200 && n_stop > 200   # BOTH limits really bound — not vacuous
                 @test n_both > 50                    # ...and both on the SAME tick, 83 measured
             end

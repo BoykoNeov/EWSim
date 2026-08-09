@@ -952,6 +952,13 @@ telemetry is the named second — the same story as [`head_clamp`](@ref), split 
 with the seam's handover as its second caller. `demand` is a STEP, not a rate: `step/Δt` at `Δt = 0`
 would manufacture a non-finite from finite input, so the division (and the degrees) belong to the
 seam, where every other unit conversion in this family already lives.
+
+⚠ **THE STEP AND ITS `hypot` ARE FORMED UNCONDITIONALLY, AND THAT IS DELIBERATE** — slice 34 formed
+the deltas only inside the `gain < 1` branch. Bit-identity is unaffected (the inert path reaches the
+same expressions and is pinned `===` over 4 000 cells), and the cost is one `hypot` per tick per
+gimbal wire, which is immaterial beside the RK4 the same tick runs. Written down because folding it
+back into a branch is exactly how the NaN-cap bug returns: the demand must exist BEFORE the
+comparison that decides whether the exact-landing assignment is even reachable.
 """
 function head_slew_full(head_az::Real, head_el::Real, tgt_az::Real, tgt_el::Real,
                         τ::Real, dt::Real, stop::Real; rate_max::Real = Inf)
