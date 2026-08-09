@@ -12,7 +12,7 @@ an FOV budget item), and the successor slices 32 AND 33 both nominated:
 > so it needs a presence-gated head state with the strapdown else-arm VERBATIM."*
 > — `docs/plans/slice33.md`, Deferred (NAMED)
 
-**Status: GATE 0 COMPLETE (2026-08-09, 8 probes). Gates 1–3 PENDING. ⚠⚠ BOTH HALVES OF THE BANKED
+**Status: GATE 0 COMPLETE (2026-08-09, 9 probes). Gates 1–3 PENDING. ⚠⚠ BOTH HALVES OF THE BANKED
 DEFERRAL WERE REFUTED AT GATE 0 (§0.1, §0.2) and the live claim was found in a THIRD place (§0.4) —
 the slice-33 shape exactly, and the refutations are load-bearing. Probe scripts in
 `M:\claud_projects\temp\slice34\`.**
@@ -30,10 +30,12 @@ and — this is the whole slice — **the head is aimed by the very measurement 
 The index of the glass becomes a FIXED POINT of the glass: the head points where the bent
 measurement says the target is, so part of the bend's own variation is absorbed by the head's
 pointing instead of being handed to guidance. Slice 26's loop is partly re-closed through the HEAD,
-where its sign is NEGATIVE. On the shipped glass and R̂ ladder that is worth **~0.08 of radome
-residual** — the onset walks from `(−0.27, −0.24]` strapdown to `(−0.18, −0.16]` gimballed — and at
-`R̂ = −0.18` the SAME glass, SAME residual, SAME seed gives **rms r 0.93194 (RINGS) strapdown vs
-0.01181 (QUIET) gimballed, 78.9×**.
+where its sign is NEGATIVE. On the shipped glass and R̂ ladder the onset walks from `(−0.27, −0.24]`
+strapdown to `(−0.18, −0.16]` gimballed — ⚠ **quoted BRACKET TO BRACKET, never as one number**
+(slice 30's "sufficient, never tight" discipline: the gap those two brackets admit spans 0.06 to
+0.11, so a single "≈0.08" would be asserted at gate 2 and fail) — and at `R̂ = −0.18` the SAME
+glass, SAME residual, SAME seed gives **rms r 0.93194 (RINGS) strapdown vs 0.01181 (QUIET)
+gimballed, 78.9×**.
 
 > **THE LESSON, IN ONE SENTENCE.** A strapdown seeker's radome index is handed to it by the
 > airframe; a gimballed seeker's is handed to it by its own last measurement — and an index that
@@ -47,7 +49,7 @@ new claim**) and a DETECTOR WINDOW (about the head axis — new, and where the m
 
 ---
 
-## §0 — Gate 0 (8 probes, 2026-08-09)
+## §0 — Gate 0 (9 probes, 2026-08-09)
 
 ⚠ **METHOD.** `GimbalSeeker` is a probe-local COPY of `missile.jl::_observe_point3d!` with a head
 state inserted; the core was NOT touched. Because a hand-copy can differ from the shipped seam in
@@ -150,8 +152,9 @@ track is the motion that feeds the loop.**
 
 ### ⭐⭐ §0.5 — THE ISOLATION: WHAT ACTUALLY BUYS THE MARGIN (`p7_isolation.jl`)
 
-Under `:bent` the onset moves ~0.08 of residual while τ does nothing across a 10× span. So the
-margin is NOT the servo lag, and two candidates remain — one of which would be a probe artifact:
+Under `:bent` the onset moves a full two rungs of the ladder while τ does nothing across a 10× span.
+So the margin is NOT the servo lag, and two candidates remain — one of which would be a probe
+artifact:
 
 * **(i) the SELF-REFERENTIAL INDEX** — the head points where the bent measurement says the target
   is, so the bend indexes on a quantity the bend itself moved. Real physics.
@@ -194,6 +197,53 @@ the bracket a measurement rather than a threshold read off the metric that defin
 ⚠ **THE MISS IS NOT THE METRIC** — every arm in every table above HITS (0.05–7.5 m). That is the
 arc's standing fact since slice 26 and it is unchanged here; the verdict is always `rms r`.
 
+### ⭐⭐ §0.7 — IS THE DETECTOR WINDOW A LIVE KNOB? (`p8_window.jl`, an advisor BLOCKING check)
+
+⚠ Every `:bent` number in §0.4–§0.6 was measured at `fov = 1e6`. **Gate 0 had NO `:bent` arm where a
+finite window BINDS**, and the plan proposes exactly that as the slice's one live slider — so it
+was flown before §1 was written. `:bent`, τ = 0.05, stop 30°:
+
+| R̂ | free `off_max` | 1.0° | 1.5° | 2.0° | 4.0° | 6.0° | critical |
+|---|---|---|---|---|---|---|---|
+| −0.18 (quiet) | 1.9556° | 1028.8 m | 728.2 m | **0.185 m HOLD** | HOLD | HOLD | **2.0°** |
+| −0.16 (ringing) | 5.2368° | 1254.8 m | 1186.5 m | 568.9 m | 269.2 m | **5.695 m HOLD** | **6.0°** |
+
+⭐⭐ **SLICE 32's PREDICATE RETURNS IN THE NEW CURRENCY: `held ⟺ tracking error < detector window`,**
+and `⌈off_max⌉` calls the critical window exactly in both rows (2 and 6). ⚠ As in slice 32, the two
+sides come from DIFFERENT CODE PATHS on DIFFERENT RUNS — the error off a FREE arm, the verdict off a
+WINDOWED one — which is what makes it a measurement rather than a restatement. ⭐ **AND THE RING IS
+SPENT IN DETECTOR WINDOW, 3× (2° → 6°)** — slice 33's payload, in the quantity a gimbal actually has.
+
+⚠⚠ **THE METRIC INVERSION ARRIVES THROUGH A NEW DOOR, AND IT IS MEASURED, NOT FEARED.** The head
+HOLDS when it loses its error signal, so a broken window FREEZES the index — and §0.4's frozen arm is
+quiet at every R̂. Confirmed: at R̂ = −0.16, `rms r` **FALLS 0.35338 → 0.08491** while the miss OPENS
+to 1254.8 m, with `off_max` running to **89.9°** (slice 33's post-lock-loss runaway signature).
+⇒ **SLICE 33's TWO-RUN DISCIPLINE IS MANDATORY HERE, NOT INHERITED AS A COURTESY**: the predictor
+(`off_max`, `rms r`) comes off the FREE arm, the predicted (miss, % out) off the WINDOWED one, and no
+stability verdict may ever be read on a windowed arm.
+
+### ⚠⚠ §0.8 — THE HANDOVER IS LOAD-BEARING (same probe; slice 32's P5 vindicated)
+
+The head initialises to the truth look angles on tick 1 — a TRUTH read on a path whose whole thesis
+is that the head never sees truth. Expected immaterial (one tick, then the servo converges).
+**It is not.** Against a head that starts CAGED at boresight:
+
+| R̂ | init | rms r | `off_max` | miss |
+|---|---|---|---|---|
+| −0.18 | handover | 0.01181 | **1.9556°** | 0.187 m |
+| −0.18 | boresight | 0.01305 | **18.1172°** | 0.172 m |
+| −0.16 | handover | 0.35338 | 5.2368° | 5.695 m |
+| −0.16 | boresight | **0.26719** | 18.1172° | 1.883 m |
+
+**A caged head must slew the WHOLE LEAD, so during acquisition its window requirement degenerates to
+the strapdown one** (18.12° — slice 32's own number) and `off_max` over the full flight stops
+measuring the tracking error at all. ⚠ **AND THE RING VERDICT IS TOUCHED**: at R̂ = −0.16 the caged
+arm's 0.26719 sits on the wrong side of the 0.30 line the bracket was read against. ⇒ **the §0.6
+bracket is quoted FOR THE HANDOVER INIT**, which is what ships, and gate 1 must either window
+`off_max` past the acquisition transient or author the handover as a stated §1 condition. This is
+precisely the deferral slice 32's P5 named ("the handover basket as an authored quantity") arriving
+as a live constraint rather than a nicety.
+
 ---
 
 ## What ships (gates 1–3, PLANNED)
@@ -206,10 +256,14 @@ arc's standing fact since slice 26 and it is unchanged here; the verdict is alwa
     with the mechanical STOP. ⚠ `τ ≤ dt` must LAND EXACTLY by ASSIGNMENT, not by arithmetic
     (`head + (tgt − head)` is not `tgt` in IEEE doubles, and §0.2's bit-identity claim is the
     slice's own false-fidelity control — the tooth must be able to pass).
-  * `head_offset(head_az, head_el, look_az, look_el) -> Float64` — the detector's off-head-axis
-    angle, the quantity the head's window is compared against. ⚠ **CIRCULAR, like
-    `boresight_angle` and unlike the per-axis glass** — and for the same reason, stated at the
-    kernel: a detector window is one window about one axis.
+  * the detector's off-head-axis angle — the quantity the head's window is compared against. ⚠
+    **CIRCULAR, like `boresight_angle` and unlike the per-axis glass**, for the same reason: a
+    detector window is one window about one axis. ⚠⚠ **DO NOT SHIP A SECOND ANGLE-MAGNITUDE HELPER
+    BESIDE `boresight_angle` WITHOUT FIRST TRYING TO REDEFINE ONE FROM THE OTHER** (advisor; slice
+    33's gate 1 got its cleanest result exactly that way, and `boresight_angle`'s own docstring
+    warns about a parallel implementation). It is `hypot` of two wrapped differences, which is
+    `boresight_angle`'s shape with the head as the reference axis rather than the nose — gate 1
+    decides whether that is one kernel generalized or two, and must say which and why.
 * Comp keys `:head_az` / `:head_el`, PARALLEL to `:att_q` / `:omega_body` (the slice-23 precedent),
   minted by the seam and never deleted.
 
@@ -235,11 +289,13 @@ THEIR SLICE-32/33 MEANING** (LOS-vs-body) and the head quantities ship ALONGSIDE
 
 ### Convention 9 and the knob count
 
-ONE live slider: **`gimbal_fov_deg`** (the detector window). `gimbal_tau_s` and `gimbal_stop_deg`
-are AUTHORED — τ because §0.4 measured it does not move the onset over any realistic band (the
-dead-knob discipline applied before the knob exists), the stop because it reproduces slice 33's
-excursion and is therefore a RESTATEMENT. Domain to be MEASURED at gate 1; the non-monotone
-`head_max` peak of §0.3 is the constraint to bracket against.
+ONE live slider: **`gimbal_fov_deg`** (the detector window) — **and §0.7 measured that it BINDS
+rather than assuming it** (critical 2.0° quiet / 6.0° ringing, with a sharp cliff either side, so
+the domain has real range). `gimbal_tau_s` and `gimbal_stop_deg` are AUTHORED — τ because §0.4
+measured it does not move the onset over any realistic band (the dead-knob discipline applied before
+the knob exists), the stop because it reproduces slice 33's excursion and is therefore a
+RESTATEMENT. Domain to be MEASURED at gate 1; the non-monotone `head_max` peak of §0.3 and the
+acquisition transient of §0.8 are the two constraints to bracket against.
 
 ### Class and the button
 
@@ -268,6 +324,10 @@ index six slices are built on, so reading the diff is not enough.
 
 ## Deferred (NAMED)
 
+* **THE HANDOVER BASKET as an authored quantity** — §0.8 promoted this from slice 32's named
+  deferral to a LIVE constraint on this slice: a caged head's window requirement IS the strapdown
+  one until it acquires. What ships here is a HANDED-OVER head, stated as a §1 condition; making the
+  handover itself addressable is the successor.
 * **A RATE-LIMITED HEAD.** `gimbal_rate_max` is implemented in the probe and was NEVER EXERCISED —
   every result above has it absent. A real head has one, and it is the natural home of a
   slew-rate-limited lock loss.
