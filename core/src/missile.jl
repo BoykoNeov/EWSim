@@ -1780,7 +1780,21 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # not an estimate — the contrast with the compensator two blocks below, which must use the BENT
     # measurement. And rung-gated on the LIVE `:airframe`, never on `haskey(:att_q)` alone (the
     # slice-21 `_atm_on` / 23 / 26 / 27 latent-bug class, whose FIFTH occurrence this would be).
-    _fov_on = haskey(c, :seeker_fov_deg) && haskey(c, :att_q) &&
+    # ⚠⚠ SLICE 34's `!_gim` CONJUNCT IS A CRASH GUARD, NOT A PREFERENCE (advisor, gate-2 review).
+    # `scenario.jl` REFUSES a YAML that authors both windows, but a PROGRAMMATIC world can still
+    # build one — and without this conjunct that world THROWS inside `observe!`: the availability
+    # branch below takes its `_gim` arm, so `fov_rad` is never assigned, and the slice-33 telemetry
+    # block further down passes it to `seeker_fov_margin`. An `UndefVarError` there lands in the
+    # session's IO/EOF-only catch and silently drops the connection (convention 5). ⚠ AND IT WAS
+    # REACHABLE: the comment below justifies leaving `fov_rad` unassigned on the grounds that "an
+    # unassigned local throws and the suite catches it" — true only while nothing builds the
+    # combination, which stopped being true the moment a head existed.
+    # ⭐ ONE CONJUNCT, THREE POLICY CLAIMS TURNED STRUCTURAL: the FOV telemetry block cannot run
+    # under a head, so slice 26's head-indexed `look_angle` CANNOT be clobbered by the truth-
+    # referenced one (impossible rather than merely refused), and the `elseif` below is unreachable
+    # rather than throwing. The loader refusal STAYS — it is the "refused, not silently ignored"
+    # discipline, and it is what tells a scenario author which seeker they are building.
+    _fov_on = haskey(c, :seeker_fov_deg) && haskey(c, :att_q) && !_gim &&
               get(w.fidelity, :airframe, :point_mass) === :six_dof
     # ⚠ `fov_rad` is DELIBERATELY LEFT UNASSIGNED on the non-FOV path (advisor) — an `= Inf`
     # else-arm would SILENTLY supply a plausible value to any future reader, where an unassigned
@@ -1790,14 +1804,10 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # a negative slider. Slice 33's `seeker_fov_margin_deg` DOES pass this local to the kernel —
     # legally, because that readout sits under the very same `_fov_on` gate, and because the margin
     # is defined on the CLAMPED window (which the kernel owns) rather than the authored one.
-    # ⚠ SLICE 34 — UNDER A HEAD THE WINDOW IS THE DETECTOR'S, ABOUT THE HEAD AXIS, and it is
-    # CHECKED FIRST. A gimballed seeker has no body-fixed field of view — the mechanical STOP is its
-    # body-fixed limit — so the two are alternatives and not a conjunction, and `scenario.jl`
-    # REFUSES a YAML that authors both (the slice-21 "refused, not branch-ordered" precedent). The
-    # `elseif` is therefore unreachable from any scenario; the precedence is written down because a
-    # programmatic world can still build both, and because the FOV telemetry block below would
-    # otherwise OVERWRITE slice 26's `look_angle` with the truth-referenced one — the head's index
-    # replaced by the nose's, silently, with a plausible number.
+    # ⚠ SLICE 34 — UNDER A HEAD THE WINDOW IS THE DETECTOR'S, ABOUT THE HEAD AXIS. A gimballed
+    # seeker has no body-fixed field of view — the mechanical STOP is its body-fixed limit — so the
+    # two are alternatives and not a conjunction: `scenario.jl` refuses a YAML that authors both,
+    # and `_fov_on` carries `!_gim` so a programmatic one cannot reach the `elseif` either.
     # ⚠ This is the SECOND evaluation of the detector error (discipline 3): the error AFTER the
     # slew, where the slew gate above read the error BEFORE it.
     if _gim

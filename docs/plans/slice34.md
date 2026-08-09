@@ -12,7 +12,7 @@ an FOV budget item), and the successor slices 32 AND 33 both nominated:
 > so it needs a presence-gated head state with the strapdown else-arm VERBATIM."*
 > — `docs/plans/slice33.md`, Deferred (NAMED)
 
-**Status: GATE 2 COMPLETE (2026-08-09, suite 6295 → 6505). Gate 0 = 9 probes, gate 1 = the kernels,
+**Status: GATE 2 COMPLETE (2026-08-09, suite 6295 → 6515). Gate 0 = 9 probes, gate 1 = the kernels,
 gate 2 = the seam + the loader + the wired testset. GATE 3 PENDING (the scenario, the client, the
 four proofs).
 ⚠⚠ BOTH HALVES OF THE BANKED DEFERRAL WERE REFUTED AT GATE 0 (§0.1, §0.2) and the live claim was
@@ -399,7 +399,7 @@ is untouched at gate 1, and the comp keys `:head_az` / `:head_el` are gate 2's.
 
 ---
 
-## §2 — Gate 2 (COMPLETE, 2026-08-09 — 6295 → 6505, +210)
+## §2 — Gate 2 (COMPLETE, 2026-08-09 — 6295 → 6515, +220)
 
 The seam in `missile.jl::_observe_point3d!`, the loader in `scenario.jl`, and the wired testset.
 **FOUR FINDINGS, THREE OF WHICH CORRECT GATE 0's OWN READING OF ITS PROBE** — the probe was a
@@ -441,6 +441,22 @@ defect** (advisor): the `_fov_on` telemetry block rewrites `look_angle` from the
 the radome block wrote the head-indexed value, so a wire authoring both would silently ship the
 NOSE's index where the glass used the HEAD's — the slice-29 stale-readout catch in a new place.
 Refusing makes that choice unnecessary rather than silent.
+
+⚠⚠ **AND THE REFUSAL WAS NOT ENOUGH — THE COMBINATION CRASHED THE TICK** (gate-2 review, advisor;
+the same shape as gate 1's Finding 2, one layer out: *a constraint stated in a policy is not
+enforceable where the policy cannot reach*). A PROGRAMMATIC world can still author both, and the
+availability branch then takes its `_gim` arm, leaving `fov_rad` UNASSIGNED — which slice 33's
+telemetry block passes to `seeker_fov_margin`. `UndefVarError` inside `observe!`, landing in the
+session's IO/EOF-only catch: a silently dropped connection, convention 5's exact failure. ⚠ The seam
+comment justified leaving that local unassigned *because* "an unassigned local throws and the suite
+catches it" — true only while nothing built the combination, which stopped being true the moment a
+head existed. **Fixed with a `!_gim` conjunct on `_fov_on`**, which converts three POLICY claims into
+STRUCTURE: the FOV telemetry block cannot run under a head, the `look_angle` clobber is impossible
+rather than merely refused, and the `elseif` is unreachable rather than throwing. The loader refusal
+STAYS — it is what tells a scenario author which seeker they are building. Both halves are teeth: the
+combination now flies (head keys ship, not one slice-32/33 window key does, `look_angle ≠
+look_body_deg`) and is BIT-IDENTICAL to the world without slice 32's key — the body window is not
+out-ranked, it is INERT.
 
 ⚠ **BUT REFUSAL COSTS TWO KEYS GATE 3 NEEDS** (advisor, and it is the non-obvious half):
 `lead_angle_deg` and the truth-referenced look angle live ONLY under `_fov_on`. So `_gim` ships them
@@ -502,8 +518,12 @@ against **(−0.27, −0.24]** strapdown — quoted BRACKET TO BRACKET, with −
 a NUMBER rather than asserted as a verdict. ⭐ **AND `head_max` STEPS AT THE SAME PLACE** — flat at
 18.117° through every quiet arm and 20.619° at the first ringing one: a SECOND tell from a DIFFERENT
 quantity, which is what makes the bracket a measurement and not a threshold read off the metric that
-defined it. ⚠ **THE MISS IS NOT THE METRIC** — every arm on both ladders HITS (< 7 m), the arc's
-standing fact since slice 26.
+defined it. ⚠⚠ **BUT `head_max` IS A FREE-ARM QUANTITY TOO, AND IT FAILS MORE QUIETLY THAN THE
+OTHERS** (advisor): on a WINDOWED arm the head HOLDS at the break, so `head_max` freezes at its
+pre-break value — every broken arm at R̂ = −0.16 reads **18.117°**, the QUIET arms' number, against
+the ring's actual 20.619°. It does not run away like `off_max`; it reads a plausible, wrong,
+*smaller* number. Every `head_max` above is off a FREE arm. ⚠ **THE MISS IS NOT THE METRIC** — every
+arm on both ladders HITS (< 7 m), the arc's standing fact since slice 26.
 
 ### ⚠⚠ §2.3 — FINDING 2: τ IS AUTHORED, BUT NOT FOR §0.4's REASON
 
@@ -570,6 +590,12 @@ At R̂ = −0.16 through a 1° window: the miss OPENS **220×** (5.695 → 1254.
 **4.2×** (0.35338 → 0.08491) and the arm's own `off_max` reads **89.2°** — the post-lock-loss runaway
 — against the ring's actual 5.24°. ⇒ **NO STABILITY VERDICT MAY EVER BE READ ON A WINDOWED ARM**;
 the predictor comes off a FREE arm and the predicted off a WINDOWED one, bound at the call sites.
+
+⚠⚠ **THE LIST IS THREE QUANTITIES, NOT TWO, AND THE THIRD IS THE DANGEROUS ONE.** `rms r` FALLS and
+`off_max` RUNS AWAY — both visibly wrong. **`head_max` FREEZES** at the value it held when the track
+broke, so a windowed arm reads 18.117° where its ring is 20.619°: a plausible number, in range, on
+the low side. A gate-3 verifier that reads the excursion off a windowed run gets the QUIET arm's
+answer and would report that the ring costs nothing.
 
 ### The knob domain — MEASURED here, because the plan filed it to gate 1 (which shipped kernels only)
 

@@ -6981,6 +6981,38 @@ end
         end
     end
 
+    @testset "⚠⚠ BOTH WINDOWS AUTHORED — the head WINS, and it does not throw" begin
+        # GATE-2 REVIEW CATCH (advisor), and it was a real crash. `scenario.jl` refuses this
+        # combination, but a PROGRAMMATIC world can still build it — and the slice-33 telemetry
+        # block reads `fov_rad`, which the availability branch leaves UNASSIGNED once the `_gim`
+        # arm is taken. An `UndefVarError` inside `observe!` lands in the session's IO/EOF-only
+        # catch and silently drops the connection (convention 5). ⚠ The seam comment at
+        # `_fov_on` justified leaving that local unassigned on the grounds that "an unassigned
+        # local throws and the suite catches it" — true only while nothing built the combination,
+        # which stopped being true the moment a head existed. Fixed with a `!_gim` conjunct on
+        # `_fov_on`, which turns the loader's POLICY into the seam's STRUCTURE.
+        let (w, sub) = gim_world(Rhat = -0.18, tau = 0.05, stop = 30.0, fov = 25.0)
+            for k in 1:400; tick!(w, sub, dt); empty!(w.events); end     # …no throw
+            tel = w.env[:telemetry]::Dict{String,Any}
+            # the HEAD's window is the one that flies…
+            @test haskey(tel, "m1.gimbal_valid") && haskey(tel, "m1.head_off_deg")
+            # …and NOT ONE slice-32/33 window key ships beside it, so nothing downstream can read
+            # a body-fixed verdict off a gimballed seeker.
+            for key in ("m1.seeker_valid", "m1.seeker_fov_deg", "m1.seeker_fov_margin_deg")
+                @test !haskey(tel, key)
+            end
+            # ⭐ AND `look_angle` IS STILL THE HEAD'S INDEX — the clobber this conjunct makes
+            # impossible rather than merely refused (the slice-29 stale-readout class).
+            @test tel["m1.look_angle"] != tel["m1.look_body_deg"]
+        end
+        # …and the same world is bit-for-bit the one WITHOUT slice 32's key: the body window is
+        # not merely out-ranked, it is INERT.
+        let a = arm(n = 9000, trace = true, Rhat = -0.18, tau = 0.05, stop = 30.0),
+            b = arm(n = 9000, trace = true, Rhat = -0.18, tau = 0.05, stop = 30.0, fov = 25.0)
+            @test posdiff(a.trace, b.trace) == 0.0
+        end
+    end
+
     @testset "⚠⚠ THE NON-COLLAPSE — §0.2 does NOT reproduce, and that IS the slice" begin
         # GATE-2 FINDING, and it corrects the plan's own reading of its gate-0 result. §0.2
         # measured `max|Δpos| = 0` at τ → 0 and concluded that "the bend keys off head-vs-body" is
@@ -7057,9 +7089,17 @@ end
         @test sweep[-0.12] ≈ [1.01270, 0.83567, 0.70207, 0.57877, 0.42355] atol = 2.0e-5
         @test issorted(sweep[-0.12]; rev = true)
         # …and the SAME sag at the line, where it changes the verdict: the bracket walks from
-        # (−0.18, −0.17] at τ ≤ 0.02 to (−0.16, −0.12] at τ = 0.20.
-        @test sweep[-0.17][1] > RING && sweep[-0.17][2] < RING * 0.9   # τ = 0 rings, 0.02 does not
-        @test sweep[-0.16][2] > RING && sweep[-0.16][5] < RING         # τ = 0.02 rings, 0.20 does not
+        # (−0.18, −0.17] at τ = 0 to (−0.16, −0.12] at τ = 0.20. ⚠ ALL FOUR CELLS ARE DECISIVE —
+        # 0.645 / 0.021 / 0.424 against the 0.30 line. The τ = 0.02 cell at −0.17 (0.26854) is
+        # DELIBERATELY NOT READ AS A VERDICT: it sits within 1 % of the line, in exactly the range
+        # §0.8 already flagged as ambiguous (0.26719 "on the wrong side of the 0.30 line"), and the
+        # same refusal was made two testsets up for −0.17 at τ = 0.05. It is pinned as a NUMBER.
+        @test sweep[-0.17][1] > RING                                   # τ = 0 RINGS…
+        @test sweep[-0.17][5] < RING                                   # …and τ = 0.20 does not
+        @test sweep[-0.16][2] > RING                                   # τ = 0.02 RINGS…
+        @test sweep[-0.16][5] < RING                                   # …and τ = 0.20 does not
+        @test sweep[-0.12][5] > RING                                   # …while −0.12 still rings
+        @test sweep[-0.17] ≈ [0.64469, 0.26854, 0.03934, 0.01562, 0.01261] atol = 2.0e-5
         @test sweep[-0.16] ≈ [0.86787, 0.62591, 0.35338, 0.07508, 0.02061] atol = 2.0e-5
         # ⇒ τ IS A CONFOUNDED LEVER, which is a STRONGER reason to keep it authored than a dead
         # one: it moves the amplitude on every arm, so a student dragging it would be moving the
@@ -7239,8 +7279,9 @@ end
         # ⚠ THE PER-TICK CHECKS ARE COUNTED AND ASSERTED ONCE (slice 33's `viol` shape): an `@test`
         # inside an 8000-tick loop would add 16 000 lines to the suite tally and say nothing more.
         let (w, sub) = gim_world(Rhat = -0.16, tau = 0.05, stop = 30.0, gfov = 8.0)
-            dmax = 0.0; offmax = 0.0; n_sign = 0; n_tri = 0; n = 8000
-            for k in 1:n
+            dmax = 0.0; offmax = 0.0; n_sign = 0; n_tri = 0; n_seen = 0
+            for k in 1:8000
+                n_seen += 1
                 tick!(w, sub, dt); empty!(w.events)
                 tel = w.env[:telemetry]::Dict{String,Any}
                 # ⭐ THE SIGN IS THE VERDICT (slice 18's `terrain_clearance_m` / slice 33's
@@ -7258,7 +7299,9 @@ end
                 dmax = max(dmax, d); offmax = max(offmax, tel["m1.head_off_deg"])
             end
             @test (n_sign, n_tri) == (0, 0)
-            @test n == 8000                 # …over a flight that actually ran, not an empty loop
+            # …over a flight that actually ran: counted INSIDE the loop, because asserting the
+            # loop bound is `x == x` (convention 11's tautology — advisor).
+            @test n_seen == 8000
             # …and the two do genuinely diverge — a tooth that a seam quietly indexing on the nose
             # would fail, which is what makes the claim above a measurement.
             @test dmax > 2.5
