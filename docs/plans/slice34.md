@@ -12,10 +12,10 @@ an FOV budget item), and the successor slices 32 AND 33 both nominated:
 > so it needs a presence-gated head state with the strapdown else-arm VERBATIM."*
 > — `docs/plans/slice33.md`, Deferred (NAMED)
 
-**Status: GATE 0 COMPLETE (2026-08-09, 9 probes). Gates 1–3 PENDING. ⚠⚠ BOTH HALVES OF THE BANKED
-DEFERRAL WERE REFUTED AT GATE 0 (§0.1, §0.2) and the live claim was found in a THIRD place (§0.4) —
-the slice-33 shape exactly, and the refutations are load-bearing. Probe scripts in
-`M:\claud_projects\temp\slice34\`.**
+**Status: GATE 1 COMPLETE (2026-08-09, suite 6215 → 6276). Gate 0 = 9 probes. Gates 2–3 PENDING.
+⚠⚠ BOTH HALVES OF THE BANKED DEFERRAL WERE REFUTED AT GATE 0 (§0.1, §0.2) and the live claim was
+found in a THIRD place (§0.4) — the slice-33 shape exactly, and the refutations are load-bearing.
+Probe scripts in `M:\claud_projects\temp\slice34\`.**
 
 ---
 
@@ -243,6 +243,136 @@ bracket is quoted FOR THE HANDOVER INIT**, which is what ships, and gate 1 must 
 `off_max` past the acquisition transient or author the handover as a stated §1 condition. This is
 precisely the deferral slice 32's P5 named ("the handover basket as an authored quantity") arriving
 as a live constraint rather than a nicety.
+
+---
+
+## §1 — Gate 1 (COMPLETE, 2026-08-09 — 6215 → 6276)
+
+**TWO kernels in `frames.jl`, and the second one REDEFINES a shipped symbol:**
+
+```julia
+off_axis_angle(ref_az, ref_el, az, el) = hypot(wrap_angle(az - ref_az), wrap_angle(el - ref_el))
+boresight_angle(att, los) = off_axis_angle(0.0, 0.0, look_angles(att, los)...)     # ← REDEFINED
+head_slew(head_az, head_el, tgt_az, tgt_el, τ, dt, stop) -> (az, el)               # the servo + STOP
+```
+
+### ⭐⭐ ONE KERNEL GENERALIZED, AND THE ARGUMENT IS PHYSICS, NOT REUSE
+
+The plan left this open — *"gate 1 decides whether that is one kernel generalized or two, and must
+say which and why."* It is ONE, and the decisive reason is not that both are `hypot` of two wrapped
+differences (which is only an implementation coincidence) but that **§0.8 already measured the
+degenerate as a physical state**: a head CAGED at boresight must slew the whole lead, so its window
+requirement degenerates to the strapdown one — **18.1172°, slice 32's own number.** ⇒ a strapdown
+seeker IS a caged gimbal, and `boresight_angle` IS `off_axis_angle` at `ref = (0,0)`. The structural
+argument is slice 33's, one layer up ("a quantity that does not fly is a quantity `test_frames.jl`
+proves a SECOND implementation of"); shipping the head angle BESIDE `boresight_angle` would have
+left gate 1 with a kernel nothing calls and two implementations of one measurement.
+
+⚠ **THE IDENTITY IS ABOUT THE ANGLE, NOT ABOUT THE SENSOR** (advisor). `seeker_fov_deg` /
+`seeker_fov_margin_deg` KEEP their slice-32/33 meaning (LOS-vs-BODY) and the head quantities ship
+ALONGSIDE — slice 28's `radome_residual*` precedent. That the degenerates coincide is not a licence
+to collapse them, which would silently rewrite two slices' asserts.
+
+### ⚠ THE REDEFINITION IS BIT-IDENTICAL, MEASURED THREE WAYS AND NEVER ARGUED
+
+`wrap_angle` is `rem(θ, 2π, RoundNearest)`, the EXACT identity on `az_el`'s codomain — 0 mismatches
+in 200 000 samples, both boundaries included (`g1_wrapcheck.jl`) — and `x − 0.0 === x`. But the
+composed expression is what ships, so it is the composed expression that is pinned:
+
+1. **`test_frames.jl`, 4000 randomized `(att, los)`, `===`** against the LITERAL slice-32 expression
+   `hypot(look_angles(att, los)...)` — ⚠ **never against the new kernel**, which is now the
+   definition and would make the tooth `x == x` (convention 11's tautology, which slice 33's own
+   gate 1 walked into). The sweep is asserted to REACH the wide corner (`b_hi > 3.0 rad`, 400+ cells
+   past 2 rad) so it is not crowded near zero.
+2. **ON THE WIRE** (`g1_wire_identity.jl`, convention 2's "reading the diff is not enough"): slice
+   33's own engagement flown at four R̂, comparing per tick on the attitudes the flight really
+   reaches — **0 mismatches in 35 346 ticks**, with the look angle reaching **165.4°**, i.e. through
+   the post-CPA LOS flip, which is exactly the corner where a wrap could have diverged. The
+   `seeker_fov_margin` path is checked on the same ticks.
+3. The full suite green at **6276**, including `test_missile.jl`'s slice-32 (156) and slice-33 (153)
+   WIRED testsets. ⚠ A green `test_determinism.jl` / `_sample_z` golden is **not** evidence here
+   (advisor) — neither touches `boresight_angle`.
+
+### ⚠⚠ FINDING 1 — "THE EQUATOR IS EXACT" IS FALSE, AND §0.7's CLAIM SURVIVES ANYWAY
+
+`boresight_angle` declares the angle-space-radius approximation with the reference at the ORIGIN
+(+0.364° at a true 30° cone). With an OFFSET reference it is a DIFFERENT quantity, so it was
+re-measured rather than inherited (`g1_radius.jl`, `g1_gap_at_op.jl`), and the natural thing to
+write — *the equator is exact, because an azimuth difference subtends `cos(el)` times its own size*
+— **is wrong**: at `ref_el = 0` the ERROR's own excursion off the equator still contributes, cubically
+(**0.00009°** at a 1.96° error, **0.00159°** at 5.0°), independent of `ref_az`. What is true is the
+ELEVATION dependence: lift the reference to 10° and the same 1.96° error gives **0.030°, 330×**.
+
+⭐ **The measurement's own control came first** (convention 10): at `ref = (0,0)` the identical code
+reproduces `boresight_angle`'s shipped **+0.36416° at φ ≈ 47°**.
+
+⇒ **§0.7's `⌈off_max⌉` = critical window claim is safe with three orders to spare.** The head sits at
+`|el| ≤ 0.84°` on the shipped wire (`g1_headel.jl` — the crossing lead is essentially pure AZIMUTH),
+so at the two operating points the bracket is read at the gap is **0.0004°** and **0.0034°**, against
+a 0.5° bracket resolution and a 1° window grid. Over the whole plausible domain (`ref_az ≤ 30°`,
+`|ref_el| ≤ 10°`, error `≤ 8°`) it peaks at **0.139°**, still under that resolution.
+
+### ⚠⚠ FINDING 2 — THE CONTRACTION CAVEAT IS SHARPER THAN THE ADVISOR PREDICTED, AND IT LANDS ON GATE 2
+
+The advisor's blocking note was that a "the error never grows" tooth is FALSE when the stop binds,
+since a radial clamp pulls the head off the line to the target. Measured (`g1_contract.jl`,
+400 000 randomized cells per regime), the truth is two-sided and sharper:
+
+| head starts | growths / 400 000 | worst Δ |
+|---|---|---|
+| INSIDE or ON the stop | **0** | 0 |
+| already OUTSIDE the stop | 144 698 | **2.924 rad** |
+
+⇒ **the disc is INVARIANT and the step is a contraction on it UNCONDITIONALLY** — including across
+a binding clamp. The failure needs a head handed in already outside its stop, which the servo cannot
+produce because `head_slew` is the SOLE writer of the head and clamps every tick. ⭐ **So the caveat
+is not a test exclusion, it is a GATE-2 CONSTRAINT ON THE HANDOVER**: §0.8's init must apply this
+same CIRCULAR clamp, or tick 1 hands in the one state that breaks the invariant. Both regimes ship
+as teeth — the sweep asserts the clamp actually bound (200+ cells), and the growth case is the exact
+cell the search returned (0.688 → 3.612 rad).
+
+### ⚠⚠ FINDING 3 — THE PROBE'S STOP WAS PER-AXIS WHILE ITS OWN TELEMETRY READ THE CIRCULAR MAGNITUDE
+
+`gimbal_lib.jl` clamps `head_az` and `head_el` INDEPENDENTLY (`clamp(x, -stop, stop)`) and then
+reports `head_angle_deg = rad2deg(hypot(head_az, head_el))` "vs the STOP" — two different shapes,
+one of which permits `√2·stop`. **No gate-0 arm ever bound the stop in EITHER form** (every arm ran
+`stop = 1e6°` or `30°` against a `head_max` of at most 23.42°, §0.3/§0.7), which is why the
+inconsistency was invisible. The shipped stop is **CIRCULAR**, chosen on species grounds — the stop
+must have the same shape as the telemetry that reads it and as the detector window — and ⚠ **gate 0
+cannot discriminate the two forms, so this docstring and `test_frames.jl` are its ONLY evidence.**
+A later slice authoring a tighter stop inherits a branch no flying arm has ever taken; a
+RECTANGULAR / per-axis stop stays a named deferral. Written down now rather than discovered at
+gate 3.
+
+### The teeth
+
+`off_axis_angle` — the 4000-cell bit-identity vs the slice-32 literal; the PAIRED "the reference is
+not ignored" case (a head 18° off the nose reads 2° on a LOS the NOSE is 20° from — without which
+the identity would also hold for a kernel that dropped its first two arguments); the WRAP paired
+with a does-not-wrap case and the naive 358° exhibited; symmetry in the two argument pairs over 2000
+cells (`===`); the §1 approximation with its control and its two operating points; hand-computed
+exact cases (a 3-4-5 in angle space); conventions 5/6.
+
+`head_slew` — ⭐ **THE EXACT LANDING BY ASSIGNMENT** over 12 000 cells (`===`), PAIRED with the
+arithmetic form `head + wrap(tgt − head)` **exhibited failing** (100+ of 3000), because §0.2's
+`max|Δpos| = 0` bit-identity control is the slice's own false-fidelity check and a rounding residual
+would turn it into a near-miss; the first-order decay against the EXTERNAL anchor `(1 − dt/τ)^n`;
+the short-way-round wrap paired, plus the fact that a head with NO stop may leave the principal
+interval and still converge (3000 steps); ⭐ **the FIXED POINT at the stop** — on the circle, in the
+target's direction, and `===` stable over 200 further steps (slice 24's killed ±90° bank law is the
+precedent: a projection at a limit is where chatter hides); both contraction regimes; the degenerate
+table (`τ = Inf` FROZEN — §0.4's reductio; `dt ≤ 0`; `τ < 0`; `stop ≤ 0` CAGED; NaN `stop` = no
+stop, NaN `τ` propagates as an authored input's problem); and the two `-0.0` corners written down
+rather than dodged (a frozen head's `-0.0 + 0.0` is `+0.0`; a caged head's zeros inherit the step's
+sign, which is ASSERTED harmless because `wrap_angle(az − (−0.0))` is `az`).
+
+### What did NOT ship, deliberately
+
+**The rate limit.** `gimbal_rate_max` exists in the probe and was NEVER EXERCISED by any gate-0 arm
+(advisor-confirmed), so shipping it would be a knob with no measurement behind it — the slice-19
+dead-knob discipline — and it also cleans up the exact-landing branch. Named deferral. **The
+`:truth`-tracking head**, measured at §0.3/§0.5 and recorded there. **Any seam edit**: `missile.jl`
+is untouched at gate 1, and the comp keys `:head_az` / `:head_el` are gate 2's.
 
 ---
 

@@ -147,6 +147,20 @@ export boresight_angle, seeker_in_fov, collision_lead_angle
 # `seeker_in_fov` is now DEFINED from it, so the shipped number is the one that flies. No rung, no
 # knob, no new cap: both sliders already ship.
 export seeker_fov_margin
+# Slice 34 (§11 Tier-A): THE GIMBALLED HEAD — the successor 32 AND 33 both nominated. Slices 26–31
+# closed the parasitic loop through the BODY because the radome indexes on the LOS-off-the-NOSE, a
+# quantity only a rotation can move. ⭐⭐ A head breaks that identity: the ray passes through the part
+# of the dome the head is AIMED at, and the head is aimed by the very measurement the dome just bent
+# — so the index becomes a FIXED POINT of the glass and part of slice 26's loop re-closes through the
+# HEAD, where its sign is NEGATIVE. ⚠⚠ BOTH halves of the banked deferral were REFUTED at gate 0
+# (the head parks nowhere the body was not already looking; the `look_az` rewrite is `max|Δpos| = 0`,
+# the false-fidelity class) and the live claim is the SELF-REFERENTIAL INDEX — ISOLATED against the
+# one-tick sampling delay, which is worth nothing. ⚠ `boresight_angle` is now DEFINED from
+# `off_axis_angle` at `ref = (0,0)`, bit-identically: a head CAGED at boresight IS a strapdown seeker
+# — an identity about the ANGLE, never a licence to collapse slice 32/33's window keys onto the head
+# ones. KNOB (`gimbal_fov_deg`), no rung; `τ` and the stop are AUTHORED (τ because gate 0 measured it
+# does not move the onset — the dead-knob discipline applied before the knob exists).
+export off_axis_angle, head_slew
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step
 export INTEGRATOR_MODES, G_ACCEL

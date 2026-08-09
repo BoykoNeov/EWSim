@@ -663,6 +663,200 @@ gyro_reading(ω_true::Vec3, scale_err::Real, bias::Vec3) =
          (1.0 + scale_err) * ω_true[2] + bias[2],
          (1.0 + scale_err) * ω_true[3] + bias[3])
 
+# --- THE GIMBALLED HEAD (slice 34, §11 Tier-A — the successor slices 32 AND 33 both nominated) ---
+#
+# Slices 26–31 built the parasitic loop on one geometric fact: the radome bends the ray by an amount
+# set by the LOOK ANGLE, and the look angle is the LOS measured off the missile's own NOSE — a
+# quantity the missile can only move by ROTATING, which is exactly why the loop closes through the
+# body and why slice 26 is a body-rate instability. ⭐⭐ A GIMBALLED SEEKER BREAKS THAT IDENTITY. The
+# head has its own pointing angles, the ray passes through the part of the dome the head is AIMED at,
+# and — this is the whole slice — THE HEAD IS AIMED BY THE VERY MEASUREMENT THE DOME JUST BENT. The
+# index of the glass becomes a FIXED POINT of the glass, part of the bend's own variation is absorbed
+# by the head's pointing instead of being handed to guidance, and slice 26's loop is partly re-closed
+# through the HEAD, where its sign is NEGATIVE. A strapdown seeker's radome index is handed to it by
+# the airframe; a gimballed seeker's is handed to it by its own last measurement — and an index that
+# looks at itself is an index that fights back. See `docs/plans/slice34.md`.
+#
+# ⚠⚠ AND BOTH HALVES OF THE BANKED DEFERRAL WERE REFUTED AT GATE 0, WHICH IS LOAD-BEARING HERE.
+# (1) "the gimbal that saves your envelope PARKS YOU ON THE WORST GLASS" rests on a contrast that does
+# not exist: with the head degenerate the head parks NOWHERE the body was not already looking
+# (`look_body_max == head_max`, 24.984° and 18.138°, to the digit), because a missile points its nose
+# along its velocity plus incidence and a strapdown look angle IS the full lead — slice 32's own
+# `held ⟺ lead < fov`. (2) `seeker_in_fov`'s banner below calls the `look_az` rewrite the reason this
+# is a bigger slice; MEASURED on ringing glass it is `max|Δpos| = 0` over 9 000 ticks, i.e. the
+# FALSE-FIDELITY class (slice 15's `k_δ`, 19's dead `speed`, 31's `R̂(1+s)`). ⇒ "the bend keys off
+# head-vs-body" ships as a TOOTH, never as the headline.
+#
+# ⚠ WHY THIS BLOCK SITS ABOVE SLICE 32's BANNER, out of slice order. [`boresight_angle`](@ref) is
+# DEFINED from [`off_axis_angle`](@ref) below, so the definition must precede the use — slice 33 made
+# the same trade one layer up (`seeker_fov_margin` placed above the predicate it defines, against the
+# one-banner-per-slice-block reading). Nothing here belongs to slice 32.
+#
+# ⚠ NO NEW DRAW, NO NEW PLANT, NO NEW CAP. The head is a deterministic servo on a measurement that
+# already exists; slice 26's positive-feedback language stays with 26–31 and slice 20's "degenerative
+# spiral" stays forbidden. What is new is WHERE THE GLASS IS INDEXED.
+
+"""
+    off_axis_angle(ref_az, ref_el, az, el) -> Float64   (radians)
+
+The angle of a direction `(az, el)` off a REFERENCE AXIS given by its own angles `(ref_az, ref_el)`,
+in the same frame:
+
+    hypot(wrap_angle(az - ref_az), wrap_angle(el - ref_el))
+
+Radians throughout (the wire carries degrees, this does not; the units trifecta, HANDOFF §1 — the
+seam converts `gimbal_stop_deg` / `gimbal_fov_deg`, exactly as it does for `seeker_fov_deg`).
+
+Slice 34's consumer is the GIMBAL: the head's detector window is about the HEAD axis, not the nose,
+so the tracking error the window is compared against is this angle with the reference at the head's
+own pointing angles and the direction at the LOS-in-body.
+
+⭐⭐ **AND [`boresight_angle`](@ref) IS THIS KERNEL AT `ref = (0, 0)` — DEFINED that way, not merely
+equal to it.** That is slice 33's gate-1 result one layer up ("a quantity that does not fly is a
+quantity `test_frames.jl` proves a SECOND implementation of"), and here it has a PHYSICAL reading
+rather than only a structural one: **a head CAGED at boresight is a strapdown seeker.** Gate 0
+measured exactly that — a caged head must slew the whole lead, so during acquisition its window
+requirement degenerates to the strapdown one, **18.1172°, which is slice 32's own number**
+(`docs/plans/slice34.md` §0.8).
+
+⚠ **THE CAGED-HEAD IDENTITY IS ABOUT THE ANGLE, NOT ABOUT THE SENSOR.** `seeker_fov_deg` and
+`seeker_fov_margin_deg` KEEP their slice-32/33 meaning (the LOS vs the BODY) and the head quantities
+ship ALONGSIDE — slice 28's `radome_residual*` precedent. Collapsing them because the degenerate
+coincides would silently rewrite two slices' asserts.
+
+⚠ **THE REDEFINITION IS BIT-IDENTICAL, AND THAT WAS MEASURED RATHER THAN ARGUED.** `wrap_angle` is
+`rem(θ, 2π, RoundNearest)`, which is the EXACT identity on `az_el`'s codomain `[−π, π] × [−π/2, π/2]`
+— both boundaries included, 0 mismatches in a 200 000-sample sweep — and `x − 0.0 === x` for every
+finite `x` and for `−0.0`. ⚠ The tooth in `test_frames.jl` is therefore against the LITERAL slice-32
+expression `hypot(look_angles(att, los)...)`, **never against this kernel**: that would be `x == x`,
+the tautology slice 33's own gate 1 hit and had to build its oracle backwards from.
+
+⚠ **THE WRAP IS LOAD-BEARING, AND IT IS THE ONE THING THE ORIGIN-REFERENCED FORM NEVER NEEDED.**
+`az_el` returns an azimuth already in `[−π, π]`, so with `ref = 0` there is nothing to wrap; with an
+offset reference a head at −179° and a LOS at +179° differ by 358°, which must read 2°. Pinned
+PAIRED with a does-not-wrap case, because a wrap tooth that only ever exercises the wrapping branch
+cannot catch a wrap applied where it does not belong.
+
+⚠ **CIRCULAR — and the argument is [`boresight_angle`](@ref)'s, unchanged.** A detector window is ONE
+window about ONE axis, so the total angle is the right quantity; the emphatic per-axis habit of the
+radome kernels above (`ε_az = f(look_az)` SEPARATELY) is a modelling error here, and using this
+kernel on the glass would be that error. A RECTANGULAR / per-axis window and stop remain a named
+deferral — a two-axis gimbal really does have independent mechanical stops, and this slice ships one
+circular window AND one circular stop.
+
+⚠ **IT IS THE ANGLE-SPACE RADIUS, NOT THE EXACT CONE HALF-ANGLE — the §1 approximation inherited from
+[`boresight_angle`](@ref), but with an OFFSET reference it is a DIFFERENT quantity, so it is
+re-measured here instead of inherited.** The exact separation is
+`acos(dot(los_unit_from_angles(ref...), los_unit_from_angles(...)))`. ⭐ **The gap is driven by the
+REFERENCE's ELEVATION, not its azimuth** — an azimuth difference subtends `cos(el)` times its own
+size, so the equator (`ref_el = 0`) is exact to 1e−4° at any `ref_az`. On the shipped wire the head
+sits at `|el| ≤ 0.84°` (the crossing target's lead is essentially pure AZIMUTH — slice 28's
+geometry), and at the two operating points the gate-0 bracket is read at — head `(18.105°, 0.814°)`
+with a `1.956°` error, and `(20.619°, 0.832°)` with `5.237°` — the gap is **0.0004°** and
+**0.0034°**, three orders below the 0.5° resolution §0.6's bracket is quoted at and the 1° grid
+§0.7's window sweep used. Over the whole plausible domain (`ref_az ≤ 30°`, `|ref_el| ≤ 10°`, error
+`≤ 8°`) it peaks at **0.139°**, still under that resolution. ⚠ The measurement's own control
+(convention 10 — pin the new instrument against a shipped number before believing it): at
+`ref = (0, 0)` the identical code reproduces `boresight_angle`'s **+0.36416° at φ ≈ 47°** on a true
+30° cone. The exact cone angle remains the alternative, not a correction.
+
+⚠ SYMMETRIC in its two argument pairs — `wrap_angle` is odd except at exactly ±π, where both signs
+give the same magnitude and `hypot` squares them anyway. Pinned, because it is what says the kernel
+measures a SEPARATION and not a signed departure.
+"""
+off_axis_angle(ref_az::Real, ref_el::Real, az::Real, el::Real) =
+    hypot(wrap_angle(az - ref_az), wrap_angle(el - ref_el))
+
+"""
+    head_slew(head_az, head_el, tgt_az, tgt_el, τ, dt, stop) -> (az, el)   (radians)
+
+One tick of the gimbal head's FIRST-ORDER pointing servo, with its mechanical STOP: the head at
+`(head_az, head_el)` is driven toward `(tgt_az, tgt_el)` with time constant `τ` over a step `dt`,
+
+    gain = τ ≤ dt ? 1 : dt/τ ,      head += wrap_angle(tgt - head)·gain ,      ‖head‖ ≤ stop
+
+All angles in the BODY frame and in RADIANS; `τ`, `dt` in seconds (the seam converts
+`gimbal_stop_deg`).
+
+⭐ **THE EXACT LANDING IS AN ASSIGNMENT, NOT ARITHMETIC — and it is the slice's own FALSE-FIDELITY
+CONTROL, so the tooth must be ABLE to pass.** `head + wrap_angle(tgt − head)` is NOT `tgt` in IEEE
+doubles, and gate 0's §0.2 result is a BIT-IDENTITY claim: with the head degenerate (`τ → 0`) the
+gimballed missile reproduces the shipped strapdown seeker to `max|Δpos| = 0` over 9 000 ticks on
+RINGING glass. A rounding residual in this branch would turn that control into a near-miss and the
+whole "the `look_az` rewrite collapses" refutation with it. ⚠ **It lands `=== (tgt_az, tgt_el)` only
+when the target is INSIDE THE STOP** — on the stop it lands on the circle instead. The condition is
+stated because the tooth is bit-exact and would otherwise be calibrated to pass.
+
+⚠⚠ **THE STOP IS CIRCULAR, AND NO ARM THAT HAS EVER FLOWN EXERCISES IT.** The species argument: the
+stop must have the same shape as the telemetry that reads it (`head_angle_deg = hypot(head_az,
+head_el)`) and as the detector window, because a PER-AXIS clamp would let the head sit at `√2·stop`
+while the readout compared against `stop`. **But gate 0 cannot discriminate the two forms** — every
+gate-0 arm ran `stop = 1e6°` or `30°` against a `head_max` of at most 23.42° (§0.3, §0.7), so the
+stop bound in NEITHER form. ⇒ the choice is made on species grounds; this docstring and
+`test_frames.jl` are its ONLY evidence; and a later slice authoring a tighter stop inherits a branch
+no flying arm has taken. Written here rather than discovered at gate 3.
+
+⭐ **THE FIXED POINT AT THE STOP IS PINNED, NOT ASSUMED.** A target held beyond the stop drives the
+head ONTO the stop circle in the target's direction and it STAYS there — no chatter, no slide along
+the circle. Slice 24 is the precedent and the reason to check: its naive ±90° bank law CHATTERED at
+the singularity and churned 180° in plane, and a radial projection at a limit is exactly where that
+hides.
+
+⚠ **CONTRACTION HOLDS ONLY OFF THE STOP.** The angular error never grows in a step while the head is
+free, but a radial clamp CAN increase it (the head is pulled off the line to the target), so the
+tooth EXCLUDES the stop-binding case explicitly rather than being loosened until it passes.
+
+⚠ **`τ` IS AUTHORED, NOT A SLIDER, AND §0.4 IS THE REASON** — the slice-19 dead-knob discipline
+applied BEFORE the knob exists rather than after it ships. Under the head this slice actually flies
+(the one that tracks its own BENT measurement) τ does not move the stability onset ANYWHERE in
+`[0.02, 0.2]`; only the amplitude sags. The single live slider is the detector window. The
+degenerates are still physics and are still pinned: **`τ = Inf` FREEZES the head** (`gain = 0`),
+which is §0.4's frozen-head arm — quiet at EVERY R̂ including the worst, because a head frozen in the
+body frame produces a CONSTANT bend and there is nothing for `dε/dt` to differentiate. ⚠ That arm is
+a REDUCTIO, not a design: its detector error runs to 33.08°, i.e. it has stopped being a gimbal and
+become a staring seeker whose window is the whole lead. **The motion that holds the track is the
+motion that feeds the loop** — which is what makes the trade structural.
+
+⚠ Convention 5 (a live knob can never crash a tick) — the degenerate table, all pinned:
+`τ < 0` behaves as `τ = 0` (the `τ ≤ dt` comparison catches it) and lands exactly; `dt ≤ 0` cannot
+drive the head BACKWARDS, because the step is floored at zero before the gain is formed; `stop ≤ 0`
+is the CAGED head, pinned at `(0, 0)`, which by [`off_axis_angle`](@ref)'s identity is exactly the
+strapdown seeker; a NaN `stop` is neither clamped nor propagated — it degenerates to NO stop, the
+convention-6 direction (never manufacture a non-finite from finite input). A NaN `τ` DOES propagate:
+it is an AUTHORED input, so it is validate-at-LOAD's business, not this consumer's.
+
+⚠ **A RATE LIMIT IS A NAMED DEFERRAL, NOT AN OVERSIGHT.** `gimbal_rate_max` exists in the gate-0
+probe and was NEVER EXERCISED by any arm, so shipping it would be a knob with no measurement behind
+it. It is also the natural home of a slew-rate-limited lock loss.
+
+⚠ **WHAT THE SERVO TRACKS IS NOT THIS KERNEL'S BUSINESS** — it takes a target angle pair. The seam
+hands it the BENT, one-tick-delayed measurement, because a real head slews on its own detector's
+error signal and slice 27's rule names why ("compensate with a signal that is not itself corrupted by
+what you are compensating"). ⭐ And the choice is not cosmetic: gate 0's ISOLATION arm carried the
+one-tick SAMPLING DELAY on the TRUTH LOS and reproduced the truth-tracking head to three decimals at
+every R̂ (0.40752 vs 0.40798, 0.69399 vs 0.69538, 0.97186 vs 0.97277) while the bent head departed
+from both — **so the margin is bought by the INDEX, not by the delay.** ⚠ And the ORDERING is a seam
+constraint, not a kernel one: the head must slew BEFORE the bend is taken, or a one-tick lag survives
+`τ → 0` and fakes a mechanism the isolation just measured to be worth nothing.
+"""
+function head_slew(head_az::Real, head_el::Real, tgt_az::Real, tgt_el::Real,
+                   τ::Real, dt::Real, stop::Real)
+    Δt   = max(Float64(dt), 0.0)
+    gain = Float64(τ) ≤ Δt ? 1.0 : Δt / Float64(τ)
+    if gain ≥ 1.0
+        az = Float64(tgt_az); el = Float64(tgt_el)     # ASSIGNED — never `head + err` (see above)
+    else
+        az = Float64(head_az) + wrap_angle(Float64(tgt_az) - Float64(head_az)) * gain
+        el = Float64(head_el) + wrap_angle(Float64(tgt_el) - Float64(head_el)) * gain
+    end
+    s = max(Float64(stop), 0.0)                        # the CIRCULAR stop — one clamp site
+    m = hypot(az, el)
+    if m > s
+        az *= s / m; el *= s / m
+    end
+    return (az, el)
+end
+
 # --- THE SEEKER'S FIELD OF VIEW (slice 32, §11 Tier-A — the deferral 26/28/29/30/31 each named) ---
 #
 # Slices 26–31 made the LOOK ANGLE the central quantity of the whole radome family, and then each
@@ -733,8 +927,17 @@ WORDED — see [`seeker_in_fov`](@ref) — never for the shipped domain, whose c
 whether the target is inside the seeker's window is PHYSICS, not an estimate — the contrast with
 [`radome_compensation`](@ref), which must use the BENT measurement because a guidance computer
 cannot see truth.
+
+⚠⚠ **DEFINED FROM [`off_axis_angle`](@ref) AT `ref = (0, 0)` (slice 34), NOT BESIDE IT** — slice 33's
+own gate-1 move, one layer up, and here it carries a physics reading too: a gimbal head CAGED at
+boresight IS a strapdown seeker, MEASURED (its window requirement degenerates to 18.1172°, this
+slice's own number). The redefinition is BIT-IDENTICAL — `wrap_angle` is the exact identity on
+`az_el`'s codomain and `x − 0.0 === x` — which is measured, not assumed, and pinned in
+`test_frames.jl` against the LITERAL expression `hypot(look_angles(att, los)...)` this line used to
+be, never against the new kernel (`x == x`). Slices 32/33's `seeker_fov_deg` / `seeker_fov_margin_deg`
+KEEP their meaning: this is the same number reached through a more general kernel, not a new one.
 """
-boresight_angle(att::Quat, los::Vec3) = hypot(look_angles(att, los)...)
+boresight_angle(att::Quat, los::Vec3) = off_axis_angle(0.0, 0.0, look_angles(att, los)...)
 
 # --- THE RING IS AN FOV BUDGET ITEM (slice 33, §11 Tier-A — the COMPOSITION of 26–31 with 32) ---
 #

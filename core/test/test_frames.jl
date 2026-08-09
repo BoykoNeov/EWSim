@@ -1106,4 +1106,275 @@
         @test isnan(seeker_fov_margin(q, û, NaN))
         @test seeker_fov_margin(q, û, 25) === seeker_fov_margin(q, û, 25.0)   # Real, not Float64
     end
+
+    @testset "the GIMBALLED HEAD (slice 34) — its own axis, and the servo that aims it" begin
+        # The head has its own pointing angles, so the detector's window is about the HEAD, not the
+        # nose. `off_axis_angle` is that measurement generalized — and `boresight_angle` is now
+        # DEFINED as its `ref = (0,0)` case, which is the CAGED head, i.e. a strapdown seeker.
+
+        @testset "off_axis_angle — the reference axis, and boresight as its caged degenerate" begin
+            # PAIRED exact cases computed by hand, not by the kernel's own formula: a 3-4-5 in
+            # angle space off the origin, and a pure-azimuth separation off an OFFSET reference.
+            @test rad2deg(off_axis_angle(0.0, 0.0, deg2rad(3.0), deg2rad(4.0))) ≈ 5.0 atol = 1e-12
+            @test rad2deg(off_axis_angle(deg2rad(18.0), 0.0, deg2rad(20.0), 0.0)) ≈ 2.0 atol = 1e-12
+            @test off_axis_angle(0.37, -0.12, 0.37, -0.12) === 0.0        # the axis itself
+            @test off_axis_angle(0, 0, 3, 4) === off_axis_angle(0.0, 0.0, 3.0, 4.0)  # Real, not F64
+
+            # ⭐⭐ THE BIT-IDENTITY THAT LICENSES THE REDEFINITION — AND THE ORACLE IS THE LITERAL
+            # SLICE-32 EXPRESSION, never the new kernel (`boresight_angle` IS the new kernel now,
+            # so testing against it would be `x == x` — convention 11's tautology, which slice 33's
+            # own gate 1 walked into one layer up). `wrap_angle` is `rem(θ, 2π, RoundNearest)`, the
+            # exact identity on `az_el`'s codomain, and `x − 0.0 === x`; this is what MEASURES that
+            # rather than arguing it. Own Xoshiro; accumulate and assert ONCE (a 4000-cell `@test`
+            # loop would move the suite's ledger by more than the whole slice).
+            let rng = Xoshiro(3434), n_bad = 0, b_hi = 0.0, n_wide = 0
+                for _ in 1:4000
+                    att = qnormalize(quat_from_axis_angle(Vec3(randn(rng), randn(rng), randn(rng)),
+                                                          4.0 * randn(rng)))
+                    los = let v = Vec3(randn(rng), randn(rng), randn(rng))
+                        v / sqrt(v[1]^2 + v[2]^2 + v[3]^2)
+                    end
+                    b = boresight_angle(att, los)
+                    b === hypot(look_angles(att, los)...) || (n_bad += 1)   # the slice-32 literal
+                    b_hi = max(b_hi, b)
+                    b > 2.0 && (n_wide += 1)
+                end
+                @test n_bad == 0                       # 4000 cells, `===`, no tolerance anywhere
+                @test b_hi > 3.0 && n_wide > 400       # the sweep really did reach the wide corner
+            end
+
+            # ⭐ AND THE REFERENCE IS NOT IGNORED — the paired half, without which the identity
+            # above would also hold for a kernel that dropped its first two arguments. A head 18°
+            # off the nose reads a 2° error on a LOS the NOSE is 20° away from.
+            let q = quat_from_axis_angle(Vec3(0.0, 0.0, 1.0), 0.0), û = los_unit_from_angles(deg2rad(20.0), 0.0)
+                laz, lel = look_angles(q, û)
+                @test rad2deg(off_axis_angle(deg2rad(18.0), 0.0, laz, lel)) ≈  2.0 atol = 1e-12
+                @test rad2deg(boresight_angle(q, û))                       ≈ 20.0 atol = 1e-12
+            end
+
+            # ⚠ THE WRAP IS LOAD-BEARING, AND IT IS THE ONE THING THE ORIGIN-REFERENCED FORM NEVER
+            # NEEDED (with `ref = 0` the codomain is already principal). PAIRED with a does-not-wrap
+            # case, so the tooth cannot pass by wrapping where it does not belong — and the naive
+            # unwrapped value is EXHIBITED, because that is the failure it exists to catch.
+            @test rad2deg(off_axis_angle(deg2rad(-179.0), 0.0, deg2rad(179.0), 0.0)) ≈ 2.0 atol = 1e-9
+            @test rad2deg(abs(deg2rad(179.0) - deg2rad(-179.0)))                     ≈ 358.0 atol = 1e-9
+            @test rad2deg(off_axis_angle(deg2rad(-9.0), 0.0, deg2rad(9.0), 0.0))     ≈ 18.0 atol = 1e-12
+
+            # ⚠ SYMMETRIC IN ITS TWO PAIRS — what says it measures a SEPARATION and not a signed
+            # departure (`wrap_angle` is odd except at exactly ±π, where both signs give the same
+            # magnitude and `hypot` squares them anyway).
+            let rng = Xoshiro(3435), n_bad = 0
+                for _ in 1:2000
+                    a, b, c, d = (2π * rand(rng) - π), (π * rand(rng) - π/2),
+                                 (2π * rand(rng) - π), (π * rand(rng) - π/2)
+                    off_axis_angle(a, b, c, d) === off_axis_angle(c, d, a, b) || (n_bad += 1)
+                end
+                @test n_bad == 0
+            end
+
+            # ⚠ THE ANGLE-SPACE RADIUS vs THE EXACT CONE HALF-ANGLE — the §1 approximation inherited
+            # from `boresight_angle`, but a DIFFERENT quantity with an OFFSET reference, so it is
+            # MEASURED here rather than inherited. ⚠ THE CONTROL COMES FIRST (convention 10 — pin
+            # the new instrument against a SHIPPED number before believing anything it says): at
+            # `ref = (0,0)` this same comparison must reproduce `boresight_angle`'s own docstring
+            # figure, +0.364° at a true 30° cone.
+            cone_angle(ra, re, a, e) = let u1 = los_unit_from_angles(ra, re),
+                                           u2 = los_unit_from_angles(a, e)
+                acos(clamp(u1[1]*u2[1] + u1[2]*u2[2] + u1[3]*u2[3], -1.0, 1.0))
+            end
+            let ε = deg2rad(30.0), g_hi = -Inf
+                for i in 0:3599                       # a true 30° cone, swept by clock angle
+                    φ = 2π * i / 3600
+                    az, el = az_el(Vec3(cos(ε), sin(ε) * cos(φ), sin(ε) * sin(φ)))
+                    g_hi = max(g_hi, rad2deg(off_axis_angle(0.0, 0.0, az, el)) - 30.0)
+                end
+                @test g_hi ≈ 0.36416 atol = 1e-4       # the shipped docstring number, reproduced
+            end
+            # ...and now the offset case, at the two operating points gate 0's bracket is read at.
+            # ⭐ THE GAP IS DRIVEN BY THE REFERENCE'S ELEVATION, NOT ITS AZIMUTH — an azimuth
+            # difference subtends `cos(el)` times its own size, so ON THE EQUATOR the only departure
+            # left is the ERROR's own excursion off it: CUBIC in the error (0.00009° at 1.96°,
+            # 0.00159° at 5.0°) and independent of `ref_az`. ⚠ "The equator is EXACT" would be the
+            # natural thing to write and it is FALSE — gate 1 measured 1.6e−3° there. Lift the
+            # reference to 10° and the SAME 1.96° error gives 0.030°, 330× more, which is what
+            # "driven by the elevation" means, asserted rather than said. On the shipped wire the
+            # head sits at |el| ≤ 0.84° (the crossing lead is essentially pure AZIMUTH), which is
+            # why the two operating points land three orders under the 0.5° resolution the §0.6
+            # bracket is quoted at.
+            worst_gap(ha, he, err) = let ra = deg2rad(ha), re = deg2rad(he), ε = deg2rad(err), g = -Inf
+                for i in 0:719
+                    φ = 2π * i / 720
+                    a = ra + ε * cos(φ); e = re + ε * sin(φ)
+                    g = max(g, rad2deg(off_axis_angle(ra, re, a, e) - cone_angle(ra, re, a, e)))
+                end
+                g
+            end
+            @test worst_gap(18.1054, 0.8138, 1.9556) ≈ 0.000400 atol = 2e-5   # QUIET   R̂ = −0.18
+            @test worst_gap(20.6191, 0.8317, 5.2368) ≈ 0.003404 atol = 2e-5   # RINGING R̂ = −0.16
+            @test worst_gap(16.0,   10.0,    8.0)    ≈ 0.13936  atol = 1e-4   # the domain's worst
+            @test worst_gap(16.0,   10.0,    8.0)     < 0.5                   # still under the grid
+            # the ELEVATION dependence, PAIRED — the equator's residual cubic term against the same
+            # error lifted to 10°, and the equator's independence from `ref_az` (18° vs 30°)
+            @test worst_gap(18.0,     0.0,   1.9556) ≈ 0.000090 atol = 5e-6
+            @test worst_gap(18.0,    10.0,   1.9556) ≈ 0.029990 atol = 5e-5   # 330× the equator
+            @test worst_gap(30.0,     0.0,   5.0)    ≈ 0.001588 atol = 5e-6
+            @test worst_gap( 5.0,     0.0,   5.0)    ≈ worst_gap(30.0, 0.0, 5.0) atol = 1e-6
+
+            # conventions 5/6 — never manufacture a non-finite from finite input, at any magnitude
+            @test isfinite(off_axis_angle(1.0e9, -1.0e9, -1.0e9, 1.0e9))
+            @test off_axis_angle(0.0, 0.0, 0.0, 0.0) === 0.0
+            @test isnan(off_axis_angle(NaN, 0.0, 0.1, 0.1))
+        end
+
+        @testset "head_slew — the servo, the stop, and the exact landing" begin
+            dt = 1.0e-3
+
+            # ⭐ THE EXACT LANDING IS AN ASSIGNMENT, NOT ARITHMETIC — the slice's own FALSE-FIDELITY
+            # CONTROL, so the tooth must be ABLE to pass: gate 0's §0.2 claim is `max|Δpos| = 0`
+            # over 9 000 ticks against the SHIPPED strapdown seeker, and a rounding residual in this
+            # branch would turn that bit-identity into a near-miss. ⚠ Only INSIDE THE STOP.
+            let rng = Xoshiro(3436), n_bad = 0, n_arith_bad = 0
+                for _ in 1:3000
+                    h_az = 0.6 * randn(rng); h_el = 0.3 * randn(rng)
+                    t_az = 0.6 * randn(rng); t_el = 0.3 * randn(rng)
+                    for τ in (0.0, dt, 0.5 * dt, -1.0)          # τ ≤ dt ⇒ the servo lands this tick
+                        head_slew(h_az, h_el, t_az, t_el, τ, dt, Inf) === (t_az, t_el) ||
+                            (n_bad += 1)
+                    end
+                    # ...and the form the kernel deliberately does NOT use, exhibited failing
+                    (h_az + wrap_angle(t_az - h_az) === t_az) || (n_arith_bad += 1)
+                end
+                @test n_bad == 0                # 12 000 cells, `===`, no tolerance
+                @test n_arith_bad > 100         # `head + (tgt − head)` is NOT `tgt` in IEEE doubles
+            end
+
+            # THE FIRST-ORDER RESPONSE, against an EXTERNAL anchor (convention 11) — the geometric
+            # decay `(1 − dt/τ)^n`, not a self-calibrated round-trip through the kernel's own gain.
+            let τ = 0.05, tgt = 0.20, n = 400
+                az, el = 0.0, 0.0
+                for _ in 1:n
+                    az, el = head_slew(az, el, tgt, 0.0, τ, dt, Inf)
+                end
+                @test tgt - az ≈ tgt * (1 - dt / τ)^n atol = 1e-12
+                @test el === 0.0                      # the idle axis does not drift
+            end
+
+            # ⚠ THE SERVO TAKES THE SHORT WAY ROUND — PAIRED with a does-not-wrap case, and with
+            # the naive long-way step exhibited. ⭐ AND THE HEAD MAY LEAVE THE PRINCIPAL INTERVAL
+            # when there is no stop to hold it: that is DEFINED, not a bug, because the next tick's
+            # error is wrapped again. Pinned by converging from the wrapped start.
+            let τ = 10 * dt
+                az, _ = head_slew(deg2rad(179.0), 0.0, deg2rad(-179.0), 0.0, τ, dt, Inf)
+                @test rad2deg(az) ≈ 179.2 atol = 1e-9          # forward through π, not back to 0
+                @test rad2deg(az) > 179.0                      # the long way would go DOWN
+                a2, _ = head_slew(deg2rad(179.0), 0.0, deg2rad(170.0), 0.0, τ, dt, Inf)
+                @test rad2deg(a2) ≈ 178.1 atol = 1e-9          # the does-not-wrap half
+                az2 = deg2rad(179.0)
+                for _ in 1:3000
+                    az2, _ = head_slew(az2, 0.0, deg2rad(-179.0), 0.0, τ, dt, Inf)
+                end
+                @test abs(rad2deg(wrap_angle(az2 - deg2rad(-179.0)))) < 1e-6   # it converged
+            end
+
+            # ⭐ THE FIXED POINT AT THE STOP — slice 24's killed ±90° bank law is the precedent and
+            # the reason to check: a projection at a limit is exactly where CHATTER hides. A target
+            # far beyond the stop drives the head ONTO the circle in the target's direction, and it
+            # STAYS — bit-for-bit, not merely to a tolerance.
+            let stop = deg2rad(30.0), τ = 20 * dt,
+                t_az = deg2rad(70.0), t_el = deg2rad(40.0)
+                az, el = 0.0, 0.0
+                for _ in 1:20000
+                    az, el = head_slew(az, el, t_az, t_el, τ, dt, stop)
+                end
+                @test hypot(az, el) ≈ stop atol = 1e-12                 # ON the circle
+                @test az / el ≈ t_az / t_el atol = 1e-6                 # in the TARGET's direction
+                prev = (az, el)
+                for _ in 1:200
+                    prev = head_slew(prev[1], prev[2], t_az, t_el, τ, dt, stop)
+                end
+                @test prev === (az, el)                                 # and it STAYS — no chatter
+                # the gain-1 branch reaches the same fixed point in ONE step and holds it exactly
+                let p1 = head_slew(0.0, 0.0, t_az, t_el, 0.0, dt, stop)
+                    @test hypot(p1...) ≈ stop atol = 1e-12
+                    @test head_slew(p1[1], p1[2], t_az, t_el, 0.0, dt, stop) === p1
+                end
+            end
+
+            # ⚠⚠ CONTRACTION — AND THE EXPECTED CAVEAT IS SHARPER THAN EXPECTED, MEASURED BOTH WAYS.
+            # A radial clamp CAN pull the head off the line to the target, so "the error never
+            # grows" looked like it needed the stop-binding case excluded. It does not: with the
+            # head starting INSIDE OR ON the stop, the disc is INVARIANT and the step is a
+            # contraction toward the target UNCONDITIONALLY — 0 growths in 400 000 randomized cells
+            # ACROSS a binding stop (gate 1, `g1_contract.jl`), and the sweep below is that result
+            # in miniature WITH the stop live rather than switched off. ⭐ It fails only for a head
+            # handed in ALREADY OUTSIDE its stop, which the seam cannot produce — `head_slew` is the
+            # SOLE writer of the head and clamps every tick — and which is therefore a constraint on
+            # gate 2's HANDOVER: the init must use this same circular clamp, or tick 1 hands in the
+            # one state that breaks the invariant.
+            let rng = Xoshiro(3437), n_grew = 0, n_clamped = 0, stop = deg2rad(20.0)
+                for _ in 1:4000
+                    r = deg2rad(20.0) * rand(rng); φ = 2π * rand(rng)
+                    h_az = r * cos(φ); h_el = r * sin(φ)                 # INSIDE or ON the stop
+                    t_az = 0.9 * randn(rng); t_el = 0.6 * randn(rng)     # often far OUTSIDE it
+                    τ = 10.0^(-3 + 3 * rand(rng))
+                    e0 = off_axis_angle(h_az, h_el, t_az, t_el)
+                    n_az, n_el = head_slew(h_az, h_el, t_az, t_el, τ, dt, stop)
+                    off_axis_angle(n_az, n_el, t_az, t_el) > e0 + 1e-15 && (n_grew += 1)
+                    hypot(n_az, n_el) ≥ prevfloat(stop) && (n_clamped += 1)
+                end
+                @test n_grew == 0
+                @test n_clamped > 200        # the stop really did bind — not a vacuous sweep
+            end
+            # ...and the case that DOES grow, EXHIBITED, so the boundary of the claim is a
+            # measurement and not a tolerance loosened until the sweep passed (the exact cell
+            # `g1_contract.jl`'s search returned, worst of 144 698 growths in 400 000):
+            let stop = 0.9977185735528811, h = (-1.914199240810994, 3.4856072840668766),
+                t = (3.9660355165643364, -2.24037075226863), gain = 0.2565091776771703
+                e0 = off_axis_angle(h[1], h[2], t[1], t[2])
+                @test hypot(h...) > stop                                 # handed in OUTSIDE
+                n = head_slew(h[1], h[2], t[1], t[2], dt / gain, dt, stop)
+                @test off_axis_angle(n[1], n[2], t[1], t[2]) > e0 + 2.9   # 0.688 → 3.612 rad
+            end
+
+            # ⚠ THE DEGENERATE TABLE (convention 5 — a live knob can never crash a tick), each with
+            # its meaning. ⭐ `τ = Inf` is §0.4's FROZEN HEAD, the reductio that pins the mechanism:
+            # a head frozen in the BODY frame produces a CONSTANT bend, and it is quiet at every R̂.
+            let h_az = 0.31, h_el = -0.17, t_az = -0.44, t_el = 0.22
+                @test head_slew(h_az, h_el, t_az, t_el, Inf, dt, Inf) === (h_az, h_el)   # FROZEN
+                @test head_slew(h_az, h_el, t_az, t_el, 1.0e9, dt, Inf) !== (h_az, h_el) # not yet
+                @test head_slew(h_az, h_el, t_az, t_el, 0.05, 0.0, Inf) === (h_az, h_el) # dt = 0
+                @test head_slew(h_az, h_el, t_az, t_el, 0.05, -1.0, Inf) === (h_az, h_el)# dt < 0
+                @test head_slew(h_az, h_el, t_az, t_el, -1.0, dt, Inf) === (t_az, t_el)  # τ < 0
+                @test head_slew(h_az, h_el, t_az, t_el, 0.0, 0.0, Inf) === (t_az, t_el)  # both 0
+                # `stop ≤ 0` is the CAGED head — which by `off_axis_angle`'s identity is exactly the
+                # strapdown seeker, the physics reading of this slice's own degenerate. ⚠ THE SIGN
+                # OF THE ZERO IS INHERITED FROM THE STEP (`x·0.0` keeps `x`'s sign — the `-0.0`
+                # trap, which this codebase names on every structural byte-identity claim), so the
+                # tooth is componentwise ZERO, not `=== (0.0, 0.0)`. It is harmless downstream and
+                # that is ASSERTED, not assumed: a caged head's own off-axis angle is the strapdown
+                # look angle to the last bit, because `wrap_angle(az − (−0.0))` is `az`.
+                for dead in (0.0, -0.0, -1.0, -1.0e9)
+                    p = head_slew(h_az, h_el, t_az, t_el, 0.05, dt, dead)
+                    @test iszero(p[1]) && iszero(p[2])
+                    @test off_axis_angle(p[1], p[2], 0.21, -0.13) ===
+                          off_axis_angle(0.0, 0.0, 0.21, -0.13)
+                end
+                # a NaN stop is NEITHER clamped NOR propagated — it degenerates to NO stop
+                # (convention 6's direction: never manufacture a non-finite from finite input)
+                @test head_slew(h_az, h_el, t_az, t_el, 0.0, dt, NaN) === (t_az, t_el)
+                # a NaN τ DOES propagate: it is an AUTHORED input, so it is validate-at-LOAD's
+                # business, not this consumer's (convention 5's two guard sites)
+                @test all(isnan, head_slew(h_az, h_el, t_az, t_el, NaN, dt, Inf))
+                # convention 6 — finite in, finite out, at any magnitude
+                @test all(isfinite, head_slew(h_az, h_el, 1.0e9, -1.0e9, 1.0e-9, dt, 1.0e9))
+                @test head_slew(0, 0, 1, 1, 0, 1, 10) === head_slew(0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 10.0)
+            end
+            # ⚠ THE SIGNED-ZERO CORNER OF THE FROZEN CLAIM, written down rather than dodged (the
+            # `-0.0` trap this codebase names on every structural byte-identity claim): a frozen
+            # head adds `wrap_angle(err)·0.0`, and `-0.0 + 0.0` is `+0.0`. So the freeze is `===`
+            # for every head this slice can reach and `==` at that one point.
+            @test head_slew(-0.0, 0.5, 0.4, 0.5, Inf, dt, Inf)[1] === 0.0
+            @test head_slew(-0.0, 0.5, 0.4, 0.5, Inf, dt, Inf)[1] == -0.0
+        end
+    end
 end
