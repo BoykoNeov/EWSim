@@ -12,14 +12,17 @@ an FOV budget item), and the successor slices 32 AND 33 both nominated:
 > so it needs a presence-gated head state with the strapdown else-arm VERBATIM."*
 > — `docs/plans/slice33.md`, Deferred (NAMED)
 
-**Status: GATE 2 COMPLETE (2026-08-09, suite 6295 → 6515). Gate 0 = 9 probes, gate 1 = the kernels,
-gate 2 = the seam + the loader + the wired testset. GATE 3 PENDING (the scenario, the client, the
-four proofs).
+**Status: COMPLETE (2026-08-09, suite 6215 → 6618). Gate 0 = 9 probes, gate 1 = the kernels,
+gate 2 = the seam + the loader + the wired testset, gate 3 = TWO scenarios + the client + the four
+proofs.
 ⚠⚠ BOTH HALVES OF THE BANKED DEFERRAL WERE REFUTED AT GATE 0 (§0.1, §0.2) and the live claim was
 found in a THIRD place (§0.4) — the slice-33 shape exactly, and the refutations are load-bearing.
 ⚠⚠ AND GATE 2 CORRECTED THREE OF GATE 0's OWN READINGS (§2.1, §2.3, §2.4) — including §0.2's, whose
-collapse is a property of the `:truth` head and NOT of the head that ships. Probe scripts in
-`M:\claud_projects\temp\slice34\`.**
+collapse is a property of the `:truth` head and NOT of the head that ships.
+⚠⚠ AND GATE 3's FIRST FINDING WAS A BLOCKING CLIENT DEFECT NO EXISTING TEST WOULD HAVE CAUGHT (§3.0,
+advisor, before any gate-3 code): §2.0's loader refusal leaves a HOLE the client falls through
+SILENTLY, and the failure is the stale-readout class's worst form — nothing in it is stale. Probe
+scripts in `M:\claud_projects\temp\slice34\`.**
 
 ---
 
@@ -624,6 +627,164 @@ measured three ways already. The three bit-identity claims are separate things a
 skipped.
 
 ---
+
+---
+
+## §3 — Gate 3 (COMPLETE, 2026-08-09 — 6515 → 6618, +103)
+
+The two shipped wires, the client, and the four proofs. **FIVE FINDINGS, and the FIRST ONE WAS A
+BLOCKING DEFECT NO EXISTING TEST WOULD HAVE CAUGHT.**
+
+### ⚠⚠ §3.0 — THE MARKER, AND IT EXISTS BECAUSE §2.0's REFUSAL LEAVES A HOLE (advisor, pre-code)
+
+§2.0 shipped the loader's refusal of `seeker_fov_deg` beside a head and called it physics. It is —
+but the refusal has a client-side consequence the plan never traced: `info[:seeker_fov_view]` is
+raised by `any(haskey(comp, :seeker_fov_deg))`, so **a gimbal wire raises `radome_view` (it HAS
+glass) and NOT `seeker_fov_view`.** In `_draw_airframe3d_hud` that means
+
+* `if _seeker_fov_view and _radome_view` → false
+* `elif _seeker_fov_view` → false
+* `elif _radome_view` → **TRUE**, and the wire lands in slice 26/27/28's RADOME CASCADE.
+
+⚠⚠ **AND THAT IS THE STALE-READOUT CLASS'S WORST FORM, BECAUSE NOTHING IN IT IS STALE.** A gimbal
+wire carries `radome_slope`, `radome_residual*`, `radome_slope_worst` and `omega_q`/`omega_r`, so
+every number that cascade reads is LIVE and PLAUSIBLE. It would print a fluent ring/quiet verdict
+about the GLASS on a wire whose whole subject is the HEAD — the wrong subject, from real telemetry —
+and **not one test would have failed.** ⇒ a NEW handshake marker `gimbal_view` (gated on
+`haskey(comp, :gimbal_tau_s)`), a HUD branch checked FIRST, and the no-marker MIRROR asserted in
+`slice34_ui_test.gd`: identical routing, identical dropped button, only `radome_view` surviving.
+⚠ **This made gate 3 a CORE edit, not client-only** — the plan's "what ships" list had no core row.
+⚠ The BUTTON needs no edit at either site (`radome_view` already drops it) — slice 33's finding, 2nd
+occurrence, and the OPPOSITE of slice 26's "the drop needs BOTH".
+
+### ⭐⭐ §3.1 — TWO SCENARIOS, BECAUSE A HEAD IS NOT A FIDELITY
+
+The headline is a comparison BETWEEN TWO WIRES and there is no way to make it one. `gimbal_tau_s` is
+AUTHORED (§2.3), and **no in-domain slider value removes a head** — τ → 0 does not, because §2.1
+measured the minimum-lag head still QUIET (0.03394 against strapdown's 0.93194). So the foil is a
+second YAML (`slice34_strapdown.yaml`), slice 22's precedent, and `slice34_verify.gd` flies BOTH
+through one `load_scenario` (the slice-7 pattern) so the ratio is measured on the wire rather than
+quoted across two runs. ⚠ It is NOT slice 33's wire with the window taken off: slice 33 ships
+`seeker_fov_deg: 21.0` and R̂ = −0.03, and a windowed arm's `rms r` is not a stability read.
+
+The twin is asserted KEY-FOR-KEY identical to the gimbal wire minus the three `gimbal_*` keys —
+28 comp keys, both positions, both velocities, seed, fidelity dict, dt and emit grid — because "same
+glass, same residual, same seed" is the whole claim and one drifted digit would make the 77× a
+comparison of two different missiles.
+
+### ⚠⚠ §3.2 — FINDING: THE DEFAULT WINDOW IS A FREE READ *ON THE APPROACH*, AND NOT BIT-IDENTICAL
+
+§2.1's CONTROL B measured a wide window bit-identical to the key being absent — at 40°. Gate 3 has to
+author a DEFAULT, and the two-run discipline forbids reading a stability verdict on an arm whose
+window binds, so it was re-measured over the WHOLE run rather than inherited:
+
+| `gimbal_fov_deg` | `max|Δpos|` vs the key absent |
+|---|---|
+| 2.5 | 1.05e−3 m |
+| 3.0 | 2.09e−9 |
+| 4.0 (**the default**) | **9.15e−11** |
+| 8.0 (**the domain ceiling**) | **0 EXACTLY** |
+
+⇒ **the CEILING is the free read and the DEFAULT is not** — the window IS reached in the last metres
+as the LOS unit vector swings at r → 0 (slice 33's endgame finding, in the head's currency). The
+claim the wire makes for its default is the one that is true: **0.00 % out at r > 200 m**, with
+`rms r`, `off_max` and `head_max` all matching the free arm to 1e−9.
+
+### ⚠⚠ §3.3 — FINDING: THE `held` TOLERANCE IS A FUNCTION OF THE WINDOW (the verifier's first run FAILED)
+
+`slice34_verify.gd` inherited slice 33's flat `|Δmiss| < 1e−6` for "this arm held" and **failed on the
+bracket-high arm: 4.319476 vs 4.298999 m.** Not a bug — a measurement. Everything a held arm pays it
+pays in the ENDGAME, and how early the endgame swing reaches the window depends on how WIDE the
+window is: the shipped 4° one is reached ~1e−10 m before CPA, the bracket's 2.05° one far enough out
+to move the CPA by **0.020 m**. Slice 33 could use one flat number because its windows were 21–40°; a
+slice whose whole subject is a detector window a couple of degrees wide cannot. ⇒ `miss_tol` is an
+ARGUMENT with a measured value per caller, and **the EXACT claim lives on the GATED quantities**
+(tracking error and head travel, both 1e−6, r > 200 m) — which is where it always belonged.
+
+### ⭐ §3.4 — FINDING: THE HANDOVER IS VISIBLE IN THE INDEX TRIPLE (the core testset's first draft FAILED)
+
+The gate-3 testset asserts the triple that IS the slice: `look_angle === head_angle_deg` (the glass
+used the HEAD's index) and `look_angle != look_body_deg` (never the NOSE's). The second assert
+**failed on exactly one tick.** A HANDED-OVER head initialises to the CLAMPED TRUTH look angles, so
+on the tick it is born the two ARE the same number, by construction; from tick 2 the servo tracks its
+own BENT measurement and they never agree again. ⇒ pinned as `same_ticks == [1]`, which is strictly
+STRONGER than the claim it replaces: it also proves the handover happened where the scenario says it
+does (§0.8 measured a CAGED head reading 18.117° instead — the strapdown requirement — so this
+distinguishes the two inits as well).
+
+### ⭐⭐ §3.5 — THE ISOLATION IS NEITHER SLICE 32's NOR SLICE 33's, AND IT IS THE CLEANEST OF THE THREE
+
+Slice 32 asserted `aero_sat == 0` in every arm (its wire had no glass); slice 33 could not (its free
+ringing arm saturates 80.7 % AND hits) and fell back to `defl_sat == 0`. Here the discriminating pair
+is the TWO WIRES at the SAME R̂, and there the ceiling separates cleanly:
+
+| | `aero_sat` (band) | `rms r` | miss |
+|---|---|---|---|
+| STRAPDOWN twin, R̂ = −0.18 | **48.36 %** | 0.93167 | 3.628 m |
+| GIMBALLED wire, R̂ = −0.18 | **0.00 %** | 0.01207 | 4.299 m |
+
+⇒ **the difference is the INDEX, not authority** — the gimbal arm is not flying a better-behaved
+airframe, it simply is not shaking. `defl_sat == 0` on every arm of both wires is what IS invariant
+(kept from slice 33; its `aero_sat` reasoning is the part that does not transfer).
+
+### The wire, frame-sampled (what `slice34_verify.gd` reads)
+
+⚠ The emit grid UNDER-READS every angle, and the numbers are quoted with their grid: head travel
+**17.190°** on frames against the core's per-tick **18.117°**, and the headline **77.2×** on frames
+against **78.9×** per tick.
+
+| arm | `rms r` | tracking err | head travel | miss | out |
+|---|---|---|---|---|---|
+| gimbal FREE, R̂ = −0.33 | 0.05931 | 1.598° | 17.190° | 2.565 | 0 % |
+| gimbal FREE, R̂ = −0.24 | 0.02522 | 1.831° | 17.190° | 1.608 | 0 % |
+| gimbal FREE, R̂ = −0.18 | **0.01207** | 1.954° | 17.190° | 4.299 | 0 % |
+| gimbal FREE, R̂ = −0.16 | **0.35348** | 5.235° | **20.616°** | 7.033 | 0 % |
+| gimbal FREE, R̂ = −0.03 | 0.88474 | 5.916° | 23.600° | 5.339 | 0 % |
+| **shipped** (4°, −0.18) | 0.01207 | 1.954° | 17.190° | 4.299 | 0 % |
+| 4°, R̂ = −0.16 | 0.29005 | 89.885° | 17.190° | **269.2** | 14.83 % |
+| 4°, R̂ = −0.03 | **NaN (0 band)** | 73.600° | 17.190° | **3703.7** | 71.53 % |
+| STRAPDOWN, R̂ = −0.27 | 0.03090 | — | — | 0.662 | 0 % |
+| STRAPDOWN, R̂ = −0.24 | 0.70969 | — | — | 2.401 | 0 % |
+| **STRAPDOWN, R̂ = −0.18** | **0.93167** | — | — | 3.628 | 0 % |
+
+Predicate bracket: 1.8541° BREAKS (47.6 % out, 201.2 m, lock lost t = 5.808 s / r = 2947.6 m) and
+2.0541° HOLDS, around a MEASURED 1.9541°. Replay `max|Δpos| = 0.000000 m` over 800 frames.
+
+### The four proofs (convention 14)
+
+* **`slice34_verify.gd`** — 17 arms across BOTH wires (one `load_scenario`), 8 phases, exit 0.
+* **`slice34_ui_test.gd`** — 10 teeth, SEVENTEEN-way value-guard, exit 0. The load-bearing one is
+  §3.0's HOLE, asserted structurally (identical routing, only `radome_view` surviving) plus the
+  two verdict helpers called on the SAME numbers and required to DISAGREE.
+* **`Sandbox.tscn` headless smoke-load** on BOTH wires, each reaching `EWSIM_SERVER_DONE` with no
+  script errors. ⚠ The smoke script's own first draft polled for `DONE` *while the client was still
+  attached* and reported a false negative on a healthy wire — the server prints it when its one
+  client DISCONNECTS.
+* **THREE windowed shots, one per verdict branch** (`_draw` never runs headless):
+  * `quiet` — "SELF-INDEXED — the loop is quiet", head 12.7° vs nose 14.6°, err 1.93° vs window
+    4.0°, LEFT +2.07°, "head: TRACKING".
+  * `broken` — "TRACK LOST — the head let go", head 16.9° vs nose **29.0°** (⭐ the index pair
+    diverging as the frozen head is left behind by a runaway nose — the mechanism, in one line),
+    err 12.13° vs 4.0°, LEFT −8.13°, "head: HOLDING — no error signal since the break".
+  * `ringing` — "RINGING — the index is not enough", body yaw rate **+0.717 rad/s ← RINGING**,
+    head 17.9° vs nose 23.3°, err 5.37° vs window 8.0°, LEFT +2.63°.
+  ⚠⚠ **AND THE FIRST DRAFT OF TWO OF THEM WAS AIMED WRONG, IN TWO DIFFERENT WAYS.** (i) 5000 m is
+  the BROKEN arm's gate (slice 33's reason, intact: the CPA is 3703.7 m so a lower gate would never
+  trigger, and the break is at 5216.9 m so 5000 is just past the MECHANISM). On a HOLDING arm that
+  is t ≈ 2.4 s and **the lead has not built yet** — the first quiet shot read head 2.99° / error
+  0.32° against the 17.19 / 1.95 the verifier measures, i.e. it captured the engagement *before the
+  quantities the slice is about exist*. (ii) The ringing shot aimed at R̂ = −0.16 read a peak-hold of
+  **0.123**, under the 0.5 the "← RINGING" tag needs, so the HUD printed the QUIET verdict on the
+  arm the shot exists to show ringing. ⇒ **a shot must be aimed at the STATE being claimed, not at a
+  shared range or the first rung that qualifies** — slice 19's rule, twice, in one gate.
+
+### Convention 2, ON THE WIRE
+
+`slice25/26/27/28/29/30/31/32/33_verify.gd` all re-run against live servers, exit 0. All **34**
+UI tests re-run green (33 prior + the new one) — Sandbox.gd gained a marker, a latch, a verdict
+helper, a HUD block and two dispatch sites, so the whole client regression surface was re-proven.
+⚠ Gate 3 touched a CORE file (`_airframe_view_info`), unlike slice 33's, so "reading the diff is not
+enough" is not a formality here.
 
 ## What ships (gates 1–3, PLANNED)
 

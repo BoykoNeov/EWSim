@@ -4625,6 +4625,147 @@ HANDOVER BASKET as an authored quantity; and everything 26–32 named and did no
 
 ---
 
+**Slice 34 — THE GIMBAL: THE HEAD POINTS WHERE THE GLASS SAYS THE TARGET IS (HANDOFF §11 Tier-A)** —
+the TWELFTH slice of the bank-to-turn / 3-D arc, and the successor slices 32 AND 33 both nominated.
+⚠ **BOTH HALVES OF THE BANKED DEFERRAL WERE REFUTED AT GATE 0** and the live claim was found in a
+THIRD place — the slice-33 shape exactly, and the refutations are load-bearing.
+
+Slices 26–33 built the parasitic loop on ONE geometric fact: the radome bends the ray by an amount set
+by the LOOK ANGLE, and the look angle is the LOS measured off the missile's **own nose** — a quantity
+the missile can only move by ROTATING, which is exactly why slice 26 is a BODY-RATE instability.
+**A GIMBALLED SEEKER BREAKS THAT IDENTITY.** Its head has its own pointing angles, the ray passes
+through the part of the dome the head is AIMED at, and — this is the whole slice — **the head is aimed
+by the very measurement the dome just bent.** The index of the glass becomes a FIXED POINT of the
+glass, so part of the bend's own variation is absorbed by the head's pointing instead of being handed
+to guidance: slice 26's loop is partly RE-CLOSED THROUGH THE HEAD, where its sign is NEGATIVE.
+
+> **THE LESSON, IN ONE SENTENCE.** A strapdown seeker's radome index is handed to it by the airframe;
+> a gimballed seeker's is handed to it by its own last measurement — and an index that looks at itself
+> is an index that fights back.
+
+⭐⭐ **THE HEADLINE IS A COMPARISON BETWEEN TWO WIRES, AND THAT IS WHY THE SLICE SHIPS TWO SCENARIOS**
+(slice 22's precedent). At R̂ = −0.18 on glass R₀ = −0.03 / A = −0.15, seed 32, the same crossing
+target: the STRAPDOWN twin rings at `rms r` **0.93167** while the GIMBALLED wire sits at **0.01207** —
+**77.2×** frame-sampled, **78.9×** per tick — and BOTH HIT (3.628 vs 4.299 m), the arc's standing fact
+since slice 26. ⚠ A head is **not a fidelity**: `gimbal_tau_s` is AUTHORED and NO in-domain slider
+value removes a head. τ → 0 does not — the head that ships tracks its own BENT, one-tick-delayed
+measurement, so at τ = 0 it lands on the PREVIOUS tick's bent angle rather than this tick's
+LOS-vs-body, and gate 2 measured it STILL QUIET (0.03394). ⭐⭐ **THAT IS ALSO THE ISOLATION: at zero
+servo lag the margin is already there IN FULL ⇒ THE MARGIN IS BOUGHT BY THE INDEX, not by the servo.**
+
+⭐ **THE ONSET WALKS TWO RUNGS OF THE SAME LADDER, FROM THE SAME SLIDER**, quoted BRACKET TO BRACKET
+and never as one number (slice 30's "sufficient, never tight"): **(−0.27, −0.24] strapdown** against
+**(−0.18, −0.16] gimballed**. The gap those two admit spans 0.06 to 0.11, so a single "≈0.08" would be
+a number neither wire supports. ⭐ **AND `head_max` STEPS AT THE SAME PLACE** — flat at 17.190° (frame;
+18.117° per tick) through every quiet arm and 20.616° at the first ringing one — a SECOND, INDEPENDENT
+tell from a DIFFERENT quantity, which is what makes the bracket a MEASUREMENT and not a threshold read
+off the metric that defined it.
+
+⚠ **AND IT IS NOT FREE, IN THE ONE CURRENCY A GIMBAL HAS.** The margin is bought by the head's pointing
+DECOUPLING from the true LOS, and the size of that decoupling is precisely the tracking error the
+head's own detector must cover. **SLICE 33's SINGLE NUMBER SPLITS IN TWO**: a STOP (the head's TRAVEL
+about the body, which reproduces slice 33's excursion — a RESTATEMENT, not a new claim) and a DETECTOR
+WINDOW (about the head axis — NEW). Gate 2 measured that the two are ONE BUDGET: a clamped head cannot
+reach the LOS, so its deficit is spent out of the detector's allowance
+(`off_head ≈ (travel − stop) + free tracking error`). ⭐⭐ **SLICE 32's PREDICATE RETURNS IN THE NEW
+CURRENCY — `held ⟺ tracking error < detector window`** — bracketed to 0.005° on the quiet arm and
+CONSERVATIVE by ~1 % on the ringing one, with the two sides from DIFFERENT RUNS (the error off a FREE
+arm, the verdict off a WINDOWED one). ⭐ **THE RING IS SPENT IN DETECTOR WINDOW, 3.7×** (1.598° →
+5.916°), so through the shipped 4° window the SAME slider that quiets the loop also keeps the track.
+
+⚠⚠ **THE TWO-RUN DISCIPLINE IS THE SHIPPED STRUCTURE, AND THE LIST IS THREE QUANTITIES — THE THIRD
+FAILS QUIETLY.** A broken window FREEZES the index (no error signal, no slew — the head HOLDS), a
+frozen index produces a CONSTANT bend, and a constant bend is QUIET at every R̂. So on a windowed arm
+`rms r` FALLS and the tracking error RUNS AWAY to ~90° — both visibly wrong — but **`head_angle_deg`
+FREEZES at the value it held when the track broke**, reading the QUIET arms' 17.190° against the ring's
+actual 20.616°: a plausible number, in range, on the LOW side. A verifier reading the excursion off a
+windowed run would report that the ring costs nothing.
+
+⚠⚠ **GATE 3's FIRST FINDING WAS A BLOCKING CLIENT DEFECT NO EXISTING TEST WOULD HAVE CAUGHT** (advisor,
+before any gate-3 code). Gate 2's loader refuses `seeker_fov_deg` beside a head — a gimballed seeker has
+NO body-fixed window — so a gimbal wire raises `radome_view` (it HAS glass) and **NOT** `seeker_fov_view`:
+both of the client's FOV branches fail their conjunction and slice 26/27/28's RADOME CASCADE takes it.
+⚠ **That failure is the stale-readout class's WORST form, because NOTHING IN IT IS STALE** — a gimbal
+wire carries `radome_slope`, `radome_residual*`, `radome_slope_worst` and `omega_q`/`omega_r`, so every
+number that cascade reads is LIVE and PLAUSIBLE. It would print a fluent ring/quiet verdict about the
+GLASS on a wire whose whole subject is the HEAD, and not one test would have failed. ⇒ a NEW handshake
+marker **`gimbal_view`** (gated on `haskey(comp, :gimbal_tau_s)`) and a HUD branch checked FIRST, with
+the no-marker MIRROR asserted in the UI test. ⚠ This made gate 3 a **CORE edit**, unlike slice 33's.
+⚠ The BUTTON needs no edit at either site (`radome_view` already drops it) — slice 33's finding, 2nd
+occurrence, and the OPPOSITE of slice 26's "the drop needs BOTH".
+
+⚠ **THE DEFAULT WINDOW IS A FREE READ *ON THE APPROACH* AND NOT BIT-IDENTICAL — measured, not
+inherited.** `max|Δpos|` against the key being absent runs 1.05e−3 / 2.09e−9 / **9.15e−11** / **0
+EXACTLY** at 2.5 / 3.0 / 4.0 (the default) / 8.0° (the domain ceiling): the window IS reached in the
+last metres as the LOS unit vector swings at r → 0 (slice 33's endgame finding, in the head's
+currency). ⇒ the CEILING is the free read; the default's claim is **0.00 % out at r > 200 m**.
+
+⚠⚠ **AND THE `held` TOLERANCE IS A FUNCTION OF THE WINDOW — the verifier's first run FAILED on it**
+(4.319476 vs 4.298999 m at a flat 1e−6 inherited from slice 33). Everything a held arm pays it pays in
+the ENDGAME, and how early the endgame swing reaches the window depends on how WIDE the window is: the
+shipped 4° one moves the CPA by ~1e−10 m, the bracket's 2.05° one by **0.020 m**. Slice 33 could use
+one flat number because its windows were 21–40°; a slice whose subject is a detector window a couple of
+degrees wide cannot. The EXACT claim lives on the GATED quantities (tracking error and head travel, both
+1e−6, r > 200 m).
+
+⭐ **THE HANDOVER IS VISIBLE IN THE INDEX TRIPLE — the core testset's first draft FAILED on exactly one
+tick.** `look_angle === head_angle_deg` (the glass used the HEAD's index) and `look_angle != look_body_deg`
+(never the NOSE's) hold on every tick but the FIRST: a HANDED-OVER head initialises to the CLAMPED TRUTH
+look angles, so on the tick it is born the two ARE the same number, by construction. Pinned as
+`same_ticks == [1]`, which is strictly STRONGER — it also proves the handover happened where the
+scenario says it does (§0.8 measured a CAGED head reading 18.117°, the strapdown requirement, instead).
+
+⭐⭐ **THE ISOLATION IS NEITHER SLICE 32's NOR SLICE 33's, AND IT IS THE CLEANEST OF THE THREE.** The
+discriminating pair is the TWO WIRES at the SAME R̂: the strapdown twin saturates the slice-19 aero
+ceiling **48.36 %** of its band while the gimballed wire touches it **0.00 %** ⇒ **the difference is the
+INDEX, not authority** — the gimbal arm is not flying a better-behaved airframe, it simply is not
+shaking. `defl_sat == 0` on every arm of both wires is what IS invariant (kept from slice 33; its
+`aero_sat` reasoning is the part that does not transfer).
+
+Class **4a** (the TENTH consecutive RNG-live slice — the head is a DETERMINISTIC SERVO on an existing
+measurement, so NO new draw; draw count asserted both bounds at gate 2). **NO new rung, cap or
+instability.** ONE live slider **`gimbal_fov_deg` ∈ [1, 8]°** on the head wire plus 27/28/33's
+`radome_slope_est` (the two halves of ONE comparison — `window` vs `tracking error(R̂)`, slice 33's pair
+in the new currency); the twin carries the SAME R̂ slider over the SAME domain, which is what makes
+"walk it on both wires" one experiment. `gimbal_tau_s` AUTHORED — a **CONFOUNDED** lever, not a dead one
+(the sag is monotone everywhere and AT THE LINE it crosses the verdict) — and `gimbal_stop_deg` AUTHORED
+as a RESTATEMENT. Button **DROPPED** (10th: 16, 26, 27, 28, 29, 30, 31, 32, 33, 34).
+
+**Four proofs green.** `slice34_verify.gd` (17 arms across BOTH wires through one `load_scenario`, 8
+phases, exit 0); `slice34_ui_test.gd` (10 teeth, SEVENTEEN-way value-guard, exit 0);
+`Sandbox.tscn` headless smoke-load on BOTH wires reaching `EWSIM_SERVER_DONE`; **three windowed shots,
+one per verdict branch** — `quiet` ("SELF-INDEXED — the loop is quiet", head 12.7° vs nose 14.6°),
+`broken` ("TRACK LOST — the head let go", head 16.9° vs nose **29.0°** — ⭐ the index pair diverging as
+the frozen head is left behind by a runaway nose, the mechanism in one line), and `ringing`
+("RINGING — the index is not enough", body yaw rate +0.717 rad/s ← RINGING). ⚠⚠ **TWO OF THE THREE WERE
+AIMED WRONG FIRST**: 5000 m is the BROKEN arm's gate, but on a HOLDING arm that is t ≈ 2.4 s and the
+lead has not built yet (the first quiet shot read head 2.99° / error 0.32° against the 17.19 / 1.95 the
+verifier measures — it captured the engagement before the quantities the slice is about exist); and the
+ringing shot aimed at R̂ = −0.16 read a peak-hold of 0.123, under the 0.5 the "← RINGING" tag needs, so
+the HUD printed the QUIET verdict on the arm the shot exists to show ringing. **Aim at the STATE being
+claimed, not at a shared range or the first rung that qualifies.**
+
+**Slices 1–33 byte-identical**, proven ON THE WIRE rather than off the diff (gate 3 touched a core file,
+so that is not a formality): `slice25/26/27/28/29/30/31/32/33_verify.gd` all re-run against live
+servers, exit 0; all **34** UI tests re-run green.
+
+Run it: `pwsh tools/julia.ps1 --project=core tools/server.jl scenarios/slice34_gimbal.yaml`, then
+`godot --headless --path clients/godot --script res://net/slice34_verify.gd` (it switches to
+`scenarios/slice34_strapdown.yaml` itself). The UI test needs no server.
+
+**Deferred (NAMED):** **THE HANDOVER BASKET as an authored quantity** (§0.8 promoted it from slice 32's
+deferral to a LIVE constraint: a caged head's window requirement IS the strapdown one until it acquires;
+what ships is a HANDED-OVER head, stated as a §1 condition); **A RATE-LIMITED HEAD** (`gimbal_rate_max`
+exists in the gate-0 probe and was NEVER EXERCISED — the natural home of a slew-rate-limited lock loss);
+**MEMORY TRACK / RE-ACQUISITION** (the break is TERMINAL here — a real head coasts on its last inertial
+rate; slice 32's α-β choice, one layer out); **A RECTANGULAR / PER-AXIS STOP** (gate 1 wrote down that
+its circular shape rests on a species argument, because no flying arm had ever bound it — gate 2's §2.5
+bound it for the first time); **THE HEAD'S OWN GYRO** (a rate-stabilized head measures inertial LOS rate
+directly — the classical reason gimbals exist, and a DIFFERENT mechanism from anything here); plus
+everything 26–33 named and did not spend.
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

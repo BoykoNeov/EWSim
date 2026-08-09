@@ -157,6 +157,26 @@ var _radome_view := false          # handshake radome_view — the DROP-THE-BUTT
 # `radome_residual`/…, none of which a FOV wire has, and reading them would print 0.0 into a label —
 # the stale-readout class this arc has caught seven times.
 var _seeker_fov_view := false      # handshake seeker_fov_view — the DROP-THE-BUTTON marker, 3rd use
+# Slice-34 GIMBAL: a missile carrying an authored :gimbal_tau_s. ⚠⚠ THIS MARKER EXISTS BECAUSE THE
+# LOADER'S REFUSAL LEAVES A HOLE THIS FILE WOULD FALL THROUGH SILENTLY. `scenario.jl` refuses
+# `seeker_fov_deg` beside a head — a gimballed seeker has NO body-fixed window, its body-fixed limit
+# is the mechanical STOP — so a gimbal wire raises `radome_view` (it HAS glass) and NOT
+# `seeker_fov_view`, and without a marker of its own the dispatch below would fall past BOTH FOV
+# branches into slice 26/27/28's RADOME cascade. That failure is worse than the stale-readout class
+# this arc has caught eight times, because NOTHING IN IT IS STALE: a gimbal wire carries
+# `radome_slope`, `radome_residual*`, `radome_slope_worst` and `omega_q`/`omega_r`, so every number
+# the cascade reads is LIVE and PLAUSIBLE. It would print a confident ring/quiet verdict about the
+# GLASS on a wire whose whole subject is the HEAD — the wrong subject, from real telemetry, and not
+# one test would fail.
+# ⚠ The BUTTON needs no edit at either site (`radome_view` is raised here too and already drops it —
+# slice 33's finding, second occurrence); what this marker selects is the HUD BRANCH ALONE.
+var _gimbal_view := false          # handshake gimbal_view — 4th marker of the drop-the-button family
+# Slice-34 DISPLAY-ONLY LATCH, the head's own equivalent of `_fov_lost` and NOT a reuse of it: the two
+# read DIFFERENT core booleans (`gimbal_valid`, about the DETECTOR window off the HEAD axis, against
+# `seeker_valid`, about the body-fixed window off the NOSE) and a gimbal wire ships only the first.
+# ⚠ Sharing the variable would be safe today and wrong the moment a wire carried both — which the
+# loader refuses, so the separation is what keeps that refusal visible in the client too.
+var _gimbal_lost := false
 # Slice-27 DISPLAY-ONLY peak-hold on the body rate (see _airframe3d_on_state): a limit cycle crosses
 # zero twice per cycle, so an instantaneous verdict mislabels half the frames. Instrument, not physics.
 var _radome_qpeak := 0.0
@@ -486,6 +506,11 @@ func _on_scenario(obj: Dictionary) -> void:
 	# to make _enter_airframe3d_mode DROP the shared button, because slice 32 has no fidelity rung
 	# either (the lesson is the FOV slider against the crossing-speed slider). Option-P′, third use.
 	_seeker_fov_view = bool(obj.get("seeker_fov_view", false))
+	# Slice-34 GIMBAL discriminator (a missile carrying an authored :gimbal_tau_s). Same shape as the
+	# three above — it does NOT pick a view, the slice-23 3-D airframe view is reused wholesale — but
+	# unlike them its job is NOT the button (see `_gimbal_view`): `radome_view` already drops that.
+	# Its job is the HUD BRANCH, which is checked FIRST and is a SWITCH ahead of the radome cascade.
+	_gimbal_view = bool(obj.get("gimbal_view", false))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -1306,6 +1331,19 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 		if float(_telemetry[_af3d_missile + ".seeker_valid"]) < 0.5 \
 		   and float(_telemetry.get(_af3d_missile + ".los_range", 0.0)) > 200.0:
 			_fov_lost = true
+	# SLICE 34 — the HEAD's track-break latch. ⚠ AN INDEPENDENT `if`, NOT AN `elif` OR AN `or` ON THE
+	# LINE ABOVE, which is slice 33's own finding one slice later: a chained dispatch would freeze one
+	# instrument the moment the other's key appeared. The two keys never co-occur (the loader refuses
+	# it), so today the branches are exclusive anyway — but the reason they are separate is that
+	# nothing here should DEPEND on that refusal holding.
+	# ⚠ RANGE-GATED at r > 200 m for the reason `_fov_lost` gives and gate 2 re-measured in this
+	# quantity: EVERY held arm leaves its detector window in the last metres as the LOS unit vector
+	# swings through a large angle at r → 0, and latching on that would paint every clean intercept a
+	# lost track. The core's `gimbal_valid` is the verdict; the client only remembers it (convention 13).
+	if _telemetry.has(_af3d_missile + ".gimbal_valid"):
+		if float(_telemetry[_af3d_missile + ".gimbal_valid"]) < 0.5 \
+		   and float(_telemetry.get(_af3d_missile + ".los_range", 0.0)) > 200.0:
+			_gimbal_lost = true
 	if _t3d_layer == null or _t3d_los_mesh == null:
 		return
 	var mpos: Array = _entities.get(_af3d_missile, {}).get("pos", [0, 0, 0])
@@ -1456,6 +1494,41 @@ func _budget_verdict_label(lost: bool, margin: float, r: float, rhat: float, aim
 		return "AIMED AT R₀+2A — budget intact"
 	return "RING IS SPENDING THE BUDGET"
 
+# SLICE 34 — THE GIMBAL. The head's verdict, and it exists because slice 33's would compare THE WRONG
+# PAIR on this wire — which is the plan's own gate-3 warning, made structural.
+# ⚠⚠ WHAT MOVED. Under a head there are TWO limits and they are read against TWO DIFFERENT ANGLES:
+# the head's TRAVEL against the mechanical STOP (which is the ENGAGEMENT's lead, i.e. slice 33's
+# excursion RESTATED), and the head's TRACKING ERROR against the DETECTOR window (new, and where the
+# margin the self-referential index buys is actually paid for). Slice 33's `_budget_verdict_label`
+# compares a body look angle against a body window and knows nothing about either. A HUD that kept it
+# would report a budget that is not the one being spent.
+# ⭐ THE COMPARISON IS THE LESSON: `gimbal_fov_margin_deg` — the SIGNED detector budget the core
+# ships, slice 18's `terrain_clearance_m` / slice 33's `seeker_fov_margin_deg` shape, THE SIGN IS THE
+# VERDICT — against the ring that is spending it. Both arrive from the CORE as numbers; the client
+# evaluates no geometry and no stability threshold (convention 13; |R_crit| moves with N and ρ, and on
+# this wire it moves with the head as well, which is the whole point).
+# ⚠⚠ FOUR STATES, AND THE ORDER IS LOAD-BEARING RATHER THAN TIDY. `lost` WINS OUTRIGHT because of the
+# metric inversion gate 2 measured in this slice's own quantities: a broken window FREEZES the index
+# (no error signal, no slew — the head HOLDS), a frozen index produces a CONSTANT bend, and a constant
+# bend is QUIET at every R̂. So on a broken arm the ring meter reads calm while the missile misses by
+# kilometres, and a ring-first ordering would print "the loop is quiet" on it.
+# ⚠ THE RANGE GATE IS AN ARGUMENT FOR THE SAME REASON SLICE 33 NEEDED ONE: every held arm leaves its
+# detector window in the last metres (r = 0.2–9 m) as the LOS unit vector swings, so without the gate
+# the "breaking" state fires at the instant of a CLEAN INTERCEPT.
+# ⚠ EXTRACTED, LIKE `_fov_verdict_label` / `_budget_verdict_label` / `_gyro_verdict_label`, BECAUSE
+# ANYTHING THE VERDICT COMPUTES INSIDE `_draw` HAS NO HEADLESS PROOF — `_draw` never runs under
+# `--headless` (convention 14; slice 31's aim-point comparison shipped WRONG and only the windowed
+# shot caught it). The UI test calls this directly, including the endgame case.
+# ⚠ WIDTHS ARE MEASURED: ~34 characters at 20 px from `vp.x − 430`. All four are counted (30/31/32/31).
+func _gimbal_verdict_label(lost: bool, margin: float, r: float, ringing: bool) -> String:
+	if lost:
+		return "TRACK LOST — the head let go"
+	if margin < 0.0 and r > 200.0:
+		return "ERROR PAST THE WINDOW — breaking"
+	if ringing:
+		return "RINGING — the index is not enough"
+	return "SELF-INDEXED — the loop is quiet"
+
 func _gyro_verdict_label(ringing: bool, eff: float, worst: float) -> String:
 	if ringing:
 		return "GYRO — RINGING: loop sees R̂(1+s)"
@@ -1544,6 +1617,62 @@ func _draw_budget_hud_lines(vp: Vector2) -> void:
 	draw_string(_font, Vector2(vp.x - 430, 176), "seeker: %s" % ("COASTING — no measurement since the break" if _fov_lost else ("MEASURING" if valid else "outside the window")),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _fov_lost else Color(0.55, 1.00, 0.65))
 
+# SLICE 34 — the five lines that ARE the head, split out so the label chain stays readable (slice
+# 32/33's precedent, and the same measured width: ~55 characters at 15 px from `vp.x − 430`; every
+# line below is counted).
+# ⭐⭐ THE PAIR A STUDENT MUST SEE IS *WHERE THE GLASS IS INDEXED*. That is the entire slice: a
+# strapdown seeker's radome index is handed to it by the AIRFRAME (the LOS off the nose), a gimballed
+# seeker's by its OWN LAST MEASUREMENT (the head's pointing). Both numbers are on screen — the head's
+# angle, which is the index the glass ACTUALLY used, and `look_body_deg`, the angle the NOSE is at and
+# therefore the one a strapdown seeker WOULD have used. On the twin wire the second number is the
+# only one that exists and it swings to 22.1° while it rings; here it stays near the lead.
+# ⚠ `head_angle_deg` AND `look_angle` CARRY THE SAME NUMBER UNDER A HEAD, BY CONSTRUCTION — the seam
+# sets `look_az, look_el = head_az, head_el` before the bend is taken, so slice 26's key ships the
+# HEAD's index. This block reads `head_angle_deg` because that is the name that says what it is; the
+# identity is asserted core-side rather than relied on silently here.
+# ⭐ AND THE TWO LIMITS ARE DRAWN AGAINST THE TWO DIFFERENT ANGLES THEY ARE READ AGAINST — the
+# TRAVEL against the STOP (slice 33's excursion, restated) and the TRACKING ERROR against the
+# DETECTOR window (new). Drawing both is what stops the HUD comparing the wrong pair; drawing them on
+# separate lines is what stops a student pairing them by accident.
+# ⚠ EVERY NUMBER ARRIVES FROM THE CORE (convention 13). In particular the BUDGET is the core's own
+# `gimbal_fov_margin_deg` and never `window − error` computed here: gate 2 measured that those two
+# keys DO NOT reconstruct it on a negative slider (the window ships AUTHORED, the margin uses the
+# CLAMPED one), which is slice 33's divergence and the reason the key exists.
+# ⚠ THE RANGE AND CROSS-RANGE LINES ARE NOT HERE — the shared block above draws them at y = 66/88.
+func _draw_gimbal_hud_lines(vp: Vector2) -> void:
+	# ⚠ THE CHANNEL COMES FROM THE SHARED HELPER, NOT A HARDCODED KEY (slice 33's reason, inherited):
+	# this wire has a slope RIPPLE so the lead — and hence the ring — is in AZIMUTH and this reads
+	# `omega_r`, but the branch is reachable by any head on any glass, and a rate line on the wrong
+	# channel would print a calm number under the peak-hold's orange RINGING tag.
+	var chan := _ring_channel_key()
+	var rr := float(_telemetry.get(_af3d_missile + chan, 0.0))
+	var yaw_ch := chan == ".omega_r"
+	var head := float(_telemetry.get(_af3d_missile + ".head_angle_deg", 0.0))
+	var body := float(_telemetry.get(_af3d_missile + ".look_body_deg", 0.0))
+	var stop := float(_telemetry.get(_af3d_missile + ".gimbal_stop_deg", 0.0))
+	var off := float(_telemetry.get(_af3d_missile + ".head_off_deg", 0.0))
+	var win := float(_telemetry.get(_af3d_missile + ".gimbal_fov_deg", 0.0))
+	var marg := float(_telemetry.get(_af3d_missile + ".gimbal_fov_margin_deg", 0.0))
+	# WHAT IS SPENDING. Coloured by the peak-hold, for the reason slice 27 settled: a limit cycle
+	# crosses zero twice per cycle, so an instantaneous verdict mislabels half the frames.
+	draw_string(_font, Vector2(vp.x - 430, 110), "body %s rate %s: %+.3f rad/s%s" % ["yaw" if yaw_ch else "pitch", "r" if yaw_ch else "q", rr, "   ← RINGING" if _radome_qpeak > 0.5 else ""],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _radome_qpeak > 0.5 else COL_TICK)
+	# ⭐⭐ THE MECHANISM, AS TWO NUMBERS: where the glass is indexed, and where it would have been.
+	draw_string(_font, Vector2(vp.x - 430, 132), "glass indexed at HEAD %.1f°   (the nose is at %.1f°)" % [head, body],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.45, 0.90, 1.00))
+	# THE PRICE — the detector budget, SIGNED, and it is what the head's decoupling is spent from.
+	draw_string(_font, Vector2(vp.x - 430, 154), "detector err %.2f° vs window %.1f°   LEFT %+.2f°" % [off, win, marg],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45) if marg >= 0.0 else Color(1.00, 0.62, 0.30))
+	# THE OTHER LIMIT, against the OTHER angle — slice 33's excursion, restated as head travel.
+	draw_string(_font, Vector2(vp.x - 430, 176), "head travel %.1f° of %.0f° stop   ← the lead it covers" % [head, stop],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	# THE STATE — coloured by the LATCH rather than the instantaneous flag, for the reason slice 32
+	# gives: a runaway geometry swings the LOS back through the window and this would blink green on a
+	# missile that lost its target seconds ago.
+	var valid := float(_telemetry.get(_af3d_missile + ".gimbal_valid", 1.0)) >= 0.5
+	draw_string(_font, Vector2(vp.x - 430, 198), "head: %s" % ("HOLDING — no error signal since the break" if _gimbal_lost else ("TRACKING" if valid else "outside the detector window")),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _gimbal_lost else Color(0.55, 1.00, 0.65))
+
 func _draw_airframe3d_hud() -> void:
 	# The 3-D layer renders the world; the 2-D canvas only LABELS it (the terrain-view discipline).
 	# The headline: the plant, the cross-range miss (los_range), and the out-of-plane excursion.
@@ -1581,7 +1710,29 @@ func _draw_airframe3d_hud() -> void:
 	# residual and the aim point would all vanish from a view whose whole subject is what the ring
 	# costs. The stale-readout class this arc has caught eight times, in its mirror form: not a stale
 	# number printed confidently, but the LIVE half of a composition never drawn.
-	if _seeker_fov_view and _radome_view:
+	# SLICE 34 — THE HEAD, checked FIRST and a SWITCH ahead of everything below ("check the NEW key
+	# first", 7th occurrence). ⚠⚠ AND THE REASON IS NOT SYMMETRY WITH 32/33 — IT IS THAT WITHOUT IT
+	# THIS WIRE LANDS IN THE RADOME CASCADE AND IS CONFIDENTLY WRONG. The loader refuses
+	# `seeker_fov_deg` beside a head, so a gimbal wire raises `radome_view` and NOT `seeker_fov_view`:
+	# both branches below fail their conjunction and the `elif _radome_view` arm takes it. Every number
+	# that arm reads is LIVE here (this wire HAS glass), so it would print a fluent verdict about the
+	# GLASS on a wire whose subject is the HEAD — the stale-readout class's worst form, in which
+	# nothing is stale and the subject is simply wrong.
+	# ⚠ THE BUTTON NEEDS NO EDIT AT EITHER SITE (`radome_view` already drops it) — slice 33's finding,
+	# second occurrence, and the OPPOSITE of slice 26's "the drop needs BOTH sites".
+	if _gimbal_view:
+		lbl = _gimbal_verdict_label(_gimbal_lost,
+				float(_telemetry.get(_af3d_missile + ".gimbal_fov_margin_deg", 0.0)),
+				float(_telemetry.get(_af3d_missile + ".los_range", 0.0)),
+				_radome_qpeak > 0.5)
+		# ⚠ THE COLOUR RIDES THE LATCH, NOT THE PEAK-HOLD, AND THAT IS THE TWO-RUN DISCIPLINE IN ONE
+		# CHOICE: on this wire a RINGING head can still hold its window and HIT (the free arm at
+		# R̂ = −0.16 rings at 0.353 and lands at 7.0 m), so a peak-hold colour would paint a successful
+		# intercept orange — while a BROKEN arm's ring meter reads CALM, because a frozen index makes a
+		# constant bend. The ring is named in the LABEL, where it belongs; the colour tracks the thing
+		# that actually ended the engagement.
+		col = Color(1.00, 0.62, 0.30) if _gimbal_lost else Color(0.45, 0.90, 1.00)
+	elif _seeker_fov_view and _radome_view:
 		lbl = _budget_verdict_label(_fov_lost,
 				float(_telemetry.get(_af3d_missile + ".seeker_fov_margin_deg", 0.0)),
 				float(_telemetry.get(_af3d_missile + ".los_range", 0.0)),
@@ -1734,7 +1885,13 @@ func _draw_airframe3d_hud() -> void:
 	# `q` meter would show a calm number in front of a shaking missile, slice 28's catch) and what is
 	# being spent (`seeker_fov_margin_deg`, this slice's one new number). Slice 32's block draws only
 	# the second half and the whole radome cascade draws only the first; neither can show a budget.
-	if _seeker_fov_view and _radome_view:
+	# SLICE 34 — THE HEAD, checked FIRST here too and for the same reason (the two chains must agree,
+	# or the headline would name the head while the body lines described the glass). It draws FIVE
+	# lines rather than four because a gimbal has TWO limits read against TWO DIFFERENT ANGLES, and
+	# collapsing them is exactly the defect the plan's gate-3 note predicted.
+	if _gimbal_view:
+		_draw_gimbal_hud_lines(vp)
+	elif _seeker_fov_view and _radome_view:
 		_draw_budget_hud_lines(vp)
 	elif _seeker_fov_view:
 		_draw_fov_hud_lines(vp,
@@ -2574,6 +2731,7 @@ func _on_reset_pressed() -> void:
 	_aero_sat_now = false
 	_post_stall_now = false               # slice-22: the stall tell restarts with the re-launch too
 	_fov_lost = false                     # slice-32: the track-break latch restarts with the re-launch
+	_gimbal_lost = false                  # slice-34: the HEAD's latch, for the same reason
 	# ⚠ AND THIS IS A DELIBERATE BEHAVIOUR CHANGE TO SLICES 26–31, NAMED RATHER THAN SLIPPED IN
 	# (advisor): `_radome_qpeak` was never cleared on reset, so pressing Reset on a RINGING wire
 	# carried a stale RINGING verdict ~0.5 s into the re-launch (the hold is ~0.5 s at 62.5 Hz) —

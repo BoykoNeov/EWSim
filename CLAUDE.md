@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–33 COMPLETE & green — 6215 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–33
+**Slices 1–34 COMPLETE & green — 6618 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–34
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
@@ -237,6 +237,44 @@ ARGUMENT (else "breaking" fires at a CLEAN INTERCEPT and paints the CURE arm a f
 DEFECT IS THE INVERSION ITSELF: a 4300 m gate cleared the 3696.9 m CPA and still caught the AFTERMATH (look 56°,
 ring decayed — the feed is CUT once the seeker stops measuring); re-aimed to 5000 m it shows the MECHANISM.
 Class 4a (9th consecutive), button DROPPED (9th). (6215)**
+**And slice 34 THE GIMBAL: THE HEAD POINTS WHERE THE GLASS SAYS THE TARGET IS — the successor 32 AND 33 both
+nominated (⚠ BOTH HALVES OF THE BANKED DEFERRAL WERE REFUTED AT GATE 0 and the live claim was found in a THIRD
+place — the slice-33 shape exactly). Slices 26–33 built the parasitic loop on ONE geometric fact: the radome bends
+the ray by an amount set by the LOOK ANGLE, and the look angle is the LOS off the missile's OWN NOSE — a quantity
+it can only move by ROTATING, which is why slice 26 is a BODY-RATE instability. ⭐⭐ A GIMBALLED SEEKER BREAKS THAT
+IDENTITY: the ray passes through the part of the dome the HEAD is aimed at, and THE HEAD IS AIMED BY THE VERY
+MEASUREMENT THE DOME JUST BENT. The index of the glass becomes a FIXED POINT of the glass, so slice 26's loop is
+partly RE-CLOSED THROUGH THE HEAD, where its sign is NEGATIVE. ⭐⭐ THE HEADLINE IS A COMPARISON BETWEEN TWO WIRES
+AND THAT IS WHY THE SLICE SHIPS TWO SCENARIOS (slice 22's precedent): a head is NOT a fidelity — `gimbal_tau_s` is
+AUTHORED and NO in-domain slider removes a head, τ → 0 least of all (the shipped head tracks its own BENT,
+one-tick-delayed measurement, so at τ = 0 it is STILL QUIET at 0.03394 — ⭐⭐ WHICH IS ALSO THE ISOLATION: at zero
+servo lag the margin is already there IN FULL ⇒ THE MARGIN IS BOUGHT BY THE INDEX, not the servo). Same glass
+(R₀ = −0.03, A = −0.15), same R̂ = −0.18, same seed 32: the STRAPDOWN twin rings at rms r 0.93167 and the GIMBALLED
+wire sits at 0.01207 — 77.2× frame / 78.9× per tick — and BOTH HIT. ⭐ THE ONSET WALKS TWO RUNGS OF THE SAME LADDER
+FROM THE SAME SLIDER — (−0.27, −0.24] strapdown vs (−0.18, −0.16] gimballed, quoted BRACKET TO BRACKET (the gap
+spans 0.06–0.11, so "≈0.08" is a number neither wire supports) — and `head_max` STEPS AT THE SAME PLACE, a SECOND
+tell from a DIFFERENT quantity. ⚠ AND IT IS NOT FREE IN THE ONE CURRENCY A GIMBAL HAS: SLICE 33's SINGLE NUMBER
+SPLITS IN TWO, a STOP (the head's TRAVEL — slice 33's excursion RESTATED) and a DETECTOR WINDOW (about the head
+axis — NEW, and where the margin is paid for), and gate 2 measured the two are ONE BUDGET. ⭐⭐ SLICE 32's PREDICATE
+RETURNS IN THE NEW CURRENCY, `held ⟺ tracking error < detector window` (bracketed to 0.005° quiet, CONSERVATIVE
+~1% ringing, the two sides from DIFFERENT RUNS), and ⭐ THE RING IS SPENT IN DETECTOR WINDOW, 3.7×. ⚠⚠ THE TWO-RUN
+DISCIPLINE'S LIST IS THREE QUANTITIES AND THE THIRD FAILS QUIETLY: a broken window FREEZES the index and a frozen
+index makes a CONSTANT bend (quiet at every R̂), so rms r FALLS and the tracking error RUNS AWAY to ~90° — both
+visibly wrong — but `head_angle_deg` FREEZES at the QUIET arms' 17.190° against the ring's 20.616°: plausible, in
+range, TOO SMALL. ⚠⚠ GATE 3's FIRST FINDING WAS A BLOCKING CLIENT DEFECT NO TEST WOULD HAVE CAUGHT (advisor, before
+any gate-3 code): the loader refuses `seeker_fov_deg` beside a head, so a gimbal wire raises `radome_view` and NOT
+`seeker_fov_view` ⇒ both FOV branches fail and slice 26/27/28's RADOME CASCADE takes it — the stale-readout class's
+WORST form, because NOTHING IN IT IS STALE (every key that cascade reads is LIVE here), so it would print a fluent
+verdict about the GLASS on a wire whose subject is the HEAD. ⇒ a NEW `gimbal_view` marker + a branch checked FIRST;
+⚠ gate 3 is therefore a CORE edit, unlike slice 33's, and the BUTTON still needs no edit at either site. ⚠ THE
+DEFAULT WINDOW IS A FREE READ *ON THE APPROACH* AND NOT BIT-IDENTICAL (9.15e−11 m at 4° vs EXACTLY 0 at the 8°
+ceiling — the window is reached in the last metres as the LOS swings), and ⚠⚠ THE `held` TOLERANCE IS A FUNCTION OF
+THE WINDOW (the verifier's first run FAILED at slice 33's flat 1e−6: a 2.05° window moves the CPA 0.020 m where the
+shipped 4° one moves it 1e−10). ⭐ THE HANDOVER IS VISIBLE IN THE INDEX TRIPLE — `look_angle` is the HEAD's angle
+every tick and the NOSE's on tick 1 ALONE, which is the handover, pinned as `same_ticks == [1]`. ⭐⭐ THE ISOLATION
+IS NEITHER 32's NOR 33's: at the same R̂ the twin saturates the slice-19 ceiling 48.36% while the gimbal wire
+touches 0.00% ⇒ THE DIFFERENCE IS THE INDEX, NOT AUTHORITY (`defl_sat == 0` is what IS invariant). Class 4a (10th
+consecutive), button DROPPED (10th). (6618)**
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
@@ -929,19 +967,37 @@ composition IS the lesson: six slices of a missile that shakes itself all record
 ringing arm STILL HITS, and that was only ever true because the seeker's window was INFINITE. The excursion a
 parasitic loop adds to the look angle is spent out of exactly the budget 32 measured, so the FOV a seeker needs
 is the engagement's lead PLUS the loop's excursion — and slice 30's design rule buys the whole second term back,
-depth-independently. A limit cycle you were told to measure in rad/s is spent in DEGREES OF FIELD OF VIEW.**
+depth-independently. A limit cycle you were told to measure in rad/s is spent in DEGREES OF FIELD OF VIEW.
+And slice 34 CLOSED the arc's sensor half with the successor 32 and 33 both nominated — THE GIMBAL — where the
+whole family's founding assumption finally moves: for eight slices the radome has been indexed on the LOS off the
+missile's own NOSE, which is why the loop closes through the body at all. Give the seeker a head and the ray goes
+through the part of the dome the HEAD is aimed at — and the head is aimed by the very measurement the dome just
+bent, so the index of the glass becomes a FIXED POINT of the glass and slice 26's loop is partly re-closed through
+the head with a NEGATIVE sign. The same glass, the same believed slope and the same seed ring strapdown and stay
+quiet gimballed, and the onset walks two rungs of the ladder. But the margin is bought by the head's pointing
+DECOUPLING from the true LOS, and that decoupling is exactly the tracking error the head's own detector must
+cover — so slice 33's single number splits into a STOP and a DETECTOR WINDOW, and slice 32's predicate returns in
+the currency a gimbal actually has.**
 The NEXT named candidates:
-**THE GIMBAL, AND SLICE 33's GATE 0 BANKED ITS LESSON: THE GIMBAL THAT SAVES YOUR ENVELOPE PARKS YOU ON THE WORST
-GLASS** — a strapdown seeker's body chases the LOS so the look angle stays near the lead, while a gimbal
-deliberately holds the head at the FULL lead angle, which is exactly the steep part of the curve slice 28 showed
-closes the loop. So it buys the envelope back and hands the radome a worse operating point: the same trade in a
-new place. ⚠ It REWRITES 26–31's `look_az` (the bend would key off HEAD-vs-body rather than LOS-vs-body), which
-is the byte-identity surface of six slices, so it needs a presence-gated head state with the strapdown else-arm
-VERBATIM — and that is why slices 32 and 33 both shipped a STRAPDOWN window instead. **(⚠ "THE GIMBAL ON THE
-RADOME WIRE" is no longer on this list as a separate item — slice 33 IS the radome wire, so what remains is the
-HEAD STATE alone.)** Also: **a RECTANGULAR / PER-AXIS FOV; SEEKER RANGE / SNR ACQUISITION LIMITS (32/33 model only
-the ANGLE half of "can the seeker see it"); THE HANDOVER BASKET as an authored quantity (slice 32's P5
-found the launch look angle is a live physical constraint its wire holds fixed);**
+**(⚠ "THE GIMBAL" IS NO LONGER ON THIS LIST — SLICE 34 SHIPPED IT, and ⚠⚠ BOTH HALVES OF THE LESSON SLICE 33's
+GATE 0 BANKED FOR IT WERE REFUTED at slice 34's own gate 0: "the gimbal that saves your envelope PARKS YOU ON THE
+WORST GLASS" rests on a contrast that does not exist — the head parks nowhere the body was not already looking,
+because a missile points its nose along its velocity plus incidence, so a strapdown seeker's look angle IS the
+full lead; and "it REWRITES 26–31's `look_az`" collapses at zero servo lag, which makes it a TOOTH and not a
+headline. The live claim was in a THIRD place — the head is aimed by the BENT measurement, so the index of the
+glass is a FIXED POINT of the glass. Do not re-import the banked framing.)**
+**SLICE 34's OWN DEFERRALS, in the order it named them: THE HANDOVER BASKET as an authored quantity (⚠ slice 34's
+§0.8 promoted this from slice 32's deferral to a LIVE constraint — a CAGED head's window requirement degenerates
+to the STRAPDOWN one, 18.117°, until it acquires, and it moves the ring verdict too; what ships is a HANDED-OVER
+head stated as a §1 condition, and its tick-1 signature is asserted); A RATE-LIMITED HEAD (`gimbal_rate_max` is
+implemented in the gate-0 probe and was NEVER EXERCISED by any arm — the natural home of a slew-rate-limited lock
+loss); MEMORY TRACK / RE-ACQUISITION (slice 34's break is TERMINAL — no error signal, no slew — while a real head
+coasts on its last inertial rate: slice 32's α-β choice one layer out); THE HEAD'S OWN GYRO (a rate-stabilized
+head measures inertial LOS rate DIRECTLY, which is the classical reason gimbals exist and a DIFFERENT mechanism
+from anything in 26–34).** Also: **a RECTANGULAR / PER-AXIS FOV — and slice 34 SHARPENS it (it ships one circular
+window AND one circular stop, and gate 1 wrote down that the circular shape rests on a SPECIES argument because no
+flying arm had ever bound the stop; gate 2's §2.5 bound it for the first time); SEEKER RANGE / SNR ACQUISITION
+LIMITS (32/33/34 model only the ANGLE half of "can the seeker see it");**
 a SINGLE IMU (slice 31 corrupts the COMPENSATOR's gyro only; feeding the same reading to the α/β autopilot was
 MEASURED at its gate 0 and moves the onset by a DIFFERENT mechanism — plant DAMPING, `k_q` supplying ~98% of it —
 which is why it is a separate slice and not a footnote); GYRO NOISE (⚠ deferred on DRAW-TOPOLOGY grounds, not
@@ -958,8 +1014,8 @@ target (the demand rotating faster than the roll loop follows, a DISTINCT face f
 the AERO + INERTIAL CROSS-COUPLING / DEPARTURE that makes a real BTT airframe go OUT-OF-PLANE during a hard roll
 (non-diagonal I, Clβ/Cnp/Clr; diagonal I + symmetric cruciform + coordinated flight keep 23/24 clean).
 What else remains of §11 Tier-A/B/C: land clutter [terrain banked the heightfield]; monopulse / az×el CFAR.
-(⚠ "a seeker FOV / gimbal limit" is no longer on this list — slice 32 SHIPPED the FOV half; what remains of it is
-the GIMBAL SERVO, named above with the reason it is a bigger slice than it looks.) ⚠ Slice 21 did NOT finish the
+(⚠ "a seeker FOV / gimbal limit" is FULLY SPENT — slice 32 shipped the FOV half and slice 34 the GIMBAL SERVO; what
+remains are slice 34's own four deferrals, named above.) ⚠ Slice 21 did NOT finish the
 atmosphere: ρ(z) reaches the COUPLED airframe path ONLY. The point-mass/ballistic drag path keeps a constant ρ
 because `dynamics.jl`'s steppers take a `v -> a(v)` closure with NO position in it, and changing that contract to
 `(p,v) -> a` touches slice 8's `rk4_step`/`euler_step` — the byte-identity surface of EVERY ballistic slice — for a

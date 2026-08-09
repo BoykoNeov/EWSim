@@ -1,0 +1,143 @@
+# slice34_strapdown — THE TWIN: THE SAME DESIGN, WITH ITS RADOME INDEX HANDED TO IT BY THE AIRFRAME
+# (HANDOFF §11 Tier-A, slice 34 gate 3 — the FOIL half of a TWO-SCENARIO slice).
+#
+# ⭐⭐ THIS FILE IS `slice34_gimbal.yaml` WITH THE HEAD REMOVED AND NOTHING ELSE CHANGED. Same glass
+# (R₀ = −0.03, A = −0.15, k = 12), same believed slope (R̂ = −0.18), same crossing target, same seed,
+# same plant, same launch condition, same dt and emit grid. The ONE difference is that its seeker is
+# STRAPDOWN — it has no head, so the radome is indexed on the LOS measured off the missile's own NOSE,
+# which is what slices 26–33 all assumed.
+#
+# ⇒ IT RINGS (rms r 0.93194) WHERE THE GIMBAL WIRE IS QUIET (0.01181). 78.9×, and the only thing that
+# moved is WHERE THE GLASS IS INDEXED.
+#
+# ⚠⚠ WHY TWO SCENARIOS RATHER THAN A RUNG (slice 22's precedent — two wires for one slice, when the
+# halves need configurations that cannot coexist). A head is not a fidelity: `gimbal_tau_s` is
+# AUTHORED (gate 2 measured τ a CONFOUNDED lever, not a dead one — it moves the amplitude on every arm
+# and AT THE LINE that sag crosses the verdict) and there is NO in-domain slider value that removes a
+# head. τ → 0 does not: the head that ships tracks its own BENT, one-tick-delayed measurement, so at
+# τ = 0 it lands on the PREVIOUS tick's bent angle and not on this tick's LOS-vs-body — gate 2
+# measured max|Δpos| 58.21 m against this wire, and rms r 0.03394, i.e. STILL QUIET. ⭐ THE MARGIN IS
+# ALREADY THERE IN FULL AT ZERO LAG, which is the isolation: THE MARGIN IS BOUGHT BY THE INDEX, not by
+# the servo. So the foil has to be a second wire, and `slice34_verify.gd` flies both through one
+# `load_scenario`.
+#
+# ⚠ AND THIS IS *NOT* SLICE 33's WIRE WITH THE WINDOW TAKEN OFF, THOUGH IT LOOKS LIKE IT. Slice 33
+# ships `seeker_fov_deg: 21.0` and R̂ = −0.03; this ships NO body window at all and R̂ = −0.18. The
+# window matters: slice 33's own two-run discipline says a stability read must come off an arm the
+# window never bites, and its default arm's `rms r` (0.93167 through a 21° window) is NOT this file's
+# free 0.93194. The pair only means something if both halves are FREE reads.
+#
+# ⚠ THE ONSET BRACKET IS THIS FILE's OWN HALF OF THE PAYLOAD, and it is quoted BRACKET TO BRACKET
+# (slice 30's "sufficient, never tight"): walk `radome_slope_est` here and the ring dies between
+# −0.27 and −0.24; walk the SAME slider on the gimbal wire and it dies between −0.18 and −0.16. TWO
+# RUNGS OF THE SAME LADDER, from the same slider, on the same glass. ⚠ The gap those two brackets
+# admit spans 0.06 to 0.11, so a single "≈0.08" would be a number neither file can support.
+#
+# ⚠ WHAT THIS FILE MAY AND MAY NOT BE READ FOR. It is a STABILITY read and nothing else: it has no
+# window, so it never loses lock, and its `head_*` / `gimbal_*` telemetry does not exist at all (the
+# never-stale discipline — `_gim` is false here, so not one head key is even evaluated). ⚠ THE MISS IS
+# NOT THE METRIC, the arc's standing fact since slice 26 and true here too: the RINGING arm still HITS
+# (0.92 m per tick, 3.63 m frame-sampled). The verdict is always `rms r`.
+#
+# ⚠ THIS WIRE IS BYTE-IDENTICAL TO THE SLICE-25…33 PATH BY GATING, not by care: with no
+# `gimbal_tau_s` the seam's `_gim` is false and the head branch is not entered, which is asserted on
+# the wire in `test_missile.jl` (the key-absent arms reproduce slices 30 and 33's ladder to the digit).
+#
+# NAMED APPROXIMATIONS (§1): everything 26–33 named, unchanged, and NONE of slice 34's — there is no
+# head here to hand over, to rate-limit, to stop or to give a gyro. ONE odd scalar slope curve PER
+# AXIS; a PERFECT gyro; ONE isotropic σ and a TRUTH Vc; diagonal inertia; symmetric cruciform; lift
+# drag-free; constant ρ (a FLIGHT CONDITION — say "low dynamic pressure", never "high altitude").
+# ⚠ AND THE 30° MODEL-VALIDITY CAVEAT 28/29/30/31 EACH DECLARED IS LIVE HERE IN ITS ORIGINAL FORM:
+# with no head the look angle IS the body's, and it reaches 22.12° at the shipped R̂ — see the knob
+# block, where the R̂ ceiling is what bounds it.
+#
+# UNITS (§1 trifecta): pos/vel SI; angles rad INSIDE the core, DEGREES at the wire boundary; radome
+# slopes DIMENSIONLESS (rad of bend per rad of look); σ_seek in RADIANS; `cross_speed_mps` in m/s and
+# SIGNED; I in kg·m²; ρ in kg/m³; launch ELEVATION in DEGREES → radians at the loader.
+# dt = 1e-3 / emit_every = 16 — IDENTICAL to the twin, so the two wires are read on the same grid.
+name: slice34_strapdown
+seed: 32
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # IDENTICAL to the twin's five, NONE toggled. `airframe` HELD at :six_dof (the radome block is gated
+  # on the LIVE rung, never on `:att_q`, which is minted once and never deleted — the slice-21/23/26/
+  # 27/28/29 latent-bug class), `seeker_axes` HELD at :az_el, `seeker` :filtered, `autopilot` :alpha,
+  # `guidance` :pn. `steering` OMITTED (the loader default :skid_to_turn).
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+
+entities:
+  # The interceptor — the twin's, to the digit, MINUS the three `gimbal_*` keys. n_pn = 8 AUTHORED.
+  # `elevation_deg` LOAD-CONSUMED and NOT a knob (the slice-19 dead-knob class).
+  #
+  # THE GLASS: R₀ = −0.03, A = −0.15 ⇒ `radome_slope_worst` = R₀ + 2A = −0.33 (slice 30's aim point),
+  # k = 12.0 AUTHORED and DISQUALIFIED BY NON-MONOTONICITY at slice 28.
+  #   radome_slope_est R̂ = −0.18 — ⭐⭐ THE SHOWCASE RESIDUAL, AND HERE IT IS THE DISEASE. It sits
+  #     INSIDE this wire's ring bracket (−0.27, −0.24] and OUTSIDE the gimbal wire's (−0.18, −0.16],
+  #     so the SAME believed slope on the SAME glass is a RINGING design here and a QUIET one there.
+  #     ⚠ It is NOT slice 28's boresight value (−0.03): a student would then be looking at slice 28's
+  #     lesson (a hardware residual of exactly 0.000 that rings anyway) rather than at slice 34's.
+  #
+  # ⚠ NO `seeker_fov_deg`, DELIBERATELY. Slice 32/33's body-fixed window would make this a THIRD
+  # mechanism and would break the pair: a windowed arm's `rms r` is not a stability read (slice 33's
+  # own finding — losing the measurement CUTS the parasitic feed, so it FALLS while the miss OPENS).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               radome_slope: -0.03, radome_ripple: -0.15, radome_ripple_k: 12.0,
+               radome_slope_est: -0.18}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # THE CROSSING TARGET — the twin's, unchanged: slice 28's vy = 200 m/s geometry, which holds the
+  # SUSTAINED ~15° lead that parks the seeker on the steep part of the slope curve. AERODYNAMICALLY
+  # FREE. `cross_speed_mps` AUTHORED and NOT a knob (it moves the LEAD — slice 32's axis).
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 200.0, 0.0]
+    target: {rcs_m2: 1.0, cross_speed_mps: 200.0}
+
+knobs:
+  # ONE slider — and it is the SAME KEY, over the SAME DOMAIN, as the twin's second knob. That is the
+  # point: the experiment is "walk this slider on both wires and read where the ring dies", and it
+  # only reads as one experiment if the axis is literally the same.
+  # ⚠ The twin carries a SECOND slider (`gimbal_fov_deg`, the detector window) which has no meaning
+  # here — a strapdown seeker in this arc has no window at all — so this file is a ONE-slider wire and
+  # convention 9 is satisfied outright rather than by the twin's diagonal argument.
+  #   FLOOR −0.36: below slice 30's aim point (−0.33) so the rule is reachable AND overshootable (the
+  #     one-sided constraint: only a NEGATIVE residual rings; a positive one de-tunes).
+  #   CEILING −0.03: the glass's own boresight slope — slice 28's characterization, the loudest arm
+  #     the domain reaches, and the 30° MODEL-VALIDITY budget 28/29/30/31 each declared, here as a
+  #     measured edge (the look angle is already 22.12° at the shipped R̂).
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED FOR THE TWIN's REASONS, and the verifier asserts their
+  # absence: `cross_speed_mps` (slice 32's axis, it moves the LEAD), `n_pn` / `rho` (the parasitic
+  # boundary AND the guidance loop), `af_alpha_max` (slice 26's amplitude instrument, confounded),
+  # `sigma_seek` (degrades the lesson beside it), `radome_slope` / `radome_ripple` (the GLASS is
+  # HARDWARE — what you can change is what you BELIEVE about it), `elevation_deg` (dead-knob class),
+  # and the three `gimbal_*` keys, which the loader would refuse as DEAD without a head anyway.
+  # ⚠ LABEL LENGTH-BUDGETED at ~110 characters (drawn full-width over the `_draw` HUD column).
+  - {target: m1, key: radome_slope_est, min: -0.36, max: -0.03,
+     label: "DESIGN: believed slope R̂ — the STRAPDOWN twin, whose ring dies two rungs later"}

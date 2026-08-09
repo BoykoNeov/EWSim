@@ -763,6 +763,27 @@ function _airframe_view_info(w::World)
     # convention 9), so the order is a statement of intent, not a shipped path.
     any(haskey(w.entities[m].comp, :seeker_fov_deg) for m in missiles) &&
         (info[:seeker_fov_view] = true)
+    # SLICE 34 — the GIMBALLED HEAD marker, and it exists because the LOADER'S REFUSAL LEAVES A HOLE
+    # THE CLIENT WOULD FALL THROUGH SILENTLY (gate-3 review, advisor). `scenario.jl` refuses
+    # `seeker_fov_deg` beside `gimbal_tau_s` — a gimballed seeker has no body-fixed window — so a
+    # gimbal wire raises `radome_view` (it HAS glass) and NOT `seeker_fov_view`. Without a marker of
+    # its own the client's dispatch would fall past both FOV branches into slice 26/27/28's RADOME
+    # cascade.
+    #
+    # ⚠⚠ AND THAT FAILURE IS WORSE THAN THE STALE-READOUT CLASS THIS ARC HAS CAUGHT EIGHT TIMES,
+    # because nothing in it is stale: a gimbal wire carries `radome_slope`, `radome_residual*`,
+    # `radome_slope_worst` and `omega_q`/`omega_r`, so every number that cascade reads is LIVE and
+    # PLAUSIBLE. It would print a confident ring/quiet verdict about the GLASS on a wire whose whole
+    # subject is the HEAD — the wrong subject, drawn from real telemetry, and not one test would
+    # fail. Slice 33's composition branch is the precedent for the fix and the reason it is a
+    # SEPARATE key rather than a reuse: the branches read DIFFERENT quantities, and a gimbal wire has
+    # neither `seeker_fov_deg` nor `seeker_fov_margin_deg` (the seam ships `gimbal_fov_deg` /
+    # `gimbal_fov_margin_deg`, about the HEAD axis, and `head_off_deg` rather than a body look).
+    #
+    # ⚠ THE BUTTON OUTCOME NEEDS NO EDIT AT EITHER CLIENT SITE — `radome_view` is raised here too and
+    # already drops it, exactly as slice 33 found for its own composition. What this marker selects is
+    # the HUD BRANCH ALONE, which is the half that is NOT identical.
+    any(haskey(w.entities[m].comp, :gimbal_tau_s) for m in missiles) && (info[:gimbal_view] = true)
     return info
 end
 

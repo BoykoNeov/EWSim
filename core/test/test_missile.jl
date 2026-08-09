@@ -7479,4 +7479,185 @@ end
             @test hi.miss > lo.miss              # the non-monotone cell, PINNED as a fact
         end
     end
+
+    @testset "gate 3 — the TWO SHIPPED WIRES, and the marker the loader's refusal made necessary" begin
+        # ⭐⭐ SLICE 34 SHIPS TWO SCENARIOS AND THE PAIR IS THE LESSON (slice 22's precedent — two
+        # wires for one slice, when the halves need configurations that cannot coexist). A head is
+        # not a fidelity: `gimbal_tau_s` is AUTHORED and there is NO in-domain slider value that
+        # removes a head — τ → 0 does not, because the head that ships tracks its own BENT,
+        # one-tick-delayed measurement and is ALREADY QUIET there (0.03394 against strapdown's
+        # 0.93194, measured three testsets up). So the foil has to be a second wire.
+        base = joinpath(@__DIR__, "..", "..", "scenarios")
+        gim_scn  = load_scenario(joinpath(base, "slice34_gimbal.yaml"))
+        strp_scn = load_scenario(joinpath(base, "slice34_strapdown.yaml"))
+        g1 = gim_scn.world.entities[:m1];  gt = gim_scn.world.entities[:tgt1]
+        s1 = strp_scn.world.entities[:m1]; st = strp_scn.world.entities[:tgt1]
+
+        # ⚠⚠ THE MARKER, AND IT EXISTS BECAUSE THE LOADER'S REFUSAL LEAVES A HOLE THE CLIENT WOULD
+        # FALL THROUGH SILENTLY (gate-3 review, advisor). `seeker_fov_deg` is REFUSED beside a head,
+        # so a gimbal wire raises `radome_view` — it HAS glass — and NOT `seeker_fov_view`: both of
+        # the client's FOV branches fail their conjunction and slice 26/27/28's RADOME cascade takes
+        # it. ⚠ That failure is the stale-readout class's WORST form, because NOTHING IN IT IS
+        # STALE: every key that cascade reads (`radome_slope`, `radome_residual*`,
+        # `radome_slope_worst`, `omega_r`) is LIVE here, so it would print a fluent ring/quiet
+        # verdict about the GLASS on a wire whose whole subject is the HEAD — the wrong subject,
+        # from real telemetry, and not one test would have failed.
+        let info = EWSim._airframe_view_info(gim_scn.world)
+            @test info[:gimbal_view]   === true
+            @test info[:radome_view]   === true            # it HAS glass…
+            @test !haskey(info, :seeker_fov_view)          # …and CANNOT have slice 32's window
+            @test info[:airframe_6dof] === true            # still the slice-23 3-D view
+        end
+        # THE TWIN raises the 26–33 marker set EXACTLY — no head, no new branch.
+        let info = EWSim._airframe_view_info(strp_scn.world)
+            @test !haskey(info, :gimbal_view)
+            @test info[:radome_view]   === true
+            @test !haskey(info, :seeker_fov_view)
+            @test info[:airframe_6dof] === true
+        end
+        # …and NO earlier wire grows one, which is slice 32's `!haskey(info, :radome_view)`-as-a-
+        # feature discipline pointed at the new key: the branches must stay distinguishable from the
+        # CORE side, because that conjunction is what the client dispatches on.
+        for f in ("slice26_radome.yaml", "slice30_envelope.yaml", "slice31_gyro.yaml",
+                  "slice32_fov.yaml", "slice33_budget.yaml")
+            p = joinpath(base, f)
+            isfile(p) || continue
+            @test !haskey(EWSim._airframe_view_info(load_scenario(p).world), :gimbal_view)
+        end
+
+        # ⭐ THE TWIN IS THE GIMBAL WIRE WITH THE HEAD REMOVED AND NOTHING ELSE CHANGED — asserted
+        # key-for-key rather than described in a comment, because the whole claim ("same glass, same
+        # residual, same seed") rests on it and a single drifted digit would make the 78.9× a
+        # comparison of two different missiles.
+        for k in (:radome_slope, :radome_ripple, :radome_ripple_k, :radome_slope_est,
+                  :sigma_seek, :alpha, :beta, :seek_two_angle, :n_pn, :a_max, :delta_max,
+                  :k_alpha, :k_q, :mass_kg, :cd_area_m2, :rho, :af_cma, :af_cmd, :af_cmq,
+                  :af_cla, :af_alpha_max, :af_cy_beta, :af_I, :af_I_roll, :af_I_zz, :af_c_roll,
+                  :af_d, :af_S)
+            @test g1.comp[k] == s1.comp[k]
+        end
+        @test g1.pos == s1.pos && g1.vel == s1.vel
+        @test gt.pos == st.pos && gt.vel == st.vel
+        @test gim_scn.world.seed == strp_scn.world.seed == 32
+        @test gim_scn.world.fidelity == strp_scn.world.fidelity
+        @test gim_scn.dt_physics == strp_scn.dt_physics == 1.0e-3
+        # ⚠ THE SAME EMIT GRID ON BOTH, so the pair is read on one grid — and it is what
+        # `slice34_verify.gd`'s `STEPS` must be a MULTIPLE OF (convention 14; slice 31 lost an hour
+        # to the silent hang, and this slice's verifier flies BOTH wires through one `load_scenario`
+        # so a mismatch would hang on the second half only).
+        @test gim_scn.emit_every == strp_scn.emit_every == 16
+        # …and the ONE difference, both ways round.
+        for k in (:gimbal_tau_s, :gimbal_stop_deg, :gimbal_fov_deg)
+            @test haskey(g1.comp, k) && !haskey(s1.comp, k)
+        end
+        @test !haskey(g1.comp, :seeker_fov_deg) && !haskey(s1.comp, :seeker_fov_deg)
+
+        # THE WIRE ITSELF.
+        @test g1.comp[:gimbal_tau_s]    == 0.05     # AUTHORED — a CONFOUNDED lever (τ testset above)
+        @test g1.comp[:gimbal_stop_deg] == 30.0     # AUTHORED — a RESTATEMENT of slice 33's excursion
+        @test g1.comp[:gimbal_fov_deg]  == 4.0      # the ONE live slider's default
+        @test g1.comp[:radome_slope_est] == -0.18   # ⭐⭐ INSIDE the strapdown bracket (−0.27, −0.24]
+        @test g1.comp[:radome_slope]     == -0.03   # …and OUTSIDE the gimballed one (−0.18, −0.16]
+        @test g1.comp[:radome_ripple]    == -0.15   # ⇒ radome_slope_worst = R₀ + 2A = −0.33
+        @test gt.comp[:cross_speed_mps] == 200.0 && gt.vel.y == 200.0   # the pin and `vel` AGREE
+        @test gim_scn.world.fidelity[:airframe]    === :six_dof
+        @test gim_scn.world.fidelity[:seeker_axes] === :az_el
+        @test !haskey(gim_scn.world.fidelity, :steering)   # BTT would be a THIRD mechanism
+        for k in (:gyro_scale_err, :gyro_bias_z, :gyro_bias_y)   # slice 31's terms are ABSENT
+            @test !haskey(g1.comp, k) && !haskey(s1.comp, k)
+        end
+
+        # THE KNOBS — TWO on the head wire (the two halves of ONE comparison, `window` vs
+        # `tracking error(R̂)`), ONE on the twin, and the SHARED key is shared over the SAME domain
+        # because the experiment is "walk this slider on both wires and read where the ring dies".
+        let kg = Dict(kb.key => kb for kb in gim_scn.knobs),
+            ks = Dict(kb.key => kb for kb in strp_scn.knobs)
+            @test length(gim_scn.knobs) == 2 && length(strp_scn.knobs) == 1
+            @test kg[:gimbal_fov_deg].target === :m1 && kg[:radome_slope_est].target === :m1
+            # the DETECTOR window: the floor is inside the cliff (the design's free error is 1.956°),
+            # the ceiling is THE FREE READ — bit-identical to the key being absent (CONTROL B).
+            @test (kg[:gimbal_fov_deg].min, kg[:gimbal_fov_deg].max) == (1.0, 8.0)
+            @test kg[:gimbal_fov_deg].max > 5.92     # clear of the LOUDEST arm's own requirement
+            @test kg[:gimbal_fov_deg].min < 1.956    # …and the floor is inside the cliff
+            # R̂: the SAME domain on both wires, reaching PAST slice 30's aim point (R₀ + 2A) so the
+            # rule is reachable AND overshootable (the one-sided constraint).
+            @test (kg[:radome_slope_est].min, kg[:radome_slope_est].max) == (-0.36, -0.03)
+            @test (ks[:radome_slope_est].min, ks[:radome_slope_est].max) ==
+                  (kg[:radome_slope_est].min, kg[:radome_slope_est].max)
+            @test kg[:radome_slope_est].min < g1.comp[:radome_slope] + 2 * g1.comp[:radome_ripple]
+            @test kg[:radome_slope_est].max == g1.comp[:radome_slope]
+            # DISQUALIFIED AND ASSERTED ABSENT — on BOTH wires. ⚠ `gimbal_tau_s` heads this list and
+            # its exclusion is the one that is MEASURED rather than argued (the τ testset above): the
+            # sag is monotone everywhere and AT THE LINE it crosses the verdict, so a student
+            # dragging it would move the verdict without moving the mechanism.
+            for k in (:gimbal_tau_s, :gimbal_stop_deg, :cross_speed_mps, :radome_slope,
+                      :radome_ripple, :radome_ripple_k, :af_alpha_max, :n_pn, :rho, :sigma_seek,
+                      :elevation_deg, :speed, :seeker_fov_deg)
+                @test !haskey(kg, k) && !haskey(ks, k)
+            end
+            @test !haskey(ks, :gimbal_fov_deg)       # …and the twin has no window at all
+        end
+
+        # ⭐⭐ THE INDEX, ON THE SHIPPED WIRE: slice 26's `look_angle` ships the HEAD's own angle —
+        # `look_az, look_el = head_az, head_el` before the bend is taken — so the two keys carry the
+        # SAME NUMBER BY CONSTRUCTION, while `look_body_deg` (the NOSE's angle, what a strapdown
+        # seeker would have used) is a DIFFERENT one. That triple IS the slice, and it is asserted
+        # as bit-identity and inequality rather than left to the HUD to imply.
+        # ⚠⚠ AND THE TICK-1 EXCEPTION IS THE HANDOVER, WHICH IS A §1 CONDITION AND NOT AN ARTIFACT —
+        # this testset's first draft asserted "never the nose's" and FAILED on exactly one tick. A
+        # HANDED-OVER head initialises to the CLAMPED TRUTH look angles, so on the tick it is born
+        # the head's angle IS the nose-referenced one, and the two keys agree BY CONSTRUCTION. From
+        # tick 2 the servo is tracking its own BENT measurement and they never agree again. ⇒ the
+        # tooth is the DIVERGENCE, pinned as "equal exactly once, at the handover", which is
+        # strictly stronger than the claim it replaces: it also proves the handover happened where
+        # the scenario says it does (gate 0's §0.8 measured a CAGED head reading 18.117° instead —
+        # the strapdown requirement — so this distinguishes the two inits as well).
+        let (w, sub) = gim_world(Rhat = -0.18, tau = 0.05, stop = 30.0, gfov = 4.0)
+            n_idx = 0; same_ticks = Int[]
+            for k in 1:600
+                tick!(w, sub, dt); empty!(w.events)
+                tel = w.env[:telemetry]::Dict{String,Any}
+                tel["m1.look_angle"] === tel["m1.head_angle_deg"] || (n_idx += 1)
+                tel["m1.look_angle"] == tel["m1.look_body_deg"]   && push!(same_ticks, k)
+            end
+            @test n_idx == 0                       # the glass used the HEAD's index, EVERY tick…
+            @test same_ticks == [1]                # …and it is the NOSE's on the handover tick ALONE
+        end
+
+        # ⭐ THE SHIPPED DEFAULT WINDOW IS A FREE READ ON THE APPROACH, MEASURED AND NOT ASSUMED —
+        # which is what licenses reading a STABILITY verdict off the default arm at all (the two-run
+        # discipline forbids one on an arm whose window binds). ⚠ It is NOT bit-identical to the key
+        # being absent, and that is stated rather than hidden: the window IS reached in the last
+        # metres as the LOS unit vector swings through a large angle at r → 0 (slice 33's own endgame
+        # finding), which moves the CPA by ~9e−11 m. The claim is 0.00 % out at r > 200 m.
+        let ship = arm(Rhat = -0.18, tau = 0.05, stop = 30.0, gfov = 4.0), free = gim[-0.18]
+            @test ship.out == 0.0
+            @test ship.rms_r ≈ free.rms_r atol = 1.0e-9
+            @test ship.off_max ≈ free.off_max atol = 1.0e-9
+            @test ship.head_max ≈ free.head_max atol = 1.0e-9
+            @test abs(ship.miss - free.miss) < 1.0e-6
+            # …and the twin's own default arm IS the strapdown ladder's −0.18 rung, to the digit.
+            @test strap[-0.18].rms_r ≈ 0.93194 atol = 2.0e-5
+            @test strap[-0.18].rms_r / ship.rms_r ≈ 78.9 atol = 0.2
+        end
+
+        # ⭐⭐ AND THE R̂ SLIDER IS THE CLIENT-DRIVABLE PAYLOAD ON THE SHIPPED WINDOW: the RING IS
+        # SPENT IN DETECTOR WINDOW. Held at the default 4°, walking R̂ up from the showcase residual
+        # drives the tracking error past the window and the track breaks — while walking it DOWN to
+        # slice 30's aim point holds. ⚠ THE BROKEN ARMS' BAND IS EMPTY (slice 33's gate-2 catch), so
+        # no band number may be quoted for them and none is.
+        let hold18 = arm(Rhat = -0.18, tau = 0.05, stop = 30.0, gfov = 4.0),
+            hold33 = arm(Rhat = -0.33, tau = 0.05, stop = 30.0, gfov = 4.0),
+            brk16  = arm(Rhat = -0.16, tau = 0.05, stop = 30.0, gfov = 4.0),
+            brk03  = arm(Rhat = -0.03, tau = 0.05, stop = 30.0, gfov = 4.0)
+            @test hold18.out == 0.0 && hold33.out == 0.0
+            @test hold18.miss < 1.0 && hold33.miss < 1.0
+            @test brk16.out > 0.0 && brk16.miss > 100.0
+            @test brk03.out > 50.0 && brk03.miss > 3000.0
+            @test brk03.n_band == 0              # …and its band is EMPTY, so `rms r` is NaN
+            @test isnan(brk03.rms_r)
+            # the free arms' own tracking errors are what those windows are being compared against
+            @test gim[-0.18].off_max < 4.0 < gim[-0.03].off_max
+        end
+    end
 end
