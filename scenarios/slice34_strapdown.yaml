@@ -128,7 +128,12 @@ knobs:
   # here — a strapdown seeker in this arc has no window at all — so this file is a ONE-slider wire and
   # convention 9 is satisfied outright rather than by the twin's diagonal argument.
   #   FLOOR −0.36: below slice 30's aim point (−0.33) so the rule is reachable AND overshootable (the
-  #     one-sided constraint: only a NEGATIVE residual rings; a positive one de-tunes).
+  #     one-sided constraint: only a NEGATIVE residual rings; a positive one de-tunes). ⚠⚠ MEASURED
+  #     AT GATE 3's POST-REVIEW, on THIS wire as well as the twin's: the overshoot is a DE-TUNE THAT
+  #     REVERSES rather than a plateau — `rms r` turns back UP (0.05879 at the aim point → 0.06911 at
+  #     the floor) while the arm stays comfortably QUIET (the 0.30 line) and still HITS (0.185 m).
+  #     The endpoint was flown NOWHERE before that review, which is slice 26's own post-commit rule
+  #     (ENDPOINTS MEASURED, never inferred from the interior) missed on a knob it did not own.
   #   CEILING −0.03: the glass's own boresight slope — slice 28's characterization, the loudest arm
   #     the domain reaches, and the 30° MODEL-VALIDITY budget 28/29/30/31 each declared, here as a
   #     measured edge (the look angle is already 22.12° at the shipped R̂).

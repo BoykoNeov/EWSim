@@ -4714,6 +4714,13 @@ tick.** `look_angle === head_angle_deg` (the glass used the HEAD's index) and `l
 look angles, so on the tick it is born the two ARE the same number, by construction. Pinned as
 `same_ticks == [1]`, which is strictly STRONGER — it also proves the handover happened where the
 scenario says it does (§0.8 measured a CAGED head reading 18.117°, the strapdown requirement, instead).
+⚠ **AND THE IDENTITY HALF IS NOT THE `x == x` SHAPE GATE 1 REFUSED, THOUGH IT IS STRUCTURALLY CLOSE**
+(advisor): `look_angle === head_angle_deg` is the same expression over the same two locals at two
+sites, so it is worth saying which regression it catches — it fires if the seam stops overwriting
+`look_az, look_el` with the head's angles, or if the head block is ever moved BELOW the radome block
+(seam discipline 2, whose whole point is that the other ordering leaves a one-tick lag that survives
+τ → 0 and would fake a mechanism). The claim itself is carried by the paired INEQUALITY against
+`look_body_deg`.
 
 ⭐⭐ **THE ISOLATION IS NEITHER SLICE 32's NOR SLICE 33's, AND IT IS THE CLEANEST OF THE THREE.** The
 discriminating pair is the TWO WIRES at the SAME R̂: the strapdown twin saturates the slice-19 aero
@@ -4721,6 +4728,23 @@ ceiling **48.36 %** of its band while the gimballed wire touches it **0.00 %** �
 INDEX, not authority** — the gimbal arm is not flying a better-behaved airframe, it simply is not
 shaking. `defl_sat == 0` on every arm of both wires is what IS invariant (kept from slice 33; its
 `aero_sat` reasoning is the part that does not transfer).
+
+⭐ **POST-REVIEW (advisor): THE *OTHER* SLIDER'S FLOOR WAS FLOWN NOWHERE.** Both YAMLs declare
+`radome_slope_est ∈ [−0.36, −0.03]` and the gimbal file cites slice 26's post-commit rule (ENDPOINTS
+MEASURED, never inferred from the interior) while applying it only to the WINDOW knob — R̂'s CEILING is
+flown on both wires, its FLOOR nowhere. ⚠ Not hygiene: past the aim point the residual goes POSITIVE and
+DE-TUNES rather than rings, but a de-tuned loop LAGS, lag grows the LEAD, and the lead is what the
+head's TRAVEL must cover (vs the stop) and what sets the TRACKING ERROR (vs the window). Measured, it
+HOLDS on both wires — 0.00 % out, 0.433 / 0.185 m, `rms r` 0.06946 / 0.06911 (QUIET), head travel
+18.117° of 30°, tracking error 1.508° of 4° (so the shipped window is INERT there too). ⭐⭐ **AND
+MEASURING IT CORRECTED THE SCENARIO'S OWN STATED REASON**: the YAML said the overshoot shows the
+requirement "STOPS FALLING"; it does not — the RING TURNS BACK UP (0.05917 → 0.06946 gimballed,
+0.05879 → 0.06911 strapdown) and the MISS grows monotonically PER TICK (0.161 → 0.433 m, on to 5.669 m at
+R̂ = −0.50 beyond the domain — ⚠ the ~11 m emit grid cannot resolve that ordering, both arms being
+HITS, so the verifier asserts the RING and says so). A DE-TUNE THAT REVERSES, which is sharper than a plateau. ⚠ The DETECTOR
+bill is not even monotone in R̂ (1.599 → 1.508 → 1.383° at −0.33/−0.36/−0.40, a MINIMUM past the aim
+point), so the floor is where the REVERSAL is visible and both limits still have margin. Both wires now
+fly a `DOMAIN_MIN` arm (PHASE DOMAIN) plus a core testset.
 
 Class **4a** (the TENTH consecutive RNG-live slice — the head is a DETERMINISTIC SERVO on an existing
 measurement, so NO new draw; draw count asserted both bounds at gate 2). **NO new rung, cap or
@@ -4731,7 +4755,7 @@ in the new currency); the twin carries the SAME R̂ slider over the SAME domain,
 (the sag is monotone everywhere and AT THE LINE it crosses the verdict) — and `gimbal_stop_deg` AUTHORED
 as a RESTATEMENT. Button **DROPPED** (10th: 16, 26, 27, 28, 29, 30, 31, 32, 33, 34).
 
-**Four proofs green.** `slice34_verify.gd` (17 arms across BOTH wires through one `load_scenario`, 8
+**Four proofs green.** `slice34_verify.gd` (19 arms across BOTH wires through one `load_scenario`, 9
 phases, exit 0); `slice34_ui_test.gd` (10 teeth, SEVENTEEN-way value-guard, exit 0);
 `Sandbox.tscn` headless smoke-load on BOTH wires reaching `EWSIM_SERVER_DONE`; **three windowed shots,
 one per verdict branch** — `quiet` ("SELF-INDEXED — the loop is quiet", head 12.7° vs nose 14.6°),

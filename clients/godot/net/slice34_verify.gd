@@ -72,6 +72,10 @@ const RHAT_24 := -0.24            # slice 30's "last decisive ring" on the strap
 const RHAT_27 := -0.27            # …and the quiet rung above it
 const RHAT_03 := -0.03            # slice 28's boresight characterization: the LOUDEST arm
 const RHAT_33 := -0.33            # slice 30's aim point (R0 + 2A), read off the wire where it matters
+const RHAT_36 := -0.36            # ⭐ THE R̂ SLIDER'S FLOOR, PAST the aim point — flown on BOTH wires
+                                  # because slice 26's post-commit rule is that a declared domain's
+                                  # ENDPOINTS ARE MEASURED, never inferred from the interior. The
+                                  # gate-3 post-review found this one flown NOWHERE.
 const BRACKET := 0.1              # the predicate bracket, either side of the MEASURED tracking error
 
 const RING := 0.30                # the arc's ring/quiet line, the same one slices 30/33 read against
@@ -196,13 +200,20 @@ func _build_arms() -> void:
 	#    the inequality `held <=> window > tracking error`).
 	_arms.append({"tag": "brlo", "win_ref": "g18", "win_off": -BRACKET, "rhat": RHAT_SHOW})
 	_arms.append({"tag": "brhi", "win_ref": "g18", "win_off": BRACKET, "rhat": RHAT_SHOW})
-	# 5) THE DOMAIN FLOOR — the price, at the slider's own bottom.
+	# 5) THE DOMAIN FLOOR — the price, at the WINDOW slider's own bottom.
 	_arms.append({"tag": "floor", "win": WIN_FLOOR, "rhat": RHAT_SHOW})
+	# 5b) ⭐ THE *OTHER* SLIDER'S FLOOR, PAST slice 30's aim point (the gate-3 post-review catch).
+	#     Not hygiene: past the aim point the engagement residual goes POSITIVE, which DE-TUNES rather
+	#     than rings — but a de-tuned loop LAGS, lag grows the LEAD, and the lead is what the head's
+	#     TRAVEL must cover (vs the stop) and what sets the TRACKING ERROR (vs the window). If either
+	#     crossed, the student's own "overshoot cure B" gesture would break the arm.
+	_arms.append({"tag": "gfloor", "win": WIN_SHIP, "rhat": RHAT_36})
 	# 6) THE TWIN — the SAME glass, the SAME residual, the SAME seed, with the head REMOVED.
 	_arms.append({"tag": "s18", "wire": "strapdown", "rhat": RHAT_SHOW})
 	_arms.append({"tag": "s24", "wire": "strapdown", "rhat": RHAT_24})
 	_arms.append({"tag": "s27", "wire": "strapdown", "rhat": RHAT_27})
 	_arms.append({"tag": "s33", "wire": "strapdown", "rhat": RHAT_33})
+	_arms.append({"tag": "s36", "wire": "strapdown", "rhat": RHAT_36})   # …the same floor, both wires
 
 func _start_next() -> void:
 	_idx += 1
@@ -515,12 +526,51 @@ func _verdict() -> bool:
 	# ⚠ WHAT IS INVARIANT is that the FIN never pegs, on EITHER wire — so the missile always had the
 	# authority and slice 15's cap is innocent of everything here (slice 33's tooth, kept because it
 	# is the one that still holds; its `aero_sat` reasoning is the part that does not transfer).
-	for k in ["g18", "g16", "g03", "open", "w16", "s18", "s24", "s27", "s33"]:
+	for k in ["g18", "g16", "g03", "open", "w16", "s18", "s24", "s27", "s33", "gfloor", "s36"]:
 		if not (int(_res[k]["defl"]) == 0):
 			return _fail(("PHASE ISOLATION, arm %s: `defl_sat` fired on %d band frames — the fin must " +
 				"never peg on either wire. If this fires, the miss has acquired an ACTUATOR component " +
 				"(slice 15's cap) and neither the index nor the window is cleanly the cause any more") %
 				[k, int(_res[k]["defl"])])
+
+	# ─────────────────────────────────────────────────────────────────────────────────────────
+	# PHASE DOMAIN — ⭐ THE R̂ SLIDER'S FLOOR, ON BOTH WIRES (the gate-3 post-review catch).
+	var gf: Dictionary = _res["gfloor"]
+	var sf: Dictionary = _res["s36"]
+	# ⚠ THE REVERSAL IS QUOTED IN `rms r` AND NOT IN THE MISS, AND THAT IS A SAMPLING FACT RATHER THAN
+	# a choice of emphasis ([[ewsim-missile-verifier-sampling]]: a MISS samples faithfully, a HIT
+	# samples COARSELY). Per tick the miss grows monotonically past the aim point (0.161 -> 0.433 m,
+	# on to 5.669 at R̂ = -0.50, measured at gate 3's post-review); on this ~11 m emit grid both arms
+	# are HITS a couple of metres apart and the ordering is not resolvable. `rms r` is a band mean and
+	# is resolved, so it is what this phase asserts.
+	print("S34V_DOMAIN   PAST slice 30's aim point at R̂ %+.2f, on BOTH wires: the gimbal arm holds through the shipped %.0f deg window (%.3f %% out, %.3f m, tracking error %.3f deg, head travel %.3f deg of a %.0f deg stop) and the twin holds too (%.3f m) — and the overshoot is a DE-TUNE THAT REVERSES rather than a plateau: rms r turns back UP %.5f -> %.5f gimballed and %.5f -> %.5f strapdown. It never RINGS anywhere down here. ⚠ The miss reversal is per-tick only (0.161 -> 0.433 m); on this frame grid both arms are HITS and a HIT samples coarsely, so it is not asserted here" %
+		  [RHAT_36, WIN_SHIP, float(gf["out"]), float(gf["miss"]), float(gf["off"]), float(gf["head"]),
+		   float(gf["stop"]), float(sf["miss"]),
+		   float(w33["rms"]), float(gf["rms"]), float(s33["rms"]), float(sf["rms"])])
+	for k in ["gfloor", "s36"]:
+		var a: Dictionary = _res[k]
+		if not (float(a["out"]) == 0.0 and float(a["miss"]) < HIT_MAX):
+			return _fail(("PHASE DOMAIN, arm %s: the R̂ slider's FLOOR must be a place a student can " +
+				"actually go (%.3f %% out, %.3f m). Past slice 30's aim point the engagement residual " +
+				"goes POSITIVE and DE-TUNES rather than rings — but a de-tuned loop LAGS, and lag grows " +
+				"the LEAD, which is what the head's travel must cover and what sets the tracking error") %
+				[k, float(a["out"]), float(a["miss"])])
+		if not (int(a["band"]) > 0 and float(a["rms"]) < RING):
+			return _fail(("PHASE DOMAIN, arm %s: it must be QUIET (rms r %.5f over %d band frames) — " +
+				"slice 30's constraint is ONE-SIDED, so overshooting the aim point must never ring") %
+				[k, float(a["rms"]), int(a["band"])])
+	if not (float(gf["head"]) < float(gf["stop"]) and float(gf["off"]) < WIN_SHIP):
+		return _fail(("PHASE DOMAIN: at the floor NEITHER limit may bind — head travel %.3f deg against " +
+			"a %.3f deg stop and a tracking error of %.3f deg against the shipped %.0f deg window. If " +
+			"either crossed, the student's own overshoot-the-aim-point gesture would break the arm and " +
+			"the domain's stated reason would be wrong") %
+			[float(gf["head"]), float(gf["stop"]), float(gf["off"]), WIN_SHIP])
+	# ⭐⭐ AND THE OVERSHOOT REVERSES — which CORRECTS the scenario comment this catch was found by
+	# (it said the requirement "STOPS FALLING"; it turns back UP, which is sharper than a plateau).
+	if not (float(gf["rms"]) > float(w33["rms"]) and float(sf["rms"]) > float(s33["rms"])):
+		return _fail(("PHASE DOMAIN: past the aim point the ring must turn back UP on BOTH wires " +
+			"(gimbal %.5f -> %.5f, strapdown %.5f -> %.5f) — a DE-TUNE, which is what makes the floor " +
+			"worth reaching") % [float(w33["rms"]), float(gf["rms"]), float(s33["rms"]), float(sf["rms"])])
 
 	# ─────────────────────────────────────────────────────────────────────────────────────────
 	# PHASE REPLAY — class 4a, held seed, bit-identical. The head is a DETERMINISTIC SERVO on an
@@ -853,9 +903,14 @@ func _pass() -> bool:
 		"NOR 33's: at the same R̂ the twin saturates the slice-19 ceiling %.2f %% of its band while " +
 		"the gimbal wire touches it %.2f %% — the difference is the INDEX, not authority — and what " +
 		"is invariant is defl_sat = 0 on every arm of both wires. ⚠ The badly broken arm's band is " +
-		"EMPTY (%d frames), so its rms r is UNDEFINED rather than quiet. ⚠ NO new rung, cap, " +
-		"instability or draw: the head is a DETERMINISTIC SERVO on an existing measurement. Class 4a, " +
-		"the TENTH consecutive RNG-live slice, replay bit-identical, button DROPPED (10th).")
+		"EMPTY (%d frames), so its rms r is UNDEFINED rather than quiet. ⭐ AND THE R̂ SLIDER'S FLOOR " +
+		"IS FLOWN ON BOTH WIRES (slice 26's post-commit rule: a declared domain's ENDPOINTS ARE " +
+		"MEASURED): PAST the aim point it holds with neither limit binding (%.3f m, %.3f %% out, " +
+		"tracking error %.3f deg of %.0f, head travel %.3f deg of %.0f) and the overshoot is a " +
+		"DE-TUNE THAT REVERSES rather than a plateau — rms r turns back UP %.5f -> %.5f. ⚠ NO new " +
+		"rung, cap, instability or draw: the head is a DETERMINISTIC SERVO on an existing " +
+		"measurement. Class 4a, the TENTH consecutive RNG-live slice, replay bit-identical, button " +
+		"DROPPED (10th).")
 		% [RHAT_SHOW, float(s18["rms"]), float(g18["rms"]),
 		   float(s18["rms"]) / maxf(float(g18["rms"]), 1.0e-9), float(s18["miss"]), float(g18["miss"]),
 		   RHAT_27, float(s27["rms"]), RHAT_24, float(s24["rms"]),
@@ -868,7 +923,11 @@ func _pass() -> bool:
 		   float(g16["rms"]) / maxf(float(w16["rms"]), 1.0e-9),
 		   float(w16["miss"]) / maxf(float(g16["miss"]), 1.0e-9), float(w16["off"]),
 		   float(w16["head"]), float(g16["head"]),
-		   float(s18["aero"]), float(g18["aero"]), int(w03["band"])])
+		   float(s18["aero"]), float(g18["aero"]), int(w03["band"]),
+		   float(_res["gfloor"]["miss"]), float(_res["gfloor"]["out"]),
+		   float(_res["gfloor"]["off"]), WIN_SHIP,
+		   float(_res["gfloor"]["head"]), float(_res["gfloor"]["stop"]),
+		   float(_res["w33"]["rms"]), float(_res["gfloor"]["rms"])])
 	_teardown()
 	quit(0)
 	return true

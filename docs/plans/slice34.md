@@ -12,7 +12,7 @@ an FOV budget item), and the successor slices 32 AND 33 both nominated:
 > so it needs a presence-gated head state with the strapdown else-arm VERBATIM."*
 > — `docs/plans/slice33.md`, Deferred (NAMED)
 
-**Status: COMPLETE (2026-08-09, suite 6215 → 6618). Gate 0 = 9 probes, gate 1 = the kernels,
+**Status: COMPLETE (2026-08-09, suite 6215 → 6628). Gate 0 = 9 probes, gate 1 = the kernels,
 gate 2 = the seam + the loader + the wired testset, gate 3 = TWO scenarios + the client + the four
 proofs.
 ⚠⚠ BOTH HALVES OF THE BANKED DEFERRAL WERE REFUTED AT GATE 0 (§0.1, §0.2) and the live claim was
@@ -630,7 +630,7 @@ skipped.
 
 ---
 
-## §3 — Gate 3 (COMPLETE, 2026-08-09 — 6515 → 6618, +103)
+## §3 — Gate 3 (COMPLETE, 2026-08-09 — 6515 → 6628, +113)
 
 The two shipped wires, the client, and the four proofs. **FIVE FINDINGS, and the FIRST ONE WAS A
 BLOCKING DEFECT NO EXISTING TEST WOULD HAVE CAUGHT.**
@@ -752,7 +752,7 @@ Predicate bracket: 1.8541° BREAKS (47.6 % out, 201.2 m, lock lost t = 5.808 s /
 
 ### The four proofs (convention 14)
 
-* **`slice34_verify.gd`** — 17 arms across BOTH wires (one `load_scenario`), 8 phases, exit 0.
+* **`slice34_verify.gd`** — 19 arms across BOTH wires (one `load_scenario`), 9 phases, exit 0.
 * **`slice34_ui_test.gd`** — 10 teeth, SEVENTEEN-way value-guard, exit 0. The load-bearing one is
   §3.0's HOLE, asserted structurally (identical routing, only `radome_view` surviving) plus the
   two verdict helpers called on the SAME numbers and required to DISAGREE.
@@ -777,6 +777,38 @@ Predicate bracket: 1.8541° BREAKS (47.6 % out, 201.2 m, lock lost t = 5.808 s /
   **0.123**, under the 0.5 the "← RINGING" tag needs, so the HUD printed the QUIET verdict on the
   arm the shot exists to show ringing. ⇒ **a shot must be aimed at the STATE being claimed, not at a
   shared range or the first rung that qualifies** — slice 19's rule, twice, in one gate.
+
+### ⭐ §3.6 — POST-REVIEW: THE *OTHER* SLIDER'S FLOOR WAS FLOWN NOWHERE (advisor)
+
+Both YAMLs declare `radome_slope_est ∈ [−0.36, −0.03]` and the gimbal file cites slice 26's
+post-commit rule — **ENDPOINTS MEASURED, never inferred from the interior** — while applying it only
+to the WINDOW knob. R̂'s CEILING is flown on both wires; **its FLOOR was flown nowhere**: the free
+ladder stops at −0.33, the twin's arms are −0.33/−0.27/−0.24/−0.18, and `test_missile.jl`'s ladders
+have no −0.36 either. That is slice 26's own catch, one slice later, in a knob it did not own.
+
+⚠ **AND IT IS NOT HYGIENE, BECAUSE OF WHAT THE FLOOR IS FOR.** Past slice 30's aim point the
+engagement residual goes POSITIVE and DE-TUNES rather than rings — but a de-tuned loop LAGS, lag
+grows the LEAD, and the lead is what the head's TRAVEL must cover (vs the 30° stop) and what sets the
+TRACKING ERROR (vs the 4° window). If either crossed, the student's own "overshoot cure B" gesture
+would break the arm and the domain's stated reason would be wrong. Measured:
+
+| R̂ | wire | `rms r` | miss | tracking err | head travel |
+|---|---|---|---|---|---|
+| −0.33 (the aim point) | gimbal, 4° | 0.05917 | 0.161 m | 1.599° | 18.117° |
+| **−0.36 (the FLOOR)** | gimbal, 4° | **0.06946** | **0.433 m** | **1.508°** | 18.117° |
+| −0.33 | strapdown | 0.05879 | 0.184 m | — | — |
+| **−0.36** | strapdown | **0.06911** | **0.185 m** | — | — |
+
+⇒ it holds on BOTH wires, 0.00 % out, with NEITHER limit binding (and the 4° window is INERT there,
+matching its own free read to 1e−6). ⭐⭐ **AND MEASURING IT CORRECTED THE SCENARIO'S OWN STATED
+REASON**: the YAML said the student "can overshoot it and see that the requirement STOPS FALLING". It
+does not — **the ring turns back UP and the miss grows monotonically PER TICK** (0.161 → 0.433 m, on to
+5.669 m at R̂ = −0.50, measured beyond the domain — ⚠ the emit grid cannot resolve that ordering,
+both arms being HITS a couple of metres apart, so the verifier asserts the RING and says so): a DE-TUNE THAT REVERSES, which is a sharper thing to see than a plateau.
+⚠ And the DETECTOR bill is not even monotone in R̂ (1.599 → 1.508 → 1.383° at −0.33/−0.36/−0.40, a
+MINIMUM past the aim point), so the floor is chosen where the REVERSAL is visible and both limits
+still have margin. Both wires now fly a `DOMAIN_MIN` arm (`gfloor` / `s36`) in a PHASE DOMAIN, plus
+a core-side testset.
 
 ### Convention 2, ON THE WIRE
 

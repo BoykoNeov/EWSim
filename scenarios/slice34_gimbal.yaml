@@ -252,6 +252,18 @@ knobs:
   #     positive one de-tunes). ⚠ The gimballed onset is TWO RUNGS SHORTER than the strapdown one, so
   #     a student who walks this slider on both wires sees the SAME slider produce two different
   #     brackets, which is the slice stated as an experiment rather than as a number.
+  #     ⚠⚠ MEASURED AT GATE 3's POST-REVIEW, AND THE FIRST DRAFT OF THIS LINE WAS WRONG ABOUT WHAT
+  #     THE OVERSHOOT SHOWS. It said the requirement "STOPS FALLING"; it does not. Past the aim
+  #     point the RING TURNS BACK UP (rms r 0.05917 → 0.06946 gimballed, 0.05879 → 0.06911
+  #     strapdown) and the MISS grows monotonically (0.161 → 0.433 m, and on to 5.669 m at R̂ = −0.50
+  #     measured beyond the domain) — a DE-TUNE THAT REVERSES, which is a sharper thing to see than a
+  #     plateau. Slice 30's one-sided constraint is intact: it never RINGS anywhere down here (0.069
+  #     against the 0.30 line) and neither limit binds (head travel 18.117° of 30°, tracking error
+  #     1.508° of 4°, so the 4° window is INERT at the floor too). ⚠ And the DETECTOR bill is NOT
+  #     monotone in R̂ — 1.599 → 1.508 → 1.383° at −0.33/−0.36/−0.40, a MINIMUM past the aim point —
+  #     so the floor is chosen where the REVERSAL is visible and both limits still have margin, not
+  #     where a bill is largest. (The endpoint was flown NOWHERE before this: slice 26's own
+  #     post-commit rule, applied to the window knob and missed on this one.)
   #   CEILING −0.03: the glass's own boresight slope, i.e. slice 28's BORESIGHT characterization (the
   #     natural and dangerous choice), which is the LOUDEST arm the domain reaches — and THE CEILING
   #     IS THE 30° MODEL-VALIDITY BUDGET 28/29/30/31 EACH DECLARED, here as a measured edge: the head

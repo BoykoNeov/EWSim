@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–34 COMPLETE & green — 6618 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–34
+**Slices 1–34 COMPLETE & green — 6628 tests. The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–34
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
@@ -274,7 +274,7 @@ shipped 4° one moves it 1e−10). ⭐ THE HANDOVER IS VISIBLE IN THE INDEX TRIP
 every tick and the NOSE's on tick 1 ALONE, which is the handover, pinned as `same_ticks == [1]`. ⭐⭐ THE ISOLATION
 IS NEITHER 32's NOR 33's: at the same R̂ the twin saturates the slice-19 ceiling 48.36% while the gimbal wire
 touches 0.00% ⇒ THE DIFFERENCE IS THE INDEX, NOT AUTHORITY (`defl_sat == 0` is what IS invariant). Class 4a (10th
-consecutive), button DROPPED (10th). (6618)**
+consecutive), button DROPPED (10th). (6628)**
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.

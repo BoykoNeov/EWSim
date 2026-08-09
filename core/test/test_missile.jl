@@ -7659,5 +7659,45 @@ end
             # the free arms' own tracking errors are what those windows are being compared against
             @test gim[-0.18].off_max < 4.0 < gim[-0.03].off_max
         end
+
+        # ⭐ THE R̂ SLIDER'S FLOOR, MEASURED ON BOTH WIRES — the gate-3 post-review catch (advisor).
+        # The YAML cites slice 26's post-commit rule (ENDPOINTS MEASURED, never inferred from the
+        # interior) and then applied it only to the WINDOW knob: R̂'s CEILING is flown everywhere
+        # (−0.03, both wires) and its FLOOR was flown NOWHERE. That is exactly the omission slice
+        # 26's own post-commit was about, one slice later and in a knob it did not own.
+        # ⚠ AND IT IS NOT HYGIENE, BECAUSE OF WHAT THE FLOOR IS FOR: past slice 30's aim point the
+        # engagement residual goes POSITIVE, which de-tunes rather than rings (slice 30's one-sided
+        # constraint) — but a de-tuned loop LAGS, lag grows the LEAD, and the lead is what the head's
+        # TRAVEL must cover (vs the stop) and what sets the TRACKING ERROR (vs the window). If either
+        # crossed, the student's own "overshoot cure B" gesture would break the arm.
+        let fg   = arm(Rhat = -0.36, tau = 0.05, stop = 30.0, gfov = 4.0),
+            fgf  = arm(Rhat = -0.36, tau = 0.05, stop = 30.0, gfov = 8.0),
+            fs   = arm(Rhat = -0.36),
+            aimg = arm(Rhat = -0.33, tau = 0.05, stop = 30.0, gfov = 4.0)
+            # It holds, on BOTH wires, with BOTH limits clear.
+            @test fg.out == 0.0 && fs.out == 0.0
+            @test fg.miss < 1.0 && fs.miss < 1.0
+            @test fg.n_band > 0 && fs.n_band > 0
+            @test fg.rms_r < 0.30 && fs.rms_r < 0.30          # QUIET — a de-tune never rings
+            @test fg.head_max < 30.0                          # …the STOP does not bind…
+            @test fg.off_max  < 4.0                           # …nor the shipped WINDOW…
+            @test abs(fgf.miss - fg.miss) < 1.0e-6            # …which is why 4° is inert here too
+            # (⚠ `defl_sat` is NOT asserted here — this testset's `arm` does not measure it, and a
+            #  claim needs a measurement rather than a plausible-looking line. It is carried on the
+            #  wire instead, where `slice34_verify.gd`'s PHASE ISOLATION counts it band-gated on
+            #  every arm INCLUDING both floor arms.)
+            # ⭐⭐ AND THE OVERSHOOT IS A DE-TUNE THAT *REVERSES*, NOT A PLATEAU — which CORRECTS the
+            # scenario comment this catch was found by. The YAML said the student "can overshoot it
+            # and see that the requirement STOPS FALLING"; what actually happens is that the RING
+            # turns back UP (0.05917 → 0.06946 gimballed, 0.05879 → 0.06911 strapdown) and the MISS
+            # grows monotonically past the aim point (0.161 → 0.433, and on to 5.669 at R̂ = −0.50,
+            # measured beyond the domain). Slice 30's one-sided constraint is intact — it never
+            # RINGS — but "stops falling" was the wrong verb, and the DETECTOR bill is not even
+            # monotone here (1.599 → 1.508 → 1.383 at −0.33/−0.36/−0.40, a minimum past the aim
+            # point). The floor is where the REVERSAL is visible and both limits still have margin.
+            @test fg.rms_r > aimg.rms_r
+            @test fs.rms_r > strap[-0.33].rms_r
+            @test fg.miss  > aimg.miss
+        end
     end
 end
