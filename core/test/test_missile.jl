@@ -8134,15 +8134,144 @@ end
                            for kb in load_scenario(p).knobs)[:gimbal_rate_dps] === :m1
             end
         end
-        # THE PRESENCE GATE FROM THE OTHER SIDE: no shipped wire carries a servo rate, so slices
-        # 1–34 are byte-identical by GATING and not by a value that happens to agree.
+        # THE PRESENCE GATE FROM THE OTHER SIDE, AND GATE 3 TIGHTENED IT RATHER THAN RELAXING IT:
+        # at gate 2 this asserted that NO shipped wire carries a servo rate. Gate 3 authors exactly
+        # one, so the sweep now pins the COUNT and the OWNER — slices 1–34 stay byte-identical by
+        # GATING (not by a value that happens to agree), and a second wire growing the key would
+        # fail here rather than silently widening the claim.
         let base = joinpath(@__DIR__, "..", "..", "scenarios")
+            carriers = String[]
             for f in readdir(base)
                 endswith(f, ".yaml") || continue
                 for (_, e) in load_scenario(joinpath(base, f)).world.entities
-                    @test !haskey(e.comp, :gimbal_rate_dps)
+                    haskey(e.comp, :gimbal_rate_dps) && push!(carriers, f)
                 end
             end
+            @test carriers == ["slice35_rate.yaml"]
+        end
+    end
+
+    @testset "gate 3 — THE SHIPPED WIRE, and the window that is authored on a MEASUREMENT" begin
+        base = joinpath(@__DIR__, "..", "..", "scenarios")
+        scn  = load_scenario(joinpath(base, "slice35_rate.yaml"))
+        m    = scn.world.entities[:m1]
+
+        # ⚠ ONE WIRE, unlike slice 34's PAIR, and the reason is a measurement rather than a
+        # preference: the whole claim lives INSIDE one slider's declared domain (60 → 8 °/s), so the
+        # lesson is a DRAG and not a comparison between two files. Slice 34 needed a twin only
+        # because no in-domain value removes a head.
+        @test scn.world.seed == 32
+        @test scn.dt_physics == 1.0e-3
+        # The interceptor is slices 23–34's to the digit — the rate-absent column has to reproduce
+        # slice 34 exactly for any movement to be attributable to the servo and nothing else.
+        gim = load_scenario(joinpath(base, "slice34_gimbal.yaml")).world.entities[:m1]
+        for k in (:radome_slope, :radome_ripple, :radome_ripple_k, :sigma_seek, :alpha, :beta,
+                  :seek_two_angle, :n_pn, :a_max, :delta_max, :k_alpha, :k_q, :mass_kg,
+                  :cd_area_m2, :rho, :af_cma, :af_cmd, :af_cmq, :af_cla, :af_alpha_max,
+                  :af_cy_beta, :af_I, :af_I_roll, :af_I_zz, :af_c_roll, :af_d,
+                  :gimbal_tau_s, :gimbal_stop_deg)
+            @test m.comp[k] == gim.comp[k]
+        end
+        @test m.comp[:gimbal_rate_dps] == 40.0        # the NEW key, and the ONE authored difference…
+        @test m.comp[:gimbal_fov_deg]  == 25.0        # …beside the window, widened on the number below
+        @test m.comp[:radome_slope_est] == -0.03      # …and R̂, OPENING ON THE DISEASE (33's default)
+
+        # ⚠⚠ THE MARKER, AND THE RE-CHECK THE PLAN DEMANDED CAME BACK **NEGATIVE** — which is the
+        # result worth pinning. Slice 34's marker plugged a REAL HOLE: its wire raised neither FOV
+        # marker (the loader refuses `seeker_fov_deg` beside a head) and fell through into slice
+        # 26/27/28's radome cascade, confidently wrong about the SUBJECT. Nothing of the kind happens
+        # here — a slice-35 wire is a slice-34 wire PLUS one key, so `gimbal_view` is raised and
+        # routes it to a branch that is still about the HEAD. This marker is a BRANCH SELECTOR, and
+        # what it selects is the half slice 34's HUD cannot say: that HUD pairs the tracking error
+        # against the DETECTOR WINDOW, which is authored WIDE here and NEVER BINDS, so it would print
+        # a true verdict about a comfortable budget and never mention the SERVO. ⇒ the failure mode
+        # is an INVISIBLE SLICE, not a wrong number, and the two must not be taught as one rule.
+        let info = EWSim._airframe_view_info(scn.world)
+            @test info[:gimbal_rate_view] === true
+            @test info[:gimbal_view]      === true      # …still a head…
+            @test info[:radome_view]      === true      # …still glass (which is what drops the button)
+            @test !haskey(info, :seeker_fov_view)       # …and still no body-fixed window
+            @test info[:airframe_6dof]    === true
+        end
+        # THE MIRROR — slice 34's own wire must NOT raise it, or the branch selector selects both
+        # wires and slice 34's HUD is the one that disappears (slice 32's `!haskey`-as-a-feature
+        # discipline pointed at the new key, and the reason it is a mirror and not a spot check).
+        for f in readdir(base)
+            endswith(f, ".yaml") || continue
+            f == "slice35_rate.yaml" && continue
+            # ⚠ `nothing` on a wire with no missile at all (slices 1–7) — the sweep must SKIP those
+            # rather than assert on them, or the mirror fails for a reason that has nothing to do
+            # with the marker.
+            let inf = EWSim._airframe_view_info(load_scenario(joinpath(base, f)).world)
+                inf === nothing || @test !haskey(inf, :gimbal_rate_view)
+            end
+        end
+
+        # CONVENTION 9 — EXACTLY TWO KNOBS, and gate 2 measured them to be ONE AXIS (the rate knob's
+        # COST is charged by the ring, and the ring is what R̂ sets). Every disqualified candidate is
+        # asserted ABSENT rather than merely left out, `gimbal_fov_deg` at the head of the list
+        # because it was slice 34's ONE live slider and is dropped here ON A NUMBER (see below).
+        let ks = Dict(kb.key => kb for kb in scn.knobs)
+            @test length(scn.knobs) == 2
+            @test ks[:gimbal_rate_dps].min == 8.0  && ks[:gimbal_rate_dps].max == 60.0
+            @test ks[:radome_slope_est].min == -0.36 && ks[:radome_slope_est].max == -0.03
+            for k in (:gimbal_fov_deg, :gimbal_tau_s, :gimbal_stop_deg, :cross_speed_mps,
+                      :n_pn, :rho, :af_alpha_max, :sigma_seek, :radome_slope, :radome_ripple,
+                      :radome_ripple_k, :elevation_deg)
+                @test !haskey(ks, k)
+            end
+            # The DEFAULT is INSIDE the servo domain and not at either endpoint — the two-sided knob
+            # has to be draggable BOTH ways from where the wire opens, or half the lesson is off the
+            # screen. (R̂ opens AT its ceiling deliberately: that end is the disease.)
+            @test ks[:gimbal_rate_dps].min < m.comp[:gimbal_rate_dps] < ks[:gimbal_rate_dps].max
+            @test m.comp[:radome_slope_est] == ks[:radome_slope_est].max
+        end
+
+        # ⭐⭐ THE AUTHORED WINDOW IS A MEASUREMENT, AND THIS IS THE ASSERT THAT MAKES IT ONE. Gate 2's
+        # finding is that a rate limit makes the ACQUISITION TURN the binding requirement — the LOOP's
+        # requirement barely moves while the WHOLE-APPROACH one triples, out at LAUNCH RANGE — so a
+        # LIVE window would turn this wire's break into an ACQUISITION break and re-run slice 34's
+        # lesson as a third mechanism. The window is therefore authored above the worst whole-approach
+        # requirement anywhere a student can drag to.
+        # ⚠ THAT MAXIMUM WAS RE-MEASURED ON A FINE GRID BECAUSE THE REQUIREMENT IS NON-MONOTONE IN
+        # BOTH SLIDERS (a corner sweep is not evidence about the interior — the advisor's blocking
+        # catch at this gate): R̂ ∈ [−0.36, −0.03] on a 0.015 grid × rate ∈ {8, 10, 12, 15, 20, 25,
+        # 40, 60} = 184 cells, worst 19.279° at the CORNER, interior wrinkles all well under it.
+        # What is FLOWN here is that corner, which is the cell the claim rests on.
+        let w = load_scenario(joinpath(base, "slice35_rate.yaml")).world,
+            s = load_scenario(joinpath(base, "slice35_rate.yaml")).subs
+            w.entities[:m1].comp[:gimbal_rate_dps] = 8.0        # the servo domain's FLOOR
+            w.entities[:m1].comp[:radome_slope_est] = -0.03     # …and the R̂ domain's, together
+            off_max = 0.0; n_out = 0; head_max = 0.0; r_prev = Inf; miss = Inf
+            for _ in 1:14000
+                tick!(w, s, 1.0e-3); empty!(w.events)
+                tel = get(w.env, :telemetry, Dict{String,Any}())
+                r = los_range(w.entities[:m1].pos, w.entities[:tgt1].pos)
+                if miss == Inf && r > 200.0
+                    off_max = max(off_max, get(tel, "m1.head_off_deg", 0.0))
+                    head_max = max(head_max, get(tel, "m1.head_angle_deg", 0.0))
+                    get(tel, "m1.gimbal_valid", 1.0) < 0.5 && (n_out += 1)
+                end
+                r > r_prev && miss == Inf && (miss = r_prev)
+                r_prev = r
+                miss < Inf && break
+            end
+            @test miss < Inf                                   # it REACHED CPA (never trust the sizing)
+            # ⚠ 19.279 IS A **MEASURED** CONSTANT, NOT A DERIVED ONE, AND IS LABELLED AS SUCH HERE AND
+            # IN `slice35_verify.gd` (the slice-21 magic-multiple discipline): it is the maximum of
+            # the 184-cell grid above, whose table lives in `docs/plans/slice35.md` §3. What THIS
+            # testset can say on its own is that the corner reproduces it and that the window clears
+            # it; the verifier additionally derives "the corner IS the maximum" from its own arms.
+            @test isapprox(off_max, 19.279; atol = 0.02)       # the worst requirement in the domain…
+            @test off_max < 25.0                               # …and the authored window CLEARS it…
+            @test n_out == 0                                   # …so the detector never bites, ANYWHERE
+            # ⚠ AND THE OTHER LIMIT HAS MARGIN TOO, measured on the same arm: the mechanical STOP is
+            # a RESTATEMENT of slice 33's excursion and never binds (worst travel over the whole
+            # 184-cell domain is 24.602°, at a different cell than this one).
+            @test head_max < 30.0
+            # ⚠ AND THE 30° MODEL-VALIDITY CAVEAT 28/29/30/31 EACH DECLARED SURVIVES AS A NUMBER
+            # rather than as a caveat: the small-angle bend keeps its headroom over the whole domain.
+            @test head_max < 25.0
         end
     end
 end

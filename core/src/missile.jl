@@ -784,6 +784,31 @@ function _airframe_view_info(w::World)
     # already drops it, exactly as slice 33 found for its own composition. What this marker selects is
     # the HUD BRANCH ALONE, which is the half that is NOT identical.
     any(haskey(w.entities[m].comp, :gimbal_tau_s) for m in missiles) && (info[:gimbal_view] = true)
+    # SLICE 35 — the RATE-LIMITED SERVO marker. ⚠⚠ THE MARKER-HOLE RE-CHECK THE PLAN DEMANDED CAME
+    # BACK **NEGATIVE**, AND THAT NEGATIVE RESULT IS WORTH MORE THAN THE KEY BELOW. Slice 34's marker
+    # was load-bearing against a REAL HOLE: the loader refuses `seeker_fov_deg` beside a head, so a
+    # gimbal wire raises neither FOV marker and would have fallen THROUGH both branches into slice
+    # 26/27/28's radome cascade — a fluent verdict about the GLASS on a wire whose subject is the
+    # HEAD. Nothing of the kind happens here. A slice-35 wire is a slice-34 wire PLUS one key: the
+    # loader refuses nothing extra, `gimbal_view` is raised and routes correctly, and the branch it
+    # selects is about the HEAD, which is still the right subject.
+    #
+    # ⇒ THIS MARKER IS A BRANCH SELECTOR, NOT A HOLE PLUG, and the distinction is written down here
+    # so the next slice does not learn the wrong rule from the fact that both slices added a key.
+    # What it selects is the half slice 34's HUD cannot say: slice 34's lines pair the head's
+    # TRACKING ERROR against the DETECTOR WINDOW, which on this wire is authored wide and never
+    # binds — so that HUD would report a comfortable budget and never mention the SERVO, which is
+    # the entire subject. The numbers it draws would all be true; the slice would simply be invisible.
+    #
+    # ⚠ A HANDSHAKE MARKER RATHER THAN A TELEMETRY VALUE-GUARD, and the reason is not only that every
+    # view decision in this family is made at the handshake: `gimbal_rate_dps` ships the FINITE_CEIL
+    # sentinel on a slice-34 wire (convention 6 — never an `Inf` on the JSON), so a value-guard would
+    # be a MAGIC-NUMBER compare against 1e9, which is exactly the shape this arc keeps replacing with
+    # measured quantities.
+    # ⚠ THE BUTTON NEEDS NO EDIT AT EITHER CLIENT SITE — `radome_view` and `gimbal_view` are both
+    # raised here and either already drops it (slice 33's finding, third occurrence).
+    any(haskey(w.entities[m].comp, :gimbal_rate_dps) for m in missiles) &&
+        (info[:gimbal_rate_view] = true)
     return info
 end
 

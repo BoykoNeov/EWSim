@@ -4791,7 +4791,7 @@ everything 26–33 named and did not spend.
 ---
 
 **Slice 35 — A RATE-LIMITED HEAD: THE BANDWIDTH THAT HOLDS THE TRACK IS THE BANDWIDTH THAT FEEDS THE
-LOOP (HANDOFF §11 Tier-A)** — GATES 0–2 COMPLETE (2026-08-09), gate 3 PLANNED. The deferral slice 34
+LOOP (HANDOFF §11 Tier-A)** — COMPLETE (2026-08-09), gates 0–3. The deferral slice 34
 named SECOND. Slice 34's head was INFINITELY FAST: `head_slew` moved it a full first-order step every
 tick with no bound on how far. A real gimbal has a servo with a maximum slew rate, and the moment it
 does the head's motion stops being free — it becomes a RESOURCE spent against a demand, and **THE
@@ -4891,11 +4891,86 @@ the POSITIVE fact behind it, and the measured reason a 60 °/s ceiling is not a 
 ⚠ And the isolation's baseline is now pinned FINITE **before** its `===` loop, so an arm that never
 reached CPA could not pass it vacuously on `Inf === Inf`.
 
+**GATE 3 (6892 → 6876)** — ⚠ **THE FIRST GATE IN THIS ARC WHOSE SUITE COUNT FALLS, AND THE DIRECTION
+IS ACCOUNTED FOR RATHER THAN LEFT TO READ AS LOST COVERAGE**: ~87 new asserts land and ~103 leave,
+because gate 2's per-entity "no shipped wire carries `gimbal_rate_dps`" sweep collapses into ONE
+`carriers == ["slice35_rate.yaml"]` assert — strictly stronger, since it pins the COUNT and the OWNER
+and a second wire growing the key now fails. Ships ONE wire (`scenarios/slice35_rate.yaml`, unlike
+slice 34's PAIR — the whole claim lives INSIDE one slider's domain, so the lesson is a DRAG), the
+`gimbal_rate_view` marker, a new HUD branch + verdict helper + instrument, a gate-3 testset, and the
+verifier/UI-test pair.
+
+⚠⚠ **GATE 3's FIRST FINDING WAS BLOCKING AND FIRED BEFORE THE YAML WAS WRITTEN (advisor): THE AUTHORED
+WINDOW'S NUMBER RESTED ON A COARSE GRID OF A QUANTITY THIS SLICE HAD ALREADY MEASURED TO BE
+NON-MONOTONE IN BOTH SLIDERS.** Gate 2's 19.279° came from 7 R̂ × 5 rates; a student drags two
+CONTINUOUS sliders, and the interior wrinkles (§0.4's −0.16 row, §2's 13.244-at-15 vs 12.828-at-8) are
+exactly where a corner sweep says nothing. Re-measured on **184 cells** (R̂ ∈ [−0.36, −0.03] on a 0.015
+step × rate ∈ {8, 10, 12, 15, 20, 25, 40, 60}, window REMOVED so the requirement is READ and never
+CLIPPED): ⭐ the coarse answer SURVIVED — the surface is maximal at the CORNER (R̂ = −0.03, rate = 8)
+at **19.279°**, the interior all well under it, worst head travel **24.602°** against a 30° stop. ⇒
+`gimbal_fov_deg` is AUTHORED at **25.0** (clearing the domain max by 5.7°, 1.30×) and deliberately NOT
+at 30.0, because the window and the stop are read against two DIFFERENT angles and equating them
+invites the pairing slice 34's HUD exists to prevent. ⚠ The verifier does not trust the grid: it
+asserts `out == 0` AND `off_max < window` on EVERY arm and **DERIVES "the corner IS the maximum" from
+its own 12 arms** before cross-checking 19.279, which is labelled a MEASURED constant at both sites.
+
+⚠⚠ **SECOND FINDING — THE MARKER-HOLE RE-CHECK THE PLAN DEMANDED CAME BACK *NEGATIVE*, AND THE
+FAILURE IT PREVENTS IS AN *INVISIBLE SLICE*, NOT A WRONG NUMBER.** Slice 34's marker plugged a REAL
+hole (a loader refusal re-routing its wire into the radome cascade, confidently wrong about the
+SUBJECT). Here a slice-35 wire is a slice-34 wire PLUS one key: the loader refuses nothing extra,
+`gimbal_view` is raised, and the branch it selects is still about the HEAD. ⇒ `gimbal_rate_view` is a
+**BRANCH SELECTOR**, and that distinction is written into four files so the next slice does not learn
+the wrong rule. What it selects is the half slice 34's HUD cannot say: that HUD pairs the tracking
+error against the DETECTOR WINDOW, authored WIDE here and never binding, so it would report a
+comfortable budget, name the INDEX and never mention the SERVO — **every number TRUE, the slice
+invisible**. ⭐⭐ AND ON ONE STATE IT IS WORSE THAN SILENT: when a slow servo has BOUGHT the ring down,
+slice 34's helper reads "SELF-INDEXED — the loop is quiet", **crediting the INDEX for a quiet the
+BANDWIDTH paid for** — the exact inversion of the lesson, and the sharpest tooth in the UI test (the
+two helpers are called on the SAME numbers and asserted to DISAGREE). ⚠ A handshake marker rather than
+a telemetry value-guard, because `gimbal_rate_dps` ships FINITE_CEIL on a slice-34 wire and a guard
+would be a magic-number compare against 1e9. ⚠ The BUTTON needs no edit at either site (slice 33's
+finding, THIRD occurrence).
+
+⚠ **THIRD FINDING — A VERIFIER TOOTH THAT PASSED 12/12 WAS A TAUTOLOGY** (advisor, post-green). It
+counted frames where the shipped `head_rate_sat` disagreed with the shipped demand-vs-cap and claimed
+that agreement LICENSED the HUD's three-number line. The kernel branches on `head_dem > max(rate,0)·Δt`
+and the seam ships `rad2deg(head_dem)/Δt` beside the cap: **the same comparison rearranged, from the
+same two floats** — convention 11's rtol-`≈0` trap in a new shape. The counter is KEPT with its claim
+downgraded to what it is (a units-regression check on the seam), and the architectural reason the
+client may not re-derive the predicate is argued at the HUD instead. ⭐ **THE TOOTH WITH CONTENT IS THE
+ZERO**: a demand of EXACTLY 0.0 is the HANDOVER tick or a head HOLDING with no error signal, and it
+carries a flag of 0.0 — so `head_rate_sat` reads FREE on a broken arm for precisely the reason `rms r`
+reads QUIET there. The verifier now asserts ZERO such band frames on every arm, which is what makes
+`sat_band` and `dem95` measurements of a SERVO. ⚠ One-sided, and the file says so.
+
+**THE WIRE** — seed 32, the glass/head/geometry held to slice 34's digit, window 25.0 AUTHORED, R̂ =
+−0.03 (OPENING ON THE DISEASE, slice 33's default; slice 34's departure does NOT transfer, since 34
+opened quiet only to keep a stability verdict off a windowed arm), servo 40 °/s (INTERIOR, so the knob
+drags BOTH ways). **S35V, 12 arms, 8 phases, green first run and reproducing gates 0/2 to the digit:**
+OPEN rms r 0.86263 RINGING with `sat_band` 65.19 % and demand p95 **110.194 °/s against a 40 cap**,
+miss 10.947; REPLAY max|Δpos| **0.000000**; ⭐⭐ TRADE 60→8 °/s gives rms r 0.88479 → 0.38556 (**2.29×,
+MONOTONE across all five rungs**) while `off_band` grows 5.915 → 12.825 (**2.17×**), the interior dip
+PINNED POSITIVELY; ⭐⭐ SPLIT `sat_band` **0.00 % vs 96.98 %** at one 8 °/s servo; ⭐ RULE at
+`radome_slope_worst` the requirement moves **0.0019°** across the whole rate domain with the limit
+binding 0.00 % at both ends; ⭐⭐ DEMAND **0.562 → 32.418 °/s = 57.7×** across slice 34's own bracket;
+WINDOW corner 19.275° and `out = 0.00 %` on all 12; FLOOR R̂ = −0.36 quiet with the servo free.
+**S35UI** 10 teeth + an 18-way guard, and all 20 prior UI tests re-run green. **Smoke-load** DONE.
+**TWO SHOTS** at tick 9600, both aimed at the CLAIMED branch and verified against the client's own
+instruments BEFORE the window opened: "SERVO PEGGED — and still RINGING" (demand 109.8 vs 40, duty
+70 %, peak 1.257) vs "QUIET, BOUGHT WITH BANDWIDTH" (demand 31.9 vs 8, duty 91 %, peak 0.154).
+⚠⚠ **SHOT B HAD TO BE RE-TAKEN** — the first harness sent a raw `set_param`, which moves the PHYSICS
+while the slider handle and its label keep the OLD numbers: a capture showing a missile flying 8 °/s
+under a slider reading 40, **a LYING PICTURE on a green run**, and slice 19's press-the-button lesson
+recurring in a new widget. ⚠ The new client instrument is a THIRD SHAPE beside slice 27's peak-hold
+and slice 32's latch — an **EMA DUTY**, earned because a rate limit binds on a FRACTION of ticks
+(8.2 / 65.2 / 97.0 %), so an instantaneous read would flicker with the ring and a latch would go true
+on every arm and stay; all three are INDEPENDENT `if` blocks and here all three keys ship on EVERY
+frame (unlike slice 34's mutually-exclusive pair), so a chained dispatch would freeze one outright.
+
 Class **4a** (the ELEVENTH consecutive RNG-live slice — a deterministic servo bound on an existing
 measurement, 2 randn/tick, the seed load-bearing). **KNOB, not rung**; the button stays DROPPED (the
-11th) and slice 34's `gimbal_view` marker already routes this wire — ⚠ to be re-checked at gate 3
-against the MARKER-HOLE class, which is what slice 34's own §3.0 was. Plan + full measured tables in
-`docs/plans/slice35.md` (§0, §1, §2); probe scripts in `M:\claud_projects\temp\slice35\`.
+11th). Plan + full measured tables in `docs/plans/slice35.md` (§0, §1, §2, §3); probe scripts in
+`M:\claud_projects\temp\slice35\`.
 
 ---
 

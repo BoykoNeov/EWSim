@@ -11,7 +11,13 @@ an FOV budget item, 34 = the gimbal), and the deferral slice 34 named SECOND:
 > slew-rate-limited lock loss."*
 > — `docs/plans/slice34.md`, Deferred (NAMED)
 
-**Status: GATE 2 COMPLETE (2026-08-09) — the seam + the loader + the telemetry, suite 6685 → 6874
+**Status: SLICE COMPLETE — GATE 3 DONE (2026-08-09).** One shipped wire (`scenarios/slice35_rate.yaml`),
+one new handshake marker, one new HUD branch, four proofs green. See **§3** for the gate-3 findings —
+the AUTHORED window's number had to be re-measured on a 184-cell FINE GRID (the coarse corner sweep is
+not evidence about an interior that is non-monotone in BOTH sliders), the marker-hole re-check came
+back **NEGATIVE** and the failure it prevents is an **INVISIBLE SLICE** rather than a wrong number, and
+a verifier tooth that passed 12/12 was found to be a TAUTOLOGY and replaced with the one that has
+content. **GATE 2 COMPLETE (2026-08-09)** — the seam + the loader + the telemetry, suite 6685 → 6874
 green, + a post-review commit to 6892 (advisor: the `rate ≤ 0` degenerate the loader PERMITS was
 proven to LOAD and never FLOWN — it is BIT-FOR-BIT slice 34's `τ = Inf` reductio, and at gate 3 the
 key is a declared knob a client can reach live). See §2 for its ONE FINDING (a rate limit makes the ACQUISITION TURN the binding requirement,
@@ -415,6 +421,157 @@ reproduces exactly and nothing is built on it.
 absent key and for `1e6`. Gate 3 cannot author the ceiling as a control.
 
 Probe scripts: `M:\claud_projects\temp\slice35\` (`g2_seam.jl`, `g2_knobs.jl`, `g2_acq.jl`).
+
+---
+
+## §3 — Gate 3 (2026-08-09) — THE WIRE, THE MARKER, AND THREE FINDINGS
+
+**Status: GATE 3 COMPLETE. Suite 6892 → 6876 — ⚠ the FIRST gate in this arc whose count FALLS, and
+the direction is accounted for rather than left to read as lost coverage: ~87 new asserts land and
+~103 leave, because gate 2's per-entity "no shipped wire carries `gimbal_rate_dps`" sweep collapses
+into ONE `carriers == ["slice35_rate.yaml"]` assert, which is strictly stronger (it pins the COUNT and
+the OWNER, so a second wire growing the key now fails).** Ships:
+
+* `scenarios/slice35_rate.yaml` — ONE wire, unlike slice 34's PAIR, and the reason is a measurement:
+  the whole claim lives INSIDE one slider's declared domain (60 → 8 °/s), so the lesson is a DRAG.
+  Slice 34 needed a twin only because no in-domain value removes a head.
+* `missile.jl` `_airframe_view_info` — the `gimbal_rate_view` marker (see FINDING 2).
+* `Sandbox.gd` — `_servo_verdict_label` (a pure helper, convention 14), `_draw_gimbal_rate_hud_lines`,
+  the `_servo_duty` EMA instrument, and both dispatch chains branching on the new marker FIRST.
+* `test_missile.jl` — a gate-3 testset (the wire held to slice 34's digit-for-digit, the marker + its
+  mirror, convention 9's knob count with every disqualification, and the domain CORNER **flown**).
+* `net/slice35_verify.gd` (12 arms, 8 phases) + `net/slice35_ui_test.gd` (10 teeth, 18-way guard).
+
+### ⚠⚠ FINDING 1 — THE AUTHORED WINDOW'S NUMBER RESTED ON A COARSE GRID, AND THE QUANTITY IS
+### NON-MONOTONE IN BOTH SLIDERS (advisor, BLOCKING, before the YAML was written)
+
+Gate 2 settled that `gimbal_fov_deg` goes AUTHORED AND WIDE and named the number it must clear:
+**19.279°**, the worst whole-approach requirement, measured over 7 R̂ × 5 rates. But this slice's own
+§0.4 and §2 both record the requirement being NON-MONOTONE — in the rate (`off_band` 13.244 at 15 °/s
+against 12.828 at 8) and in R̂ near the onset bracket — and a student drags two CONTINUOUS sliders.
+A corner sweep is not evidence about an interior whose wrinkles are exactly where the two
+non-monotonicities live, and if any interior cell exceeded the authored window the band would EMPTY
+and gate 2's own condition (1) would turn every number on the wire into slice 34's frozen-index
+artefact.
+
+⇒ re-measured on a FINE grid — **R̂ ∈ [−0.36, −0.03] on a 0.015 step × rate ∈ {8, 10, 12, 15, 20, 25,
+40, 60} = 184 cells**, window REMOVED so the requirement is READ and never CLIPPED
+(`M:\claud_projects\temp\slice35\g3_fine.jl`):
+
+| R̂ \ rate | 8 | 10 | 12 | 15 | 20 | 25 | 40 | 60 |
+|---|---|---|---|---|---|---|---|---|
+| −0.360 | 1.51 | 1.51 | 1.51 | 1.51 | 1.51 | 1.51 | 1.51 | 1.51 |
+| −0.330 | 1.72 | 1.60 | 1.60 | 1.60 | 1.60 | 1.60 | 1.60 | 1.60 |
+| −0.270 | 3.59 | 2.82 | 2.31 | 1.80 | 1.77 | 1.77 | 1.77 | 1.76 |
+| −0.210 | 6.30 | 5.31 | 4.64 | 3.98 | 3.29 | 2.85 | 1.90 | 1.89 |
+| −0.180 | 8.05 | 6.96 | 6.23 | 5.50 | 4.73 | 4.02 | 1.96 | 1.96 |
+| −0.165 | 9.03 | 7.90 | 7.14 | 6.39 | 6.30 | 6.69 | 5.19 | 5.14 |
+| −0.135 | 11.24 | 10.07 | 10.52 | 10.82 | 8.90 | 7.18 | 5.41 | 5.52 |
+| −0.105 | 13.82 | 12.58 | 12.20 | 10.32 | 9.10 | 7.70 | 5.64 | 5.65 |
+| −0.060 | 17.66 | 15.30 | 13.07 | 12.14 | 10.32 | 8.55 | 6.59 | 5.83 |
+| −0.030 | **19.28** | 16.31 | 13.64 | 13.24 | 11.58 | 9.52 | 7.58 | 5.92 |
+
+⭐ **THE COARSE ANSWER SURVIVED AND THE CHECK WAS STILL WORTH RUNNING**: the surface is maximal at the
+CORNER (R̂ = −0.03, rate = 8) at **19.279°**, the interior wrinkles (the −0.135/−0.165 rows) all sit
+well under it, and the worst HEAD TRAVEL anywhere is **24.602°** against a 30° stop. ⇒ the window is
+authored at **25.0°** — clearing the domain max by 5.7° (1.30×) — and NOT at 30.0, deliberately: the
+window and the stop are read against two DIFFERENT angles, and making them equal invites exactly the
+pairing slice 34's HUD exists to prevent.
+⚠ **AND THE VERIFIER DOES NOT TRUST THE GRID**: it asserts `out == 0` AND `off_max < window` on
+EVERY arm it flies, and it DERIVES "the corner IS the maximum" from its own 12 arms before
+cross-checking that corner against 19.279. ⚠ 19.279 is a **MEASURED** constant from a probe that is
+not in the repo, and it is labelled as such at both sites (the slice-21 magic-multiple discipline).
+
+### ⚠⚠ FINDING 2 — THE MARKER-HOLE RE-CHECK CAME BACK **NEGATIVE**, AND THE FAILURE IT PREVENTS IS AN
+### **INVISIBLE SLICE**, NOT A WRONG NUMBER
+
+The plan required this re-check ("slice 34's `gimbal_view` marker already routes this wire — ⚠ to be
+re-checked at gate 3 against the marker-hole class"). It came back negative, and **the negative result
+is worth more than the key**. Slice 34's marker plugged a REAL HOLE: the loader refuses
+`seeker_fov_deg` beside a head, so its wire raised neither FOV marker, fell through into slice
+26/27/28's RADOME cascade, and would have printed a fluent verdict about the GLASS on a wire whose
+subject was the HEAD. Nothing of the kind happens here — a slice-35 wire is a slice-34 wire PLUS one
+key, the loader refuses nothing extra, `gimbal_view` is raised, and the branch it selects is still
+about the HEAD.
+
+⇒ `gimbal_rate_view` is a **BRANCH SELECTOR**, not a hole plug, and the distinction is written into
+the core comment, `Sandbox.gd`, the verifier's handshake check and the UI test header so the next
+slice does not learn the wrong rule from the fact that both slices added a key. What it selects is the
+half slice 34's HUD **cannot say**: that HUD pairs the tracking error against the DETECTOR WINDOW,
+which is authored WIDE here and NEVER BINDS, so it would report a comfortable budget, name the INDEX,
+and never mention the SERVO — **every number TRUE, the slice invisible**.
+
+⭐⭐ **AND ON ONE STATE IT IS WORSE THAN SILENT, WHICH IS THE SHARPEST TOOTH IN THE UI TEST.** When a
+slow servo has BOUGHT the ring down (quiet, ~97 % saturated), slice 34's helper reads
+**"SELF-INDEXED — the loop is quiet"** — crediting the INDEX for a quiet the BANDWIDTH paid for, the
+exact inversion of this slice's lesson. The two helpers are called on the SAME numbers and asserted to
+DISAGREE, and slice 34's is left VERBATIM and still correct on its own wire.
+⚠ A HANDSHAKE MARKER rather than a telemetry value-guard, and not only because every view decision in
+this family is made at the handshake: `gimbal_rate_dps` ships the FINITE_CEIL sentinel on a slice-34
+wire (convention 6), so a value-guard would be a MAGIC-NUMBER compare against 1e9.
+⚠ **THE BUTTON NEEDS NO EDIT AT EITHER SITE** (`radome_view` already drops it) — slice 33's finding,
+THIRD occurrence, and asserted rather than assumed.
+
+### ⚠ FINDING 3 — A VERIFIER TOOTH THAT PASSED 12/12 WAS A TAUTOLOGY (advisor, post-green)
+
+The first draft counted frames where the shipped `head_rate_sat` disagreed with the shipped
+demand-vs-cap, and claimed that agreement LICENSED the HUD drawing the three numbers as one story. It
+does not. The kernel branches on `head_dem > max(rate_max, 0)·Δt` and the seam ships
+`rad2deg(head_dem)/Δt` beside the authored cap: **the same comparison rearranged, from the same two
+floats.** It cannot disagree except at a 1-ULP boundary, which the tolerance then excludes —
+convention 11's rtol-`≈0` trap in a new shape. The counter is KEPT (it would catch a units regression
+in the seam, which is worth one cheap check) with its claim downgraded to exactly that, and the
+architectural reason the client may not re-derive the predicate is argued where it belongs, at the HUD.
+
+⭐ **THE TOOTH WITH CONTENT IS THE ZERO**, and it is the two-run discipline's FOURTH quantity measured
+rather than described: a demand of EXACTLY 0.0 is the HANDOVER tick or a head HOLDING with no error
+signal, and it carries a flag of 0.0 with it — so `head_rate_sat` reads FREE on a broken arm for
+precisely the reason `rms r` reads QUIET there. The verifier now asserts **zero such frames in band on
+every arm**, which is what makes `sat_band` and `dem95` measurements of a SERVO rather than of a head
+that was not slewing. ⚠ ONE-SIDED, and the file says so: this wire's window never bites, so only the
+HELD side is reachable here.
+
+### The wire, and what the four proofs measured
+
+`slice35_rate.yaml` — seed 32, glass R₀ = −0.03 / A = −0.15 / k = 12, τ = 0.05, stop 30°, window
+**25.0 AUTHORED**, R̂ = **−0.03** (OPENING ON THE DISEASE — slice 33's default; slice 34's departure
+from it does NOT transfer, because 34 opened quiet only to keep a stability verdict off a windowed
+arm and here the window never binds), servo **40 °/s** (INTERIOR, so the knob drags BOTH ways).
+Knobs: `gimbal_rate_dps ∈ [8, 60]`, `radome_slope_est ∈ [−0.36, −0.03]`.
+
+**S35V (12 arms, frame-sampled, all green first run and reproducing gates 0/2 to the digit):**
+
+| phase | measured |
+|---|---|
+| OPEN | rms r 0.86263 (RINGING), `sat_band` 65.19 %, demand p95 **110.194 °/s vs a 40 cap**, miss 10.947 m |
+| REPLAY | max\|Δpos\| **0.000000 m** over 800 frames |
+| ⭐⭐ TRADE | 60→40→25→15→8 °/s: rms r 0.88479 → 0.86263 → 0.70434 → 0.55796 → 0.38556 (**2.29×, MONOTONE across all five**) while `off_band` 5.915 → 12.825 (**2.17×**); ⚠ the interior dip (13.244 at 15 vs 12.825 at 8) PINNED POSITIVELY |
+| ⭐⭐ SPLIT | the SAME 8 °/s servo: `sat_band` **0.00 %** at R̂ = −0.18 against **96.98 %** at −0.03 |
+| ⭐ RULE | at `radome_slope_worst` READ OFF THE WIRE: `off_band` 1.599 → 1.597 across the whole rate domain (a move of **0.0019°**), `sat_band` 0.00 % at both ends, quiet at both |
+| ⭐⭐ DEMAND | at the ceiling, across slice 34's own bracket: **0.562 → 32.418 °/s = 57.7×** (frame grid; 53.6× per tick) with rms r crossing 0.30 |
+| ⚠ WINDOW | corner requirement **19.275°** (grid 19.279), `out = 0.00 %` on all 12 arms, and the corner DERIVED as the max of this run's arms |
+| FLOOR | R̂ = −0.36 past the aim point: rms r 0.06846 QUIET, servo 0.00 % — the one-sided constraint intact under a rate limit |
+
+**S35UI** — 10 teeth, 18-way value guard, and every one of the 20 prior UI tests re-run green.
+**Smoke-load** — `EWSIM_SERVER_DONE`. **TWO SHOTS**, both aimed at the CLAIMED branch and verified
+against the client's own instruments BEFORE the window opened (`g3_shot_ticks.jl`), both at tick 9600:
+**A** (default) reads *"SERVO PEGGED — and still RINGING"*, demand 109.8 vs 40, duty 70 %, ring peak
+1.257, r = 755 m; **B** (R̂ → −0.16, servo → 8) reads *"QUIET, BOUGHT WITH BANDWIDTH"*, demand 31.9 vs
+8, duty 91 %, ring peak 0.154, r = 790 m — the state no two-way label can express.
+⚠⚠ **AND SHOT B HAD TO BE RE-TAKEN**: the first harness sent a raw `set_param`, which moves the
+PHYSICS while the slider handle and its value label keep the OLD numbers — a capture showing a missile
+flying 8 °/s under a slider reading 40. **A LYING PICTURE ON A GREEN RUN**, and slice 19's
+press-the-button lesson recurring in a new widget. Re-shot through `slider.value`, the real user path.
+
+⚠ **THE NEW CLIENT INSTRUMENT IS A THIRD SHAPE AND THE SHAPE IS EARNED.** Beside slice 27's decaying
+PEAK-HOLD and slice 32's LATCH, `_servo_duty` is an **EMA DUTY** on the core's own flag, because a
+rate limit binds on a FRACTION of ticks (8.2 / 65.2 / 97.0 % at the slider's ceiling, default and
+floor): an instantaneous read would flicker with the ~2 Hz ring and a latch would go true on every arm
+and stay. ⚠ All THREE instruments are INDEPENDENT `if` blocks, and slice 33's finding matters MORE
+here than it did there — unlike slice 34's mutually-exclusive pair, all three keys ship on EVERY frame,
+so a chained dispatch would freeze one outright. ⚠ `reset` clears it, and it is the sharper case of
+slice 32's post-review rule: a ~0.5 s time constant would carry a PEGGED verdict into a re-launch that
+opens on the LAUNCH TURN, itself the largest slew demand in the engagement.
 
 ---
 

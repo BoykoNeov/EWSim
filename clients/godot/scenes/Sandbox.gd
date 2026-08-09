@@ -177,6 +177,26 @@ var _gimbal_view := false          # handshake gimbal_view — 4th marker of the
 # ⚠ Sharing the variable would be safe today and wrong the moment a wire carried both — which the
 # loader refuses, so the separation is what keeps that refusal visible in the client too.
 var _gimbal_lost := false
+# Slice-35 RATE-LIMITED SERVO marker. ⚠⚠ A BRANCH SELECTOR, NOT A HOLE PLUG — the marker-hole re-check
+# the plan demanded came back NEGATIVE (a slice-35 wire is a slice-34 wire PLUS one key; the loader
+# refuses nothing extra and `gimbal_view` routes it to a branch that is still about the HEAD). What it
+# selects is the half slice 34's HUD cannot say: those lines pair the tracking error against the
+# DETECTOR WINDOW, which is authored WIDE here and never binds, so they would report a comfortable
+# budget and never mention the SERVO — every number true, the slice invisible. See the core marker.
+var _gimbal_rate_view := false     # handshake gimbal_rate_view — 5th marker of the family
+# Slice-35 DISPLAY-ONLY SATURATION DUTY — the servo's own instrument, and a THIRD shape beside slice
+# 27's decaying peak-hold and slice 32's latch, because it answers a third kind of question. The rate
+# limit binds on a FRACTION of ticks (measured: 8.6 % at the slider's ceiling, 64.6 % at the shipped
+# default, 97.1 % at its floor on the same design), so neither an instantaneous read (it would flicker
+# with the ring, ~2 Hz) nor a latch (it would go true on every arm and stay) says anything. What a
+# student needs is the DUTY, so this is an exponential moving average of the core's own `head_rate_sat`
+# FLAG — the same ~0.5 s time constant as the peak-hold above, for the same reason (comfortably longer
+# than the ring's half-period, so the verdict is steady across a whole cycle).
+# ⚠ INSTRUMENT, NOT PHYSICS (convention 13): it smooths a shipped boolean and decides only WHICH
+# STRING to draw. It computes no threshold, no rate comparison and no stability test — the core ships
+# the flag as its own branch predicate precisely so the client never re-derives `demand > cap` across
+# two unit conversions and a `max(·, 0)`.
+var _servo_duty := 0.0
 # Slice-27 DISPLAY-ONLY peak-hold on the body rate (see _airframe3d_on_state): a limit cycle crosses
 # zero twice per cycle, so an instantaneous verdict mislabels half the frames. Instrument, not physics.
 var _radome_qpeak := 0.0
@@ -511,6 +531,16 @@ func _on_scenario(obj: Dictionary) -> void:
 	# unlike them its job is NOT the button (see `_gimbal_view`): `radome_view` already drops that.
 	# Its job is the HUD BRANCH, which is checked FIRST and is a SWITCH ahead of the radome cascade.
 	_gimbal_view = bool(obj.get("gimbal_view", false))
+	# Slice-35 RATE-LIMITED SERVO discriminator (a missile carrying an authored :gimbal_rate_dps).
+	# ⚠⚠ IT IS A BRANCH SELECTOR, NOT A HOLE PLUG, and the core says why at the marker: a slice-35 wire
+	# is a slice-34 wire PLUS one key, so `gimbal_view` routes it correctly and nothing is silently
+	# re-routed (the marker-hole re-check came back NEGATIVE). What it selects is the half slice 34's
+	# HUD cannot say — that HUD pairs the tracking error against the DETECTOR WINDOW, which is authored
+	# WIDE here and never binds, so it would report a comfortable budget and never mention the SERVO.
+	# Every number it drew would be true; the slice would simply be invisible.
+	# ⚠ It does NOT pick a view (the slice-23 3-D airframe view is reused wholesale) and it does NOT
+	# touch the button — `radome_view` already drops that at both sites.
+	_gimbal_rate_view = bool(obj.get("gimbal_rate_view", false))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -1344,6 +1374,18 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 		if float(_telemetry[_af3d_missile + ".gimbal_valid"]) < 0.5 \
 		   and float(_telemetry.get(_af3d_missile + ".los_range", 0.0)) > 200.0:
 			_gimbal_lost = true
+	# SLICE 35 — the SERVO's SATURATION DUTY. ⚠ AN INDEPENDENT `if`, NOT AN `elif` OR AN `or` ON THE
+	# BLOCK ABOVE — slice 33's finding, and here the two DO co-occur on every shipped frame (this wire
+	# carries `gimbal_valid` AND `head_rate_sat`), so a chained dispatch would freeze one of them
+	# outright rather than merely being fragile.
+	# ⚠ AN EMA, NOT A PEAK-HOLD AND NOT A LATCH, and the reason is in the variable's own comment: the
+	# question a rate limit raises is "what FRACTION of the time is it binding?", which is the shape
+	# the core measures in the band (0.00 % vs 97.14 % at one servo) and the only shape that separates
+	# a servo with headroom from one that is pegged. Gated on the slice-35 telemetry key so slice 34's
+	# label path is untouched — the same SWITCH discipline as the HUD lines below.
+	if _telemetry.has(_af3d_missile + ".head_rate_sat"):
+		var st := 1.0 if float(_telemetry[_af3d_missile + ".head_rate_sat"]) >= 0.5 else 0.0
+		_servo_duty = _servo_duty * 0.97 + st * 0.03
 	if _t3d_layer == null or _t3d_los_mesh == null:
 		return
 	var mpos: Array = _entities.get(_af3d_missile, {}).get("pos", [0, 0, 0])
@@ -1529,6 +1571,35 @@ func _gimbal_verdict_label(lost: bool, margin: float, r: float, ringing: bool) -
 		return "RINGING — the index is not enough"
 	return "SELF-INDEXED — the loop is quiet"
 
+# SLICE 35 — THE SERVO's verdict, and it is a FOUR-WAY on TWO booleans rather than slice 34's cascade
+# on one, because THE WHOLE SLICE IS THAT THE TWO MOVE IN OPPOSITE DIRECTIONS. A rate limit buys the
+# ring DOWN and sells the tracking error UP, so the interesting states are the two MIXED ones — and a
+# verdict built on either boolean alone would collapse exactly the pair the student is dragging.
+# ⚠ `lost` STILL WINS OUTRIGHT, inherited from slice 34 with its reason UNCHANGED and re-earned here:
+# a broken window FREEZES the index, a frozen index makes a CONSTANT bend, and a constant bend is
+# QUIET at every R̂ — so the ring meter reads calm while the missile misses by kilometres. ⚠ AND THE
+# SERVO METER INVERTS ON THAT SAME ARM FOR THE SAME REASON: the head HOLDS when it has no error
+# signal, so it demands nothing and `head_rate_sat` reads 0 — a FREE-LOOKING servo on a broken track.
+# That is the plan's two-run discipline arriving in its FOURTH quantity, and it is why `lost` is first.
+# ⭐ THE PAYLOAD IS THE `not ringing and pegged` STATE: the ring was bought DOWN and the bandwidth is
+# what paid for it. Slices 32/33/34 all end "widen it, it's free"; there is no free direction here.
+# ⚠ EXTRACTED, LIKE `_fov_verdict_label` / `_budget_verdict_label` / `_gimbal_verdict_label`, BECAUSE
+# ANYTHING THE VERDICT COMPUTES INSIDE `_draw` HAS NO HEADLESS PROOF — `_draw` never runs under
+# `--headless` (convention 14; slice 31's aim-point comparison shipped WRONG and only the windowed
+# shot caught it). The UI test calls this directly, on all four states plus the lost one.
+# ⚠ THE DUTY THRESHOLD IS THE ARGUMENT'S, NOT A CONSTANT READ OFF A GLOBAL: the caller passes the
+# smoothed duty and this compares it against 0.5, so the UI test drives every branch with numbers
+# rather than having to reproduce an EMA.
+# ⚠ WIDTHS ARE MEASURED: ~34 characters at 20 px from `vp.x − 430`. All five are counted (28/32/32/
+# 30/31).
+func _servo_verdict_label(lost: bool, ringing: bool, duty: float) -> String:
+	if lost:
+		return "TRACK LOST — the head let go"
+	var pegged := duty >= 0.5
+	if ringing:
+		return "SERVO PEGGED — and still RINGING" if pegged else "RINGING — the servo has room yet"
+	return "QUIET, BOUGHT WITH BANDWIDTH" if pegged else "FREE — the servo costs nothing"
+
 func _gyro_verdict_label(ringing: bool, eff: float, worst: float) -> String:
 	if ringing:
 		return "GYRO — RINGING: loop sees R̂(1+s)"
@@ -1673,6 +1744,72 @@ func _draw_gimbal_hud_lines(vp: Vector2) -> void:
 	draw_string(_font, Vector2(vp.x - 430, 198), "head: %s" % ("HOLDING — no error signal since the break" if _gimbal_lost else ("TRACKING" if valid else "outside the detector window")),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _gimbal_lost else Color(0.55, 1.00, 0.65))
 
+# SLICE 35 — the five lines that ARE the servo, split out so the label chain stays readable (slice
+# 32/33/34's precedent, and the same measured width: ~55 characters at 15 px from `vp.x − 430`; every
+# line below is counted).
+# ⭐⭐ THE PAIR A STUDENT MUST SEE IS *DEMAND BESIDE CAP*. That is the whole slice: the head's motion
+# stopped being free and became a RESOURCE, so the screen must show what was ASKED FOR against what
+# the servo can DELIVER. Both arrive from the core in the same degrees per second, off the same wire,
+# and the demand is the kernel's PRE-LIMIT step — which is the entire reason `head_slew_full` exists.
+# A post-hoc difference of `:head_az` would read the CLIPPED motion and report the CAP as the demand,
+# i.e. the answer as the question: measured at the slider's floor, demand p95 214.958 °/s against an
+# achieved 8.000, ~27×, with the achieved step EXACTLY the cap on every saturated tick.
+# ⭐ AND THE SECOND PAIR IS THE TRADE ITSELF — the ring beside the tracking error, which is what makes
+# this the arc's first TWO-SIDED knob. Drag the servo down and the first number FALLS while the second
+# RISES (0.885 → 0.386 against 5.9° → 12.8° across the slider). Drawing them adjacent is what makes
+# "there is no free direction" a thing you watch rather than a thing you are told.
+# ⚠ THE SATURATION IS THE CORE's OWN FLAG, SMOOTHED FOR DISPLAY AND NEVER RE-DERIVED HERE (convention
+# 13). ⚠⚠ AND THE REASON IS ARCHITECTURAL, NOT EMPIRICAL — the first draft of this comment claimed a
+# measurement it did not have (advisor). On THIS wire a client-side `demand > cap` would agree with
+# the flag to the ULP, because the two are the same comparison rearranged; the verifier says so
+# explicitly rather than pretending otherwise. What the flag buys is that the comparison lives in ONE
+# place: the kernel forms it as `head_dem > max(rate_max, 0)·Δt` in RADIANS PER STEP while the wire
+# carries DEGREES PER SECOND, so a client reconstruction would re-cross a `deg2rad`, a `Δt` and a
+# `max(·, 0)` — three chances for a HUD to disagree with the branch it claims to report, at the
+# boundary tick where the disagreement is least visible. That is a reason of construction, and it
+# holds whether or not any wire has ever exercised it.
+# ⚠ THE DETECTOR WINDOW IS DELIBERATELY *NOT* THE HEADLINE HERE, unlike slice 34: it is authored WIDE
+# on this wire (25° against a measured worst requirement of 19.279° over 184 domain cells) precisely
+# so the break is NOT what a student sees, because gate 0's own ship/no-ship gate found the break to
+# be SLICE 34's mechanism. It is drawn as a single reassurance line — the budget is intact, so what
+# you are watching is the trade and not a failure.
+# ⚠ THE RANGE AND CROSS-RANGE LINES ARE NOT HERE — the shared block above draws them at y = 66/88.
+func _draw_gimbal_rate_hud_lines(vp: Vector2) -> void:
+	# ⚠ THE CHANNEL COMES FROM THE SHARED HELPER, NOT A HARDCODED KEY (slice 33's reason, inherited
+	# through 34): this wire has a slope RIPPLE so the lead — and hence the ring — is in AZIMUTH and
+	# this reads `omega_r`, but the branch is reachable by any rate-limited head on any glass, and a
+	# rate line on the wrong channel would print a calm number under the peak-hold's orange tag.
+	var chan := _ring_channel_key()
+	var rr := float(_telemetry.get(_af3d_missile + chan, 0.0))
+	var yaw_ch := chan == ".omega_r"
+	var dem := float(_telemetry.get(_af3d_missile + ".head_rate_dps", 0.0))
+	var cap := float(_telemetry.get(_af3d_missile + ".gimbal_rate_dps", 0.0))
+	var sat := float(_telemetry.get(_af3d_missile + ".head_rate_sat", 0.0)) >= 0.5
+	var off := float(_telemetry.get(_af3d_missile + ".head_off_deg", 0.0))
+	var marg := float(_telemetry.get(_af3d_missile + ".gimbal_fov_margin_deg", 0.0))
+	var rhat := float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0))
+	var aim := float(_telemetry.get(_af3d_missile + ".radome_slope_worst", 0.0))
+	# ⭐⭐ THE MECHANISM, AS TWO NUMBERS: what the loop ASKED the head for, against what it can give.
+	draw_string(_font, Vector2(vp.x - 430, 110), "head rate: DEMAND %.1f°/s  vs  SERVO %.0f°/s%s" % [dem, cap, "   ← PEGGED" if sat else ""],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if sat else Color(0.45, 0.90, 1.00))
+	# …and how much of the time it is pegged, which is the shape the core measures in the band and the
+	# only one that separates a servo with headroom from one that is saturated (0.00 % vs 97.14 %).
+	draw_string(_font, Vector2(vp.x - 430, 132), "servo saturated ~%.0f%% of the time   ← the resource" % [100.0 * _servo_duty],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45) if _servo_duty >= 0.5 else COL_TICK)
+	# ⭐ THE TRADE — the two bounds side by side, moving in OPPOSITE directions under one slider.
+	# The ring is coloured by the peak-hold for the reason slice 27 settled: a limit cycle crosses zero
+	# twice per cycle, so an instantaneous verdict mislabels half the frames.
+	draw_string(_font, Vector2(vp.x - 430, 154), "ring %s %+.3f rad/s%s   ↔   head lag %.2f°" % ["r" if yaw_ch else "q", rr, "  RINGING" if _radome_qpeak > 0.5 else "", off],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _radome_qpeak > 0.5 else COL_TICK)
+	# THE CURE, as two shipped numbers — slice 30's rule paying a THIRD time (33 = FOV, 34 = detector
+	# window, 35 = servo bandwidth). No client-side stability test: |R_crit| moves with N and ρ.
+	draw_string(_font, Vector2(vp.x - 430, 176), "R̂ %+.3f   aim point R₀+2A %+.3f   ← servo goes free" % [rhat, aim],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	# THE DETECTOR BUDGET, as ONE reassurance line rather than the headline (see the block comment):
+	# it is authored wide here so the trade is what shows, not a break. Coloured by the shipped SIGN.
+	draw_string(_font, Vector2(vp.x - 430, 198), "detector budget %+.1f°   head: %s" % [marg, "HOLDING — no error signal since the break" if _gimbal_lost else "TRACKING"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if (_gimbal_lost or marg < 0.0) else Color(0.55, 1.00, 0.65))
+
 func _draw_airframe3d_hud() -> void:
 	# The 3-D layer renders the world; the 2-D canvas only LABELS it (the terrain-view discipline).
 	# The headline: the plant, the cross-range miss (los_range), and the out-of-plane excursion.
@@ -1720,7 +1857,29 @@ func _draw_airframe3d_hud() -> void:
 	# nothing is stale and the subject is simply wrong.
 	# ⚠ THE BUTTON NEEDS NO EDIT AT EITHER SITE (`radome_view` already drops it) — slice 33's finding,
 	# second occurrence, and the OPPOSITE of slice 26's "the drop needs BOTH sites".
-	if _gimbal_view:
+	# SLICE 35 — THE SERVO, checked FIRST and a SWITCH ahead of the head branch below ("check the NEW
+	# key first", 8th occurrence). ⚠⚠ AND THE REASON IS NEITHER 33's NOR 34's, WHICH IS WHY IT IS
+	# SPELLED OUT RATHER THAN CROSS-REFERENCED. Slice 34's marker plugged a REAL HOLE (its wire fell
+	# through both FOV branches into the radome cascade and was confidently wrong about the subject).
+	# Nothing of the kind happens here: a slice-35 wire is a slice-34 wire PLUS one key, `gimbal_view`
+	# is raised, and the branch below is about the HEAD, which is still the right subject. This is a
+	# BRANCH SELECTOR, and what it selects is the half slice 34's verdict CANNOT SAY — that verdict
+	# compares the tracking error against the DETECTOR WINDOW, which is authored WIDE here (25° against
+	# a measured worst requirement of 19.279° over 184 domain cells) and NEVER BINDS. So it would print
+	# "SELF-INDEXED — the loop is quiet" or "RINGING — the index is not enough", both TRUE, on a wire
+	# whose entire subject is a servo it never mentions. ⚠ The failure mode is therefore not a wrong
+	# number but an INVISIBLE SLICE, and that distinction is the thing to carry forward.
+	# ⚠ THE BUTTON NEEDS NO EDIT AT EITHER SITE (`radome_view` and `gimbal_view` both drop it) — slice
+	# 33's finding, third occurrence.
+	if _gimbal_rate_view:
+		lbl = _servo_verdict_label(_gimbal_lost, _radome_qpeak > 0.5, _servo_duty)
+		# ⚠ THE COLOUR RIDES THE LATCH, NOT THE PEAK-HOLD AND NOT THE DUTY, inherited from slice 34 with
+		# its reason and one of this slice's own on top: a RINGING arm here still HITS (every arm in the
+		# domain does), and so does a PEGGED one — the servo saturating is the lesson, not a failure, so
+		# painting it orange would say the opposite of what the slice claims. The latch tracks the one
+		# thing that actually ends an engagement.
+		col = Color(1.00, 0.62, 0.30) if _gimbal_lost else Color(0.45, 0.90, 1.00)
+	elif _gimbal_view:
 		lbl = _gimbal_verdict_label(_gimbal_lost,
 				float(_telemetry.get(_af3d_missile + ".gimbal_fov_margin_deg", 0.0)),
 				float(_telemetry.get(_af3d_missile + ".los_range", 0.0)),
@@ -1889,7 +2048,14 @@ func _draw_airframe3d_hud() -> void:
 	# or the headline would name the head while the body lines described the glass). It draws FIVE
 	# lines rather than four because a gimbal has TWO limits read against TWO DIFFERENT ANGLES, and
 	# collapsing them is exactly the defect the plan's gate-3 note predicted.
-	if _gimbal_view:
+	# SLICE 35 — THE SERVO, checked FIRST here too and for the reason the two chains must always agree:
+	# a headline naming the servo above body lines describing the DETECTOR BUDGET would pair the wrong
+	# two numbers, which is the defect slice 34's own gate-3 note predicted one slice earlier. It draws
+	# FIVE lines like slice 34's, but only ONE of them is shared — the trade is DEMAND vs CAP and RING
+	# vs LAG, where slice 34's is TRAVEL vs STOP and ERROR vs WINDOW.
+	if _gimbal_rate_view:
+		_draw_gimbal_rate_hud_lines(vp)
+	elif _gimbal_view:
 		_draw_gimbal_hud_lines(vp)
 	elif _seeker_fov_view and _radome_view:
 		_draw_budget_hud_lines(vp)
@@ -2740,6 +2906,11 @@ func _on_reset_pressed() -> void:
 	# here rather than left as an asymmetry between two instruments in the same HUD. A tooth in
 	# `slice32_ui_test.gd` drives `_on_reset_pressed()` on the slice-26 mirror and asserts it.
 	_radome_qpeak = 0.0
+	# Slice-35: the servo duty is cleared for EXACTLY the reason named above, and it is the sharper
+	# case of the two — the duty's ~0.5 s time constant would carry a PEGGED-servo verdict straight
+	# into a re-launch that opens on the LAUNCH TURN, which is itself the largest slew demand in the
+	# engagement (gate 0 §0.4). A stale reading there would be indistinguishable from a real one.
+	_servo_duty = 0.0
 	_t3d_trail_pts.clear()                # slice-18: the 3-D target trail restarts with the re-launch
 	# `reset` reloads the YAML server-side → propagation reverts to the scenario default,
 	# but the server sends no new handshake. Resync the local fidelity so the badge/button

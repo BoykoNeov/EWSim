@@ -1,0 +1,263 @@
+# slice35_rate — A RATE-LIMITED HEAD: THE BANDWIDTH THAT HOLDS THE TRACK IS THE BANDWIDTH THAT
+# FEEDS THE LOOP (HANDOFF §11 Tier-A, slice 35 gate 3). The THIRTEENTH slice of the bank-to-turn /
+# 3-D arc (23 = the 6-DOF substrate + skid-to-turn, 24 = bank-to-turn + roll-lag, 25 = a seeker in
+# the 6-DOF loop, 26 = the radome parasitic loop, 27 = the compensation autopilot, 28 = the slope
+# CURVE, 29 = the SCHEDULED compensator, 30 = the ENVELOPE and the one-sided constraint, 31 = an
+# imperfect gyro, 32 = the seeker's field of view, 33 = the ring as an FOV budget item, 34 = the
+# gimbal), and the deferral slice 34 named SECOND.
+#
+# ⚠ ONE WIRE, unlike slice 34's PAIR — and the reason is a measurement, not a preference. Slice 34
+# needed a twin YAML because a head is not a fidelity and NO in-domain slider value removes one. Here
+# the whole claim lives INSIDE one slider's declared domain: the servo runs 60 → 8 °/s and both
+# bounds move across it, so the lesson is a DRAG and not a comparison between two files.
+#
+# Slice 34's head was INFINITELY FAST: `head_slew` moved it a full first-order step every tick with
+# no bound on how far. A real gimbal has a servo with a maximum slew rate, and the moment it does the
+# head's motion stops being free — it becomes a RESOURCE, spent against a demand. **AND THE DEMAND IS
+# SET BY THE PARASITIC LOOP.** On a settled collision course the LOS barely moves in the body frame
+# (slice 28 held `look_az` to a 0.2° band; slice 34's head angle is a *constant* 17.190°), so a quiet
+# design asks its servo for essentially nothing — 0.600 °/s in the engagement band. Let the loop ring
+# and the same head must chase its own oscillation: 32.165 °/s one rung of the R̂ ladder later, 53.6×
+# more, ACROSS SLICE 34's OWN ONSET BRACKET.
+#
+# > THE LESSON, IN ONE SENTENCE. A gimbal's slew rate is free until the loop rings — and then it is
+# > the most expensive thing on the missile, because the motion that holds the track is the same
+# > motion that feeds the loop.
+#
+# ⭐⭐ AND THIS IS THE ARC'S FIRST TWO-SIDED KNOB. Slices 32, 33 and 34 all end the same way: *widen
+# it — it is free* (a wider FOV, a wider detector window, costing nothing but glass). THAT CURE DOES
+# NOT TRANSFER. Servo bandwidth is not a window; it is what the parasitic loop FEEDS ON. Slow the
+# head and the ring is ATTENUATED (`rms r` 0.88469 → 0.38591 between the slider's ceiling and its
+# floor, 2.29×) while the tracking error it must cover GROWS (5.915° → 12.828°, 2.17×) — ONE KNOB,
+# TWO BOUNDS, PULLING IN OPPOSITE DIRECTIONS. Every earlier cure in this arc had a free direction;
+# this one has none.
+#
+# ⭐⭐ AND THE SHARPEST SINGLE PAIR IS A 0-vs-97 SPLIT AT ONE SERVO. At the SAME 8 °/s the shipped
+# slice-34 design (R̂ = −0.18) saturates its rate limit on 0.00 % of the engagement band and this
+# wire's boresight-characterized default (R̂ = −0.03) on 97.14 %. One servo, two designs — and it is
+# the SERVO's own side of the demand step above, from a DIFFERENT code path (the demand is formed
+# unconditionally in the kernel; the flag is the branch predicate).
+#
+# ⚠⚠ THE BREAK IS NOT THIS SLICE'S CLAIM, AND THAT WAS THE ADVISOR'S OWN SHIP/NO-SHIP GATE (gate 0
+# §0.3, and it came back NEGATIVE): a WIDER detector window DOES rescue a rate-limited arm, so a
+# rate-limited head that loses its track loses it by SLICE 34's mechanism (`tracking error > detector
+# window`). Writing slice 35 as a new failure mode would be the copy-paste false-claim trap. What is
+# new is the REQUIREMENT (what the servo costs you in window) and the TRADE (that buying the ring
+# down buys the requirement up). ⇒ THE WINDOW IS AUTHORED WIDE HERE ON PURPOSE, and the number is
+# measured — see `gimbal_fov_deg` below.
+#
+# ⚠⚠ AND THE QUIET END OF THE SLIDER IS A REDUCTIO, WHICH IS WHAT SETS ITS FLOOR. Past ~5 °/s the
+# limit binds on 100.00 % of band ticks: the head stops being a filtered servo and becomes an
+# OPEN-LOOP RAMP whose output is `∫ rate_max`, quiet for precisely slice 34's FROZEN-HEAD reason.
+# The 43× ring ratio available down there is UNQUOTABLE (it would be slice 26's `omega_ratio`
+# diagnostic trap in a new place). The floor is 8 °/s and the reason is in the knob block.
+#
+# ⚠ NO NEW RUNG, NO NEW CAP, NO NEW INSTABILITY, NO NEW DRAW. The rate limit is a deterministic bound
+# on an existing servo (class 4a, 2 randn/tick, the ELEVENTH consecutive RNG-live slice — the seed is
+# load-bearing and conventions 3/11 apply). What is new is one comp key, three telemetry numbers that
+# measure it, and the trade.
+#
+# ⚠ THE ISOLATION, MEASURED CORE-SIDE (`test_missile.jl`): with NO GLASS AND NO WINDOW the rate limit
+# is EXACTLY INERT — `max|Δpos| == 0` at every rate from 60 down to 2 °/s, and the miss is `===`
+# identical — WHILE THE HEAD LAGS BY 21.7°. ⇒ the servo reaches the trajectory through exactly slice
+# 34's two channels, the radome's INDEX and the detector WINDOW, and through nothing else. That is
+# what makes the zero a measurement rather than a dead knob.
+#
+# ⚠ THE BIT-IDENTITY CONTROL IS THE ABSENT KEY, NEVER THIS SLIDER'S CEILING. At 60 °/s the trajectory
+# MOVES (`max|Δpos|` 0.652 / 0.041 / 0.165 m at R̂ = −0.33 / −0.18 / −0.03) because the cap clips the
+# tick-2 HANDOVER transient, an identical 72.542 °/s on every arm. "Inert ON THE METRIC" (`rms r`
+# 0.88469 against the unlimited 0.88465) is not "bit-identical", and the suite says so as a `>`.
+#
+# NAMED APPROXIMATIONS (§1): a FIRST-ORDER servo WITH A RATE LIMIT — no inertia, no ω_a/ζ_a (slice
+# 15's actuator is the precedent for what a second-order one adds; a named deferral); a HANDED-OVER
+# head (tick 1 initialises to the CLAMPED truth look angles — and §0.4 SHARPENS slice 34's deferral
+# here, because the acquisition turn is now the LARGEST slew demand in the engagement); NO MEMORY
+# TRACK (a break is TERMINAL); a CIRCULAR stop AND a CIRCULAR window AND a RADIAL rate limit (the
+# same species argument three times — gate 1 pinned that the limit is radial about the HEAD while the
+# stop is radial about the ORIGIN, so the two orders are genuinely different maps); NO HEAD GYRO;
+# plus everything 26–34 named, unchanged — ONE odd scalar slope curve PER AXIS, a PERFECT gyro
+# (slice 31's terms absent), ONE isotropic σ and a TRUTH Vc, diagonal inertia, symmetric cruciform,
+# lift drag-free, constant ρ (a FLIGHT CONDITION — say "low dynamic pressure", never "high altitude").
+# ⚠ THE 30° MODEL-VALIDITY CAVEAT 28/29/30/31 EACH DECLARED SURVIVES AS A MEASUREMENT: the worst head
+# travel anywhere in the two-slider domain is 24.602° (184 cells), so the small-angle bend keeps its
+# headroom and the mechanical stop never binds.
+#
+# UNITS (§1 trifecta): pos/vel SI; angles rad INSIDE the core; `gimbal_stop_deg` / `gimbal_fov_deg` /
+# `gimbal_fov_margin_deg` / `head_angle_deg` / `head_off_deg` in DEGREES at the wire boundary;
+# ⚠ `gimbal_rate_dps` / `head_rate_dps` in DEGREES PER SECOND — the name carries its unit where the
+# two angles above do not, deliberately, because a RATE has a time in it and `gimbal_rate_deg` would
+# read as an angle. The seam's conversion is a plain `deg2rad` (deg→rad is a pure scale factor; the
+# seconds are untouched). `gimbal_tau_s` in SECONDS; radome slopes DIMENSIONLESS (rad of bend per rad
+# of look); σ_seek in RADIANS; `cross_speed_mps` in m/s and SIGNED; I in kg·m²; ρ in kg/m³; launch
+# ELEVATION in DEGREES → radians at the loader. dt = 1e-3 / emit_every = 16.
+name: slice35_rate
+seed: 32
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # FIVE keys, NONE toggled — the lesson is the SLIDERS (the 16/20/26/27/28/29/30/31/32/33/34 shape,
+  # and the ELEVENTH consecutive slice with no fidelity button at all). Held to slice 34's wire to
+  # the digit: `airframe` at :six_dof (the head is gated on the LIVE rung, never on `haskey(:head_az)`
+  # — the slice-21 `_atm_on` latent-bug class), `seeker_axes` at :az_el (a two-angle seeker is what
+  # HAS a look angle at all, and the loader REFUSES `gimbal_tau_s` without it), `seeker` at
+  # :filtered, `autopilot` :alpha and `guidance` :pn as in 23–34. `steering` is OMITTED (the loader
+  # default IS :skid_to_turn — slice 24 measured BTT binding the aero ceiling 93.2 % of its approach,
+  # a THIRD mechanism on a wire convention 9 already stretches to two).
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+
+entities:
+  # The interceptor — slices 23–34's plant and launch condition, UNCHANGED to the digit, because the
+  # rate-absent column must reproduce slice 34 exactly for any movement here to be the servo and
+  # nothing else. n_pn = 8 is slice 27's, AUTHORED and NEVER A KNOB (26–34 all disqualified it).
+  #
+  # ⚠ elevation_deg = 12.0 IS LOAD-CONSUMED AND IS NOT A KNOB (the slice-19 DEAD-KNOB class), and it
+  # is also what sets a HANDED-OVER head's tick-1 pointing — the handover this file names as a §1
+  # condition, and whose acquisition turn §0.4 found to be the largest slew demand in the engagement.
+  #
+  # THE GLASS (26–29's, unchanged in form):
+  #   radome_slope    R₀ = −0.03 — the boresight slope.
+  #   radome_ripple   A  = −0.15 — the slope CURVE's depth, so `radome_slope_worst` = R₀ + 2A = −0.33.
+  #   radome_ripple_k k  = 12.0  — AUTHORED and DISQUALIFIED BY NON-MONOTONICITY at slice 28.
+  #   radome_slope_est R̂ = −0.03 — ⚠ THE SHOWCASE OPENS ON THE DISEASE (the 25/26/27/28/29/30/31/32/33
+  #     default, and slice 34's departure from it does NOT transfer: 34 opened quiet because the
+  #     two-run discipline forbids reading a STABILITY verdict on an arm whose window binds, and here
+  #     the window is authored wide and NEVER binds — measured, see below — so the ring is legible at
+  #     the default). It is slice 28's BORESIGHT CHARACTERIZATION: the natural and dangerous choice,
+  #     `radome_residual` EXACTLY 0.000 against the hardware, and the LOUDEST arm the domain reaches.
+  #     It is also the ONLY place the rate knob is worth dragging — at slice 30's aim point the servo
+  #     is free across the whole domain, which is this slice's cure and its third payment of that rule.
+  #
+  # THE HEAD:
+  #   gimbal_tau_s  τ = 0.05 — AUTHORED. Slice 34's gate 2 measured τ CONFOUNDED, not dead (the
+  #     bracket walks with it), which is a STRONGER reason to keep it off the slider list than a dead
+  #     one would be: a student dragging it would move the verdict without moving the mechanism.
+  #   gimbal_stop_deg = 30.0 — AUTHORED, and NEVER BINDING: the worst head travel over the whole
+  #     two-slider domain is 24.602° (184 cells). It is slice 33's excursion RESTATED, not a new limit.
+  #   gimbal_fov_deg = 25.0 — ⚠⚠ AUTHORED AND WIDE, AND THE NUMBER IS A MEASUREMENT, NOT A GESTURE.
+  #     Gate 2's finding is that a rate limit makes the ACQUISITION TURN the binding requirement: the
+  #     LOOP's requirement barely moves under a rate limit (`off_band` 1.956 → 2.022 at R̂ = −0.18)
+  #     while the WHOLE-APPROACH one triples (`off_max` 1.956 → 8.051), out at LAUNCH RANGE, r ≈ 5700
+  #     m — and on a wire with NO GLASS AT ALL the same thing happens (a flat 0.031° in band against
+  #     2.112 → 12.346° whole-approach). Nothing is ringing there; the BODY is simply rotating faster
+  #     than the servo can follow. ⇒ a LIVE window would make this wire's break an ACQUISITION break,
+  #     i.e. §0.4's confound promoted to the headline and slice 34's own lesson re-run as a third
+  #     mechanism. The window must therefore clear the worst whole-approach requirement anywhere a
+  #     student can drag to. ⚠ THAT MAXIMUM WAS RE-MEASURED ON A FINE GRID BECAUSE THE REQUIREMENT IS
+  #     NON-MONOTONE IN BOTH SLIDERS (the coarse corner sweep is not evidence about the interior — the
+  #     advisor's blocking catch at this gate): R̂ ∈ [−0.36, −0.03] on a 0.015 grid × rate ∈ {8, 10,
+  #     12, 15, 20, 25, 40, 60} = 184 cells, worst 19.279° at the CORNER (R̂ = −0.03, rate = 8), with
+  #     the interior wrinkles all well under it. 25.0 clears that by 5.7° (1.30×), and the verifier
+  #     asserts `out == 0` AND `off_max < window` ON EVERY ARM IT FLIES rather than trusting the grid.
+  #     ⚠ It is deliberately NOT 30.0: the window and the stop are read against two DIFFERENT angles
+  #     (the tracking error about the head axis, and the travel about the body), and making them equal
+  #     would invite exactly the pairing slice 34's HUD exists to prevent.
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               radome_slope: -0.03, radome_ripple: -0.15, radome_ripple_k: 12.0,
+               radome_slope_est: -0.03,
+               gimbal_tau_s: 0.05, gimbal_stop_deg: 30.0, gimbal_fov_deg: 25.0,
+               gimbal_rate_dps: 40.0}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # ⭐ THE CROSSING TARGET, AND THE CROSSING IS WHAT MAKES THE GLASS MATTER AT ALL. Same start point
+  # as 23–34 (cross-range +Y = 2000 m off the x–z plane), at slice 28's vy = 200 m/s — the geometry
+  # that holds a SUSTAINED ~15° lead, so the seeker parks on the steep part of the slope curve and the
+  # loop is closed by its LOCAL DERIVATIVE there. ⚠ A STATIC target would make the whole family dead
+  # at once (slice 28 measured the lead at 0.04°→0.54° there), and it would ALSO make this slice dead
+  # specifically: a head with no lead to hold has no slew to demand. AERODYNAMICALLY FREE (no target
+  # airframe). ⚠ `cross_speed_mps` IS AUTHORED AND IS NOT A KNOB HERE, as on slice 34 and unlike 30
+  # and 32 — it moves the LEAD, i.e. slice 32's whole axis, which would be the THIRD thing convention
+  # 9 forbids on this wire. The authored `vel` and the pin AGREE at the default.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 200.0, 0.0]
+    target: {rcs_m2: 1.0, cross_speed_mps: 200.0}
+
+knobs:
+  # ⭐⭐ TWO KNOBS, AND GATE 2 MEASURED THAT THEY ARE ONE AXIS, WHICH IS WHAT CONVENTION 9 ACTUALLY
+  # ASKS (the slice-27 DIAGONAL precedent): the rate knob's COST is charged by the ring, and the ring
+  # is what R̂ sets. `off_band` on a free window over the (rate, R̂) grid is FLAT across the WHOLE rate
+  # domain at slice 30's aim point (1.600 → 1.598) and 2.17× at the boresight characterization. The
+  # two sliders are the DEMAND and the SUPPLY of one resource, not two lessons.
+  #
+  # ⚠ A THIRD CANDIDATE WAS TESTED AND DROPPED ON A NUMBER, NOT ON ARGUMENT: `gimbal_fov_deg` was
+  # slice 34's one live slider and is AUTHORED here, because a live window turns this wire's break
+  # into an ACQUISITION break (see the entity block, and gate 2's §C: at R̂ = −0.18 / 15 °/s a 2.20°
+  # window — comfortably above the 1.986° BAND requirement — broke 97.4 % of the approach). ⇒ SLICE
+  # 32/34's PREDICATE `held ⟺ requirement < window` IS NOT THIS SLICE'S TO RE-SHIP: on a rate-limited
+  # arm it is a statement about the HANDOVER BASKET, which is slice 34's FIRST named deferral and a
+  # different slice.
+  #
+  # KNOB 1 (`gimbal_rate_dps`, the HARDWARE side) — the slice's one genuinely new axis, and BOTH
+  # ENDPOINTS ARE MEASURED WITH THEIR REASONS (slice 26's post-commit discipline).
+  #   FLOOR 8: THE FLOOR IS WHERE THE KNOB IS SIMULTANEOUSLY FREE FOR A GOOD DESIGN AND BINDING FOR A
+  #     BAD ONE, and that is a stronger reason than "it stops being a servo". At exactly 8 °/s
+  #     `sat_band` is 0.00 % on slice 34's shipped design (R̂ = −0.18) and 97.14 % on this wire's
+  #     default — a 0-vs-97 split at ONE servo. Below it two things go wrong at once: the no-glass
+  #     ACQUISITION transient itself starts to break (§0.4: `off_band` 0.031 → 4.582 between 10 and
+  #     5 °/s, i.e. the confound stops being confined to the launch turn) and the limit runs to
+  #     100.00 % saturation on every arm — THE REDUCTIO, where the head is an open-loop ramp and the
+  #     ring ratio it offers may not be quoted.
+  #   CEILING 60: the loudest arm's own band demand is ~61 °/s, so at 60 the limit is already ~inert
+  #     ON THE METRIC (`rms r` 0.88469 against the unlimited 0.88465) — the top of the useful range.
+  #     ⚠⚠ IT IS NOT A BIT-IDENTITY CONTROL AND MUST NEVER BE AUTHORED AS ONE (see the header): the
+  #     free read is the ABSENT KEY, and the suite pins the difference as a `>`.
+  #
+  # KNOB 2 (`radome_slope_est`, the DESIGN side) — 27/28/33/34's R̂ slider, and its domain is slice
+  # 34's UNCHANGED because the glass and the geometry are unchanged.
+  #   FLOOR −0.36: BELOW slice 30's aim point (`radome_slope_worst` = R₀ + 2A = −0.33) so the rule is
+  #     REACHABLE and OVERSHOOTABLE — the one-sided constraint (only a NEGATIVE residual rings; a
+  #     positive one de-tunes). ⭐ AND THIS IS WHERE SLICE 30's RULE PAYS A THIRD TIME (33 = FOV,
+  #     34 = detector window, 35 = SERVO BANDWIDTH): at the aim point the requirement is FLAT across
+  #     the entire rate domain and `sat_band` is 0.00 % everywhere ⇒ aim R̂ at the glass's worst-case
+  #     slope and you may fly the CHEAPEST SERVO IN THE CATALOGUE.
+  #   CEILING −0.03: the glass's own boresight slope — slice 28's characterization, the LOUDEST arm,
+  #     and THE DEFAULT. It is also where the 30° model-validity budget is most spent (head travel
+  #     24.602° against a 30° stop, measured over the whole domain).
+  #   ⚠ THE ROW AT R̂ = −0.16 IS NON-MONOTONE IN THE RATE (gate 0 §0.4, reproduced at gate 2 and
+  #     again here: the ring-suppression benefit briefly outruns the lag cost around 10–12 °/s) and
+  #     NOTHING IS BUILT ON IT — the ~5th occurrence of that pattern in this arc after 19/20/22/28.
+  #     The same wrinkle appears at the default: `off_band` reads 13.244° at 15 °/s against 12.828° at
+  #     8, so the TWO-SIDED claim is quoted ENDPOINT TO ENDPOINT and the interior dip is ASSERTED as a
+  #     measured fact rather than smoothed away.
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED AND THE VERIFIER ASSERTS THEIR ABSENCE: `gimbal_fov_deg`
+  # (above, on a number), `gimbal_tau_s` (a CONFOUNDED lever), `gimbal_stop_deg` (a restatement of
+  # slice 33's excursion, and it couples the two budgets), `cross_speed_mps` (slice 32's axis — it
+  # moves the LEAD), `n_pn` and `rho` (they move the parasitic boundary AND the guidance loop),
+  # `af_alpha_max` (slice 26's amplitude instrument), `sigma_seek` (it degrades the lesson beside it),
+  # `radome_slope`/`radome_ripple` (the GLASS — a HARDWARE property; the arc's point since 27 is that
+  # what you can change is what you BELIEVE about it), `elevation_deg` (the slice-19 DEAD-knob class).
+  #
+  # ⚠⚠ THE LABELS ARE LENGTH-BUDGETED AND THAT IS NOT COSMETIC — SLICE 32's SHOTS PAID FOR IT. Knob
+  # labels are drawn FULL-WIDTH in the UI CanvasLayer, which paints OVER the Node2D `_draw` HUD whose
+  # column starts at `vp.x − 430`; at ~6.2 px per character that is a budget of ~110 CHARACTERS.
+  - {target: m1, key: gimbal_rate_dps, min: 8.0, max: 60.0,
+     label: "SERVO: max head slew (deg/s) — slow it and the ring falls while the lag grows"}
+  - {target: m1, key: radome_slope_est, min: -0.36, max: -0.03,
+     label: "DESIGN: believed slope R̂ — at R₀+2A the servo is free at every rate"}
