@@ -4974,6 +4974,111 @@ measurement, 2 randn/tick, the seed load-bearing). **KNOB, not rung**; the butto
 
 ---
 
+**Slice 36 — THE HANDOVER BASKET: THE CHEAPEST PLACE TO HAND A SEEKER ITS TARGET IS NOT AT THE
+TARGET** — GATE 0 + GATE 1 + **GATE 2 COMPLETE** (2026-08-10, 6876 → 6988 → **7057**); gate 3 NOT
+STARTED. Slice 32's P5, promoted by slice 34 to a live constraint and sharpened by slice 35 into the
+strongest remaining candidate of the gimbal family. Since slice 34 the head has been handed its
+target PERFECTLY — tick 1 initialises it to the clamped truth look angles, on a path whose whole
+thesis is that the head never sees truth. Slice 36 makes that handover an AUTHORED SIGNED ERROR
+(`gimbal_handover_err_deg`), and ⭐⭐ **THE OPTIMUM IS NOT ZERO**: the body-frame LOS is not a fixed
+target but travels **+18.11° → −15.15°** (a 33.2° excursion THROUGH ZERO) as the missile swings onto
+the collision course, so the requirement is a **V** — left arm `|err|` EXACTLY (the tick-1 peak,
+before the servo moves), right arm the CHASE COST — and the cheapest basket is biased toward where
+the LOS is GOING. The argmin walks −2 → −4 → −8° as the servo slows 60 → 8 °/s. Full gate-0/1 detail
+and every measured table in `docs/plans/slice36.md`; probes in `M:\claud_projects\temp\slice36\`.
+
+**GATE 2 (6988 → 7057, +69) — the seam's two keys, the loader, and a THIRD key measured and
+dropped.**
+
+⭐⭐ **THE GO/NO-GO CAME BACK NEGATIVE, AND THAT IS THE GATE's FIRST FINDING** (advisor, blocking,
+run BEFORE the key was written). The requirement is a MAX OVER THE APPROACH, so the core holds it as
+a running maximum (`head_off_peak_deg`) — and the tempting justification was slice 33's gate-3
+finding, THE EMIT GRID UNDER-READS THE EXCURSION. ⚠⚠ **It would have been a BORROWED CLAIM.** Slice
+33 was entitled to say it because its under-read (0.016°) was WIDER than the band that decided its
+verdict (0.011–0.05°); measured here on the cells where a verdict actually turns — err 0 / 12 °/s
+reads 8.84016 per tick against 8.83704 per frame, a **0.00313° gap against a 1.1598° margin =
+0.27 %** — and 0.10 % / 0.03 % at err −4 and −6. The frame grid also **agrees with the ticks on the
+break verdict in every cell** (0/10579 vs 0/661 held; 7302/7919 vs 456/494 broken). ⇒ the key stands
+on **CONVENTION 13** instead: a max over ticks is not a thing a client receiving one tick in sixteen
+can form at all, whatever the sampling error happens to be. ⭐ And the MECHANISM for why it could
+never have stood on slice 33's is slice 35's own knob — a RATE-LIMITED head cannot move more than
+`rate·emit·dt` between frames (0.128° at the shipped 8 °/s and `emit_every: 16`), so **the servo
+limit that CREATES the requirement also BOUNDS how much a frame grid can hide of it**; measured over
+rate × emit ∈ {8, 25, 60} × {16, 64, 250} the gap never exceeds 3.6 % of that bound. *General: when
+a later slice reaches for an earlier one's finding, re-run the comparison that ENTITLED the earlier
+slice to it — the finding may be true and still not yours.*
+
+⚠⚠ **AND A KEY WAS DRAFTED, MEASURED AND DROPPED — its whole value and its whole defect are the
+same sentence.** A signed peak MARGIN (slice 33's `seeker_fov_margin_deg` shape) would go negative on
+the first tick the window is breached and **never recover**, which reads as slice 32's client-side
+LATCH derived and core-owned. But slice 34 measured that EVERY held arm leaves its window at
+r = 0.18–8.55 m as the LOS swings past, and **a peak cannot forget**: reproduced here, the would-be
+latch fires on 100 % of arms **including every hit** (the 0.191 m arms latch for their last tick).
+⇒ the verdict stays with `gimbal_valid`, which is per-tick and RECOVERS when the geometry does, and
+slice 32's latch stays the client's to hold over it. **TWO keys ship, not three.**
+
+⚠⚠ **THE PEAK IS AN APPROACH QUANTITY, AND THIS IS THE ENDGAME SPIKE IN THE ONE TELEMETRY SHAPE FOR
+WHICH IT IS IRREVERSIBLE.** `head_off_peak_deg` reads the clean requirement **BIT-IDENTICALLY from
+r = 3000 m to r = 200 m** (8.84016 / 8.09069 / 2.11192 on the three cells) and then runs to
+**179.4998° at CPA on every arm, hit or miss** — the target is simply behind the head by then. An
+instantaneous key spikes there and recovers; a peak-hold cannot. ⇒ a reader takes it AT A RANGE,
+never at the end ([[ewsim-missile-verifier-sampling]], new quantity), and **gate 3 inherits the
+display decision** — a HUD that prints the raw key past CPA is a lying picture (slice 19's class).
+
+⚠⚠ **THE TWO-RUN DISCIPLINE's FIFTH QUANTITY IS NOW SHIPPED, AND IT FAILS LARGE** — the opposite
+direction to slice 34's. On a windowed/broken arm the head holds while the LOS leaves, so the peak is
+the POST-BREAK RUNAWAY: 104.56 / 65.79 / 73.77° against free-window requirements of 12.35 / 10.00 /
+18.00. Slice 34's `head_angle_deg` froze plausibly-but-TOO-SMALL; this one runs away. Every
+requirement in the testset is read off a FREE-WINDOW arm and the file says so.
+
+⭐⭐ **`_parse_knobs` GAINS THE FIRST BY-NAME REFUSAL, AND THE REASON IS AN ASYMMETRY WORTH THE
+LINE.** `gimbal_handover_err_deg` is consumed exactly ONCE, at tick 1, and `:head_az` is rewritten
+every tick after — a slider on it is dead in the hand (slice 19's `speed` class, the 5th in this
+arc). ⚠ What is NEW is that the existing guard would NOT have caught it: `_parse_knobs` refuses a
+knob whose comp key does not exist, which is how 19's `speed` and 21's launch altitude were caught —
+**BY ACCIDENT, because neither is a comp key at all**. This one IS a comp key when authored, so the
+declaration loads cleanly and ships a live slider onto a number nothing reads again. A constraint
+stated in a policy is not enforceable where the policy cannot reach (slice 34 gate 2); this is where
+it reaches. ⚠ ONE KEY BY NAME (`_DEAD_KNOB_KEYS`), deliberately not a registry, with the MIRROR
+pinned — `gimbal_rate_dps` still declares cleanly on the same scenario.
+
+**THE LOADER JOINS, IT DOES NOT REFUSE.** The key enters the EXISTING
+`("gimbal_stop_deg", "gimbal_fov_deg", "gimbal_rate_dps")` validation loop (slice 35's precedent —
+one source, no drift), inheriting presence-gating on `gimbal_tau_s` and the non-finite refusal. ⚠ The
+loop's slice-attribution ternary needed a THIRD arm. ⚠⚠ The non-finite refusal is **not hygiene**
+(gate 1's inherited item): `head_clamp` handles a NaN *stop* but not a NaN *az*, so `deg2rad(±Inf)`
+would reach the kernel as a non-finite azimuth, make the radial projection `Inf/Inf` and poison the
+head state permanently, inside `observe!` where the session's IO-only catch drops the connection.
+⚠ **NO BOUND AGAINST THE STOP**, and the reason is decisive rather than stylistic: the key is an
+OFFSET on the flying `look_az_b`, so "authored beyond its own stop" is **not a load-time-decidable
+quantity** — and refusing it would delete the mechanism that bounds the basket from above. Slice 35's
+post-review shape applies: a degenerate the loader PERMITS, proven to LOAD (`err = 400°`) and never
+FLOWN.
+
+⚠ **BOTH DOMAIN ENDPOINTS MEASURED, AND THEY ARE DIFFERENT KINDS OF BOUNDARY** (slice 26's
+post-commit rule, applied to both ends rather than one). LOWER: at `err = −18.105365°` — the negative
+of the perfect handover — the head is born at azimuth **EXACTLY 0.000000°**, pointing down its own
+nose in that axis, which is where a CAGED head sits; `|head|` is then a pure elevation 0.655978°.
+⚠ The key does NOT go inert there (at −20° the requirement is still exactly 20.000000°), so **the
+lower bound is a MODELLING choice and the plan says so** rather than implying a mechanism it lacks.
+UPPER: at `+11.9°` the birth angle SATURATES on the stop (`|head|` exactly 30.000000°) and the key
+GOES INERT — the requirement agrees to **5e-4° over 11.9 → 20°**, a mechanism. ⇒ the signed domain is
+**[−18.1 (the CAGED coincidence), +11.9 (the STOP)]**; the two shipped wires author 0 and −6.
+
+⚠ **THE PEAK IS CUMULATIVE ACROSS A CROSS-TOGGLE, AND THAT IS THE DELIBERATE CHOICE** (the
+latent-bug class this arc has caught seven times, in a new place): `:head_az` itself persists through
+a toggle off `:six_dof` — the head FREEZES rather than un-existing, and on toggle-back the seam takes
+the SLEW branch off the stored angles — so a peak that reset would be the ONLY piece of head state
+that did, and would read LOWER than the tracking error the head has actually had. Nothing accrues
+while `_gim` is false (the update sits inside the rung gate; measured **0/500 frames** ship the key
+there, and the peak returns 8.090688 unchanged).
+
+Convention 9 is settled by MEASUREMENT and not by counting sliders (slice 27's diagonal): gate 1's
+own teeth already show the authored error and the servo are **ONE axis** — the servo MOVES the
+argmin (−2 at 40 °/s, −8 at 8 °/s, a 1.54× saving) — and **slice 35 is the `err = 0` row of this
+slice's grid**. ⭐ The blocking re-read gate 1 demanded was run and PASSED: Finding 3's elevation pin
+(`hel1 === ref.hel1`, `hypot === 30.000000`) still holds against the new tick-1 telemetry.
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

@@ -1810,6 +1810,33 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # replaced. That a CAGED head reproduces `boresight_angle` exactly is gate 1's finding, and
         # it is why there is one kernel here and not two.
         off_head = off_axis_angle(head_az, head_el, look_az_b, look_el_b)
+        # ⭐⭐ SLICE 36 (gate 2) — THE REQUIREMENT IS A **MAX OVER THE APPROACH**, SO THE CORE HOLDS
+        # IT. `head_off_deg` above is instantaneous, and the quantity this slice is about — *how much
+        # detector window did this handover need?* — is its running maximum. ⚠ THE REASON IT LIVES
+        # HERE IS CONVENTION 13 AND **NOT** SLICE 33's EMIT-GRID FINDING, and that was settled by a
+        # go/no-go measurement rather than by inheritance: the frame grid under-reads this peak by
+        # 0.0003–0.0031°, which is **0.27 % of the margin that decides the verdict** at the tightest
+        # cell (8.840° against a 10° window) and the frame verdict agrees with the tick verdict in
+        # every cell measured. Slice 33's language would have been a BORROWED CLAIM. ⭐ And the
+        # mechanism is slice 35's own knob: a RATE-LIMITED head cannot move more than
+        # `rate·emit·dt` between frames, so the very servo limit that CREATES the requirement also
+        # BOUNDS how much a frame grid can hide of it. What licenses the key is simply that a max
+        # over ticks is not a thing a client that receives one tick in sixteen can form at all.
+        #
+        # ⚠ CUMULATIVE, AND ACROSS A CROSS-TOGGLE TOO — the deliberate choice, because `:head_az`
+        # itself persists through one (the head does not un-exist when `:airframe` leaves `:six_dof`;
+        # it FREEZES, and on toggle-back the seam takes the SLEW branch off the stored angles). A
+        # peak that reset there would be the only piece of head state that did, and it would read
+        # LOWER than the tracking error the head has actually had. Nothing accrues while `_gim` is
+        # false because this line is inside its gate.
+        # ⚠⚠ AND IT IS RAW — NO RANGE GATE. The last metres of a HIT swing the LOS through large
+        # angles (slice 34: every held arm leaves its window at r = 0.18–8.55 m), so this key runs
+        # away at CPA on an arm that hit. That is correct for a live HUD, which reads it during the
+        # approach; a VERIFIER must read it AT A RANGE and never at the end
+        # ([[ewsim-missile-verifier-sampling]] — the endgame spike, in a new quantity). Measured and
+        # pinned in `test_missile.jl`.
+        off_peak = max(Float64(get(c, :head_off_peak, 0.0)), off_head)
+        c[:head_off_peak] = off_peak
     end
 
     # SLICE 26 — THE RADOME. The seeker does not look at the target directly: it looks THROUGH a
@@ -2494,6 +2521,39 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # predicate returning in the quantity a gimbal actually has.
         tel["$sid.gimbal_fov_margin_deg"] = _finite_coord(rad2deg(fov_h - off_head))
         tel["$sid.gimbal_valid"] = in_fov ? 1.0 : 0.0
+        # ⭐⭐ SLICE 36 — THE REQUIREMENT, AND THE MARGIN AGAINST IT. `head_off_deg` is what the
+        # detector must cover THIS TICK; `head_off_peak_deg` is what it had to cover to get here,
+        # which is the number a handover basket is designed against. The running max is formed at
+        # the seam beside `off_head` (see there for why the core holds it — convention 13, and NOT
+        # slice 33's emit grid, which was measured and came back 0.27 % of the deciding margin).
+        # ⚠⚠ IT IS THE TWO-RUN DISCIPLINE's FIFTH QUANTITY AND IT FAILS **LARGE** — on a
+        # never-acquired arm it is the POST-BREAK RUNAWAY (65–120°), where slice 34's frozen
+        # `head_angle_deg` failed plausibly-but-small. A requirement may only be read off a
+        # FREE-WINDOW arm; on a windowed arm this key reports what the break did, not what the
+        # design needed.
+        # ⚠⚠ AND IT IS AN **APPROACH** QUANTITY — THE ENDGAME IS PERMANENT HERE IN A WAY IT IS
+        # NOWHERE ELSE IN THIS ARC. Slice 34 measured that every held arm leaves its window at
+        # r = 0.18–8.55 m as the LOS swings past; an INSTANTANEOUS key spikes there and recovers,
+        # but a PEAK CANNOT FORGET. Measured: this key reads the clean requirement (8.84 / 8.09 /
+        # 9.50 / 2.11 on the four cells below) unchanged from r = 3000 m down to r = 200 m, and then
+        # runs to **179.4998° at CPA on every arm, hit or miss** — the target is simply behind the
+        # head by then. ⇒ a reader takes it AT A RANGE, never at the end, and gate 3's HUD owns
+        # freezing the display there. That is [[ewsim-missile-verifier-sampling]]'s endgame spike in
+        # the ONE telemetry shape for which it is irreversible, and it is why the SECOND key drafted
+        # here — a signed peak MARGIN, slice 33's shape — WAS MEASURED AND DROPPED: its whole value
+        # would have been that it latches and never recovers, and its whole defect is the same
+        # sentence, since the endgame breach fires it on 100 % of arms INCLUDING every hit. The
+        # verdict already ships per tick as `gimbal_valid`, which recovers when the geometry does,
+        # and slice 32's LATCH is the client's to hold over it.
+        tel["$sid.head_off_peak_deg"] = _finite(rad2deg(off_peak))
+        # The AUTHORED handover error beside it, SIGNED and in the same degrees, so the client
+        # reads the basket's coordinate off the wire instead of being told it (the
+        # `gimbal_stop_deg` / `gimbal_fov_deg` / `gimbal_rate_dps` posture — convention 13). ⚠ Its
+        # default is a true 0.0 and not a `FINITE_CEIL` sentinel, because a head with no authored
+        # error IS handed over perfectly: `err = 0` is the physical default, which is exactly why
+        # slice 34/35's wires are the `err = 0` row of this slice's own grid.
+        tel["$sid.gimbal_handover_err_deg"] =
+            _finite_coord(Float64(get(c, :gimbal_handover_err_deg, 0.0)))
         # ⭐⭐ SLICE 35 — THE SERVO'S OWN TWO NUMBERS, and they are the two SIDES of one claim: what
         # the head was ASKED for, and whether it could deliver it. Gate 0 measured both, and they
         # come from DIFFERENT code paths in the kernel (the demand is formed unconditionally, the

@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–35 COMPLETE & green — 6876 tests** (⚠ the count FELL at slice 35 gate 3 and the direction is accounted
+**Slices 1–35 COMPLETE & green; slice 36 is at GATE 2 — 7057 tests** (⚠ the count FELL at slice 35 gate 3 and the direction is accounted
 for: ~87 new asserts in, ~103 out, because a per-entity scenario sweep collapsed into ONE strictly-stronger
 exact-set assert). **The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–35
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",

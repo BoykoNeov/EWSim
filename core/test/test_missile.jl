@@ -8338,12 +8338,18 @@ end
     # ACQUISITION (gate 0 §0.1 — the tracking error is under 0.5° by r ≈ 4937–6437 m), and it was
     # MEASURED identical at n = 4000 / 6000 / 9000 / full-to-CPA in every cell used here. Only the
     # MISS arms need the full run.
-    function harm(; n = 22000, trace = false, kw...)
+    # ⚠ GATE 2 ADDED THE `peak*` / `off_frame` / `n_peak_*` COLUMNS AND CHANGED NO EXISTING ONE —
+    # the gate-1 teeth above are read on the same bits they were written against, which is what
+    # makes re-running them the re-read Finding 3's inherited-pin note demands.
+    function harm(; n = 22000, trace = false, emit = 16, kw...)
         w, sub = hand_world(; kw...)
         miss = Inf; r_prev = Inf; pos_prev = zero(Vec3); pos_cpa = zero(Vec3)
         off_max = 0.0; head_max = 0.0; nt = 0; n_out = 0; n_sat = 0; n_defl = 0
         n_sat_band = 0; n_defl_band = 0; n_band = 0; r_sat_lo = Inf
         haz1 = NaN; hel1 = NaN; off1 = NaN
+        off_frame = 0.0; raw_max = 0.0; pk_prev = -1.0
+        n_peak_back = 0; n_peak_ne = 0; peak_end = NaN; err_tel = NaN
+        peak_at_3000 = NaN; peak_at_1000 = NaN; peak_at_200 = NaN
         tr = Vec3[]
         for k in 1:n
             tick!(w, sub, dt); empty!(w.events)
@@ -8354,6 +8360,21 @@ end
             o = get(tel, "m1.head_off_deg", 0.0)
             k == 1 && (haz1 = Float64(get(c, :head_az, NaN));
                        hel1 = Float64(get(c, :head_el, NaN)); off1 = o)
+            # SLICE 36 gate 2 — the shipped peak, checked against a running max formed HERE. ⚠ THE
+            # CHECK IS UNGATED (the key is raw), while the frame-vs-tick comparison below sits
+            # INSIDE the r > 200 gate: read over all ticks BOTH maxima converge on the ~179.5° CPA
+            # swing and the comparison would measure the endgame instead of the grid.
+            let pk = get(tel, "m1.head_off_peak_deg", NaN)
+                raw_max = max(raw_max, o)
+                isnan(pk) || (pk < pk_prev && (n_peak_back += 1);
+                              abs(pk - raw_max) > 1.0e-12 && (n_peak_ne += 1);
+                              pk_prev = pk; peak_end = pk)
+                isnan(peak_at_3000) && r <= 3000 && (peak_at_3000 = pk)
+                isnan(peak_at_1000) && r <= 1000 && (peak_at_1000 = pk)
+                isnan(peak_at_200)  && r <=  200 && (peak_at_200  = pk)
+            end
+            err_tel = get(tel, "m1.gimbal_handover_err_deg", NaN)
+            r > 200 && k % emit == 0 && (off_frame = max(off_frame, o))
             # ⚠ THE SATURATION COUNTERS SIT **INSIDE** THE r > 200 GATE, and that was a gate-1
             # correction rather than a copy: read over ALL ticks they pick up the r → 0 ENDGAME
             # SPIKE (5 `aero_sat` ticks and 1 `defl_sat` tick at r = 0.19 m on a HITTING arm), which
@@ -8380,6 +8401,8 @@ end
         end
         return (; miss, pos_cpa, off_max, head_max, trace = tr, haz1, hel1, off1,
                   n_sat, n_defl, n_sat_band, n_defl_band, r_sat_lo, nt, n_band,
+                  off_frame, peak_end, peak_at_3000, peak_at_1000, peak_at_200,
+                  n_peak_back, n_peak_ne, err_tel,
                   out  = nt == 0 ? 0.0 : 100 * n_out / nt)
     end
 
@@ -8603,5 +8626,255 @@ end
         # ⚠ On a GLASS wire it would not read this way — the loud twin runs `aero_sat` 27–48 % on the
         # broken rows and the isolation would discriminate in NEITHER direction (slice 33's
         # inversion). That, with §0.2's exact inertness, is the other half of why the glass is gone.
+    end
+
+    # ═══════════════════════════════════════════════════════════════════════════════════════════
+    # GATE 2 — the seam's own keys, the loader, and the two endpoints of the declared domain.
+    # ═══════════════════════════════════════════════════════════════════════════════════════════
+
+    @testset "the TELEMETRY keys — the REQUIREMENT is a max over the approach, so the CORE holds it" begin
+        # `head_off_deg` is what the detector must cover THIS TICK. The quantity a handover basket
+        # is designed against is its RUNNING MAXIMUM, and that is a thing a client receiving one
+        # tick in sixteen cannot form at all — convention 13, which is the whole reason the key
+        # exists (and see the go/no-go below for the reason it is NOT slice 33's).
+        let a = harm(n = 6000, rate = 8.0, err = -6.0)
+            @test a.n_peak_ne == 0            # the shipped key IS the running max of `head_off_deg`
+            @test a.n_peak_back == 0          # …and it is monotone non-decreasing, by construction
+        end
+        # every key a SCALAR and finite (conventions 6/13), and the SIGNED authored error beside the
+        # requirement so the client reads the basket's coordinate rather than being told it.
+        let (w, sub) = hand_world(rate = 8.0, gfov = 10.0, err = -6.0)
+            for _ in 1:1500; tick!(w, sub, dt); empty!(w.events); end
+            tel = w.env[:telemetry]::Dict{String,Any}
+            for key in ("m1.head_off_peak_deg", "m1.gimbal_handover_err_deg")
+                @test haskey(tel, key)
+                @test tel[key] isa Float64 && isfinite(tel[key])
+            end
+            @test tel["m1.gimbal_handover_err_deg"] == -6.0        # SIGNED, and AUTHORED degrees
+            @test tel["m1.head_off_peak_deg"] >= tel["m1.head_off_deg"]
+        end
+        # ⚠ THE DEFAULT IS A TRUE 0.0 AND NOT A `FINITE_CEIL` SENTINEL — a head with no authored
+        # error IS handed over perfectly, which is exactly why slice 34/35's wires are the `err = 0`
+        # ROW of this slice's own grid rather than a different kind of wire.
+        let (w, sub) = hand_world(rate = 8.0, gfov = 10.0)      # no key at all — slice 35's wire
+            tick!(w, sub, dt)
+            @test w.env[:telemetry]["m1.gimbal_handover_err_deg"] === 0.0
+        end
+        # …and the never-stale discipline: the rung gate, not a `haskey`. A cross-toggle off
+        # `:six_dof` ships NO head keys rather than a frozen plausible set (the latent-bug class
+        # this arc has now caught seven times).
+        let (w, sub) = hand_world(rate = 8.0, gfov = 10.0, err = -6.0)
+            for _ in 1:600; tick!(w, sub, dt); empty!(w.events); end
+            w.fidelity[:airframe] = :pitch_coupled
+            n_key = 0
+            for _ in 1:200
+                tick!(w, sub, dt); empty!(w.events)
+                haskey(w.env[:telemetry]::Dict{String,Any}, "m1.head_off_peak_deg") && (n_key += 1)
+            end
+            @test n_key == 0
+        end
+    end
+
+    @testset "⭐⭐ THE GO/NO-GO — the emit grid is NOT the reason for the peak key, and that is MEASURED" begin
+        # The tempting justification for a core-side peak is slice 33's gate-3 finding (THE EMIT
+        # GRID UNDER-READS THE EXCURSION BY MORE THAN THE SURVIVABLE BAND IS WIDE). ⚠⚠ IT WOULD
+        # HAVE BEEN A BORROWED CLAIM, and the check is the rule: slice 33 was allowed to say it
+        # because its under-read (0.016°) was WIDER than the band that decided its verdict
+        # (0.011–0.05°). So the comparison has to be run HERE, on the cells where a verdict
+        # actually turns — §0.9's err 0 / 12 °/s reads 8.840 against the wires' 10° window, and
+        # err −6 / 8 °/s reads 8.091 — and NOT on the 12.346 or 104.562 rows, where no sampling
+        # error could flip anything.
+        for (e, rt, req) in ((0.0, 12.0, 8.84016), (-6.0, 8.0, 8.09069), (-4.0, 8.0, 9.49992))
+            a = harm(rate = rt, err = e)                       # FREE window — the requirement arm
+            @test isapprox(a.off_max, req; atol = 1.0e-4)
+            gap = a.off_max - a.off_frame
+            @test gap >= 0.0                                   # a subset max cannot exceed the whole
+            # THE NUMBER THAT DECIDED IT: the gap is under 1 % of the margin to the shipped window.
+            @test gap < 0.01 * (10.0 - a.off_max)
+        end
+        # ⇒ 0.27 % at the tightest cell. The key stands on convention 13 instead, and the MECHANISM
+        # for why it could never have stood on slice 33's is slice 35's own knob: a RATE-LIMITED
+        # head cannot move more than `rate·emit·dt` between frames — 0.128° at the shipped 8 °/s and
+        # `emit_every: 16` — so the servo limit that CREATES the requirement also BOUNDS how much a
+        # frame grid can hide of it. Measured over rate × emit, the gap never reaches that bound:
+        for (rt, em) in ((8.0, 16), (60.0, 16), (8.0, 250), (60.0, 250))
+            a = harm(rate = rt, err = 0.0, emit = em)
+            @test a.off_max - a.off_frame < rt * em * dt
+        end
+        # ⚠ AND THE VERDICT ITSELF SURVIVES THE GRID — the break is not a thing a frame can miss.
+        # (This is what would have made the borrowed claim not merely unearned but wrong.)
+        for (e, rt, broke) in ((0.0, 12.0, false), (0.0, 8.0, true), (-6.0, 8.0, false),
+                               (-10.0, 8.0, true))
+            a = harm(rate = rt, err = e, gfov = 10.0)
+            @test (a.out > 0.0) == broke
+        end
+    end
+
+    @testset "⚠⚠ THE PEAK IS AN **APPROACH** QUANTITY — and a peak-hold cannot forget the endgame" begin
+        # Slice 34 measured that EVERY held arm leaves its detector window at r = 0.18–8.55 m as the
+        # LOS swings past. An instantaneous key spikes there and RECOVERS; a peak cannot. So the
+        # shipped key reads the clean requirement all the way down and then runs away at CPA — on
+        # every arm, hit or miss. [[ewsim-missile-verifier-sampling]]'s endgame spike, in the ONE
+        # telemetry shape for which it is irreversible.
+        for (e, rt, req) in ((0.0, 12.0, 8.84016), (-6.0, 8.0, 8.09069), (0.0, 60.0, 2.11192))
+            a = harm(rate = rt, err = e)
+            @test isapprox(a.peak_at_3000, req; atol = 1.0e-4)   # unchanged from 3000 m…
+            @test a.peak_at_1000 === a.peak_at_3000              # …to 1000 m…
+            @test a.peak_at_200  === a.peak_at_3000              # …to 200 m, IN BITS
+            @test a.peak_end > 179.0                             # …and then the LOS goes behind it
+        end
+        # ⭐ THAT MEASUREMENT IS WHY A SECOND KEY WAS DRAFTED AND DROPPED. A signed peak MARGIN
+        # (slice 33's `seeker_fov_margin_deg` shape) would LATCH negative on the first breach and
+        # never recover — and that sentence is simultaneously its whole value and its whole defect,
+        # because the endgame breach fires it on 100 % of arms INCLUDING every hit. Reproduced here
+        # so the drop is a measurement and not a preference: the would-be latch fires on a HITTING
+        # arm too, and what distinguishes the two arms is the RANGE at which it fires.
+        let held = harm(rate = 8.0, err = -6.0, gfov = 10.0), broke = harm(rate = 8.0, err = 0.0, gfov = 10.0)
+            @test held.miss  < 1.0    && held.peak_end  > 179.0   # HIT — and the latch would fire
+            @test broke.miss > 3000.0 && broke.peak_end > 100.0   # BROKEN — and so would it
+        end
+        # ⇒ the verdict stays with `gimbal_valid`, which is per-tick and RECOVERS when the geometry
+        # does, and slice 32's LATCH stays the client's to hold over it.
+    end
+
+    @testset "⚠⚠ THE FIFTH TWO-RUN QUANTITY, NOW SHIPPED — and it fails LARGE" begin
+        # Slice 34's `head_angle_deg` froze plausibly-but-TOO-SMALL on a windowed arm. This one runs
+        # AWAY: with no error signal the head holds while the LOS leaves, so the shipped peak is the
+        # POST-BREAK RUNAWAY and a reader will take it for a requirement. It is not one. Every
+        # requirement in this file is read off a FREE-WINDOW arm, and here is why, as numbers.
+        for (e, rt, free_req) in ((0.0, 8.0, 12.34604), (-10.0, 8.0, 10.0), (-18.0, 8.0, 18.0))
+            w = harm(rate = rt, err = e, gfov = 10.0)            # the WINDOWED (broken) arm
+            f = harm(rate = rt, err = e)                         # the FREE-window twin
+            @test isapprox(f.off_max, free_req; atol = 1.0e-4)
+            @test w.miss > 3000.0                                # it broke…
+            @test w.peak_end > 60.0                              # …and its peak is the runaway,
+            @test w.peak_end > 4 * f.off_max                     # nowhere near the requirement
+        end
+    end
+
+    @testset "⚠ THE DECLARED DOMAIN — **BOTH** ENDPOINTS MEASURED, not one inferred from the other" begin
+        # Slice 26's post-commit rule (a declared domain's endpoints are MEASURED) applied to both
+        # ends, which slice 34's gate-3 post-review found had been applied to neither.
+        ref = harm(n = 1, rate = 8.0)
+        # ⭐ THE LOWER END IS A COINCIDENCE WITH THE ARC's OTHER DEGENERATE: at `err = −18.105365`,
+        # the negative of the perfect handover, the head is born at azimuth EXACTLY zero — pointing
+        # down the missile's own nose in that axis, which is where a CAGED head sits.
+        let a = harm(n = 1, rate = 8.0, err = -rad2deg(ref.haz1))
+            @test abs(rad2deg(a.haz1)) < 1.0e-9
+            @test isapprox(rad2deg(hypot(a.haz1, a.hel1)), 0.655978; atol = 1.0e-5)  # pure ELEVATION
+        end
+        # ⚠ AND THE KEY DOES NOT GO INERT THERE — past the coincidence the head is simply born on the
+        # far side of the nose and the V's left arm continues, so the lower bound is a MODELLING
+        # choice and the plan must say so rather than implying a mechanism it does not have.
+        @test isapprox(harm(n = 5000, rate = 8.0, err = -20.0).off_max, 20.0; atol = 1.0e-9)
+        # ⭐⭐ THE UPPER END IS A MECHANISM, AND IT IS WHERE THE KEY GOES INERT: the birth angle
+        # SATURATES on the stop, so beyond ~+11.9° authoring more error changes nothing. Measured as
+        # the requirement agreeing to 5e-4° over a 1.7× span of authored error.
+        let v = [harm(n = 5000, rate = 8.0, err = e).off_max for e in (11.9, 12.0, 14.0, 20.0)]
+            @test maximum(v) - minimum(v) < 1.0e-3
+            @test isapprox(v[1], 24.07896; atol = 1.0e-4)
+        end
+        # ⇒ the signed domain is [−18.1 (the CAGED coincidence), +11.9 (the STOP)] and the two ends
+        # are different KINDS of boundary. The two shipped wires author 0 and −6, well inside it.
+    end
+
+    @testset "loader: the handover error is PRESENCE-gated, non-finite-REFUSED, and NEVER A KNOB" begin
+        mktempdir() do dir
+            # slice 35's own `write_scn`, verbatim in shape — one YAML source for this family so a
+            # loader tooth cannot drift from the wire it is about (convention 7 applied to a test).
+            function write_scn(seekextra; two_angle = true, knobs = "")
+                p = joinpath(dir, "h.yaml")
+                open(p, "w") do io
+                    print(io, "name: h\nseed: 32\ndt_physics: 1.0e-3\n",
+                              "fidelity: {airframe: six_dof, autopilot: alpha, guidance: pn,\n",
+                              "           seeker: filtered, seeker_axes: az_el}\n",
+                              "entities:\n",
+                              "  - id: m1\n    kind: missile\n    pos: [0.0, 0.0, 3000.0]\n",
+                              "    missile:\n      mass_kg: 140.0\n      speed: 700.0\n",
+                              "      elevation_deg: 12.0\n",
+                              "      seeker: {two_angle: ", two_angle ? "true" : "false",
+                              seekextra, "}\n",
+                              "      guidance: {n_pn: 8.0}\n",
+                              "      airframe: {inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0,\n",
+                              "                 cmq: -150.0, cla: 20.0, cy_beta: 20.0}\n",
+                              "  - id: t1\n    kind: target\n    pos: [6000.0, 2000.0, 4200.0]\n",
+                              "    vel: [0.0, 200.0, 0.0]\n    target: {rcs_m2: 1.0}\n", knobs)
+                end
+                return p
+            end
+            mis(p) = first(e for (_, e) in load_scenario(p).world.entities if e.kind === :missile)
+            HEAD = ", gimbal_tau_s: 0.05, gimbal_stop_deg: 30.0, gimbal_rate_dps: 8.0"
+            # THE YAML → COMP PATH: SIGNED DEGREES at the boundary, stored verbatim, the seam
+            # converts ONCE (the `gimbal_stop_deg` / `gimbal_fov_deg` / `gimbal_rate_dps` posture).
+            let m = mis(write_scn(HEAD * ", gimbal_handover_err_deg: -6.0"))
+                @test m.comp[:gimbal_handover_err_deg] == -6.0
+            end
+            # PRESENCE-GATED: not authored ⇒ not minted, so slices 1–35 are byte-identical by
+            # GATING and not by a zero that happens to be inert (gate 1 measured the `= 0.0` case
+            # separately, and on the one geometry where it could have differed).
+            @test !haskey(mis(write_scn(HEAD)).comp, :gimbal_handover_err_deg)
+            # A DEAD KNOB IS REFUSED, NOT SILENTLY IGNORED — it joins the same validation loop as
+            # the other three, so a handover error without a head, or without the two-angle seeker
+            # that hosts one, is a LOAD error (the slice-31/34/35 posture, fourth key in the loop).
+            @test_throws ErrorException load_scenario(
+                write_scn(", gimbal_handover_err_deg: -6.0"))
+            @test_throws ErrorException load_scenario(
+                write_scn(HEAD * ", gimbal_handover_err_deg: -6.0"; two_angle = false))
+            # ⚠⚠ NON-FINITE IS REFUSED AT LOAD, AND THIS ONE IS NOT HYGIENE (gate 1's inherited
+            # item): `head_clamp` handles a NaN *stop* but not a NaN *az*, so `deg2rad(±Inf)` would
+            # reach the kernel as a non-finite azimuth, make the radial projection `Inf/Inf` and
+            # poison the head state permanently — inside `observe!`, where the session's IO-only
+            # catch would drop the connection (convention 5).
+            for bad in (".nan", ".inf", "-.inf")
+                @test_throws ErrorException load_scenario(
+                    write_scn(HEAD * ", gimbal_handover_err_deg: $bad"))
+            end
+            # ⚠ THE DEGENERATE THE LOADER **PERMITS**, PROVEN TO LOAD AND NEVER FLOWN (slice 35's
+            # post-review shape). An error authored past the stop is NOT refused, deliberately: the
+            # key is an OFFSET on the flying `look_az_b`, so "beyond its own stop" is not a
+            # load-time-decidable quantity — the loader cannot know the geometry that puts the
+            # boundary at +11.9° on this wire and elsewhere on another. `head_clamp` owns it, and
+            # the birth SATURATING on the stop is the mechanism that bounds the basket from above
+            # (measured in the domain testset above).
+            let m = mis(write_scn(HEAD * ", gimbal_handover_err_deg: 400.0"))
+                @test m.comp[:gimbal_handover_err_deg] == 400.0
+            end
+            # ⭐⭐ AND THE ENFORCEABLE FORM OF "THERE IS EXACTLY ONE LIVE KNOB". The key is consumed
+            # ONCE, at tick 1, and `:head_az` is rewritten every tick after — so a slider on it is
+            # dead in the hand (slice 19's `speed` class, the 5th in this arc, and slice 19's
+            # NOT-A-DEAD-KNOB TRIPWIRE would FAIL on it).
+            # ⚠ WHAT IS NEW IS THAT `_parse_knobs`' EXISTING GUARD WOULD NOT HAVE CAUGHT IT. That
+            # guard refuses a knob whose comp key does not exist, which is how 19's `speed` and
+            # 21's launch altitude were caught — BY ACCIDENT, because neither is a comp key at all.
+            # This one IS a comp key when authored, so the declaration loads cleanly and ships a
+            # live slider onto a number nothing will read again. A constraint stated in a policy is
+            # not enforceable where the policy cannot reach (slice 34 gate 2); this is where it
+            # reaches, and it is one key by name rather than a registry.
+            @test_throws ErrorException load_scenario(write_scn(
+                HEAD * ", gimbal_handover_err_deg: -6.0";
+                knobs = "knobs:\n  - {target: m1, key: gimbal_handover_err_deg, " *
+                        "min: -18.0, max: 11.0, label: H}\n"))
+            # …and the refusal is about THIS key, not about knobs on this wire: the ONE live slider
+            # the slice ships declares cleanly on the same scenario (the MIRROR — a refusal, not a
+            # blanket ban).
+            let p = write_scn(HEAD * ", gimbal_handover_err_deg: -6.0";
+                              knobs = "knobs:\n  - {target: m1, key: gimbal_rate_dps, " *
+                                      "min: 8.0, max: 60.0, label: R}\n")
+                @test Dict(kb.key => kb.target for kb in load_scenario(p).knobs)[:gimbal_rate_dps] === :m1
+            end
+        end
+        # THE PRESENCE GATE FROM THE OTHER SIDE (slice 35's shape): at GATE 2 no shipped wire
+        # carries the key at all, so slices 1–35 stay byte-identical by GATING. ⚠ Gate 3 authors
+        # exactly two and must TIGHTEN this to the pair rather than delete it.
+        let base = joinpath(@__DIR__, "..", "..", "scenarios")
+            carriers = String[]
+            for f in readdir(base)
+                endswith(f, ".yaml") || continue
+                for (_, e) in load_scenario(joinpath(base, f)).world.entities
+                    haskey(e.comp, :gimbal_handover_err_deg) && push!(carriers, f)
+                end
+            end
+            @test carriers == String[]
+        end
     end
 end

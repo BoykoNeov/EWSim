@@ -627,12 +627,34 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # is slice 34's `τ = Inf` reductio reached from the other side) and a NaN degenerates to
             # NO limit. Only the non-finite AUTHORED input is refused here, which is
             # validate-at-LOAD's business — the same split slice 34 wrote for τ.
-            for hk in ("gimbal_stop_deg", "gimbal_fov_deg", "gimbal_rate_dps")
+            #
+            # ⭐⭐ SLICE 36 — `gimbal_handover_err_deg`, THE HANDOVER BASKET, and it joins this same
+            # loop for slice 35's reason: identical posture, one source, no drift. Since slice 34
+            # the head has been handed its target PERFECTLY (tick 1 initialises it to the clamped
+            # truth look angles), and this key makes that handover an AUTHORED SIGNED ERROR. The
+            # finding is that its OPTIMUM IS NOT ZERO — the body-frame LOS travels +18.11° → −15.15°
+            # over the approach, so a head handed over ON the LOS must chase the whole excursion
+            # while one handed over part-way along it never falls further behind than it started.
+            # ⚠ AUTHORED, NEVER A KNOB — see `_parse_knobs`, which refuses it BY NAME. It is
+            # consumed exactly once, at tick 1, so a slider on it would be dead in the hand.
+            # ⚠ NO BOUND AGAINST THE STOP, and that is a decision with a reason: the key is an
+            # OFFSET on the flying `look_az_b`, so "authored beyond its own stop" is not a
+            # load-time-decidable quantity — the loader cannot know the geometry that puts the
+            # boundary at +11.9° on one wire and elsewhere on another. `head_clamp` OWNS that
+            # degenerate (the birth angle saturates ON the stop and the key goes inert there, which
+            # is what bounds the basket from above), and slice 35's post-review shape applies: a
+            # degenerate the loader PERMITS, proven to LOAD and never FLOWN. Only the non-finite
+            # authored input is refused, below — and it must be, because `head_clamp` handles a NaN
+            # *stop* but not a NaN *az*: `deg2rad(Inf)` reaches the kernel as a non-finite azimuth
+            # and poisons the head state permanently (gate 1's inherited item).
+            for hk in ("gimbal_stop_deg", "gimbal_fov_deg", "gimbal_rate_dps",
+                       "gimbal_handover_err_deg")
                 haskey(sb, hk) || continue
                 haskey(sb, "gimbal_tau_s") ||
                     error("missile '$id': seeker.$hk authored without seeker.gimbal_tau_s — " *
                           "it is read only inside the gimbal head, so without one this knob is " *
-                          "DEAD (slice $(hk == "gimbal_rate_dps" ? 35 : 34))")
+                          "DEAD (slice $(hk == "gimbal_rate_dps" ? 35 :
+                                         hk == "gimbal_handover_err_deg" ? 36 : 34))")
                 comp[Symbol(hk)] = _f64(sb[hk])
                 isfinite(comp[Symbol(hk)]) ||
                     error("missile '$id': seeker.$hk must be finite (got $(comp[Symbol(hk)]))")
@@ -1087,6 +1109,24 @@ function _validate_fidelity(world::World)
     return world
 end
 
+# ⚠⚠ SLICE 36 — KEYS WHOSE DEADNESS IS **STRUCTURAL AND KNOWN AT LOAD**, refused BY NAME.
+#
+# The existence check below is what has caught every dead knob this project has shipped — 19's
+# `comp[:speed]` and 21's launch altitude are consumed once at LOAD and are not comp keys at all, so
+# a slider on them fails to load by accident. `gimbal_handover_err_deg` is the first that would slip
+# through: it IS a comp key, so it passes the existence check cleanly — and then the seam reads it
+# exactly ONCE, on tick 1, inside the `haskey(c, :head_az)`-absent handover branch, and rewrites
+# `:head_az` every tick thereafter. A slider on it moves a number nothing will ever read again.
+# ⇒ the plan's "there is exactly ONE live knob" is a POLICY, and this arc's own rule (slice 34 gate
+# 2) is that a constraint stated in a policy is not enforceable where the policy cannot reach. This
+# is where it reaches. ⚠ ONE KEY, BY NAME — deliberately not a registry: a registry would invite
+# entries argued rather than measured, and every other dead knob in this project is already caught
+# by the line below it.
+const _DEAD_KNOB_KEYS = Dict{Symbol,String}(
+    :gimbal_handover_err_deg =>
+        "it is consumed ONCE at tick 1 by the head's handover branch and never read again, so a " *
+        "slider on it is dead in the hand — author it and reload (slice 36)")
+
 function _parse_knobs(data::AbstractDict, world::World)
     knobs = Knob[]
     haskey(data, "knobs") || return knobs
@@ -1095,6 +1135,8 @@ function _parse_knobs(data::AbstractDict, world::World)
         # a knob must address a real entity + a real comp key, or a slider would
         # silently do nothing — fail at load instead (HANDOFF §6: target+key must exist).
         haskey(world.entities, target) || error("knob target '$target' is not an entity")
+        haskey(_DEAD_KNOB_KEYS, key) &&
+            error("knob '$target.$key' is AUTHORED, not live-settable: $(_DEAD_KNOB_KEYS[key])")
         haskey(world.entities[target].comp, key) ||
             error("knob '$target.$key' has no matching comp parameter")
         push!(knobs, Knob(target, key, k["min"], k["max"], k["label"]; log = get(k, "log", false)))

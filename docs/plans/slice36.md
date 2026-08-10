@@ -16,7 +16,8 @@ candidate of the family:
 > — `docs/plans/slice35.md`, Deferred (NAMED)
 
 **Status: GATE 0 COMPLETE (2026-08-10, 8 probes — 5, then 3 more on the advisor's pre-gate-1 review).
-GATE 1 COMPLETE (2026-08-10, 6876 → 6980, +104 — see §1). Gates 2–3 NOT STARTED.**
+GATE 1 COMPLETE (2026-08-10, 6876 → 6980 → 6988 post-review — see §1).
+GATE 2 COMPLETE (2026-08-10, 6988 → 7057, +69 — see §2). Gate 3 NOT STARTED.**
 ⚠⚠ **THE BANKED FRAMING WAS REFUTED AND SO WAS ITS REPLACEMENT, AND BOTH REFUTATIONS ARE
 LOAD-BEARING.** (1) The advisor's opening hypothesis — *a badly handed-over head RINGS LESS, because
 it indexes shallower glass* — is measured with the OPPOSITE sign and non-monotone at the loud arm
@@ -481,6 +482,136 @@ today, but if gate 2's telemetry changes tick 1 in any way that pin must be RE-R
 
 ---
 
+## §2 — Gate 2 (2026-08-10): the seam's two keys, the loader, and a third key DROPPED — 6988 → 7057
+
+⭐⭐ **THE GO/NO-GO RAN FIRST AND CAME BACK NEGATIVE** (the advisor's blocking item, before the key
+was written). The requirement is a MAX OVER THE APPROACH so the core holds it, and the tempting
+justification was slice 33's gate-3 finding — THE EMIT GRID UNDER-READS THE EXCURSION BY MORE THAN
+THE SURVIVABLE BAND IS WIDE. ⚠⚠ **It would have been a BORROWED CLAIM, and the check is the rule:**
+slice 33 was entitled to say it because its 0.016° under-read was WIDER than the 0.011–0.05° band
+that decided its verdict. Measured here on the cells where a verdict actually turns (`g2_grid.jl`;
+free window, no glass, the 10° window the wires will author):
+
+| cell | per-tick | per-frame | GAP° | margin to 10° | gap / margin |
+|---|---|---|---|---|---|
+| err 0 / 12 °/s (§0.9's HELD) | 8.84016 | 8.83704 | **0.00313** | 1.1598 | **0.27 %** |
+| err −4 / 8 °/s | 9.49992 | 9.49942 | 0.00050 | 0.5001 | 0.10 % |
+| err −6 / 8 °/s (§0.9's HELD) | 8.09069 | 8.09019 | 0.00050 | 1.9093 | 0.03 % |
+| err 0 / 15 °/s | 7.22281 | 7.22240 | 0.00041 | 2.7772 | 0.015 % |
+
+and the frame grid **agrees with the ticks on the BREAK verdict in every cell** (0/10579 vs 0/661
+held; 7302/7919 vs 456/494 at err 0 / 10 °/s). ⇒ **THE KEY STANDS ON CONVENTION 13 INSTEAD** — a max
+over ticks is not a thing a client receiving one tick in sixteen can form at all, whatever the
+sampling error happens to be. ⭐ And the MECHANISM for why it could never have stood on slice 33's is
+**slice 35's own knob**: a RATE-LIMITED head cannot move more than `rate·emit·dt` between frames
+(0.128° at 8 °/s and `emit_every: 16`), so the servo limit that CREATES the requirement also BOUNDS
+how much a frame grid can hide of it. Over rate × emit ∈ {8, 25, 60} × {16, 64, 250} the gap never
+exceeds **3.6 %** of that bound (largest absolute 0.547° at 60 °/s × 250).
+> **GENERAL.** *When a later slice reaches for an earlier slice's finding, re-run the comparison
+> that ENTITLED the earlier slice to it. The finding may be perfectly true and still not yours.*
+
+⚠⚠ **A THIRD KEY WAS DRAFTED, MEASURED AND DROPPED, AND ITS WHOLE VALUE IS ITS WHOLE DEFECT.** A
+signed peak MARGIN (`gimbal_fov_peak_margin_deg`, slice 33's `seeker_fov_margin_deg` shape) would go
+negative on the first tick the window is breached and **never recover** — slice 32's client-side
+LATCH, derived and core-owned, which is how it was written. But slice 34 measured that EVERY held arm
+leaves its window at r = 0.18–8.55 m as the LOS swings past, and **a peak cannot forget**: reproduced
+in `g2_measure.jl` §B, the would-be latch fires on **100 % of arms, including every hit** (the
+0.191 m arms latch for their last tick; the broken arms for their last 7302–7358). A latch that is
+true of every arm is not a verdict. ⇒ the verdict stays with `gimbal_valid` — per tick, and it
+RECOVERS when the geometry does — and slice 32's latch stays the client's to hold over it.
+**TWO keys ship, not three**, and the drop is a measurement rather than a preference (the tooth
+recomputes the dropped key so a later slice cannot re-propose it from the plan alone).
+
+**FINDING 1 — THE PEAK IS AN APPROACH QUANTITY, AND THIS IS THE ENDGAME SPIKE IN THE ONE TELEMETRY
+SHAPE FOR WHICH IT IS IRREVERSIBLE.** `head_off_peak_deg` reads the clean requirement **BIT-
+IDENTICALLY from r = 3000 m through r = 1000 m to r = 200 m** — 8.84016 / 8.09069 / 9.49992 / 2.11192
+on the four cells measured, `===` at all three ranges — and then runs to **179.4998° at CPA on every
+arm, hit or miss**, because the target is behind the head by then. An instantaneous key spikes there
+and recovers. ⇒ a reader takes it AT A RANGE and never at the end, and **gate 3 inherits the display
+decision**: a HUD that prints the raw key past CPA is slice 19's lying picture in a new widget.
+
+**FINDING 2 — THE TWO-RUN DISCIPLINE's FIFTH QUANTITY IS NOW SHIPPED AND IT FAILS LARGE.** On a
+windowed arm the head holds with no error signal while the LOS leaves, so the peak is the POST-BREAK
+RUNAWAY — **104.56 / 65.79 / 73.77°** against free-window requirements of **12.346 / 10.000 /
+18.000** at err 0 / −10 / −18 (8 °/s). Slice 34's `head_angle_deg` froze plausibly-but-TOO-SMALL;
+this one runs away, so a reader of a break table will take these for requirements. They are not.
+
+⭐⭐ **FINDING 3 — `_parse_knobs` GAINS THE FIRST BY-NAME REFUSAL IN THE PROJECT, AND THE REASON IS AN
+ASYMMETRY.** §0.9 established the key is structurally a dead knob; gate 2 makes that ENFORCEABLE.
+⚠ The existing guard would NOT have caught it: `_parse_knobs` refuses a knob whose comp key does not
+exist, which is how 19's `speed` and 21's launch altitude were caught — **BY ACCIDENT, because
+neither is a comp key at all**. `gimbal_handover_err_deg` IS a comp key when authored, so the
+declaration loads cleanly and ships a live slider onto a number nothing reads again. *A constraint
+stated in a policy is not enforceable where the policy cannot reach* (slice 34 gate 2) — this is
+where it reaches. ⚠ ONE KEY BY NAME (`_DEAD_KNOB_KEYS`), deliberately **not a registry**: a registry
+invites entries argued rather than measured, and every other dead knob is already caught by the
+existence check below it. The MIRROR is pinned — `gimbal_rate_dps` still declares cleanly on the same
+scenario, so this is a refusal and not a blanket ban.
+
+**FINDING 4 — THE LOADER JOINS, IT DOES NOT REFUSE.** The key enters the EXISTING three-key gimbal
+validation loop (slice 35's precedent — one source, no drift), inheriting presence-gating on
+`gimbal_tau_s` and the non-finite refusal. ⚠ The loop's slice-attribution ternary needed a THIRD arm
+or it would credit slice 34. ⚠⚠ The non-finite refusal is **not hygiene** (gate 1's inherited item):
+`head_clamp` handles a NaN *stop* but not a NaN *az*, so `deg2rad(±Inf)` reaches the kernel as a
+non-finite azimuth, makes the radial projection `Inf/Inf` and poisons the head state permanently —
+inside `observe!`, where the session's IO-only catch drops the connection. ⚠ **NO BOUND AGAINST THE
+STOP**, and the reason is decisive rather than stylistic: the key is an OFFSET on the flying
+`look_az_b`, so *"authored beyond its own stop"* is **not a load-time-decidable quantity** — the
+loader cannot know the geometry that puts the boundary at +11.9° here and elsewhere on another wire —
+and refusing it would delete the mechanism that bounds the basket from above. Slice 35's post-review
+shape: a degenerate the loader PERMITS, proven to LOAD (`err = 400°`) and never FLOWN.
+
+**FINDING 5 — BOTH DOMAIN ENDPOINTS MEASURED, AND THEY ARE DIFFERENT KINDS OF BOUNDARY** (slice 26's
+post-commit rule, applied to both ends rather than one — slice 34's gate-3 post-review found it had
+been applied to neither). `g2_measure.jl` §D, free window, 8 °/s:
+
+| err° | birth az° | \|head\|° | requirement° |
+|---|---|---|---|
+| −20.000 | −1.894635 | 2.004981 | 20.000000 |
+| **−18.105365** | **0.000000** | **0.655978** | 18.105365 |
+| −12.000 | 6.105365 | 6.140504 | 12.000000 |
+| 0.000 | 18.105365 | 18.117245 | 12.346038 |
+| **+11.900** | 29.992833 | **30.000000** | 24.078964 |
+| +20.000 | 29.995556 | **30.000000** | 24.079428 |
+
+LOWER: at the NEGATIVE OF THE PERFECT HANDOVER the head is born at azimuth **exactly 0.000000°** —
+pointing down its own nose in that axis, which is where a CAGED head sits, so the endpoint is a
+coincidence with the arc's other degenerate. ⚠ **The key does NOT go inert there** (at −20° the
+requirement is still exactly 20.000000° and the V's left arm continues), so the lower bound is a
+**MODELLING choice** and this plan says so rather than implying a mechanism it does not have. UPPER:
+the birth angle SATURATES on the stop and the key GOES INERT — the requirement agrees to **5e-4° over
+a 1.7× span of authored error**, which is a mechanism. ⇒ **[−18.1 (the CAGED coincidence), +11.9 (the
+STOP)]**, two different kinds of bound; the wires author 0 and −6, well inside.
+
+**FINDING 6 — THE PEAK IS CUMULATIVE ACROSS A CROSS-TOGGLE, DELIBERATELY.** The latent-bug class this
+arc has caught seven times, arriving in a new place: state that outlives its rung gate. `:head_az`
+itself persists through a toggle off `:six_dof` — the head FREEZES rather than un-existing, and on
+toggle-back the seam takes the SLEW branch off the stored angles — so a peak that RESET there would
+be the only piece of head state that did, and would read LOWER than the tracking error the head has
+actually had. Nothing accrues while `_gim` is false because the update sits inside the rung gate:
+measured **0/500 frames** ship the key while off-rung, and the peak returns 8.090688 unchanged.
+
+**CONVENTION 9, BY MEASUREMENT.** Gate 1's own teeth already carry it: the authored error and the
+servo are ONE axis, because **the servo MOVES the argmin** (−2 at 40 °/s, −8 at 8 °/s, a 1.54×
+saving), and slice 35 is the `err = 0` ROW of this slice's grid. No new tooth was owed.
+
+⭐ **AND THE BLOCKING RE-READ WAS RUN, NOT INHERITED** (§1's "WHAT GATE 2 INHERITS"): Finding 3's
+elevation pin reads `ref.hel1` off a separate 1-tick arm, and gate 2 changes tick 1's telemetry. The
+whole slice-36 gate-1 ladder was re-run against the shipped seam and is green — `hel1 === ref.hel1`
+and `hypot === 30.000000` still hold.
+
+**WHAT GATE 3 INHERITS.** ⚠⚠ The peak's ENDGAME (179.4998° at CPA on every arm) is a DISPLAY problem
+the HUD must own — freeze or annotate it past CPA, and never print it raw. ⚠ The scenario sweep at
+the end of the loader testset asserts **no shipped wire carries the key**; gate 3 authors two and
+must TIGHTEN that to the pair rather than delete it (slice 35's shape). ⚠ The verifier reads every
+requirement off a FREE-WINDOW arm and every peak AT A RANGE.
+
+**⚠ MEASURED-AND-NOT-DONE.** The `fov_h`-vs-authored-`gimbal_fov_deg` divergence (slice 33's, live on
+a negative window) was checked and is MOOT here: with the peak margin dropped, nothing new subtracts
+the two, and the per-tick `gimbal_fov_margin_deg` already owns that divergence.
+
+---
+
 ## What ships (gates 1–3, PLANNED)
 
 ### The core (gate 1) — ✅ DONE, see §1
@@ -506,15 +637,28 @@ it does not — it is an argument to an existing clamp — in which case gate 1 
 Finding 1). The branch stays anyway, for the structural reason and not for a flying one, with the
 value that would break it pinned at the kernel.
 
-### The seam + loader (gate 2)
+### The seam + loader (gate 2) — ✅ DONE, see §2
 
 * Telemetry: the SIGNED authored error, and the REQUIREMENT as a running maximum
   (`head_off_peak_deg`) — ⚠ slice 27's peak-hold shape, because the requirement is a *max over the
   approach* and an instantaneous readout cannot show it. The margin against the window is slice 33's
   SIGNED `seeker_fov_margin_deg` shape: **the sign is the verdict.**
+  ⇒ **PARTLY ANSWERED, PARTLY REFUTED (§2).** The two keys ship; the third — the signed peak MARGIN
+  — was written, MEASURED and DROPPED, because a latch that fires on every arm (the endgame breaches
+  any window and a peak cannot forget) is not a verdict. ⚠ And the *reason* for the peak key is
+  CONVENTION 13, **not** slice 33's emit grid, which was the go/no-go and came back at 0.27 % of the
+  deciding margin.
 * Loader: validate the error against the STOP (a head authored beyond its own stop is silently
   clamped today — a degenerate the loader would permit; slice 35's post-review commit shape is to
   prove it LOADS and is never FLOWN, or to refuse it).
+  ⇒ **ANSWERED: PROVEN TO LOAD, NEVER FLOWN (§2 Finding 4)** — and refusing it is not merely
+  unnecessary but *not possible*, because the key is an OFFSET on the flying `look_az_b` and "beyond
+  its own stop" is not a load-time-decidable quantity. The loader validates FINITENESS only, in the
+  existing three-key loop.
+* ⭐⭐ **AND THE POLICY GOT AN ENFORCER THE PLAN DID NOT ANTICIPATE (§2 Finding 3):** `_parse_knobs`
+  refuses `gimbal_handover_err_deg` BY NAME. The bullet below says the key "must NOT be declared
+  live-settable" — that was a policy, and the existing knob guard would not have caught a violation,
+  because it only refuses knobs whose comp key does not exist and this one's does.
 * ⚠⚠ **THERE IS EXACTLY ONE LIVE KNOB, `gimbal_rate_dps`** (§0.9). `gimbal_handover_err_deg` is
   AUTHORED — structurally a dead knob, and slice 19's tripwire would fail on it — so it must NOT be
   declared live-settable and the verifier must NOT run a set-param sweep on it. `radome_slope_est`
