@@ -1732,7 +1732,56 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             # exactly that bug): the servo is a contraction toward the target ONLY FROM INSIDE the
             # disc, and this is the one place a head can be born outside it. The call is
             # unconditional because the kernel is bit-for-bit inert when it does not bind.
-            head_az, head_el = head_clamp(look_az_b, look_el_b, stop_h)
+            #
+            # ⭐⭐ SLICE 36 — THE HANDOVER BASKET, and the successor named directly above is now
+            # spent. The head is born `gimbal_handover_err_deg` degrees off the true body-frame LOS
+            # in AZIMUTH, and the finding is that THE OPTIMUM IS NOT ZERO. The body-frame LOS is not
+            # a fixed target: over the approach it travels +18.11° → −15.15° (a 33.2° EXCURSION, and
+            # it CROSSES THROUGH ZERO) as the missile swings its nose onto the collision course, so a
+            # head handed over ON the LOS must chase that whole journey and a rate-limited servo
+            # falls 12.35° behind doing it, while a head handed over 8° ALONG the journey never falls
+            # further behind than the 8° it started with. The requirement is therefore a **V** — its
+            # left arm `|err|` EXACTLY (the tick-1 peak, before the servo has done anything) and its
+            # right arm the CHASE COST — and the cheapest basket sits at the KINK, which the servo
+            # moves. See `docs/plans/slice36.md`.
+            #
+            # ⚠ THE SIGN IS THE ENGAGEMENT'S, NOT THE TARGET'S. `err < 0` means ALONG THE BODY-FRAME
+            # LOS EXCURSION, whose DIRECTION THE CROSSING SIGN SETS — never "toward where the target
+            # is going" (the #1 SIGN TRAP's 11th occurrence, and it would be wrong prose rather than
+            # wrong code). Against the reversed crossing the excursion nearly vanishes (a 2.2° swing
+            # against 33.2°), the requirement is exactly `|err|` at EVERY servo rate, and the optimum
+            # returns to zero — which is the tooth that makes this a statement about the ENGAGEMENT
+            # rather than about handover errors (gate 0 §0.4).
+            #
+            # ⭐ NO NEW KERNEL, AND THAT IS A DECISION WITH A REASON. The offset is an ARGUMENT to an
+            # existing clamp: `head_clamp` already owns the stop, the CAGED (`stop ≤ 0`) degenerate,
+            # the NaN-stop degenerate and the sign of the returned zeros, so a `head_handover`
+            # wrapper would have exactly ONE call site and would be a SECOND place for stop policy to
+            # drift — the trap this file already names for `off_axis_angle` and `head_slew`. ⇒
+            # `frames.jl` is UNTOUCHED by this slice and every prior slice is bit-identical BY
+            # CONSTRUCTION, not by a measurement (slice 35's gate-1 shape inverted).
+            #
+            # ⚠⚠ THE OFFSET GOES **INSIDE** `head_clamp`, NEVER AFTER IT — or a head is born outside
+            # its own mechanical stop, which is the ONE state the servo cannot recover from (the
+            # contraction toward the target holds only from inside the disc). The tell that it went
+            # in inside is that at `err > +11.9°` the head is born ON the circle with its ELEVATION
+            # SCALED RADIALLY, not left alone; pinned below.
+            #
+            # ⚠⚠ THE BIT-IDENTITY CONTROL IS THE ABSENT KEY, NEVER `= 0.0` (slice 35's blocking pin,
+            # verbatim). A separate `haskey` branch with the else-arm slice 34/35's line TEXTUALLY
+            # UNCHANGED — never `head_clamp(look_az_b + err, …)` trusting `err = 0` to be inert,
+            # because `-0.0 + 0.0` is `+0.0` (the trap 20/21/26 all name). ⚠ Whether `= 0.0` IS
+            # bit-identical to absent is MEASURED and not assumed, and it is measured on the ONE
+            # geometry where it can differ — an IN-PLANE (`Y = 0`) arm, where `look_az_b` is a signed
+            # zero. On the crossing wire `look_az_b ≈ +0.316 rad` and `+ 0.0` is trivially inert, so
+            # that arm carries no information (advisor).
+            if haskey(c, :gimbal_handover_err_deg)
+                head_az, head_el =
+                    head_clamp(look_az_b + deg2rad(Float64(c[:gimbal_handover_err_deg])),
+                               look_el_b, stop_h)
+            else
+                head_az, head_el = head_clamp(look_az_b, look_el_b, stop_h)   # ── 34/35 VERBATIM ──
+            end
         else
             head_az = Float64(c[:head_az]); head_el = Float64(c[:head_el])
             # discipline 3, first evaluation: the error the detector HAD, before this tick's slew.

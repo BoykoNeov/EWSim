@@ -782,14 +782,23 @@ keeps the head there. A handover that clamped some OTHER way would hand tick 1 t
 breaks the invariant, and nothing in the servo could detect it. Splitting the clamp out is what
 makes that a single testable site rather than a paragraph in a plan.
 
-⚠ **CIRCULAR, and gate 0 CANNOT DISCRIMINATE — the species argument is the whole justification.**
-The stop must have the same shape as the telemetry that reads it (`head_angle_deg = hypot(head_az,
-head_el)`) and as the detector window, since a PER-AXIS clamp would let the head sit at `√2·stop`
-while the readout compared against `stop`. ⚠ The gate-0 probe DID clamp per axis while reporting the
-`hypot`, and it went unnoticed because **no gate-0 arm bound the stop in either form** — every arm
-ran `stop = 1e6°` or `30°` against a `head_max` of at most 23.42°. So this docstring and
-`test_frames.jl` are the ONLY evidence for the choice, and a later slice authoring a tighter stop
-inherits a branch no flying arm has taken. A RECTANGULAR / per-axis stop is a named deferral.
+⚠ **CIRCULAR, and slice 34 COULD NOT DISCRIMINATE — the species argument was the whole
+justification.** The stop must have the same shape as the telemetry that reads it (`head_angle_deg =
+hypot(head_az, head_el)`) and as the detector window, since a PER-AXIS clamp would let the head sit
+at `√2·stop` while the readout compared against `stop`. ⚠ Slice 34's gate-0 probe DID clamp per axis
+while reporting the `hypot`, and it went unnoticed because **no arm of that slice bound the stop in
+either form** — every one ran `stop = 1e6°` or `30°` against a `head_max` of at most 23.42°.
+
+⭐ **SLICE 36 IS THE FIRST TO BIND IT, AND THE TWO FORMS NOW PART ON A FLOWN ARM.** A head born
+`gimbal_handover_err_deg` degrees off the LOS is offered to this kernel from OUTSIDE the disc
+whenever the authored error carries it past the stop (`+11.9°` on that wire, against a perfect
+handover of `+18.105°`), and the tell is the **ELEVATION**: this kernel scales BOTH axes radially, so
+`head_el` MOVES (`−0.65598° → −0.65353° → −0.61283°` as the error grows) and `hypot` lands EXACTLY on
+`stop`, where the per-axis alternative would leave `head_el` alone and sit at **30.0072° — outside a
+30° stop while the readout compared against 30**. Pinned in `test_missile.jl` (slice 36's
+"THE OFFSET GOES INSIDE `head_clamp`"), so the choice is no longer evidenced only by this docstring.
+⚠ A RECTANGULAR / per-axis stop remains a named deferral; what changed is that the circular one is
+now exercised rather than argued.
 
 ⚠ Convention 5/6 degenerates: `stop ≤ 0` is the CAGED head, pinned to the origin — which by
 [`off_axis_angle`](@ref)'s identity is exactly a strapdown seeker; a NaN `stop` is neither clamped

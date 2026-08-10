@@ -8275,3 +8275,312 @@ end
         end
     end
 end
+
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 36 — THE HANDOVER BASKET (gate 1: the seam, and the decision NOT to write a kernel)
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+@testset "THE HANDOVER BASKET wired (slice 36 — an optimum that is not zero)" begin
+    dt = 1.0e-3
+
+    # ⚠ THE WIRE HAS **NO GLASS** — the first of this arc and the first since slice 25 (gate 0 §0.6).
+    # The break is glass-INDIFFERENT (err −18 / window 15 misses 3620.131 m WITH the glass and
+    # 3620.675 m WITHOUT — 0.5 m apart on a 3.6 km miss), while the loud-glass twin runs `aero_sat`
+    # 27–48 % on the broken rows, so on a glass wire the isolation would discriminate in NEITHER
+    # direction (slice 33's inversion). Convention 9 plus §0.2's EXACT inertness is what licenses the
+    # drop; `R = nothing` here removes every radome key, and the glass rows below are the tooth that
+    # says the drop is legitimate rather than convenient.
+    function hand_world(; vy = 200.0, ypos = 2000.0, seed = 32, R = nothing, A = -0.15, Rhat = -0.18,
+                          tau = 0.05, stop = 30.0, gfov = nothing, rate = nothing, err = nothing)
+        w = World(seed = seed,
+                  fidelity = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                                 :autopilot => :alpha, :airframe => :six_dof,
+                                                 :seeker => :filtered, :seeker_axes => :az_el))
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.0,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => 0.3, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => 8.0, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => 5.0e-5, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true)
+        if R !== nothing
+            comp[:radome_slope] = R; comp[:radome_ripple] = A; comp[:radome_ripple_k] = 12.0
+            Rhat === nothing || (comp[:radome_slope_est] = Rhat)
+        end
+        if tau !== nothing
+            comp[:gimbal_tau_s] = tau
+            stop === nothing || (comp[:gimbal_stop_deg] = stop)
+            gfov === nothing || (comp[:gimbal_fov_deg]  = gfov)
+            rate === nothing || (comp[:gimbal_rate_dps] = rate)
+            err  === nothing || (comp[:gimbal_handover_err_deg] = err)   # DEGREES at the wire
+        end
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        # ⚠ `ypos` exists for ONE arm — the IN-PLANE (Y = 0, no crossing) geometry that is the only
+        # place `look_az_b` can be a SIGNED ZERO. `cross_speed_mps` re-pins `vel.y` every tick
+        # (slice 30), so that arm must move the POSITION and zero the crossing TOGETHER.
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, ypos, 4200.0),
+                                 vel = Vec3(0.0, vy, 0.0),
+                                 comp = Dict{Symbol,Any}(:cross_speed_mps => vy))
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:t1)]
+    end
+
+    # ⚠⚠ EVERY REQUIREMENT IS READ OFF A **FREE-WINDOW** ARM (`gfov = nothing`), AND THAT IS THE
+    # TWO-RUN DISCIPLINE's FIFTH QUANTITY — failing in the OPPOSITE direction to slice 34's. On a
+    # never-acquired arm `off_max` reads 65–120°: the POST-BREAK RUNAWAY, LARGER than any real
+    # requirement, where slice 34's frozen `head_angle_deg` was plausibly-but-TOO-SMALL. A reader of
+    # a break table will take those numbers for requirements. They are not.
+    # ⚠ `n = 5000` on a free-window arm is not a truncation of the claim: `off_max` peaks during
+    # ACQUISITION (gate 0 §0.1 — the tracking error is under 0.5° by r ≈ 4937–6437 m), and it was
+    # MEASURED identical at n = 4000 / 6000 / 9000 / full-to-CPA in every cell used here. Only the
+    # MISS arms need the full run.
+    function harm(; n = 22000, trace = false, kw...)
+        w, sub = hand_world(; kw...)
+        miss = Inf; r_prev = Inf; pos_prev = zero(Vec3); pos_cpa = zero(Vec3)
+        off_max = 0.0; head_max = 0.0; nt = 0; n_out = 0; n_sat = 0; n_defl = 0
+        n_sat_band = 0; n_defl_band = 0; r_sat_lo = Inf
+        haz1 = NaN; hel1 = NaN; off1 = NaN
+        tr = Vec3[]
+        for k in 1:n
+            tick!(w, sub, dt); empty!(w.events)
+            m = w.entities[:m1]; t = w.entities[:t1]; c = m.comp
+            tel = get(w.env, :telemetry, Dict{String,Any}())
+            trace && push!(tr, m.pos)
+            r = los_range(m.pos, t.pos)
+            o = get(tel, "m1.head_off_deg", 0.0)
+            k == 1 && (haz1 = Float64(get(c, :head_az, NaN));
+                       hel1 = Float64(get(c, :head_el, NaN)); off1 = o)
+            # ⚠ THE SATURATION COUNTERS SIT **INSIDE** THE r > 200 GATE, and that was a gate-1
+            # correction rather than a copy: read over ALL ticks they pick up the r → 0 ENDGAME
+            # SPIKE (5 `aero_sat` ticks and 1 `defl_sat` tick at r = 0.19 m on a HITTING arm), which
+            # is [[ewsim-missile-verifier-sampling]]'s own warning and has nothing to do with the
+            # basket. Slice 32's endgame gate, applied to every counter and not only to `off_max`.
+            if r > 200
+                nt += 1
+                get(tel, "m1.gimbal_valid", 1.0) == 0.0 && (n_out += 1)
+                head_max = max(head_max, get(tel, "m1.head_angle_deg", 0.0))
+                o > off_max && (off_max = o)
+                let s = get(tel, "m1.aero_sat", 0.0) == 1.0,
+                    d = get(tel, "m1.defl_sat", 0.0) == 1.0
+                    s && (n_sat  += 1; r_sat_lo = min(r_sat_lo, r))
+                    d && (n_defl += 1)
+                    500 <= r <= 3000 && (s && (n_sat_band += 1); d && (n_defl_band += 1))
+                end
+            end
+            r > r_prev && miss == Inf && (miss = r_prev; pos_cpa = pos_prev)
+            r_prev = r; pos_prev = m.pos
+            miss < Inf && k > 200 && break
+        end
+        return (; miss, pos_cpa, off_max, head_max, trace = tr, haz1, hel1, off1,
+                  n_sat, n_defl, n_sat_band, n_defl_band, r_sat_lo, nt,
+                  out  = nt == 0 ? 0.0 : 100 * n_out / nt)
+    end
+
+    posdiff36(a, b) = (@assert length(a) == length(b) && !isempty(a);
+                       maximum(hypot((x - y)...) for (x, y) in zip(a, b)))
+
+    @testset "BYTE-IDENTITY — the ABSENT key, and `= 0.0` MEASURED rather than asserted" begin
+        # ⭐ THE STRUCTURAL HALF IS FREE, AND THAT IS THIS GATE's DECISION SHOWING UP AS A PROPERTY:
+        # `frames.jl` is UNTOUCHED, so with the key absent the seam runs slice 34/35's own line
+        # TEXTUALLY UNCHANGED and every prior slice is bit-identical BY CONSTRUCTION. The whole
+        # slice-34/35 ladder above re-running green IS that proof, and it needs no arm here.
+        #
+        # ⚠⚠ WHAT DOES NEED AN ARM IS `= 0.0` vs ABSENT, which the plan requires MEASURED and not
+        # asserted — and measured on the ONE geometry where it can differ. On the crossing wire
+        # `look_az_b ≈ +0.316 rad`, so `+ 0.0` is trivially inert and that arm carries NO
+        # INFORMATION (advisor). The hazard needs a SIGNED ZERO azimuth, i.e. the IN-PLANE (Y = 0)
+        # geometry — slice 23's own wire.
+        for (tag, vy, ypos) in (("crossing", 200.0, 2000.0), ("in-plane", 0.0, 0.0))
+            a = harm(n = 3000, trace = true, vy = vy, ypos = ypos, rate = 8.0, gfov = 10.0)
+            b = harm(n = 3000, trace = true, vy = vy, ypos = ypos, rate = 8.0, gfov = 10.0, err = 0.0)
+            @test posdiff36(a.trace, b.trace) == 0.0
+            @test a.miss === b.miss
+            @test a.haz1 === b.haz1                          # the birth angle itself, in BITS
+            if tag == "in-plane"
+                @test a.haz1 === 0.0                         # …and it IS a zero on this geometry
+            end
+        end
+        # ⚠ THE MEASUREMENT CAME BACK IDENTICAL ON BOTH GEOMETRIES, and the REASON is worth pinning
+        # rather than the result: `az_el` hands back `+0.0` here, not `−0.0`, so `x + 0.0` never
+        # meets the value that breaks it. The `haskey` branch therefore stays for the STRUCTURAL
+        # reason (slice 35's blocking pin, verbatim) and NOT because a flying arm needs it — and
+        # here is the value that would break it, at the kernel, so the branch is not folklore:
+        @test head_clamp(-0.0, 0.1, 1.0)[1] === -0.0
+        @test head_clamp(-0.0 + 0.0, 0.1, 1.0)[1] === +0.0   # DIFFERENT BITS — the trap 20/21/26 name
+        # …and the never-stale discipline: no head ⇒ the key is not even evaluated.
+        let (w, sub) = hand_world(tau = nothing, err = -6.0)
+            for _ in 1:200; tick!(w, sub, dt); empty!(w.events); end
+            @test !haskey(w.entities[:m1].comp, :head_az)
+        end
+    end
+
+    @testset "THE TICK-1 SIGNATURE — the head is born `|err|` off the LOS, in AZIMUTH" begin
+        # The pin that fixes AXIS, UNITS and SIGN at once, and the ONLY tick where the handover
+        # branch runs at all. ⚠ `atol = 1e-12`, never `===`: the deg→rad→deg round trip is not the
+        # identity (MEASURED worst |Δ| = 3.6e-15 deg over the domain, so this carries ~280× margin).
+        ref = harm(n = 1, rate = 8.0)                        # the PERFECT handover, from the wire
+        @test isapprox(rad2deg(ref.haz1), 18.105365; atol = 1.0e-5)
+        @test ref.off1 == 0.0                                # …and it is EXACTLY on the LOS
+        for e in (-18.0, -8.0, -6.0, -2.0, 2.0, 5.0, 11.0)
+            a = harm(n = 1, rate = 8.0, err = e)
+            @test isapprox(a.off1, abs(e); atol = 1.0e-12)   # the tracking error IS the handover error
+            # AZIMUTH ONLY — the elevation is untouched, in BITS. That is what says the key went in
+            # on the axis where the lead and the excursion are (slice 28's channel split), and it is
+            # the tooth the DEFERRED elevation half would have to break.
+            @test a.hel1 === ref.hel1
+            @test isapprox(rad2deg(a.haz1) - rad2deg(ref.haz1), e; atol = 1.0e-9)
+        end
+    end
+
+    @testset "⚠⚠ THE OFFSET GOES **INSIDE** `head_clamp` — a birth past the stop lands ON it" begin
+        # The one state the servo cannot recover from is a head born OUTSIDE its own disc, because
+        # the contraction toward the target holds only from inside it (slice 34 gate 1 Finding 2).
+        # ⭐ THE TELL IS THE **ELEVATION**: a circular clamp scales BOTH axes radially, so `head_el`
+        # MOVES; the per-axis alternative would clamp azimuth alone, leave `head_el` at its birth
+        # value and sit at |head| = 30.0072° — OUTSIDE a 30° stop while the readout compared against
+        # 30. This is also the first flying arm in the project to BIND the stop in either form, which
+        # `head_clamp`'s docstring records as the thing it did not have.
+        ref = harm(n = 1, rate = 8.0)
+        for e in (11.9, 12.0, 14.0, 20.0)
+            a = harm(n = 1, rate = 8.0, err = e)
+            @test isapprox(rad2deg(hypot(a.haz1, a.hel1)), 30.0; atol = 1.0e-9)   # ON the circle
+            @test abs(a.hel1) < abs(ref.hel1)                # …and the ELEVATION was scaled with it
+            @test hypot(rad2deg(ref.haz1) + e, rad2deg(ref.hel1)) > 30.0          # per-axis: OUTSIDE
+        end
+        # ⚠ AND THE KEY GOES INERT THERE — the birth angle SATURATES, so the stop bounds the basket
+        # from above (gate 2 owns the domain endpoint; this is the mechanism it will measure).
+        @test isapprox(harm(n = 1, rate = 8.0, err = 14.0).off1,
+                       harm(n = 1, rate = 8.0, err = 20.0).off1; atol = 0.02)
+        # Convention 5/6 degenerates, FLOWN: a CAGED stop swallows the error whole and nothing throws.
+        let a = harm(n = 200, rate = 8.0, stop = 0.0, err = -8.0)
+            @test a.haz1 === 0.0 || a.haz1 === -0.0
+            @test isfinite(a.off1)
+        end
+    end
+
+    @testset "⭐⭐ THE V's LEFT ARM IS `|err|` EXACTLY — an initial condition no bandwidth touches" begin
+        # THE SHAPE IS A V AND BOTH ARMS COME FROM DIFFERENT MECHANISMS, which is why the minimum is
+        # a genuine trade and not a fitted curve: the LEFT arm is the TICK-1 PEAK — before the servo
+        # has done anything — and the RIGHT arm is the CHASE COST, the servo falling behind a
+        # receding LOS. Their max is the requirement and the optimum is the KINK.
+        # ⚠ FREE WINDOW on every arm (the two-run discipline above).
+        for e in (-18.0, -10.0, -8.0)
+            for rt in (60.0, 40.0, 8.0)
+                @test isapprox(harm(n = 5000, rate = rt, err = e).off_max, abs(e); atol = 1.0e-12)
+            end
+        end
+        # ⭐ AND THE RIGHT ARM IS WHERE THE SERVO LIVES — the SAME cells with the bias too small.
+        # This is slice 35's two-sided knob seen from the other side: at err = 0 the requirement
+        # WALKS 2.11 → 12.35° as the servo slows, and at err = −8 it does not move at all.
+        @test isapprox(harm(n = 5000, rate = 60.0, err = 0.0).off_max,  2.1119; atol = 2.0e-3)
+        @test isapprox(harm(n = 5000, rate = 40.0, err = 0.0).off_max,  2.1728; atol = 2.0e-3)
+        @test isapprox(harm(n = 5000, rate =  8.0, err = 0.0).off_max, 12.3460; atol = 2.0e-3)
+        @test isapprox(harm(n = 5000, rate =  8.0, err = -6.0).off_max, 8.0907; atol = 2.0e-3)
+        @test isapprox(harm(n = 5000, rate =  8.0, err = -4.0).off_max, 9.4999; atol = 2.0e-3)
+        # ⇒ THE OPTIMUM IS NOT ZERO, AND THE SERVO MOVES IT. At 8 °/s the minimum over the domain is
+        # at err = −8 (8.000) against 12.346 at err = 0 — a 1.54× saving — while at 40 °/s the kink
+        # has walked back to −2 and the saving is 1.09×. Asserted as an ORDERING, not a fit.
+        let f = e -> harm(n = 5000, rate = 8.0, err = e).off_max
+            @test f(-8.0) < f(0.0)                            # the biased handover is CHEAPER…
+            @test f(-8.0) < f(-4.0)                           # …and −8 beats its neighbours…
+            @test f(-8.0) < f(-10.0)                          # …on BOTH sides: a genuine interior min
+            @test f(0.0) / f(-8.0) > 1.5
+        end
+    end
+
+    @testset "⚠⚠ THE CONTROL — reverse the crossing and the SERVO STOPS MATTERING" begin
+        # ⭐⭐ THE RATE-DEPENDENCE OF THE BASKET REQUIREMENT IS CREATED ENTIRELY BY THE ENGAGEMENT's
+        # OWN LOS EXCURSION, and this is the tooth that says so. Against `vy = +200` the body-frame
+        # LOS travels +18.11° → −15.15° (it CROSSES THROUGH ZERO — a 33.2° excursion) and the
+        # requirement is rate-dependent; against `vy = −200` the same quantity is nearly STATIC (a
+        # 2.2° swing), the requirement is exactly `|err|` at EVERY rate, and the OPTIMUM RETURNS TO
+        # ZERO. ⚠ Hence `err < 0` means ALONG THE BODY-FRAME LOS EXCURSION, whose direction the
+        # CROSSING SIGN sets — never "toward where the target is going".
+        for e in (-18.0, -10.0, -5.0, 0.0, 5.0, 11.0)
+            slow = harm(n = 5000, rate =  8.0, vy = -200.0, err = e == 0.0 ? nothing : e).off_max
+            fast = harm(n = 5000, rate = 40.0, vy = -200.0, err = e == 0.0 ? nothing : e).off_max
+            @test isapprox(slow / fast, 1.0; atol = 1.0e-9)          # the servo is IRRELEVANT…
+            e == 0.0 || @test isapprox(slow, abs(e); atol = 1.0e-12) # …and it costs EXACTLY itself
+        end
+        @test isapprox(harm(n = 5000, rate = 8.0, vy = -200.0).off_max, 0.2028; atol = 2.0e-3)
+        # …against the SAME cells on the shipped crossing, where it runs 1.76 / 5.68 / 3.18 / 2.03.
+        for (e, lo) in ((-5.0, 1.5), (0.0, 5.0), (5.0, 3.0), (11.0, 2.0))
+            slow = harm(n = 5000, rate =  8.0, err = e == 0.0 ? nothing : e).off_max
+            fast = harm(n = 5000, rate = 40.0, err = e == 0.0 ? nothing : e).off_max
+            @test slow / fast > lo
+        end
+    end
+
+    @testset "⚠⚠ THE REPARAMETERIZATION GATE — `gimbal_stop_deg` REACHES the rescue, and parts from it" begin
+        # The arc's standing false-fidelity gate (15's `k_δ`, 19's dead `speed`, 31's scale factor),
+        # run because the shipped handover is CLAMPED — so authoring a 10° STOP already births the
+        # head at exactly 10.000°, which IS the showcase's winning birth angle. IT RESCUES IT: same
+        # verdict, same miss. The objection is real and must be answered with a MEASUREMENT (slice
+        # 20's matched-ΔV shape). ⚠ RELOCATED HERE FROM THE WIRE: neither route is client-drivable
+        # as a contrast (the stop is authored, and two of them on one scenario breaks convention 9)
+        # — slice 28's precedent.
+        ref_az = rad2deg(harm(n = 1, rate = 8.0).haz1)              # 18.105365
+        aimed(birth; kw...) = harm(; stop = 30.0, err = birth - ref_az, rate = 8.0, gfov = 10.0, kw...)
+        caged(birth; kw...) = harm(; stop = birth,                    rate = 8.0, gfov = 10.0, kw...)
+        # ⭐ ANSWER 1 — THE STOP **CAGES**, IT DOES NOT **AIM**. `head_max === stop` for the whole
+        # flight, where the aimed head runs free out to the LOS's own far excursion.
+        let a = aimed(10.0), c = caged(10.0)
+            @test isapprox(c.head_max, 10.0; atol = 1.0e-9)          # PINNED at the stop, all flight
+            @test a.head_max > 14.0                                  # …the aimed head is not
+            @test a.out == 0.0 && c.out == 0.0                       # and on THIS cell they agree
+        end
+        # ⚠ AND THE ENTIRE RIGHT ARM OF THE V IS UNREACHABLE BY THE STOP — clamping only ever moves
+        # a birth angle TOWARD zero, so the birth SATURATES at the perfect handover and a POSITIVE
+        # handover error is a real thing no stop can express. ⚠ READ ON A **FREE-WINDOW** ARM: with
+        # the 10° window these two both BREAK, and their `off_max` would be the post-break runaway.
+        @test isapprox(harm(n = 5000, rate = 8.0, stop = 30.0).off_max,
+                       harm(n = 5000, rate = 8.0, stop = 20.0).off_max; atol = 1.0e-12)
+        # ⭐⭐ ANSWER 2 — AND THEIR VERDICTS PART IN **BOTH** DIRECTIONS, which is a stronger
+        # separation than a one-directional one. At a 10° birth the caged head is pinned while the
+        # LOS walks off it, so it breaks over a band of crossings the aimed one survives; at a 12°
+        # birth it REVERSES, because a cage also blocks the WRONG-WAY CHASE — a head born BELOW the
+        # LOS slews UP toward +18.1° before the LOS turns around, and at 8 °/s that climb is
+        # unaffordable. ⇒ NEITHER ROUTE DOMINATES: two mechanisms overlapping on part of one arm.
+        let a = aimed(10.0, vy = 275.0), c = caged(10.0, vy = 275.0)
+            @test a.out == 0.0 && a.miss < 1.0                       # AIMED holds…
+            @test c.out > 0.0  && c.miss > 100.0                     # …CAGED breaks
+        end
+        let a = aimed(12.0, vy = 260.0), c = caged(12.0, vy = 260.0)
+            @test a.out > 0.0  && a.miss > 1000.0                    # …and here it is the OTHER WAY
+            @test c.out == 0.0 && c.miss < 1.0
+        end
+    end
+
+    @testset "⚠ THE DROP OF THE GLASS IS MEASURED, NOT CONVENIENT — the break is GLASS-FREE" begin
+        # Convention 9 says one lesson per scenario; §0.2 says a handover error is EXACTLY inert on
+        # a no-glass trajectory. Neither, on its own, licenses removing the radome from an arc whose
+        # last ten slices are about it. THIS does: the break itself is glass-INDIFFERENT.
+        a = harm(err = -18.0, rate = 40.0, gfov = 15.0)                      # NO glass
+        b = harm(err = -18.0, rate = 40.0, gfov = 15.0, R = -0.03, Rhat = -0.03)  # the LOUD twin
+        @test isapprox(a.miss, 3620.675; atol = 0.05)
+        @test isapprox(b.miss, 3620.131; atol = 0.05)
+        @test abs(a.miss - b.miss) < 1.0                 # 0.5 m apart on a 3.6 km miss
+        # ⚠⚠ AND THE ISOLATION IS SLICE 32's — BUT `0/0` IS WHAT GATE 0's TABLE **PRINTED**, AT ONE
+        # DECIMAL, AND THAT IS NOT WHAT IT MEASURED (gate-1 finding; the "printed agreement is not a
+        # measurement" class the advisor caught once already at §0.2, recurring in a second column).
+        # Measured as COUNTS the picture is stronger, not weaker: `defl_sat` is EXACTLY 0 on every
+        # arm, and `aero_sat` fires on **exactly one tick out of 7358–10579**, at r = 6383 m — the
+        # SAME range on every arm that gets there, INDEPENDENT of the handover error. It is the
+        # launch transient, not the basket, and inside the arc's band it is exactly zero.
+        for e in (0.0, -6.0, -18.0)
+            x = harm(rate = 8.0, gfov = 10.0, err = e)
+            @test x.n_defl == 0                          # deflection: EXACTLY zero, whole approach
+            @test x.n_sat_band == 0 && x.n_defl_band == 0   # slice 32's claim, verbatim, in band
+            @test x.n_sat <= 1                              # …and at most ONE tick anywhere
+            x.n_sat == 0 || @test x.r_sat_lo > 6000.0       # …which is at LAUNCH RANGE, not the basket
+        end
+        # ⇒ a POINTING miss on BOTH sides of the basket: full authority, no idea where to point it.
+        # ⚠ On a GLASS wire it would not read this way — the loud twin runs `aero_sat` 27–48 % on the
+        # broken rows and the isolation would discriminate in NEITHER direction (slice 33's
+        # inversion). That, with §0.2's exact inertness, is the other half of why the glass is gone.
+    end
+end

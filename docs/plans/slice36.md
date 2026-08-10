@@ -16,7 +16,7 @@ candidate of the family:
 > — `docs/plans/slice35.md`, Deferred (NAMED)
 
 **Status: GATE 0 COMPLETE (2026-08-10, 8 probes — 5, then 3 more on the advisor's pre-gate-1 review).
-Gates 1–3 NOT STARTED.**
+GATE 1 COMPLETE (2026-08-10, 6876 → 6980, +104 — see §1). Gates 2–3 NOT STARTED.**
 ⚠⚠ **THE BANKED FRAMING WAS REFUTED AND SO WAS ITS REPLACEMENT, AND BOTH REFUTATIONS ARE
 LOAD-BEARING.** (1) The advisor's opening hypothesis — *a badly handed-over head RINGS LESS, because
 it indexes shallower glass* — is measured with the OPPOSITE sign and non-monotone at the loud arm
@@ -236,8 +236,16 @@ NO GLASS, servo 8 °/s, vy = +200, window **10.0°** (`p5_wire.jl`):
 | `aero_sat` / `defl_sat` | 0/0 | 0/0 | 0/0 | 0/0 | 0/0 | 0/0 | 0/0 | 0/0 |
 
 **TOO LITTLE BIAS BREAKS THE TRACK AND TOO MUCH BIAS BREAKS IT, AND ZERO IS OUTSIDE THE BASKET THAT
-HOLDS.** `aero_sat` and `defl_sat` are **0.0 on every row** ⇒ slice 32's POINTING-miss isolation,
-clean on BOTH sides of the basket — full authority, no idea where to point it.
+HOLDS.** ⇒ slice 32's POINTING-miss isolation, clean on BOTH sides of the basket — full authority,
+no idea where to point it.
+
+⚠⚠ **THAT LAST ROW IS A `%5.1f` PRINT, NOT A MEASUREMENT, AND GATE 1 RE-READ IT AS COUNTS** (§1
+Finding 4 — the class the advisor already caught once at §0.2, recurring in a second column). The
+number behind a printed `0.0` runs up to 0.047 %. Read as counts over `r > 200` the picture is
+STRONGER, not weaker: `defl_sat` is **EXACTLY 0** on every arm, and `aero_sat` fires on **exactly ONE
+tick out of 7358–10579**, at **r = 6383 m — the same range on every arm that reaches it, independent
+of the handover error**. It is the launch transient, and inside the arc's [500, 3000] m band both are
+exactly zero. Quote the counts, never the percentages.
 
 ⚠⚠ **THE LOUD-GLASS TWIN DOES NOT REPRODUCE IT CLEANLY** — `aero_sat` runs 27–48 % on the broken rows
 and there are two anomalous ~140 m partial rows at −8/−10 — so on a glass wire the isolation would
@@ -360,9 +368,106 @@ the transition's location is a MEASURED bracket (between 12 and 10 °/s), never 
 
 ---
 
+## §1 — Gate 1 (2026-08-10): the seam, and the decision NOT to write a kernel — 6876 → 6980
+
+⭐ **THE DECISION, AND ITS REASON. NO KERNEL: `frames.jl` IS FUNCTIONALLY UNTOUCHED.** The offset is
+an ARGUMENT to an existing clamp. `head_clamp` already owns the stop, the CAGED (`stop ≤ 0`)
+degenerate, the NaN-stop degenerate and the sign of the returned zeros, so a `head_handover` wrapper
+would have exactly ONE call site and would be a SECOND place for stop policy to drift — the trap
+`missile.jl` already names for `off_axis_angle` and `head_slew`. ⇒ **every prior slice is
+bit-identical BY CONSTRUCTION rather than by a measurement** (slice 35's gate-1 shape inverted): with
+the key absent the seam runs slice 34/35's own line TEXTUALLY UNCHANGED, and the 34/35 testsets
+re-running green IS that proof. The whole gate is ONE `haskey` branch in `_observe_point3d!` plus a
+prose correction in `frames.jl` (Finding 3).
+
+⭐⭐ **THE GO/NO-GO, RUN BEFORE ANY TEETH (the advisor's blocking item), AND IT LANDED `===`.** Gate 0
+flew every table by PRE-SEEDING `:head_az`, which makes tick 1 take the **slew** branch (a no-op
+toward itself); what ships takes the **handover** branch. The two agree only because `stop = 30° >
+18.105°` makes `head_clamp` INERT on the reference, collapsing the probe's double clamp into the
+shipped single one — a narrow condition, and if it had failed nothing in §0.2/0.5/0.6/0.8 would have
+been quotable. Measured over err ∈ {0, −2, −4, −6, −8, −10, −18, +5, +11} at the showcase cell
+(`g1_equiv.jl`): the two routes are **`===` on the miss in ALL NINE CELLS**, and §0.6 reproduces to
+the digit (3290.078 / 2965.542 / 0.191 / 3620.675). ⇒ **EVERY GATE-0 TABLE TRANSFERS**, and §0.4's
+and §0.5's numbers were then re-flown on the shipped branch and reproduce exactly (`g1_measure.jl`:
+the V's 2.1119 / 2.1728 / 12.3460 / 8.0907 / 9.4999 / 10.9707, the control's 1.00 / 1.00 / 1.76 /
+5.68 / 3.18 / 2.03 and its 0.2028 floor).
+⚠ **ONE PORTING TRAP, NOT TAKEN** (advisor): the probe's `c0[:head_tgt_az] = haz` is an ARTIFACT of
+pre-seeding — it existed only to make the pre-seeded tick-1 slew a no-op. Shipped mints `:head_tgt_*`
+at the END of tick 1 from the measurement, and an init would have silently rewritten tick 2's chase.
+
+**FINDING 1 — `err = 0.0` IS bit-identical to the key being absent, AND IT WAS MEASURED WHERE IT
+COULD FAIL.** The plan required this measured, not asserted. ⚠ On the crossing wire `look_az_b ≈
++0.316 rad`, so `+ 0.0` is trivially inert and that arm **carries no information** (advisor); the
+hazard needs a SIGNED-ZERO azimuth, i.e. the IN-PLANE (Y = 0, no crossing) geometry — slice 23's own
+wire, which `hand_world` reaches with a `ypos` argument because `cross_speed_mps` re-pins `vel.y`
+every tick. Both geometries come back `max|Δpos| = 0` over 3 000 ticks and `===` on the miss and on
+the birth angle's bits. ⭐ **AND THE REASON IS THE PART WORTH KEEPING**: `az_el` hands back `+0.0` on
+that arm, not `−0.0`, so `x + 0.0` never meets the value that breaks it. The `haskey` branch
+therefore stays for the STRUCTURAL reason (slice 35's blocking pin, verbatim) and NOT because a
+flying arm needs it — and the value that WOULD break it is pinned at the kernel beside the arm, so
+the branch is evidenced rather than folklore: `head_clamp(-0.0, …)[1] === -0.0` while
+`head_clamp(-0.0 + 0.0, …)[1] === +0.0`.
+
+**FINDING 2 — THE TICK-1 SIGNATURE IS `|err|` TO 3.6e−15°, WHICH IS AN `atol` AND NOT AN `===`.**
+The handover branch runs on exactly one tick, and the tracking error it leaves is the pin that fixes
+AXIS, UNITS and SIGN at once. ⚠ The deg→rad→deg round trip is not the identity — measured worst
+|Δ| = 3.553e−15° over the domain (exact at −18/−10/−8, 1.8e−15 at −12) — so the tooth is `atol =
+1e-12`, carrying ~280× margin. The elevation is asserted `===` UNCHANGED, which is what says the key
+went in on the axis where the lead and the excursion are (slice 28's channel split) and is the tooth
+the DEFERRED elevation half would have to break.
+
+⭐ **FINDING 3 — THE OFFSET GOES INSIDE THE CLAMP, AND SLICE 36 IS THE FIRST FLOWN ARM IN THE PROJECT
+TO BIND THE STOP.** `head_clamp`'s docstring rested circular-vs-per-axis on a SPECIES argument, whose
+stated condition was that *no arm had ever bound the stop in either form* (slice 34 gate 1). A head
+born past `+11.9°` binds it, and the two forms PART on a flown arm: this kernel scales BOTH axes
+radially, so `head_el` MOVES (−0.65598° → −0.65353° → −0.61283° as the error grows to +11.9/+12/+14)
+and `hypot` lands EXACTLY on 30.000000°, where the per-axis alternative would leave `head_el` alone
+and sit at **30.0072° — outside a 30° stop while the readout compared against 30**. ⇒ the docstring's
+species argument is RETIRED and replaced with the measurement; the elevation is the tell, and it is
+also what proves the offset did not go in AFTER the clamp.
+
+⚠⚠ **FINDING 4 — §0.6's ISOLATION COLUMN IS A `%5.1f` PRINT, NOT A MEASUREMENT** (and it took a
+FAILING tooth to notice, which is the point of writing the tooth as `== 0`). The first draft asserted
+`aero_sat == 0.0` and `defl_sat == 0.0` as PERCENTAGES and failed at 0.0125 % / 0.047 % / 0.0095 %.
+Re-read as COUNTS the claim is STRONGER: `defl_sat` is **EXACTLY 0** on every arm, and `aero_sat`
+fires on **exactly ONE tick**, at **r = 6383 m on every arm that reaches it, INDEPENDENT of the
+handover error** — the launch transient, not the basket — with both exactly 0 inside [500, 3000] m.
+⚠ AND A SECOND DEFECT WAS HIDING UNDER IT: the first counters sat OUTSIDE the `r > 200` gate and so
+read the r → 0 ENDGAME SPIKE (5 `aero_sat` + 1 `defl_sat` tick at r = 0.19 m on a HITTING arm) —
+[[ewsim-missile-verifier-sampling]]'s own warning, applied to `off_max` in this file since slice 32
+but not, until now, to the saturation counters.
+
+**FINDING 5 — THE GLASS TWIN IS `R̂ = −0.03`, NOT −0.18.** §0.6's glass-indifference number was flown
+on lib36's LOUD default. Re-measured on the shipped branch: no glass **3620.6755**, `R̂ = −0.03`
+**3620.1305** (§0.6's 3620.131 to the digit, **0.545 m apart on a 3.6 km miss**), `R̂ = −0.18`
+3619.0219. The tooth pins the first two and the 1 m bound; getting this wrong reads as a 1.65 m gap
+and would have understated the drop's own justification.
+
+**AND A COST FINDING THAT SHAPED THE TESTSET.** `off_max` peaks during ACQUISITION (§0.1: the
+tracking error is under 0.5° by r ≈ 4937–6437 m), so a REQUIREMENT arm need not fly to CPA —
+measured identical at n = 4000 / 6000 / 9000 / full in every cell used, and the testset runs
+requirement arms at n = 5000 and only MISS arms to CPA (19.6 s for 104 asserts). ⚠ Every requirement
+is read off a **FREE-WINDOW** arm and the testset says so: on a never-acquired arm `off_max` is the
+POST-BREAK RUNAWAY at 65–120°, the two-run discipline's FIFTH quantity, failing in the opposite
+direction to slice 34's.
+
+⚠ **§0.8 IS RELOCATED AND LANDED, NOT REBUILT** (advisor: "without building a new grid"). The
+cage-vs-aim separation ships as a tooth in `test_missile.jl` with four cells rather than the gate-0
+sweep: `head_max === stop` on the caged route against the aimed head's free 15.17° run; the birth
+angle SATURATING (stop 30 and stop 20 bit-identical on a free-window arm, so the V's right arm is
+unreachable by the stop); and the two cells where the verdicts part in OPPOSITE directions (birth 10°
+/ vy 275: AIMED holds, CAGED breaks — birth 12° / vy 260: the reverse, the WRONG-WAY CHASE).
+
+**WHAT GATE 2 INHERITS.** Two items were found here and belong there: ⚠ `head_clamp` handles a NaN
+*stop* but not a NaN *az*, so a non-finite authored error would poison the head state permanently —
+**the loader must refuse it** (advisor); and the domain's upper end is where the key GOES INERT,
+which §1's saturation tooth now gives a mechanism for (`off1` at +14 and +20 agree to 0.02°).
+
+---
+
 ## What ships (gates 1–3, PLANNED)
 
-### The core (gate 1)
+### The core (gate 1) — ✅ DONE, see §1
 
 ONE new comp key, `gimbal_handover_err_deg` (SIGNED, degrees at the wire boundary — the
 `gimbal_stop_deg` / `gimbal_fov_deg` / `gimbal_rate_dps` posture; the seam converts once). The
@@ -378,7 +483,12 @@ else-arm slice 34/35's line TEXTUALLY UNCHANGED — never `head_clamp(look_az_b 
 ⚠ Whether the error needs its own KERNEL is gate 1's to decide and to say why. The candidate is that
 it does not — it is an argument to an existing clamp — in which case gate 1 is a SEAM edit and
 `frames.jl` is untouched, which would make every prior slice bit-identical BY CONSTRUCTION (slice
-35's gate-1 shape inverted).
+35's gate-1 shape inverted). ⇒ **ANSWERED: NO KERNEL** (§1). The only `frames.jl` edit is PROSE —
+`head_clamp`'s species argument, retired by Finding 3.
+
+⚠ **AND THE `= 0.0` MEASUREMENT CAME BACK IDENTICAL, INCLUDING ON THE IN-PLANE SIGNED-ZERO ARM** (§1
+Finding 1). The branch stays anyway, for the structural reason and not for a flying one, with the
+value that would break it pinned at the kernel.
 
 ### The seam + loader (gate 2)
 
