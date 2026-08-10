@@ -604,7 +604,16 @@ and `hypot === 30.000000` still hold.
 the HUD must own — freeze or annotate it past CPA, and never print it raw. ⚠ The scenario sweep at
 the end of the loader testset asserts **no shipped wire carries the key**; gate 3 authors two and
 must TIGHTEN that to the pair rather than delete it (slice 35's shape). ⚠ The verifier reads every
-requirement off a FREE-WINDOW arm and every peak AT A RANGE.
+requirement off a FREE-WINDOW arm and every peak AT A RANGE. ⚠ The GLASS keys must be asserted ABSENT
+the way slice 35 asserted its disqualified ones (`radome_slope*` is a dead knob on a no-glass wire) —
+that bullet is unspent, and it is a gate-3 artifact because it is a claim about the shipped YAML.
+
+⚠⚠ **AND THE DECLARED DOMAIN IS NOT THE BASKET — DO NOT LET THE HUD OR THE PROSE PRESENT ONE AS THE
+OTHER** (advisor). `[−18.1, +11.9]` is the range over which the KEY IS MEANINGFUL; the set of
+handover errors that HOLD THE TRACK on the shipped wire is far smaller — roughly **[−8, −4] at
+8 °/s behind a 10° window** (§0.6), because at +11.9 the requirement is 24.079° against that same
+10°. The slice's headline is that **zero is outside the basket**, and a picture that draws the domain
+as the basket would make the headline unreadable in the one place it is supposed to be visible.
 
 **⚠ MEASURED-AND-NOT-DONE.** The `fov_h`-vs-authored-`gimbal_fov_deg` divergence (slice 33's, live on
 a negative window) was checked and is MOOT here: with the peak margin dropped, nothing new subtracts

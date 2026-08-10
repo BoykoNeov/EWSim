@@ -50,9 +50,10 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–35 COMPLETE & green; slice 36 is at GATE 2 — 7057 tests** (⚠ the count FELL at slice 35 gate 3 and the direction is accounted
-for: ~87 new asserts in, ~103 out, because a per-entity scenario sweep collapsed into ONE strictly-stronger
-exact-set assert). **The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–35
+**Slices 1–35 COMPLETE & green — 6876 tests at slice 35 gate 3; slice 36 is at GATE 2 and the suite is now 7057.**
+(⚠ the count FELL *at slice 35 gate 3* — 6892 → 6876 — and that direction is accounted for: ~87 new asserts in,
+~103 out, because a per-entity scenario sweep collapsed into ONE strictly-stronger exact-set assert. The 6876 →
+6988 → 7057 walk since then is slice 36's gates 1 and 2.) **The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–35
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's

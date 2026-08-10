@@ -8348,7 +8348,7 @@ end
         n_sat_band = 0; n_defl_band = 0; n_band = 0; r_sat_lo = Inf
         haz1 = NaN; hel1 = NaN; off1 = NaN
         off_frame = 0.0; raw_max = 0.0; pk_prev = -1.0
-        n_peak_back = 0; n_peak_ne = 0; peak_end = NaN; err_tel = NaN
+        n_peak_back = 0; n_peak_ne = 0; peak_end = NaN; err_tel = NaN; peak1 = NaN
         peak_at_3000 = NaN; peak_at_1000 = NaN; peak_at_200 = NaN
         tr = Vec3[]
         for k in 1:n
@@ -8366,6 +8366,7 @@ end
             # swing and the comparison would measure the endgame instead of the grid.
             let pk = get(tel, "m1.head_off_peak_deg", NaN)
                 raw_max = max(raw_max, o)
+                k == 1 && (peak1 = pk)
                 isnan(pk) || (pk < pk_prev && (n_peak_back += 1);
                               abs(pk - raw_max) > 1.0e-12 && (n_peak_ne += 1);
                               pk_prev = pk; peak_end = pk)
@@ -8402,7 +8403,7 @@ end
         return (; miss, pos_cpa, off_max, head_max, trace = tr, haz1, hel1, off1,
                   n_sat, n_defl, n_sat_band, n_defl_band, r_sat_lo, nt, n_band,
                   off_frame, peak_end, peak_at_3000, peak_at_1000, peak_at_200,
-                  n_peak_back, n_peak_ne, err_tel,
+                  n_peak_back, n_peak_ne, err_tel, peak1,
                   out  = nt == 0 ? 0.0 : 100 * n_out / nt)
     end
 
@@ -8637,10 +8638,28 @@ end
         # is designed against is its RUNNING MAXIMUM, and that is a thing a client receiving one
         # tick in sixteen cannot form at all — convention 13, which is the whole reason the key
         # exists (and see the go/no-go below for the reason it is NOT slice 33's).
+        # ⚠ THESE TWO ARE A **UNITS / SHAPE** CHECK AND THE CLAIM IS DOWNGRADED TO SAY SO (advisor,
+        # post-green — slice 35's gate-3 lesson 3, verbatim: a tooth can pass and be a tautology).
+        # Recomputing `max` over the same telemetry key and comparing it to the core's `max` over
+        # the same quantity is the same comparison rearranged, and `rad2deg`/`_finite` are both
+        # monotone, so the second one holds BY CONSTRUCTION — which is what its first draft said out
+        # loud. They are kept because they would catch a wrong unit or a wrong source key, and
+        # nothing more is claimed for them.
         let a = harm(n = 6000, rate = 8.0, err = -6.0)
-            @test a.n_peak_ne == 0            # the shipped key IS the running max of `head_off_deg`
-            @test a.n_peak_back == 0          # …and it is monotone non-decreasing, by construction
+            @test a.n_peak_ne == 0            # same units, same source as `head_off_deg`
+            @test a.n_peak_back == 0          # (monotone — see the cross-toggle testset for content)
         end
+        # ⭐⭐ THE TOOTH WITH CONTENT IS ON **TICK 1**, and it ties the shipped key to the headline:
+        # the peak's first value is the V's LEFT ARM, `|err|` EXACTLY. Nothing else in the file pins
+        # the key to the handover — this fails if the peak were seeded from anything but the
+        # handover tick, updated BEFORE the clamp (the birth would not yet be on the stop), or gated
+        # so tick 1 did not count at all, and the pair above detects none of those.
+        # ⚠ `atol = 1e-12`, never `===`: the deg→rad→deg round trip is not the identity (gate 1's
+        # Finding 2, measured worst |Δ| 3.6e-15°).
+        for e in (-18.0, -8.0, -6.0, -2.0, 2.0, 5.0, 11.0)
+            @test isapprox(harm(n = 1, rate = 8.0, err = e).peak1, abs(e); atol = 1.0e-12)
+        end
+        @test harm(n = 1, rate = 8.0).peak1 == 0.0        # …and a PERFECT handover starts at zero
         # every key a SCALAR and finite (conventions 6/13), and the SIGNED authored error beside the
         # requirement so the client reads the basket's coordinate rather than being told it.
         let (w, sub) = hand_world(rate = 8.0, gfov = 10.0, err = -6.0)
@@ -8663,15 +8682,29 @@ end
         # …and the never-stale discipline: the rung gate, not a `haskey`. A cross-toggle off
         # `:six_dof` ships NO head keys rather than a frozen plausible set (the latent-bug class
         # this arc has now caught seven times).
+        # ⭐⭐ AND THIS IS WHERE MONOTONICITY HAS CONTENT (advisor): within one continuous run a
+        # running max cannot go backwards by construction, but ACROSS A CROSS-TOGGLE it can, and a
+        # reset would show up here as a backward step. ⚠ CUMULATIVE IS THE DELIBERATE CHOICE, and
+        # the reason is that `:head_az` ITSELF persists through the toggle — the head FREEZES rather
+        # than un-existing, and on toggle-back the seam takes the SLEW branch off the stored angles.
+        # A peak that reset would be the ONLY piece of head state that did, and it would then read
+        # LOWER than the tracking error the head has actually had. (The latent-bug class this arc
+        # has caught seven times, arriving as state that outlives its rung gate rather than as a
+        # stale readout.)
         let (w, sub) = hand_world(rate = 8.0, gfov = 10.0, err = -6.0)
             for _ in 1:600; tick!(w, sub, dt); empty!(w.events); end
+            before = w.env[:telemetry]["m1.head_off_peak_deg"]
+            @test before > 5.0                                  # the head HAS accrued a peak…
             w.fidelity[:airframe] = :pitch_coupled
             n_key = 0
             for _ in 1:200
                 tick!(w, sub, dt); empty!(w.events)
                 haskey(w.env[:telemetry]::Dict{String,Any}, "m1.head_off_peak_deg") && (n_key += 1)
             end
-            @test n_key == 0
+            @test n_key == 0                                    # …the rung gate ships NO head keys…
+            w.fidelity[:airframe] = :six_dof                    # …and on the way back it RESUMES,
+            tick!(w, sub, dt); empty!(w.events)                 #    it does not restart:
+            @test w.env[:telemetry]["m1.head_off_peak_deg"] >= before
         end
     end
 
