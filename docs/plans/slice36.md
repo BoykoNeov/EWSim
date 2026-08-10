@@ -15,7 +15,8 @@ candidate of the family:
 > subject."*
 > — `docs/plans/slice35.md`, Deferred (NAMED)
 
-**Status: GATE 0 COMPLETE (2026-08-10, 5 probes). Gates 1–3 NOT STARTED.**
+**Status: GATE 0 COMPLETE (2026-08-10, 8 probes — 5, then 3 more on the advisor's pre-gate-1 review).
+Gates 1–3 NOT STARTED.**
 ⚠⚠ **THE BANKED FRAMING WAS REFUTED AND SO WAS ITS REPLACEMENT, AND BOTH REFUTATIONS ARE
 LOAD-BEARING.** (1) The advisor's opening hypothesis — *a badly handed-over head RINGS LESS, because
 it indexes shallower glass* — is measured with the OPPOSITE sign and non-monotone at the loud arm
@@ -28,9 +29,13 @@ claim. (3) And the mechanism's first story was wrong too: the body-frame LOS was
 directly it **crosses through zero to −15.15°, a 33.2° EXCURSION** (§0.4). The live claim is in a
 FOURTH place, and it is better than any of the three: **the requirement has an OPTIMUM, and the
 optimum is not zero.**
+⚠⚠ **AND THE PRE-GATE-1 REVIEW FOUND A FOURTH THING, WHICH CHANGED THE SCENARIO COUNT**: the new key
+is STRUCTURALLY A DEAD KNOB (§0.9) — it is consumed once at tick 1 and never read again, so slice
+19's NOT-A-DEAD-KNOB TRIPWIRE would FAIL on it. It is authored, not slid, and the slice ships **TWO
+SCENARIOS** with slice 35's `gimbal_rate_dps` as the ONE live slider (slice 34's precedent exactly).
 Probe scripts and the full measured tables in `M:\claud_projects\temp\slice36\`
 (`g0_results.md`, `lib36.jl`, `p1_band.jl`, `p2_where.jl`, `p2b_break.jl`, `p3_swap.jl`,
-`p4_optimum.jl`, `p5_wire.jl`).
+`p4_optimum.jl`, `p5_wire.jl`, `p6_advisor.jl`, `p7_discriminator.jl`, `p8_trap.jl`).
 
 ⭐ **ZERO CORE PATCH AT GATE 0, AND THAT IS A PROPERTY OF THE SEAM RATHER THAN A TRICK.**
 `_observe_point3d!` mints `:head_az` **only when the key is absent** (`missile.jl:1722`), so
@@ -62,6 +67,22 @@ cost — and the cheapest basket sits at the **kink**, which is not at zero and 
 > **THE LESSON, IN ONE SENTENCE.** The cheapest place to hand a seeker its target is not at the
 > target — it is part-way to where the target is *going*, and how far depends on how fast a servo
 > you bought.
+
+⭐⭐ **AND THE BIAS BUYS SOMETHING SLICE 35 SAID COULD NOT BE BOUGHT.** Slice 35 shipped the arc's
+first TWO-SIDED knob: servo bandwidth is not a window, so *"widen it — it's free"* stopped working
+and there was no free direction to run in. On the err = 0 wire that is exactly what the requirement
+does — it walks **2.112 → 12.346°** as the servo slows 60 → 8 °/s (5.8×), crossing a 10° window
+between 12 and 10 °/s. On the err = −6 wire it reads **6.000 / 6.000 / 6.000 / 6.000 / 6.000 / 6.412
+/ 8.091** over the same sweep: **held everywhere, and FLAT.** ⇒ **A CORRECTLY BIASED HANDOVER MAKES
+THE SERVO RATE STOP MATTERING** — the left arm of the V is `|err|` exactly, an initial condition no
+bandwidth touches, so biasing onto it moves the design off the two-sided knob altogether. That is
+the free direction slice 35 could not find, and it is not on slice 35's axis. (§0.9)
+
+⭐ **AND IT IS FREE IN ACCURACY, BIT-EXACTLY.** Every arm across the whole domain — −18° to +11°,
+both servo rates, free window, *and* the windowed holding rows — returns the identical 64 bits
+`miss = 0.19116048719212922` and the identical CPA position to 17 digits. Not "the same to three
+decimals": `===`. The price of the bias is EXACTLY ZERO and the only thing a handover error can
+change is whether the track is held at all — slice 32's asymmetry with the cost column at 0. (§0.2)
 
 ⭐⭐ **AND THE SHOWCASE IS A BASKET THAT EXCLUDES THE PERFECT HANDOVER.** At an 8 °/s servo behind a
 10° detector window, a head handed over *exactly right* loses its track at t = 0.434 s and misses by
@@ -100,13 +121,29 @@ band begins *after* acquisition is over. `off_band` at the loud arm is 7.496 (er
 gate the launch transient AWAY to see their loop; here the launch transient IS the subject, and the
 band that protected them deletes it.
 
-### ⭐ §0.2 — AND THE ISOLATION FELL OUT OF THE SAME PROBE, STRONGER THAN EXPECTED
+### ⭐⭐ §0.2 — AND THE ISOLATION FELL OUT OF THE SAME PROBE, STRONGER THAN EXPECTED — THEN STRONGER AGAIN
 
 On a NO-GLASS wire with a free window, a handover error is **EXACTLY INERT** on the trajectory:
 miss **0.191**, rms r **0.01589**, `off_band` **0.0308**, identical across every error at every rate
 (30 cells, §0.5's Table A). ⇒ the basket reaches the trajectory through the **WINDOW** or through the
 **INDEX** and through nothing else — slice 35's isolation shape in a new quantity, and it is what
 licenses dropping the glass (§0.6).
+
+⚠ **"IDENTICAL" AT THREE DECIMALS IS PRINTED AGREEMENT, NOT A MEASUREMENT** (advisor, pre-gate-1).
+With no glass there is no bend, so the prediction is stronger than inertness-to-eye: the miss should
+be **BIT-IDENTICAL**. Re-measured with `===` on the scalar AND on the full 3-D CPA position
+(`p6_advisor.jl`), across err ∈ {0, −2, −4, −6, −8, −10, −18, +5, +11} × rate ∈ {40, 8}:
+
+| quantity | value | across |
+|---|---|---|
+| `miss` | `0.19116048719212922` | **all 18 cells `===`** |
+| `pos_cpa` | `(5999.8334218207992, 4185.714198674571, 4199.9621559124289)` | **all 18 cells `===`** |
+| the WINDOWED holding rows (err −4/−6/−8, window 10°, 8 °/s) vs the free-window baseline | same bits | **`===`** |
+
+⇒ **THE PRICE OF THE BIAS IS EXACTLY ZERO.** ⚠ Note what the third row rules out: it is not merely
+that a *held* track flies the same, it is that a track held from a **10° window with an 8° bias**
+flies bit-for-bit the same trajectory as one with an infinite window and no bias. Had any row
+differed, there would be a head-angle→trajectory path unaccounted for; there is not.
 
 ### ⚠⚠ §0.3 — REFUTATION 1: THE OPENING HYPOTHESIS, MEASURED WITH THE OPPOSITE SIGN
 
@@ -228,6 +265,99 @@ slice 35 wrote that on a rate-limited arm it is *"a statement about the HANDOVER
 slice 34's FIRST named deferral and a different slice."* **This is that slice, and the statement is
 measured.**
 
+### ⚠⚠ §0.8 — THE REPARAMETERIZATION GATE, RUN BEFORE THE KEY IS WRITTEN: `gimbal_stop_deg` REACHES THE SAME RESCUE
+
+The advisor's blocking check, and the arc's standing false-fidelity gate (15's `k_δ`, 19's dead
+`speed`, 31's scale factor). The perfect handover is **+18.105°**, and the shipped handover is
+`head_clamp`ed — so **authoring a 10° STOP already births the head at exactly 10.000°**, which is the
+showcase's winning birth angle. Measured on the showcase cell (`p6_advisor.jl` §B):
+
+| arm | birth° | %out | miss | `off_max` | `head_max` |
+|---|---|---|---|---|---|
+| stop 30, err **0** (the foil) | 18.117 | 94.6 | 3290.078 | 107.378 | 18.119 |
+| stop 30, err **−8.105** (the ship) | 10.021 | **0.0** | **0.191** | 8.105 | **15.173** |
+| **stop 10, err 0** (the alternative) | 10.000 | **0.0** | **0.191** | 8.132 | **10.000** |
+
+**IT RESCUES IT.** Same verdict, same miss. So the objection is real and must be answered with a
+measurement rather than with prose — slice 20's matched-ΔV shape exactly, where a parasitic drag
+reproduced the miss and only the α²-SOURCE made it *induced*.
+
+⭐ **ANSWER 1 — IT IS NOT ONE PARAMETER WEARING TWO NAMES, AND THE TELL IS IN THE TABLE.** Sweeping
+each parameter over the SAME birth angles at a free window (`p7_discriminator.jl` §B):
+
+| | route 1: `err` at stop 30 | route 2: `stop` at err 0 |
+|---|---|---|
+| birth 18.117° | `off_max` 12.3460 | `off_max` 12.3460 **at stop 30 AND stop 20 — bit-identical** |
+| birth ~12° | 8.0907 (err −6) | **7.2684** (stop 12) |
+| birth 10° | 8.1050 | 8.1321 |
+| birth 4° | 14.0000 | 14.1321 |
+| `head_max` | **15.173 — the LOS's own far excursion** | **`=== stop` on every row: PINNED** |
+
+Two facts kill the equivalence. **(a) The stop's birth angle SATURATES at 18.117** — clamping only
+ever moves a birth angle TOWARD zero, so *the entire right arm of the V is unreachable by the stop*,
+and a positive handover error is a real thing a real handover does. **(b) `head_max === stop`
+exactly on every stop row**: the stop does not *aim* the head, it **CAGES** it for the whole flight,
+where the aimed head runs free out to the LOS's own 15.173°. They also reach different minima (7.27
+vs 8.09) — two mechanisms overlapping on part of one arm, not one mechanism twice.
+
+⭐⭐ **ANSWER 2 — AND THEIR VERDICTS PART IN BOTH DIRECTIONS.** Matched birth angle, window 10°,
+servo 8 °/s, swept over the crossing (`p8_trap.jl`):
+
+| birth | vy | AIMED (stop 30) | CAGED (stop = birth) |
+|---|---|---|---|
+| 10° | 260 | HELD 0.068 (`head_max` 19.591) | HELD 0.068 (10.000) |
+| 10° | **275** | **HELD 0.214** (`head_max` 20.681) | **BROKEN 383.164** (10.000) |
+| 10° | **285** | **HELD 0.166** (21.400) | **BROKEN 482.589** (10.000) |
+| 10° | **295** | **HELD 0.116** (22.103) | **BROKEN 483.956** (10.000) |
+| 10° | 305 | BROKEN | BROKEN |
+| 12° | **260** | **BROKEN 3235.815** | **HELD 0.068** |
+| 12° | **275** | **BROKEN 3125.306** | **HELD 0.214** |
+| 12° | 285+ | BROKEN | BROKEN |
+
+**THE CAP THAT AIMS YOU IS THE CAP THAT TRAPS YOU** — at a 10° birth the caged head is pinned at
+exactly 10.000° while the LOS walks off it (the aimed head follows to 20.7–22.1°), so it breaks over
+a whole band of crossings the aimed one survives. ⭐ And the 12° rows **REVERSE it**, which is the
+better half of the finding: a cage also blocks the **WRONG-WAY CHASE**. A head born *below* the LOS
+slews *upward* toward +18.1° for the first moments — the LOS has not turned around yet — and at
+8 °/s that climb is unaffordable; the caged head cannot make it and is better placed when the LOS
+comes down. ⇒ **NEITHER ROUTE DOMINATES**, which is a stronger separation than a one-directional one.
+⚠ It also sharpens §0.5's right arm: part of the "chase cost" is chasing the LOS in the direction it
+is about to stop going.
+
+⚠ **THIS SHIPS AS A TOOTH IN `test_missile.jl`, NOT ON THE WIRE** — neither route is client-drivable
+as a contrast (the stop is authored, and putting two of them on one scenario breaks convention 9).
+Slice 28's precedent, and the relocation goes in the verifier header.
+
+### ⚠⚠ §0.9 — THE KEY IS A DEAD KNOB, AND THAT SETS THE SCENARIO COUNT
+
+`_observe_point3d!` mints the head **only when `:head_az` is absent**, and writes `c[:head_az]`
+unconditionally at the end of every tick. So `gimbal_handover_err_deg` is **consumed exactly once, at
+tick 1, and never read again** — dragging a slider on it mid-flight does nothing. This is slice 19's
+`comp[:speed]` and slice 21's launch altitude verbatim, the **5th occurrence in this arc**, and it is
+caught BEFORE the key is written rather than at gate 3. ⚠ Sharper: **slice 19's NOT-A-DEAD-KNOB
+TRIPWIRE (verifier + `test_server` assert the knob MOVES a number) would FAIL on it.**
+
+⇒ **THE PRECEDENT IS SLICE 34's, AND THE SLICE SHIPS TWO SCENARIOS** — `gimbal_tau_s` is authored
+there for the same class of reason (no in-domain slider removes a head). Here: an **err = 0** wire
+that breaks and an **err = −6** wire that holds, with slice 35's `gimbal_rate_dps` as the ONE live
+slider. Convention 9 is satisfied by one live knob plus one authored contrast, not by counting
+sliders.
+
+⭐⭐ **AND THE SLIDER EARNS ITS PLACE — IT DOES SOMETHING DIFFERENT ON EACH WIRE** (`p7_discriminator.jl`
+§C; window 10°, stop 30, vy 200, no glass):
+
+| `gimbal_rate_dps` | 60 | 40 | 25 | 15 | 12 | 10 | 8 |
+|---|---|---|---|---|---|---|---|
+| **err = 0** `off_max` | 2.112 | 2.173 | 4.075 | 7.223 | 8.840 | 104.562 | 107.378 |
+| **err = 0** verdict | HELD | HELD | HELD | HELD | HELD | **BROKEN 3338.3 m** | **BROKEN 3290.1 m** |
+| **err = −6** `off_max` | 6.000 | 6.000 | 6.000 | 6.000 | 6.000 | 6.412 | 8.091 |
+| **err = −6** verdict | HELD | HELD | HELD | HELD | HELD | **HELD 0.191** | **HELD 0.191** |
+
+A crisp HELD→BROKEN transition inside the declared domain on ONE wire and none on the other, and the
+`off_max` row on the biased wire is **flat at 6.000 over five of seven rates** — the left arm of the
+V is an initial condition, and no bandwidth touches it. ⚠ The requirement's non-monotonicity means
+the transition's location is a MEASURED bracket (between 12 and 10 °/s), never interpolated.
+
 ---
 
 ## What ships (gates 1–3, PLANNED)
@@ -259,17 +389,34 @@ it does not — it is an argument to an existing clamp — in which case gate 1 
 * Loader: validate the error against the STOP (a head authored beyond its own stop is silently
   clamped today — a degenerate the loader would permit; slice 35's post-review commit shape is to
   prove it LOADS and is never FLOWN, or to refuse it).
-* ⚠ `radome_slope_est` **cannot be knob 2** — it is DEAD on a no-glass wire (the slice-19 dead-knob
-  class). The knobs are `gimbal_handover_err_deg` and slice 35's `gimbal_rate_dps`; the verifier must
-  assert the GLASS keys ABSENT the way slice 35 asserted its disqualified ones.
+* ⚠⚠ **THERE IS EXACTLY ONE LIVE KNOB, `gimbal_rate_dps`** (§0.9). `gimbal_handover_err_deg` is
+  AUTHORED — structurally a dead knob, and slice 19's tripwire would fail on it — so it must NOT be
+  declared live-settable and the verifier must NOT run a set-param sweep on it. `radome_slope_est`
+  is also dead here (no glass), and the verifier asserts the GLASS keys ABSENT the way slice 35
+  asserted its disqualified ones.
 * Convention 9 by MEASUREMENT, not by counting sliders (slice 27's diagonal): §0.5's table already
-  shows the two knobs are ONE axis — the servo *moves the optimum of the basket* — and slice 35 is
-  the `err = 0` row of that same grid.
+  shows the authored error and the servo are ONE axis — the servo *moves the optimum of the basket* —
+  and slice 35 is the `err = 0` row of that same grid.
+* ⚠ **THE DOMAIN'S UPPER END IS WHERE THE KEY GOES INERT** (slice 26's post-commit endpoint lesson).
+  `off_max` saturates at 11.8902 for any authored error past ~+11.9° because the head is then born ON
+  the stop — so the plan states **the stop bounds the basket from above** rather than presenting
+  [−18.1, +11.9] as a plain range, and gate 2 MEASURES the endpoint rather than inferring it. Slice
+  34 gate 2 already found the stop and the window are one budget.
 
 ### The wire (gate 3)
 
-`scenarios/slice36_handover.yaml`: slice 35's wire **MINUS THE GLASS**, servo authored at 8 °/s,
-window authored ~10°, `gimbal_handover_err_deg` and `gimbal_rate_dps` the two sliders.
+**TWO SCENARIOS** (§0.9, slice 34's precedent — and slice 22's before it): both are slice 35's wire
+**MINUS THE GLASS** with the window authored ~10° and `gimbal_rate_dps` the ONE live slider,
+differing only in the authored `gimbal_handover_err_deg` —
+
+* `scenarios/slice36_handover.yaml` — **err = 0**, the perfect handover: HELD down to 12 °/s, BROKEN
+  at 10 and below, missing ~3.3 km. *The slider decides whether you keep the track.*
+* `scenarios/slice36_biased.yaml` — **err = −6**, the biased handover: HELD at every rate in the
+  domain with `off_max` flat at 6.000 over five of seven rates. *The slider stops mattering.*
+
+⚠ ONE verifier auto-detects which (slice 22's shape), and the pair IS the A/B — there is no rung to
+toggle and no button to press, which is consistent with the button having been DROPPED for eleven
+consecutive slices.
 
 ⚠⚠ **THE WINDOW'S NUMBER MUST BE RE-AUTHORED ON THIS SLICE'S OWN FINE GRID** (the advisor's blocking
 point, and slice 35's own gate-3 finding): the requirement is NON-MONOTONE in both sliders, so a
@@ -285,11 +432,14 @@ real requirement — where slice 34's `head_angle_deg` froze plausibly-but-TOO-S
 break table will take those numbers for requirements; the verifier must read every requirement off a
 FREE-window arm and say so in the file.
 
-⚠ **MARKER RE-CHECK (slice 35's INVISIBLE-SLICE class, and it must be RUN, not inherited).** A
-slice-36 wire is a slice-35 wire minus the glass plus one key, so `gimbal_rate_view` routes it and
-the SUBJECT is right — but slice 35's HUD meters the servo's duty against **the loop's** demand, and
-there is no loop here at all. Expect a branch selector, not a hole plug, and expect the branch to be
-checked BEFORE slice 35's.
+⚠ **MARKER RE-CHECK (slice 35's INVISIBLE-SLICE class, and it must be RUN, not inherited).** There
+are **TWO live-and-wrong candidates, not one**: a slice-36 wire is a slice-35 wire minus the glass
+plus one key, so `gimbal_rate_view` routes it and meters the servo's duty against **the loop's**
+demand — and there is no loop here at all — while `gimbal_view` would meter the tracking error
+against the detector window, closer to right and still never naming the basket or its tick-1 peak.
+Both are FLUENT and FULLY LIVE (nothing stale) on a track that has missed by 3.3 km — slice 34's
+worst form. Expect a `gimbal_handover_view` branch checked FIRST, expect the check to come back
+POSITIVE this time, and **run it anyway**.
 
 ### The four proofs (convention 14)
 
@@ -307,6 +457,10 @@ checked BEFORE slice 35's.
   still TERMINAL. ⚠ SHARPENED: a memory track is exactly what would rescue the *too-much-bias* side
   of §0.6's basket, so it would make the basket ONE-SIDED. That is a real prediction and a real slice.
 * **A SECOND-ORDER SERVO (ω_a/ζ_a)** — slice 35's own named successor, unspent.
+* **THE CAGE vs THE AIM AS ITS OWN A/B** — §0.8 measured a real, two-directional split between
+  biasing the birth angle and shrinking the stop, including a mechanism neither slice has named
+  (the WRONG-WAY CHASE: a head born below the LOS slews *up* toward +18° before the LOS reverses).
+  Built and measured here, shipped only as a tooth — slice 27's angle-domain-corrector precedent.
 * **THE ELEVATION HALF** — the error here is authored in AZIMUTH because that is where the lead and
   the excursion are (slice 28's channel split). An elevation basket is orthogonal to the excursion and
   §0.5 predicts it has NO optimum shift; measuring that is a tooth, not a slice.
