@@ -4975,8 +4975,7 @@ measurement, 2 randn/tick, the seed load-bearing). **KNOB, not rung**; the butto
 ---
 
 **Slice 36 — THE HANDOVER BASKET: THE CHEAPEST PLACE TO HAND A SEEKER ITS TARGET IS NOT AT THE
-TARGET** — GATE 0 + GATE 1 + **GATE 2 COMPLETE** (2026-08-10, 6876 → 6988 → **7057**); gate 3 NOT
-STARTED. Slice 32's P5, promoted by slice 34 to a live constraint and sharpened by slice 35 into the
+TARGET** — **COMPLETE** (2026-08-10, 6876 → 6988 → 7057 → 7067 → **7222**), all four gates green. Slice 32's P5, promoted by slice 34 to a live constraint and sharpened by slice 35 into the
 strongest remaining candidate of the gimbal family. Since slice 34 the head has been handed its
 target PERFECTLY — tick 1 initialises it to the clamped truth look angles, on a path whose whole
 thesis is that the head never sees truth. Slice 36 makes that handover an AUTHORED SIGNED ERROR
@@ -5078,6 +5077,111 @@ own teeth already show the authored error and the servo are **ONE axis** — the
 argmin (−2 at 40 °/s, −8 at 8 °/s, a 1.54× saving) — and **slice 35 is the `err = 0` row of this
 slice's grid**. ⭐ The blocking re-read gate 1 demanded was run and PASSED: Finding 3's elevation pin
 (`hel1 === ref.hel1`, `hypot === 30.000000`) still holds against the new tick-1 telemetry.
+
+**GATE 3 (7067 → 7222, +155) — TWO WIRES, THE WINDOW RE-AUTHORED ON A FINE GRID, AND THE FIRST MARKER
+IN THIS FAMILY THAT HAD TO PLUG A *BUTTON* HOLE AS WELL AS A HUD ONE.**
+`scenarios/slice36_handover.yaml` (err = 0, the FOIL) and `scenarios/slice36_biased.yaml` (err = −6,
+the wire that HOLDS) differ in **exactly one comp key** — asserted by set difference over the whole
+comp dict, not by a hand-listed tuple — with `gimbal_rate_dps` the ONE live slider on both and the
+default at its FLOOR (8 °/s), because the showcase OPENS ON THE DISEASE: at that servo, behind the
+same 10° window, on the same seed, the perfect handover MISSES BY 3290.079 m and the biased one HITS.
+
+⚠⚠ **THE BUTTON DROP WAS NOT FREE, AND THE PLAN PREDICTED IT WOULD BE** (a COUNT with no mechanism —
+the defect slice 32 caught in its own plan). `radome_view` is keyed on authored GLASS and **this is
+the arc's first no-glass wire since slice 25** (§0.2's exact inertness and §0.6's isolation are why),
+while `seeker_fov_view` is refused beside a head — so BOTH of the client's drop-branches fail, the
+dispatch falls through to slice 25's `seeker_axes` cycler, and the button COMES BACK, whose other
+position (`:pitch_plane`) would leave the handover live beside slice 25's unrelated 2000 m blind miss.
+⇒ `gimbal_handover_view` does **slice 34's job AND slice 32's** — a BUTTON hole at both client sites
+(slice 26's "the drop needs BOTH", 4th occurrence) *and* the HUD branch — and slice 35's "a branch
+selector, not a hole plug" **does not transfer**. ⭐ The HUD half is a STALE-READOUT defect rather than
+slice 35's invisible slice: `gimbal_rate_view` IS raised here, so slice 35's block would take the wire
+and its own CURE line reads `radome_slope_est` / `radome_slope_worst`, printing **`R̂ +0.000   aim
+point R₀+2A +0.000`** for keys that do not exist (the 9th occurrence of that class, on another slice's
+payoff line), with `_radome_qpeak` frozen at 0.0 beside it. Proven BY MIRROR in both directions.
+
+⚠⚠ **THE WINDOW'S CRITERION IS INVERTED FROM SLICE 35's**, which is the trap of this gate: slice 35
+authored its window to CLEAR the worst requirement anywhere (one number, one direction), while this one
+must SIT INSIDE the requirement's range on wire A and ABOVE it on wire B over the WHOLE domain — a
+TWO-SIDED margin. Re-flown over **210 arms** (rate ∈ [8, 60] on a 0.5 °/s grid × 2 wires, free window)
+because the requirement is NON-MONOTONE in both sliders: wire A runs **12.34604° at 8 °/s → 2.11192° at
+42.5** with the ≥-window set **EXACTLY FIVE CELLS, CONTIGUOUS and anchored at the slow end** (the
+assert a 7-column sweep cannot make) and the crossing a MEASURED bracket **10.0 (10.32507°) → 10.5
+(9.89727°)**; wire B has **no crossing anywhere**, worst 8.09069° (a **1.909°**, 1.24× margin) and
+**FLAT at 6.00000° over 100 of its 105 cells**. ⇒ `gimbal_fov_deg: 10.0`. ⭐ The 30° STOP never binds on
+either wire (`head_max` 18.11891° flat / 14.995→15.197°, i.e. 11.9° and 14.8° of margin), so slice 34's
+"the stop and the window are ONE budget" stays clean and the window is the only limit in play.
+
+⭐⭐ **THE FLOOR IS SLICE 35's NUMBER FOR A DIFFERENT REASON, MEASURED RATHER THAN COPIED** (the
+copy-paste false-claim trap, closed on a number). Slice 35's 8 °/s rested on the RING — 100 % band
+saturation below it and the 0-vs-97 split at exactly 8 — and **neither survives the loss of the glass**
+(band saturation at 5 °/s is 895/4341 = 20.6 % here, because there is no oscillation to chase). What
+bounds it is **the biased wire's own claim**: at 6 °/s its requirement is 10.523° and the track is LOST
+(t = 1.167 s, miss 2398.200 m), 7 °/s being the last holding cell. ⇒ *the bias buys MARGIN, NOT
+IMMUNITY* (slice 27's phrase in a third currency), and "the slider stops mattering" is a statement
+ABOUT THE DECLARED DOMAIN whose floor is the measurement that makes it true.
+
+⭐⭐ **A THIRD KEY SHIPPED AT GATE 3, BECAUSE THE HUD COULD NOT OTHERWISE DRAW THE MECHANISM AT ALL.**
+Every shipped angle on the head path is a `hypot` (`look_body_deg`, `head_angle_deg`, `head_off_deg`)
+and §0.4's whole finding is that **a hypot cannot show a sign** — gate 0 inferred the LOS *settling*
+18.1° → 15.2° from `head_max` and the story was WRONG. `look_body_az_deg` (SIGNED, `_finite_coord`,
+recomputed from `att_q`/`û_tru` beside its neighbour) puts the 33.2° crossing excursion on the wire,
+where until now it existed only in a probe. ⚠ It is NOT the peak-MARGIN key gate 2 measured and
+dropped: no latch in it.
+
+⚠⚠ **THE ENDGAME ARTIFACT NOW APPEARS IN THREE QUANTITIES WITH TWO DIFFERENT GATES, AND EVERY ONE OF
+THEM COST A FAILING ASSERT.** (a) `head_off_peak_deg` runs to 179.4998° per tick at CPA on every arm,
+hit or miss — gate 2's finding, and the reason the client **freezes its display** at r > 200 m
+(`_handover_peak_hold`, a FOURTH instrument shape beside slice 27's peak-hold, slice 32's latch and
+slice 35's EMA duty). (b) The core's first excursion tooth was ungated by RANGE and read **182.02°**
+(the LOS at CPA is +164.29°). (c) The verifier's was ungated on the CLOSING LEG and read **359.778°**
+on a HELD arm — the azimuth wrapping through ±180° once the target is behind the missile, which is
+slice 32's gate-3 correction verbatim. ⇒ read on the closing leg AND inside r > 200 m.
+
+⭐⭐ **AND THE MECHANISM IS THE TWO-RUN DISCIPLINE'S SIXTH QUANTITY, WHICH THE UPPER BOUND CAUGHT**:
+gated both ways, the excursion is **33.182° on an arm that HELD and 110.473° (~3.3×) on the broken
+one** — a lost track is a runaway geometry (slice 32's inflated-lead finding and slice 29's P10a, in a
+new quantity), so every excursion number is read off a HELD arm and the broken arm asserts the RUNAWAY
+as the positive fact. The list of quantities that lie on a broken arm is now `rms r` / `look_max` /
+`head_angle_deg` / `head_rate_sat` / `head_off_peak_deg` / **the LOS excursion**.
+
+⭐⭐ **THE BIASED WIRE REVISES GATE 2's OWN GO/NO-GO — THE SHARPEST NUMBER OF THE GATE.** Gate 2
+measured the emit grid's under-read of the requirement at 0.03–0.27 % of the deciding margin and
+concluded that slice 33's emit-grid finding was a BORROWED claim, so the key ships on convention 13.
+⚠⚠ Those cells all have a SMOOTH MID-FLIGHT peak. Above the bracket on the biased wire the requirement
+is the **TICK-1 PEAK — an initial condition, one tick wide** — and a client receiving one tick in
+sixteen never sees it: the frame-sampled instantaneous max reads **5.753 / 5.298 / 4.998° against the
+shipped 6.000** at 11 / 40 / 60 °/s (0.247–1.002° under, against 0.009° on the foil). ⇒ gate 2's
+verdict was right about the cells it measured and does not generalize; the rule it wrote — *re-run the
+comparison that entitled the earlier claim* — applied to itself.
+
+⚠⚠ **TWO DEFECTS THE WINDOWED SHOT FOUND AND NO TEST WOULD HAVE.** (1) Shot A's first capture printed
+`handover +0.0°   body LOS az −39.18°  (first frame +18.00°)` — three LIVE, TRUE numbers whose INVITED
+ARITHMETIC is a 57° "excursion" that is the runaway, with a correct verdict line right above it (slice
+33's defect exactly, in a new quantity) ⇒ a new pure helper `_handover_los_text` withdraws the pair and
+says **RUNNING AWAY** once the latch is set. (2) The retake ran that clause off the right edge at 67
+characters ("…RUNNING AWAY sin"), the **3rd occurrence** after slices 26 and 28, so both forms are now
+length-asserted at the measured ~55-character budget. ⚠ And the verifier's pass text printed as a **RAW
+FORMAT STRING on a green exit** — slice 21's `%.2e` and slice 25's `%g` in a THIRD form, an
+argument-count mismatch rather than an unknown specifier.
+
+**THE FOUR PROOFS.** `net/slice36_verify.gd` — ONE file, BOTH wires, auto-detected (slice 22's shape),
+`STEPS = 12800 = 16 × 800`. Wire A: foil BROKEN 3290.079 m with its peak reading 107.378° (8.7× the
+real 12.346°, the two-run discipline's FIFTH quantity failing LARGE); bracket BROKEN 10 → HELD 11 °/s;
+requirement 9.515 → 8.840 → 2.112° above it; two held arms **bit-identical** (max|Δpos| = 0.0, same CPA
+bits — the price of the cure is EXACTLY zero); `defl_sat` 0 and `aero_sat` 0 everywhere; the band EMPTY
+on every broken arm (CPA 3.3 km) and 271 frames on every held one. Wire B: HELD in all cells, 8.091° at
+the floor, FLAT 6.000° to the bit, plus the one-tick under-read. Replay bit-identical on both.
+`net/slice36_ui_test.gd` — 11 teeth, NINETEEN-way guard. Sandbox smoke-load → `EWSIM_SERVER_DONE`.
+TWO windowed shots at r ≈ 4.5 km: **A** "PERFECT HANDOVER — TRACK LOST" / `peak head err 54.0° —
+POST-BREAK, NOT a requirement` / `LOS az −39.18° — RUNNING AWAY` / `head: HOLDING`; **B** "BIASED
+HANDOVER — track HELD" / `requirement (peak) 8.09° vs window 10.0°` / `LOS az −12.49° from +18.00°` /
+`demand 23.5°/s ← PEGGED` / `head: TRACKING`. ⭐ Shot B's servo is PEGGED on a HELD arm — the bias made
+the requirement an initial condition, so a saturated servo costs it nothing. Class **4a** (the TWELFTH
+consecutive RNG-live slice); button DROPPED (the 12th — and the FIRST that needed an edit to stay
+dropped). Slices 1–35 byte-identical, proven ON THE WIRE (slice 34's and slice 35's verifiers re-run
+green). Two loader/marker sweeps in `test_missile.jl` were TIGHTENED to enumerated carrier sets rather
+than deleted, which is how slice 35's own "a second wire growing this key would fail here" paid off.
 
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new

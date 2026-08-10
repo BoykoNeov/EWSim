@@ -8147,7 +8147,13 @@ end
                     haskey(e.comp, :gimbal_rate_dps) && push!(carriers, f)
                 end
             end
-            @test carriers == ["slice35_rate.yaml"]
+            # ⚠⚠ SLICE 36 WIDENED THIS SET AND THE ASSERT IS WHERE THAT WAS NOTICED — which is exactly
+            # what the paragraph above says it is for. Slice 36's two wires are slice 35's wire minus the
+            # glass, so they carry a RATE-LIMITED HEAD too and the servo is their ONE live slider (their
+            # own lesson is the AUTHORED handover error, which cannot be a knob). ⇒ the claim being
+            # pinned is still "slices 1–34 stay byte-identical by GATING"; the carrier list is the
+            # enumeration that keeps it honest, and it is a SET rather than a count for that reason.
+            @test carriers == ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml"]
         end
     end
 
@@ -8196,14 +8202,22 @@ end
         # THE MIRROR — slice 34's own wire must NOT raise it, or the branch selector selects both
         # wires and slice 34's HUD is the one that disappears (slice 32's `!haskey`-as-a-feature
         # discipline pointed at the new key, and the reason it is a mirror and not a spot check).
-        for f in readdir(base)
-            endswith(f, ".yaml") || continue
-            f == "slice35_rate.yaml" && continue
-            # ⚠ `nothing` on a wire with no missile at all (slices 1–7) — the sweep must SKIP those
-            # rather than assert on them, or the mirror fails for a reason that has nothing to do
-            # with the marker.
-            let inf = EWSim._airframe_view_info(load_scenario(joinpath(base, f)).world)
-                inf === nothing || @test !haskey(inf, :gimbal_rate_view)
+        # ⚠⚠ AND SLICE 36 IS THE EXCEPTION THIS MIRROR NOW HAS TO NAME RATHER THAN SWEEP OVER, which is
+        # the same tightening the carrier list above needed and for the same reason: slice 36's wires are
+        # slice 35's wire MINUS THE GLASS, so they carry `gimbal_rate_dps` and legitimately raise this
+        # marker too. That does NOT break the branch selector — the client checks slice 36's own marker
+        # FIRST, and the mirror in `slice36_ui_test.gd` is what proves that ordering — but a mirror
+        # asserting "no other wire" would now be false, and the honest form is an ENUMERATED exception.
+        let expected_rate = ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml"]
+            for f in readdir(base)
+                endswith(f, ".yaml") || continue
+                f in expected_rate && continue
+                # ⚠ `nothing` on a wire with no missile at all (slices 1–7) — the sweep must SKIP those
+                # rather than assert on them, or the mirror fails for a reason that has nothing to do
+                # with the marker.
+                let inf = EWSim._airframe_view_info(load_scenario(joinpath(base, f)).world)
+                    inf === nothing || @test !haskey(inf, :gimbal_rate_view)
+                end
             end
         end
 
@@ -8350,6 +8364,9 @@ end
         off_frame = 0.0; raw_max = 0.0; pk_prev = -1.0
         n_peak_back = 0; n_peak_ne = 0; peak_end = NaN; err_tel = NaN; peak1 = NaN
         peak_at_3000 = NaN; peak_at_1000 = NaN; peak_at_200 = NaN
+        # GATE 3 — the SIGNED body-frame LOS azimuth, and the `hypot` beside it that cannot show a
+        # sign. Columns ADDED, none changed (gate 2's discipline, second application).
+        az1 = NaN; az_lo = Inf; az_hi = -Inf; body_lo = Inf
         tr = Vec3[]
         for k in 1:n
             tick!(w, sub, dt); empty!(w.events)
@@ -8375,6 +8392,20 @@ end
                 isnan(peak_at_200)  && r <=  200 && (peak_at_200  = pk)
             end
             err_tel = get(tel, "m1.gimbal_handover_err_deg", NaN)
+            # GATE 3 — the mechanism, tracked SIGNED. ⚠⚠ GATED AT r > 200 m, AND THE FIRST DRAFT WAS
+            # UNGATED AND **FAILED**: the launch transient IS the subject here (§0.1's inversion of the
+            # usual caution) so the gate must not exclude the START — but the ENDGAME swing reaches
+            # +164.29° at CPA and made the measured "excursion" 182.02°, which is not the mechanism at
+            # all. [[ewsim-missile-verifier-sampling]]'s endgame spike in a THIRD quantity, after the
+            # miss and `head_off_peak_deg` — and the same 179°-class number in every one of them.
+            # ⚠ tick 1 is inside the gate (r ≈ 7000 m), so the birth angle survives it.
+            if r > 200
+                let az = get(tel, "m1.look_body_az_deg", NaN), bd = get(tel, "m1.look_body_deg", NaN)
+                    k == 1 && (az1 = az)
+                    isnan(az) || (az_lo = min(az_lo, az); az_hi = max(az_hi, az))
+                    isnan(bd) || (body_lo = min(body_lo, bd))
+                end
+            end
             r > 200 && k % emit == 0 && (off_frame = max(off_frame, o))
             # ⚠ THE SATURATION COUNTERS SIT **INSIDE** THE r > 200 GATE, and that was a gate-1
             # correction rather than a copy: read over ALL ticks they pick up the r → 0 ENDGAME
@@ -8404,6 +8435,7 @@ end
                   n_sat, n_defl, n_sat_band, n_defl_band, r_sat_lo, nt, n_band,
                   off_frame, peak_end, peak_at_3000, peak_at_1000, peak_at_200,
                   n_peak_back, n_peak_ne, err_tel, peak1,
+                  az1, az_lo, az_hi, body_lo,
                   out  = nt == 0 ? 0.0 : 100 * n_out / nt)
     end
 
@@ -8897,8 +8929,10 @@ end
             end
         end
         # THE PRESENCE GATE FROM THE OTHER SIDE (slice 35's shape): at GATE 2 no shipped wire
-        # carries the key at all, so slices 1–35 stay byte-identical by GATING. ⚠ Gate 3 authors
-        # exactly two and must TIGHTEN this to the pair rather than delete it.
+        # carried the key at all. ⚠ GATE 3 AUTHORS EXACTLY TWO AND **TIGHTENED** THIS RATHER THAN
+        # DELETING IT — the claim being pinned is still "slices 1–35 stay byte-identical by GATING",
+        # and an enumerated carrier SET is what keeps that honest: a third wire growing the key fails
+        # here rather than silently widening the claim.
         let base = joinpath(@__DIR__, "..", "..", "scenarios")
             carriers = String[]
             for f in readdir(base)
@@ -8907,7 +8941,235 @@ end
                     haskey(e.comp, :gimbal_handover_err_deg) && push!(carriers, f)
                 end
             end
-            @test carriers == String[]
+            @test carriers == ["slice36_biased.yaml", "slice36_handover.yaml"]
+        end
+    end
+
+    # ═══════════════════════════════════════════════════════════════════════════════════════════
+    # GATE 3 — THE TWO SHIPPED WIRES, the window authored on a FINE grid, and the marker that
+    # finally had to plug a BUTTON hole as well as a HUD one.
+    # ═══════════════════════════════════════════════════════════════════════════════════════════
+    @testset "gate 3 — THE PAIR, and the window authored on a MEASUREMENT" begin
+        base = joinpath(@__DIR__, "..", "..", "scenarios")
+        sA = load_scenario(joinpath(base, "slice36_handover.yaml"))   # err = 0 — the FOIL
+        sB = load_scenario(joinpath(base, "slice36_biased.yaml"))     # err = −6 — the wire that HOLDS
+        mA = sA.world.entities[:m1]; mB = sB.world.entities[:m1]
+
+        @test sA.world.seed == 32 && sB.world.seed == 32
+        @test sA.dt_physics == 1.0e-3 && sB.dt_physics == 1.0e-3
+        # ⭐⭐ THE PAIR ISOLATES **ONE** NUMBER, AND THIS IS THE ASSERT THAT SAYS SO. The two files are
+        # the A/B (the key cannot be a knob — it is consumed once at tick 1), so any difference other
+        # than the authored handover error is a bug, not a variation. Compared by SET DIFFERENCE over
+        # the whole comp dict rather than by a hand-listed key tuple, because a hand-listed tuple
+        # cannot catch a key that exists on ONE side only — which is exactly the failure this pair is
+        # most exposed to.
+        @test keys(mA.comp) == keys(mB.comp)
+        @test [k for k in sort!(collect(keys(mA.comp))) if mA.comp[k] != mB.comp[k]] ==
+              [:gimbal_handover_err_deg]
+        @test mA.comp[:gimbal_handover_err_deg] == 0.0
+        @test mB.comp[:gimbal_handover_err_deg] == -6.0
+        # …and the target halves are identical too (the crossing is what creates the requirement's
+        # rate-dependence at all, so it may not differ between the halves of the contrast).
+        @test sA.world.entities[:tgt1].comp == sB.world.entities[:tgt1].comp
+        @test sA.world.entities[:tgt1].vel == sB.world.entities[:tgt1].vel
+
+        # THE PLANT IS SLICE 35's TO THE DIGIT **MINUS THE GLASS** — that is what makes any movement
+        # between the two slices attributable to the handover and the missing radome and nothing else.
+        let m35 = load_scenario(joinpath(base, "slice35_rate.yaml")).world.entities[:m1]
+            for k in (:sigma_seek, :alpha, :beta, :seek_two_angle, :n_pn, :a_max, :delta_max,
+                      :k_alpha, :k_q, :mass_kg, :cd_area_m2, :rho, :af_cma, :af_cmd, :af_cmq,
+                      :af_cla, :af_alpha_max, :af_cy_beta, :af_I, :af_I_roll, :af_I_zz,
+                      :af_c_roll, :af_d, :gimbal_tau_s, :gimbal_stop_deg)
+                @test mA.comp[k] == m35.comp[k]
+            end
+            # ⚠ THE GLASS IS ASSERTED **ABSENT**, not merely left out (slice 35's discipline pointed
+            # at the family it disqualified): on a radome-free wire every `radome_*` key would be a
+            # DEAD KNOB, and slice 35's own `radome_slope_est` slider goes with them.
+            for k in (:radome_slope, :radome_ripple, :radome_ripple_k, :radome_slope_est)
+                @test haskey(m35.comp, k)                 # …it IS slice 35's, so the mirror is real…
+                @test !haskey(mA.comp, k)                 # …and it is gone from both halves here.
+                @test !haskey(mB.comp, k)
+            end
+        end
+        # THE WINDOW AND THE SERVO — the two numbers gate 3 re-authored, and the DEFAULT IS THE FLOOR
+        # (the showcase opens on the disease: at 8 °/s wire A is BROKEN and wire B HELD, same servo).
+        @test mA.comp[:gimbal_fov_deg] == 10.0 && mB.comp[:gimbal_fov_deg] == 10.0
+        @test mA.comp[:gimbal_rate_dps] == 8.0 && mB.comp[:gimbal_rate_dps] == 8.0
+
+        # ⚠⚠ THE MARKER, AND THE RE-CHECK CAME BACK **POSITIVE** — the opposite of slice 35's, and for
+        # a reason no earlier slice of this arc could have had: THIS IS THE FIRST NO-GLASS WIRE SINCE
+        # SLICE 25. `radome_view` is what dropped the shared button for slices 26–35 (slice 33 wrote
+        # that down as a finding and 34/35 inherited it), and it is keyed on `haskey(:radome_slope)`.
+        # With the glass gone it is ABSENT, and `seeker_fov_view` is absent too because the loader
+        # REFUSES `seeker_fov_deg` beside a head — so BOTH of the client's drop-the-button branches
+        # fail and its dispatch reaches slice 25's `seeker_axes` cycler. ⇒ this marker does slice 34's
+        # job AND slice 32's: it plugs a BUTTON hole at both client sites and selects the HUD branch.
+        for scn in (sA, sB)
+            let info = EWSim._airframe_view_info(scn.world)
+                @test info[:gimbal_handover_view] === true
+                @test info[:gimbal_rate_view]     === true   # …a rate-limited head is still here…
+                @test info[:gimbal_view]          === true   # …and a head…
+                @test info[:airframe_6dof]        === true
+                # ⭐⭐ THE TWO ABSENCES ARE THE FINDING, asserted as the POSITIVE facts they are:
+                @test !haskey(info, :radome_view)            # no glass ⇒ the free ride is over
+                @test !haskey(info, :seeker_fov_view)        # refused beside a head (slice 34's)
+            end
+        end
+        # THE MIRROR — no OTHER wire may raise it, or the branch selector selects slice 35's wire too
+        # and slice 35's own HUD is the one that disappears (slice 32/35's `!haskey`-as-a-feature).
+        for f in readdir(base)
+            endswith(f, ".yaml") || continue
+            (f == "slice36_handover.yaml" || f == "slice36_biased.yaml") && continue
+            let inf = EWSim._airframe_view_info(load_scenario(joinpath(base, f)).world)
+                inf === nothing || @test !haskey(inf, :gimbal_handover_view)
+            end
+        end
+
+        # CONVENTION 9 — EXACTLY ONE LIVE KNOB PER WIRE, and the other half of the lesson is AUTHORED.
+        # ⚠ The authored key must NOT appear as a knob on either wire: it is structurally dead, slice
+        # 19's tripwire would FAIL on it, and `_parse_knobs` refuses it BY NAME (tested above on a
+        # synthetic wire — this is the same claim about the SHIPPED files).
+        for scn in (sA, sB)
+            let ks = Dict(kb.key => kb for kb in scn.knobs)
+                @test collect(keys(ks)) == [:gimbal_rate_dps]
+                @test ks[:gimbal_rate_dps].min == 8.0        # the FLOOR — measured below
+                @test ks[:gimbal_rate_dps].max == 60.0
+                @test ks[:gimbal_rate_dps].target === :m1
+                for dead in (:gimbal_handover_err_deg, :gimbal_fov_deg, :gimbal_stop_deg,
+                             :gimbal_tau_s, :radome_slope_est, :cross_speed_mps, :n_pn, :rho,
+                             :af_alpha_max, :sigma_seek)
+                    @test !haskey(ks, dead)
+                end
+            end
+        end
+
+        # ══ THE WINDOW'S NUMBER, DERIVED FROM FLOWN ARMS RATHER THAN FROM THE GRID ══════════════════
+        # ⚠⚠ THE CRITERION IS **INVERTED** FROM SLICE 35's, and that is the trap this block exists to
+        # keep visible. Slice 35 authored its window to CLEAR the worst requirement anywhere a student
+        # can drag to — one number, one direction. Here the window must SIT INSIDE the requirement's
+        # range on wire A (or the slider crosses nothing and there is no showcase) and ABOVE it on wire
+        # B over the WHOLE domain (or "the slider stops mattering" is false). Two sides, two asserts.
+        # ⚠ The fine grid (210 cells at 0.5 °/s, `g3_grid.jl`) is what CHOSE 10.0; what is asserted
+        # here is the PROPERTY, re-derived from arms flown in this process.
+        let W = 10.0
+            # WIRE A: the requirement CROSSES the window inside the domain, and the crossing is a
+            # MEASURED BRACKET — never interpolated (the requirement is non-monotone in both sliders).
+            reqA = Dict(rt => harm(n = 5000, rate = rt).off_max for rt in (8.0, 10.0, 10.5, 11.0, 60.0))
+            @test isapprox(reqA[8.0],  12.34604; atol = 1.0e-4)   # the domain floor's requirement
+            @test isapprox(reqA[10.0], 10.32507; atol = 1.0e-4)   # …still OVER the window…
+            @test isapprox(reqA[10.5],  9.89727; atol = 1.0e-4)   # …and UNDER it half a step later
+            @test reqA[10.0] > W && reqA[10.5] < W                # ⇒ THE BRACKET, as a comparison
+            @test isapprox(reqA[60.0],  2.11192; atol = 1.0e-4)   # the ceiling: the servo is free
+            # WIRE B: NO crossing anywhere, with a MEASURED margin — and FLAT, because the left arm of
+            # the V is `|err|` EXACTLY and no bandwidth touches an initial condition.
+            reqB = Dict(rt => harm(n = 5000, rate = rt, err = -6.0).off_max
+                        for rt in (8.0, 11.0, 40.0, 60.0))
+            @test isapprox(reqB[8.0], 8.09069; atol = 1.0e-4)
+            @test reqB[8.0] < W                                   # the WORST cell in the domain…
+            @test W - reqB[8.0] > 1.9                             # …clears it by 1.909° (1.24×)
+            # ⚠ FLAT means IDENTICAL TO EACH OTHER, and `=== 6.0` is the assert that does NOT hold —
+            # gate 1 Finding 2's round-trip again (deg→rad→deg is not the identity; worst |Δ| 3.6e-15°).
+            # The content is that three different servos read the SAME initial condition, so THAT is
+            # what is pinned in bits, and the `6.0` is pinned to an `atol`.
+            @test reqB[11.0] === reqB[40.0] && reqB[40.0] === reqB[60.0]
+            @test isapprox(reqB[11.0], 6.0; atol = 1.0e-12)
+            # ⭐ AND THE VERDICTS, FLOWN WITH THE SHIPPED WINDOW — the pair at the SAME servo, which is
+            # what the two wires and both shots are. The miss is `===` on every arm that holds: the
+            # price of the bias is EXACTLY ZERO and the only thing it changes is whether the track is
+            # held at all (slice 32's asymmetry with the cost column at 0).
+            let a8 = harm(rate = 8.0, gfov = W), b8 = harm(rate = 8.0, gfov = W, err = -6.0),
+                a11 = harm(rate = 11.0, gfov = W)
+                @test a8.out > 0.0 && isapprox(a8.miss, 3290.078; atol = 0.01)   # PERFECT ⇒ LOST
+                @test b8.out == 0.0                                              # BIASED  ⇒ HELD
+                @test a11.out == 0.0                                             # …or buy a servo
+                @test b8.miss === a11.miss                                       # …and the SAME bits
+                @test isapprox(b8.miss, 0.19116; atol = 1.0e-4)
+                # ⚠ THE HELD ARM's PEAK **IS** THE FREE-WINDOW REQUIREMENT, and that is what lets a
+                # verifier read a requirement at all on a wire whose window is AUTHORED (it has no
+                # free-window arm to fly). Measured `===`, not "close": the window gates the DETECTOR,
+                # and on an arm that never breaches it nothing about the peak can differ.
+                @test b8.off_max  === reqB[8.0]
+                @test a11.off_max === harm(n = 5000, rate = 11.0).off_max
+                # ⚠⚠ AND ON THE BROKEN ARM IT IS THE POST-BREAK RUNAWAY — the two-run discipline's
+                # FIFTH quantity, failing LARGE where slice 34's `head_angle_deg` failed small. A
+                # reader of a break table who takes this for a requirement over-designs by ~8.7×.
+                @test a8.off_max > 100.0
+                @test a8.off_max > 8.0 * reqA[8.0]
+                # THE ISOLATION, AS COUNTS INSIDE THE r > 200 GATE (gate 1 Finding 4's discipline):
+                # `defl_sat` EXACTLY 0 and `aero_sat` the ONE launch-transient tick on every arm ⇒
+                # slice 32's POINTING miss, on BOTH sides of the basket — full authority, no idea
+                # where to point it. ⚠ And the broken arm's band is EMPTY (its CPA is 3.3 km), which
+                # is the POSITIVE fact "no band metric may carry this claim" rests on.
+                for arm in (a8, b8, a11)
+                    @test arm.n_defl == 0
+                    @test arm.n_sat == 1
+                end
+                @test a8.n_band == 0
+                @test b8.n_band > 4000 && a11.n_band == b8.n_band
+            end
+            # ⭐⭐ THE FLOOR IS SLICE 35's NUMBER FOR A DIFFERENT REASON, MEASURED RATHER THAN COPIED.
+            # Slice 35's 8 °/s rested entirely on the RING (100 % band saturation below it, and the
+            # 0-vs-97 split at exactly 8) and NEITHER survives the loss of the glass. What bounds the
+            # floor here is the BIASED WIRE's OWN CLAIM: one bracket below the domain it breaks too.
+            # ⇒ the bias buys MARGIN, NOT IMMUNITY (slice 27's phrase, in a third currency).
+            let b6 = harm(rate = 6.0, gfov = W, err = -6.0), b7 = harm(rate = 7.0, gfov = W, err = -6.0)
+                @test harm(n = 5000, rate = 6.0, err = -6.0).off_max > W    # the requirement crosses…
+                @test b6.out > 0.0                                          # …and the track is LOST
+                @test isapprox(b6.miss, 2398.200; atol = 0.01)
+                @test b7.out == 0.0                                         # the last holding cell
+            end
+            # THE STOP NEVER BINDS ON EITHER SHIPPED WIRE, so slice 34's "the stop and the window are
+            # ONE budget" stays clean and the WINDOW is the only limit in play. ⚠ `head_max` is FLAT
+            # on wire A across the whole rate domain because it IS the tick-1 birth angle.
+            @test isapprox(harm(n = 5000, rate = 8.0).head_max,  18.11891; atol = 1.0e-4)
+            @test isapprox(harm(n = 5000, rate = 60.0).head_max, 18.11891; atol = 1.0e-4)
+            @test harm(n = 5000, rate = 8.0, err = -6.0).head_max < 15.2
+            for a in (harm(n = 5000, rate = 8.0), harm(n = 5000, rate = 8.0, err = -6.0))
+                @test a.head_max < 30.0 - 11.0                # ≥ 11° of margin on the 30° stop
+            end
+        end
+
+        # ══ THE MECHANISM, ON THE WIRE: THE SIGNED EXCURSION, AND THE `hypot` THAT CANNOT SHOW IT ═══
+        # ⭐⭐ THE KEY GATE 3 SHIPPED, AND THE REASON IT HAD TO. Gate 0 §0.4 attributed the basket's
+        # asymmetry to the body-frame LOS *settling* 18.1° → 15.2°, inferred from `head_max` — A `hypot`,
+        # WHICH CANNOT SHOW A SIGN (the #1 SIGN TRAP's 10th occurrence, and the story was wrong). Logged
+        # signed, the azimuth CROSSES THROUGH ZERO to −15.15°: a 33.2° EXCURSION, which is the whole
+        # mechanism (a head handed over ON the LOS must chase the entire journey; one handed over
+        # part-way along it starts with a head start). ⚠ Until gate 3 this number existed only in a
+        # probe, so the HUD could not draw the mechanism and the claim could not be pinned on the wire.
+        # ⚠⚠ READ INSIDE THE r > 200 m GATE, AND THE UNGATED FIRST DRAFT FAILED HERE: the endgame LOS
+        # swing takes this azimuth to +164.29° at CPA (an "excursion" of 182.02°), which is the same
+        # 179°-class endgame artifact as `head_off_peak_deg`'s and as the miss's own re-crossing. Three
+        # quantities in this slice, one warning: [[ewsim-missile-verifier-sampling]].
+        let a = harm(n = 11000, rate = 8.0)               # to CPA — the excursion is approach-long
+            @test isapprox(a.az1, 18.105365; atol = 1.0e-4)          # BORN at the perfect handover…
+            # ⚠ …AND THAT IS NOT QUITE THE MAXIMUM, WHICH THE FIRST DRAFT ASSERTED AS `===` AND FAILED:
+            # the LOS azimuth RISES 0.015° over the first ticks before the body rotation takes over
+            # (18.105365 → 18.120394). Immaterial to a 33.2° excursion, but it is measured rather than
+            # rounded away — and it is why the tick-1 birth angle is pinned SEPARATELY from the peak.
+            @test a.az_hi >= a.az1
+            @test a.az_hi - a.az1 < 0.02                             # …and it is the peak to 0.015°…
+            @test a.az_lo < -15.0                                    # …and it ends up NEGATIVE.
+            @test a.az_hi - a.az_lo > 33.0                            # THE 33.2° EXCURSION
+            # ⭐ AND THE `hypot` BESIDE IT NEVER GOES NEGATIVE — the sign trap, pinned rather than
+            # narrated: `look_body_deg` bottoms out at ~0 as the LOS sweeps through the nose and would
+            # read the same journey as a gentle "settle", which is exactly the wrong story.
+            @test a.body_lo >= 0.0
+            @test a.body_lo < 1.0                                    # …it DOES pass through the nose…
+            @test !isapprox(a.body_lo, abs(a.az_lo); atol = 1.0)     # …and it is NOT |az| at the end
+        end
+        # ⚠⚠ THE CONTROL THAT MAKES THIS A STATEMENT ABOUT THE **ENGAGEMENT** RATHER THAN ABOUT
+        # HANDOVER ERRORS: reverse the crossing and the same quantity is nearly STATIC (a ~2.2° swing
+        # against 33.2°), and there the requirement is EXACTLY `|err|` at every servo rate — the servo
+        # becomes irrelevant. ⇒ THE RATE-DEPENDENCE OF THE BASKET IS CREATED ENTIRELY BY THE
+        # ENGAGEMENT's OWN LOS EXCURSION. ⚠ NOT client-drivable (target velocity is not a comp key), so
+        # it lives here and not in the verifier — slice 27/28's relocation precedent.
+        let rev = harm(n = 11000, rate = 8.0, vy = -200.0)
+            @test rev.az_hi - rev.az_lo < 3.0                        # nearly STATIC
+            for rt in (8.0, 40.0)
+                @test isapprox(harm(n = 5000, rate = rt, vy = -200.0, err = -6.0).off_max, 6.0;
+                               atol = 1.0e-3)                        # EXACTLY |err|, at BOTH rates
+            end
         end
     end
 end

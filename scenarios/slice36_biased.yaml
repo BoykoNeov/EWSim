@@ -1,0 +1,119 @@
+# slice36_biased — THE HANDOVER BASKET, THE HALF THAT HOLDS: A HANDOVER 6° "WRONG" KEEPS THE TRACK
+# THAT A PERFECT ONE LOSES (HANDOFF §11 Tier-A, slice 36 gate 3).
+#
+# ⚠ THIS FILE IS `scenarios/slice36_handover.yaml` WITH ONE NUMBER CHANGED —
+# `gimbal_handover_err_deg: -6.0` INSTEAD OF `0.0`. Nothing else differs: same seed, same plant, same
+# crossing target, same 30° stop, same 10° detector window, same 8 °/s servo default, same one slider.
+# READ THAT FILE'S HEADER FOR THE LESSON; this one records only what its own number does, because a
+# duplicated lesson paragraph is a paragraph that can drift out of agreement with the wire it explains.
+#
+# ⭐⭐ WHY THE SLICE SHIPS A PAIR RATHER THAN A RUNG. `gimbal_handover_err_deg` is STRUCTURALLY A DEAD
+# KNOB — `_observe_point3d!` mints the head only when `:head_az` is ABSENT and writes it back
+# unconditionally at the end of every tick, so the key is consumed exactly once, at tick 1, and never
+# read again. A slider on it would move NOTHING (slice 19's `speed`, slice 21's launch altitude; the
+# 5th occurrence in this arc, and the first caught BEFORE the key was written), slice 19's
+# NOT-A-DEAD-KNOB TRIPWIRE would FAIL on it, and `_parse_knobs` REFUSES it by name. So the contrast
+# has to be two files — slice 34's precedent, where `gimbal_tau_s` is authored for the same class of
+# reason (no in-domain slider value removes a head).
+#
+# ⭐⭐ WHAT THIS WIRE MEASURES, AND IT IS THE PAYLOAD SLICE 35 SAID WAS UNBUYABLE. Slice 35 shipped the
+# arc's first TWO-SIDED knob: one servo slider, two bounds pulling in opposite directions, and NO free
+# direction. On the err = 0 twin the requirement walks 2.112 → 12.346° as the servo slows 60 → 8 °/s
+# (5.8×) and CROSSES the 10° window below the measured bracket, so the track is lost and the missile
+# misses by 3290.078 m. On THIS wire, over the same slider and the same fine grid:
+#
+#     °/s      | 8       9       10      11    …    42.5 … 60
+#     req°     | 8.09069 7.16518 6.41152 6.00000 … 6.00000 … 6.00000       (FLAT: 100 of 105 cells)
+#     verdict  | HELD    HELD    HELD    HELD  …  HELD  …  HELD            (53 of 53 at 1 °/s)
+#     miss (m) | 0.191   0.191   0.191   0.191 …  0.191 …  0.191           (`===`, all 64 bits)
+#
+# ⇒ A CORRECTLY BIASED HANDOVER MAKES THE SERVO RATE STOP MATTERING, because the left arm of the
+# requirement's V is `|err|` EXACTLY — the tick-1 peak, an INITIAL CONDITION, before the servo has done
+# anything — and no bandwidth touches an initial condition. The requirement's worst value anywhere in
+# the declared domain is 8.09069° against a 10° window: a margin of 1.909° (1.24×), MEASURED on the
+# fine grid rather than at the corners.
+#
+# ⚠ AND THE BIAS BUYS MARGIN, NOT IMMUNITY — WHICH IS WHY THE SLIDER'S FLOOR IS WHERE IT IS. Below the
+# domain this wire breaks too: at 6 °/s its requirement is 10.523° and the track is lost at t = 1.167 s
+# (miss 2398.200 m). The last holding cell is 7 °/s (9.203°) and the floor ships at 8. ⇒ "the slider
+# stops mattering" is a statement ABOUT THE DECLARED DOMAIN, and the domain's floor is the measurement
+# that makes it true rather than a boundary chosen to protect it.
+#
+# ⚠ −6° IS INSIDE THE BASKET BUT IS NOT ITS OPTIMUM, AND THE FILE SAYS SO RATHER THAN IMPLYING
+# OTHERWISE. At 8 °/s the argmin of the requirement is −8° (8.0000°, the pure `|err|` arm) against
+# −6°'s 8.09069 — a 0.09° difference, i.e. −6 is one grid step off the kink and is chosen because it
+# sits comfortably inside the holding set [−8, −4] from BOTH sides. Too little bias breaks the track
+# and TOO MUCH BIAS BREAKS IT (−10° misses 3620.7 m), and the headline is that ZERO IS OUTSIDE the set
+# that holds. ⚠⚠ [−18.1°, +11.9°] is the DECLARED DOMAIN — where the key is MEANINGFUL — and it is NOT
+# the basket; nothing in this file, the HUD or the verifier may present one as the other.
+#
+# ⭐ THE PRICE OF THE BIAS IS EXACTLY ZERO, AND THAT IS `===` RATHER THAN A ROUNDED AGREEMENT. This
+# wire's CPA is the identical 64 bits as the perfect handover's on any arm that holds — miss
+# 0.19116048719212922, CPA position (5999.8334218207992, 4185.714198674571, 4199.9621559124289) — so a
+# handover error cannot buy accuracy or sell it. The only thing it changes is whether the track is held
+# at all: slice 32's asymmetry with the cost column at 0.
+#
+# ⚠ NO GLASS (see the twin's header — three measured reasons), NO NEW CAP, NO NEW RUNG, NO NEW
+# INSTABILITY, NO NEW DRAW. Class 4a, 2 randn/tick, the TWELFTH consecutive RNG-live slice.
+# NAMED APPROXIMATIONS and UNITS: as the twin's header, verbatim and unchanged.
+name: slice36_biased
+seed: 32
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # Identical to the twin's, key for key — FIVE fidelities, NONE toggled. The pair IS the A/B.
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+
+entities:
+  # Identical to the twin's interceptor, key for key, EXCEPT `gimbal_handover_err_deg`. Any other
+  # difference between these two files is a bug: the pair is the slice's entire contrast, so it must
+  # isolate ONE number (the 30° stop never binds on either — `head_max` runs 14.995 → 15.197° here
+  # against 18.11891° there, 14.8° and 11.9° of margin over 210 measured cells — and the 10° window is
+  # the only limit in play on both).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               gimbal_tau_s: 0.05, gimbal_stop_deg: 30.0, gimbal_fov_deg: 10.0,
+               gimbal_rate_dps: 8.0, gimbal_handover_err_deg: -6.0}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # Identical to the twin's target, key for key. ⚠ The CROSSING is what creates the requirement's
+  # rate-dependence at all (the reversed-crossing control is a tooth in `test_missile.jl`, where the
+  # requirement is EXACTLY |err| at every servo rate and the servo is irrelevant).
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 200.0, 0.0]
+    target: {rcs_m2: 1.0, cross_speed_mps: 200.0}
+
+knobs:
+  # THE SAME ONE KNOB AS THE TWIN, with the same measured endpoints and the same reasons — and here it
+  # is the slider that DOES NOTHING, which is the point. Dragging it from 8 to 60 °/s moves the
+  # requirement 8.09069 → 6.00000° (flat from 11 up), leaves the verdict HELD in all 53 cells and the
+  # miss bit-identical. ⚠ THE LABEL SAYS SO EXPLICITLY: a student who drags a slider and sees nothing
+  # change must be told that the nothing IS the measurement, or they will read it as a broken control.
+  - {target: m1, key: gimbal_rate_dps, min: 8.0, max: 60.0,
+     label: "SERVO: max head slew (deg/s) — biased right, it stops mattering (the miss never moves)"}

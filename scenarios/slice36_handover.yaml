@@ -1,0 +1,251 @@
+# slice36_handover — THE HANDOVER BASKET: THE CHEAPEST PLACE TO HAND A SEEKER ITS TARGET IS NOT AT
+# THE TARGET (HANDOFF §11 Tier-A, slice 36 gate 3). The FOURTEENTH slice of the bank-to-turn / 3-D arc
+# (23 = the 6-DOF substrate + skid-to-turn, 24 = bank-to-turn + roll-lag, 25 = a seeker in the 6-DOF
+# loop, 26 = the radome parasitic loop, 27 = the compensation autopilot, 28 = the slope CURVE, 29 = the
+# SCHEDULED compensator, 30 = the ENVELOPE and the one-sided constraint, 31 = an imperfect gyro,
+# 32 = the seeker's field of view, 33 = the ring as an FOV budget item, 34 = the gimbal, 35 = a
+# rate-limited head), and the deferral slice 32 named as its P5, slice 34 PROMOTED to a live
+# constraint, and slice 35 SHARPENED into the strongest remaining candidate of the family.
+#
+# ⚠ THIS IS THE **err = 0** HALF OF A PAIR. `scenarios/slice36_biased.yaml` is this file with ONE
+# number changed — `gimbal_handover_err_deg: -6.0` — and nothing else, not even a comment about the
+# physics. The PAIR IS THE A/B: there is no rung to toggle here, because the key is STRUCTURALLY A
+# DEAD KNOB (it is consumed once, at tick 1, and never read again — slice 19's `speed` and slice 21's
+# launch altitude verbatim, the 5th occurrence in this arc, and `_parse_knobs` now refuses it BY NAME).
+# Slice 34's precedent exactly: `gimbal_tau_s` is authored there for the same class of reason.
+#
+# Since slice 34 the head has been handed its target PERFECTLY: tick 1 initialises it to the clamped
+# truth look angles — a truth read on a path whose whole thesis is that the head never sees truth.
+# Slice 34 wrote that down as a §1 condition; slice 35 found that a rate limit makes the resulting
+# ACQUISITION TURN the largest slew demand in the whole engagement, and gated it away with a range
+# band and a deliberately wide window. Slice 36 makes the handover itself an AUTHORED QUANTITY, and
+# the question that was gated away has an answer nobody in the arc predicted.
+#
+# ⭐⭐ THE WINDOW A SEEKER NEEDS IS NOT |err|. The body-frame LOS is not a fixed target: over the
+# approach it travels +18.11° → −15.15°, a 33.2° EXCURSION, as the missile swings its nose onto the
+# collision course. A head handed over ON the LOS must chase that entire journey and a rate-limited
+# servo falls 12.35° behind doing it; a head handed over 8° ALONG the journey never falls further
+# behind than the 8° it started with. So the requirement is a **V** — its left arm the handover error
+# itself (the tick-1 peak, before the servo has done anything), its right arm the CHASE COST — and the
+# cheapest basket sits at the KINK, which is not at zero and which the servo MOVES (argmin −2° at
+# 40 °/s, −8° at 8 °/s, a 1.54× saving).
+#
+# > THE LESSON, IN ONE SENTENCE. The cheapest place to hand a seeker its target is not at the target —
+# > it is part-way to where the target is *going*, and how far depends on how fast a servo you bought.
+#
+# ⭐⭐ AND THE BIAS BUYS WHAT SLICE 35 SAID COULD NOT BE BOUGHT. Slice 35 shipped the arc's first
+# TWO-SIDED knob: servo bandwidth is not a window, so "widen it — it's free" stopped working and there
+# was no free direction to run in. On THIS wire that is exactly what the requirement does — it walks
+# 2.112 → 12.346° as the servo slows 60 → 8 °/s (5.8×), crossing the 10° window below the bracket.
+# On the biased twin it reads 6.00000 over 100 of 105 fine-grid cells: HELD EVERYWHERE, and FLAT.
+# ⇒ A CORRECTLY BIASED HANDOVER MAKES THE SERVO RATE STOP MATTERING, because the left arm of the V is
+# an INITIAL CONDITION and no bandwidth touches it. That is the free direction slice 35 could not
+# find, and it is not on slice 35's axis.
+#
+# ⭐ AND IT IS FREE IN ACCURACY, BIT-EXACTLY. Every arm across the whole declared domain — −18° to
+# +11°, both servo rates, free window, AND the windowed holding rows — returns the identical 64 bits
+# `miss = 0.19116048719212922` and the identical CPA position to 17 digits. Not "the same to three
+# decimals": `===`. The price of the bias is EXACTLY ZERO, and the only thing a handover error can
+# change is whether the track is held at all — slice 32's asymmetry with the cost column at 0.
+#
+# ⚠⚠ THE DECLARED DOMAIN IS **NOT** THE BASKET, AND NOTHING HERE MAY PRESENT ONE AS THE OTHER.
+# [−18.1°, +11.9°] is the range over which the KEY IS MEANINGFUL (its lower end is the negative of the
+# perfect handover, where the head is born pointing down its own nose in azimuth — a coincidence with
+# the arc's CAGED degenerate, and a MODELLING choice; its upper end is where the head is born ON the
+# 30° stop and the key GOES INERT — a mechanism, the requirement agreeing to 5e-4° over a 1.7× span of
+# authored error). The set of handover errors that HOLD THE TRACK on this wire is far smaller —
+# roughly [−8, −4] at 8 °/s behind this 10° window — and the headline is that ZERO IS OUTSIDE IT.
+#
+# ⚠ NO GLASS ON THIS WIRE, AND THAT IS MEASURED RATHER THAN CONVENIENT — the first radome-free missile
+# wire since slice 25 and the first of this arc. Three reasons, in the order they were established:
+# (1) a handover error is EXACTLY INERT on the trajectory with no glass and a free window (miss, CPA
+# position, rms r and the band requirement all bit-identical across every error at every rate, 30
+# cells) ⇒ the basket reaches the trajectory through the WINDOW or through the INDEX and through
+# nothing else; (2) the break itself is glass-INDIFFERENT — err −18 / window 15 misses 3620.131 m WITH
+# the glass and 3620.675 m WITHOUT, 0.5 m apart on a 3.6 km miss; and (3) on a LOUD-glass twin the
+# isolation would discriminate in NEITHER direction (`aero_sat` 27–48 % on the broken rows), which is
+# slice 33's inversion. ⇒ convention 9, on a measurement.
+#
+# ⚠ NO NEW CAP, NO NEW RUNG, NO NEW INSTABILITY, NO NEW DRAW. Class 4a (2 randn/tick, the TWELFTH
+# consecutive RNG-live slice — the seed is load-bearing and conventions 3/11 apply). What is new is one
+# comp key, an AUTHORED quantity where there was a truth read, two telemetry numbers that measure it,
+# and the finding that its optimum is not zero.
+#
+# NAMED APPROXIMATIONS (§1): ONE SIGNED handover error in AZIMUTH — not a DISTRIBUTION (a real
+# handover has a covariance and the design question is a Pk over the basket; a named deferral) and not
+# the ELEVATION half (the error is authored where the lead and the excursion are — slice 28's channel
+# split — and the elevation is asserted `===` UNCHANGED at tick 1, which is the tooth that deferral
+# would have to break); a HANDED-OVER head, now with an error but still with no HANDOVER BASKET
+# GEOMETRY behind it; NO MEMORY TRACK (a break is TERMINAL — and a memory track is exactly what would
+# rescue the too-much-bias side, making the basket ONE-SIDED: a real prediction and a real slice); a
+# FIRST-ORDER servo WITH A RATE LIMIT (no ω_a/ζ_a — slice 35's own named successor); a CIRCULAR stop
+# AND a CIRCULAR window AND a RADIAL rate limit; NO HEAD GYRO; plus everything 26–35 named, unchanged,
+# EXCEPT the radome family itself, which is absent from this wire entirely (⚠ so nothing here may be
+# read as a statement about glass, and `radome_*` keys are asserted ABSENT by the verifier — they would
+# be dead knobs).
+#
+# UNITS (§1 trifecta): pos/vel SI; angles rad INSIDE the core; `gimbal_stop_deg` / `gimbal_fov_deg` /
+# `gimbal_handover_err_deg` / `gimbal_fov_margin_deg` / `head_angle_deg` / `head_off_deg` /
+# `head_off_peak_deg` in DEGREES at the wire boundary — and the new key is SIGNED, because which way
+# you miss the LOS is the entire lesson; ⚠ `gimbal_rate_dps` / `head_rate_dps` in DEGREES PER SECOND
+# (the name carries its unit where the angles above do not, deliberately: a RATE has a time in it).
+# `gimbal_tau_s` in SECONDS; σ_seek in RADIANS; `cross_speed_mps` in m/s and SIGNED; I in kg·m²; ρ in
+# kg/m³; launch ELEVATION in DEGREES → radians at the loader. dt = 1e-3 / emit_every = 16.
+name: slice36_handover
+seed: 32
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # FIVE keys, NONE toggled — the lesson is the AUTHORED PAIR plus ONE slider (the
+  # 16/20/26/27/28/29/30/31/32/33/34/35 shape, and the TWELFTH consecutive slice with no fidelity
+  # button at all). Held to slice 35's wire to the digit: `airframe` at :six_dof (the head is gated on
+  # the LIVE rung, never on `haskey(:head_az)` — the slice-21 `_atm_on` latent-bug class), `seeker_axes`
+  # at :az_el (a two-angle seeker is what HAS a look angle at all, and the loader REFUSES the gimbal
+  # keys without it), `seeker` at :filtered, `autopilot` :alpha and `guidance` :pn as in 23–35.
+  # `steering` is OMITTED (the loader default IS :skid_to_turn).
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+
+entities:
+  # The interceptor — slices 23–35's plant and launch condition, UNCHANGED to the digit, so that
+  # anything that moves between this wire and slice 35's is the handover error and the missing glass
+  # and nothing else. n_pn = 8 is slice 27's, AUTHORED and NEVER A KNOB (26–35 all disqualified it).
+  #
+  # ⚠ elevation_deg = 12.0 IS LOAD-CONSUMED AND IS NOT A KNOB (the slice-19 DEAD-KNOB class), and it
+  # is ALSO what the handover error is measured against: it sets the tick-1 body-frame LOS, +18.105°,
+  # which is why the domain's endpoints are where they are (−18.105 births the head at azimuth
+  # EXACTLY 0.000000°, and +11.9 births it ON the stop).
+  #
+  # THE HEAD:
+  #   gimbal_tau_s  τ = 0.05 — AUTHORED. Slice 34's gate 2 measured τ CONFOUNDED, not dead, which is a
+  #     STRONGER reason to keep it off the slider list than a dead one would be.
+  #   gimbal_stop_deg = 30.0 — AUTHORED, and NEVER BINDING ON EITHER SHIPPED WIRE: `head_max` is
+  #     18.11891° here (FLAT across the whole rate domain — it is the tick-1 birth angle) and
+  #     14.995→15.197° on the biased twin, i.e. 11.9° and 14.8° of margin over 210 measured cells. ⇒
+  #     slice 34's "the stop and the window are ONE budget" stays clean and the WINDOW is the only
+  #     limit in play. ⚠ The stop is NOT a second route to this lesson: gate 0 measured that authoring
+  #     a 10° stop births the head at exactly 10.000° and RESCUES the showcase — the reparameterization
+  #     gate — and the separation is that the stop's birth angle SATURATES at 18.117 (so the V's right
+  #     arm is unreachable by it), that `head_max === stop` exactly (it CAGES the head for the whole
+  #     flight where an aimed head runs free to the LOS's own 15.173°), and that their verdicts part in
+  #     BOTH directions over a band of crossings. That ships as a tooth in `test_missile.jl`, never as
+  #     a second scenario (convention 9 — and neither route is client-drivable as a contrast).
+  #   gimbal_fov_deg = 10.0 — ⚠⚠ AUTHORED, AND THE CRITERION IS **INVERTED** FROM SLICE 35's. Slice 35
+  #     authored its window to CLEAR the worst requirement anywhere a student can drag to (25° against a
+  #     measured 19.279°) — one number, one direction. This window must SIT INSIDE the requirement's
+  #     range HERE (or the slider crosses nothing and there is no showcase) and ABOVE it on the biased
+  #     twin over the WHOLE domain (or "the slider stops mattering" is false). A TWO-SIDED margin, and
+  #     because the requirement is NON-MONOTONE in both sliders it was re-flown on this slice's own fine
+  #     grid — rate ∈ [8, 60] on a 0.5 °/s step × both wires = 210 cells, free window:
+  #       • this wire:  MAX 12.34604° at 8 °/s → MIN 2.11192° at 42.5 (flat to 60). The cells at or
+  #         above the window are EXACTLY FIVE (8.0, 8.5, 9.0, 9.5, 10.0), the set is CONTIGUOUS and
+  #         anchored at the slow end, and the crossing is a MEASURED bracket: BROKEN at 10.0
+  #         (10.32507°) → HELD at 10.5 (9.89727°). Contiguity is the assert a coarse 7-column sweep
+  #         cannot make — no wrinkle pokes back over the window anywhere in 10.5…60.
+  #       • the biased twin: MAX 8.09069° at 8 °/s, NO crossing anywhere, margin 1.909° (1.24×), and
+  #         FLAT at 6.00000° over 100 of its 105 cells.
+  #     ⚠ The verifier DERIVES both properties from its own arms (`out == 0` and `off_max < window` on
+  #     every arm that holds) rather than trusting that grid.
+  #   gimbal_rate_dps = 8.0 — THE ONE LIVE SLIDER, and the default is its FLOOR on purpose: THE
+  #     SHOWCASE OPENS ON THE DISEASE (slice 35's own precedent). At 8 °/s this wire is BROKEN and the
+  #     biased twin HELD, at the SAME servo — so the pair is legible AT LOAD with nothing dragged.
+  #   gimbal_handover_err_deg = 0.0 — ⚠⚠ THE PERFECT HANDOVER, AND IT IS THE FOIL. An authored 0.0 is
+  #     BIT-IDENTICAL to the key being absent (measured at gate 1 on BOTH geometries, including the
+  #     in-plane SIGNED-ZERO one where `x + 0.0` could have flipped a `-0.0` — it does not, because
+  #     `az_el` hands back `+0.0` there), so this file is byte-identical to a slice-35 wire minus its
+  #     glass. It is authored EXPLICITLY rather than omitted because the pair's whole point is that ONE
+  #     number differs between the two files, and a reader must see which.
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               gimbal_tau_s: 0.05, gimbal_stop_deg: 30.0, gimbal_fov_deg: 10.0,
+               gimbal_rate_dps: 8.0, gimbal_handover_err_deg: 0.0}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # ⭐ THE CROSSING TARGET, AND THE CROSSING IS WHAT CREATES THE REQUIREMENT'S RATE-DEPENDENCE AT ALL.
+  # Same start point as 23–35 (cross-range +Y = 2000 m off the x–z plane) at slice 28's vy = 200 m/s.
+  # ⚠⚠ AND THE CONTROL THAT MAKES THIS A STATEMENT ABOUT THE ENGAGEMENT RATHER THAN ABOUT HANDOVER
+  # ERRORS IS THE REVERSED CROSSING: at vy = −200 the body-frame LOS is nearly STATIC (a 2.2° swing
+  # against this geometry's 33.2° excursion), and there the requirement is EXACTLY |err| at every servo
+  # rate — the asymmetry VANISHES and the servo is irrelevant (`off_max` ratio 8 ÷ 40 °/s: 1.00 in all
+  # six cells, against 1.00 / 1.00 / 1.76 / 5.68 / 3.18 / 2.03 here). That control ships as a tooth in
+  # `test_missile.jl` — target velocity is not a comp key, so it is not client-drivable (slice 27/28's
+  # relocation precedent). AERODYNAMICALLY FREE (no target airframe).
+  # ⚠ `cross_speed_mps` IS AUTHORED AND IS NOT A KNOB HERE, as on slice 34/35 and unlike 30 and 32 — it
+  # moves the LEAD, i.e. slice 32's whole axis, which is what convention 9 forbids beside this lesson.
+  # The authored `vel` and the pin AGREE at the default.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 200.0, 0.0]
+    target: {rcs_m2: 1.0, cross_speed_mps: 200.0}
+
+knobs:
+  # ⚠⚠ EXACTLY ONE LIVE KNOB, AND THE OTHER HALF OF THE LESSON IS AUTHORED. Convention 9 is satisfied
+  # by a MEASUREMENT and not by counting sliders (slice 27's DIAGONAL precedent): the authored error and
+  # the servo are ONE AXIS, because THE SERVO MOVES THE ARGMIN OF THE BASKET (−2° at 40 °/s, −8° at
+  # 8 °/s, a 1.54× saving), and slice 35 is the `err = 0` ROW of this slice's own grid.
+  #
+  # ⚠⚠ `gimbal_handover_err_deg` IS NOT AND CANNOT BE A KNOB: it is consumed exactly once, at tick 1,
+  # and never read again, so a slider on it would move nothing (slice 19's `speed`, slice 21's launch
+  # altitude — the 5th occurrence in this arc, caught BEFORE the key was written). Slice 19's
+  # NOT-A-DEAD-KNOB TRIPWIRE would FAIL on it. `_parse_knobs` now refuses it BY NAME — the first
+  # by-name refusal in the project — because the EXISTING guard would not have caught it: that guard
+  # rejects knobs whose comp key does not exist, which is how 19's and 21's were caught (BY ACCIDENT,
+  # because neither is a comp key at all), and this one's key does exist when authored.
+  #
+  # THE KNOB (`gimbal_rate_dps`, slice 35's servo) — BOTH ENDPOINTS MEASURED ON THIS WIRE WITH THEIR
+  # REASONS (slice 26's post-commit discipline), and neither is inherited from slice 35:
+  #   FLOOR 8: ⚠ SLICE 35's NUMBER FOR A DIFFERENT REASON, which is why it was re-measured rather than
+  #     copied. Slice 35's floor rested entirely on the RING — 100.00 % band saturation below it (the
+  #     open-loop-ramp REDUCTIO) and the 0-vs-97 split at exactly 8 — and NEITHER survives the loss of
+  #     the glass: band saturation at 5 °/s here is 895/4341 = 20.6 %, because there is no oscillation
+  #     to chase. What bounds the floor on THIS wire is the BIASED TWIN's own claim: at 6 °/s its
+  #     requirement is 10.523° against this 10° window and it BREAKS (t = 1.167 s, miss 2398.200 m), so
+  #     "the slider stops mattering" is FALSE below the floor — the bias buys MARGIN, NOT IMMUNITY
+  #     (slice 27's phrase, in a third currency). The last holding cell is 7 °/s (9.203°) and the floor
+  #     ships at 8, one measured bracket above it.
+  #   CEILING 60: slice 35's ceiling, and here it is where the KEY the slider fights goes quiet — the
+  #     requirement is FLAT at 2.11192° from 42.5 °/s up (the servo is no longer the binding term), so
+  #     there is nothing above 60 to reach.
+  #   ⚠ THE DEFAULT IS THE FLOOR, so this slider drags ONE WAY — UP, which is the CURE (a faster servo
+  #     rescues the perfect handover at the measured bracket 10.0 → 10.5 °/s). That is not a shortcoming
+  #     of the domain: dragging DOWN would break the BIASED wire too, which is why the domain stops.
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED AND THE VERIFIER ASSERTS THEIR ABSENCE: the whole
+  # `radome_*` family (there is NO GLASS on this wire — they would be dead knobs, and slice 35's
+  # `radome_slope_est` slider is gone with it), `gimbal_fov_deg` (a live window would make the break an
+  # ACQUISITION break — slice 35's finding, and here the window is the thing the requirement is read
+  # against), `gimbal_tau_s` (CONFOUNDED), `gimbal_stop_deg` (the reparameterization gate above — it
+  # reaches the same rescue by a DIFFERENT mechanism, so it ships as a tooth), `cross_speed_mps` (slice
+  # 32's axis — it moves the LEAD, and it is also this slice's own control), `n_pn` and `rho`,
+  # `af_alpha_max`, `sigma_seek`, `elevation_deg` (the slice-19 DEAD-knob class — and here it is also
+  # what the handover error is measured against).
+  #
+  # ⚠⚠ THE LABEL IS LENGTH-BUDGETED AND THAT IS NOT COSMETIC — SLICE 32's SHOTS PAID FOR IT. Knob
+  # labels are drawn FULL-WIDTH in the UI CanvasLayer, which paints OVER the Node2D `_draw` HUD whose
+  # column starts at `vp.x − 430`; at ~6.2 px per character that is a budget of ~110 CHARACTERS.
+  - {target: m1, key: gimbal_rate_dps, min: 8.0, max: 60.0,
+     label: "SERVO: max head slew (deg/s) — drag UP to buy back the track a perfect handover lost"}

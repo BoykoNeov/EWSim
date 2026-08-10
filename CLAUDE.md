@@ -50,10 +50,10 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–35 COMPLETE & green — 6876 tests at slice 35 gate 3; slice 36 is at GATE 2 and the suite is now 7057.**
+**Slices 1–36 COMPLETE & green — 6876 tests at slice 35 gate 3; slice 36 is DONE and the suite is now 7222.**
 (⚠ the count FELL *at slice 35 gate 3* — 6892 → 6876 — and that direction is accounted for: ~87 new asserts in,
 ~103 out, because a per-entity scenario sweep collapsed into ONE strictly-stronger exact-set assert. The 6876 →
-6988 → 7057 walk since then is slice 36's gates 1 and 2.) **The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–35
+6988 → 7057 → 7067 → 7222 walk since then is slice 36's four gates.) **The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–36
 are into the §11 Tier-A horizon — slice 15 did the actuator/fin half of "6-DOF airframe + actuator/fin dynamics",
 slice 16 the rotational half (pitch-plane θ,q), slice 17 the α→lift→γ TRANSLATION-COUPLING half (the real
 path-changing `:airframe` toggle), slice 18 TERRAIN MASKING behind a third `:propagation` rung + the client's
@@ -322,6 +322,58 @@ rate limit binds on a FRACTION of ticks. ⚠ SHOT B WAS RE-TAKEN: a raw `set_par
 slider label keeps the old number — a LYING PICTURE on a green run, slice 19's press-the-button lesson in a new
 widget. ONE wire (the claim lives inside one slider's domain). Class 4a (11th consecutive), button DROPPED (11th).
 (6876)**
+**And slice 36 THE HANDOVER BASKET: THE CHEAPEST PLACE TO HAND A SEEKER ITS TARGET IS NOT AT THE TARGET — the
+deferral slice 32 named as its P5, slice 34 promoted to a LIVE CONSTRAINT and slice 35 sharpened into the family's
+strongest remaining candidate. Since slice 34 the head has been handed its target PERFECTLY (tick 1 initialises it
+to the clamped TRUTH look angles — a truth read on a path whose whole thesis is that the head never sees truth),
+and slice 35 found the resulting ACQUISITION TURN to be the largest slew demand in the whole engagement and gated
+it away with a band and a wide window. Make the handover an AUTHORED SIGNED ERROR and the question that was gated
+away has an answer nobody in the arc predicted. ⭐⭐ THE WINDOW A SEEKER NEEDS IS NOT `|err|`: the body-frame LOS is
+NOT A FIXED TARGET — it travels **+18.11° → −15.15°, a 33.2° EXCURSION THROUGH ZERO** — so a head handed over ON
+the LOS must chase that whole journey (a rate-limited servo falls 12.35° behind) while one handed over PART-WAY
+ALONG IT starts with a head start. The requirement is a **V**: left arm `|err|` EXACTLY (the tick-1 peak, an
+INITIAL CONDITION, before the servo has done anything), right arm the CHASE COST, and the cheapest basket is the
+KINK — which the SERVO MOVES (argmin −2 → −4 → −8° as it slows 60 → 8 °/s, a 1.54× saving). ⭐⭐ THE SHOWCASE IS A
+BASKET THAT EXCLUDES THE PERFECT HANDOVER: at 8 °/s behind a 10° window err = 0 loses the track and misses by
+**3290.079 m** while err = −6 HOLDS and hits — and −10 breaks again the other way, so ZERO IS OUTSIDE THE SET THAT
+HOLDS. ⭐⭐ AND THE BIAS BUYS WHAT SLICE 35 SAID COULD NOT BE BOUGHT: slice 35's servo was the arc's first TWO-SIDED
+knob with no free direction, and here the biased wire reads **FLAT 6.00000° over 100 of 105 fine-grid cells** —
+A CORRECTLY BIASED HANDOVER MAKES THE SERVO RATE STOP MATTERING, because no bandwidth touches an initial
+condition. ⭐ AND IT IS FREE IN ACCURACY, BIT-EXACTLY (`miss === 0.19116048719212922` and the same CPA position to
+17 digits across the whole domain — slice 32's asymmetry with the cost column at 0). ⚠ NOT slice 33's second term
+and NOT a radome claim: the break is GLASS-INDIFFERENT (3620.131 with the glass vs 3620.675 without) and the wire
+carries NO GLASS — the arc's first since slice 25 — so the budget 32 and 33 built gains a THIRD term:
+`window ≥ the ENGAGEMENT's lead (32) + the LOOP's excursion (33) + THE HANDOVER BASKET (36)`. ⚠⚠ THE KEY IS
+STRUCTURALLY A DEAD KNOB (consumed once at tick 1 — slice 19's `speed`, 5th in this arc, and the FIRST caught
+BEFORE the key was written), so it is AUTHORED, `_parse_knobs` refuses it BY NAME (the project's first by-name
+refusal — the existing guard could not have caught it, because this one IS a comp key), and the contrast is TWO
+SCENARIOS with slice 35's servo as the ONE slider. ⚠⚠ THE WINDOW's CRITERION IS INVERTED FROM SLICE 35's (it must
+SIT INSIDE the requirement's range on one wire and ABOVE it on the other), re-flown over 210 cells at 0.5 °/s
+because the requirement is NON-MONOTONE in both sliders: the ≥-window set is EXACTLY FIVE CELLS, CONTIGUOUS and
+anchored at the slow end, and the crossing is a MEASURED bracket 10.0 → 10.5 °/s. ⚠ THE FLOOR IS SLICE 35's NUMBER
+FOR A DIFFERENT REASON (its ring-based justification does not survive the loss of the glass — 20.6 % band
+saturation at 5 °/s, not 100 %): what bounds it is the BIASED wire's own claim, which FAILS at 6 °/s ⇒ THE BIAS
+BUYS MARGIN, NOT IMMUNITY. ⚠⚠ THE BUTTON DROP WAS NOT FREE AND THE PLAN PREDICTED IT WOULD BE: `radome_view` is
+keyed on authored GLASS, so on the arc's first no-glass wire BOTH client drop-branches fail and slice 25's cycler
+returns ⇒ `gimbal_handover_view` does slice 34's job AND slice 32's (the drop needs BOTH sites, 4th occurrence),
+and slice 35's "a branch selector, not a hole plug" DOES NOT TRANSFER. ⚠ Its HUD half is the STALE-READOUT class's
+9th occurrence, landing on slice 35's own CURE line (`R̂ +0.000   aim point R₀+2A +0.000` for keys that do not
+exist). ⭐⭐ A THIRD TELEMETRY KEY SHIPPED AT GATE 3 because the HUD could not otherwise draw the mechanism: every
+shipped head angle is a `hypot` and A HYPOT CANNOT SHOW A SIGN (gate 0 read the excursion as a 3° "settle" off
+`head_max` and was WRONG — the #1 SIGN TRAP's 10th occurrence), so `look_body_az_deg` is SIGNED. ⚠⚠ THE ENDGAME
+ARTIFACT NOW APPEARS IN THREE QUANTITIES WITH TWO DIFFERENT GATES, each caught by a FAILING assert: the running
+max hits 179.4998° at CPA on EVERY arm (⇒ the client FREEZES its display, a FOURTH instrument shape), the core's
+excursion tooth read 182.02° ungated by RANGE, and the verifier's read 359.778° ungated on the CLOSING LEG (the
+azimuth wrapping through ±180° — slice 32's gate-3 correction verbatim). ⭐⭐ AND THE EXCURSION IS THE TWO-RUN
+DISCIPLINE's SIXTH QUANTITY: 33.182° on a HELD arm against 110.473° (~3.3×) on the broken one. ⭐⭐ THE SHARPEST
+NUMBER REVISES GATE 2's OWN GO/NO-GO: gate 2 measured the emit grid at 0.03–0.27 % of the deciding margin and
+declared slice 33's finding BORROWED — but only on cells whose peak is a SMOOTH interior maximum. On the biased
+wire the requirement is ONE TICK WIDE and a client receiving one tick in sixteen under-reads it by 0.247–1.002°
+(against 0.009° on the foil) ⇒ gate 2's own rule — re-run the comparison that entitled the claim — applied to
+itself. ⚠⚠ AND THE WINDOWED SHOT FOUND A DISPLAY DEFECT NO TEST WOULD HAVE: three LIVE, TRUE numbers whose INVITED
+ARITHMETIC was the runaway, under a correct verdict line (slice 33's defect in a new quantity) — plus the 3rd
+right-edge overrun after 26/28. TWO wires. Class 4a (12th consecutive), button DROPPED (12th — and the FIRST that
+needed an edit to stay dropped). (7222)**
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
@@ -1032,7 +1084,17 @@ itself, stepping 57.7× across the very onset bracket slice 34 measured. Slices 
 — it is what the loop FEEDS ON. Slow the head and the ring is genuinely attenuated while the tracking error it must
 cover grows, so for the first time in the arc one knob carries two bounds pulling in opposite directions and there
 is no free direction to run in. What you CAN still do is aim R̂ at the glass's worst-case slope, and slice 30's rule
-pays for the third time: at the aim point the servo is free at every rate in the catalogue.**
+pays for the third time: at the aim point the servo is free at every rate in the catalogue. And slice 36 shipped
+the deferral this family had carried longest — 32 named it, 34 promoted it to a live constraint, 35 sharpened it and
+gated it away — by making the HANDOVER itself an authored quantity. Every slice since 34 handed the head its target
+perfectly, and the question that was gated away turns out to have an answer nobody predicted: the window a seeker
+needs is not the handover error. The body-frame LOS is not a fixed target — it crosses through zero over the
+approach — so a head handed over ON the line of sight must chase that entire journey while one handed over part-way
+along it starts with a head start, and the requirement is a V whose kink the servo moves. The cheapest place to
+hand a seeker its target is not at the target: it is part-way to where the target is GOING, and how far depends on
+how fast a servo you bought. Zero is outside the basket that holds — and biasing onto the kink buys the one thing
+slice 35 proved could not be bought on its own axis, because the left arm of the V is an initial condition and no
+bandwidth touches an initial condition.**
 The NEXT named candidates:
 **(⚠ "THE GIMBAL" IS NO LONGER ON THIS LIST — SLICE 34 SHIPPED IT, and ⚠⚠ BOTH HALVES OF THE LESSON SLICE 33's
 GATE 0 BANKED FOR IT WERE REFUTED at slice 34's own gate 0: "the gimbal that saves your envelope PARKS YOU ON THE
@@ -1041,16 +1103,22 @@ because a missile points its nose along its velocity plus incidence, so a strapd
 full lead; and "it REWRITES 26–31's `look_az`" collapses at zero servo lag, which makes it a TOOTH and not a
 headline. The live claim was in a THIRD place — the head is aimed by the BENT measurement, so the index of the
 glass is a FIXED POINT of the glass. Do not re-import the banked framing.)**
-**SLICE 34's OWN DEFERRALS, in the order it named them: THE HANDOVER BASKET as an authored quantity (⚠ slice 34's
-§0.8 promoted this from slice 32's deferral to a LIVE constraint — a CAGED head's window requirement degenerates
-to the STRAPDOWN one, 18.117°, until it acquires, and it moves the ring verdict too; what ships is a HANDED-OVER
-head stated as a §1 condition, and its tick-1 signature is asserted — ⚠⚠ AND SLICE 35 SHARPENED IT INTO THE
-STRONGEST REMAINING CANDIDATE OF THIS FAMILY: the ACQUISITION TURN is the LARGEST slew demand in the whole
-engagement (~40 °/s against the ring's ~60), a rate limit makes it the BINDING requirement — `off_max` TRIPLES out
-at LAUNCH RANGE while the loop's own band requirement barely moves, and it does so with NO GLASS AT ALL — so
-slice 32/34's predicate `held ⟺ requirement < window` is FALSE on a rate-limited arm and is a statement about the
-HANDOVER BASKET, not about the loop. Slice 35 gates it away with the [500, 3000] m band and authors its window wide
-BECAUSE OF IT; that slice would make it the subject); MEMORY TRACK / RE-ACQUISITION (slice 34's break is TERMINAL —
+**(⚠⚠ "THE HANDOVER BASKET" IS NO LONGER ON THIS LIST — SLICE 36 SHIPPED IT, and its own named successors are
+below. ⚠ Do not re-import slice 34's §0.8 framing for it: the CAGED-head degeneracy it banked was measured at
+slice 36's gate 0 to be a SEPARATE mechanism from the aimed one — shrinking `gimbal_stop_deg` reaches the same
+rescue, but it CAGES the head (`head_max === stop` exactly) and its birth angle SATURATES, so the V's right arm is
+unreachable by it and their verdicts part in BOTH directions over a band of crossings. That separation ships as a
+tooth in `test_missile.jl`, and "THE CAGE vs THE AIM AS ITS OWN A/B" is now a named deferral of its own.)**
+**SLICE 36's OWN DEFERRALS, in the order it named them: A HANDOVER BASKET WITH A DISTRIBUTION (it authors ONE
+signed error; a real handover has a COVARIANCE and the design question is a Pk over the basket rather than a single
+arm — the natural successor); MEMORY TRACK / RE-ACQUISITION ⚠⚠ SHARPENED BY SLICE 36 INTO A REAL PREDICTION (a
+memory track is exactly what would rescue the TOO-MUCH-BIAS side of the basket, so it would make the basket
+ONE-SIDED); THE CAGE vs THE AIM AS ITS OWN A/B (§0.8, built and measured, shipped only as a tooth — including a
+mechanism neither slice has named: the WRONG-WAY CHASE, where a head born BELOW the LOS slews UP toward +18.1°
+before the LOS reverses, and at 8 °/s that climb is unaffordable); THE ELEVATION HALF (the error is authored in
+AZIMUTH because that is where the lead and the excursion are — slice 28's channel split — and §0.5 predicts NO
+optimum shift there, which is a tooth rather than a slice).**
+**SLICE 34's OWN REMAINING DEFERRALS: MEMORY TRACK / RE-ACQUISITION (slice 34's break is TERMINAL —
 no error signal, no slew — while a real head coasts on its last inertial rate: slice 32's α-β choice one layer out;
 ⚠ every break slice 35 measured is still TERMINAL too); THE HEAD'S OWN GYRO (a rate-stabilized head measures
 inertial LOS rate DIRECTLY, which is the classical reason gimbals exist and a DIFFERENT mechanism from anything in

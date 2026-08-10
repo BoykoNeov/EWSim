@@ -184,6 +184,44 @@ var _gimbal_lost := false
 # DETECTOR WINDOW, which is authored WIDE here and never binds, so they would report a comfortable
 # budget and never mention the SERVO — every number true, the slice invisible. See the core marker.
 var _gimbal_rate_view := false     # handshake gimbal_rate_view — 5th marker of the family
+# Slice-36 HANDOVER BASKET marker. ⚠⚠ AND THIS ONE IS **BOTH** — slice 34's HOLE PLUG *and* slice 32's
+# BUTTON DROP — which is why slice 35's "a branch selector, not a hole plug" must NOT be carried
+# forward to it. Two independent failures, and the first is one no earlier slice of this arc could have
+# had, because THIS IS THE FIRST NO-GLASS WIRE SINCE SLICE 25:
+#   (1) THE BUTTON. Slices 26–35 all dropped it for free by riding `_radome_view`, which is raised by
+#       authored glass. This wire has none (the drop is measured — a handover error is EXACTLY inert on
+#       the trajectory without a window or an index), and `_seeker_fov_view` is absent too because the
+#       loader REFUSES `seeker_fov_deg` beside a head. So both drop-branches in
+#       `_enter_airframe3d_mode` fail, the dispatch falls through to slice 25's `seeker_axes` cycler,
+#       and the button comes BACK — whose other position (`:pitch_plane`) leaves the handover error LIVE
+#       beside slice 25's unrelated 2000 m blind miss. Slice 26's argument, and the drop therefore needs
+#       BOTH sites (its 4th occurrence), because `_update_fid_btn`'s "seeker_axes" arm re-shows it
+#       unconditionally and never reaches the "airframe" arm's two defences.
+#   (2) THE HUD. `_gimbal_rate_view` IS raised here (the servo is this slice's one slider), so without
+#       this marker slice 35's lines take the wire — and its line 4, the one it calls THE CURE, reads
+#       `radome_slope_est` / `radome_slope_worst`, neither of which exists on a glass-free wire. It
+#       would print `R̂ +0.000   aim point R₀+2A +0.000`: the stale-readout class's 9th occurrence,
+#       landing on another slice's payoff line, with `_radome_qpeak` structurally frozen at 0.0 beside
+#       it. ⇒ not merely slice 35's INVISIBLE SLICE (every number true, the subject unmentioned) but an
+#       invisible slice PLUS two fabricated zeros.
+var _gimbal_handover_view := false # handshake gimbal_handover_view — 6th marker, and the first to
+                                   # plug a BUTTON hole and a HUD hole at once
+# Slice-36 DISPLAY-ONLY FREEZE on the shipped requirement (see `_handover_peak_hold`): `head_off_peak_deg`
+# is a running maximum, so it runs to 179.4998° at CPA on EVERY arm, hit or miss, and a peak cannot
+# forget. This holds the last sample taken while r > 200 m — the same gate the core's own requirement
+# claim uses. A FOURTH instrument shape beside slice 27's decaying peak-hold, slice 32's latch and slice
+# 35's EMA duty: a RANGE-GATED FREEZE, and it is the only one whose reason is the endgame rather than the
+# ring. ⚠ Instrument, not physics: it selects which shipped sample to draw.
+var _handover_peak := 0.0
+# Slice-36 DISPLAY-ONLY LATCH on the head's BIRTH angle — the tick-1 body-frame LOS azimuth, which is
+# where the handover put the head and the start of the 33.2° journey the servo has to chase. Latched
+# rather than shipped because it is a ONE-TICK fact (the seam's handover branch runs exactly once) and
+# the core has no telemetry shape for "the value this key had at t = 0" — while the HUD needs it beside
+# the live value or the excursion is invisible and the lesson reads as an assertion.
+# ⚠ The sentinel is NAN, not 0.0: an azimuth of exactly 0.000000° is a REAL birth angle (it is what
+# `err = −18.105` produces — the domain's own lower endpoint), so a zero sentinel would be indistinguish-
+# able from the arm the domain is bounded by.
+var _handover_los0 := NAN
 # Slice-35 DISPLAY-ONLY SATURATION DUTY — the servo's own instrument, and a THIRD shape beside slice
 # 27's decaying peak-hold and slice 32's latch, because it answers a third kind of question. The rate
 # limit binds on a FRACTION of ticks (measured: 8.6 % at the slider's ceiling, 64.6 % at the shipped
@@ -541,6 +579,13 @@ func _on_scenario(obj: Dictionary) -> void:
 	# ⚠ It does NOT pick a view (the slice-23 3-D airframe view is reused wholesale) and it does NOT
 	# touch the button — `radome_view` already drops that at both sites.
 	_gimbal_rate_view = bool(obj.get("gimbal_rate_view", false))
+	# Slice-36 HANDOVER-BASKET discriminator (a missile carrying an authored :gimbal_handover_err_deg).
+	# ⚠⚠ AND IT IS THE FIRST OF THIS FAMILY TO DO BOTH JOBS — the BUTTON *and* the HUD BRANCH — because
+	# it is the first NO-GLASS wire since slice 25, so `radome_view` is absent and the free ride that
+	# dropped the button for slices 26–35 has ended. See `_gimbal_handover_view`'s own comment for the
+	# two failures it prevents, and note that slice 35's "branch selector, not a hole plug" sentence
+	# does NOT transfer to it.
+	_gimbal_handover_view = bool(obj.get("gimbal_handover_view", false))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -1197,6 +1242,26 @@ func _enter_airframe3d_mode(obj: Dictionary) -> void:
 	# convention 9 keeps it off the wire — it lives in `test_missile.jl`). The BUTTON outcome is
 	# identical either way; only the HUD branch differs, and the FOV framing is the right headline for
 	# a wire that has a window at all.
+	# SLICE 36 — THE HANDOVER BASKET, checked FIRST (the "check the NEW key first" rule, 7th occurrence)
+	# and the THIRD case in this dispatch that DROPS the button — but the FIRST that had to, because
+	# ⚠⚠ THIS IS THE FIRST NO-GLASS WIRE SINCE SLICE 25 AND THE FREE RIDE HAS ENDED. Slices 26–35 all
+	# dropped the button by riding `_radome_view` below (slice 33 wrote that down as a finding and 34/35
+	# inherited it); this wire authors no glass — measured, not stylistic: a handover error is EXACTLY
+	# inert on the trajectory without a window or an index, so the wire that isolates the basket is a
+	# wire with no radome at all — and the loader refuses `seeker_fov_deg` beside a head, so
+	# `_seeker_fov_view` is absent too. Without this branch BOTH drops fail, the dispatch reaches
+	# `_fidelity.has("seeker_axes")` below, and the button returns as slice 25's cycler — whose other
+	# position (`:pitch_plane`) leaves the handover error LIVE beside slice 25's unrelated 2000 m blind
+	# miss. That is slice 26's own argument, and the drop needs BOTH sites (its 4th occurrence): the
+	# `"seeker_axes"` arm of `_update_fid_btn` re-shows the button unconditionally and never reaches the
+	# `"airframe"` arm's defences. ⚠ THE MIRROR IS THE PROOF: strip this marker in the UI test and the
+	# button must come BACK.
+	if _gimbal_handover_view:
+		_fid_kind = "airframe"                      # the 3-D view's drawing/badge treatment, unchanged
+		_prop_btn.visible = false
+		_prop_btn.tooltip_text = ""
+		_build_airframe3d_scene()
+		return
 	if _seeker_fov_view:
 		_fid_kind = "airframe"                      # the 3-D view's drawing/badge treatment, unchanged
 		_prop_btn.visible = false
@@ -1386,6 +1451,22 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 	if _telemetry.has(_af3d_missile + ".head_rate_sat"):
 		var st := 1.0 if float(_telemetry[_af3d_missile + ".head_rate_sat"]) >= 0.5 else 0.0
 		_servo_duty = _servo_duty * 0.97 + st * 0.03
+	# SLICE 36 — the REQUIREMENT's display freeze and the BIRTH angle's latch. ⚠ TWO INDEPENDENT `if`s,
+	# NOT AN `elif` AND NOT CHAINED ONTO THE BLOCK ABOVE — slice 33's finding, and here the keys DO
+	# co-occur on every shipped frame (this wire carries `head_rate_sat` AND both keys below), so a
+	# chained dispatch would freeze one of them outright rather than merely being fragile.
+	if _telemetry.has(_af3d_missile + ".head_off_peak_deg"):
+		# ⚠ THE RANGE IS AN ARGUMENT, so the freeze is provable headless (convention 14): the raw key
+		# runs to 179.4998° at CPA on every arm, and a HUD that printed that would end every clean
+		# intercept displaying a 179° "requirement" — slice 19's lying picture in a new widget.
+		_handover_peak = _handover_peak_hold(_handover_peak,
+				float(_telemetry[_af3d_missile + ".head_off_peak_deg"]),
+				float(_telemetry.get(_af3d_missile + ".los_range", 0.0)))
+	if is_nan(_handover_los0) and _telemetry.has(_af3d_missile + ".look_body_az_deg"):
+		# The BIRTH angle — latched on the first frame that carries the key, which is the handover's own
+		# tick as far as any client can see it. Without it the live azimuth is a number with nothing to
+		# be measured against, and the 33.2° excursion that IS the mechanism never appears on screen.
+		_handover_los0 = float(_telemetry[_af3d_missile + ".look_body_az_deg"])
 	if _t3d_layer == null or _t3d_los_mesh == null:
 		return
 	var mpos: Array = _entities.get(_af3d_missile, {}).get("pos", [0, 0, 0])
@@ -1600,6 +1681,79 @@ func _servo_verdict_label(lost: bool, ringing: bool, duty: float) -> String:
 		return "SERVO PEGGED — and still RINGING" if pegged else "RINGING — the servo has room yet"
 	return "QUIET, BOUGHT WITH BANDWIDTH" if pegged else "FREE — the servo costs nothing"
 
+# SLICE 36 — THE HANDOVER BASKET's verdict, a FOUR-WAY on two booleans like slice 35's, and the pair it
+# splits on is `lost × was the handover perfect`. ⭐⭐ THE POINT IS THE DIAGONAL: the two states a
+# student must be able to read off one line are PERFECT-AND-LOST (the foil wire at its default servo,
+# missing by 3290 m) and BIASED-AND-HELD (the twin, 0.191 m at the SAME servo behind the SAME window).
+# Naming them is the whole headline — *zero is outside the basket* — and a verdict built on `lost` alone
+# would print the same string on both halves of the pair.
+# ⚠ THE TOLERANCE IS AN ARGUMENT'S, NOT A GLOBAL'S: `err` arrives as the AUTHORED degrees straight off
+# the wire (`_finite_coord`, no arithmetic), so an exact `== 0.0` would be defensible — but the epsilon
+# costs nothing and keeps the branch readable for any future wire that authors a computed error.
+# ⚠ EXTRACTED, LIKE `_fov_verdict_label` / `_budget_verdict_label` / `_gimbal_verdict_label` /
+# `_servo_verdict_label`, BECAUSE ANYTHING THE VERDICT COMPUTES INSIDE `_draw` HAS NO HEADLESS PROOF —
+# `_draw` never runs under `--headless` (convention 14; slice 31's aim-point comparison shipped WRONG
+# and only the windowed shot caught it). The UI test calls this directly, on all four states.
+# ⚠ WIDTHS ARE MEASURED: ~34 characters at 20 px from `vp.x − 430`. All four are counted (29/26/30/28).
+func _handover_verdict_label(lost: bool, err: float) -> String:
+	var perfect := absf(err) < 1.0e-9
+	if lost:
+		return "PERFECT HANDOVER — TRACK LOST" if perfect else "TOO MUCH BIAS — TRACK LOST"
+	return "ON THE LOS — the servo kept up" if perfect else "BIASED HANDOVER — track HELD"
+
+# SLICE 36 — THE DISPLAY FREEZE THE CORE ASKED GATE 3 TO OWN, and it is not cosmetic: `head_off_peak_deg`
+# is a RUNNING MAXIMUM, so it reads the clean requirement bit-identically from r = 3000 m down to
+# r = 200 m and then runs to **179.4998° at CPA ON EVERY ARM, HIT OR MISS** — the target is simply
+# behind the head by then. A PEAK CANNOT FORGET, so a HUD that printed the raw key would end every run
+# — including every clean intercept — displaying a 179° "requirement". That is slice 19's lying picture
+# in a new widget, and it is the same endgame spike that made gate 2 DROP the signed peak-margin key.
+# ⇒ the display holds the last value taken while r > 200 m, which is the SAME gate the core's own
+# requirement claims and the verifier's arms use ([[ewsim-missile-verifier-sampling]]).
+# ⚠ AN INSTRUMENT, NOT PHYSICS (convention 13): it selects WHICH shipped sample to show and computes
+# nothing. ⚠ AND IT IS A PURE HELPER FOR CONVENTION 14's REASON — the UI test drives it with the 179.5°
+# endgame sample directly, which is the only way that case is ever proven.
+func _handover_peak_hold(held: float, peak_now: float, r: float) -> float:
+	return peak_now if r > 200.0 else held
+
+# SLICE 36 — the requirement line's text, and the branch in it is the TWO-RUN DISCIPLINE's FIFTH
+# QUANTITY. ⚠⚠ ON A BROKEN ARM THIS KEY IS NOT A REQUIREMENT AT ALL: the head holds with no error
+# signal while the LOS leaves, so the peak becomes the POST-BREAK RUNAWAY — 104.56 / 65.79 / 73.77°
+# against free-window requirements of 12.346 / 10.000 / 18.000° on the same arms. Slice 34's frozen
+# `head_angle_deg` failed plausibly-but-TOO-SMALL; this one fails LARGE, so a reader who takes it for a
+# requirement over-designs by 8× rather than under-designing. The label says which it is.
+# ⚠⚠ AND IT PRINTS THE **PAIR**, NEVER THE DIFFERENCE. A signed peak MARGIN was drafted at gate 2,
+# measured, and DROPPED: it would latch negative on the first breached tick and never recover, which
+# fires on 100 % of arms including every hit (the endgame breaches any window). Subtracting the two
+# here would rebuild exactly that dropped key in GDScript — so the two numbers are shown side by side
+# and the comparison shows up as a MARKER, not as a manufactured degree count.
+# SLICE 36 — the MECHANISM line's text, and the branch in it was found BY THE WINDOWED SHOT, which is
+# what the shot is for. ⚠⚠ THE EXCURSION IS THE TWO-RUN DISCIPLINE's SIXTH QUANTITY AND IT INFLATES ON A
+# BROKEN ARM: the verifier measures the body-frame LOS azimuth spanning 33.182° on an arm that HELD and
+# 110.473° (~3.3×) on the shipped broken one, because a missile that has lost its track is in a runaway
+# geometry. The first capture of shot A printed `handover +0.0°   body LOS az −39.18°  (first frame
+# +18.00°)` — three true numbers a reader would subtract into a 57° "excursion" that is not the
+# mechanism at all. Slice 33's defect exactly ("it would print IN THE WINDOW on the arm missing by
+# 3.7 km"), in a new quantity: the numbers are live, the verdict above is correct, and the INVITED
+# ARITHMETIC is wrong. ⇒ once the track is lost the line SAYS the azimuth is running away.
+# ⚠ EXTRACTED for convention 14's reason, like the four verdict helpers: `_draw` has no headless proof.
+# ⚠⚠ AND THE WIDTHS ARE MEASURED, WHICH THE FIRST RETAKE OF SHOT A PAID FOR: ~55 characters fit at 15 px
+# from `vp.x − 430`, and "handover +0.0°   body LOS az −38.02° — RUNNING AWAY since the break" (67) ran
+# off the right edge, cutting the clause to "RUNNING AWAY sin". The 3rd occurrence of that overrun after
+# slices 26 and 28 — and the part that gets cut is always the part that carries the meaning.
+# ⚠ "from %+.2f°" rather than "(first frame %+.2f°)" for the same budget reason; it is exact either way
+# (the server emits every 16th tick, so the earliest azimuth any client sees is 16 ms after the handover
+# tick that set it — tick 1 reads +18.11° on this wire).
+func _handover_los_text(err: float, az: float, az0: float, lost: bool) -> String:
+	if lost:
+		return "handover %+.1f°   LOS az %+.2f° — RUNNING AWAY" % [err, az]
+	return "handover %+.1f°   LOS az %+.2f° from %+.2f°" % [err, az, az0]
+
+func _handover_req_text(peak: float, window: float, lost: bool) -> String:
+	if lost:
+		return "peak head err %.1f° — POST-BREAK, NOT a requirement" % peak
+	return "requirement (peak) %.2f°  vs  window %.1f°%s" % \
+			[peak, window, "   ← OVER" if peak > window else ""]
+
 func _gyro_verdict_label(ringing: bool, eff: float, worst: float) -> String:
 	if ringing:
 		return "GYRO — RINGING: loop sees R̂(1+s)"
@@ -1810,6 +1964,60 @@ func _draw_gimbal_rate_hud_lines(vp: Vector2) -> void:
 	draw_string(_font, Vector2(vp.x - 430, 198), "detector budget %+.1f°   head: %s" % [marg, "HOLDING — no error signal since the break" if _gimbal_lost else "TRACKING"],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if (_gimbal_lost or marg < 0.0) else Color(0.55, 1.00, 0.65))
 
+# SLICE 36 — the five lines that ARE the handover basket, split out like 32/33/34/35's (same measured
+# width: ~55 characters at 15 px from `vp.x − 430`; every line below is counted).
+# ⭐⭐ THE PAIR A STUDENT MUST SEE IS *WHERE THE HEAD WAS PUT* BESIDE *WHERE THE LOS WENT*. That is the
+# whole slice: the body-frame LOS is not a fixed target — it travels +18.11° → −15.15° over the approach
+# as the missile swings its nose onto the collision course — so a head handed over ON it must chase the
+# entire journey while one handed over part-way ALONG it starts with a head start. Line 1 carries all
+# three numbers (the authored error, where the LOS was at first sight, where it is now) because the
+# excursion is the mechanism and a single instantaneous angle cannot show it.
+# ⭐ AND THE SECOND PAIR IS THE REQUIREMENT BESIDE THE WINDOW, in the same degrees. Slice 32 measured
+# `held ⟺ lead < fov`, slice 34 re-measured it as `tracking error < detector window`, and this slice
+# measures it a THIRD time in the basket's own currency — so the two numbers that decide it are adjacent
+# and a student watches the verdict rather than being told it.
+# ⚠⚠ THERE IS NO RING LINE HERE AND THAT IS DELIBERATE — THIS WIRE HAS NO GLASS. Slice 35's block draws
+# `R̂` against the aim point as its CURE line; both keys are absent on a radome-free wire and would render
+# as `+0.000`, which is precisely the stale-readout defect this slice's marker exists to prevent. The
+# body rate is not drawn either: it is real here, but nothing is refracting, so labelling it would invite
+# exactly the radome reading the whole wire is built to exclude.
+# ⚠ THE REQUIREMENT IS THE FROZEN SAMPLE (`_handover_peak`), NEVER THE RAW KEY — see `_handover_peak_hold`.
+# ⚠ THE RANGE AND CROSS-RANGE LINES ARE NOT HERE — the shared block above draws them at y = 66/88.
+func _draw_handover_hud_lines(vp: Vector2) -> void:
+	var err := float(_telemetry.get(_af3d_missile + ".gimbal_handover_err_deg", 0.0))
+	var az := float(_telemetry.get(_af3d_missile + ".look_body_az_deg", 0.0))
+	var win := float(_telemetry.get(_af3d_missile + ".gimbal_fov_deg", 0.0))
+	var off := float(_telemetry.get(_af3d_missile + ".head_off_deg", 0.0))
+	var marg := float(_telemetry.get(_af3d_missile + ".gimbal_fov_margin_deg", 0.0))
+	var dem := float(_telemetry.get(_af3d_missile + ".head_rate_dps", 0.0))
+	var cap := float(_telemetry.get(_af3d_missile + ".gimbal_rate_dps", 0.0))
+	var sat := float(_telemetry.get(_af3d_missile + ".head_rate_sat", 0.0)) >= 0.5
+	# ⭐⭐ THE MECHANISM, AS THREE NUMBERS. ⚠ "first frame" is exact and "at handover" would not be: the
+	# server emits every 16th tick, so the earliest azimuth any client sees is 16 ms after the handover
+	# tick that set it (tick 1 reads +18.11° on this wire against the first frame's own value). The
+	# excursion is what matters and it is 33.2° wide, so a 16 ms offset changes nothing about the reading
+	# — but the label may not claim a tick the client never received.
+	draw_string(_font, Vector2(vp.x - 430, 110), _handover_los_text(err, az, _handover_los0, _gimbal_lost),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _gimbal_lost else Color(0.45, 0.90, 1.00))
+	# ⭐ THE REQUIREMENT BESIDE THE WINDOW — the frozen peak, and on a broken arm the text says outright
+	# that the number is the post-break runaway and not a requirement (the two-run discipline's fifth
+	# quantity, which fails LARGE where slice 34's failed small).
+	draw_string(_font, Vector2(vp.x - 430, 132), _handover_req_text(_handover_peak, win, _gimbal_lost),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if (_gimbal_lost or _handover_peak > win) else Color(1.00, 0.85, 0.45))
+	# THE PER-TICK BUDGET, whose SIGN is the shipped verdict (`gimbal_fov_margin_deg`, slice 33's shape).
+	draw_string(_font, Vector2(vp.x - 430, 154), "tracking err %.2f°   detector LEFT %+.2f°" % [off, marg],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if marg < 0.0 else COL_TICK)
+	# THE ONE SLIDER, and what it is being asked for — slice 35's demand-vs-cap pair, kept because on
+	# THIS wire it is the CURE (drag it up and the perfect handover's track comes back at the measured
+	# 10.0 → 10.5 °/s bracket) and, on the biased twin, the thing that stops mattering.
+	draw_string(_font, Vector2(vp.x - 430, 176), "servo %.0f°/s   demand %.1f°/s%s" % [cap, dem, "   ← PEGGED" if sat else ""],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45) if sat else COL_TICK)
+	# THE STATE — coloured by the LATCH, not the instantaneous flag, for the reason slice 32/34 give: the
+	# runaway geometry swings the LOS back through the window and this would blink green on a missile
+	# that lost its target seconds ago.
+	draw_string(_font, Vector2(vp.x - 430, 198), "head: %s" % ("HOLDING — no error signal since the break" if _gimbal_lost else "TRACKING"),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _gimbal_lost else Color(0.55, 1.00, 0.65))
+
 func _draw_airframe3d_hud() -> void:
 	# The 3-D layer renders the world; the 2-D canvas only LABELS it (the terrain-view discipline).
 	# The headline: the plant, the cross-range miss (los_range), and the out-of-plane excursion.
@@ -1871,7 +2079,30 @@ func _draw_airframe3d_hud() -> void:
 	# number but an INVISIBLE SLICE, and that distinction is the thing to carry forward.
 	# ⚠ THE BUTTON NEEDS NO EDIT AT EITHER SITE (`radome_view` and `gimbal_view` both drop it) — slice
 	# 33's finding, third occurrence.
-	if _gimbal_rate_view:
+	# SLICE 36 — THE HANDOVER BASKET, checked FIRST and a SWITCH ahead of the servo branch below ("check
+	# the NEW key first", 9th occurrence). ⚠⚠ AND THE REASON IS **BOTH** OF THE PREVIOUS TWO AT ONCE,
+	# which is why it is spelled out rather than cross-referenced. Slice 35's marker was a pure BRANCH
+	# SELECTOR (its wire routed correctly and every number its inherited HUD drew was true — the failure
+	# was an INVISIBLE SLICE). Slice 34's plugged a real HOLE (its wire fell into the radome cascade and
+	# was confidently wrong about the subject). This wire does both: `gimbal_rate_view` IS raised, so
+	# without this branch slice 35's block takes it — and slice 35's line 4, the one its own comment calls
+	# THE CURE, reads `radome_slope_est` and `radome_slope_worst`, NEITHER OF WHICH EXISTS ON A GLASS-FREE
+	# WIRE. It would print `R̂ +0.000   aim point R₀+2A +0.000` beside a `_radome_qpeak` frozen at 0.0 by
+	# its own presence gate: the stale-readout class's 9th occurrence, landing on another slice's payoff
+	# line, on a wire that is missing by 3.3 km for a reason no line mentions.
+	# ⚠ AND THE BUTTON IS NOT FREE HERE EITHER — see `_enter_airframe3d_mode`. Slices 26–35 all dropped it
+	# by riding `radome_view`; this is the first no-glass wire of the arc, so the drop needs both sites
+	# (slice 26's finding, 4th occurrence) and this marker owns that too.
+	if _gimbal_handover_view:
+		lbl = _handover_verdict_label(_gimbal_lost,
+				float(_telemetry.get(_af3d_missile + ".gimbal_handover_err_deg", 0.0)))
+		# ⚠ THE COLOUR RIDES THE LATCH, and here that is not merely inherited — it is the ONLY honest
+		# choice available. There is no ring to meter on this wire and the requirement is a FROZEN PEAK,
+		# so `lost` is the one thing that separates the pair: same servo, same window, same seed, one arm
+		# holds and one does not. ⚠ And the price of the bias is EXACTLY ZERO on every arm that holds
+		# (miss `===` to 64 bits across the whole domain), so nothing else could be painted as a cost.
+		col = Color(1.00, 0.62, 0.30) if _gimbal_lost else Color(0.45, 0.90, 1.00)
+	elif _gimbal_rate_view:
 		lbl = _servo_verdict_label(_gimbal_lost, _radome_qpeak > 0.5, _servo_duty)
 		# ⚠ THE COLOUR RIDES THE LATCH, NOT THE PEAK-HOLD AND NOT THE DUTY, inherited from slice 34 with
 		# its reason and one of this slice's own on top: a RINGING arm here still HITS (every arm in the
@@ -2053,7 +2284,15 @@ func _draw_airframe3d_hud() -> void:
 	# two numbers, which is the defect slice 34's own gate-3 note predicted one slice earlier. It draws
 	# FIVE lines like slice 34's, but only ONE of them is shared — the trade is DEMAND vs CAP and RING
 	# vs LAG, where slice 34's is TRAVEL vs STOP and ERROR vs WINDOW.
-	if _gimbal_rate_view:
+	# SLICE 36 — THE HANDOVER BASKET, checked FIRST here too and for the reason the two chains must always
+	# agree: a headline naming the handover above body lines describing a CURE THAT DOES NOT EXIST ON THIS
+	# WIRE (two 0.000s of absent glass) is the worst pairing in the family so far — it is slice 35's
+	# invisible slice AND the stale-readout class in one frame. It draws FIVE lines like 34's and 35's, and
+	# shares exactly two of them (the detector budget and the head's state); the mechanism line and the
+	# requirement-vs-window line are this slice's own, and no ring line is drawn at all.
+	if _gimbal_handover_view:
+		_draw_handover_hud_lines(vp)
+	elif _gimbal_rate_view:
 		_draw_gimbal_rate_hud_lines(vp)
 	elif _gimbal_view:
 		_draw_gimbal_hud_lines(vp)
@@ -2341,7 +2580,18 @@ func _update_fid_btn() -> void:
 			_prop_btn.visible = true
 			_prop_btn.text = "seeker: %s" % str(_fidelity.get("seeker_axes", "?"))
 		"airframe":
-			if _seeker_fov_view:
+			if _gimbal_handover_view:
+				# SLICE 36 THE HANDOVER BASKET — the SECOND site of the same drop, and here it is
+				# LOAD-BEARING rather than defensive, unlike the two arms below. ⚠⚠ On a no-glass wire
+				# `_enter_airframe3d_mode` sets `_fid_kind = "airframe"` from its OWN new branch, so
+				# without this arm the `_fidelity.has("airframe")` branch below would re-show the button
+				# it just dropped (the scenario DOES carry an `:airframe` fidelity, HELD at six_dof) and
+				# cycling that held key is the convention-9 "toggle a held key" trap. There is no rung to
+				# cycle: the lesson is an AUTHORED pair of wires plus ONE servo slider, and the authored
+				# key is structurally a dead knob. Option-P′'s fourth use, and the FIRST time since slice
+				# 26 that the drop genuinely needs both sites.
+				_prop_btn.visible = false
+			elif _seeker_fov_view:
 				# Slice-32 THE SEEKER'S FIELD OF VIEW: same defence as the radome arm below and for
 				# the same reason — the scenario DOES carry an `:airframe` fidelity (HELD at six_dof),
 				# so the `_fidelity.has("airframe")` branch would re-show the button that
@@ -2911,6 +3161,17 @@ func _on_reset_pressed() -> void:
 	# into a re-launch that opens on the LAUNCH TURN, which is itself the largest slew demand in the
 	# engagement (gate 0 §0.4). A stale reading there would be indistinguishable from a real one.
 	_servo_duty = 0.0
+	# Slice-36: BOTH of this slice's instruments are cleared, and each for its own reason — this is the
+	# THIRD time the family has had to fix a stale-instrument-across-reset defect, so it is done at the
+	# same time as the code that creates it rather than found later.
+	#   `_handover_peak` is a FROZEN MAXIMUM, so without this the requirement line would carry the
+	#     PREVIOUS run's peak through a whole re-launch — and on a broken arm that peak is the ~105°
+	#     post-break runaway, i.e. the single most misleading number this HUD can display.
+	#   `_handover_los0` is a ONE-SHOT LATCH on the first frame's LOS azimuth; a stale one would pair the
+	#     new run's live azimuth against the old run's birth angle, silently misreporting the excursion
+	#     that IS the mechanism. Back to NAN, never 0.0 — a 0.000000° birth angle is a real state.
+	_handover_peak = 0.0
+	_handover_los0 = NAN
 	_t3d_trail_pts.clear()                # slice-18: the 3-D target trail restarts with the re-launch
 	# `reset` reloads the YAML server-side → propagation reverts to the scenario default,
 	# but the server sends no new handshake. Resync the local fidelity so the badge/button

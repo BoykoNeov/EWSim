@@ -809,6 +809,36 @@ function _airframe_view_info(w::World)
     # raised here and either already drops it (slice 33's finding, third occurrence).
     any(haskey(w.entities[m].comp, :gimbal_rate_dps) for m in missiles) &&
         (info[:gimbal_rate_view] = true)
+    # SLICE 36 — the HANDOVER BASKET marker. ⚠⚠ THE RE-CHECK CAME BACK **POSITIVE**, AND IT IS THE
+    # STRONGER OF THE TWO POSSIBLE ANSWERS: this marker does slice 34's job AND slice 32's, which is
+    # exactly what slice 35's did NOT do ("a BRANCH SELECTOR, not a hole plug" — do not carry that
+    # sentence forward to this key). Two independent failures, and the FIRST is the one no earlier
+    # slice of this arc could have had:
+    #
+    # ⚠⚠ (1) THE BUTTON DROP STOPS BEING FREE, because THIS IS THE FIRST NO-GLASS WIRE OF THE ARC.
+    # `radome_view` above is raised by `haskey(:radome_slope)` and slices 26–35 all had glass, so every
+    # one of them got the drop for free by riding it (slice 33 wrote that down as a finding and 34/35
+    # inherited it). Slice 36 drops the glass — for §0.2's exact-inertness and §0.6's isolation reasons,
+    # a decision internal to this slice — so `radome_view` is ABSENT here, and `seeker_fov_view` is
+    # absent too because `scenario.jl` REFUSES `seeker_fov_deg` beside a head. Both of the client's
+    # drop-the-button branches therefore fail, its dispatch falls through to slice 25's `seeker_axes`
+    # cycler, and the button comes BACK — whose other position (`:pitch_plane`) would leave the handover
+    # error LIVE beside slice 25's unrelated 2000 m blind miss. That is slice 26's own argument, and it
+    # is the reason the drop needs BOTH client sites (its 4th occurrence).
+    #
+    # ⚠⚠ (2) AND THE HUD WOULD BE SLICE 35's, WHICH ON THIS WIRE PRINTS TWO ZEROS FOR GLASS THAT DOES
+    # NOT EXIST. `gimbal_rate_view` IS raised here (the servo is this slice's one slider), so slice 35's
+    # branch takes the wire, and its own line 4 — the one it calls THE CURE — reads `radome_slope_est`
+    # and `radome_slope_worst`. Neither is shipped without a compensator and a ripple, so it renders
+    # `R̂ +0.000   aim point R₀+2A +0.000`: the stale-readout class this arc has now caught nine times,
+    # landing on another slice's payoff line. ⇒ not merely an INVISIBLE slice (slice 35's failure mode,
+    # where every number is true and the subject is unmentioned) but an invisible slice PLUS two
+    # fabricated numbers.
+    #
+    # ⚠ KEY-GATED on the comp key, exactly as the four markers above are, so a slice-26..35 wire is
+    # byte-identical and a slice-36 wire is recognized by the one thing that distinguishes it.
+    any(haskey(w.entities[m].comp, :gimbal_handover_err_deg) for m in missiles) &&
+        (info[:gimbal_handover_view] = true)
     return info
 end
 
@@ -2593,6 +2623,24 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # look angle — the number slice 32 called `look_angle` — kept under its own name because
         # slice 26's `look_angle` above now ships the HEAD's index, which is what the glass used.
         tel["$sid.look_body_deg"] = _finite(rad2deg(boresight_angle(c[:att_q]::Quat, û_tru)))
+        # ⭐⭐ SLICE 36 — THE SAME LOOK, **SIGNED**, IN THE AXIS THE HANDOVER ERROR IS AUTHORED IN, and
+        # it exists because THE LINE ABOVE CANNOT SHOW A SIGN. `look_body_deg` is a `hypot`, and gate 0
+        # §0.4 attributed the basket's asymmetry to the body-frame LOS *settling* 18.1° → 15.2° on
+        # exactly that evidence — a story that was WRONG (the #1 SIGN TRAP's 10th occurrence). Logged
+        # signed, the azimuth **CROSSES THROUGH ZERO**: +18.11° at t = 0.001 s to −15.15° by t = 10 s, a
+        # 33.2° EXCURSION, as the missile swings its nose onto the collision course. That excursion is
+        # the whole mechanism — a head handed over ON the LOS must chase the entire journey while one
+        # handed over part-way along it starts with a head start — so the number a student must WATCH is
+        # this one, and until now it existed only in a probe. ⚠ Against the REVERSED crossing the same
+        # quantity is nearly STATIC (a 2.2° swing), which is why the requirement is EXACTLY |err| there
+        # at every servo rate: the rate-dependence belongs to the ENGAGEMENT, not to handover errors.
+        # ⚠ `_finite_coord`, NOT `_finite` — the value is negative over most of the approach and
+        # `_finite` clamps only the upper bound (the slice-29 `k̂` catch, 4th application).
+        # ⚠ RECOMPUTED from `att_q` and `û_tru` exactly as the line above is, NOT plumbed out of the
+        # seam's `look_az_b`: the two are the same call on the same inputs, and the recompute keeps this
+        # publisher free of state it would otherwise have to be handed (the shape every key here has).
+        tel["$sid.look_body_az_deg"] =
+            _finite_coord(rad2deg(look_angles(c[:att_q]::Quat, û_tru)[1]))
         # Slice 32's key, VERBATIM in meaning and inputs (`_fov_on` is unreachable beside `_gim`, so
         # this is the only writer on a gimbal wire): the collision triangle's own demand, per tick.
         tel["$sid.lead_angle_deg"] = _finite(rad2deg(
