@@ -686,8 +686,11 @@ the SHIPPED handover branch):
 
 ⇒ **`gimbal_fov_deg: 10.0`**, and the two claims it has to support are measured from opposite sides.
 ⭐ The `≥ window` set being **CONTIGUOUS and anchored at 8 °/s** is the assert the coarse 7-column
-sweep could not make: no wrinkle pokes back over the window anywhere in 10.5…60 °/s, so "BROKEN at the
-bracket and below, HELD above it" is a measurement rather than an interpolation. ⚠ The margin
+sweep could not make: **over the 0.5 °/s grid** no wrinkle pokes back over the window anywhere in
+10.5…60 °/s, so "BROKEN at the bracket and below, HELD above it" is a measurement rather than an
+interpolation. ⚠ That is a claim about the GRID, not about the continuum — a wrinkle between two
+adjacent cells would be invisible to it — which is why the verifier asserts `out == 0` and
+`off_max < window` on **every arm it actually flies** rather than citing the grid. ⚠ The margin
 IMMEDIATELY above the bracket is only **0.103°**, and that is inherent to a bracket rather than a
 defect — the requirement is continuous in rate, so the first holding cell is always close. What would
 have been a defect is a non-contiguous set, and it is not one. ⭐⭐ **AND THE STOP NEVER BINDS ON EITHER
@@ -780,6 +783,17 @@ verbatim** (its 180° identity holds ON THE CLOSING LEG and is false over the wh
 and this slice now carries the endgame artifact in **three** quantities with **two different gates**
 between them.
 
+⚠⚠ **AND A NUMBER-DISCIPLINE NOTE THAT APPLIES TO EVERY EXCURSION FIGURE IN THIS SLICE** (advisor,
+post-commit): the excursion has **two legitimate values from two different grids** and each must carry
+its own label. **PER TICK** (gate 0, the core suite): `+18.105365° → −15.15°`, i.e. the 33.2° figure the
+lesson statement uses. **PER FRAME** (the verifier and both shots, `emit_every = 16`): `+18.003° →
+−15.179° = 33.182°`, because the earliest azimuth any client receives is 16 ms after the handover tick
+and lands 0.102° below it. ⚠ The verifier's first draft named its frame constant `AZ_BIRTH` with a 0.2°
+tolerance — wide enough to hide exactly that difference behind a label claiming the tick-1 value. That
+is slice 21/25's defect ("the pass text QUOTED PER-TICK truth while the file measures FRAMES") arriving
+in a CONSTANT rather than in a print, and it is now two named constants (`AZ_FIRST_FRAME`, `AZ_TICK1`)
+with a 0.01° tolerance that cannot absorb the gap.
+
 ⭐⭐ **FINDING 10 — THE MECHANISM IS THE TWO-RUN DISCIPLINE'S **SIXTH** QUANTITY, AND IT FAILS LARGE.**
 The upper bound added beside Finding 9's fix then fired on the *shipped* arm: closing-leg-gated and
 range-gated, the body-frame LOS azimuth spans **33.182° on an arm that HELD and 110.473° (~3.3×) on the
@@ -841,6 +855,15 @@ measured ~55-character budget. *The part that gets cut is always the part that c
   servo costs it nothing.
 * Core suite **7067 → 7222** (+155). Slices 1–35 byte-identical, proven ON THE WIRE: slice 34's and
   slice 35's verifiers re-run green after the change.
+
+⚠⚠ **POST-COMMIT REVIEW (advisor) CAUGHT A CLAIM THAT WAS NOT YET TRUE, AND THAT IS THE ORDER-OF-PROOFS
+LESSON.** The smoke-load was run BEFORE the two `Sandbox.gd` edits the shot then forced
+(`_handover_los_text` + its call site), so plan/STATUS/commit all asserted "four proofs green on the
+final code" while the scene-load proof stood on a superseded file. The UI test loads `Sandbox.gd` and
+would have caught a PARSE error, but that is not what a smoke-load claims — it claims *scene load +
+handshake*. Re-run on `HEAD`: `EWSIM_SERVER_DONE`, clean stdout and stderr. ⇒ **when a late fix touches a
+file that an earlier proof covered, that proof is stale even if a different proof happens to load the
+same file.** (Both verifiers were also re-run after the constant rename; green on both wires.)
 
 ---
 

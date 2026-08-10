@@ -5138,9 +5138,17 @@ slice 35's EMA duty). (b) The core's first excursion tooth was ungated by RANGE 
 on a HELD arm — the azimuth wrapping through ±180° once the target is behind the missile, which is
 slice 32's gate-3 correction verbatim. ⇒ read on the closing leg AND inside r > 200 m.
 
+⚠⚠ **EVERY EXCURSION FIGURE CARRIES ITS GRID, AND THE FIRST DRAFT DID NOT** (advisor, post-commit).
+**PER TICK** (gate 0 / the core suite): `+18.105365° → −15.15°`, the 33.2° the lesson statement uses.
+**PER FRAME** (the verifier and both shots at `emit_every = 16`): `+18.003° → −15.179° = 33.182°`,
+because the earliest azimuth a client receives is 16 ms after the handover tick and lands 0.102° below
+it. The verifier's frame constant was first named `AZ_BIRTH` with a 0.2° tolerance — wide enough to hide
+that gap behind a label claiming the tick-1 value, which is slice 21/25's defect in a CONSTANT rather
+than a print. Now `AZ_FIRST_FRAME` + `AZ_TICK1`, atol 0.01°.
+
 ⭐⭐ **AND THE MECHANISM IS THE TWO-RUN DISCIPLINE'S SIXTH QUANTITY, WHICH THE UPPER BOUND CAUGHT**:
 gated both ways, the excursion is **33.182° on an arm that HELD and 110.473° (~3.3×) on the broken
-one** — a lost track is a runaway geometry (slice 32's inflated-lead finding and slice 29's P10a, in a
+one** (frame-sampled, both) — a lost track is a runaway geometry (slice 32's inflated-lead finding and slice 29's P10a, in a
 new quantity), so every excursion number is read off a HELD arm and the broken arm asserts the RUNAWAY
 as the positive fact. The list of quantities that lie on a broken arm is now `rms r` / `look_max` /
 `head_angle_deg` / `head_rate_sat` / `head_off_peak_deg` / **the LOS excursion**.

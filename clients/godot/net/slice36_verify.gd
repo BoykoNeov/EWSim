@@ -105,7 +105,14 @@ const REQ_B_FLOOR := 8.091        # wire B's WORST cell anywhere in the domain, 
 const REQ_B_FLAT := 6.000         # …and its FLAT value from 11 deg/s up: |err| EXACTLY
 const MISS_A_BROKEN := 3290.078   # wire A at its default: the PERFECT handover's miss
 const MISS_HELD := 0.19116        # every arm that HOLDS, on EITHER wire, to 64 bits (core suite)
-const AZ_BIRTH := 18.105          # the body-frame LOS azimuth at the handover (SIGNED)
+# ⚠⚠ A **FRAME** NUMBER, AND THE NAME SAYS SO. The handover angle itself is 18.105365 deg at TICK 1
+# (pinned in the core suite), but the server emits every 16th tick, so the earliest azimuth any client
+# sees is 16 ms later and lands 0.102 deg below it. The first draft of this file called the constant
+# AZ_BIRTH with a 0.2 deg tolerance — wide enough to hide exactly that difference behind a label
+# claiming the tick-1 value, which is slice 21/25's defect ("the pass text quoted PER-TICK truth while
+# the file measures FRAMES") in a constant rather than in a print. Frame numbers get frame names.
+const AZ_FIRST_FRAME := 18.003    # the SIGNED body-frame LOS azimuth on the FIRST EMITTED FRAME
+const AZ_TICK1 := 18.105365       # …and the handover's own value, quoted only as the core suite's
 const EXCURSION := 32.0           # …and it crosses through zero: the mechanism, as a span. ⚠ A FLOOR
                                   # on the FRAME grid, under the ~33.2 deg the core suite measures per
                                   # tick — and the arms also assert an UPPER bound, because on a BROKEN
@@ -330,10 +337,14 @@ func _finish_arm() -> String:
 				"Without it the HUD cannot draw the mechanism at all: `look_body_deg` beside it is a " +
 				"`hypot`, and gate 0 got the mechanism WRONG on exactly that evidence (a hypot cannot " +
 				"show a sign — the #1 SIGN TRAP's 10th occurrence)") % tag
-	if not (absf(_az_first - AZ_BIRTH) < 0.2):
-		return ("arm %s: the first frame's body-frame LOS azimuth is %.3f deg, expected ~%.3f — this " +
-				"is the launch attitude's own number (elevation_deg = 12, load-consumed) and it is " +
-				"what the handover error is measured against") % [tag, _az_first, AZ_BIRTH]
+	# ⚠ TIGHT, AND AGAINST THE FRAME VALUE: the handover angle is AZ_TICK1 = 18.105365 deg (core suite,
+	# tick 1) and what a client can see is this, one emit period later. The tolerance is 0.01 deg so it
+	# cannot absorb the 0.102 deg difference between the two — which is the whole reason both constants
+	# exist. The launch attitude (`elevation_deg: 12`, load-consumed) is what sets them both.
+	if not (absf(_az_first - AZ_FIRST_FRAME) < 0.01):
+		return ("arm %s: the FIRST EMITTED FRAME's body-frame LOS azimuth is %.3f deg, expected %.3f " +
+				"(the handover itself is %.6f at tick 1, which no client receives — the server emits " +
+				"every 16th tick)") % [tag, _az_first, AZ_FIRST_FRAME, AZ_TICK1]
 	if want_held:
 		if not (_az_hi - _az_lo > EXCURSION):
 			return ("arm %s: the body-frame LOS azimuth must travel more than %.1f deg (got %.3f: " +
@@ -413,7 +424,7 @@ func _verdict() -> bool:
 	# ⚠ QUOTED OFF AN ARM THAT **HELD**, for the same reason PHASE MECHANISM is: on a broken arm the
 	# gated value is itself the post-break runaway, so the pair would not be showing the display problem
 	# — it would be showing two runaways. On a held arm the gated number IS the requirement.
-	print("S36V_ENDGAME  on a HELD arm the running max reads %.3f deg while r > 200 m and %.4f deg at the last frame — an APPROACH quantity, and the reason the HUD freezes its display (per-tick at the exact CPA the core measures %.4f on every arm)" %
+	print("S36V_ENDGAME  on a HELD arm the running max reads %.3f deg while r > 200 m and %.4f deg at the last frame — an APPROACH quantity, and the reason the HUD freezes its display (the core suite pins it > 179 deg per tick on every arm; gate 2 measured %.4f)" %
 		  [float(r11["peak"]), float(r11["peakraw"]), PEAK_CPA])
 
 	# ─────────────────────────────────────────────────────────────────────────────────────────

@@ -360,7 +360,11 @@ and slice 35's "a branch selector, not a hole plug" DOES NOT TRANSFER. ⚠ Its H
 9th occurrence, landing on slice 35's own CURE line (`R̂ +0.000   aim point R₀+2A +0.000` for keys that do not
 exist). ⭐⭐ A THIRD TELEMETRY KEY SHIPPED AT GATE 3 because the HUD could not otherwise draw the mechanism: every
 shipped head angle is a `hypot` and A HYPOT CANNOT SHOW A SIGN (gate 0 read the excursion as a 3° "settle" off
-`head_max` and was WRONG — the #1 SIGN TRAP's 10th occurrence), so `look_body_az_deg` is SIGNED. ⚠⚠ THE ENDGAME
+`head_max` and was WRONG — the #1 SIGN TRAP's 10th occurrence), so `look_body_az_deg` is SIGNED. ⚠⚠ EVERY
+EXCURSION FIGURE CARRIES ITS GRID: **+18.11° → −15.15° (33.2°) PER TICK** (gate 0 / the core suite) against
+**+18.003° → −15.179° (33.182°) PER FRAME** (the verifier and both shots — the first frame is 16 ms after the
+handover tick and lands 0.102° below it), and the verifier's frame constant was first mis-named `AZ_BIRTH` behind a
+tolerance wide enough to hide that gap — slice 21/25's frames-vs-ticks defect in a CONSTANT rather than a print. ⚠⚠ THE ENDGAME
 ARTIFACT NOW APPEARS IN THREE QUANTITIES WITH TWO DIFFERENT GATES, each caught by a FAILING assert: the running
 max hits 179.4998° at CPA on EVERY arm (⇒ the client FREEZES its display, a FOURTH instrument shape), the core's
 excursion tooth read 182.02° ungated by RANGE, and the verifier's read 359.778° ungated on the CLOSING LEG (the
