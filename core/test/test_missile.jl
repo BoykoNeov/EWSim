@@ -8342,7 +8342,7 @@ end
         w, sub = hand_world(; kw...)
         miss = Inf; r_prev = Inf; pos_prev = zero(Vec3); pos_cpa = zero(Vec3)
         off_max = 0.0; head_max = 0.0; nt = 0; n_out = 0; n_sat = 0; n_defl = 0
-        n_sat_band = 0; n_defl_band = 0; r_sat_lo = Inf
+        n_sat_band = 0; n_defl_band = 0; n_band = 0; r_sat_lo = Inf
         haz1 = NaN; hel1 = NaN; off1 = NaN
         tr = Vec3[]
         for k in 1:n
@@ -8368,7 +8368,10 @@ end
                     d = get(tel, "m1.defl_sat", 0.0) == 1.0
                     s && (n_sat  += 1; r_sat_lo = min(r_sat_lo, r))
                     d && (n_defl += 1)
-                    500 <= r <= 3000 && (s && (n_sat_band += 1); d && (n_defl_band += 1))
+                    if 500 <= r <= 3000
+                        n_band += 1
+                        s && (n_sat_band += 1); d && (n_defl_band += 1)
+                    end
                 end
             end
             r > r_prev && miss == Inf && (miss = r_prev; pos_cpa = pos_prev)
@@ -8376,7 +8379,7 @@ end
             miss < Inf && k > 200 && break
         end
         return (; miss, pos_cpa, off_max, head_max, trace = tr, haz1, hel1, off1,
-                  n_sat, n_defl, n_sat_band, n_defl_band, r_sat_lo, nt,
+                  n_sat, n_defl, n_sat_band, n_defl_band, r_sat_lo, nt, n_band,
                   out  = nt == 0 ? 0.0 : 100 * n_out / nt)
     end
 
@@ -8571,13 +8574,31 @@ end
         # arm, and `aero_sat` fires on **exactly one tick out of 7358–10579**, at r = 6383 m — the
         # SAME range on every arm that gets there, INDEPENDENT of the handover error. It is the
         # launch transient, not the basket, and inside the arc's band it is exactly zero.
-        for e in (0.0, -6.0, -18.0)
-            x = harm(rate = 8.0, gfov = 10.0, err = e)
-            @test x.n_defl == 0                          # deflection: EXACTLY zero, whole approach
-            @test x.n_sat_band == 0 && x.n_defl_band == 0   # slice 32's claim, verbatim, in band
-            @test x.n_sat <= 1                              # …and at most ONE tick anywhere
-            x.n_sat == 0 || @test x.r_sat_lo > 6000.0       # …which is at LAUNCH RANGE, not the basket
+        arms = Dict(e => harm(rate = 8.0, gfov = 10.0, err = e)
+                    for e in (0.0, -2.0, -4.0, -6.0, -8.0, -18.0))
+        # WHOLE APPROACH, every arm: deflection EXACTLY zero, aero at most ONE tick.
+        for (_, x) in arms
+            @test x.n_defl == 0
+            @test x.n_sat <= 1
         end
+        # ⭐ …AND THAT ONE TICK IS AT THE SAME RANGE ON EVERY ARM THAT HAS IT, **IN BITS** — which is
+        # what makes "the launch transient, not the basket" a MEASUREMENT and not an inference
+        # (advisor). `r_sat_lo === 6383.1955244633746` across err 0 / −2 / −4 / −6 / −8; the two arms
+        # that break on tick 2 diverge before reaching it and never saturate at all.
+        let rs = [arms[e].r_sat_lo for e in (0.0, -2.0, -4.0, -6.0, -8.0)]
+            @test all(x -> x === rs[1], rs)
+            @test isapprox(rs[1], 6383.1955; atol = 1.0e-3)
+            @test arms[-18.0].n_sat == 0
+        end
+        # ⚠⚠ AND THE BAND CLAIM IS MADE ONLY WHERE THERE ARE SAMPLES (advisor — slice 33 paid FIVE
+        # failing asserts for exactly this class, a quiet `rms r = 0.00000` FROM ZERO SAMPLES on the
+        # 3.7 km arm). A BROKEN arm's CPA is 3.3–3.6 km, so it **never enters [500, 3000] at all**
+        # and a zero band counter there would be evidence of nothing. Their emptiness is asserted as
+        # the POSITIVE fact it is: it is *why* §0.1's "no band metric may carry this claim" is true.
+        @test arms[-6.0].n_band > 4000                   # the HELD arm HAS the band (4341 ticks)…
+        @test arms[-6.0].n_sat_band == 0 && arms[-6.0].n_defl_band == 0   # …slice 32, verbatim
+        @test arms[0.0].n_band  == 0                     # …and the broken arms never reach it
+        @test arms[-18.0].n_band == 0
         # ⇒ a POINTING miss on BOTH sides of the basket: full authority, no idea where to point it.
         # ⚠ On a GLASS wire it would not read this way — the loud twin runs `aero_sat` 27–48 % on the
         # broken rows and the isolation would discriminate in NEITHER direction (slice 33's

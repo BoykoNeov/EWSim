@@ -437,6 +437,19 @@ read the r → 0 ENDGAME SPIKE (5 `aero_sat` + 1 `defl_sat` tick at r = 0.19 m o
 [[ewsim-missile-verifier-sampling]]'s own warning, applied to `off_max` in this file since slice 32
 but not, until now, to the saturation counters.
 
+⚠⚠ **AND A THIRD, CAUGHT POST-GREEN (advisor — slice 26's post-commit precedent, and it BLOCKED):
+three of those asserts were VACUOUS.** `n_sat_band == 0` was asserted on the BROKEN arms, whose CPA
+is 3.3–3.6 km — **so they never enter [500, 3000] at all** and the counter is zero FROM ZERO SAMPLES.
+That is precisely the class slice 33 paid five failing asserts to catch (a quiet `rms r = 0.00000`
+from an empty band on the 3.7 km arm), reappearing in a slice that cites it. Measured: `n_band` is
+**4341** on the held arm, **866** at err −2 (it breaks late enough to dip below 3 km) and **0** at
+err 0 / −10 / −18. ⇒ the band claim is now made ONLY on the held arm, and the broken arms' emptiness
+is asserted as the POSITIVE fact it is — *it is why §0.1's "no band metric may carry this claim" is
+true*. ⭐ The independence half was upgraded in the same pass, from prose to a measurement: the one
+saturating tick lands at **`r_sat_lo === 6383.1955244633746` — BIT-IDENTICAL across err 0 / −2 / −4 /
+−6 / −8** (spread exactly 0), which is what makes "the launch transient, not the basket" a fact.
+**6980 → 6988.**
+
 **FINDING 5 — THE GLASS TWIN IS `R̂ = −0.03`, NOT −0.18.** §0.6's glass-indifference number was flown
 on lib36's LOUD default. Re-measured on the shipped branch: no glass **3620.6755**, `R̂ = −0.03`
 **3620.1305** (§0.6's 3620.131 to the digit, **0.545 m apart on a 3.6 km miss**), `R̂ = −0.18`
@@ -458,10 +471,13 @@ angle SATURATING (stop 30 and stop 20 bit-identical on a free-window arm, so the
 unreachable by the stop); and the two cells where the verdicts part in OPPOSITE directions (birth 10°
 / vy 275: AIMED holds, CAGED breaks — birth 12° / vy 260: the reverse, the WRONG-WAY CHASE).
 
-**WHAT GATE 2 INHERITS.** Two items were found here and belong there: ⚠ `head_clamp` handles a NaN
-*stop* but not a NaN *az*, so a non-finite authored error would poison the head state permanently —
-**the loader must refuse it** (advisor); and the domain's upper end is where the key GOES INERT,
-which §1's saturation tooth now gives a mechanism for (`off1` at +14 and +20 agree to 0.02°).
+**WHAT GATE 2 INHERITS.** Three items were found here and belong there: ⚠⚠ `head_clamp` handles a
+NaN *stop* but not a NaN *az*, so a non-finite authored error would poison the head state permanently
+— **the loader must refuse NaN AND ±Inf** (advisor; `deg2rad(Inf)` reaches the kernel as a non-finite
+`az` and `hypot(Inf, el)` makes the radial projection `Inf/Inf`); the domain's upper end is where the
+key GOES INERT, which §1's saturation tooth now gives a mechanism for (`off1` at +14 and +20 agree to
+0.02°); and ⚠ **Finding 3's elevation pin reads `ref.hel1` off a SEPARATE 1-tick arm** — correct
+today, but if gate 2's telemetry changes tick 1 in any way that pin must be RE-READ, not inherited.
 
 ---
 
