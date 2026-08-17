@@ -176,9 +176,11 @@ export seeker_fov_margin
 # glass's INDEX (measured against `1/√(1+(2πfτ)²)` to 3–4 digits, unity gain EXACTLY when stabilized,
 # with slice 26's ring at 1.7–2.1 Hz where that filter is worth 12–16 % of gain). ⇒ THE CLASSICAL
 # REASON GIMBALS EXIST INVERTS ON THIS WIRE. RUNG, not knob — the gate is answered by a BOUND (a 25×
-# faster servo at a 50× smaller τ cannot reach the stabilized head's window requirement), and the two
-# heads do not collapse in any limit of τ against the shipped seam (an irreducible ONE TICK OF
-# ATTITUDE, a property of the seam's ordering).
+# faster servo at a 50× smaller τ cannot reach the stabilized head's window requirement). ⚠⚠ AND THE
+# τ → 0 LIMIT ANSWERS DIFFERENTLY IN TWO QUANTITIES: in POSITION the heads never collapse against the
+# shipped seam (an irreducible ONE TICK OF ATTITUDE, the seam's ordering), while in STABILITY they
+# collapse COMPLETELY — the same bracket for every τ ≤ 0.005, gap exactly 0.0000. A 42 m trajectory
+# difference worth nothing to the loop.
 export SEEKER_HEAD_MODES, head_clamp_inertial, head_slew_inertial
 export off_axis_angle, head_slew, head_clamp, head_slew_full
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators

@@ -592,11 +592,12 @@ PRE-MEASUREMENT WARNING IS WHY IT WAS NOT ASSERTED THAT WAY.** The stabilized he
 gain, so slice 34's fixed-point path survives with a τ in it. Demanding "flat" would have made a real
 0.055 walk read as a bug in the new branch.
 
-⚠ **THE GAP DOES NOT REACH ZERO (0.010 at τ = 0.01), AND THAT FLOOR WAS INDEPENDENTLY LOCATED.**
-§II.4 measured the irreducible residual against the shipped seam to be exactly ONE TICK OF ATTITUDE
-(`abs(STAB − SHIP)` plateauing at 6.259e−4 rad while `abs(STAB − FRESH)` reaches 0.000e+00). Two
-different measurements, the same floor — which is why *"the two heads collapse in the τ → 0 limit"* is
-still the wrong sentence.
+> ⚠⚠ **THE FIRST DRAFT OF THIS SECTION CLAIMED A FLOOR AND THERE ISN'T ONE — SEE §II.15.** It read
+> *"the gap does not reach zero (0.010 at τ = 0.01), and that floor was independently located"* off
+> the BOTTOM CELL of the τ range flown, and attributed it to §II.4's one-tick term by comparing a
+> SLOPE (6.259e−4 rad) to an ANGLE (0.010 in R̂). Extended to τ = 0.001 the gap is **EXACTLY 0.0000
+> for every τ ≤ 0.005** — all three heads on one bracket. The collapse is TOTAL, which is a stronger
+> result than the floor was, and the attribution was an inference dressed as a measurement.
 
 ⚠ **THE CO-VANISHING IS AN ORDERING, NOT AN IDENTITY** (slice 26's rule, not slice 21/22's): the
 first-order attenuation `1 − 1/√(1+(2πfτ)²)` at the ring's 1.9 Hz runs 0.614 / 0.358 / 0.141 / 0.027
@@ -675,4 +676,83 @@ G1a FIRST was that it could have refuted this slice's title for the price of one
   `head_angle_deg`, `head_rate_sat` and (slice 36) the LOS excursion all read plausibly wrong.
 * ⚠ The MISS is NOT the metric (see above) — and gate 1 adds a second reason not to reach for it: on
   the frozen reductio arms the two heads' misses are 0.160 and 0.169 m while `rms r` parts by 35.4×.
+
+---
+
+## ⚠⚠ §II.15 GATE-1 POST-REVIEW (advisor) — THREE CATCHES, AND ONE OF THEM KILLED A CLAIM
+
+The first pass of §II.10–§II.14 was committed and then reviewed. Three findings, re-flown as **G1d**
+(`g1d_extended.jl`): ONE grid of 29 cells (−0.140 … −0.280), **FOUR** heads, τ over **eight** values
+from 0.200 down to 0.001, `rate_max = Inf`, 696 arms + 29 strapdown. `out% = sat% = 0.00` on every
+one.
+
+### ⭐⭐ CATCH 1 (the one that killed a claim) — THERE IS NO FLOOR, AND THE COLLAPSE IS TOTAL
+
+The gap was quoted as bottoming at 0.010 — **which was the last cell of the τ range I chose to fly**,
+while §II.3 had already run the shipped head to τ = 0.001. Extended:
+
+| τ (s) | body mid | stab mid | fresh mid | **gap (stab − body)** | gap (stab − fresh) |
+|---|---|---|---|---|---|
+| 0.200 | −0.1425 | −0.2375 | −0.1425 | **0.0950** | 0.0950 |
+| 0.100 | −0.1625 | −0.2275 | −0.1625 | 0.0650 | 0.0650 |
+| 0.050 | −0.1675 | −0.2075 | −0.1675 | **0.0400** | 0.0400 |
+| 0.020 | −0.1725 | −0.1875 | −0.1725 | 0.0150 | 0.0150 |
+| 0.010 | −0.1725 | −0.1825 | −0.1775 | 0.0100 | 0.0050 |
+| 0.005 | −0.1775 | −0.1775 | −0.1775 | **0.0000** | 0.0000 |
+| 0.002 | −0.1775 | −0.1775 | −0.1775 | **0.0000** | 0.0000 |
+| 0.001 | −0.1775 | −0.1775 | −0.1775 | **0.0000** | 0.0000 |
+
+⇒ **THE GAP GOES TO EXACTLY ZERO AND STAYS THERE: all three heads land on the SAME bracket
+(−0.180, −0.175] for every τ ≤ 0.005.** The frame stops mattering ENTIRELY where the filter stops
+existing — a *complete* collapse, which is a stronger statement than the floor I wrote and had less
+evidence for. ⚠ **AND THE ATTRIBUTION WAS AN INFERENCE DRESSED AS A MEASUREMENT** — comparing §II.4's
+6.259e−4 **rad** slope residual to a 0.010 **dimensionless** R̂ gap and calling both being nonzero
+"the same floor". Exactly the defect the advisor had already made this plan strip out of §II.6's
+causal chain, reappearing in the sentence meant to close it.
+
+⭐ **AND THE DISCRIMINATOR THAT SETTLED IT IS §II.4's OWN FRESH-ATTITUDE HEAD, FLOWN RATHER THAN
+CITED**: a body-referenced head whose target is re-expressed in the CURRENT attitude, so it differs
+from the shipped seam by EXACTLY one tick of attitude and from the stabilized head by ONLY the frame
+the lag is applied in. Its bracket matches the shipped head's at every τ but one (τ = 0.010, one
+cell) ⇒ **the one-tick attitude term is worth ≤ 0.005 of residual anywhere and 0.000 in the limit** —
+slice 34's §0.5 finding (*a one-tick delay is worth nothing*) reproduced in a new quantity.
+
+⭐⭐ **THE TWO QUANTITIES ANSWER τ → 0 DIFFERENTLY, AND THAT IS THE THING TO CARRY FORWARD:** in
+POSITION the heads never collapse against the shipped seam (`max|Δpos|` plateaus at 42.572 m, §II.4);
+in STABILITY they collapse completely. **A 42 m trajectory difference that is worth nothing to the
+loop.** Both shipped files now say so.
+
+⚠ **AND THE HEADLINE FRACTION IS A τ = 0.05 STATEMENT TWICE OVER**, because BOTH terms move with τ.
+On one grid: strapdown −0.2625 throughout, so the gimbal buys 0.1200 / 0.1000 / **0.0950** / 0.0900 /
+0.0900 / 0.0850 at τ = 0.2 … 0.005, and stabilizing gives back **79.2 % / 65.0 % / 42.1 % / 16.7 % /
+11.1 % / 0.0 %** of it. ⇒ *"≈40–45 % of what the gimbal bought"* is true AT τ = 0.05 and the honest
+range is **0 % to 79 %**.
+
+### CATCH 2 — `head_max` WAS NEVER RECORDED, SO "NO CAGE" WAS UNESTABLISHED FOR THE LADDER
+
+§II.8's *"the stop never binds — no cage"* rested on gate 0's P4d, measured at ONE τ over a different
+R̂ region — while G1b flew τ up to 0.2, and G1c gave direct evidence the space head travels FURTHER as
+the servo slows (28.0–30.0° frozen, and it **hit** the 30° stop at R̂ = −0.33). A clamping cell would
+not be a reference-frame measurement at all: slice 36's gate 0 established caging as a SEPARATE
+mechanism with its own verdict. Worst `head_max` over each 29-cell ladder, against the 30° stop:
+
+| τ (s) | 0.200 | 0.100 | 0.050 | 0.020 | 0.010 | 0.005 | 0.002 | 0.001 |
+|---|---|---|---|---|---|---|---|---|
+| body | 19.858 | **21.691** | 21.558 | 21.019 | 20.701 | 20.471 | 20.343 | 20.247 |
+| stab | 21.108 | 20.335 | 19.803 | 19.944 | 20.003 | 20.109 | 20.166 | 20.166 |
+| fresh | 19.744 | 21.675 | 21.509 | 20.942 | 20.621 | 20.384 | 20.245 | 20.166 |
+
+⇒ **THE WORST CELL ANYWHERE IN 696 ARMS IS 21.691°, AND IT IS THE BODY-REFERENCED HEAD.** No cage
+anywhere on the ladder, with ~8° of headroom. ⭐ And §II.8's *"do not assume the stabilized head
+swings further — measure it"* is vindicated a second time: on the LADDER it is the SMALLER of the two
+at six of eight time constants.
+
+### CATCH 3 — THE 0.095 ARITHMETIC HAD SPLICED TWO GRIDS, WHICH IS §II.6's OWN PROHIBITION
+
+G1b's grid stopped at −0.260 and therefore could NOT produce the strapdown bracket (−0.265, −0.260];
+that number was still gate 0's P6, flown at rate 40. §II.6's own rule is *"A LADDER QUOTED ACROSS TWO
+GRIDS IS NOT A LADDER"* — written about slice 34's numbers and then violated on this slice's own.
+G1d's grid reaches −0.280 and re-flies the strapdown arm on it: **(−0.265, −0.260], mid −0.2625,
+step 4.46×**, reproducing P6 exactly. ⇒ the three-rung ladder and every fraction above are now ONE
+grid, one band, one metric, one rate.
 

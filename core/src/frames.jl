@@ -1022,11 +1022,17 @@ end
 #
 # ⚠ RUNG, NOT KNOB, AND THE GATE IS ANSWERED BY A BOUND RATHER THAN A TOLERANCE (§II.3): a 25×
 # faster servo at a 50× smaller time constant stops at `off_band` 4.796° and cannot reach the
-# stabilized head's 3.861°, so no in-domain value of any shipped knob reaches this off-state. ⚠ And
-# the two heads do NOT collapse in any limit of τ against the SHIPPED seam — the residual is exactly
-# ONE TICK OF ATTITUDE (the seam expresses its target in `att(k)` and consumes it at `k+1`), a
-# property of the seam's ORDERING and not of the servo (§II.4). Against a fresh-attitude head the
-# limit IS exact (0.000e+00 at τ ≤ 1e−3), and that is the honest statement.
+# stabilized head's 3.861°, so no in-domain value of any shipped knob reaches this off-state.
+#
+# ⚠⚠ **THE τ → 0 LIMIT ANSWERS DIFFERENTLY IN TWO QUANTITIES, AND CONFLATING THEM IS THE TRAP.**
+# In POSITION the two heads do NOT collapse against the SHIPPED seam — `max|Δpos|` plateaus at
+# 42.572 m, an irreducible ONE TICK OF ATTITUDE (the seam expresses its target in `att(k)` and
+# consumes it at `k+1`), a property of the seam's ORDERING and not of the servo (§II.4); against a
+# fresh-attitude head that residual IS exactly 0.000e+00. But in STABILITY they collapse COMPLETELY:
+# gate 1 flew both heads (and the fresh-attitude one) down to τ = 0.001 and all three land on the
+# SAME bracket (−0.180, −0.175] for every τ ≤ 0.005, gap EXACTLY 0.0000 (§II.11). ⇒ a 42 m
+# trajectory difference that carries ZERO stability consequence — slice 34's §0.5 result (a one-tick
+# delay is worth nothing) reproduced in a new quantity, and the reason no floor may be claimed here.
 #
 # ⚠ THE STOP IS STILL THE AIRFRAME'S. A gimbal's mechanical travel is a BODY-relative quantity no
 # matter what frame its servo closes in, and so is the glass it looks through — so both kernels below
