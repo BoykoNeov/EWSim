@@ -762,7 +762,7 @@ grid, one band, one metric, one rate.
 
 # GATE 2 AS BUILT (2026-08-17) — the rung wired, and a finding that inverts a servo intuition
 
-**Status: gate 2 COMPLETE and green. Suite 7323 → 7394 (+71 asserts, all in `test_missile.jl`); every
+**Status: gate 2 COMPLETE and green. Suite 7323 → 7396 (+73 asserts, all in `test_missile.jl`); every
 prior assert unmoved, so slices 1–36 are byte-identical.** Raw measurements:
 `M:\claud_projects\temp\slice37g2\` (`lib37g2.jl`, `g2a_ladder.jl`, `g2b_seam.jl`, `g2c_hold.jl`,
 `g2d_pins.jl`, `g2e_sat.jl`). **NO PATCH ANYWHERE** — every arm here flies the shipped seam, which is
@@ -870,7 +870,7 @@ on this cell only reaches 3.4°. These arms are a BRANCH EXERCISE and NOT a stab
 | fov | rung | held ticks | head_angle MOTION while held | span |
 |---|---|---|---|---|
 | 3° | body | **0** (never breaks) | — | — |
-| 3° | space | 4711 | 13.93° | 14.15° |
+| 3° | space | 4530 | 13.83° | 13.93° |
 | 1° | body | 5229 | **0.00000° EXACTLY** | 0.0000° |
 | 1° | space | 5916 | **46.80°** | 28.34° |
 
@@ -879,8 +879,11 @@ on this cell only reaches 3.4°. These arms are a BRANCH EXERCISE and NOT a stab
 and BOTH are against the stop — but the body head is FROZEN there (bound on **100 %** of held ticks,
 having been clamped before the break) while the space head is being continuously re-clamped as the
 body rotates under it and is bound on **59 %**: it wanders in and out of its own stop while holding.
-⚠ Attribution: that is the CLAMP doing work, not slice 36's CAGE (which is a separate mechanism with
-its own verdict) — no arm on any ladder here reaches the stop at all (worst 21.7°, ~8° of headroom).
+⚠ **ATTRIBUTION, PRECISELY (advisor's post-review wording):** these arms **ARE** caged by slice 36's
+own definition — a head at `head_max == stop` is exactly that — and the claim read off them is about
+**what the clamp does in each frame**, never a stability or envelope verdict, which is what slice
+36's separate-mechanism finding forbids. What keeps the BRACKET cells clean of it is a different
+fact: no arm on any LADDER here reaches the stop at all (worst 21.7° against 30°).
 
 ## §II.20 THE OTHER TEETH, IN ONE LIST
 
@@ -923,3 +926,63 @@ its own verdict) — no arm on any ladder here reaches the stop at all (worst 21
 * ⚠ **THE MISS IS NOT THE METRIC** (every arm here hits, and the RINGING arm often misses LESS), and
   ⚠ **`head_rate_dps` MAY NOT BE COMPARED ACROSS THE BUTTON** without saying which frame each reading
   is in — §II.18 is the reason, and the seam comment is where it is said.
+
+## ⚠⚠ §II.22 GATE-2 POST-REVIEW (advisor) — THREE CATCHES, AND ONE WAS A LIVE SEAM DEFECT
+
+### ⭐⭐ CATCH 1 (the real one) — THE SLEW GATE WAS READING A ONE-TICK-STALE ATTITUDE
+
+The space-stabilized branch gated its slew on the STORED body pair `c[:head_az]`, which tick k−1's
+`observe!` wrote as this pointing expressed in **att(k−1)**. But `integrate!` is PHASE 1 and
+`observe!` is PHASE 3, so `:att_q` in that block is already **att(k)** — and on THIS rung the head's
+body angle moves with attitude even when the servo does nothing. ⇒ *"the error the detector HAD
+before this tick's slew"* was being measured against the WRONG ATTITUDE, and discipline 3's two
+evaluations differed by attitude TIMING as well as by the slew, which is not what discipline 3 says
+they differ by. (The body rung has no such gap: a body-referenced head's stored pair is still
+current, which is exactly why the defect is new here.)
+
+⚠⚠ **AND §II.16's REPRODUCTION — THIS GATE'S STRONGEST CHECK — STRUCTURALLY COULD NOT SEE IT.** Gate
+1's probe patched the same hunk and made the same choice, so cell-for-cell agreement proves
+`seam == probe`, never that either is right. **A reproduction check is blind on exactly the question
+the two implementations share** — and here that question was frame timing, which is this slice's
+whole subject.
+
+**THE FIX IS AN ORDERING, AND IT SIMPLIFIED THE BRANCH:** the body carries the head, and the STOP is
+taken, BEFORE the detector is read — `head_clamp_inertial` moved from the `else` arm to above the
+gate, and the `else` arm is gone, because *a head outside its window simply does not slew* is the
+only thing it ever meant. Physically this is also the right order: the body rotating under a
+space-stabilized head can drag it into its own mechanical stop with no slew involved.
+
+⭐ **THE RE-FLIGHT IS THE INTERESTING PART — THE FIX IS BIT-INERT ON EVERY ARM THE LADDER QUOTES AND
+MATERIAL EXACTLY WHERE THE BRANCH IS EXERCISED**, which is why the probe and the seam agreed in the
+first place:
+
+| re-flown | before | after |
+|---|---|---|
+| the 4 bracket cells + the sharp pair + the matched-ring cells | — | **unchanged to 5 decimals** (`out = 0.00` on all: the gate never fires and the stop never binds) |
+| hold arm, fov 3°, space | 4711 held ticks / 13.93° / miss 789.5 m | **4530 / 13.83° / miss 953.5 m** |
+| hold arm, fov 2°, space | 4503 held ticks / 26.72° / miss 145.0 m | **3001 / 17.74° / miss 1911.1 m** |
+| hold arm, fov 1°, space | 5916 / 46.803° | 5916 / **46.801°** |
+| the 12° / 8° / 5° stop arms | — | identical |
+
+⇒ every number §II.16–§II.18 rests on is untouched, and the branch §II.19 flew moved by up to 13×
+in miss. ⚠ **THIS IS THE THIRD PLACE ATTITUDE TIMING ENTERS THE HEAD** — §II.4 names the other two
+(the target expressed in `att(k)` and consumed at k+1; the servo state's own frame) — and it was
+undocumented until this review.
+
+### CATCH 2 — A `sat == 0.0` ASSERT SITTING ON THE ONE VALUE A BROKEN ARM PRODUCES
+
+§II.18's two CORROBORATING cells asserted `sat == 0.0` for the space rung without asserting
+`out == 0.0` beside it. `head_rate_sat` reads 0 on a windowed arm for the reason the seam comment
+gives (a held head is asked for nothing, so nothing saturates) ⇒ that was the one place in the
+testset where the two-run discipline was asserted **in the direction that hides its own failure**.
+Both cells now carry the window gate. (The primary cell at R̂ = −0.140 always did.)
+
+### CATCH 3 — "NOT SLICE 36's CAGE" WAS THE WRONG SENTENCE
+
+A head at `head_max == stop` **is** caged by slice 36's own definition, so §II.19's attribution
+could not stand as written. The correct statement has two halves and they are about different arms:
+the claim read off the 12°-stop arms is about **what the clamp does in each frame** and never a
+stability or envelope verdict (which is what slice 36's separate-mechanism finding forbids); and
+what keeps the BRACKET cells clean is the separate fact that no ladder arm reaches the stop at all.
+⚠ In this project the attribution sentence is the thing a later slice quotes, so it is fixed in the
+plan AND at the tooth.

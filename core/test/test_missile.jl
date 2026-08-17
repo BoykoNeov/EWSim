@@ -9448,9 +9448,18 @@ end
         @test b.sat > 10.0 && s.sat == 0.0            # slice 35's limit binds on ONE of them only
         # …and the same split, in the same direction, one and two rungs down the ladder (4.0–10.5 %
         # against 0.00 %): a single cell would be an anecdote.
+        # ⚠⚠ EACH CORROBORATING CELL CARRIES ITS OWN `out == 0.0` (advisor), AND THAT IS NOT
+        # BOILERPLATE HERE: `head_rate_sat == 0` IS WHAT A BROKEN ARM READS, for the reason the seam
+        # comment gives — a held head is asked for nothing, so nothing saturates. Asserting the zero
+        # without the window gate would be the one place in this testset where the two-run discipline
+        # is asserted in the direction that hides its own failure.
         for r in (-0.150, -0.160)
-            @test rarm(Rhat = r, head = :body_referenced).sat > 3.0
-            @test rarm(Rhat = r, head = :space_stabilized).sat == 0.0
+            let ab = rarm(Rhat = r, head = :body_referenced),
+                as = rarm(Rhat = r, head = :space_stabilized)
+                @test ab.out == 0.0 && as.out == 0.0
+                @test ab.sat > 3.0
+                @test as.sat == 0.0
+            end
         end
     end
 
@@ -9502,6 +9511,11 @@ end
         # head is FROZEN there (bound on 100 % of held ticks, having been clamped before the break),
         # while the space head is being continuously re-clamped as the missile rotates under it and
         # is bound on only ~59 %: it wanders in and out of its own stop while holding.
+        # ⚠ ATTRIBUTION, PRECISELY (advisor): these arms ARE caged by slice 36's definition — a head
+        # at `head_max == stop` is exactly that — and the claim being read off them is about WHAT THE
+        # CLAMP DOES IN EACH FRAME, never a stability or envelope verdict, which is what slice 36's
+        # separate-mechanism finding forbids. No arm on any LADDER here reaches the stop at all
+        # (worst 21.7° against 30°), which is what keeps the bracket cells free of it.
         let bs = held(fov = 2.0, stop = 12.0, head = :body_referenced),
             ss = held(fov = 2.0, stop = 12.0, head = :space_stabilized)
             @test bs.nlost == ss.nlost && bs.nlost > 5000

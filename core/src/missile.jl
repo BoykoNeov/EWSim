@@ -1875,25 +1875,44 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             i_az, i_el = get(c, :head_frame, :body_referenced) === :space_stabilized ?
                 (Float64(c[:head_i_az]), Float64(c[:head_i_el])) :
                 az_el(rotate(c[:att_q]::Quat, los_unit_from_angles(head_az, head_el)))
+            # ⚠⚠ THE BODY CARRIES THE HEAD **BEFORE** THE DETECTOR IS READ, AND THE ORDERING IS A
+            # GATE-2 POST-REVIEW FIX (advisor). `:head_az` was written by tick k−1's `observe!`, i.e.
+            # it is this pointing expressed in **att(k−1)** — but `integrate!` is PHASE 1 and this is
+            # PHASE 3, so `:att_q` here is already att(k), and on THIS rung the head's body angle
+            # moves with attitude even when the servo does nothing. Gating the slew on the stored
+            # pair would therefore have measured "the error the detector HAD" against the WRONG
+            # ATTITUDE, and would have made discipline 3's two evaluations differ by attitude timing
+            # as well as by the slew — which is not what discipline 3 says they differ by (on the
+            # body rung there is no such gap, because a body-referenced head's stored pair is still
+            # current). ⚠ AND NO CHECK OF THIS GATE COULD SEE IT: the gate's headline validation is
+            # that the shipped seam reproduces gate 1's ladder cell for cell, but gate 1's PROBE
+            # patched the same hunk and made the same choice — cell-for-cell agreement proves
+            # `seam == probe`, never that either is right. This is the THIRD place attitude timing
+            # enters the head (§II.4 names the other two) and the plan now says so.
+            # ⭐ THE CLAMP IS THE SAME CALL THE HOLD PATH USED TO MAKE, MOVED ABOVE THE GATE, WHICH IS
+            # BOTH THE FIX AND A SIMPLIFICATION: the body rotating under a space-stabilized head can
+            # drag it into its own mechanical STOP with no slew involved, so the stop is taken FIRST
+            # and the detector then reads where the head actually is. The `else` arm is gone — a head
+            # outside its detector window simply does not slew, which is now the only thing that
+            # branch ever meant.
+            i_az, i_el, head_az, head_el = head_clamp_inertial(i_az, i_el, c[:att_q]::Quat, stop_h)
+            # ⚠⚠ THE HOLD IS PHYSICS HERE, NOT HOUSEKEEPING, AND IT IS WHERE THE TWO RUNGS PART MOST
+            # VISIBLY. A body-referenced head with no error signal HOLDS ITS BODY ANGLE and its index
+            # freezes (slice 34 §0.4: a frozen index makes a CONSTANT bend, quiet at every R̂). A
+            # space-stabilized one holds its INERTIAL angle, so its body angle — the glass's index,
+            # the stop's quantity and the detector's reference — KEEPS MOVING at unity gain while the
+            # missile rotates under it, AND THE STOP CAN STILL BIND while the head is holding. No
+            # slew, so nothing is demanded and nothing saturates: the zero initialisers above are
+            # what a held tick reports on BOTH rungs. Measured (gate 2): over one broken window a
+            # body head moves 0.00000° EXACTLY across 5229 held ticks and this one travels 46.80°.
             # discipline 3, first evaluation (the body arm's, verbatim in meaning): the error the
-            # detector HAD, before this tick's slew.
+            # detector HAS, now that the body has carried the head and the stop has been taken.
             if off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h
                 i_az, i_el, head_az, head_el, head_dem, head_sat =
                     head_slew_inertial(i_az, i_el,
                                        Float64(c[:head_tgt_i_az]), Float64(c[:head_tgt_i_el]),
                                        c[:att_q]::Quat, Float64(c[:gimbal_tau_s]), dt, stop_h;
                                        rate_max = rate_h)
-            else
-                # ⚠⚠ THE HOLD BRANCH IS PHYSICS HERE, NOT HOUSEKEEPING, AND IT IS WHERE THE TWO RUNGS
-                # PART MOST VISIBLY. A body-referenced head with no error signal HOLDS ITS BODY ANGLE
-                # and its index freezes (slice 34 §0.4: a frozen index makes a CONSTANT bend, quiet
-                # at every R̂). A space-stabilized one holds its INERTIAL angle, so its body angle —
-                # the glass's index, the stop's quantity and the detector's reference — KEEPS MOVING
-                # at unity gain while the missile rotates under it, AND THE STOP CAN STILL BIND while
-                # the head is holding. No slew, so nothing is demanded and nothing saturates: the
-                # zero initialisers above are this branch's readouts on both rungs.
-                i_az, i_el, head_az, head_el =
-                    head_clamp_inertial(i_az, i_el, c[:att_q]::Quat, stop_h)
             end
             c[:head_i_az] = i_az; c[:head_i_el] = i_el
         else
