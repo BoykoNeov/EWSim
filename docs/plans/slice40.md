@@ -284,11 +284,18 @@ lesson mirrored) it is **MONOTONE IN THE INERTIA**:
 |---|---|---|
 | 2nd 5.0 Hz | (−0.170, −0.165] | **0 — the CONTROL's own bracket** |
 | 2nd 2.0 Hz | (−0.155, −0.150] | +3 |
-| 2nd 1.0 Hz | (−0.130, −0.120] | ≈ +9 |
-| 2nd 0.5 Hz | (−0.100, −0.090] | ≈ **+15** |
+| 2nd 1.0 Hz | (−0.130, −0.120] | **+0.045 of R̂** |
+| 2nd 0.5 Hz | (−0.100, −0.090] | **+0.072 of R̂** |
+
+⚠ **THE LAST TWO ROWS ARE QUOTED IN R̂, NOT IN "CELLS", AND THE REASON IS THE GRID** (advisor): they
+were found on a **0.010** grid extended toward zero, because on slice 37/38's own 0.005 grid these
+arms never ring at all inside it. Everywhere else in this family a "cell" means 0.005, so quoting
+them that way would silently double the resolution they were measured at. The first three rows ARE
+on the 0.005 grid and keep their cell counts.
 
 ⭐⭐ **⇒ THE SLICE'S CLEANEST SENTENCE: INERTIA IS NOT THE ENEMY — UNDAMPED INERTIA IS.** The SAME
-added inertia buys ~15 cells of margin at ζ = 1.0 and rings at every cell of the grid at ζ = 0.1.
+added inertia buys +0.072 of R̂ of margin at ζ = 1.0 (⚠ in R̂, not "cells" — §1.2) and rings at
+  every cell of the grid at ζ = 0.1.
 **The damping decides the SIGN of what the inertia does**, which is why ζ is the slider and ω_n is
 the wire.
 

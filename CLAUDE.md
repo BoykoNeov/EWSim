@@ -508,7 +508,9 @@ SIX TIMES HARDER. ⚠⚠ AND THE CONVERSE IS MEASURED TOO, WHICH IS WHAT KEEPS T
 stops at **NEITHER NUMBER, READ AT A FIXED FREQUENCY, ORDERS THE OUTCOME**, and NO loop-crossover
 argument is made — because the frequency the loop closes at is the one quantity this gate could NOT
 measure. ⭐ THE SENTENCE THE TWO WIRES EXIST TO SAY: **INERTIA IS NOT THE ENEMY, UNDAMPED INERTIA IS** —
-the same added inertia buys ≈15 cells of R̂ margin at ζ = 1.0 (onset (−0.100, −0.090] against the
+the same added inertia buys +0.072 of R̂ of margin at ζ = 1.0 (⚠ quoted in R̂ and NOT in "cells" —
+that bracket is on a 0.010 grid extended toward zero, while a cell means 0.005 everywhere else in
+this family; onset (−0.100, −0.090] against the
 shipped head's (−0.170, −0.165]) and rings at EVERY cell of that grid at ζ = 0.1; THE DAMPING DECIDES
 THE SIGN OF WHAT THE INERTIA DOES. ⚠ RUNG (`:head_servo`), and the reparameterization gate slice 39
 died on is answered by a BOUND: no τ reaches gain > 1 or phase < −90° analytically, and in flight the
@@ -526,7 +528,8 @@ THIS WIRE, which killed the sharpest available claim (*the loop rings where the 
 the probe's own CONTROL row failed (0.80 Hz where 26–39 measure 1.7–2.1), and re-flown under slice 26
 §P7B's conditions the two estimators DISAGREE on the control itself (0.91 vs 0.23) ⇒ recorded as
 UNTESTED, not as refuted physics; (3) "well-damped buys margin" does not generalise — at ζ = 1.0 it
-depends on ω_n (0 cells at 5 Hz, +3 at 2, ≈+15 at 0.5), and the 5 Hz row explains itself (τ_eff =
+depends on ω_n (0 cells at 5 Hz, +3 at 2, and +0.072 of R̂ at 0.5 — the last on a coarser 0.010
+grid, so it is quoted in R̂ rather than in cells), and the 5 Hz row explains itself (τ_eff =
 0.0637, within 27 % of the shipped 0.05 — the overdamped collapse arriving in flight); (4) ⭐⭐ THE
 SEAM'S OWN PREDICTION, REFUTED AT GATE 2 — the resonance is NOT inert on slice 37's space-stabilized
 rung (6.1× on a design that rung flies quiet, `out_band` 0.00 %), because BODY MOTION IS ONLY ONE OF

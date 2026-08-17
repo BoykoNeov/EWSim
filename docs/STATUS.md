@@ -5472,8 +5472,11 @@ because the frequency the loop actually closes at is the ONE QUANTITY THIS GATE 
 (§0.7 below).
 
 ⭐ **THE SENTENCE THE TWO WIRES EXIST TO SAY: INERTIA IS NOT THE ENEMY — UNDAMPED INERTIA IS.** The
-SAME added inertia buys ≈15 cells of R̂ margin at ζ = 1.0 (onset (−0.100, −0.090] against the shipped
-head's (−0.170, −0.165]) and rings at EVERY cell of that grid at ζ = 0.1. **The damping decides the
+SAME added inertia buys **+0.072 of R̂** of margin at ζ = 1.0 (onset (−0.100, −0.090] against the
+shipped head's (−0.170, −0.165]) and rings at EVERY cell of that grid at ζ = 0.1. ⚠ QUOTED IN R̂ AND
+NOT IN "CELLS": those two brackets were found on a **0.010** grid extended toward zero (on slice
+37/38's own 0.005 grid those arms never ring inside it at all), and a "cell" means 0.005 everywhere
+else in this family. **The damping decides the
 SIGN of what the inertia does**, which is why ζ is the slider and ω_n is the wire.
 
 ⚠ **RUNG, NOT KNOB, AND THE GATE IS ANSWERED BY A BOUND** (slice 39's kill, pre-empted before any
@@ -5506,7 +5509,8 @@ failed**: a periodogram put the first-order head's ring at 0.80 Hz where slices 
 oracle failed again and the two estimators disagree on the control itself** (0.91 vs 0.23 Hz) ⇒ NO
 FREQUENCY CLAIM IS MADE, and the hypothesis is recorded as UNTESTED rather than as refuted physics.
 (3) *"A well-damped second-order gimbal has more margin than the lag"* does not generalise as
-written — at ζ = 1.0 the onset depends on ω_n (0 cells at 5 Hz, +3 at 2, ≈+9 at 1, ≈+15 at 0.5), and
+written — at ζ = 1.0 the onset depends on ω_n (0 cells at 5 Hz, +3 at 2, then +0.045 and +0.072 of R̂
+at 1 and 0.5 Hz — the last two on a coarser 0.010 grid, hence quoted in R̂ rather than in cells), and
 what it became is better: MONOTONE IN THE INERTIA. ⭐ The 5 Hz row explains itself (`τ_eff` = 0.0637,
 within 27 % of the shipped τ = 0.05 — the overdamped collapse arriving in flight). (4) **THE SEAM's
 OWN PREDICTION, REFUTED AT GATE 2**: gate 1 wrote in three places that the resonance would be nearly
