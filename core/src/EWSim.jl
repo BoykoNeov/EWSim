@@ -183,6 +183,15 @@ export seeker_fov_margin
 # difference worth nothing to the loop.
 export SEEKER_HEAD_MODES, head_clamp_inertial, head_slew_inertial
 export head_drift_inertial                      # slice 38 — an imperfect head gyro
+# Slice 40 (§11 Tier-A — the deferral 35, 37 and 38 each named): THE HEAD SERVO'S ORDER. A real
+# gimbal has INERTIA, so its servo is second-order — and that is a new mechanism rather than a
+# refinement, because a first-order lag is BOUNDED (index gain ≤ 1, phase ≥ −90°, at every frequency
+# for every τ) while a second-order servo leaves both bounds. ⭐⭐ On slice 34's own shipped design
+# two second-order servos ring with index gains 32× apart — one 3.5× ABOVE the shipped lag's, one a
+# TENTH of it — so NEITHER NUMBER, READ AT A FIXED FREQUENCY, ORDERS THE OUTCOME. ⭐ INERTIA IS NOT
+# THE ENEMY, UNDAMPED INERTIA IS: the same added inertia buys ≈15 cells of R̂ margin at ζ = 1.0 and
+# rings at every cell of that grid at ζ = 0.1.
+export HEAD_SERVO_MODES, head_slew_second_order, head_slew_second_order_inertial
 export off_axis_angle, head_slew, head_clamp, head_slew_full
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step

@@ -658,8 +658,19 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # and `:seeker_head` is live-settable (it is slice 37's button), so a wire that opens
             # body-referenced and is toggled DOES use them. Refusing them here would forbid exactly
             # the demonstration slice 37 shipped.
+            # ⭐⭐ SLICE 40 — `gimbal_omega_hz` AND `gimbal_zeta`, THE SECOND-ORDER SERVO's OWN TWO
+            # NUMBERS, join the same loop for slice 35/36/38's reason: identical posture, one
+            # source, no drift. ⚠ `gimbal_omega_hz` CARRIES ITS UNIT for slice 35's exact reason (a
+            # frequency has a time in it), while `gimbal_zeta` is DIMENSIONLESS — a damping RATIO —
+            # so neither is converted here; the seam's `2π` lives beside the seam's `deg2rad`.
+            # ⚠ THEY ARE INERT WITHOUT THE RUNG, not refused beside `:first_order` — the slice-38
+            # distinction exactly: they are consumed EVERY TICK the second-order arm runs and
+            # `:head_servo` is live-settable (it is this slice's button), so a wire that opens
+            # first-order and is toggled DOES use them. Refusing them would forbid the
+            # demonstration. Their VALUE bounds are checked in `_validate_world`, where the
+            # integrator's own stability limit is the reason for the ceiling.
             for hk in ("gimbal_stop_deg", "gimbal_fov_deg", "gimbal_rate_dps",
-                       "gimbal_handover_err_deg",
+                       "gimbal_handover_err_deg", "gimbal_omega_hz", "gimbal_zeta",
                        "head_gyro_scale_err", "head_gyro_bias_y", "head_gyro_bias_z")
                 haskey(sb, hk) || continue
                 haskey(sb, "gimbal_tau_s") ||
@@ -667,6 +678,7 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                           "it is read only inside the gimbal head, so without one this knob is " *
                           "DEAD (slice $(hk == "gimbal_rate_dps" ? 35 :
                                          hk == "gimbal_handover_err_deg" ? 36 :
+                                         hk in ("gimbal_omega_hz", "gimbal_zeta") ? 40 :
                                          startswith(hk, "head_gyro") ? 38 : 34))")
                 comp[Symbol(hk)] = _f64(sb[hk])
                 isfinite(comp[Symbol(hk)]) ||
@@ -1352,6 +1364,47 @@ function _validate_missile(world::World)
                   "gimballed seeker anywhere — the rung names the HEAD's servo reference frame " *
                   "and is read only inside the head, so without seeker.gimbal_tau_s it is a DEAD " *
                   "fidelity (slice 37)")
+    end
+    # SLICE 40 — `:head_servo` NAMES THE GIMBAL SERVO'S **ORDER**, so it is meaningless without a
+    # gimbal for exactly slice 37's reason, and it is refused the same way and in the same place.
+    # ⚠ AND IT CARRIES A SECOND REFUSAL SLICE 37 DID NOT NEED: the second-order rung is defined by
+    # `gimbal_omega_hz`, so authoring the rung without it would fly a servo with NO BANDWIDTH — a
+    # FROZEN head (the kernel's own `ωn ≤ 0` degenerate), which is slice 34's `τ = Inf` reductio
+    # arriving by accident and reading as a mysteriously dead seeker rather than as a load error.
+    if haskey(world.fidelity, :head_servo)
+        any(haskey(e.comp, :gimbal_tau_s) for (_, e) in world.entities) ||
+            error("fidelity head_servo: '$(world.fidelity[:head_servo])' authored with no " *
+                  "gimballed seeker anywhere — the rung names the HEAD's servo ORDER and is read " *
+                  "only inside the head, so without seeker.gimbal_tau_s it is a DEAD fidelity " *
+                  "(slice 40)")
+        if world.fidelity[:head_servo] === :second_order
+            any(haskey(e.comp, :gimbal_omega_hz) for (_, e) in world.entities) ||
+                error("fidelity head_servo: second_order needs seeker.gimbal_omega_hz — a " *
+                      "second-order servo IS its natural frequency and its damping, and without " *
+                      "one the head has no bandwidth at all and simply FREEZES (slice 40)")
+        end
+    end
+    # ⚠ AND THE SERVO'S OWN TWO NUMBERS ARE VALIDATED WHERE THEY ARE AUTHORED (convention 5's
+    # validate-at-LOAD for immutable inputs; `gimbal_zeta` is ALSO clamped at the consumer because
+    # it is the live slider). ω_n is bounded ABOVE by the integrator, not by taste: the semi-implicit
+    # step is stable while `ω_n·Δt < 2`, measured decaying at 200 Hz and DIVERGING TO NaN at 300 Hz
+    # on the shipped `dt = 1e−3` (`docs/plans/slice40.md` §1.1). The bound below is that limit with a
+    # 3× margin, and it is stated as a frequency because that is what the YAML authors.
+    for (id, e) in world.entities
+        if haskey(e.comp, :gimbal_omega_hz)
+            w_hz = Float64(e.comp[:gimbal_omega_hz])
+            (isfinite(w_hz) && w_hz > 0.0) ||
+                error("missile '$id': seeker.gimbal_omega_hz must be finite and > 0 (got $w_hz)")
+            w_hz ≤ 100.0 ||
+                error("missile '$id': seeker.gimbal_omega_hz = $w_hz Hz exceeds 100 Hz — the " *
+                      "second-order servo is stepped at the scenario's dt and its recursion " *
+                      "diverges near 300 Hz at dt = 1e-3 (slice 40 §1.1)")
+        end
+        if haskey(e.comp, :gimbal_zeta)
+            z = Float64(e.comp[:gimbal_zeta])
+            (isfinite(z) && z ≥ 0.0) ||
+                error("missile '$id': seeker.gimbal_zeta must be finite and ≥ 0 (got $z)")
+        end
     end
     n_missile == 0 && return world                       # not a missile scenario
     # Slice 9: a guided missile's Autopilot target-locks the nearest `:target` at runtime — so a

@@ -10118,3 +10118,262 @@ end
         end
     end
 end
+
+@testset "THE HEAD SERVO'S ORDER wired (slice 40 — a heavier gimbal, and its resonance)" begin
+    dt = 1.0e-3
+
+    # Slice 37/38's wire TO THE DIGIT, with ONE authored change: `gimbal_rate_dps = 120` instead of
+    # 40. ⚠⚠ THE CHANGE IS AN ISOLATION, MEASURED AND NOT PREFERRED: at 40 °/s slice 35's rate limit
+    # binds 20–53 % of band ticks on the lightly-damped arms — and it ATTENUATES the ring (0.65648
+    # against the free 0.79973 at ζ = 0.05), which is slice 35's own two-sided knob reappearing on a
+    # new architecture. At 120 it binds 0.00 % on every arm of both wires, so slice 35's knob is
+    # provably not in this slice's answer. ⇒ THE HONEST SENTENCE IS THAT THE SHIPPED SERVO WAS
+    # PARTLY HIDING THIS, not that a confound was removed.
+    function so_world(; vy = 200.0, seed = 32, Rhat = -0.18, stop = 30.0, rate = 120.0,
+                        head = :body_referenced, servo = nothing, wn = nothing, zeta = nothing)
+        fid = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn, :autopilot => :alpha,
+                                  :airframe => :six_dof, :seeker => :filtered,
+                                  :seeker_axes => :az_el, :seeker_head => head)
+        servo === nothing || (fid[:head_servo] = servo)
+        w = World(seed = seed, fidelity = fid)
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.0,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => 0.3, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => 8.0, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => 5.0e-5, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true,
+                                :radome_slope => -0.03, :radome_ripple => -0.15,
+                                :radome_ripple_k => 12.0, :radome_slope_est => Rhat,
+                                :gimbal_tau_s => 0.05, :gimbal_stop_deg => stop,
+                                :gimbal_fov_deg => 25.0, :gimbal_rate_dps => rate)
+        # ⚠ ABSENT unless asked for — the key-absent arm is the byte-identity reference.
+        wn   === nothing || (comp[:gimbal_omega_hz] = wn)
+        zeta === nothing || (comp[:gimbal_zeta] = zeta)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 2000.0, 4200.0),
+                                 vel = Vec3(0.0, vy, 0.0),
+                                 comp = Dict{Symbol,Any}(:cross_speed_mps => vy))
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1),
+                            ConstantVelocity(:t1)]
+    end
+
+    # slice 28's band and yaw channel, which 33/34/35/37/38 all use. ⚠⚠ `out` AND the STOP CLEARANCE
+    # ARE ASSERTED ON EVERY ARM QUOTED — the two-run discipline's precondition, plus gate 1's own
+    # blocking finding (the heavy wire reached `head_max = 30.000` EXACTLY, which is the kernel's
+    # inelastic-stop decision becoming reachable on a claimed arm).
+    function sarm(; n = 22000, lo = 500.0, hi = 3000.0, rgate = 200.0, kw...)
+        w, sub = so_world(; kw...)
+        rr = Float64[]; nb = 0; nout = 0; nsat = 0
+        hmax = 0.0; offmax = 0.0; miss = Inf; r_prev = Inf; gain = NaN
+        for k in 1:n
+            tick!(w, sub, dt); empty!(w.events)
+            m = w.entities[:m1]; t = w.entities[:t1]; c = m.comp
+            tel = get(w.env, :telemetry, Dict{String,Any}())
+            r = los_range(m.pos, t.pos)
+            if r > rgate
+                hmax   = max(hmax,   get(tel, "m1.head_angle_deg", 0.0))
+                offmax = max(offmax, get(tel, "m1.head_off_deg", 0.0))
+            end
+            if lo <= r <= hi
+                nb += 1; push!(rr, get(c, :omega_body, zero(Vec3))[3])
+                get(tel, "m1.gimbal_valid", 1.0) == 1.0 || (nout += 1)
+                get(tel, "m1.head_rate_sat", 0.0) == 1.0 && (nsat += 1)
+                gain = get(tel, "m1.head_index_gain", NaN)
+            end
+            r > r_prev && miss == Inf && (miss = r_prev)
+            r_prev = r
+            miss < Inf && k > 200 && break
+        end
+        return (rms_r = isempty(rr) ? NaN : sqrt(sum(abs2, rr) / length(rr)), miss = miss,
+                hmax = hmax, offmax = offmax, gain = gain,
+                out = nb > 0 ? 100nout / nb : 0.0, sat = nb > 0 ? 100nsat / nb : 0.0, nb = nb)
+    end
+
+    function sposdiff(; n = 6000, a = (;), b = (;))
+        wa, sa = so_world(; a...); wb, sb = so_world(; b...)
+        d = 0.0
+        for _ in 1:n
+            tick!(wa, sa, dt); empty!(wa.events); tick!(wb, sb, dt); empty!(wb.events)
+            pa = wa.entities[:m1].pos; pb = wb.entities[:m1].pos
+            d = max(d, sqrt((pa[1]-pb[1])^2 + (pa[2]-pb[2])^2 + (pa[3]-pb[3])^2))
+        end
+        return d
+    end
+
+    @testset "BYTE-IDENTITY — the control is the ABSENT RUNG, in both directions" begin
+        # ⭐ THE BIT-IDENTITY CONTROL IS THE ABSENT RUNG, NEVER AN AUTHORED VALUE THAT SHOULD BE
+        # INERT (slices 35/36's blocking pin): `:first_order` takes the untouched code path, so
+        # slices 34–39 are bit-identical BY CONSTRUCTION rather than by a zero that cancels.
+        @test sposdiff(; a = (;), b = (servo = :first_order,)) == 0.0
+        # …and the KEYS are inert without the RUNG, which is what makes them introduce-safe on a
+        # slice 34–39 wire (the loader permits them beside either rung — see below).
+        @test sposdiff(; a = (;), b = (servo = :first_order, wn = 2.0, zeta = 0.1)) == 0.0
+        # …paired with the does-differ case, or the two above prove only that nothing ran.
+        @test sposdiff(; a = (;), b = (servo = :second_order, wn = 2.0, zeta = 0.1)) > 1.0
+    end
+
+    @testset "THE SHOWCASE — one press on a design the shipped head flies QUIET" begin
+        # ⭐⭐ R̂ = −0.18 IS SLICE 34's OWN SHIPPED DESIGN, and the first-order head flies it quiet.
+        # Give the same gimbal an INERTIA with light damping and the SAME missile, glass, seed and
+        # handover rings 44× — and still hits, as every ringing arm in this family does.
+        q = sarm()                                        # the shipped first-order head
+        r = sarm(servo = :second_order, wn = 2.0, zeta = 0.1)
+        @test q.rms_r ≈ 0.01181 atol = 5.0e-5
+        @test r.rms_r ≈ 0.51659 atol = 5.0e-4
+        @test r.rms_r / q.rms_r > 40.0
+        @test r.miss < 20.0                               # it RINGS and still HITS (4.914 m)
+        # ⚠⚠ THE ISOLATION, ASSERTED PER ARM AND NOT CITED FROM THE ARMS I HAPPENED TO LOOK AT
+        # (advisor). The window must hold (or `rms r` is not a stability read at all — slice 33/34's
+        # metric inversion), slice 35's rate limit must not bind (or this measures THAT knob), and
+        # the head must stay clear of its stop (or the kernel's INELASTIC-STOP decision is in the
+        # answer, which would fake a resonance exactly — gate 1's own blocking finding).
+        for a in (q, r)
+            @test a.out == 0.0
+            @test a.sat == 0.0
+            @test a.hmax < 30.0 - 1.0e-9
+        end
+        # ⭐ AND THE CURE IS THE OTHER END OF THE SAME SLIDER: the SAME inertia, well damped, is back
+        # inside the quiet plateau — which is why ζ is the wire's knob and ω_n is authored.
+        c = sarm(servo = :second_order, wn = 2.0, zeta = 1.0)
+        @test c.rms_r ≈ 0.01212 atol = 5.0e-5
+        @test c.rms_r < 1.1 * q.rms_r
+        @test c.out == 0.0 && c.sat == 0.0 && c.hmax < 30.0 - 1.0e-9
+    end
+
+    @testset "the ζ ladder is MONOTONE — the reason it is the slider and ω_n is not" begin
+        # ⚠ ω_n IS AUTHORED AND DISQUALIFIED BY NON-MONOTONICITY (slice 28's `k`, 4th occurrence):
+        # the resonant peak is a COINCIDENCE effect, so the harm must fall off on BOTH sides of the
+        # loop's own band. ζ has no such shape — measured monotone from 0.05 to the quiet plateau.
+        lad = [sarm(servo = :second_order, wn = 2.0, zeta = z).rms_r for z in (0.05, 0.1, 0.2, 0.3, 0.5)]
+        @test all(lad[i] > lad[i+1] for i in 1:length(lad)-1)
+        @test lad[1] / lad[end] > 30.0                    # 0.79973 → 0.01940, ≈41×
+        # …and the non-monotonicity of the OTHER axis, pinned so the disqualification is a
+        # measurement in the suite rather than a claim in a plan file: at ζ = 0.3 the ring PEAKS
+        # near the loop's own band and is smaller BOTH heavier and lighter.
+        h = sarm(servo = :second_order, wn = 0.5,  zeta = 0.3, stop = 50.0).rms_r
+        p = sarm(servo = :second_order, wn = 2.0,  zeta = 0.3).rms_r
+        l = sarm(servo = :second_order, wn = 30.0, zeta = 0.3).rms_r
+        @test p > h && p > l
+    end
+
+    @testset "⚠⚠ THE RESONANCE IS **NOT** INERT ON THE SPACE-STABILIZED RUNG (gate 2's refutation)" begin
+        # The seam's first draft predicted it would be — a space-stabilized head rejects body motion
+        # passively, so the glass's index does not pass through its servo. IT IS NOT INERT, because
+        # body motion is only ONE of the two things this servo is fed: the other is slice 34's own
+        # fixed point (the head is aimed by the BENT measurement), which is live on both frames.
+        # A lag low-passes whatever it is fed; a resonance amplifies it.
+        #
+        # ⚠ READ AT R̂ = −0.28, NOT −0.18. At −0.18 the space rung is ALREADY RINGING before the
+        # servo is touched (slice 37's whole result), and there the second-order arm shows `rms r`
+        # FALLING while the miss opens 944× — slice 33/34's METRIC INVERSION signature, unreadable
+        # as a stability claim. At −0.28 both arms start quiet and the comparison is legal.
+        q = sarm(head = :space_stabilized, Rhat = -0.28)
+        r = sarm(head = :space_stabilized, Rhat = -0.28, servo = :second_order, wn = 2.0, zeta = 0.1)
+        @test q.out == 0.0 && r.out == 0.0
+        @test r.hmax < 30.0 - 1.0e-9 && r.offmax < 25.0   # not the broken-track arm
+        @test r.rms_r / q.rms_r > 4.0                     # measured 6.1×
+        # …and it is SMALLER than the body rung's 44×, which is why the shipped wires use that one.
+        @test r.rms_r / q.rms_r < 20.0
+    end
+
+    @testset "the RATE STATE — zeroed on entering the rung, because a lag has none to hand over" begin
+        w, sub = so_world(servo = :second_order, wn = 2.0, zeta = 0.1)
+        for _ in 1:3000; tick!(w, sub, dt); empty!(w.events); end
+        c = w.entities[:m1].comp
+        r1 = hypot(Float64(c[:head_rate_az]), Float64(c[:head_rate_el]))
+        @test r1 > 1.0e-3                                  # the servo has a real rate state
+        @test c[:head_servo_frame] === :second_order
+        w.fidelity[:head_servo] = :first_order             # …press the button
+        for _ in 1:500; tick!(w, sub, dt); empty!(w.events); end
+        @test c[:head_servo_frame] === :first_order
+        @test (Float64(c[:head_rate_az]), Float64(c[:head_rate_el])) === (0.0, 0.0)
+        w.fidelity[:head_servo] = :second_order            # …and press it back
+        tick!(w, sub, dt); empty!(w.events)
+        # ⭐ FROM REST, not resuming the 0.09 rad/s it left: a first-order head HAS no rate state,
+        # so carrying one across would be a velocity the head never had. The STAMP is what makes
+        # this structural (slice 37's `:head_frame` posture in a second quantity).
+        @test hypot(Float64(c[:head_rate_az]), Float64(c[:head_rate_el])) < 0.1 * r1
+        @test all(isfinite, (c[:head_rate_az], c[:head_rate_el], c[:head_az], c[:head_el]))
+    end
+
+    @testset "the telemetry: the servo's own numbers, and the gain read on BOTH rungs" begin
+        w, sub = so_world(servo = :second_order, wn = 2.0, zeta = 0.1)
+        for _ in 1:400; tick!(w, sub, dt); empty!(w.events); end
+        tel = w.env[:telemetry]
+        @test tel["m1.gimbal_omega_hz"] == 2.0
+        @test tel["m1.gimbal_zeta"] == 0.1
+        # ⭐⭐ THE INDEX GAIN IS THE CLOSED FORM OF `H(j2π·1.7)`, shipped from the CORE (convention 13
+        # — the client recomputes nothing) and read at the frequency six earlier slices measured the
+        # limit cycle to live at. ⚠ IT IS A LABEL, NOT A VERDICT: two arms of this slice ring with
+        # this number 32× apart, which is the payload.
+        let rr = 1.7 / 2.0
+            @test tel["m1.head_index_gain"] ≈ 1 / sqrt((1 - rr^2)^2 + (2 * 0.1 * rr)^2) atol = 1e-12
+        end
+        # ⚠ AND IT SHIPS ON THE FIRST-ORDER RUNG TOO, AS THE LAG'S OWN `1/√(1+(2πfτ)²)` — the number
+        # slice 37 measured its whole margin out of. A HUD that printed the second-order gain beside
+        # NOTHING would invite the reader to compare it against 1.
+        let (w2, s2) = so_world(servo = :first_order, wn = 2.0, zeta = 0.1)
+            for _ in 1:400; tick!(w2, s2, dt); empty!(w2.events); end
+            @test w2.env[:telemetry]["m1.head_index_gain"] ≈
+                  1 / sqrt(1 + (2π * 1.7 * 0.05)^2) atol = 1e-12
+        end
+        # …and NOTHING ships when the keys are absent, so slices 34–39 stay byte-identical ON THE
+        # WIRE as well as in the core (the slice-31/38 posture).
+        let (w3, s3) = so_world()
+            for _ in 1:400; tick!(w3, s3, dt); empty!(w3.events); end
+            t3 = w3.env[:telemetry]
+            @test !haskey(t3, "m1.gimbal_omega_hz")
+            @test !haskey(t3, "m1.gimbal_zeta")
+            @test !haskey(t3, "m1.head_index_gain")
+        end
+    end
+
+    @testset "the loader: the rung needs a head AND a bandwidth; the keys are bounded" begin
+        mk(seek, fid = "") = string("name: t\nseed: 1\ndt_physics: 1.0e-3\n", fid,
+                          "entities:\n",
+                          "  - id: m1\n    kind: missile\n    pos: [0.0, 0.0, 3000.0]\n",
+                          "    missile:\n      mass_kg: 140.0\n      speed: 700.0\n",
+                          "      elevation_deg: 12.0\n",
+                          "      seeker: {two_angle: true, ", seek, "}\n",
+                          "      guidance: {n_pn: 4.0, a_max: 3000.0}\n",
+                          "  - id: t1\n    kind: target\n    pos: [6000.0, 2000.0, 4200.0]\n",
+                          "    vel: [0.0, 200.0, 0.0]\n    target: {rcs_m2: 1.0}\n")
+        mktempdir() do d
+            wr(txt) = (p = joinpath(d, "s.yaml"); write(p, txt); p)
+            # DEAD WITHOUT A HEAD — the `gimbal_*` posture (34/35/36/38's own refusal).
+            @test_throws ErrorException load_scenario(wr(mk("gimbal_omega_hz: 2.0")))
+            @test_throws ErrorException load_scenario(wr(mk("gimbal_zeta: 0.1")))
+            # …and the RUNG is dead without a head too, for slice 37's reason. ⚠ `sigma: 5.0e-5` is
+            # a filler seeker key, NOT a second `two_angle` — a duplicate flow-mapping key loads
+            # (with a warning) and would make this arm throw for the wrong reason.
+            @test_throws ErrorException load_scenario(
+                wr(mk("sigma: 5.0e-5", "fidelity: {head_servo: second_order}\n")))
+            # ⚠⚠ AND `second_order` WITHOUT `gimbal_omega_hz` IS REFUSED — a servo with no bandwidth
+            # is the kernel's FROZEN-head degenerate, which would read as a mysteriously dead seeker
+            # rather than as a load error (slice 21's "refused, not silently branch-ordered").
+            @test_throws ErrorException load_scenario(
+                wr(mk("gimbal_tau_s: 0.05", "fidelity: {head_servo: second_order}\n")))
+            # the VALUE bounds: ω_n > 0 and finite, and below the integrator's own stability limit
+            # (the recursion diverges near 300 Hz at dt = 1e-3 — slice 40 §1.1); ζ ≥ 0 and finite.
+            @test_throws ErrorException load_scenario(wr(mk("gimbal_tau_s: 0.05, gimbal_omega_hz: 0.0")))
+            @test_throws ErrorException load_scenario(wr(mk("gimbal_tau_s: 0.05, gimbal_omega_hz: -2.0")))
+            @test_throws ErrorException load_scenario(wr(mk("gimbal_tau_s: 0.05, gimbal_omega_hz: 250.0")))
+            @test_throws ErrorException load_scenario(
+                wr(mk("gimbal_tau_s: 0.05, gimbal_omega_hz: 2.0, gimbal_zeta: -0.1")))
+            # ⚠ ACCEPTED BESIDE **EITHER** RUNG — slice 38's distinction, not slice 36's by-name
+            # refusal: these keys are consumed EVERY TICK the second-order arm runs and
+            # `:head_servo` is LIVE-SETTABLE (it is this slice's button), so a wire that opens
+            # first-order and is toggled DOES use them.
+            sc = load_scenario(wr(mk("gimbal_tau_s: 0.05, gimbal_omega_hz: 2.0, gimbal_zeta: 0.1")))
+            @test sc.world.entities[:m1].comp[:gimbal_omega_hz] == 2.0
+            @test sc.world.entities[:m1].comp[:gimbal_zeta] == 0.1
+        end
+    end
+end

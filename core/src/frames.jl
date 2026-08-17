@@ -1215,6 +1215,197 @@ function head_drift_inertial(az::Real, el::Real, ω_body::Vec3, s::Real, bias::V
                         los_unit_from_angles(a, e)))
 end
 
+# --- THE HEAD SERVO'S ORDER (slice 40, §11 Tier-A — the deferral 35, 37 AND 38 each named) --------
+#
+# Slices 34–39's head is a FIRST-ORDER LAG with a rate limit: one number, `gimbal_tau_s`, and a
+# servo that moves a fraction of its error every tick. A real gimbal has INERTIA, so its servo is
+# second-order — a mass on a spring with a damper, `θ̈ = ω_n²(θ_cmd − θ) − 2ζω_n θ̇`.
+#
+# ⭐⭐ AND THAT IS NOT A REFINEMENT, IT IS A NEW MECHANISM, BECAUSE OF WHAT A FIRST-ORDER LAG CANNOT
+# DO. Slice 37 measured its whole margin in GAIN: the lag LOW-PASSES body motion out of the radome's
+# index (0.884 at the ring's 1.7 Hz, against a STRAPDOWN seeker's exactly 1.000), and that filtering
+# is worth ≈40–45 % of the margin slice 34's gimbal bought. A first-order lag is BOUNDED IN BOTH
+# CURRENCIES — gain `1/√(1+(2πfτ)²) ≤ 1` and phase `−atan(2πfτ) ≥ −90°`, at every frequency, for
+# every τ — so it could only ever make the index QUIETER. A second-order servo leaves both bounds:
+# it PEAKS at `1/(2ζ√(1−ζ²))` near ω_n for ζ < 1/√2 (⇒ an index gain ABOVE 1, i.e. WORSE THAN NO
+# GIMBAL AT ALL) and its phase runs to −180°.
+#
+# ⚠⚠ AND THE HEADLINE IS THAT NEITHER NUMBER ORDERS THE OUTCOME. On slice 34's own shipped design
+# (R̂ = −0.18, which the first-order head flies QUIET at rms r 0.0118), two second-order servos ring
+# and their index gains differ by 32×:
+#
+#     ω_n = 2.0 Hz, ζ = 0.10 — gain 3.073 (3.5× the lag's), phase −31° ...... rms r 0.51659  (44×)
+#     ω_n = 0.5 Hz, ζ = 0.10 — gain 0.095 (a TENTH of the lag's), phase −176° rms r 0.42414  (36×)
+#
+# ⇒ a servo NINE TIMES QUIETER than the shipped lag rings THIRTY-SIX TIMES HARDER. ⚠ And the
+# converse is measured too, which is what keeps the claim honest: phase past −90° does not by itself
+# ring (`ω_n = 0.5 Hz, ζ = 1.0` sits at −147° and reads 0.0184). The frequency the loop actually
+# closes at is the one quantity slice 40's gate 0 could NOT measure (its estimator failed its own
+# control — see `docs/plans/slice40.md` §0.7), so the claim stops at *neither number, read at a
+# fixed frequency, orders the outcome*, and no loop-crossover argument is made.
+#
+# ⭐ THE SENTENCE THE TWO WIRES EXIST TO SAY: **INERTIA IS NOT THE ENEMY — UNDAMPED INERTIA IS.**
+# The same added inertia buys ≈15 cells of R̂ margin at ζ = 1.0 (onset (−0.100, −0.090] against the
+# shipped head's (−0.170, −0.165]) and rings at EVERY cell of that grid at ζ = 0.1. The damping
+# decides the SIGN of what the inertia does.
+#
+# ⚠ RUNG, NOT KNOB, AND THE GATE IS ANSWERED BY A BOUND RATHER THAN A TOLERANCE (slice 39's kill,
+# pre-empted): analytically no τ can reach gain > 1 or phase < −90°, and in flight the shipped
+# knob's own domain swept 800× over τ ∈ [0.001, 0.8] spans `rms r` 0.0104…0.0343 and NEVER RINGS —
+# 15× below the quieter of the two second-order arms. ⚠ At large ζ the rung nearly collapses onto a
+# lag of `τ_eff = 2ζ/ω_n` (ratios 1.059/1.056/1.016/1.005 against the matched first-order arm —
+# CLOSE, never identical, and always in the same direction), which is where the button goes quiet.
+#
+# ⚠⚠ THE DISCRETIZATION IS PART OF THE CLAIM AND IS PINNED, NOT ASSUMED. The recursion below is
+# SEMI-IMPLICIT EULER, and the claim lives in the lightly-damped regime — exactly where an
+# integrator's own numerical damping could masquerade as physics. Three oracles (`test_frames.jl`):
+# the step response against the closed form converges at FIRST ORDER (6.269e−03 → 6.259e−04 for a
+# 10× dt, ratio 10.02 — a flat column would mean the recursion is not solving this equation); the
+# discrete free response's EFFECTIVE ζ is within 1.5e−05…5.7e−04 of the authored one, i.e.
+# 0.0003–0.011 OF ONE DOMAIN CELL; and its damped frequency within 3e−04…2e−03 relative.
+# ⚠ The recursion is stable while `ω_n·Δt < 2` — measured decaying at 200 Hz (`ω_n·Δt = 1.26`) and
+# DIVERGING at 300 Hz (1.885) at the shipped `dt = 1e−3` — which is validate-at-LOAD's business
+# (convention 5), not this kernel's.
+
+"""
+    HEAD_SERVO_MODES
+
+The `:head_servo` fidelity's rungs — the ORDER of the gimbal's pointing servo (slice 40):
+
+* `:first_order` — slices 34–39's shipped head. One number (`gimbal_tau_s`) and a rate limit; its
+  index gain is bounded by 1 and its phase by −90° at every frequency. Bit-identical to the rung
+  not existing.
+* `:second_order` — a gimbal with INERTIA: `θ̈ = ω_n²(θ_cmd − θ) − 2ζω_n θ̇`, authored as
+  `gimbal_omega_hz` and `gimbal_zeta`. Leaves BOTH of those bounds, in either direction depending
+  on its damping.
+
+⚠⚠ **THE RUNG IS LIVE ON BOTH `:seeker_head` FRAMES, AND THAT IS A GATE-2 REFUTATION OF THIS
+FILE's OWN FIRST DRAFT.** It predicted the resonance would be nearly INERT on the space-stabilized
+rung, reasoning that such a head rejects body motion passively so its index gain is 1 whatever its
+servo order. **Measured, it is not inert.** At R̂ = −0.28, where the space rung flies QUIET on the
+first-order servo (rms r 0.04258), the same ω_n = 2 Hz, ζ = 0.10 servo rings it to **0.26150 —
+6.1×**, with `out_band` 0.00 %, the head 4.0° off its target and nowhere near its stop, so it is not
+slice 33/34's metric inversion either. The first draft was wrong because BODY MOTION IS ONLY ONE OF
+THE TWO THINGS THIS SERVO IS FED: the other is slice 34's own fixed point — the head is aimed by the
+BENT measurement — and that loop is live on both frames. **A lag low-passes whatever it is fed; a
+resonance amplifies it.** ⇒ the shipped wires use the BODY-referenced rung because the effect is
+LARGER there (44× against 6.1×, each rung read at a design its own first-order servo flies quiet),
+never because the other rung is untouched.
+
+⭐ Both frames are implemented from ONE kernel — [`head_slew_second_order_inertial`](@ref) is this
+kernel with the frame changed, exactly as [`head_slew_inertial`](@ref) is [`head_slew_full`](@ref) —
+so no combination is unreachable and none is unexercised.
+
+Convention 7 (one-list-no-drift): defined ONCE here and REFERENCED by `LIVE_FIDELITY_MODES` and the
+server's `set_fidelity` validation — never re-listed.
+"""
+const HEAD_SERVO_MODES = (:first_order, :second_order)
+
+"""
+    head_slew_second_order(head_az, head_el, rate_az, rate_el, tgt_az, tgt_el, ωn, ζ, dt, stop;
+                           rate_max = Inf)
+        -> (az, el, rate_az, rate_el, demand, rate_sat)
+
+One tick of a SECOND-ORDER head servo (slice 40) — a gimbal with inertia, integrated by
+SEMI-IMPLICIT EULER:
+
+    θ̇ ← θ̇ + (ω_n²·wrap(θ_cmd − θ) − 2ζω_n·θ̇)·Δt        then        θ ← θ + θ̇·Δt
+
+`ωn` is in RADIANS PER SECOND (the seam converts the authored Hz exactly once, as it does for the
+stop, the window and the rate limit). `demand` and `rate_sat` keep their slice-35 meaning — the
+STEP the servo was asked for this tick (radians, pre-limit, pre-stop) and whether the limit bound —
+so the seam's telemetry is unchanged across the rung.
+
+⚠⚠ **THREE SEAM DECISIONS LIVE IN THIS KERNEL AND ARE WRITTEN DOWN BECAUSE A FREE DECISION INSIDE A
+NEW SERVO CAN MANUFACTURE THE CLAIM** (slice 39 §0.1's lesson, applied before any probe ran):
+
+1. **THE RATE LIMIT BINDS THE RATE STATE, RADIALLY — NOT THE STEP.** With an inertia the drive's
+   maximum rate is a property of the MECHANISM, and a step cap would leave the unspent rate sitting
+   in the state to be delivered next tick, which is a cap that is not a cap. ⚠ Radial for the same
+   species reason [`head_slew_full`](@ref) gives: a per-axis clamp leaves `√2·cap` on the diagonal
+   while the readout compares against `cap`.
+2. **THE STOP IS INELASTIC AND ZEROES THE RATE STATE.** Letting θ̇ wind up against a mechanical stop
+   produces a clamp-driven oscillation that would fake a resonance exactly — and gate 1 caught that
+   arm for real (`head_max = 30.000` EXACTLY on the heavy wire at ζ ≤ 0.15), which is why the shipped
+   wires author a stop their own ring stays inside and every claimed arm asserts it.
+3. **A HEAD AT REST.** The rate state is born at zero — the seam mints it with the handover — so the
+   acquisition turn is slower than the first-order head's. Slice 35's gate 2 found that turn to be
+   the binding window requirement, so it is watched rather than assumed (1.96° first-order against
+   3.4–4.9° second-order, both far inside a 25° window).
+
+⚠ Convention 5/6 degenerates, all pinned: a non-positive or non-finite `ωn`, or a non-finite `ζ`,
+FREEZES the head and ZEROES its rate — a servo with no bandwidth does not coast, and this is
+[`head_slew_full`](@ref)'s `τ = Inf` reductio reached from the other side. `ζ` is CLAMPED at 0 (it
+is a live slider — convention 5's clamp-at-CONSUMER; a negative damping ratio is an authored
+absurdity, not a physics rung). `Δt ≤ 0` leaves both the pointing and the rate untouched, so the
+`dt = 0` degenerate is a freeze here as it is there. Nothing non-finite is manufactured from finite
+input.
+"""
+function head_slew_second_order(head_az::Real, head_el::Real, rate_az::Real, rate_el::Real,
+                                tgt_az::Real, tgt_el::Real, ωn::Real, ζ::Real,
+                                dt::Real, stop::Real; rate_max::Real = Inf)
+    a = Float64(head_az); e = Float64(head_el)
+    w = Float64(ωn); z = max(Float64(ζ), 0.0)
+    (isfinite(w) && w > 0.0 && isfinite(z)) || return (a, e, 0.0, 0.0, 0.0, false)
+    Δt = max(Float64(dt), 0.0)
+    Δt > 0.0 || return (a, e, Float64(rate_az), Float64(rate_el), 0.0, false)
+    Δaz = wrap_angle(Float64(tgt_az) - a)
+    Δel = wrap_angle(Float64(tgt_el) - e)
+    raz = Float64(rate_az) + (w^2 * Δaz - 2z * w * Float64(rate_az)) * Δt
+    rel = Float64(rate_el) + (w^2 * Δel - 2z * w * Float64(rate_el)) * Δt
+    dem = hypot(raz, rel) * Δt                         # the DEMAND — slice 35's units, a STEP
+    cap = max(Float64(rate_max), 0.0) * Δt
+    sat = dem > cap                                    # `>`, so a NaN/Inf cap is inert (slice 35)
+    if sat
+        sc = cap / dem
+        raz *= sc; rel *= sc
+    end
+    az = a + raz * Δt; el = e + rel * Δt
+    p  = head_clamp(az, el, stop)                      # the CIRCULAR stop — the ONE clamp site
+    if !(p[1] === az && p[2] === el)                   # …and it is INELASTIC (decision 2 above)
+        raz = 0.0; rel = 0.0
+    end
+    return (p[1], p[2], raz, rel, dem, sat)
+end
+
+"""
+    head_slew_second_order_inertial(head_az, head_el, rate_az, rate_el, tgt_az, tgt_el, att,
+                                    ωn, ζ, dt, stop; rate_max = Inf)
+        -> (az_i, el_i, az_b, el_b, rate_az, rate_el, demand, rate_sat)
+
+[`head_slew_second_order`](@ref) with the head's state, its target, its RATE STATE and its step all
+in the INERTIAL frame, followed by [`head_clamp_inertial`](@ref) for the airframe's BODY-relative
+stop — i.e. slice 40's servo on slice 37's space-stabilized rung.
+
+⭐ **IT IS THE SAME KERNEL, NOT A SECOND SERVO**, exactly as [`head_slew_inertial`](@ref) is
+[`head_slew_full`](@ref): the law, the radial rate limit and every degenerate are the SAME CODE, so
+the two frames differ only in where the angles live and where the stop is taken. The inner call is
+handed `stop = Inf` because a mechanical stop is not an inertial quantity, leaving exactly ONE stop
+site — and the inelastic-rate rule is re-applied HERE, against the stop that actually bound.
+
+⚠⚠ **THIS PATH WAS PREDICTED TO BE NEARLY INERT AND IT IS NOT** — gate 2's refutation, kept here
+because the prediction is the natural one to make again. A space-stabilized head rejects body motion
+passively, so the reasoning went, the radome's index cannot pass through this servo. But the servo
+is also fed slice 34's fixed point — the head is aimed by the BENT measurement — and a resonance
+amplifies that just as happily: 6.1× on a design this rung's first-order servo flies quiet. The
+effect is merely SMALLER than on the body-referenced rung (44×), which is why the shipped wires use
+that one. See [`HEAD_SERVO_MODES`](@ref).
+"""
+function head_slew_second_order_inertial(head_az::Real, head_el::Real,
+                                         rate_az::Real, rate_el::Real,
+                                         tgt_az::Real, tgt_el::Real, att::Quat,
+                                         ωn::Real, ζ::Real, dt::Real, stop::Real;
+                                         rate_max::Real = Inf)
+    a, e, raz, rel, dem, sat =
+        head_slew_second_order(head_az, head_el, rate_az, rate_el, tgt_az, tgt_el,
+                               ωn, ζ, dt, Inf; rate_max = rate_max)
+    p = head_clamp_inertial(a, e, att, stop)           # the ONE stop site, in the BODY frame
+    if !(p[1] === a && p[2] === e)                     # the stop bound ⇒ inelastic (decision 2)
+        raz = 0.0; rel = 0.0
+    end
+    return (p[1], p[2], p[3], p[4], raz, rel, dem, sat)
+end
+
 # --- THE SEEKER'S FIELD OF VIEW (slice 32, §11 Tier-A — the deferral 26/28/29/30/31 each named) ---
 #
 # Slices 26–31 made the LOOK ANGLE the central quantity of the whole radome family, and then each

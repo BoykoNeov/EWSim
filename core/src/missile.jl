@@ -1776,6 +1776,20 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     _six = get(w.fidelity, :airframe, :point_mass) === :six_dof
     _gim = haskey(c, :gimbal_tau_s) && haskey(c, :att_q) && _six
     _stab = _gim && get(w.fidelity, :seeker_head, :body_referenced) === :space_stabilized
+    # ⭐⭐ SLICE 40 — THE SERVO'S ORDER. Slices 34–39's head is a FIRST-ORDER LAG with a rate limit;
+    # a real gimbal has INERTIA, so its servo is second-order (`frames.jl HEAD_SERVO_MODES`). That
+    # is a new MECHANISM rather than a refinement, because a first-order lag is BOUNDED in both
+    # currencies — index gain ≤ 1 and phase ≥ −90°, at every frequency for every τ — so it could
+    # only ever make the glass's index quieter, which is exactly how slice 37's margin was bought.
+    # A second-order servo leaves both bounds, and on slice 34's own shipped design TWO of them ring
+    # with index gains 32× APART (3.073 and 0.095, against the shipped lag's 0.882) ⇒ neither number,
+    # read at a fixed frequency, orders the outcome. See `docs/plans/slice40.md`.
+    #
+    # ⚠⚠ RUNG-GATED THROUGH `_gim` ON THE LIVE `:airframe`, never on `haskey(c, :gimbal_omega_hz)` —
+    # the latent-bug class this arc has caught EIGHT times (21's `_atm_on`, 23, 26, 27, 29, 32, 34,
+    # 37). The rate state below is minted here and never deleted, so a key-gated servo would keep
+    # integrating an inertia against a FROZEN attitude after a cross-toggle off `:six_dof`.
+    _so = _gim && get(w.fidelity, :head_servo, :first_order) === :second_order
     look_az_b = 0.0; look_el_b = 0.0     # the LOS in the BODY frame — what a STRAPDOWN seeker indexes
     head_az   = 0.0; head_el   = 0.0     # the HEAD's pointing angles, in the body frame
     off_head  = 0.0; fov_h     = 0.0     # the detector's off-head-axis error, and its window
@@ -1789,6 +1803,12 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # reason `rms r` falls there, which is why the plan's two-run discipline covers FOUR quantities
     # and not slice 34's three. A frozen head does not saturate.
     head_dem  = 0.0; head_sat  = false
+    # SLICE 40 — the second-order servo's RATE STATE (rad/s, in whichever frame the pointing is
+    # held in) and its two authored numbers. ⚠ THE LOCALS EXIST ON BOTH RUNGS AND THE STATE IS
+    # PERSISTED ONLY ON THE SECOND-ORDER ONE: a first-order head HAS no rate state, which is why
+    # entering this rung mid-run starts from rest rather than resuming a stale one (see the stamp
+    # below — slice 37's `:head_frame` posture, in a second quantity).
+    r_az = 0.0; r_el = 0.0; ωn_h = 0.0; ζ_h = 0.0
     if _gim
         look_az_b, look_el_b = look_angles(c[:att_q]::Quat, û_tru)
         # Degrees at the YAML boundary, radians inside (the `seeker_fov_deg` posture — the seam
@@ -1817,6 +1837,24 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # factor and the seconds are untouched. The seam converts ONCE, here, as it does for the stop
         # and the window — the loader stores the authored degrees.
         rate_h = deg2rad(Float64(get(c, :gimbal_rate_dps, Inf)))
+        if _so
+            # ⭐ SLICE 40 — Hz AT THE YAML BOUNDARY, RAD/S INSIDE: the seam converts ONCE, here, as
+            # it does for the stop, the window and the rate limit. `gimbal_zeta` is dimensionless
+            # and is the SLIDER (convention 5's clamp-at-CONSUMER lives inside the kernel, which
+            # clamps a negative damping ratio to zero rather than flying a divergence).
+            ωn_h = 2π * Float64(get(c, :gimbal_omega_hz, 0.0))
+            ζ_h  = Float64(get(c, :gimbal_zeta, 1.0))
+            # ⚠⚠ THE RATE STATE IS ZEROED ON ENTERING THE RUNG, NOT CARRIED. `:head_servo_frame`
+            # stamps which servo ORDER the head's state was last held in — slice 37's `:head_frame`
+            # posture in a second quantity — and the reason is physical rather than defensive: a
+            # first-order head has NO rate state, so there is nothing to resume from and a stale
+            # one would be a velocity the head never had. ⭐ THE STAMP, NOT `haskey`, IS THE
+            # CURRENCY TEST (slice 37's ⚠): `:head_rate_az` is minted here and never deleted.
+            if get(c, :head_servo_frame, :first_order) === :second_order
+                r_az = Float64(get(c, :head_rate_az, 0.0))
+                r_el = Float64(get(c, :head_rate_el, 0.0))
+            end
+        end
         if !haskey(c, :head_az)
             # THE HANDOVER — the head is handed the target at launch, and it is LOAD-BEARING rather
             # than a nicety (§0.8, slice 32's P5 vindicated). Against a head that starts CAGED at
@@ -1997,11 +2035,26 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             # discipline 3, first evaluation (the body arm's, verbatim in meaning): the error the
             # detector HAS, now that the body has carried the head and the stop has been taken.
             if off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h
-                i_az, i_el, head_az, head_el, head_dem, head_sat =
-                    head_slew_inertial(i_az, i_el,
-                                       Float64(c[:head_tgt_i_az]), Float64(c[:head_tgt_i_el]),
-                                       c[:att_q]::Quat, Float64(c[:gimbal_tau_s]), dt, stop_h;
-                                       rate_max = rate_h)
+                if _so
+                    # SLICE 40 on slice 37's rung — the SAME kernel with the frame changed, exactly
+                    # as `head_slew_inertial` is `head_slew_full`. ⚠⚠ THIS ARM WAS PREDICTED TO BE
+                    # NEARLY INERT AND GATE 2 REFUTED IT (6.1× on a design this rung flies quiet):
+                    # the servo is fed slice 34's bent-measurement fixed point as well as body
+                    # motion, and a resonance amplifies either. The claim ships on the body arm
+                    # because it is LARGER there, not because this one is quiet.
+                    i_az, i_el, head_az, head_el, r_az, r_el, head_dem, head_sat =
+                        head_slew_second_order_inertial(i_az, i_el, r_az, r_el,
+                                                        Float64(c[:head_tgt_i_az]),
+                                                        Float64(c[:head_tgt_i_el]),
+                                                        c[:att_q]::Quat, ωn_h, ζ_h, dt, stop_h;
+                                                        rate_max = rate_h)
+                else
+                    i_az, i_el, head_az, head_el, head_dem, head_sat =
+                        head_slew_inertial(i_az, i_el,
+                                           Float64(c[:head_tgt_i_az]), Float64(c[:head_tgt_i_el]),
+                                           c[:att_q]::Quat, Float64(c[:gimbal_tau_s]), dt, stop_h;
+                                           rate_max = rate_h)
+                end
             end
             c[:head_i_az] = i_az; c[:head_i_el] = i_el
         else
@@ -2017,10 +2070,24 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
                 # from a re-derived predicate can DISAGREE with the branch it claims to report, at
                 # the boundary tick where the disagreement is least visible. `head_slew` is these
                 # four values' first two, bit-for-bit (pinned over 2 000 cells at gate 1).
-                head_az, head_el, head_dem, head_sat =
-                    head_slew_full(head_az, head_el,
-                                   Float64(c[:head_tgt_az]), Float64(c[:head_tgt_el]),
-                                   Float64(c[:gimbal_tau_s]), dt, stop_h; rate_max = rate_h)
+                if _so
+                    # ⭐⭐ SLICE 40 — THE SECOND-ORDER SERVO, in the BODY frame. This is where the
+                    # rung's claim lives, and gate 2 measured WHY it is here: not because the other
+                    # frame is untouched (that prediction was REFUTED — a resonance also amplifies
+                    # slice 34's bent-measurement fixed point, which is live on both frames, 6.1×)
+                    # but because the effect is LARGER here, 44×, where the servo is additionally
+                    # fed the missile's own body motion. See `frames.jl HEAD_SERVO_MODES`.
+                    head_az, head_el, r_az, r_el, head_dem, head_sat =
+                        head_slew_second_order(head_az, head_el, r_az, r_el,
+                                               Float64(c[:head_tgt_az]), Float64(c[:head_tgt_el]),
+                                               ωn_h, ζ_h, dt, stop_h; rate_max = rate_h)
+                else
+                    # ── 34/35/36/37 VERBATIM — the else-arm is the bit-identity control ──────────
+                    head_az, head_el, head_dem, head_sat =
+                        head_slew_full(head_az, head_el,
+                                       Float64(c[:head_tgt_az]), Float64(c[:head_tgt_el]),
+                                       Float64(c[:gimbal_tau_s]), dt, stop_h; rate_max = rate_h)
+                end
             end
         end
         c[:head_az] = head_az; c[:head_el] = head_el
@@ -2032,6 +2099,13 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # copy of the state, and duplicating an ANGLE on the rung that does not use it is what would
         # turn slices 34–36's "byte-identical BY CONSTRUCTION" into "by measurement".
         c[:head_frame] = _stab ? :space_stabilized : :body_referenced
+        # SLICE 40 — the servo's RATE STATE and the stamp that says which ORDER held it. Written on
+        # BOTH rungs for the same reason `:head_frame` is: the first-order arm stamps `:first_order`
+        # and stores the zeros its locals carry, so re-entering the second-order rung starts from
+        # rest BY CONSTRUCTION rather than by a guard that could be forgotten. ⚠ The keys are minted
+        # inside `_gim`, so a wire with no head carries neither (slices 1–33 byte-identical).
+        c[:head_rate_az] = r_az; c[:head_rate_el] = r_el
+        c[:head_servo_frame] = _so ? :second_order : :first_order
         # …and the second evaluation: the error the detector HAS. This one is the availability
         # verdict and the shipped margin. ⚠ THE SHIPPED KERNEL, never an inline `hypot(wrap_angle(…))`
         # restatement of it (slice 32's gate-1 correction: an inline form makes `test_frames.jl`
@@ -2836,6 +2910,39 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # recomputes nothing, convention 13). A head with no authored rate ships the FINITE_CEIL
         # sentinel rather than the `Inf` that is its true default (convention 6).
         tel["$sid.gimbal_rate_dps"] = _finite(Float64(get(c, :gimbal_rate_dps, Inf)))
+        # ⭐⭐ SLICE 40 — THE SERVO'S OWN TWO NUMBERS, shipped ONLY while its keys are authored (the
+        # slice-31/38 posture: a first-order wire carries none of them, so slices 34–39 stay
+        # byte-identical ON THE WIRE as well as in the core).
+        if haskey(c, :gimbal_omega_hz) || haskey(c, :gimbal_zeta)
+            tel["$sid.gimbal_omega_hz"] = _finite(Float64(get(c, :gimbal_omega_hz, 0.0)))
+            tel["$sid.gimbal_zeta"]     = _finite(Float64(get(c, :gimbal_zeta, 1.0)))
+            # ⭐⭐ THE QUANTITY THE WHOLE SLICE IS DENOMINATED IN: the servo's INDEX GAIN — how much
+            # of the missile's own body motion arrives at the part of the dome the ray goes through.
+            # It is the closed-form magnitude of `H(jω) = ω_n²/((jω)² + 2ζω_n(jω) + ω_n²)` read at
+            # the ring's own 1.7 Hz, which is where slices 26–39 measured the limit cycle to live.
+            #
+            # ⚠⚠ IT IS SHIPPED FROM THE CORE AND NOT LEFT TO THE CLIENT (convention 13), AND IT IS
+            # SHIPPED FOR **BOTH** RUNGS SO THE BUTTON COMPARES LIKE WITH LIKE — the first-order
+            # head's own `1/√(1+(2πfτ)²)` is the number slice 37 measured its entire margin out of
+            # (0.882 at this frequency), and a HUD that printed the second-order gain beside nothing
+            # would invite the reader to compare it against 1.
+            #
+            # ⚠ AND IT IS A LABEL, NOT A VERDICT — read at ONE frequency chosen by six earlier
+            # slices, on a wire where gate 0 could NOT measure the frequency the loop actually
+            # closes at (`docs/plans/slice40.md` §0.7). Two arms of this very slice ring with these
+            # numbers 32× apart, which is the payload: what it names is the servo, not the outcome.
+            let f_ring = 1.7
+                w_hz = Float64(get(c, :gimbal_omega_hz, 0.0))
+                z    = max(Float64(get(c, :gimbal_zeta, 1.0)), 0.0)
+                g = if _so && w_hz > 0.0
+                        rr = f_ring / w_hz
+                        1.0 / sqrt((1.0 - rr^2)^2 + (2 * z * rr)^2)
+                    else
+                        1.0 / sqrt(1.0 + (2π * f_ring * Float64(get(c, :gimbal_tau_s, 0.0)))^2)
+                    end
+                tel["$sid.head_index_gain"] = _finite(g)
+            end
+        end
         # ⭐⭐ SLICE 38 — THE HEAD GYRO's OWN NUMBERS, shipped ONLY while one of its keys is authored
         # (the slice-31 posture: a wire with a perfect head gyro carries no gyro keys at all, so
         # slices 34–37 stay byte-identical on the wire as well as in the core).

@@ -2072,4 +2072,257 @@
                   head_drift_inertial(0.0, 0.0, Vec3(0.0, 1.0, 0.0), -1.0, Z38, qy38(0.0), 1.0)
         end
     end
+
+    @testset "THE HEAD SERVO'S ORDER (slice 40) — the inertia, and the bounds a lag cannot leave" begin
+        û40 = los_unit(Vec3(0.0, 0.0, 0.0), Vec3(6000.0, 2000.0, 4200.0))
+        az40, el40 = az_el(û40)
+        qy40(θ) = qnormalize(quat_from_axis_angle(Vec3(0.0, 1.0, 0.0), θ))
+        DT40 = 1.0e-3
+        FREE40 = 1.0e6
+
+        @testset "HEAD_SERVO_MODES — the one-list-no-drift const (convention 7)" begin
+            @test HEAD_SERVO_MODES == (:first_order, :second_order)
+            @test length(HEAD_SERVO_MODES) == length(unique(HEAD_SERVO_MODES))
+            # ⚠ The rung names the servo's ORDER. It must not collide with the fidelity beside it
+            # (slice 37's FRAME) nor with the seeker's own rungs — a `:first_order` appearing in two
+            # tuples is exactly the drift convention 7 exists to catch.
+            @test isempty(intersect(HEAD_SERVO_MODES, SEEKER_HEAD_MODES))
+            @test isempty(intersect(HEAD_SERVO_MODES, SEEKER_MODES))
+            @test isempty(intersect(HEAD_SERVO_MODES, SEEKER_AXES_MODES))
+        end
+
+        @testset "ORACLE A — the STEP RESPONSE against the closed form, and its CONVERGENCE in dt" begin
+            # ⚠⚠ THE DISCRETIZATION IS PART OF THE CLAIM. Slice 40 lives in the lightly-damped
+            # regime, which is exactly where an integrator's own numerical damping can masquerade as
+            # physics — so the kernel is pinned against the CLOSED-FORM step response of
+            # `H(s) = ω_n²/(s² + 2ζω_n s + ω_n²)`, at three damping regimes, and the error must FALL
+            # with dt. ⭐ THE RATIO IS THE TOOTH, not the magnitude (slice 23's wiring-bug detector):
+            # a flat column would mean the recursion is not solving this equation at all.
+            #
+            # ⚠ THE ORACLE HAS THREE BRANCHES AND THE UNDERDAMPED ONE IS NOT GENERAL — `√(1−ζ²)` is
+            # 0/0 at ζ = 1 and imaginary beyond it. The gate-0 probe returned NaN there and it was an
+            # ORACLE defect, not a stepper one; all three branches are carried here.
+            function exact_step(t, ωn, ζ)
+                ζ < 1.0 && (ωd = ωn * sqrt(1 - ζ^2);
+                            return 1.0 - exp(-ζ * ωn * t) * (cos(ωd * t) +
+                                                             (ζ / sqrt(1 - ζ^2)) * sin(ωd * t)))
+                ζ == 1.0 && return 1.0 - exp(-ωn * t) * (1 + ωn * t)
+                s = ωn * sqrt(ζ^2 - 1)                  # overdamped: two real poles
+                return 1.0 - exp(-ζ * ωn * t) * (cosh(s * t) + (ζ * ωn / s) * sinh(s * t))
+            end
+            # the head is driven from 0 toward a target 1 rad away, in AZIMUTH only, no stop, no
+            # rate limit — the kernel's own law, isolated from every other decision in it.
+            function step_err(ωn, ζ, dt)
+                a = 0.0; ra = 0.0; worst = 0.0
+                for k in 1:round(Int, 5.0 / dt)
+                    a, _, ra, _ = head_slew_second_order(a, 0.0, ra, 0.0, 1.0, 0.0,
+                                                         ωn, ζ, dt, FREE40)
+                    worst = max(worst, abs(a - exact_step(k * dt, ωn, ζ)))
+                end
+                return worst
+            end
+            for (whz, ζ) in ((2.0, 0.05), (2.0, 0.30), (2.0, 1.00), (0.5, 0.10), (2.0, 3.00))
+                ωn = 2π * whz
+                e1 = step_err(ωn, ζ, 1.0e-3)
+                e2 = step_err(ωn, ζ, 1.0e-4)
+                @test e1 < 0.02                         # measured 6.3e−03 at the worst cell
+                @test 8.0 < e1 / e2 < 13.0              # FIRST ORDER: measured 10.02
+            end
+        end
+
+        @testset "ORACLE B/C — the DISCRETE response's own ζ and ω_d, by log decrement" begin
+            # ⭐⭐ THE ARTIFACT QUESTION IN ITS OWN CURRENCY. The shipped ζ slider's cells are 0.05
+            # apart, so what matters is not that the stepper has an error but that its error is small
+            # COMPARED TO THAT. Measured: 1.5e−05 … 5.7e−04, i.e. 0.0003–0.011 of one cell.
+            # ⚠ The oracle is an INDEPENDENT recompute (convention 11): the log decrement of the
+            # kernel's OWN free response, which the recursion never forms.
+            for (whz, ζ) in ((2.0, 0.05), (2.0, 0.10), (2.0, 0.30), (0.5, 0.10), (0.5, 0.30))
+                ωn = 2π * whz
+                a = 1.0; ra = 0.0
+                pk = Tuple{Float64,Float64}[]
+                prev = 1.0; prev2 = 0.0
+                for k in 1:round(Int, (ζ < 0.15 ? 20.0 : 10.0) / DT40)
+                    a, _, ra, _ = head_slew_second_order(a, 0.0, ra, 0.0, 0.0, 0.0,
+                                                         ωn, ζ, DT40, FREE40)
+                    k > 2 && prev > prev2 && prev ≥ a && prev > 0.0 &&
+                        push!(pk, ((k - 1) * DT40, prev))
+                    prev2 = prev; prev = a
+                end
+                @test length(pk) ≥ 3
+                np = length(pk) - 1
+                δ  = log(pk[1][2] / pk[end][2]) / np
+                ζe = δ / sqrt(4π^2 + δ^2)
+                @test abs(ζe - ζ) < 0.05 * 0.05         # under a FIFTH of one domain cell
+                fd  = whz * sqrt(1 - ζ^2)
+                fde = np / (pk[end][1] - pk[1][1])
+                @test abs(fde - fd) / fd < 5.0e-3
+            end
+        end
+
+        @testset "THE BOUND — what a first-order lag cannot do, which is why this is a RUNG" begin
+            # ⚠⚠ SLICE 39's KILL, PRE-EMPTED. That slice died because an "architecture" turned out to
+            # be a relabelled `gimbal_tau_s`. Here the gate is answered by a BOUND rather than a
+            # tolerance (slice 37 §II.3's shape): on a FROZEN geometry with the body oscillating, a
+            # first-order head's index gain can never exceed 1 — it is a contraction toward a target
+            # that is itself the reference — while a resonant second-order head OVERSHOOTS it.
+            #
+            # The bench is slice 37/38's own: geometry frozen, body swinging sinusoidally, and the
+            # measured quantity is the head's BODY-frame azimuth, i.e. the part of the dome the ray
+            # goes through. The reference is the body-frame LOS, which is EXACTLY what a strapdown
+            # seeker indexes (gain ≡ 1).
+            function index_peak(; ωn = nothing, ζ = 0.3, τ = 0.05, f = 1.7, amp = 0.05, n = 24_000)
+                hb = look_angles(qy40(0.0), û40)
+                a, e = hb[1], hb[2]; ra = 0.0; re = 0.0
+                pk_head = 0.0; pk_body = 0.0
+                for k in 1:n
+                    t = k * DT40
+                    q = qy40(-amp * sin(2π * f * t))
+                    tb = look_angles(q, û40)
+                    if ωn === nothing
+                        a, e = head_slew(a, e, tb[1], tb[2], τ, DT40, FREE40)
+                    else
+                        a, e, ra, re = head_slew_second_order(a, e, ra, re, tb[1], tb[2],
+                                                              ωn, ζ, DT40, FREE40)
+                    end
+                    if k > n ÷ 2                        # steady state only
+                        pk_head = max(pk_head, abs(a  - hb[1]))
+                        pk_body = max(pk_body, abs(tb[1] - hb[1]))
+                    end
+                end
+                return pk_head / pk_body
+            end
+            # A FIRST-ORDER LAG IS BOUNDED BY 1 ACROSS 400× OF τ — and the bound TIGHTENS with τ,
+            # which is slice 37's mechanism (its lag is what buys the margin).
+            g_fast = index_peak(τ = 0.002)
+            g_ship = index_peak(τ = 0.05)
+            g_slow = index_peak(τ = 0.8)
+            @test g_fast ≤ 1.0 && g_ship ≤ 1.0 && g_slow ≤ 1.0
+            @test g_slow < g_ship < g_fast              # monotone: more lag, quieter index
+            @test 0.85 < g_ship < 0.92                  # slice 37's own 0.884 at 1.7 Hz
+            # ⭐⭐ AND A RESONANT SECOND-ORDER SERVO LEAVES THAT BOUND — the mechanism in one assert.
+            g_res = index_peak(ωn = 2π * 2.0, ζ = 0.1)
+            @test g_res > 1.5                           # measured ≈3.07 by quadrature at gate 0
+            @test g_res > 3.0 * g_ship                  # …and far above anything a lag can reach
+            # ⚠ PAIRED WITH THE DOES-NOT-HAPPEN CASE (the house rule): past the ANALYTIC edge
+            # ζ = 1/√2 the closed-loop response has no peak above 1 at ANY frequency, so a
+            # well-damped servo of the SAME inertia is back inside the lag's own bound.
+            @test index_peak(ωn = 2π * 2.0, ζ = 1.0) < 1.0
+        end
+
+        @testset "the rate limit binds the RATE STATE, and the stop is INELASTIC (decisions 1 and 2)" begin
+            # ⚠ DECISION 1 — the limit is on the STATE, not the step, and it is RADIAL. A per-axis
+            # clamp would leave `√2·cap` on the diagonal while the readout compares against `cap`
+            # (`head_slew_full`'s own species argument). The target here is equidistant in both axes,
+            # so a per-axis bug shows up as a `√2` and nothing else would.
+            # ⚠ THE CAP IS ON A RATE THE SERVO BUILDS OVER TICKS, so it must be below what ONE tick
+            # from rest produces (`ω_n²·Δ·Δt` = 0.0670 rad/s here) — the first draft of this tooth
+            # asked for 0.5 rad/s in one tick and failed for arithmetic reasons of its own.
+            let cap = 0.02                              # rad/s
+                a, e, ra, re, dem, sat =
+                    head_slew_second_order(0.0, 0.0, 0.0, 0.0, 0.3, 0.3, 2π * 2.0, 0.1,
+                                           DT40, FREE40; rate_max = cap)
+                @test sat
+                @test hypot(ra, re) ≈ cap atol = 1.0e-12          # the STATE was capped, radially
+                @test hypot(a, e) ≈ cap * DT40 atol = 1.0e-12     # …so the step is cap·Δt
+                @test dem > cap * DT40                            # …and the DEMAND is pre-limit
+                @test ra ≈ re atol = 1.0e-12                      # RADIAL: the diagonal is preserved
+            end
+            # ⚠ AND THE CAP IS INERT WHEN IT DOES NOT BIND — bit-for-bit the unlimited answer, so a
+            # wire that authors a wide limit is not a slightly-different physics (slice 35's
+            # blocking pin, in the new kernel).
+            @test head_slew_second_order(0.1, -0.05, 0.2, 0.1, 0.3, 0.3, 2π * 2.0, 0.3,
+                                         DT40, FREE40; rate_max = 1.0e6) ===
+                  head_slew_second_order(0.1, -0.05, 0.2, 0.1, 0.3, 0.3, 2π * 2.0, 0.3,
+                                         DT40, FREE40)
+            # ⚠⚠ DECISION 2 — THE STOP IS INELASTIC. A head driven hard into its stop must not keep
+            # its rate: winding up against a clamp produces an oscillation that would FAKE the very
+            # resonance this slice is about, and gate 1 caught that arm for real on the heavy wire.
+            let stop = 0.02                             # < the 0.050 rad this tick's step travels
+                a, e, ra, re = head_slew_second_order(0.0, 0.0, 50.0, 0.0, 1.0, 0.0,
+                                                      2π * 2.0, 0.1, DT40, stop)
+                @test hypot(a, e) ≤ stop + 1.0e-12       # the stop bound…
+                @test (ra, re) === (0.0, 0.0)            # …so the rate state was zeroed
+            end
+            # …and it is NOT zeroed when the stop does not bind (the paired does-not-happen case).
+            let p = head_slew_second_order(0.0, 0.0, 0.5, 0.0, 1.0, 0.0, 2π * 2.0, 0.1, DT40, FREE40)
+                @test p[3] > 0.0
+            end
+        end
+
+        @testset "ONE kernel, TWO frames — the inertial variant (slice 37's shape)" begin
+            # ⭐ At ZERO body rate the two frames ARE the same frame, so the inertial wrapper must
+            # reproduce the body-frame kernel exactly — pinned PAIRED with a does-differ case, the
+            # house rule for an invariant tooth.
+            let a = az40, e = el40, ra = 0.0, re = 0.0, b = az40, be = el40, rb = 0.0, rbe = 0.0
+                worst = 0.0
+                for _ in 1:2000
+                    s = head_slew_second_order_inertial(a, e, ra, re, az40 + 0.05, el40,
+                                                        qy40(0.0), 2π * 2.0, 0.3, DT40, FREE40)
+                    a, e, ra, re = s[1], s[2], s[5], s[6]
+                    b, be, rb, rbe = head_slew_second_order(b, be, rb, rbe, az40 + 0.05, el40,
+                                                            2π * 2.0, 0.3, DT40, FREE40)
+                    worst = max(worst, hypot(s[3] - b, s[4] - be))
+                end
+                @test worst < 1.0e-12
+            end
+            # …and with the body TURNING they part, because the inertial head's target does not move
+            # in its own frame while the body head's does (slice 37's mechanism, in this servo).
+            let a = az40, e = el40, ra = 0.0, re = 0.0, b = az40, be = el40, rb = 0.0, rbe = 0.0
+                worst = 0.0
+                for k in 1:2000
+                    q = qy40(-0.3 * k * DT40)
+                    tb = look_angles(q, û40)
+                    s = head_slew_second_order_inertial(a, e, ra, re, az40, el40, q,
+                                                        2π * 2.0, 0.3, DT40, FREE40)
+                    a, e, ra, re = s[1], s[2], s[5], s[6]
+                    b, be, rb, rbe = head_slew_second_order(b, be, rb, rbe, tb[1], tb[2],
+                                                            2π * 2.0, 0.3, DT40, FREE40)
+                    worst = max(worst, hypot(s[3] - b, s[4] - be))
+                end
+                @test worst > 1.0e-3
+            end
+            # ⚠ The inertial variant's INNER call is handed `stop = Inf` so there remains exactly ONE
+            # stop site — and the inelastic rule is re-applied against the stop that actually bound.
+            let s = head_slew_second_order_inertial(0.0, 0.0, 50.0, 0.0, 1.0, 0.0, qy40(0.0),
+                                                    2π * 2.0, 0.1, DT40, 0.02)
+                @test hypot(s[3], s[4]) ≤ 0.02 + 1.0e-12
+                @test (s[5], s[6]) === (0.0, 0.0)
+            end
+        end
+
+        @testset "byte-identity and the degenerates (conventions 5 and 6)" begin
+            base = (0.1, -0.05, 0.2, 0.1, 0.3, 0.25)
+            # a servo with NO BANDWIDTH does not coast: it FREEZES and its rate is zeroed. This is
+            # `head_slew`'s `τ = Inf` reductio reached from the other side.
+            @test head_slew_second_order(base..., 0.0,  0.3, DT40, FREE40) === (0.1, -0.05, 0.0, 0.0, 0.0, false)
+            @test head_slew_second_order(base..., -1.0, 0.3, DT40, FREE40) === (0.1, -0.05, 0.0, 0.0, 0.0, false)
+            @test head_slew_second_order(base..., NaN,  0.3, DT40, FREE40) === (0.1, -0.05, 0.0, 0.0, 0.0, false)
+            @test head_slew_second_order(base..., Inf,  0.3, DT40, FREE40) === (0.1, -0.05, 0.0, 0.0, 0.0, false)
+            @test head_slew_second_order(base..., 2π,   NaN, DT40, FREE40) === (0.1, -0.05, 0.0, 0.0, 0.0, false)
+            # `dt ≤ 0` leaves BOTH the pointing and the rate untouched — a freeze that REMEMBERS,
+            # because no time passed (against the no-bandwidth freeze above, which is a servo that
+            # does not exist). ⚠ The two degenerates are deliberately different and both are pinned.
+            @test head_slew_second_order(base..., 2π, 0.3, 0.0,  FREE40) === (0.1, -0.05, 0.2, 0.1, 0.0, false)
+            @test head_slew_second_order(base..., 2π, 0.3, -1.0, FREE40) === (0.1, -0.05, 0.2, 0.1, 0.0, false)
+            # a NEGATIVE damping ratio is an authored absurdity, not a physics rung: CLAMPED at the
+            # consumer (convention 5), so it is the ζ = 0 servo and cannot manufacture a divergence.
+            @test head_slew_second_order(base..., 2π, -0.5, DT40, FREE40) ===
+                  head_slew_second_order(base..., 2π,  0.0, DT40, FREE40)
+            # a NaN/Inf rate cap is NO limit (slice 35's `>` polarity, inherited)
+            @test head_slew_second_order(base..., 2π, 0.3, DT40, FREE40; rate_max = NaN) ===
+                  head_slew_second_order(base..., 2π, 0.3, DT40, FREE40)
+            @test head_slew_second_order(base..., 2π, 0.3, DT40, FREE40; rate_max = Inf) ===
+                  head_slew_second_order(base..., 2π, 0.3, DT40, FREE40)
+            # …and a non-positive one FREEZES the head, exactly as it does in `head_slew_full`
+            let p = head_slew_second_order(base..., 2π, 0.3, DT40, FREE40; rate_max = 0.0)
+                @test (p[1], p[2], p[3], p[4]) === (0.1, -0.05, 0.0, 0.0)
+                @test p[6]
+            end
+            # nothing non-finite from finite input, even at absurd inputs (convention 6)
+            @test all(isfinite, head_slew_second_order(base..., 2π * 100.0, 0.05, DT40, 1.0)[1:4])
+            # Int arguments give the Float64 answer (the house type-stability check)
+            @test head_slew_second_order(0, 0, 0, 0, 1, 0, 6, 1, 1, 2) ===
+                  head_slew_second_order(0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 6.0, 1.0, 1.0, 2.0)
+        end
+    end
 end
