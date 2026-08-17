@@ -647,14 +647,27 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # authored input is refused, below — and it must be, because `head_clamp` handles a NaN
             # *stop* but not a NaN *az*: `deg2rad(Inf)` reaches the kernel as a non-finite azimuth
             # and poisons the head state permanently (gate 1's inherited item).
+            # ⭐ SLICE 38 — THE HEAD'S OWN GYRO joins this loop. `head_gyro_scale_err` is
+            # DIMENSIONLESS and `head_gyro_bias_y` / `_bias_z` are rad/s, so none of them is a
+            # degree quantity and none is converted here (`gimbal_rate_dps` carries its unit in its
+            # name for exactly the reason these do not).
+            # ⚠⚠ NOT REFUSED BESIDE `:body_referenced`, AND THE DISTINCTION FROM SLICE 36's
+            # BY-NAME REFUSAL IS A REAL ONE. `gimbal_handover_err_deg` is refused beside
+            # `:space_stabilized` because it is consumed ONCE, at tick 1, so a live toggle can never
+            # reach it — it would be a DEAD key. These are consumed EVERY TICK the space arm runs,
+            # and `:seeker_head` is live-settable (it is slice 37's button), so a wire that opens
+            # body-referenced and is toggled DOES use them. Refusing them here would forbid exactly
+            # the demonstration slice 37 shipped.
             for hk in ("gimbal_stop_deg", "gimbal_fov_deg", "gimbal_rate_dps",
-                       "gimbal_handover_err_deg")
+                       "gimbal_handover_err_deg",
+                       "head_gyro_scale_err", "head_gyro_bias_y", "head_gyro_bias_z")
                 haskey(sb, hk) || continue
                 haskey(sb, "gimbal_tau_s") ||
                     error("missile '$id': seeker.$hk authored without seeker.gimbal_tau_s — " *
                           "it is read only inside the gimbal head, so without one this knob is " *
                           "DEAD (slice $(hk == "gimbal_rate_dps" ? 35 :
-                                         hk == "gimbal_handover_err_deg" ? 36 : 34))")
+                                         hk == "gimbal_handover_err_deg" ? 36 :
+                                         startswith(hk, "head_gyro") ? 38 : 34))")
                 comp[Symbol(hk)] = _f64(sb[hk])
                 isfinite(comp[Symbol(hk)]) ||
                     error("missile '$id': seeker.$hk must be finite (got $(comp[Symbol(hk)]))")

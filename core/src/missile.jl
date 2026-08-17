@@ -1898,6 +1898,53 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             i_az, i_el = get(c, :head_frame, :body_referenced) === :space_stabilized ?
                 (Float64(c[:head_i_az]), Float64(c[:head_i_el])) :
                 az_el(rotate(c[:att_q]::Quat, los_unit_from_angles(head_az, head_el)))
+            # ── SLICE 38 — AN IMPERFECT HEAD GYRO ────────────────────────────────────────────────
+            # Everything above holds this pointing in space FOR FREE, which is slice 37's §1
+            # approximation named FIRST among its deferrals: a PERFECT head-mounted rate gyro,
+            # rejecting body motion at EXACTLY unity gain at every frequency. A real one has a scale
+            # factor and a bias, and feeding its reading forward leaves the pointing drifting at
+            # `−s·ω − b` (frames.jl `head_drift_inertial`, which composes slice 31's `gyro_reading`).
+            # ⇒ slice 37's whole margin becomes a GYRO SPEC: its onset bracket walks from its own
+            # space bracket at s = 0 to its own body bracket at a dead gyro, and −5 % — an ordinary
+            # cheap-MEMS part — gives back a quarter of it.
+            #
+            # ⚠⚠ THE ORDERING IS A DECISION, NOT AN INHERITANCE (advisor, before the edit). This runs
+            # BEFORE `head_clamp_inertial`, so a drift that pushes the head into its MECHANICAL STOP
+            # is clamped in the SAME tick — the head cannot drift through its own gimbal limit. The
+            # alternative (clamp, then drift) differs exactly when the stop binds, and it would let
+            # the stored pointing sit outside the stop for a tick. ⚠ GATE 0 NEVER BOUND THE STOP
+            # (`head_max` 18.1–18.8° against 30°), so this is untested territory rather than
+            # something 37 settled: `test_missile.jl` pins it on a wire where the stop DOES bind.
+            # This is slice 37 §II.9's class — the body carries the head BEFORE the detector is read
+            # — and the same discipline applies: say which order, and pin it.
+            #
+            # ⚠ INERT ON THE BODY RUNG BY PLACEMENT, NOT BY A GUARD: this is inside the `elseif
+            # _stab` arm, so a body-referenced wire never reaches it and the keys are introduce-safe
+            # there (pinned as `max|Δpos| == 0.0` in `test_missile.jl`, the other-rung twin of the
+            # key-absent tooth). ⚠ AND IT IS NOT ON THE TICK-1 HANDOVER BRANCH, correctly: nothing
+            # has elapsed for a gyro to drift THROUGH.
+            #
+            # ⚠ THE FOURTH ATTITUDE-TIMING SITE (slice 37's gate-2 fix named three, and it says so
+            # in this file). `:omega_body` here is PHASE 1's output — the rate belonging to att(k),
+            # which is the SAME attitude `:att_q` holds on this line and the same one the carry and
+            # the stop below use. All four sites therefore agree on the tick, which is the property
+            # that was violated the last time this block was edited.
+            #
+            # ⭐ THE ELSE IS SLICE 37 VERBATIM — no `head_drift_inertial(…, 0.0, …)` trusting the
+            # zeros. The kernel returns its input BIT-FOR-BIT at a zero residual, so an authored
+            # `s = 0` is byte-identical to the keys being absent BY CONSTRUCTION; routing the
+            # key-absent case through the call anyway would make that a MEASUREMENT instead, and
+            # would re-open the `-0.0` trap slices 20/21/26/27/28/29 each closed structurally.
+            if haskey(c, :head_gyro_scale_err) || haskey(c, :head_gyro_bias_y) ||
+               haskey(c, :head_gyro_bias_z)
+                i_az, i_el = head_drift_inertial(i_az, i_el,
+                                                 get(c, :omega_body, zero(Vec3))::Vec3,
+                                                 Float64(get(c, :head_gyro_scale_err, 0.0)),
+                                                 Vec3(0.0,
+                                                      Float64(get(c, :head_gyro_bias_y, 0.0)),
+                                                      Float64(get(c, :head_gyro_bias_z, 0.0))),
+                                                 c[:att_q]::Quat, dt)
+            end
             # ⚠⚠ THE BODY CARRIES THE HEAD **BEFORE** THE DETECTOR IS READ, AND THE ORDERING IS A
             # GATE-2 POST-REVIEW FIX (advisor). `:head_az` was written by tick k−1's `observe!`, i.e.
             # it is this pointing expressed in **att(k−1)** — but `integrate!` is PHASE 1 and this is
@@ -2770,6 +2817,37 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # recomputes nothing, convention 13). A head with no authored rate ships the FINITE_CEIL
         # sentinel rather than the `Inf` that is its true default (convention 6).
         tel["$sid.gimbal_rate_dps"] = _finite(Float64(get(c, :gimbal_rate_dps, Inf)))
+        # ⭐⭐ SLICE 38 — THE HEAD GYRO's OWN NUMBERS, shipped ONLY while one of its keys is authored
+        # (the slice-31 posture: a wire with a perfect head gyro carries no gyro keys at all, so
+        # slices 34–37 stay byte-identical on the wire as well as in the core).
+        if haskey(c, :head_gyro_scale_err) || haskey(c, :head_gyro_bias_y) ||
+           haskey(c, :head_gyro_bias_z)
+            # ⚠⚠ NAMED BY **WHICH SENSOR**, NOT BY WHICH ERROR TERM (advisor). This missile now
+            # carries TWO corrupted gyros: slice 31's `gyro_scale_err` / `gyro_bias_z` feed the
+            # COMPENSATOR (they multiply a believed slope and land on the aim point and the
+            # residual), while these feed the HEAD's own stabilization loop and land on how much
+            # body motion reaches the glass's INDEX. They are different sensors with the same two
+            # error terms, and a HUD that prints "scale factor" twice would be unreadable.
+            tel["$sid.head_gyro_scale_err"] = _finite_coord(
+                Float64(get(c, :head_gyro_scale_err, 0.0)))
+            tel["$sid.head_gyro_bias_z"] = _finite_coord(
+                Float64(get(c, :head_gyro_bias_z, 0.0)))
+            # ⭐ THE REJECTION GAIN — what fraction of the missile's own body motion the head FAILS
+            # to reject, i.e. the quantity slice 37 measured its entire margin out of. `s = 0` is a
+            # perfect head (0 % leaked); `s = −1` is a dead gyro (100 % leaked, the head simply
+            # carried along by the body). ⚠ IT IS **NOT** THE INDEX GAIN, and the distinction is
+            # gate 0's first refutation: the index gain is what the glass sees AFTER the servo has
+            # also acted, so it runs 1.000 → 0.886 rather than 1 → 0 (a head carried by the body is
+            # STILL SLEWED by its servo, which is precisely slice 37's other rung). This key is the
+            # LEAK, which is a property of the sensor alone and therefore the honest thing to put on
+            # a wire beside a slider that sets it.
+            tel["$sid.head_gyro_leak"] = _finite_coord(
+                abs(Float64(get(c, :head_gyro_scale_err, 0.0))))
+            # ⚠ SHIPPED ALONGSIDE slice 27/28's `radome_residual*`, NEVER FOLDED INTO THEM (the
+            # slice-31 instruction, and it was right there too): those keys keep meaning "what the
+            # GLASS and the BELIEF disagree by", and this slice moves neither. What it moves is how
+            # much of the body's motion arrives at the index where that disagreement is evaluated.
+        end
         # ⚠ THE TWO QUANTITIES THE STOP AND THE WINDOW ARE READ AGAINST ARE DIFFERENT ANGLES, and
         # shipping both is what stops a HUD comparing the wrong pair (the plan's gate-3 note): the
         # ENGAGEMENT's lead is what the head's TRAVEL must cover (vs the STOP), while the TRACKING

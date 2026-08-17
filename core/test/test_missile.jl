@@ -9839,3 +9839,232 @@ end
     end
 end
 
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# SLICE 38 — AN IMPERFECT HEAD GYRO: SLICE 37's MARGIN IS A GYRO SPEC.
+#
+# Slice 37's space-stabilized head rejects body motion at EXACTLY unity gain at every frequency,
+# because the model simply STORES the inertial angles — a PERFECT head-mounted rate gyro, named
+# FIRST among its own deferrals. A real one has a scale factor and a bias; feeding its reading
+# forward leaves the pointing drifting at `−s·ω − b`, so a FRACTION of the missile's own body motion
+# leaks back into the radome's INDEX. ⇒ slice 37's onset walks from its own SPACE bracket at a
+# perfect gyro to its own BODY bracket at a dead one, and −5 % — an ordinary cheap-MEMS part — gives
+# back a quarter of the margin the button costs. **A WORSE GYRO IS A MORE STABLE MISSILE.**
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+@testset "THE HEAD'S OWN GYRO wired (slice 38 — the margin is a gyro spec)" begin
+    dt = 1.0e-3
+
+    # Slice 37's wire TO THE DIGIT (seed 32, vy 200, glass R₀ = −0.03 / A = −0.15 / k = 12,
+    # R̂ = −0.18, τ = 0.05, window 25°, stop 30°, servo 40 °/s, n_pn = 8, σ 5e-5) plus the head-gyro
+    # keys, because the subject is that wire's own §1 approximation and any other difference would be
+    # a second variable in a one-variable measurement.
+    function gyro_world(; vy = 200.0, seed = 32, Rhat = -0.18, stop = 30.0, rate = 40.0,
+                          head = :space_stabilized, s = nothing, by = nothing, bz = nothing)
+        fid = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn, :autopilot => :alpha,
+                                  :airframe => :six_dof, :seeker => :filtered,
+                                  :seeker_axes => :az_el, :seeker_head => head)
+        w = World(seed = seed, fidelity = fid)
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.0,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => 0.3, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => 8.0, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => 5.0e-5, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true,
+                                :radome_slope => -0.03, :radome_ripple => -0.15,
+                                :radome_ripple_k => 12.0, :radome_slope_est => Rhat,
+                                :gimbal_tau_s => 0.05, :gimbal_stop_deg => stop,
+                                :gimbal_fov_deg => 25.0, :gimbal_rate_dps => rate)
+        # ⚠ ABSENT unless asked for — the key-absent arm is the byte-identity reference.
+        s  === nothing || (comp[:head_gyro_scale_err] = s)
+        by === nothing || (comp[:head_gyro_bias_y] = by)
+        bz === nothing || (comp[:head_gyro_bias_z] = bz)
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 2000.0, 4200.0),
+                                 vel = Vec3(0.0, vy, 0.0),
+                                 comp = Dict{Symbol,Any}(:cross_speed_mps => vy))
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1),
+                            ConstantVelocity(:t1)]
+    end
+
+    # slice 28's band and yaw channel, which 33/34/35/37 all use. ⚠⚠ `out` IS ASSERTED ON EVERY ARM
+    # QUOTED — the two-run discipline's precondition, inherited whole and not extended here.
+    function garm(; n = 22000, lo = 500.0, hi = 3000.0, kw...)
+        w, sub = gyro_world(; kw...)
+        stop = Float64(get(w.entities[:m1].comp, :gimbal_stop_deg, 1.0e6))
+        rr = Float64[]; nb = 0; nout = 0; nbind = 0
+        hmax = 0.0; over = -Inf; miss = Inf; r_prev = Inf
+        for k in 1:n
+            tick!(w, sub, dt); empty!(w.events)
+            m = w.entities[:m1]; t = w.entities[:t1]; c = m.comp
+            tel = get(w.env, :telemetry, Dict{String,Any}())
+            r = los_range(m.pos, t.pos)
+            h = get(tel, "m1.head_angle_deg", 0.0)
+            hmax = max(hmax, h); over = max(over, h - stop)
+            h >= stop - 1.0e-9 && (nbind += 1)
+            if lo <= r <= hi
+                nb += 1; push!(rr, get(c, :omega_body, zero(Vec3))[3])
+                get(tel, "m1.gimbal_valid", 1.0) == 1.0 || (nout += 1)
+            end
+            r > r_prev && miss == Inf && (miss = r_prev)
+            r_prev = r
+            miss < Inf && k > 200 && break
+        end
+        return (rms_r = isempty(rr) ? NaN : sqrt(sum(abs2, rr) / length(rr)), miss = miss,
+                hmax = hmax, over = over, nbind = nbind,
+                out = nb > 0 ? 100nout / nb : 0.0, nb = nb)
+    end
+
+    # max|Δpos| between two arms — slices 34/37's isolation quantity.
+    function gposdiff(; n = 6000, a = (;), b = (;))
+        wa, sa = gyro_world(; a...); wb, sb = gyro_world(; b...)
+        d = 0.0
+        for _ in 1:n
+            tick!(wa, sa, dt); empty!(wa.events); tick!(wb, sb, dt); empty!(wb.events)
+            pa = wa.entities[:m1].pos; pb = wb.entities[:m1].pos
+            d = max(d, sqrt((pa[1]-pb[1])^2 + (pa[2]-pb[2])^2 + (pa[3]-pb[3])^2))
+        end
+        return d
+    end
+
+    @testset "BYTE-IDENTITY, in BOTH directions (the key-absent arm and the other rung)" begin
+        # ⭐ A PERFECT GYRO IS THE KEYS NOT EXISTING, EXACTLY. `head_drift_inertial` returns its
+        # input bit-for-bit at a zero residual, so this is STRUCTURAL rather than a measurement that
+        # happened to come out clean (slice 20/21/26/27/28/29's shape).
+        @test gposdiff(; a = (head = :space_stabilized,),
+                         b = (head = :space_stabilized, s = 0.0, by = 0.0, bz = 0.0)) == 0.0
+        # ⭐⭐ AND INERT ON THE BODY RUNG BY **PLACEMENT**, NOT BY A GUARD (advisor): the drift call
+        # lives inside the `elseif _stab` arm, so a body-referenced wire never reaches it — with the
+        # keys authored at values that visibly ring the space rung. This is what makes them
+        # introduce-safe on slices 34–36's wires without the loader having to argue it.
+        @test gposdiff(; a = (head = :body_referenced,),
+                         b = (head = :body_referenced, s = -0.20, bz = 0.4)) == 0.0
+        # …paired with the does-differ case, or the two asserts above prove only that nothing ran.
+        @test gposdiff(; a = (head = :space_stabilized,),
+                         b = (head = :space_stabilized, s = -0.20)) > 1.0
+    end
+
+    @testset "the HANDOVER tick is not drifted — no elapsed time to drift through" begin
+        # Tick 1 takes the `!haskey(c, :head_az)` branch, which clamps the TRUTH angles and never
+        # slews; the drift is on the `elseif _stab` arm and must not reach it. ⇒ the head is BORN in
+        # the same place whatever its gyro is, and the two arms part only from tick 2.
+        wa, sa = gyro_world(); wb, sb = gyro_world(; s = -0.20, bz = 0.4)
+        tick!(wa, sa, dt); empty!(wa.events); tick!(wb, sb, dt); empty!(wb.events)
+        ca = wa.entities[:m1].comp; cb = wb.entities[:m1].comp
+        @test (ca[:head_az], ca[:head_el]) === (cb[:head_az], cb[:head_el])
+        @test (ca[:head_i_az], ca[:head_i_el]) === (cb[:head_i_az], cb[:head_i_el])
+    end
+
+    @testset "THE ONSET WALKS WITH THE GYRO — the shipped seam reproduces gate 0's cells" begin
+        # Gate 0 flew a PATCHED kernel behind `:probe_hg_*`; these are the same four cells on the
+        # SHIPPED seam with that patch reverted. ⚠ A reproduction check is blind to whether both are
+        # RIGHT (slice 37 §II.4's own finding) — what it establishes is that the seam IS the probe.
+        q0  = garm(; Rhat = -0.215)               # gate 0: 0.0198 — quiet, below the s = 0 bracket
+        r0  = garm(; Rhat = -0.200)               # gate 0: 0.6375 — RINGING at a perfect gyro
+        r5  = garm(; Rhat = -0.200, s = -0.05)    # gate 0: 0.0196 — the SAME design, QUIET at −5 %
+        r5b = garm(; Rhat = -0.180, s = -0.05)    # gate 0: 0.8985 — and it rings again one rung on
+        for a in (q0, r0, r5, r5b)
+            @test a.out == 0.0                    # …the precondition, on every arm quoted
+            @test a.miss < 50.0                   # every arm still HITS (the miss is not the metric)
+        end
+        @test isapprox(q0.rms_r,  0.0198; atol = 5.0e-4)
+        @test isapprox(r0.rms_r,  0.6375; atol = 5.0e-3)
+        @test isapprox(r5.rms_r,  0.0196; atol = 5.0e-4)
+        @test isapprox(r5b.rms_r, 0.8985; atol = 5.0e-3)
+        # ⭐ THE CLAIM ITSELF, as a RATIO between two arms differing ONLY by the gyro: a 5 % scale
+        # factor takes a design from RINGING to QUIET at fixed glass, fixed belief, fixed seed.
+        @test r0.rms_r / r5.rms_r > 25.0
+        # …and it is a WALK, not an on/off: the same 5 % gyro rings again one rung further up, so the
+        # BOUNDARY MOVED rather than the ring being switched off.
+        @test r5b.rms_r / r5.rms_r > 25.0
+    end
+
+    @testset "THE ORDERING: drift-then-clamp, so the head cannot drift THROUGH its stop" begin
+        # ⚠⚠ THIS IS A DECISION, NOT AN INHERITANCE (advisor). The drift runs BEFORE
+        # `head_clamp_inertial`, so a drift that pushes the head into its mechanical limit is
+        # clamped in the SAME tick. Gate 0 never bound the stop at all (head travel 18.1–18.8°
+        # against 30°), so this is untested territory rather than something slice 37 settled — and a
+        # VACUOUS version of this test is the real risk, which is why `nbind` is asserted too.
+        a = garm(; stop = 12.0, s = -0.20)
+        @test a.nbind > 1000            # the stop genuinely BINDS (measured: 5572 ticks)
+        @test a.over <= 1.0e-12         # …and is never exceeded (measured: 1.78e−15, float only)
+        @test a.hmax <= 12.0 + 1.0e-12
+        # ⚠ A GUESS THAT WAS WRITTEN AS AN ASSERT AND **REFUTED BY IT**, kept because the corrected
+        # reading is the better one. The draft asserted that a PERFECT-gyro arm reaches this stop
+        # LESS often, "so the binding above is the drift's doing" — it is not: at a 12° stop the head
+        # is against its limit either way (5582 ticks perfect against 5572 drifted, i.e. very
+        # slightly MORE without the gyro error). ⇒ what this testset proves is the ORDERING
+        # INVARIANT and nothing about causation: whatever puts the head on its stop, the drift never
+        # carries it THROUGH. Both arms are asserted to bind so the invariant is non-vacuous on each.
+        @test garm(; stop = 12.0).nbind > 1000
+        @test garm(; stop = 12.0).over <= 1.0e-12
+    end
+
+    @testset "the telemetry: named by WHICH SENSOR, and shipped only when a key is authored" begin
+        # ⚠ SHIPPED ONLY WITH A KEY AUTHORED (slice 31's posture) — a wire with a perfect head gyro
+        # carries no gyro keys at all, so slices 34–37 stay byte-identical ON THE WIRE too.
+        wa, sa = gyro_world()
+        for _ in 1:50; tick!(wa, sa, dt); empty!(wa.events); end
+        tela = get(wa.env, :telemetry, Dict{String,Any}())
+        @test !haskey(tela, "m1.head_gyro_scale_err")
+        @test !haskey(tela, "m1.head_gyro_leak")
+        # …and slice 27/28's residual keys are UNTOUCHED by this slice, on both kinds of wire: what
+        # moves is how much body motion reaches the index where that residual is evaluated, not the
+        # residual itself (the advisor's instruction to slice 31, right here too).
+        @test haskey(tela, "m1.radome_residual_az")
+        wb, sb = gyro_world(; s = -0.20, bz = 0.4)
+        for _ in 1:50; tick!(wb, sb, dt); empty!(wb.events); end
+        telb = get(wb.env, :telemetry, Dict{String,Any}())
+        @test telb["m1.head_gyro_scale_err"] == -0.20
+        @test telb["m1.head_gyro_bias_z"] == 0.4
+        @test telb["m1.head_gyro_leak"] == 0.20      # the LEAK is |s| — the sensor's own property
+        @test haskey(telb, "m1.radome_residual_az")
+        # ⚠ THE LEAK IS NOT THE INDEX GAIN and the two must not be confused: the index gain is what
+        # the glass sees AFTER the servo has also acted (1.000 → 0.886 across the whole s range —
+        # gate 0's first refutation), while this is the fraction the SENSOR fails to reject (0 → 1).
+        @test telb["m1.head_gyro_leak"] != 1.0 - 0.886
+        # ⚠ AND IT IS A DIFFERENT SENSOR FROM SLICE 31's, which corrupts the COMPENSATOR's gyro.
+        # Neither of those keys is present here, and the two must never share a name.
+        @test !haskey(telb, "m1.gyro_scale_err")
+    end
+
+    @testset "the loader: refused without a head, accepted beside EITHER rung" begin
+        # ⚠ DEAD WITHOUT A HEAD — the `gimbal_*` posture (slice 34/35/36's own refusal): these keys
+        # are read only inside the space-stabilized head, so without `gimbal_tau_s` they are a knob
+        # on a key nothing reads (the slice-19 `speed` class).
+        mk(seek) = string("name: t\nseed: 1\ndt_physics: 1.0e-3\n",
+                          "entities:\n",
+                          "  - id: m1\n    kind: missile\n    pos: [0.0, 0.0, 3000.0]\n",
+                          "    missile:\n      mass_kg: 140.0\n      speed: 700.0\n",
+                          "      elevation_deg: 12.0\n",
+                          # ⚠ `two_angle: true` on EVERY arm: the gimbal head lives in the
+                          # two-angle seeker, so `gimbal_tau_s` is refused without it (slice 34's
+                          # own guard). Its absence would make the accept case below fail for a
+                          # reason that has nothing to do with slice 38.
+                          "      seeker: {two_angle: true, ", seek, "}\n",
+                          "      guidance: {n_pn: 4.0, a_max: 3000.0}\n",
+                          "  - id: t1\n    kind: target\n    pos: [6000.0, 2000.0, 4200.0]\n",
+                          "    vel: [0.0, 200.0, 0.0]\n    target: {rcs_m2: 1.0}\n")
+        mktempdir() do d
+            wr(txt) = (p = joinpath(d, "s.yaml"); write(p, txt); p)
+            @test_throws ErrorException load_scenario(wr(mk("head_gyro_scale_err: -0.05")))
+            @test_throws ErrorException load_scenario(wr(mk("head_gyro_bias_z: 0.1")))
+            # …and non-finite is refused, like every other head key
+            @test_throws ErrorException load_scenario(
+                wr(mk("gimbal_tau_s: 0.05, head_gyro_scale_err: .nan")))
+            # ⚠⚠ NOT REFUSED BESIDE `:body_referenced`, and that is the distinction from slice 36's
+            # by-name refusal: `gimbal_handover_err_deg` is consumed ONCE at tick 1 so a live toggle
+            # can never reach it, while these are consumed EVERY tick the space arm runs — and
+            # `:seeker_head` IS live-settable (it is slice 37's button). Refusing them beside the
+            # body rung would forbid exactly the demonstration slice 37 shipped.
+            sc = load_scenario(wr(mk("gimbal_tau_s: 0.05, head_gyro_scale_err: -0.05")))
+            @test sc.world.entities[:m1].comp[:head_gyro_scale_err] == -0.05
+        end
+    end
+end

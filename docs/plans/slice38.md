@@ -189,9 +189,57 @@ design choice. The proof is again a control that visibly stops working.
 
 ---
 
-# THE PLAN — GATES 1 TO 3
+# GATES 1 AND 2 — AS BUILT (2026-08-17)
 
-## Gate 1 — the kernel and its teeth
+**Gate 1 COMPLETE (suite 7496 → 7516).** `frames.jl` gains `head_drift_inertial`, a COMPOSITION of
+slice 31's `gyro_reading` that returns its input BIT-FOR-BIT at a zero residual — so an authored
+`s = 0` is byte-identical to the keys being absent BY CONSTRUCTION. Four teeth: the sign (the body
+angle frozen to 8.5e−14 over 5000 ticks at a dead gyro, paired with the perfect-gyro `===`); the
+drift as a Rodrigues rotation against an INDEPENDENT recompute (3.554e−16 over 108 cells); linearity
+in `s` (1.7e−12) paired with the bias as a different currency; and the degenerates.
+
+⚠⚠ **TWO WRONG ORACLES, BOTH OF WHICH LOOKED LIKE TOLERANCE PROBLEMS**, and both are recorded in the
+test because either would have shipped as a loose `atol`: `acos` of the dot product is
+precision-limited to ~1.2e−04 rad on a 2e−4 rotation (and hid the linearity result at ~1e−8, which
+the chord formula reads as 1.7e−12); and predicting the swept angle as `|Ω|·dt` is **wrong by
+construction**, since a vector rotated about an axis moves by `|Ω|·dt·sin(ψ)`. That read 24 % on the
+widest cell — and swapping the first oracle for the chord formula left the number BIT-FOR-BIT
+UNCHANGED, which is what exposed it as a formula error rather than a precision one.
+
+**Gate 2 COMPLETE (suite 7516 → 7553).** The seam is one call in `missile.jl`'s `elseif _stab` arm
+plus three loader keys and three telemetry keys.
+
+* ⭐ **THE SHIPPED SEAM REPRODUCES GATE 0's CELLS with the probe patch reverted** — 0.63754 / 0.01963
+  / 0.89855 / 0.01981 against gate 0's 0.6375 / 0.0196 / 0.8985 / 0.0198. ⚠ A reproduction check is
+  blind to whether BOTH are right (slice 37 §II.4's finding); what it establishes is that the seam
+  IS the probe.
+* ⭐ **SLICE 37 IS BYTE-IDENTICAL ON THE WIRE**, re-run after the seam edit: 0.01195 / 1.00094 =
+  83.8×, both brackets unchanged (4.32× and 9.09×), the aim point still 1.022×.
+* **THE ORDERING IS DRIFT-THEN-CLAMP** and it is stated in the seam: a drift that pushes the head
+  into its mechanical stop is clamped in the SAME tick, so the head cannot drift THROUGH its own
+  gimbal limit. Pinned on a wire where the stop actually binds (5572 ticks at a 12° stop; `over`
+  1.78e−15, floating point only). ⚠ **A GUESS BESIDE IT WAS WRITTEN AS AN ASSERT AND REFUTED BY IT:**
+  the draft claimed a perfect-gyro arm reaches that stop LESS often, *"so the binding is the drift's
+  doing"*. It is not — 5582 ticks perfect against 5572 drifted, very slightly MORE. ⇒ the testset
+  proves the ORDERING INVARIANT and nothing about causation, and it says so.
+* **INERT ON THE BODY RUNG BY PLACEMENT, NOT BY A GUARD** (advisor): `max|Δpos| == 0.0` with the keys
+  authored at values that visibly ring the space rung — the other-rung twin of the key-absent tooth,
+  and what makes the keys introduce-safe on slices 34–36's wires.
+* **THE HANDOVER TICK IS NOT DRIFTED** — tick 1 takes the `!haskey(:head_az)` branch, so the head is
+  BORN in the same place whatever its gyro is and the arms part only from tick 2.
+* **TELEMETRY NAMED BY WHICH SENSOR** (advisor): `head_gyro_scale_err` / `head_gyro_bias_z` /
+  `head_gyro_leak`, shipped only when a key is authored, ALONGSIDE slice 27/28's `radome_residual*`
+  and never folded into them. ⚠ `head_gyro_leak` is `|s|` — the SENSOR's own property — and is
+  explicitly **not** the index gain (which runs 1.000 → 0.886 because the servo also acts).
+* **THE LOADER refuses the keys without `gimbal_tau_s`** (dead without a head) but **accepts them
+  beside EITHER rung** — the distinction from slice 36's by-name refusal is that a handover error is
+  consumed once at tick 1 while these are consumed every tick, and `:seeker_head` is live-settable.
+
+---
+
+# THE PLAN — GATE 3
+
+## Gate 1 — the kernel and its teeth (DONE, above)
 
 * **`frames.jl`:** the drift is `gyro_reading` (slice 31's, unchanged) plus one small kernel that
   advances an inertial pointing by a body-rate residual — `head_drift_inertial(az, el, ω_b, s, b, att,
