@@ -4782,7 +4782,9 @@ deferral to a LIVE constraint: a caged head's window requirement IS the strapdow
 what ships is a HANDED-OVER head, stated as a §1 condition); **A RATE-LIMITED HEAD** (`gimbal_rate_max`
 exists in the gate-0 probe and was NEVER EXERCISED — the natural home of a slew-rate-limited lock loss);
 **MEMORY TRACK / RE-ACQUISITION** (the break is TERMINAL here — a real head coasts on its last inertial
-rate; slice 32's α-β choice, one layer out); **A RECTANGULAR / PER-AXIS STOP** (gate 1 wrote down that
+rate; slice 32's α-β choice, one layer out) — ⚠⚠ **SINCE KILLED AT GATE 0, `docs/plans/slice37.md`
+(2026-08-17): the coast is a head feature and what makes the break terminal is the ESTIMATOR's frozen
+rate, so no head change reaches it**; **A RECTANGULAR / PER-AXIS STOP** (gate 1 wrote down that
 its circular shape rests on a species argument, because no flying arm had ever bound it — gate 2's §2.5
 bound it for the first time); **THE HEAD'S OWN GYRO** (a rate-stabilized head measures inertial LOS rate
 directly — the classical reason gimbals exist, and a DIFFERENT mechanism from anything here); plus

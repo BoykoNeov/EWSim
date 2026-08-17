@@ -1115,16 +1115,28 @@ unreachable by it and their verdicts part in BOTH directions over a band of cros
 tooth in `test_missile.jl`, and "THE CAGE vs THE AIM AS ITS OWN A/B" is now a named deferral of its own.)**
 **SLICE 36's OWN DEFERRALS, in the order it named them: A HANDOVER BASKET WITH A DISTRIBUTION (it authors ONE
 signed error; a real handover has a COVARIANCE and the design question is a Pk over the basket rather than a single
-arm — the natural successor); MEMORY TRACK / RE-ACQUISITION ⚠⚠ SHARPENED BY SLICE 36 INTO A REAL PREDICTION (a
-memory track is exactly what would rescue the TOO-MUCH-BIAS side of the basket, so it would make the basket
-ONE-SIDED); THE CAGE vs THE AIM AS ITS OWN A/B (§0.8, built and measured, shipped only as a tooth — including a
+arm — the natural successor ⚠ but scope it against slice 37's §0.1 FIRST: the basket's two sides fail by DIFFERENT
+mechanisms, so a Pk over it is a mixture of two failure modes, not one); ⚠⚠ **MEMORY TRACK / RE-ACQUISITION IS
+DEAD, NOT DEFERRED — KILLED AT GATE 0 (2026-08-17, 5 probes, `docs/plans/slice37.md`), AND SLICE 36's SHARPENED
+PREDICTION IS REFUTED**: the TOO-MUCH-BIAS side of the basket NEVER ACQUIRES (born outside the window, `seek_init`
+never flips, every rate 0.0), so a coast has NOTHING TO REMEMBER on exactly the half it was predicted to rescue;
+an HONEST coast (the head follows the α-β tracker's coasted INERTIAL estimate through the CURRENT attitude)
+rescues ONE boundary cell of fifteen and moves NO verdict, because ⭐⭐ A BREAK IN THIS ARC IS NOT AN EPISODE, IT
+IS THE REST OF THE FLIGHT (`coast_max` 6.0–7.9 s, `nreacq` 0 on every arm of every wire at both servo rates) ⇒ what
+makes a break terminal is the ESTIMATOR's FROZEN RATE destroying the guidance solution, NOT where the head points,
+so the cure 34/35/36 all banked was MIS-LOCATED and no head feature can reach it. ⭐ What IS live is a DIFFERENT
+subsystem: THE NEVER-ACQUIRED SIDE NEEDS A RE-CUE, NOT A COAST (a probe arm that cheats by feeding the head the
+measurement it cannot have goes 3620.675 → 0.110 m, and its provenance is LOGGED — the seam's unconditional
+`head_tgt` write, not the probe's seeding) ⇒ a SEARCH PATTERN / SECOND CUE slice owns that number, with its
+ceiling and its floor both already measured. ⚠ Reviving the memory track needs a TRACKER that maintains a usable
+rate through a gap, not a head change — a larger slice, of which a coast is the corollary; THE CAGE vs THE AIM AS ITS OWN A/B (§0.8, built and measured, shipped only as a tooth — including a
 mechanism neither slice has named: the WRONG-WAY CHASE, where a head born BELOW the LOS slews UP toward +18.1°
 before the LOS reverses, and at 8 °/s that climb is unaffordable); THE ELEVATION HALF (the error is authored in
 AZIMUTH because that is where the lead and the excursion are — slice 28's channel split — and §0.5 predicts NO
 optimum shift there, which is a tooth rather than a slice).**
-**SLICE 34's OWN REMAINING DEFERRALS: MEMORY TRACK / RE-ACQUISITION (slice 34's break is TERMINAL —
-no error signal, no slew — while a real head coasts on its last inertial rate: slice 32's α-β choice one layer out;
-⚠ every break slice 35 measured is still TERMINAL too); THE HEAD'S OWN GYRO (a rate-stabilized head measures
+**SLICE 34's OWN REMAINING DEFERRALS: ⚠⚠ MEMORY TRACK / RE-ACQUISITION IS OFF THIS LIST — KILLED AT GATE 0, see
+above and `docs/plans/slice37.md` (34/35/36 all recorded the break as TERMINAL and all three assumed a coasting
+head was the cure; it is not, and the mis-location is the result); THE HEAD'S OWN GYRO (a rate-stabilized head measures
 inertial LOS rate DIRECTLY, which is the classical reason gimbals exist and a DIFFERENT mechanism from anything in
 26–35). ⚠ "A RATE-LIMITED HEAD" IS NO LONGER ON THIS LIST — SLICE 35 SHIPPED IT, and its OWN named successor is
 **A SECOND-ORDER SERVO (ω_a/ζ_a)**: slice 35's head is first-order-WITH-a-rate-limit, while a real gimbal has an
