@@ -1324,6 +1324,22 @@ function _validate_missile(world::World)
     # a runtime no-op. Triggered by `:datalink` presence, so a non-salvo missile scenario is untouched.
     n_datalink ≥ 1 && n_missile < 2 &&
         error("a salvo (:datalink) scenario needs ≥ 2 :missile interceptors to coordinate (got $n_missile)")
+    # SLICE 37 — `:seeker_head` NAMES THE GIMBAL SERVO'S REFERENCE FRAME, so it is meaningless
+    # without a gimbal. REFUSED AT LOAD rather than silently ignored (the slice-21/28/29/31/32
+    # precedent): the rung is read ONLY inside the head branch of `_observe_point3d!`, so on a wire
+    # with no `seeker.gimbal_tau_s` anywhere it is a DEAD FIDELITY — a button a student could cycle
+    # all day with nothing on the other end, which is the slice-19 `speed` class one level up from a
+    # knob. ⚠ Refused for EITHER rung, not only `:space_stabilized`: authoring the default by name
+    # is exactly as dead, and refusing only the interesting one would teach that the other is live.
+    # ⚠ It sits ABOVE the no-missile early return, because a head-less scenario is exactly the case
+    # this catches.
+    if haskey(world.fidelity, :seeker_head)
+        any(haskey(e.comp, :gimbal_tau_s) for (_, e) in world.entities) ||
+            error("fidelity seeker_head: '$(world.fidelity[:seeker_head])' authored with no " *
+                  "gimballed seeker anywhere — the rung names the HEAD's servo reference frame " *
+                  "and is read only inside the head, so without seeker.gimbal_tau_s it is a DEAD " *
+                  "fidelity (slice 37)")
+    end
     n_missile == 0 && return world                       # not a missile scenario
     # Slice 9: a guided missile's Autopilot target-locks the nearest `:target` at runtime — so a
     # guided scenario must ship ≥ 1 (validated at LOAD, the `_validate_gps`/`_validate_esm` pattern,
@@ -1342,6 +1358,24 @@ function _validate_missile(world::World)
                 error("missile '$id': seeker.two_angle is incompatible with fidelity seeker: scan — " *
                       "the :scan angular profile is single-axis (λ) by construction; az×el CFAR is a " *
                       "named deferral (docs/plans/slice25.md §1b)")
+        end
+    end
+    # ⚠⚠ AND THE HANDOVER BASKET IS REFUSED BESIDE THE SPACE-STABILIZED RUNG — this one is the
+    # FALSE-CLAIM class rather than hygiene. Slice 36's `gimbal_handover_err_deg` is an offset in the
+    # BODY-frame LOS azimuth, and its whole finding (the V, the kink, the sign convention "ALONG the
+    # body-frame LOS excursion") is stated in that frame. A space-stabilized head is born in the
+    # INERTIAL frame, where the same number is a DIFFERENT physical birth — shipping it would be a
+    # measured slice's name on an unmeasured quantity. ⚠ The refusal is complete cover even though
+    # the rung is LIVE-SETTABLE: the handover is consumed exactly ONCE, at tick 1, so no mid-run
+    # toggle can reach that branch with the key live.
+    if get(world.fidelity, :seeker_head, :body_referenced) === :space_stabilized
+        for (id, e) in world.entities
+            haskey(e.comp, :gimbal_handover_err_deg) &&
+                error("missile '$id': seeker.gimbal_handover_err_deg is incompatible with " *
+                      "fidelity seeker_head: space_stabilized — the handover error is authored in " *
+                      "the BODY-frame LOS azimuth (slice 36), and a space-stabilized head is born " *
+                      "in the INERTIAL frame, where that offset is a different birth. Author one " *
+                      "or the other (slice 37)")
         end
     end
     return world

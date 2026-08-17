@@ -1706,8 +1706,34 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # "refused rather than silently branch-ordered" precedent), so the `elseif` on the availability
     # branch below is unreachable from any YAML. A gimballed seeker has no body-fixed window: the
     # STOP is that limit, and slice 32's key under a head would be an unmodelled THIRD window.
+    #
+    # ⭐⭐ SLICE 37 — THE SERVO'S REFERENCE FRAME, and the deferral's own wording was REFUTED before
+    # any probe ran. `docs/plans/slice34.md:931` named this slice as *"a rate-stabilized head
+    # measures inertial LOS rate DIRECTLY"* — and line 1652 above is `az_el(û_tru)`, NOT
+    # `look_angles(att, û_tru)`: this seeker has reported INERTIAL LOS angles since slice 25 and the
+    # α-β tracker an INERTIAL rate, so the shipped model is ALREADY a perfectly body-motion-isolated
+    # MEASUREMENT and the promised headline cannot be shipped. What is body-referenced is the SERVO —
+    # `head_tgt = look_angles(att, …)` and `head_slew_full` rate-limits its step in BODY coordinates,
+    # so the servo's job includes TRACKING OUT the missile's own rotation. `:space_stabilized` holds
+    # the head's pointing in the INERTIAL frame instead (head-mounted rate gyros), and body motion is
+    # REJECTED PASSIVELY rather than tracked out. See `docs/plans/slice37.md` PART II.
+    #
+    # ⚠⚠ AND IT REMOVES MARGIN RATHER THAN ADDING IT — THE CLASSICAL REASON GIMBALS EXIST INVERTS ON
+    # THIS WIRE. The position servo's LAG WAS DOING STABILITY WORK: it LOW-PASSES body motion out of
+    # the glass's INDEX (measured against `1/√(1+(2πfτ)²)` to 3–4 digits, against UNITY GAIN exactly
+    # at every frequency for the stabilized head), and slice 26's limit cycle lives at 1.7–2.1 Hz
+    # where that filter is worth 12–16 % of gain and ~30° of phase. Stabilizing gives back ≈40–45 %
+    # of the margin slice 34's gimbal bought, AT THE SHIPPED τ = 0.05 (gate 1 measured BOTH terms
+    # moving with τ: the honest range over `τ ∈ [0.005, 0.2]` is 0 % to 79 %).
+    #
+    # ⚠⚠ RUNG-GATED ON THE LIVE `:airframe` THROUGH `_gim`, NEVER ON `haskey(c, :head_i_az)` — the
+    # latent-bug class this arc has caught SEVEN times (21's `_atm_on`, 23, 26, 27, 29, 32, 34), and
+    # here it would be WORSE than every earlier occurrence: a cross-toggle off `:six_dof` FREEZES the
+    # attitude, and a frozen attitude makes the body↔inertial conversion the IDENTITY — so the two
+    # rungs would silently BECOME EACH OTHER rather than visibly break.
     _six = get(w.fidelity, :airframe, :point_mass) === :six_dof
     _gim = haskey(c, :gimbal_tau_s) && haskey(c, :att_q) && _six
+    _stab = _gim && get(w.fidelity, :seeker_head, :body_referenced) === :space_stabilized
     look_az_b = 0.0; look_el_b = 0.0     # the LOS in the BODY frame — what a STRAPDOWN seeker indexes
     head_az   = 0.0; head_el   = 0.0     # the HEAD's pointing angles, in the body frame
     off_head  = 0.0; fov_h     = 0.0     # the detector's off-head-axis error, and its window
@@ -1805,13 +1831,71 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             # geometry where it can differ — an IN-PLANE (`Y = 0`) arm, where `look_az_b` is a signed
             # zero. On the crossing wire `look_az_b ≈ +0.316 rad` and `+ 0.0` is trivially inert, so
             # that arm carries no information (advisor).
-            if haskey(c, :gimbal_handover_err_deg)
+            #
+            # ⭐ SLICE 37 — THE SPACE-STABILIZED HANDOVER IS THE SAME BIRTH IN THE OTHER FRAME, and
+            # it is `head_clamp_inertial`'s SECOND CALLER, which is why gate 1 split that kernel out
+            # at all (slice 34 split `head_clamp` for exactly this reason: the handover must clamp
+            # the way the servo does). The head is born on the TRUTH LOS — the same physical
+            # direction as the body arm below — but its STATE is the inertial pair, and the STOP is
+            # still taken in the BODY frame, because a gimbal's mechanical travel is body-relative
+            # no matter what frame its servo closes in.
+            # ⚠⚠ `gimbal_handover_err_deg` IS REFUSED BESIDE THIS RUNG AT LOAD (`scenario.jl`), and
+            # the reason is the false-claim class rather than hygiene: slice 36's basket, its V and
+            # its sign convention are all stated in the BODY frame ("ALONG THE BODY-FRAME LOS
+            # EXCURSION"), so an INERTIAL-azimuth offset would be a different physical birth wearing
+            # a measured slice's name. The load refusal is complete cover even though the rung is
+            # live-settable: the handover is consumed ONCE, at tick 1, so a toggle can never reach
+            # this branch with that key live.
+            if _stab
+                i_az, i_el, head_az, head_el =
+                    head_clamp_inertial(az_tru, el_tru, c[:att_q]::Quat, stop_h)
+                c[:head_i_az] = i_az; c[:head_i_el] = i_el
+            elseif haskey(c, :gimbal_handover_err_deg)
                 head_az, head_el =
                     head_clamp(look_az_b + deg2rad(Float64(c[:gimbal_handover_err_deg])),
                                look_el_b, stop_h)
             else
                 head_az, head_el = head_clamp(look_az_b, look_el_b, stop_h)   # ── 34/35 VERBATIM ──
             end
+        elseif _stab
+            # ── SLICE 37 — THE SPACE-STABILIZED SERVO ─────────────────────────────────────────────
+            # The state is the INERTIAL pair; the body pair is RECOMPUTED from it every tick and
+            # NEVER integrated, so nothing accumulates (`head_clamp_inertial`'s own contract).
+            head_az = Float64(c[:head_az]); head_el = Float64(c[:head_el])
+            # ⭐ THE INERTIAL STATE IS MINTED AT THE RUNG BOUNDARY AND ONLY THERE (advisor). `:head_az`
+            # is kept live by BOTH rungs, so on the first tick after a toggle the head's pointing is
+            # carried across EXACTLY — the same physical direction, re-expressed once through the
+            # CURRENT attitude — and neither rung pays a per-tick conversion it does not use.
+            # ⚠ THE STAMP, NOT `haskey`, IS THE CURRENCY TEST. `:head_i_az` is minted here and NEVER
+            # deleted (the house rule), so after a body-referenced stint it is present and STALE;
+            # `:head_frame` records which frame the head's state was last held in, which is the
+            # physical question ("where is this pointing being held?") rather than bookkeeping of a
+            # redundant angle. A `haskey` mint would silently resume a pointing direction the missile
+            # abandoned seconds ago.
+            i_az, i_el = get(c, :head_frame, :body_referenced) === :space_stabilized ?
+                (Float64(c[:head_i_az]), Float64(c[:head_i_el])) :
+                az_el(rotate(c[:att_q]::Quat, los_unit_from_angles(head_az, head_el)))
+            # discipline 3, first evaluation (the body arm's, verbatim in meaning): the error the
+            # detector HAD, before this tick's slew.
+            if off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h
+                i_az, i_el, head_az, head_el, head_dem, head_sat =
+                    head_slew_inertial(i_az, i_el,
+                                       Float64(c[:head_tgt_i_az]), Float64(c[:head_tgt_i_el]),
+                                       c[:att_q]::Quat, Float64(c[:gimbal_tau_s]), dt, stop_h;
+                                       rate_max = rate_h)
+            else
+                # ⚠⚠ THE HOLD BRANCH IS PHYSICS HERE, NOT HOUSEKEEPING, AND IT IS WHERE THE TWO RUNGS
+                # PART MOST VISIBLY. A body-referenced head with no error signal HOLDS ITS BODY ANGLE
+                # and its index freezes (slice 34 §0.4: a frozen index makes a CONSTANT bend, quiet
+                # at every R̂). A space-stabilized one holds its INERTIAL angle, so its body angle —
+                # the glass's index, the stop's quantity and the detector's reference — KEEPS MOVING
+                # at unity gain while the missile rotates under it, AND THE STOP CAN STILL BIND while
+                # the head is holding. No slew, so nothing is demanded and nothing saturates: the
+                # zero initialisers above are this branch's readouts on both rungs.
+                i_az, i_el, head_az, head_el =
+                    head_clamp_inertial(i_az, i_el, c[:att_q]::Quat, stop_h)
+            end
+            c[:head_i_az] = i_az; c[:head_i_el] = i_el
         else
             head_az = Float64(c[:head_az]); head_el = Float64(c[:head_el])
             # discipline 3, first evaluation: the error the detector HAD, before this tick's slew.
@@ -1832,6 +1916,14 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             end
         end
         c[:head_az] = head_az; c[:head_el] = head_el
+        # SLICE 37 — WHICH FRAME THE POINTING IS CURRENTLY HELD IN. Written on BOTH rungs because
+        # that is what makes a mid-run toggle exact in both directions: the body pair above is live
+        # on both rungs, so the space arm re-expresses it ONCE at the boundary and the body arm
+        # simply resumes off it (slice 34's own cross-toggle posture — the head does not un-exist,
+        # it carries its pointing across). ⚠ A Symbol, deliberately: this is PROVENANCE, not a second
+        # copy of the state, and duplicating an ANGLE on the rung that does not use it is what would
+        # turn slices 34–36's "byte-identical BY CONSTRUCTION" into "by measurement".
+        c[:head_frame] = _stab ? :space_stabilized : :body_referenced
         # …and the second evaluation: the error the detector HAS. This one is the availability
         # verdict and the shipped margin. ⚠ THE SHIPPED KERNEL, never an inline `hypot(wrap_angle(…))`
         # restatement of it (slice 32's gate-1 correction: an inline form makes `test_frames.jl`
@@ -2017,9 +2109,20 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # ⚠ UNCONDITIONAL UNDER `_gim`, and paired with the handover's `:head_az` mint: the two keys are
     # written on the same tick, which is what lets the slew branch index `:head_tgt_az` directly
     # instead of falling back to a truth read (advisor).
+    # ⭐ SLICE 37 — THE SPACE-STABILIZED SERVO'S TARGET HAS NO ATTITUDE IN IT AT ALL: it is the
+    # MEASURED INERTIAL angles themselves, which is the whole content of the rung (and the origin of
+    # the one-tick attitude residual gate 1 located in §II.4 — the body arm expresses its target in
+    # `att(k)` and consumes it at `k+1`, where this one is attitude-free).
+    # ⚠ BOTH ARE WRITTEN ON BOTH RUNGS, and that is a decision with a reason rather than symmetry for
+    # its own sake: the inertial pair is FREE (it is the measurement, no conversion), and keeping the
+    # body pair unconditional leaves slices 34/35/36's line TEXTUALLY UNBRANCHED — which is the form
+    # their byte-identity claim takes. The alternative (each rung storing only its own frame's
+    # target) makes the FIRST tick after a toggle-back consume a target stale by however long the
+    # other rung ran, which is a real wrong-number rather than a bookkeeping cost.
     if _gim
         head_tgt_az, head_tgt_el = look_angles(c[:att_q]::Quat, los_unit_from_angles(az_m, el_m))
         c[:head_tgt_az] = head_tgt_az; c[:head_tgt_el] = head_tgt_el
+        c[:head_tgt_i_az] = az_m; c[:head_tgt_i_el] = el_m
     end
 
     # Lazy first-tick init (the `_observe_point!` shape): seed every memory, all rates 0.
@@ -2604,6 +2707,15 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # slew) both ship 0.0 demand and 0.0 sat. ⇒ `head_rate_sat` READS 0 ON A BROKEN ARM for the
         # same reason `rms r` FALLS there, and it joins `rms r` / `head_off_deg` / `head_angle_deg`
         # as the FOURTH quantity that may not be read off a windowed run.
+        # ⚠⚠ SLICE 37 — THIS KEY MEASURES THE SERVO'S OWN FRAME, AND THAT FRAME CHANGES WITH THE
+        # `:seeker_head` RUNG. Under `:body_referenced` the demand is the step in BODY angles (so it
+        # includes tracking out the missile's own rotation); under `:space_stabilized` it is the step
+        # in INERTIAL angles, which is what the head must slew at with body motion already rejected.
+        # ⇒ A CLIENT COMPARING THIS NUMBER ACROSS A BUTTON PRESS IS COMPARING TWO FRAMES' DEMANDS —
+        # which is not a defect but the rung's whole content (gate 0 §II.1 measured the ratio at
+        # 8.19× on a ringing design and 0.86× on a quiet one: an inertial servo buys essentially
+        # nothing when the missile is not shaking). Said here rather than only in the plan, because
+        # the key NAME does not change and nothing on the wire would otherwise say so.
         tel["$sid.head_rate_dps"]  = _finite(dt > 0.0 ? rad2deg(head_dem) / dt : 0.0)
         # ⚠ THE FLAG, never a hand-rolled compare of the two keys above against the authored rate
         # (the `aero_sat` / `defl_sat` / `gimbal_valid` shape): it is the kernel's OWN branch

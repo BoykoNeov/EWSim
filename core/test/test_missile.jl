@@ -9173,3 +9173,478 @@ end
         end
     end
 end
+
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 37 (gate 2) — THE HEAD'S REFERENCE FRAME: the servo lag was doing stability work.
+#
+# Slices 34/35 gave the seeker a head with its own pointing state, its own first-order servo and its
+# own maximum slew rate — ALL IN THE BODY FRAME, so the servo's job includes TRACKING OUT the
+# missile's own rotation. `:seeker_head = :space_stabilized` holds the pointing in the INERTIAL frame
+# instead (head-mounted rate gyros), and body motion is REJECTED PASSIVELY rather than tracked out.
+#
+# ⚠⚠ AND THE CLASSICAL REASON GIMBALS EXIST INVERTS ON THIS WIRE: stabilizing GIVES BACK ≈40–45 % of
+# the margin slice 34's gimbal bought (at the shipped τ = 0.05), because the position servo's LAG WAS
+# LOW-PASSING body motion out of the glass's INDEX. See `docs/plans/slice37.md` PART II.
+#
+# ⚠⚠ THE DEFERRAL'S OWN WORDING WAS REFUTED BEFORE ANY PROBE (§II.0): "a rate-stabilized head
+# measures inertial LOS rate DIRECTLY" is ALREADY TRUE of the shipped seeker (`az_el(û_tru)` — an
+# INERTIAL measurement since slice 25). What moves is WHERE THE POINTING IS HELD, which is why the
+# rung is `:space_stabilized` and `:rate_stabilized ∉ SEEKER_HEAD_MODES` is pinned in test_frames.jl.
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+@testset "THE HEAD'S REFERENCE FRAME wired (slice 37 — the lag was doing stability work)" begin
+    dt = 1.0e-3
+
+    # ⚠ THE WIRE IS SLICE 35's SERVO WIRE TO THE DIGIT (seed 32, vy 200, glass R₀ = −0.03 /
+    # A = −0.15 / k = 12, window 25°, stop 30°, τ = 0.05, n_pn = 8, σ 5e-5) — because the subject is
+    # the SERVO's reference frame, and slice 35's wire is where a servo was last measured. `head` is
+    # the RUNG, set on `w.fidelity`: gate 0/1 flew a patched kernel behind a `:probe_head` comp key,
+    # and gate 2's blocking check was that the SHIPPED rung reproduces gate 1's published ladder with
+    # that patch reverted (it does, cell for cell — see the bracket testset below).
+    function ref_world(; vy = 200.0, seed = 32, R = -0.03, A = -0.15, Rhat = -0.18, tau = 0.05,
+                         stop = 30.0, gfov = 25.0, rate = 40.0, head = :body_referenced,
+                         set_head = true, err = nothing)
+        fid = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn,
+                                  :autopilot => :alpha, :airframe => :six_dof,
+                                  :seeker => :filtered, :seeker_axes => :az_el)
+        set_head && (fid[:seeker_head] = head)
+        w = World(seed = seed, fidelity = fid)
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.0,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => 0.3, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => 8.0, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => 5.0e-5, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true)
+        if R !== nothing
+            comp[:radome_slope] = R; comp[:radome_ripple] = A; comp[:radome_ripple_k] = 12.0
+            Rhat === nothing || (comp[:radome_slope_est] = Rhat)
+        end
+        if tau !== nothing                       # `tau = nothing` ⇒ THE STRAPDOWN TWIN — no head at
+            comp[:gimbal_tau_s] = tau            # all, which is where the rung must be INERT.
+            stop === nothing || (comp[:gimbal_stop_deg] = stop)
+            gfov === nothing || (comp[:gimbal_fov_deg]  = gfov)
+            rate === nothing || (comp[:gimbal_rate_dps] = rate)
+            err  === nothing || (comp[:gimbal_handover_err_deg] = err)
+        end
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 2000.0, 4200.0),
+                                 vel = Vec3(0.0, vy, 0.0),
+                                 comp = Dict{Symbol,Any}(:cross_speed_mps => vy))
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1), ConstantVelocity(:t1)]
+    end
+
+    # THE BAND ARM — slice 28's `r ∈ [500, 3000]` window, which 33/34/35 all use, and the metric is
+    # slice 28's YAW channel `rms r` because the lead is in AZIMUTH.
+    # ⚠⚠ EVERY STABILITY NUMBER BELOW IS READ OFF AN ARM WITH `out == 0.00` AND IT IS ASSERTED, NOT
+    # ASSUMED — the two-run discipline, whose list this slice does not extend but does inherit whole:
+    # a windowed arm's `rms r` FALLS while the miss opens (slice 33), its `head_angle_deg` freezes
+    # plausibly-but-too-small (slice 34), its `head_rate_sat` reads FREE (slice 35) and its LOS
+    # excursion reads ~3× (slice 36).
+    function rarm(; n = 22000, lo = 500.0, hi = 3000.0, rgate = 200.0, trace = false, kw...)
+        w, sub = ref_world(; kw...)
+        miss = Inf; r_prev = Inf; nb = 0; nout = 0; nsat = 0
+        rr = Float64[]; qq = Float64[]; dem = Float64[]
+        off_band = 0.0; head_max = 0.0; dem_max = 0.0; tr = Vec3[]
+        haz1 = NaN; hel1 = NaN; off1 = NaN; hi_az1 = NaN; hi_el1 = NaN
+        tgt_b1 = NaN; tgt_i1 = NaN; frame1 = :none
+        for k in 1:n
+            tick!(w, sub, dt); empty!(w.events)
+            m = w.entities[:m1]; t = w.entities[:t1]; c = m.comp
+            tel = get(w.env, :telemetry, Dict{String,Any}())
+            trace && push!(tr, m.pos)
+            r = los_range(m.pos, t.pos)
+            if k == 1
+                haz1 = Float64(get(c, :head_az, NaN)); hel1 = Float64(get(c, :head_el, NaN))
+                off1 = get(tel, "m1.head_off_deg", NaN)
+                hi_az1 = Float64(get(c, :head_i_az, NaN)); hi_el1 = Float64(get(c, :head_i_el, NaN))
+                tgt_b1 = Float64(get(c, :head_tgt_az, NaN))
+                tgt_i1 = Float64(get(c, :head_tgt_i_az, NaN))
+                frame1 = get(c, :head_frame, :none)
+            end
+            r > rgate && (head_max = max(head_max, get(tel, "m1.head_angle_deg", 0.0)))
+            if lo <= r <= hi
+                nb += 1
+                let ωb = get(c, :omega_body, zero(Vec3))
+                    push!(rr, ωb[3]); push!(qq, ωb[2])
+                end
+                let d = get(tel, "m1.head_rate_dps", 0.0)
+                    push!(dem, d); dem_max = max(dem_max, d)
+                end
+                get(tel, "m1.head_rate_sat", 0.0) == 1.0 && (nsat += 1)
+                get(tel, "m1.gimbal_valid", 1.0) == 1.0 || (nout += 1)
+                off_band = max(off_band, get(tel, "m1.head_off_deg", 0.0))
+            end
+            r > r_prev && miss == Inf && (miss = r_prev)
+            r_prev = r
+            miss < Inf && k > 200 && break
+        end
+        rms(v) = isempty(v) ? NaN : sqrt(sum(abs2, v) / length(v))
+        return (; miss, rms_r = rms(rr), rms_q = rms(qq), dem_rms = rms(dem), dem_max,
+                  off_band, head_max, trace = tr, haz1, hel1, off1, hi_az1, hi_el1,
+                  tgt_b1, tgt_i1, frame1, nb,
+                  out = nb == 0 ? 0.0 : 100 * nout / nb,
+                  sat = nb == 0 ? 0.0 : 100 * nsat / nb)
+    end
+
+    posdiff37(a, b) = (@assert length(a) == length(b) && !isempty(a);
+                       maximum(hypot((x - y)...) for (x, y) in zip(a, b)))
+
+    @testset "BYTE-IDENTITY — the ABSENT fidelity, `:body_referenced` BY NAME, and NO HEAD AT ALL" begin
+        # ⚠ THE FIRST CONTROL IS STRUCTURAL: the `:body_referenced` arm of the seam is slice
+        # 34/35/36's lines TEXTUALLY UNCHANGED inside a branch, never a computed path trusted to
+        # agree — the `-0.0` trap 20/21/26/27/28/35/36 all name. This measures the claim anyway,
+        # because "textually unchanged" is a property of the diff and byte-identity is a property of
+        # the run.
+        let a = rarm(n = 3000, trace = true, set_head = false),          # the key ABSENT
+            b = rarm(n = 3000, trace = true, head = :body_referenced)    # the key AUTHORED, default
+            @test posdiff37(a.trace, b.trace) === 0.0
+            @test a.haz1 === b.haz1 && a.hel1 === b.hel1
+            @test a.miss === b.miss
+            # ⚠ AND THE ABSENT KEY STILL MINTS THE STAMP: `:head_frame` is written on BOTH rungs
+            # (it is what makes a toggle exact in both directions), so its presence is not a tell
+            # that the rung was authored.
+            @test a.frame1 === :body_referenced && b.frame1 === :body_referenced
+        end
+        # ⭐ INERT WITHOUT A HEAD, AND MEASURED RATHER THAN ARGUED. `_stab` carries `_gim`, so on the
+        # STRAPDOWN twin (no `gimbal_tau_s` at all — slice 34's `slice34_strapdown.yaml` shape) the
+        # rung reaches nothing. The loader REFUSES the combination in a YAML (below); this is the
+        # programmatic path the loader cannot see, and it is bit-identical rather than merely close.
+        let a = rarm(n = 3000, trace = true, tau = nothing, head = :body_referenced),
+            b = rarm(n = 3000, trace = true, tau = nothing, head = :space_stabilized)
+            @test posdiff37(a.trace, b.trace) === 0.0
+        end
+    end
+
+    @testset "CLASS 4a — the rung is RNG-LOCKSTEP, and it is NOT a no-op" begin
+        # ⚠ THE MEASUREMENT IS THE RNG STATE AFTER N TICKS, not a draw count reasoned about: the
+        # seam adds no `randn` on either rung, so the two streams must be at the same place. ⚠ GYRO
+        # NOISE STAYS DETERMINISM-BLOCKED and is NOT this slice (an unconditional third draw desyncs
+        # every 25–31 replay — the slice-13 `:scan` 4b shape).
+        function rng_pos(n; kw...)
+            w, sub = ref_world(; kw...)
+            for _ in 1:n; tick!(w, sub, dt); empty!(w.events); end
+            return copy(w.rng), w.entities[:m1].pos
+        end
+        rb, pb = rng_pos(4000; head = :body_referenced)
+        rs, ps = rng_pos(4000; head = :space_stabilized)
+        @test rb == rs                                  # LOCKSTEP — 12th consecutive RNG-live slice
+        # …and the PAIRED does-differ case, the house rule for an invariant tooth: the same seed,
+        # the same draws, and 36.6 m of divergence by tick 4000. A lockstep assert alone would pass
+        # just as well on a rung that did nothing at all.
+        @test maximum(abs.(pb .- ps)) > 30.0
+    end
+
+    @testset "⭐ THE HANDOVER IS THE SAME BIRTH IN TWO FRAMES — and the target frames DIFFER" begin
+        b = rarm(n = 2, head = :body_referenced)
+        s = rarm(n = 2, head = :space_stabilized)
+        # The head is born ON the truth LOS on BOTH rungs: the tracking error at tick 1 is zero to
+        # the last bit on the body arm and 3.3e-15 DEGREES on the space one (≈6e-17 rad — one frame
+        # round trip), and the BODY pairs agree to ~6e-17 rad. ⇒ the rungs are not two different
+        # births, they are one birth held in two frames. ⚠ `head_clamp_inertial` is called at the
+        # handover for the reason slice 34 split `head_clamp` out — the SECOND CALLER — so the stop
+        # is taken the same way the servo takes it.
+        # ⚠ THE TOLERANCE IS IN DEGREES BECAUSE THE TELEMETRY IS (the first draft compared a degree
+        # readout against a radian-sized bound and FAILED on a correct seam) — the last-bit claim is
+        # `atol = 1e-15` on the RADIAN pair below, where it belongs.
+        @test b.off1 === 0.0
+        @test abs(s.off1) < 1.0e-12
+        @test isapprox(s.haz1, b.haz1; atol = 1.0e-15)
+        @test isapprox(s.hel1, b.hel1; atol = 1.0e-15)
+        # ⚠ AND THE INERTIAL STATE IS NOT THE BODY PAIR WEARING A DIFFERENT NAME — the missile is
+        # pitched, so the same direction reads (0.3160, −0.0114) in body and (0.3218, +0.1875) in
+        # inertial. A tooth that passed with the two equal would be measuring nothing.
+        @test isnan(b.hi_az1) && isnan(b.hi_el1)          # the body rung mints NO inertial state…
+        @test !isnan(s.hi_az1) && !isnan(s.hi_el1)        # …and the space rung does
+        @test abs(s.hi_el1 - s.hel1) > 0.1                # …and it is a genuinely different pair
+        # THE TWO TARGET FRAMES ARE BOTH STORED, ON BOTH RUNGS, AND THEY ARE DIFFERENT NUMBERS
+        # (0.264° apart at tick 1). Both are unconditional under `_gim` so a rung toggle cannot
+        # consume a target stale by however long the other rung ran — the inertial one is FREE (it
+        # is the measurement itself) and the body one keeps slice 34's line unbranched.
+        for a in (b, s)
+            @test !isnan(a.tgt_b1) && !isnan(a.tgt_i1)
+            @test abs(rad2deg(a.tgt_b1 - a.tgt_i1)) > 0.1
+        end
+    end
+
+    @testset "⭐⭐ THE SHARP PAIR — at SLICE 34's OWN DESIGN the body rung is QUIET and the space rung RINGS" begin
+        # R̂ = −0.18 is slice 34's shipped design and gate 0 §II.1's own first row. Same glass, same
+        # believed slope, same seed, same servo: 0.01172 against 1.00097 — 85×, and the ONLY
+        # difference is the frame the servo closes in.
+        b = rarm(head = :body_referenced)
+        s = rarm(head = :space_stabilized)
+        @test b.out == 0.0 && s.out == 0.0            # the two-run discipline's gate, ASSERTED
+        @test b.sat == 0.0 && s.sat == 0.0            # …and slice 35's limit is not in the story
+        @test isapprox(b.rms_r, 0.01172; atol = 5.0e-4)   # reproduces gate 0 §II.1 exactly
+        @test isapprox(s.rms_r, 1.00097; atol = 5.0e-3)   # reproduces gate 1 §II.4's τ = 0.05 row
+        @test s.rms_r / b.rms_r > 50.0
+        # ⚠ THE MISS IS NOT THE METRIC AND THE ARMS SAY SO: both HIT, and the RINGING arm misses by
+        # LESS (0.34 vs 0.16 m is the same sub-metre CPA). Slice 26's rule — the ringing arm still
+        # hits — holding for the 12th slice running.
+        @test b.miss < 1.0 && s.miss < 1.0
+        # ⚠⚠ AND THE DEMAND IS NOT COMPARABLE ACROSS THESE TWO ARMS, WHICH IS WORTH PINNING SO IT IS
+        # NOT MIS-READ: gate 0 §II.1 measured an inertial servo saving 8.19× ON A MATCHED ARM, but
+        # here the space arm is RINGING and the body arm is not, so its demand is LARGER (11.6 vs
+        # 0.30 °/s). A demand comparison is only a frame comparison when both arms are in the same
+        # ring state — which is what slice 30's aim point provides (§II.7).
+        @test s.dem_rms > b.dem_rms
+    end
+
+    @testset "⭐⭐ THE TWO BRACKETS, ON THE SHIPPED WIRE — stabilizing GIVES BACK slice 34's margin" begin
+        # Gate 1 flew the ladder with the RATE LIMIT REMOVED (the isolation: at a finite rate a τ
+        # sweep confounds the servo low-pass with rate saturation). These four cells are the two
+        # brackets ON THE FLYING WIRE, rate limit and all — and they reproduce gate 1's G1d
+        # brackets, so the isolation does not move the number it isolates.
+        #   body-referenced  (−0.170, −0.165]    space-stabilized  (−0.210, −0.205]
+        # ⇒ the space-stabilized head starts ringing 0.040 EARLIER in R̂, which is ≈42 % of the
+        # 0.095 slice 34's gimbal bought over the strapdown seeker — AT τ = 0.05, since gate 1
+        # measured BOTH terms moving with τ (the honest range over τ ∈ [0.005, 0.2] is 0 % to 79 %).
+        cells = Dict((r, h) => rarm(Rhat = r, head = h)
+                     for r in (-0.165, -0.170, -0.205, -0.210),
+                         h in (:body_referenced, :space_stabilized))
+        for (_, a) in cells                     # every cell is a legal stability read
+            @test a.out == 0.0
+        end
+        B(r) = cells[(r, :body_referenced)].rms_r
+        S(r) = cells[(r, :space_stabilized)].rms_r
+        # THE BODY-REFERENCED BRACKET: quiet at −0.170, ringing at −0.165 (the step gate 1 measured
+        # at 4.3–4.4× under the threshold-FREE largest-single-step rule).
+        @test B(-0.170) < 0.05 && B(-0.165) > 0.15
+        @test B(-0.165) / B(-0.170) > 3.5
+        # THE SPACE-STABILIZED BRACKET, TWO RUNGS OF THE SAME LADDER EARLIER: quiet at −0.210,
+        # ringing at −0.205 — where the body-referenced head is STILL QUIET on BOTH.
+        @test S(-0.210) < 0.06 && S(-0.205) > 0.30
+        @test S(-0.205) / S(-0.210) > 5.0
+        @test B(-0.205) < 0.05 && B(-0.210) < 0.05         # ⭐ the whole claim, in one line
+        # …and from the other end, the same fact told by the other rung: where the body head's own
+        # bracket sits, the space head is long since ringing hard.
+        @test S(-0.170) > 0.5 && S(-0.165) > 0.5
+    end
+
+    @testset "⭐⭐ GATE 2's OWN FINDING — the head that RINGS HARDER DEMANDS LESS (matched ring state)" begin
+        # ⚠ THE SHARP PAIR ABOVE CANNOT SUPPORT A DEMAND CLAIM, because one of its arms rings and
+        # the other does not. Here BOTH rungs ring, hard, at the same R̂ = −0.140 — and the
+        # comparison inverts the intuition a servo number invites: the SPACE-STABILIZED head rings
+        # 1.7× HARDER (1.093 against 0.644) and asks its servo for 3.4× LESS peak slew (18.4 against
+        # 63.1 °/s), saturating slice 35's 40 °/s limit on 0.00 % of band ticks against 17.44 %.
+        # ⭐ ⇒ THE BODY-REFERENCED SERVO'S DEMAND IS ALMOST ALL BODY MOTION, not target motion:
+        # slice 35's resource is spent tracking out the missile's own rotation, which is exactly
+        # what gate 0 §II.1 measured as `dem/wl` = 8.19× on a ringing design and 0.86× on a quiet
+        # one — now visible at the seam, on the flying wire, with the rate limit live.
+        # ⚠ AND IT DOES NOT LICENSE "THE STABILIZED HEAD IS CHEAPER TO BUILD": it is cheaper in
+        # SERVO BANDWIDTH and dearer in STABILITY MARGIN (the brackets above), which is the same
+        # one-knob-two-bounds shape slice 35 found — moved onto the architecture.
+        b = rarm(Rhat = -0.140, head = :body_referenced)
+        s = rarm(Rhat = -0.140, head = :space_stabilized)
+        @test b.out == 0.0 && s.out == 0.0            # both are legal reads…
+        @test b.rms_r > 0.3 && s.rms_r > 0.3          # …and BOTH are ringing (the matched state)
+        @test s.rms_r > b.rms_r                       # the stabilized one rings HARDER…
+        @test s.dem_max < b.dem_max / 3.0             # …and demands LESS
+        @test b.sat > 10.0 && s.sat == 0.0            # slice 35's limit binds on ONE of them only
+        # …and the same split, in the same direction, one and two rungs down the ladder (4.0–10.5 %
+        # against 0.00 %): a single cell would be an anecdote.
+        for r in (-0.150, -0.160)
+            @test rarm(Rhat = r, head = :body_referenced).sat > 3.0
+            @test rarm(Rhat = r, head = :space_stabilized).sat == 0.0
+        end
+    end
+
+    @testset "⚠⚠ THE HOLD BRANCH, FLOWN — a held body head FREEZES, a held space head KEEPS MOVING" begin
+        # ⚠ NO ARM AT GATE 0 OR GATE 1 REACHED THIS BRANCH (`out = 0.00` on all 946 of them), and an
+        # unexercised branch is what slice 34's gate-2 advisor catch on `fov_rad` is about. It is
+        # PHYSICS rather than housekeeping: a body-referenced head with no error signal holds its
+        # BODY angle and its index FREEZES (slice 34 §0.4 — a constant bend is quiet at every R̂),
+        # while a space-stabilized one holds its INERTIAL angle, so the body angle the glass, the
+        # stop and the detector all read KEEPS MOVING at unity gain.
+        # ⚠ THE WINDOW IS DRIVEN TO 1° TO REACH IT, WHICH IS FAR BELOW ANY SHIPPED WIRE — the
+        # tracking error on this cell only reaches 3.4°, so nothing wider breaks the body arm. These
+        # arms are a BRANCH EXERCISE and NOT a stability read; their `rms r` is meaningless by the
+        # two-run discipline and is not quoted.
+        function held(; fov, head, stop = 30.0, n = 22000, rgate = 200.0)
+            w, sub = ref_world(; gfov = fov, stop = stop, head = head)
+            nlost = 0; moved = 0.0; prev = NaN; lo = Inf; hi = -Inf; bound = 0
+            miss = Inf; r_prev = Inf
+            for k in 1:n
+                tick!(w, sub, dt); empty!(w.events)
+                m = w.entities[:m1]; t = w.entities[:t1]
+                tel = get(w.env, :telemetry, Dict{String,Any}())
+                r = los_range(m.pos, t.pos)
+                ha = get(tel, "m1.head_angle_deg", NaN)
+                if r > rgate && get(tel, "m1.gimbal_valid", 1.0) == 0.0
+                    nlost += 1
+                    isnan(prev) || (moved += abs(ha - prev))
+                    lo = min(lo, ha); hi = max(hi, ha)
+                    ha >= get(tel, "m1.gimbal_stop_deg", 1.0e6) - 1.0e-9 && (bound += 1)
+                    prev = ha
+                else
+                    prev = NaN
+                end
+                r > r_prev && miss == Inf && (miss = r_prev)
+                r_prev = r
+                miss < Inf && k > 200 && break
+            end
+            return (; nlost, moved, span = nlost > 0 ? hi - lo : 0.0, bound, miss)
+        end
+        b = held(fov = 1.0, head = :body_referenced)
+        s = held(fov = 1.0, head = :space_stabilized)
+        @test b.nlost > 4000 && s.nlost > 4000            # BOTH arms genuinely break, and stay broken
+        # ⭐⭐ THE CONTRAST, FROM ONE BROKEN WINDOW: the body head does not move AT ALL over 5229 held
+        # ticks — EXACTLY zero, not "small" — while the space head travels 46.8° over 5916 of them.
+        @test b.moved === 0.0 && b.span === 0.0
+        @test s.moved > 20.0 && s.span > 10.0
+        # ⭐ AND THE STOP CAN BIND WHILE THE HEAD IS HOLDING, WHICH ONLY ONE RUNG CAN DO IN BOTH
+        # DIRECTIONS. With a 12° stop both arms sit against it for the whole break — but the body
+        # head is FROZEN there (bound on 100 % of held ticks, having been clamped before the break),
+        # while the space head is being continuously re-clamped as the missile rotates under it and
+        # is bound on only ~59 %: it wanders in and out of its own stop while holding.
+        let bs = held(fov = 2.0, stop = 12.0, head = :body_referenced),
+            ss = held(fov = 2.0, stop = 12.0, head = :space_stabilized)
+            @test bs.nlost == ss.nlost && bs.nlost > 5000
+            @test bs.bound == bs.nlost                    # frozen ON the stop, every held tick
+            @test 0 < ss.bound < ss.nlost                 # in AND out — it is still moving
+            @test bs.moved === 0.0 && ss.moved > 0.0
+        end
+    end
+
+    @testset "⚠⚠ THE RUNG GATE IS THE LIVE `:airframe` — the FROZEN-ATTITUDE identity trap" begin
+        # The latent-bug class this arc has caught SEVEN times (21's `_atm_on`, 23, 26, 27, 29, 32,
+        # 34), and here it would be WORSE than every earlier occurrence: `:att_q` is minted by
+        # `_integrate_6dof!` and never deleted, so a key-gated head would keep slewing off a FROZEN
+        # attitude after a cross-toggle off `:six_dof` — and a frozen attitude makes the
+        # body↔inertial conversion the IDENTITY, so the two rungs would silently BECOME EACH OTHER
+        # rather than visibly break. `_stab` carries `_gim`, which carries the live `:airframe`.
+        function xtoggle(; head, n = 4000, off = 2000, on = 3000)
+            w, sub = ref_world(; head = head)
+            snap = nothing; changed = 0
+            for k in 1:n
+                k == off && (w.fidelity[:airframe] = :pitch_coupled)
+                k == on  && (w.fidelity[:airframe] = :six_dof)
+                tick!(w, sub, dt); empty!(w.events)
+                c = w.entities[:m1].comp
+                cur = (c[:head_az], c[:head_el], c[:head_frame],
+                       Float64(get(c, :head_i_az, 0.0)), Float64(get(c, :head_i_el, 0.0)))
+                k == off && (snap = cur)
+                off < k < on && cur != snap && (changed += 1)
+            end
+            return changed, w.entities[:m1].pos
+        end
+        cb, pb = xtoggle(head = :body_referenced)
+        cs, ps = xtoggle(head = :space_stabilized)
+        # While the plant is gone the head is FROZEN on BOTH rungs — pointing, stamp and inertial
+        # state alike, on every one of the 999 ticks — and it resumes off the stored angles when the
+        # plant returns (slice 34's own cross-toggle posture).
+        @test cb == 0 && cs == 0
+        # …and the two rungs are STILL DIFFERENT AFTER THE ROUND TRIP, which is the assert a
+        # `haskey`-gated head would fail by collapsing them onto each other.
+        @test maximum(abs.(pb .- ps)) > 1.0
+    end
+
+    @testset "⭐ THE STALE-STATE TRAP — the STAMP, not `haskey`, is the currency test" begin
+        # `:head_i_az` is minted and NEVER deleted (the house rule), so after a body-referenced stint
+        # it is PRESENT and STALE. `:head_frame` records which frame the pointing was last held in —
+        # the physical question — and a `haskey` mint would silently resume a direction the missile
+        # abandoned seconds ago.
+        # ⚠ THE COUNTERFACTUAL IS MEASURED, WHICH IS WHAT GIVES THE TOOTH CONTENT: a tooth asserting
+        # only "the head is continuous across the toggle" would pass on the buggy code too, since
+        # the body pair is continuous by construction — so the STALE value is read out and compared.
+        w, sub = ref_world(head = :body_referenced)
+        stale_az = NaN; fresh_az = NaN; prev_b = NaN; step = NaN
+        for k in 1:5000
+            k == 2000 && (w.fidelity[:seeker_head] = :space_stabilized)
+            k == 3000 && (w.fidelity[:seeker_head] = :body_referenced)
+            k == 4000 && (w.fidelity[:seeker_head] = :space_stabilized)
+            c0 = w.entities[:m1].comp
+            k == 4000 && (stale_az = Float64(c0[:head_i_az]); prev_b = Float64(c0[:head_az]))
+            tick!(w, sub, dt); empty!(w.events)
+            c = w.entities[:m1].comp
+            k == 4000 && (fresh_az = Float64(c[:head_i_az]);
+                          step = rad2deg(abs(Float64(c[:head_az]) - prev_b)))
+        end
+        @test !isnan(stale_az) && !isnan(fresh_az)
+        # THE STALE KEY IS 2.70° AWAY FROM THE FRESH MINT, while the head's own body angle steps
+        # 0.0039° across that same tick — a ~700× discriminator, so resuming the stale state would
+        # be a visible jump and not a rounding difference.
+        @test rad2deg(abs(stale_az - fresh_az)) > 1.0
+        @test step < 0.02
+        @test rad2deg(abs(stale_az - fresh_az)) / step > 100.0
+    end
+
+    @testset "loader: the rung is REFUSED without a head, and BESIDE the handover basket" begin
+        mktempdir() do dir
+            # Slice 35/36's own `write_scn`, one YAML source for this family (convention 7 applied
+            # to a test) — plus a `fidextra` so the rung can be authored.
+            function write_scn(seekextra; two_angle = true, fidextra = "")
+                p = joinpath(dir, "r.yaml")
+                open(p, "w") do io
+                    print(io, "name: r\nseed: 32\ndt_physics: 1.0e-3\n",
+                              "fidelity: {airframe: six_dof, autopilot: alpha, guidance: pn,\n",
+                              "           seeker: filtered, seeker_axes: az_el", fidextra, "}\n",
+                              "entities:\n",
+                              "  - id: m1\n    kind: missile\n    pos: [0.0, 0.0, 3000.0]\n",
+                              "    missile:\n      mass_kg: 140.0\n      speed: 700.0\n",
+                              "      elevation_deg: 12.0\n",
+                              "      seeker: {two_angle: ", two_angle ? "true" : "false",
+                              seekextra, "}\n",
+                              "      guidance: {n_pn: 8.0}\n",
+                              "      airframe: {inertia_kgm2: 20.0, cma: -1.0, cmd: 3.0,\n",
+                              "                 cmq: -150.0, cla: 20.0, cy_beta: 20.0}\n",
+                              "  - id: t1\n    kind: target\n    pos: [6000.0, 2000.0, 4200.0]\n",
+                              "    vel: [0.0, 200.0, 0.0]\n    target: {rcs_m2: 1.0}\n")
+                end
+                return p
+            end
+            HEAD = ", gimbal_tau_s: 0.05, gimbal_stop_deg: 30.0, gimbal_rate_dps: 8.0"
+            # THE RUNG LOADS on a wire that has a head…
+            for rung in ("body_referenced", "space_stabilized")
+                @test load_scenario(write_scn(HEAD; fidextra = ", seeker_head: $rung")
+                                   ).world.fidelity[:seeker_head] === Symbol(rung)
+            end
+            # …and is REFUSED where there is no head to stabilize — for EITHER rung, because
+            # authoring the default by name is exactly as dead a fidelity as authoring the
+            # interesting one (the slice-19 `speed` class, one level up from a knob).
+            for rung in ("body_referenced", "space_stabilized")
+                @test_throws ErrorException load_scenario(
+                    write_scn(""; fidextra = ", seeker_head: $rung"))
+            end
+            # ⚠⚠ AND BESIDE SLICE 36's HANDOVER BASKET, which is the FALSE-CLAIM class rather than
+            # hygiene: `gimbal_handover_err_deg` is an offset in the BODY-frame LOS azimuth and its
+            # whole finding (the V, the kink, the sign convention) is stated in that frame, so an
+            # INERTIAL-azimuth birth would be a different physical birth wearing a measured slice's
+            # name. ⚠ The load refusal is COMPLETE COVER despite the rung being live-settable: the
+            # handover is consumed once, at tick 1, so no mid-run toggle can reach that branch.
+            @test_throws ErrorException load_scenario(
+                write_scn(HEAD * ", gimbal_handover_err_deg: -6.0";
+                          fidextra = ", seeker_head: space_stabilized"))
+            # …and the MIRROR, so the refusal is about the COMBINATION and not about either half:
+            # the same basket loads under the body-referenced rung, which is the wire slice 36 ships.
+            @test load_scenario(
+                write_scn(HEAD * ", gimbal_handover_err_deg: -6.0";
+                          fidextra = ", seeker_head: body_referenced")
+                 ).world.fidelity[:seeker_head] === :body_referenced
+            # An unknown rung is refused by `_validate_fidelity` for free, because the tuple is
+            # REFERENCED and never re-listed (convention 7 — the drift-catch).
+            @test_throws ErrorException load_scenario(
+                write_scn(HEAD; fidextra = ", seeker_head: rate_stabilized"))
+        end
+        # THE ONE-LIST-NO-DRIFT BINDING, ASSERTED RATHER THAN ASSUMED: `set_fidelity` and the
+        # loader both read `LIVE_FIDELITY_MODES`, so this is what makes the rung live-settable at
+        # all — and class 4a is why it needs NO draw-topology guard beside `:cfar` and `:scan`.
+        @test haskey(EWSim.LIVE_FIDELITY_MODES, :seeker_head)
+        @test EWSim.LIVE_FIDELITY_MODES.seeker_head === SEEKER_HEAD_MODES
+        # THE PRESENCE GATE FROM THE OTHER SIDE (slice 35/36's shape): at GATE 2 no shipped wire
+        # authors the rung at all, so slices 1–36 are byte-identical BY GATING. Gate 3 tightens this
+        # into an enumerated carrier set rather than deleting it.
+        let base = joinpath(@__DIR__, "..", "..", "scenarios")
+            carriers = String[f for f in readdir(base)
+                              if endswith(f, ".yaml") &&
+                                 haskey(load_scenario(joinpath(base, f)).world.fidelity, :seeker_head)]
+            @test isempty(carriers)
+        end
+    end
+end
+

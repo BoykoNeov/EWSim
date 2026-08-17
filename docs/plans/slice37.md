@@ -756,3 +756,170 @@ G1d's grid reaches −0.280 and re-flies the strapdown arm on it: **(−0.265, �
 step 4.46×**, reproducing P6 exactly. ⇒ the three-rung ladder and every fraction above are now ONE
 grid, one band, one metric, one rate.
 
+
+---
+---
+
+# GATE 2 AS BUILT (2026-08-17) — the rung wired, and a finding that inverts a servo intuition
+
+**Status: gate 2 COMPLETE and green. Suite 7323 → 7394 (+71 asserts, all in `test_missile.jl`); every
+prior assert unmoved, so slices 1–36 are byte-identical.** Raw measurements:
+`M:\claud_projects\temp\slice37g2\` (`lib37g2.jl`, `g2a_ladder.jl`, `g2b_seam.jl`, `g2c_hold.jl`,
+`g2d_pins.jl`, `g2e_sat.jl`). **NO PATCH ANYWHERE** — every arm here flies the shipped seam, which is
+itself the gate's first result.
+
+## ⭐⭐ §II.16 THE BLOCKING CHECK, RUN BEFORE ANY TOOTH (advisor): DOES THE SHIPPED RUNG REPRODUCE GATE 1?
+
+Gate 0 and gate 1 both flew a PATCHED kernel behind a `:probe_head` comp key. The wiring is only
+proven if the shipped rung reproduces gate 1's published ladder with that patch reverted — and it
+could have refuted the wiring for the price of one sweep, which is why it ran first (§II.13's own
+reason for running G1a first, applied to this gate).
+
+| τ (s) | body-referenced | space-stabilized | gap | G1d's gap |
+|---|---|---|---|---|
+| 0.050 | (−0.170, −0.165] step 4.42× | (−0.210, −0.205] step 9.22× | **0.0400** | 0.0400 |
+| 0.010 | (−0.175, −0.170] step 11.23× | (−0.185, −0.180] step 12.26× | 0.0100 | 0.0100 |
+| 0.005 | (−0.180, −0.175] | (−0.180, −0.175] | **0.0000** | 0.0000 |
+| 0.002 | (−0.180, −0.175] | (−0.180, −0.175] | **0.0000** | 0.0000 |
+
+⇒ **EVERY BRACKET, EVERY STEP RATIO AND EVERY `head_max` COLUMN REPRODUCES G1d CELL FOR CELL**
+(21.558 / 19.803 at τ = 0.05, 20.343 / 20.166 at 0.002 — the same four digits). The patched probe and
+the shipped seam are the same physics, and gate 1's whole ladder now rests on flying code.
+
+⭐ **AND THE LADDER SURVIVES THE SHIPPED RATE LIMIT.** Gate 1 removed it for the isolation (at a
+finite rate a τ sweep confounds the servo low-pass with rate saturation). Re-flown at slice 35's
+40 °/s: body **(−0.170, −0.165]** step 4.34×, space **(−0.210, −0.205]** step 9.18× — the same two
+brackets. ⇒ the isolation does not move the number it isolates, and the four cells that ARE those
+brackets ship as teeth (0.03992 → 0.17308 and 0.04536 → 0.41625, with the body head QUIET at
+0.01392 / 0.01495 across the space head's own bracket).
+
+## §II.17 WHAT SHIPPED AT THE SEAM — six decisions, and the two that were advisor-corrected
+
+* **The rung gate is `_stab = _gim && fidelity[:seeker_head] === :space_stabilized`** — the live
+  `:airframe` through `_gim`, NEVER `haskey(c, :head_i_az)`. Pinned by a cross-toggle arm: while
+  `:airframe` is off `:six_dof` the head's pointing, its stamp AND its inertial state are unchanged
+  on all 999 ticks, on BOTH rungs, and the two rungs are still 13 m apart after the round trip.
+* **The handover calls `head_clamp_inertial(az_tru, el_tru, att, stop)`** — `head_clamp_inertial`'s
+  SECOND CALLER, which is the reason gate 1 split it out (slice 34 split `head_clamp` for exactly
+  this need). ⭐ MEASURED: the head is born on the truth LOS on both rungs — tracking error `0.0`
+  EXACTLY (body) and 3.3e−15° (space, one frame round trip), body pairs agreeing to ~6e−17 rad ⇒
+  **the rungs are not two births, they are ONE birth held in two frames.**
+* ⚠⚠ **`gimbal_handover_err_deg` IS REFUSED BESIDE `:space_stabilized` AT LOAD (advisor), AND IT IS
+  THE FALSE-CLAIM CLASS RATHER THAN HYGIENE.** Slice 36's basket, its V and its sign convention are
+  all stated in the BODY frame ("ALONG the body-frame LOS excursion"); an INERTIAL-azimuth offset is
+  a different physical birth, so shipping it would be a measured slice's name on an unmeasured
+  quantity. ⚠ The load refusal is COMPLETE COVER even though the rung is live-settable — the
+  handover is consumed once, at tick 1, so no mid-run toggle can reach that branch.
+* **The servo target is stored in BOTH frames, unconditionally under `_gim`**: the body pair
+  (slice 34's line, TEXTUALLY UNBRANCHED — which is the form its byte-identity claim takes) and the
+  inertial pair, which is FREE (it IS the measurement, no attitude in it at all — §II.4's residual's
+  whole origin). ⚠ The alternative — each rung storing only its own frame — makes the first tick
+  after a toggle-back consume a target stale by however long the other rung ran, a wrong NUMBER
+  rather than a bookkeeping cost. Measured: the two differ by 0.264° at tick 1, so this is two
+  quantities and not one told twice.
+* ⭐ **THE INERTIAL STATE IS MINTED AT THE RUNG BOUNDARY AND ONLY THERE, AND THE CURRENCY TEST IS A
+  STAMP, NOT `haskey`** (advisor: *derive at the toggle, not every tick* — the first design kept the
+  inertial pair live on both rungs every tick, which adds a write to the body rung's path and is
+  exactly how "byte-identical BY CONSTRUCTION" quietly becomes "by measurement"). `:head_i_az` is
+  minted and never deleted, so after a body stint it is PRESENT and STALE; `:head_frame` records
+  which frame the pointing was last held in — provenance, not a second copy of the state.
+  ⚠ THE COUNTERFACTUAL IS MEASURED, which is what gives the tooth content: on a
+  body→space→body→space script the stale key is **2.696°** from the fresh mint while the head's own
+  body angle steps **0.0039°** across that tick — a **~700×** discriminator, so a `haskey` mint would
+  be a visible jump and not a rounding difference.
+* **Telemetry: no new key, and one comment that had to be written into the seam** (§II.14's item).
+  `head_rate_dps` keeps its slice-35 name and now measures the demand IN THE SERVO'S OWN FRAME,
+  which CHANGES WITH THE RUNG — so a client comparing it across a button press is comparing two
+  frames' demands. Said at the telemetry line, because the key name does not change and nothing on
+  the wire would otherwise say so.
+
+## ⭐⭐ §II.18 GATE 2's OWN FINDING — THE HEAD THAT RINGS HARDER DEMANDS LESS
+
+The sharp pair at slice 34's own design (R̂ = −0.18, body **0.01172** quiet against space **1.00097**
+ringing, 85×, both HITTING at 0.16 / 0.34 m) cannot support a DEMAND claim, because one arm rings and
+the other does not — and the space arm's demand is the LARGER there (11.6 against 0.30 °/s), which is
+the reading a careless gate would have shipped backwards. At a MATCHED ring state it inverts:
+
+| R̂ (both rungs ringing) | `rms r` body / space | `dem_max` body / space | `sat_band` body / space |
+|---|---|---|---|
+| −0.140 | 0.644 / **1.093** | 63.1 / **18.4** °/s | **17.44 %** / **0.00 %** |
+| −0.150 | 0.557 / 1.085 | 59.6 / 18.3 | 10.48 % / 0.00 % |
+| −0.160 | 0.354 / 1.065 | 54.9 / 17.9 | 4.02 % / 0.00 % |
+
+⭐ **THE SPACE-STABILIZED HEAD RINGS 1.7× HARDER AND ASKS ITS SERVO FOR 3.4× LESS PEAK SLEW**, never
+touching slice 35's 40 °/s limit on any cell where the body-referenced head saturates on up to 17.4 %
+of band ticks. ⇒ **THE BODY-REFERENCED SERVO'S DEMAND IS ALMOST ALL BODY MOTION, NOT TARGET MOTION** —
+gate 0 §II.1's `dem/wl` = 8.19× seen at the seam, on the flying wire, with the rate limit live.
+⚠ AND IT DOES NOT LICENSE *"the stabilized head is the cheaper build"*: it is cheaper in SERVO
+BANDWIDTH and dearer in STABILITY MARGIN (the brackets), which is slice 35's one-knob-two-bounds
+shape moved onto the ARCHITECTURE.
+
+## ⭐⭐ §II.19 THE HOLD BRANCH, FLOWN — the branch NO arm at gate 0 or gate 1 reached
+
+§II.14 required gate 2 to either exercise it or say it is unexercised (slice 34's gate-2 advisor
+catch on `fov_rad` is what an unreached branch costs), and every one of the ~950 arms behind gates 0
+and 1 ran `out % = 0.00`. It is PHYSICS: a body-referenced head with no error signal holds its BODY
+angle and its index FREEZES (slice 34 §0.4 — a constant bend is quiet at every R̂); a space-stabilized
+one holds its INERTIAL angle, so the body angle the glass, the stop and the detector all read KEEPS
+MOVING at unity gain while the missile rotates under it.
+
+⚠ **THE WINDOW HAD TO GO TO 1° TO REACH IT** — far below any shipped wire, because the tracking error
+on this cell only reaches 3.4°. These arms are a BRANCH EXERCISE and NOT a stability read; their
+`rms r` is meaningless by the two-run discipline and is not quoted.
+
+| fov | rung | held ticks | head_angle MOTION while held | span |
+|---|---|---|---|---|
+| 3° | body | **0** (never breaks) | — | — |
+| 3° | space | 4711 | 13.93° | 14.15° |
+| 1° | body | 5229 | **0.00000° EXACTLY** | 0.0000° |
+| 1° | space | 5916 | **46.80°** | 28.34° |
+
+⭐ **AND THE STOP CAN BIND WHILE THE HEAD IS HOLDING — in a way only one rung can produce.** With a
+12° stop and a 2° window both arms break at the same tick and stay broken for the same 7366 ticks,
+and BOTH are against the stop — but the body head is FROZEN there (bound on **100 %** of held ticks,
+having been clamped before the break) while the space head is being continuously re-clamped as the
+body rotates under it and is bound on **59 %**: it wanders in and out of its own stop while holding.
+⚠ Attribution: that is the CLAMP doing work, not slice 36's CAGE (which is a separate mechanism with
+its own verdict) — no arm on any ladder here reaches the stop at all (worst 21.7°, ~8° of headroom).
+
+## §II.20 THE OTHER TEETH, IN ONE LIST
+
+* **BYTE-IDENTITY, three ways**: the ABSENT fidelity vs `:body_referenced` authored BY NAME
+  (`max|Δpos| === 0.0`, `head_az ===`), and the STRAPDOWN twin (no `gimbal_tau_s`) bit-identical
+  across BOTH rungs — the programmatic path the loader's refusal cannot see.
+* **Class 4a, 12th consecutive**: the RNG state after 4000 ticks is EQUAL on both rungs, PAIRED with
+  the does-differ case (36.6 m apart by then) — a lockstep assert alone passes on a rung that does
+  nothing.
+* **The loader**: the rung LOADS with a head, is REFUSED without one FOR EITHER RUNG (authoring the
+  default by name is exactly as dead — the slice-19 `speed` class one level up from a knob), is
+  REFUSED beside the handover basket WITH THE MIRROR (the same basket loads under
+  `:body_referenced`, so the refusal is about the COMBINATION), and an unknown rung is refused for
+  free by `_validate_fidelity` because `SEEKER_HEAD_MODES` is REFERENCED and never re-listed
+  (convention 7). `LIVE_FIDELITY_MODES.seeker_head === SEEKER_HEAD_MODES` is asserted directly.
+* **The carrier set is EMPTY at gate 2** — no shipped YAML authors the rung, so slices 1–36 are
+  byte-identical BY GATING; gate 3 tightens that to an enumerated set rather than deleting it
+  (slice 35/36's shape).
+* ⚠ **A TOLERANCE BUG CAUGHT BY A FAILING ASSERT, and it is worth its line**: the birth tooth first
+  compared a DEGREE readout (`head_off_deg`, 3.3e−15) against a RADIAN-sized bound (1e−15) and
+  FAILED on a correct seam. The last-bit claim belongs on the radian pair; the degree readout gets a
+  degree tolerance.
+
+## §II.21 WHAT GATE 3 OWES
+
+* **THE WIRE.** Slice 35's `slice35_rate.yaml` geometry with **R̂ = −0.18** — slice 34's own shipped
+  design, where the body-referenced head is QUIET and the space-stabilized one RINGS at 85×. ONE
+  toggled fidelity (convention 9): `:seeker_head` is the BUTTON, and the R̂ slider is the domain over
+  which the two brackets are walked. ⚠ The domain must be chosen so BOTH brackets are inside it
+  (−0.140 … −0.280 is the measured ladder) and the verifier must READ `out == 0` on every stability
+  arm it quotes.
+* **THE CLIENT.** ⚠⚠ THE MARKER-HOLE RE-CHECK IS OWED (slices 34/35/36 each paid for a version of
+  it): a slice-37 wire is a slice-35 wire PLUS one fidelity, so `gimbal_view` routes it and the
+  SUBJECT is right — but slice 35's HUD names the SERVO's demand against its rate cap, and on the
+  space-stabilized rung that demand is in a DIFFERENT FRAME and never saturates (§II.18). The failure
+  mode to check for is slice 35's own: a comfortable-looking budget that credits the wrong thing.
+* **THE BUTTON.** `:seeker_head` is a genuine 2-rung cycler on a wire that ALSO raises `radome_view`
+  and `gimbal_view` — the one-button rule again, and the branch order must be settled before the HUD
+  is written.
+* ⚠ **THE MISS IS NOT THE METRIC** (every arm here hits, and the RINGING arm often misses LESS), and
+  ⚠ **`head_rate_dps` MAY NOT BE COMPARED ACROSS THE BUTTON** without saying which frame each reading
+  is in — §II.18 is the reason, and the seam comment is where it is said.
