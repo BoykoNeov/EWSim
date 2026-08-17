@@ -305,9 +305,12 @@ measured on a bench before anything flies.
 
 **P2a — freeze the geometry, spin the body.** Inertial LOS fixed, body rotating at ω, τ = 0.05 s. The
 SHIPPED head chases a target that moves IN ITS OWN FRAME and settles to a steady-state pointing error
-**≈ τ·ω** (0.135679° vs 0.143239° at ω = 0.05; 1.421764° vs 1.432394° at ω = 0.50); the STABILIZED
-head's error is **0.000000000° at every ω**. ⚠ The ω ≥ 0.8 rows (74.7°, 95.4°) are the 40 °/s RATE
-LIMIT breaking the small-error regime, NOT the lag law — do not quote them as such.
+**≈ τ·ω** (0.135679° vs 0.143239° at ω = 0.05; 0.541664° vs 0.572958° at ω = 0.20; 1.421764° vs
+1.432394° at ω = 0.50); the STABILIZED head's error is **0.000000000° at every ω**.
+⚠ **THE PROBE ALSO RAN ω ≥ 0.8 AND THOSE ROWS ARE DELIBERATELY NOT REPRODUCED HERE**: at 40 °/s the
+RATE LIMIT breaks the small-error regime and they read 74.7°/95.4° against a τ·ω column of 2.3°/3.4°,
+which is the rate limit and not the lag law. A later reader seeing them beside that column would
+mis-read the tooth, so they stay in `g0_results.md` and out of the plan.
 
 **P2b — at zero body rate the two frames are the same frame:** `max|STAB(expressed in body) − SHIP|`
 over 3000 ticks = **1.110e−16 rad**. ⇒ the heads are distinguishable ONLY by body rotation.
@@ -388,13 +391,26 @@ been living on since slice 34, unnamed.**
 
 ---
 
-## §II.6 ⭐⭐ THE LADDER: THREE HEADS, ONE WIRE, ONE 0.005 GRID, ONE THRESHOLD (P4c / P5a / P6)
+## §II.6 ⭐⭐ THE LADDER: THREE HEADS, ONE WIRE, ONE 0.005 GRID (P4c / P5a / P6)
 
-| head | onset bracket | `rms r` either side | patch? |
+⚠⚠ **THE ONSET LINE IS NOT ALLOWED TO BE A BARE NUMBER I CHOSE** (advisor). The first draft bracketed
+on `rms r > 0.20`, which appears NOWHERE in 26–36 and was doing real work: the shipped head reads
+**0.17308** at R̂ = −0.165 — 13 % below that line and already an ORDER OF MAGNITUDE above its 0.01172
+plateau — so moving the line to 0.15 moves the bracket one cell and the headline fraction with it.
+That is exactly the *where did 15 % come from?* objection §II.3 raises against itself. ⇒ **the rule
+here is THRESHOLD-FREE: the bracket is the cell with the LARGEST SINGLE-STEP RATIO in `rms r`**, and
+the full ladder is printed so a reader can redraw the line and see what moves.
+
+| head | `rms r` across the transition | **bracket (largest-step rule)** | patch? |
 |---|---|---|---|
-| **STRAPDOWN** (no head) | **(−0.265, −0.260]** | 0.07250 → 0.32320 | no — SHIPPED path |
-| **GIMBAL, position-servoed** | **(−0.165, −0.160]** | 0.17308 → 0.35421 | no — SHIPPED path |
-| **GIMBAL, RATE-STABILIZED** | **(−0.210, −0.205]** | 0.04536 → 0.41625 | yes |
+| **STRAPDOWN** (no head) | 0.03070 → 0.07250 → **0.32320** (2.4×, **4.5×**) | **(−0.265, −0.260]** | no — SHIPPED path |
+| **GIMBAL, position-servoed** | 0.03992 → **0.17308** → 0.35421 (**4.3×**, 2.1×) | **(−0.170, −0.165]** | no — SHIPPED path |
+| **GIMBAL, RATE-STABILIZED** | 0.01981 → 0.04536 → **0.41625** (2.3×, **9.2×**) | **(−0.210, −0.205]** | yes |
+
+⚠ **AND THE SENSITIVITY IS STATED, NOT HIDDEN.** Under the discarded `> 0.20` line the middle rung
+becomes (−0.165, −0.160] and the headline fraction reads 45 %; under the largest-step rule and under
+`> 0.15` it reads **42 %**. ⇒ quote **≈40–45 %**, and note that **the ORDER of the three rungs and the
+SIGN of the effect are threshold-FREE** — no line anywhere in the printed range reorders them.
 
 ⚠ **TWO OF THE THREE RUNGS NEED NO PATCH AT ALL, which is what makes the third credible**, and both
 shipped rungs REPRODUCE slice 34's own brackets ((−0.27, −0.24] and (−0.18, −0.16], measured on slice
@@ -403,9 +419,18 @@ LADDER** (the advisor's catch, applied to my own first fix): slice 34's numbers 
 are re-flown here — [[ewsim-fin-dynamics-direction]]'s *re-run the comparison that entitled an earlier
 slice to its finding before borrowing it*, slice 36 gate 2.
 
-⭐⭐ **THE HEADLINE ARITHMETIC.** Slice 34's gimbal bought 0.2625 → 0.1625 = **0.100** of margin.
-Rate-stabilizing **GIVES BACK 0.045 — 45 % of it** — and lands BETWEEN the strapdown and the
-position-servoed gimbal. **THE CLASSICAL REASON GIMBALS EXIST INVERTS ON THIS WIRE.**
+⭐⭐ **THE HEADLINE ARITHMETIC**, on bracket MIDPOINTS. Slice 34's gimbal bought 0.2625 → 0.1675 =
+**0.095** of margin. Rate-stabilizing **GIVES BACK 0.040 — ≈42 % of it** (45 % under the discarded
+threshold; ⇒ quote **≈40–45 %**) — and lands BETWEEN the strapdown and the position-servoed gimbal.
+**THE CLASSICAL REASON GIMBALS EXIST INVERTS ON THIS WIRE.**
+
+⚠ **AND THE MIDDLE OF THE CAUSAL CHAIN IS NOT YET MEASURED** (advisor). §II.5 has the INDEX gain
+(closed form, 3–4 digits, unity exactly) and §II.6 has the BRACKET; the step from *"the filter is
+worth 12–16 % of gain and ~30° of phase"* to *"that is what moves the bracket 0.040"* is an
+INFERENCE, and the plan says so rather than writing one causal chain. **GATE 1 CLOSES IT:** sweep τ
+on BOTH heads and check the bracket walks with τ on the shipped head in the direction the filter
+predicts, and **does NOT walk on the stabilized one** (whose index gain is τ-independent at unity).
+That is a prediction the mechanism makes and the alternatives do not.
 
 ---
 
@@ -447,6 +472,14 @@ LAGS more, and the two effects trade. **Do not assume the stabilized head swings
 
 * **RUNG** `:seeker_head = (:body_referenced, :rate_stabilized)` (name TBD at gate 1) on the HELD
   `:airframe: six_dof` + `gimbal_tau_s` host — INERT without a head, refused without `two_angle`.
+  ⚠⚠ **GATE IT ON THE LIVE `:airframe`, NEVER ON `haskey(:head_i_az)`** — this is the seam whose
+  latent-bug class has fired SEVEN times on exactly this question (21's `_atm_on`, 23, 26, 27, 29, 32,
+  34). The new inertial state is minted and never deleted, so a key-gated rung would keep an
+  inertially-referenced head slewing against a FROZEN attitude after a cross-toggle off `:six_dof`,
+  and — worse than the earlier occurrences — a frozen attitude makes the body↔inertial conversion the
+  identity, so the two rungs would silently BECOME each other rather than visibly break. The loader
+  must also refuse the rung without `gimbal_tau_s` (there is no head to stabilize), the slice-21
+  "refused rather than silently branch-ordered" precedent.
 * **Class 4a**, 12th consecutive RNG-live: NO new `randn`; the draw count is identical on both rungs.
   ⚠ Gyro NOISE stays determinism-blocked (an unconditional third draw desyncs 25–31 — the slice-13
   `:scan` 4b shape); it is NOT this slice.

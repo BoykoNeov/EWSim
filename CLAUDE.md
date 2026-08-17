@@ -1144,12 +1144,20 @@ tracker an INERTIAL rate. What is body-referenced is the **SERVO**, and the live
 stabilize the head inertially and body motion is REJECTED rather than tracked out, so the servo demand collapses
 (⭐ 8.19× at the boresight design and 0.86× when quiet — an inertial servo buys NOTHING on a design that does not
 ring) and ⭐⭐ SLICE 35's TWO-SIDED KNOB GOES INERT (ring FLAT 1.01× and window FLAT across the whole 60→8 °/s domain,
-against 2.29× and 2.17× shipped) — ⭐⭐ **BUT IT GIVES BACK 45 % OF THE MARGIN SLICE 34's GIMBAL BOUGHT, because the
+against 2.29× and 2.17× shipped) — ⭐⭐ **BUT IT GIVES BACK ≈40–45 % OF THE MARGIN SLICE 34's GIMBAL BOUGHT, because the
 position servo's LAG WAS SILENTLY DOING STABILITY WORK: it LOW-PASSES body motion out of the glass's INDEX** (measured
 on a frozen-geometry bench against `1/√(1+(2πfτ)²)` to 3–4 digits, and EXACTLY unity gain at every frequency for the
 stabilized head, with the ring living at 1.7–2.1 Hz where that filter is worth 12–16 % of gain and ~30° of phase).
-THREE HEADS, ONE WIRE, ONE 0.005 GRID, ONE THRESHOLD: strapdown (−0.265, −0.260], position-servoed (−0.165, −0.160],
+THREE HEADS, ONE WIRE, ONE 0.005 GRID: strapdown (−0.265, −0.260], position-servoed (−0.170, −0.165],
 rate-stabilized (−0.210, −0.205] — and TWO OF THE THREE NEED NO PATCH AT ALL, which is what makes the third credible.
+⚠⚠ THE ONSET LINE IS THRESHOLD-FREE BY CONSTRUCTION (advisor): the first draft bracketed on a bare `rms r > 0.20`
+THAT I CHOSE and that appears nowhere in 26–36 — and it was load-bearing, since the shipped head reads 0.17308 at
+R̂ = −0.165, 13% below it and an order of magnitude above its own 0.01172 plateau. The rule is now the LARGEST
+SINGLE-STEP RATIO, the whole ladder is printed so a reader can redraw the line, and the SENSITIVITY IS QUOTED —
+≈42% under the largest-step rule and 45% under the discarded one, so the fraction is **≈40–45%** while THE ORDER of
+the three rungs and the SIGN of the effect are threshold-FREE. ⚠ The MIDDLE OF THE CAUSAL CHAIN IS NOT YET MEASURED:
+gate 0 has the index gain and the bracket but not the link between them, and gate 1 closes it with a prediction only
+this mechanism makes (the bracket must walk with τ on the SHIPPED head and NOT walk on the stabilized one).
 ⇒ **THE CLASSICAL REASON GIMBALS EXIST INVERTS ON THIS WIRE.** ⚠ The reparameterization gate is answered by a BOUND,
 not a tolerance (a 25× faster servo at a 50× smaller τ stops at 4.796° and cannot reach the stabilized head's 3.861°)
 ⇒ RUNG, not knob. ⚠ The τ→0 isolation FAILS against the shipped seam (`max|Δpos|` plateaus at 42.572 m) and holds

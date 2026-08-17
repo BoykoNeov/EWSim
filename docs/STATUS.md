@@ -4793,7 +4793,9 @@ PART II): the shipped seeker ALREADY reports inertial LOS angles (`missile.jl:16
 not `look_angles(…)`), so what is body-referenced is the **SERVO** and the live claim is its REFERENCE
 FRAME — and it INVERTS the classical argument, because the position servo's LAG was silently low-passing
 body motion out of the glass's INDEX (three heads on one grid: strapdown (−0.265, −0.260], position-servoed
-(−0.165, −0.160], rate-stabilized (−0.210, −0.205] ⇒ stabilizing gives back 45 % of what slice 34 bought,
+(−0.170, −0.165], rate-stabilized (−0.210, −0.205] ⇒ stabilizing gives back ≈40–45 % of what slice 34 bought
+— ⚠ the onset line is the LARGEST SINGLE-STEP RATIO, threshold-free, and the sensitivity is quoted rather
+than hidden (a bare `rms r > 0.20` was arbitrating the headline in the first draft),
 while slice 35's two-sided knob goes INERT); plus
 everything 26–33 named and did not spend.
 
