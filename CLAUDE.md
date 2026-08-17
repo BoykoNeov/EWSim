@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–36 COMPLETE & green — 6876 tests at slice 35 gate 3; slice 36 is DONE and the suite is now 7222.**
+**Slices 1–37 COMPLETE & green — 7222 tests at slice 36 gate 3; slice 37 is DONE and the suite is now 7496.**
 (⚠ the count FELL *at slice 35 gate 3* — 6892 → 6876 — and that direction is accounted for: ~87 new asserts in,
 ~103 out, because a per-entity scenario sweep collapsed into ONE strictly-stronger exact-set assert. The 6876 →
 6988 → 7057 → 7067 → 7222 walk since then is slice 36's four gates.) **The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–36
@@ -378,6 +378,63 @@ itself. ⚠⚠ AND THE WINDOWED SHOT FOUND A DISPLAY DEFECT NO TEST WOULD HAVE: 
 ARITHMETIC was the runaway, under a correct verdict line (slice 33's defect in a new quantity) — plus the 3rd
 right-edge overrun after 26/28. TWO wires. Class 4a (12th consecutive), button DROPPED (12th — and the FIRST that
 needed an edit to stay dropped). (7222)**
+**And slice 37 THE HEAD'S OWN GYRO: A SPACE-STABILIZED SERVO GIVES BACK THE MARGIN THE POSITION SERVO'S
+LAG WAS QUIETLY BUYING — the deferral slice 34 named THIRD, and ⚠⚠ ITS OWN WORDING WAS REFUTED BEFORE
+ANY PROBE RAN. "A rate-stabilized head measures inertial LOS rate DIRECTLY, the classical reason gimbals
+exist" is ALREADY TRUE of the shipped model (`missile.jl:1652` is `az_el(û_tru)`, NOT `look_angles(…)`),
+so the seeker has reported INERTIAL angles since slice 25. What is body-referenced is the SERVO, and the
+live claim is its REFERENCE FRAME. ⭐⭐ STABILIZING IT REMOVES MARGIN — THE CLASSICAL REASON GIMBALS EXIST
+INVERTS ON THIS WIRE — because the position servo's LAG was doing stability work nobody asked it for: it
+LOW-PASSES the missile's own body motion out of the radome's INDEX, and slice 26's limit cycle lives at
+1.7–2.1 Hz, exactly where a τ = 0.05 s filter is worth 12–16 % of gain and ~30° of phase. ⭐⭐ THE
+DEMONSTRATION IS ONE BUTTON PRESS ON A DESIGN THAT WAS ALREADY GOOD: at R̂ = −0.18 (slice 34's own shipped
+design) the body-referenced head is QUIET (rms r 0.01195, intercept 2.084 m) and one press — same glass,
+same seed, same servo, same handover — makes the SAME missile RING at 1.00094, 83.8× frame, and it STILL
+HITS. ⭐ THE ONSET IS FOUND TWICE, ONCE PER SERVO FRAME, quoted BRACKET TO BRACKET (body (−0.170, −0.165]
+at 4.32×, space (−0.210, −0.205] at 9.09×) and the two are asserted DISJOINT FROM BOTH SIDES, which is
+what makes it ONE ladder walked twice rather than two readings of one boundary. ⚠⚠ THE ONSET RULE IS THE
+LARGEST SINGLE-STEP RATIO AND STAYS THRESHOLD-FREE — gate 0's advisor catch, load-bearing here: the body
+rung reads 0.17284 at −0.165, an order of magnitude above its own plateau AND BELOW the arc's 0.30 ring
+line, so a threshold would have mis-bracketed it; the ~40–45 % of margin given back is quoted as a RANGE
+while the ORDER of the rungs is what is asserted. ⭐⭐ THE SLIDER'S FLOOR IS SLICE 30's AIM POINT AND IT IS
+WHERE THE BUTTON GOES DEAD (1.022×, both quiet) ⇒ aim R̂ at the glass's worst-case slope and THE
+ARCHITECTURE DOES NOT MATTER — the rule pays a FOURTH time (33 = FOV, 34 = detector window, 35 = servo
+bandwidth, 37 = the REFERENCE FRAME), and the proof is a control that visibly stops working. ⚠ THE
+CEILING'S OBVIOUS JUSTIFICATION WAS TESTED AND REFUTED (the body rung saturates up to 64.6 % past it, but
+removing the rate limit moves its ring by at most 1.04× — slice 35's mechanism is NOT leaking in); it
+rests instead on the arm where BOTH rungs ring, the only kind on which a demand comparison is legal, and
+there the space head RINGS 1.70× HARDER AND ASKS FOR 3.15× LESS PEAK SLEW (0.00 % vs 17.5 % saturated) ⇒
+the body-referenced servo's demand is almost all BODY MOTION — ⚠ which does NOT license "the stabilized
+head is the cheaper build": cheaper in SERVO BANDWIDTH, dearer in STABILITY MARGIN. ⭐⭐ THE CLIENT FINDING
+IS A BUTTON INVERSION THAT REVERSES TWELVE SLICES OF PRECEDENT: 26–36 each had no rung to cycle, so
+`radome_view`/`seeker_fov_view`/`gimbal_handover_view` all HIDE the shared button and 32/33/34/35 rode one
+for free — `:seeker_head` IS a rung (the first since slice 25) and this wire raises THREE of those drop
+markers, so a NEW `gimbal_frame_view` exists to UN-DROP it. ⚠ THE RULE IS NOT "a gimbal marker drops the
+button"; it is *the button shows what there is to cycle, and these wires mostly have nothing*. ⚠ GATED ON
+THE FIDELITY, not a comp key (the first in this family) and on the KEY not the VALUE — the wire opens on
+`:body_referenced`, so a value guard would hide the button on exactly the arm the showcase starts from.
+⭐ THE MIRROR IS THE EXACT INVERSE OF SLICE 36's: there stripping the marker made a button APPEAR that had
+to be dropped; here it makes it VANISH. ⚠⚠ THE HUD HALF IS AN INVITED SUBTRACTION (slice 36's gate-3
+defect in a new quantity): `head_rate_dps` keeps its name across the button and MEANS A DIFFERENT THING ON
+EACH SIDE OF IT, and at the ceiling the press makes it FALL 3.15× while the ring RISES 1.70× ⇒ THE FRAME
+IS PRINTED INSIDE THE SAME STRING AS THE NUMBER. ⭐⭐ AND THE SHOT CAUGHT A NUMBER LYING, which only a
+capture could: the first pair read `ring r −0.019` on the QUIET arm against `+0.021` on the one ringing
+84× harder (a limit cycle crosses zero twice per cycle), so the DECAYING PEAK's VALUE now sits beside the
+live rate (0.02 vs 1.08, ~54×) — slices 26–36 drew only the tag and that was fine because nothing on those
+wires invited a frame-to-frame comparison; HERE THE WHOLE DEMONSTRATION IS TWO FRAMES EITHER SIDE OF ONE
+PRESS. ⚠ The same pair caught a 59-char cure line against the ~55 budget (the right-edge overrun's 4th
+occurrence after 26/28/36). ⚠⚠ A FRAME VERIFIER STRUCTURALLY CANNOT SEE THE PRESS AND THE FRAME GRID
+MISREADS IT: the space→body press shows a 0.939° step in `head_angle_deg` (~16× a normal frame, reading
+exactly like a RE-BIRTH) while PER TICK the head moves 0.0074°, ~9× LESS than the tick before — the frame
+figure is the SPACE rung's own unity-gain carry-along accumulated over 16 ticks ⇒ THE PRESS IS VISIBLE IN
+THE RATE, NOT THE POSITION, and the verifier asserts NOTHING about it (the tooth is per-tick, in
+`test_missile.jl`). ⚠⚠ AND THE MID-RUN PRESS ARM NEEDED TWO LEGS because the server DRAINS EVERY QUEUED
+COMMAND BEFORE IT STEPS AT ALL — `[step K, set_fidelity, step N−K]` back-to-back applies the toggle at
+tick 0 and silently measures a from-launch arm. ⚠ RUNG, NOT KNOB, and the gate is answered by a BOUND
+(a 25× faster servo at a 50× smaller τ stops at 4.796° of index gain and cannot reach the stabilized
+head's 3.861°). Class 4a (13th consecutive RNG-live), replay bit-identical ON BOTH RUNGS, BUTTON BACK
+(the first since slice 25). ⚠ The proofs ran on port 8770 — an unrelated python process held 8765 — and
+the 8765 re-run is owed. (7496)**
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
@@ -1098,7 +1155,19 @@ along it starts with a head start, and the requirement is a V whose kink the ser
 hand a seeker its target is not at the target: it is part-way to where the target is GOING, and how far depends on
 how fast a servo you bought. Zero is outside the basket that holds — and biasing onto the kink buys the one thing
 slice 35 proved could not be bought on its own axis, because the left arm of the V is an initial condition and no
-bandwidth touches an initial condition.**
+bandwidth touches an initial condition.
+And slice 37 closed the sensor half's last structural question — not what the head can see or how fast it
+can move, but WHICH FRAME ITS SERVO CLOSES IN. The deferral that named it promised the textbook headline,
+that a stabilized head measures inertial LOS rate directly; that turned out to be already true and
+unshippable, because this seeker has reported inertial angles since slice 25. What is body-referenced is
+the servo — and stabilizing it makes the missile shake. For eleven slices the position servo's LAG had
+been doing stability work nobody asked it for, quietly low-passing the missile's own body motion out of
+the glass's index at exactly the frequency the limit cycle lives at. Take the lag away and the index sees
+the body in full: the same design, the same glass, the same seed, one button press, and a quiet missile
+rings 84× harder. The classical reason gimbals exist inverts here — and the onset is found twice, once
+per servo frame, so it is a mechanism and not a cell. What you can still do is aim the belief at the
+glass's worst-case slope, where slice 30's rule pays for the fourth time and the button simply stops
+doing anything at all.**
 The NEXT named candidates:
 **(⚠ "THE GIMBAL" IS NO LONGER ON THIS LIST — SLICE 34 SHIPPED IT, and ⚠⚠ BOTH HALVES OF THE LESSON SLICE 33's
 GATE 0 BANKED FOR IT WERE REFUTED at slice 34's own gate 0: "the gimbal that saves your envelope PARKS YOU ON THE
@@ -1137,7 +1206,9 @@ optimum shift there, which is a tooth rather than a slice).**
 **SLICE 34's OWN REMAINING DEFERRALS: ⚠⚠ MEMORY TRACK / RE-ACQUISITION IS OFF THIS LIST — KILLED AT GATE 0, see
 above and `docs/plans/slice37.md` (34/35/36 all recorded the break as TERMINAL and all three assumed a coasting
 head was the cure; it is not, and the mis-location is the result). **⚠⚠ THE HEAD'S OWN GYRO IS NO LONGER A DEFERRAL —
-IT IS SLICE 37, GATE 0 COMPLETE (2026-08-17, 6 probes, `docs/plans/slice37.md` PART II), AND ITS OWN WORDING WAS
+IT IS SLICE 37, **SHIPPED AND COMPLETE** (2026-08-17, all four gates, `docs/plans/slice37.md` PART II —
+⚠ the notes below are the GATE-0 record and are kept because the refutations in them are load-bearing;
+the as-built numbers are in the slice-37 paragraph above and in `docs/STATUS.md`), AND ITS OWN WORDING WAS
 REFUTED THERE.** "A rate-stabilized head measures inertial LOS rate DIRECTLY" is ALREADY TRUE of the shipped model —
 `missile.jl:1652` is `az_el(û_tru)`, NOT `look_angles(…)`, so the seeker already reports INERTIAL angles and the α-β
 tracker an INERTIAL rate. What is body-referenced is the **SERVO**, and the live claim is its REFERENCE FRAME:
@@ -1167,7 +1238,19 @@ CORRUPTED gyro — WAS KILLED BEFORE IT WAS PROBED: `s·ω_body` on the measured
 so the loop cannot tell a body-motion-isolation gain error from a radome slope error and the claim collapses onto
 slice 26's boundary (slice 31's shape, convention 4's copy-paste trap). ⭐ SLICE 30's RULE PAYS A FOURTH TIME (33 =
 FOV, 34 = detector window, 35 = servo bandwidth, 37 = the head's REFERENCE FRAME): at `radome_slope_worst` both heads
-are quiet, flat and cheap ⇒ the ARCHITECTURE DOES NOT MATTER THERE. ⚠ "A RATE-LIMITED HEAD" IS NO LONGER ON THIS LIST — SLICE 35 SHIPPED IT, and its OWN named successor is
+are quiet, flat and cheap ⇒ the ARCHITECTURE DOES NOT MATTER THERE.
+**SLICE 37's OWN DEFERRALS, in the order it named them: AN IMPERFECT HEAD GYRO** (the stabilized arm has
+EXACTLY unity body-motion-rejection gain at every frequency — an IDEAL head-mounted rate gyro, and slice
+31's scale factor and bias are the precedent for what an imperfect one adds; ⚠ scope it against slice
+31's own trap first, since a gain error on the rejection path may collapse onto slice 26's boundary the
+way FRAMING A did); **A SECOND-ORDER HEAD SERVO (ω_a/ζ_a)** — inherited from slice 35 UNCHANGED and now
+sharper, because this slice showed the FIRST-ORDER lag is doing stability work, so an inertia and a
+resonance would change how much (slice 15's actuator is the precedent); and **THE τ AXIS AS ITS OWN
+SLICE** (⚠ gate 1 measured BOTH terms moving with τ — the honest range over τ ∈ [0.005, 0.2] is 0 % to
+79 %, and at τ ≤ 0.005 the two rungs' brackets COINCIDE — so "≈40–45 %" is quoted AT THE SHIPPED τ = 0.05
+and a slice that made τ the slider would be measuring how much lag is worth buying, which is a different
+question from which frame to close in).
+⚠ "A RATE-LIMITED HEAD" IS NO LONGER ON THIS LIST — SLICE 35 SHIPPED IT, and its OWN named successor is
 **A SECOND-ORDER SERVO (ω_a/ζ_a)**: slice 35's head is first-order-WITH-a-rate-limit, while a real gimbal has an
 inertia and a bandwidth, and slice 15's actuator is the precedent for exactly what that adds.** Also: **a RECTANGULAR / PER-AXIS FOV — and slice 34 SHARPENS it (it ships one circular
 window AND one circular stop, and gate 1 wrote down that the circular shape rests on a SPECIES argument because no

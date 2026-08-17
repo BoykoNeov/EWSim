@@ -8153,7 +8153,13 @@ end
             # own lesson is the AUTHORED handover error, which cannot be a knob). ⇒ the claim being
             # pinned is still "slices 1–34 stay byte-identical by GATING"; the carrier list is the
             # enumeration that keeps it honest, and it is a SET rather than a count for that reason.
-            @test carriers == ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml"]
+            # ⚠ SLICE 37 WIDENED IT AGAIN, AND THE ASSERT CAUGHT IT — the second time this list has
+            # earned its keep. A slice-37 wire is slice 35's wire with ONE number changed and one
+            # fidelity authored, so it carries the rate-limited head unchanged; the servo is AUTHORED
+            # there rather than a slider (its ONE knob is R̂, its lesson is the BUTTON), which is
+            # precisely why an `isempty`-style claim would have said nothing about it.
+            @test carriers == ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml",
+                               "slice37_frame.yaml"]
         end
     end
 
@@ -8208,7 +8214,12 @@ end
         # marker too. That does NOT break the branch selector — the client checks slice 36's own marker
         # FIRST, and the mirror in `slice36_ui_test.gd` is what proves that ordering — but a mirror
         # asserting "no other wire" would now be false, and the honest form is an ENUMERATED exception.
-        let expected_rate = ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml"]
+        # ⚠ AND SLICE 37 IS THE SECOND EXCEPTION, FOR THE SAME REASON AND WITH THE SAME REMEDY: its
+        # wire is slice 35's with one number changed, so it carries `gimbal_rate_dps` and raises this
+        # marker. The ordering that keeps it harmless is again the client's — `gimbal_frame_view` is
+        # checked FIRST, and `slice37_ui_test.gd`'s mirror is what proves it.
+        let expected_rate = ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml",
+                             "slice37_frame.yaml"]
             for f in readdir(base)
                 endswith(f, ".yaml") || continue
                 f in expected_rate && continue
@@ -9651,14 +9662,180 @@ end
         @test haskey(EWSim.LIVE_FIDELITY_MODES, :seeker_head)
         @test EWSim.LIVE_FIDELITY_MODES.seeker_head === SEEKER_HEAD_MODES
         # THE PRESENCE GATE FROM THE OTHER SIDE (slice 35/36's shape): at GATE 2 no shipped wire
-        # authors the rung at all, so slices 1–36 are byte-identical BY GATING. Gate 3 tightens this
-        # into an enumerated carrier set rather than deleting it.
+        # authored the rung at all, so slices 1–36 were byte-identical BY GATING. ⭐ GATE 3 TIGHTENS
+        # IT INTO AN ENUMERATED CARRIER SET rather than deleting it, which is the stronger form: the
+        # `isempty` this replaced would have gone on passing forever while quietly ceasing to say
+        # anything the moment a wire was added.
         let base = joinpath(@__DIR__, "..", "..", "scenarios")
             carriers = String[f for f in readdir(base)
                               if endswith(f, ".yaml") &&
                                  haskey(load_scenario(joinpath(base, f)).world.fidelity, :seeker_head)]
-            @test isempty(carriers)
+            @test carriers == ["slice37_frame.yaml"]
         end
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+# SLICE 37 (gate 3) — THE SHIPPED WIRE, AND THE MARKER THAT BRINGS THE BUTTON BACK.
+#
+# Gate 2 wired the rung and measured it; gate 3 ships the scenario a student drives. Two things here
+# that gate 2 could not have: the SHIPPED YAML's own numbers, and the handshake marker — which is the
+# FIRST in this family whose job is to **UN-DROP** the shared fidelity button.
+#
+# ⭐⭐ THE BUTTON INVERSION IS THE CLIENT FINDING. Slices 26–36 each had no rung to cycle (the lesson
+# was a slider every time), so `radome_view` / `seeker_fov_view` / `gimbal_handover_view` all HIDE the
+# button and 32/33/34/35 rode one of them for free. `:seeker_head` IS a rung, and this wire raises
+# `radome_view`, `gimbal_view` AND `gimbal_rate_view` — three separate drops — so without a marker of
+# its own the one slice in twelve that has something to cycle would ship with no control at all.
+# ⚠ GATED ON THE **FIDELITY**, not a comp key: the first marker in this family that is, because the
+# rung reuses slice 34's head verbatim and there is no slice-37 comp key to gate on.
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+@testset "THE SERVO'S REFERENCE FRAME shipped (slice 37 gate 3 — the wire, and the button back)" begin
+    base = joinpath(@__DIR__, "..", "..", "scenarios")
+    scn  = load_scenario(joinpath(base, "slice37_frame.yaml"))
+    m    = scn.world.entities[:m1]
+
+    @testset "the wire is slice 35's, KEY FOR KEY, with ONE number changed" begin
+        # The claim is that changing the SERVO'S FRAME and nothing else moves the stability boundary,
+        # so ANY other difference between these two files is a second variable in a one-variable
+        # measurement. Asserted against the shipped slice-35 YAML rather than against literals, so the
+        # two files cannot drift apart silently (convention 7 applied to a scenario pair).
+        s35 = load_scenario(joinpath(base, "slice35_rate.yaml"))
+        m35 = s35.world.entities[:m1]
+        for k in (:radome_slope, :radome_ripple, :radome_ripple_k,
+                  :gimbal_tau_s, :gimbal_stop_deg, :gimbal_fov_deg, :gimbal_rate_dps,
+                  :mass_kg, :cd_area_m2, :rho, :n_pn, :a_max, :delta_max, :k_alpha, :k_q,
+                  :af_cma, :af_cmd, :af_cmq, :af_cla, :af_alpha_max, :af_cy_beta,
+                  :af_I, :af_I_roll, :af_I_zz, :af_c_roll, :sigma_seek, :alpha, :beta)
+            @test m.comp[k] == m35.comp[k]
+        end
+        @test m.pos == m35.pos && m.vel == m35.vel
+        @test scn.world.seed == s35.world.seed == 32
+        @test scn.dt_physics == s35.dt_physics && scn.emit_every == s35.emit_every == 16
+        # …and THE ONE NUMBER: slice 34's shipped design, not 26–35's boresight default. At the
+        # boresight (−0.03) BOTH rungs ring and the press moves `rms r` by 1.27× — a true number and
+        # a dead demonstration. The showcase has to open where the button DOES something.
+        @test m.comp[:radome_slope_est] == -0.18
+        @test m35.comp[:radome_slope_est] == -0.03
+        # THE TARGET is 23–36's crossing geometry, unchanged — a STATIC target would make the whole
+        # family dead at once (slice 28 measured the lead at 0.04°→0.54° there).
+        @test scn.world.entities[:tgt1].pos == s35.world.entities[:tgt1].pos
+        @test scn.world.entities[:tgt1].vel == s35.world.entities[:tgt1].vel
+    end
+
+    @testset "the FIDELITY: five HELD, exactly ONE toggled, and it opens on the GOOD design" begin
+        fid = scn.world.fidelity
+        @test fid[:airframe] === :six_dof        # the head is gated on the LIVE rung through `_gim`
+        @test fid[:autopilot] === :alpha
+        @test fid[:guidance] === :pn
+        @test fid[:seeker] === :filtered
+        @test fid[:seeker_axes] === :az_el       # a two-angle seeker is what HAS a look angle at all
+        @test !haskey(fid, :steering)            # the loader default IS :skid_to_turn
+        # ⭐ THE ONE TOGGLED KEY, AUTHORED BY NAME AT ITS DEFAULT. The wire opens on slice 34/35/36's
+        # shipped servo — quiet, and it hits — so the FIRST press is the one that breaks it.
+        @test fid[:seeker_head] === :body_referenced
+        @test :body_referenced === SEEKER_HEAD_MODES[1]   # …and the client's ring starts here too
+    end
+
+    @testset "⭐⭐ THE MARKER — the first in this family that RESTORES the button" begin
+        info = EWSim._airframe_view_info(scn.world)
+        @test info[:gimbal_frame_view] === true
+        # ⚠⚠ THE THREE DROPS THIS WIRE ALSO RAISES ARE THE REASON THE MARKER EXISTS, and they are
+        # asserted as the POSITIVE facts they are rather than left implied: every one of them hides
+        # the shared button at both client sites, so the new branch must be checked FIRST or it is
+        # unreachable. That is the OPPOSITE hazard from slice 36's (whose wire raised NONE of them
+        # and had to ADD a drop) — the same lesson from the two sides.
+        @test info[:radome_view]      === true   # it has GLASS
+        @test info[:gimbal_view]      === true   # …and a HEAD
+        @test info[:gimbal_rate_view] === true   # …and a rate-limited servo
+        @test info[:airframe_6dof]    === true
+        @test !haskey(info, :seeker_fov_view)    # refused beside a head (slice 34's)
+        @test !haskey(info, :gimbal_handover_view)
+        # THE MIRROR — no OTHER shipped wire may raise it, or the branch selector selects slices
+        # 26–36's wires too and THEIR HUDs are the ones that disappear (slice 32/35/36's
+        # `!haskey`-as-a-feature). This is also the byte-identity claim, stated as a marker fact.
+        for f in readdir(base)
+            endswith(f, ".yaml") || continue
+            f == "slice37_frame.yaml" && continue
+            let inf = EWSim._airframe_view_info(load_scenario(joinpath(base, f)).world)
+                inf === nothing || @test !haskey(inf, :gimbal_frame_view)
+            end
+        end
+        # ⚠ AND IT FOLLOWS THE RUNG, NOT THE VALUE. The wire opens on `:body_referenced`, so a marker
+        # value-guarded on `:space_stabilized` would hide the button on exactly the arm the showcase
+        # starts from — the one direction that is fatal. Both rungs raise it.
+        let w2 = load_scenario(joinpath(base, "slice37_frame.yaml")).world
+            w2.fidelity[:seeker_head] = :space_stabilized
+            @test EWSim._airframe_view_info(w2)[:gimbal_frame_view] === true
+        end
+    end
+
+    @testset "CONVENTION 9 — ONE knob beside the button, and its endpoints are the two lessons" begin
+        ks = Dict(kb.key => kb for kb in scn.knobs)
+        @test collect(keys(ks)) == [:radome_slope_est]
+        @test ks[:radome_slope_est].target === :m1
+        # THE FLOOR IS SLICE 30's AIM POINT EXACTLY — `radome_slope_worst` = R₀ + 2A — which is WHERE
+        # THE BUTTON GOES DEAD (measured below). ⚠ Asserted against the GLASS the wire authors, never
+        # against the literal −0.33: the Float64 sum lands at −0.32999999999999996 (slice 21's
+        # magic-multiple tooth), so the two are pinned to agree to a tolerance and not by eye.
+        @test ks[:radome_slope_est].min == -0.33
+        @test abs(ks[:radome_slope_est].min -
+                  (m.comp[:radome_slope] + 2 * m.comp[:radome_ripple])) < 1.0e-12
+        # THE CEILING is the arm where BOTH rungs ring — the only kind of arm on which the DEMAND
+        # comparison is legal at all (at the default one rings and one does not).
+        @test ks[:radome_slope_est].max == -0.14
+        # ⚠ THE SERVO RATE IS AUTHORED AND IS NOT A SECOND SLIDER, and the disqualification is a
+        # measurement, not an argument: putting it live beside this button would put slice 35's
+        # TWO-SIDED KNOB — a third mechanism — on a wire whose subject is the reference frame.
+        @test !haskey(ks, :gimbal_rate_dps)
+        @test m.comp[:gimbal_rate_dps] == 40.0
+        for dead in (:gimbal_tau_s, :gimbal_stop_deg, :gimbal_fov_deg, :cross_speed_mps,
+                     :n_pn, :rho, :af_alpha_max, :sigma_seek, :radome_slope, :radome_ripple,
+                     :radome_ripple_k, :elevation_deg, :speed, :seeker_fov_deg)
+            @test !haskey(ks, dead)
+        end
+    end
+
+    @testset "⭐⭐ THE PRESS, PER TICK — one birth in two frames, and the RATE is what moves" begin
+        # ⚠⚠ A GATE-3 FINDING, AND IT INVERTS THE NAIVE FRAME-GRID READING. Sampled every 16th tick
+        # (the wire's own `emit_every`), the space→body press shows a **0.939°** step in
+        # `head_angle_deg` — ~16× a normal frame — which reads exactly like the head being re-born.
+        # It is not: at the press TICK the head moves **0.0074°**, ~9× LESS than the tick before it.
+        # The frame-grid figure is the SPACE rung's own body-angle motion (0.065°/tick, because a head
+        # held INERTIALLY is carried along by the rotating body at unity gain) accumulated over the 16
+        # ticks of one frame, ending at the press.
+        # ⇒ THE PRESS IS VISIBLE IN THE **RATE**, NOT THE POSITION, AND IT GOES THE OTHER WAY: the
+        # carry-along STOPS, which is the rung's own mechanism seen in a single tick. That is
+        # [[ewsim-missile-verifier-sampling]] in a new quantity, and it is why `slice37_verify.gd`
+        # asserts nothing about a step across the press — a frame verifier cannot see this at all.
+        # ⭐ FLOWN ON THE **SHIPPED** SCENARIO, not on a hand-built twin: the press is a gate-3
+        # capability (the button did not exist before this gate), so the arm a student actually
+        # drives is the one that must be pinned. `set_fidelity` writes exactly this field.
+        function press(k::Int, to::Symbol; pre = nothing)
+            s = load_scenario(joinpath(base, "slice37_frame.yaml"))
+            w = s.world; sub = s.subs
+            ha = Float64[]
+            for kk in 1:(k + 4)
+                pre === nothing || (kk == pre[1] && (w.fidelity[:seeker_head] = pre[2]))
+                kk == k && (w.fidelity[:seeker_head] = to)
+                tick!(w, sub, s.dt_physics); empty!(w.events)
+                push!(ha, Float64(get(get(w.env, :telemetry, Dict{String,Any}()),
+                                      "m1.head_angle_deg", NaN)))
+            end
+            return (before = ha[k-1] - ha[k-2], at = ha[k] - ha[k-1])
+        end
+        fwd  = press(3000, :space_stabilized)
+        back = press(6000, :body_referenced; pre = (3000, :space_stabilized))
+        # NEITHER DIRECTION JUMPS. Gate 2's counterfactual — a `haskey` mint resuming a STALE inertial
+        # pair — steps 2.696° across one tick, so the bar here is two orders of magnitude below it and
+        # the tooth is a comparison against a MEASURED alternative rather than a chosen epsilon.
+        @test abs(fwd.at)  < 0.02
+        @test abs(back.at) < 0.02
+        # …and body→space is CONTINUOUS in the ordinary sense (the step is the head's own motion,
+        # ~1.06× the preceding tick's) while space→body COLLAPSES to a fraction of it. The PAIR is
+        # the tooth: an assert on one direction alone would pass on a seam that froze the head.
+        @test 0.5 < abs(fwd.at) / abs(fwd.before) < 2.0
+        @test abs(back.at) / abs(back.before) < 0.5
     end
 end
 

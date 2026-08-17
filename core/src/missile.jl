@@ -839,6 +839,29 @@ function _airframe_view_info(w::World)
     # byte-identical and a slice-36 wire is recognized by the one thing that distinguishes it.
     any(haskey(w.entities[m].comp, :gimbal_handover_err_deg) for m in missiles) &&
         (info[:gimbal_handover_view] = true)
+    # SLICE 37 — the SERVO REFERENCE FRAME marker, and ⭐⭐ IT IS THE FIRST OF THIS FAMILY WHOSE JOB IS
+    # TO **UN-DROP** THE SHARED FIDELITY BUTTON. Every marker above exists to DROP it: slices 26–36
+    # each had no rung to cycle (the lesson was a slider every time), so `radome_view`,
+    # `seeker_fov_view` and `gimbal_handover_view` all hide it, and 32/33/34/35 rode one of them for
+    # free. `:seeker_head` IS a genuine two-rung fidelity — the first since slice 25 — so on this wire
+    # the button is the LESSON, and the client's dispatch would otherwise hide it three times over
+    # (this wire raises `radome_view`, `gimbal_view` AND `gimbal_rate_view`).
+    #
+    # ⚠⚠ SO THE FAMILY'S RULE INVERTS HERE AND THAT SENTENCE IS THE POINT OF THIS COMMENT: a later
+    # slice reading only the five markers above would learn *"a gimbal marker drops the button"*, and
+    # would then be unable to ship a rung on this wire without re-deriving why. The rule is not "drop";
+    # it is *the button shows what there is to cycle, and these wires mostly have nothing*.
+    #
+    # ⚠ GATED ON THE **FIDELITY**, NOT ON A COMP KEY — the first marker in this family that is, and
+    # deliberately, because the thing that distinguishes a slice-37 wire IS the rung. A comp-key gate
+    # is not available at all here (there is no slice-37 comp key: the rung reuses slice 34's head),
+    # and a value-guard on `:space_stabilized` would be WRONG in the one direction that matters — this
+    # wire OPENS on `:body_referenced` (the good design, so the press is what breaks it), so gating on
+    # the non-default rung would hide the button on exactly the arm the showcase starts from.
+    # ⚠ The loader REFUSES `seeker_head` without a head for EITHER rung (`scenario.jl`), so this can
+    # never be raised on a wire with no servo to talk about, and slices 1–36 author no such key ⇒ they
+    # are byte-identical and their markers are untouched.
+    haskey(w.fidelity, :seeker_head) && (info[:gimbal_frame_view] = true)
     return info
 end
 

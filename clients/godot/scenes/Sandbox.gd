@@ -206,6 +206,25 @@ var _gimbal_rate_view := false     # handshake gimbal_rate_view — 5th marker o
 #       invisible slice PLUS two fabricated zeros.
 var _gimbal_handover_view := false # handshake gimbal_handover_view — 6th marker, and the first to
                                    # plug a BUTTON hole and a HUD hole at once
+# Slice-37 SERVO REFERENCE FRAME marker. ⭐⭐ AND IT IS THE FIRST OF THIS FAMILY WHOSE BUTTON JOB IS THE
+# **OPPOSITE** OF EVERY MARKER ABOVE — it UN-DROPS the shared fidelity button. Slices 26–36 each had no
+# rung to cycle (the lesson was a slider every time), so `_radome_view`, `_seeker_fov_view` and
+# `_gimbal_handover_view` all HIDE it and 32/33/34/35 rode one of them for free. `:seeker_head` is a
+# genuine two-rung fidelity — the first since slice 25 — so here THE BUTTON IS THE LESSON, and this wire
+# raises `_radome_view`, `_gimbal_view` AND `_gimbal_rate_view`, i.e. the dispatch below would hide it
+# three times over. ⚠ THE RULE THIS FAMILY TEACHES IS NOT "a gimbal marker drops the button"; it is
+# *the button shows what there is to cycle, and these wires mostly have nothing*. Written here because
+# a later slice reading only the six markers above would learn the wrong one.
+# ⚠ AND THE HUD HOLE IS REAL TOO, so this is slice 36's "BOTH" shape rather than slice 35's "branch
+# selector": without it `_gimbal_rate_view` wins and draws slice 35's servo block, whose headline pairs
+# `head_rate_dps` against the rate cap — a number that MEANS A DIFFERENT THING ON EACH SIDE OF THIS
+# BUTTON (body-frame demand, which includes tracking out the missile's own rotation, against
+# inertial-frame demand with body motion already rejected). Every number would be true and the invited
+# arithmetic — *press it, watch the demand fall, conclude the stabilized head is the cheaper build* —
+# is exactly the inference the core's own seam comment forbids. Slice 36's INVITED ARITHMETIC defect,
+# in a new quantity, and the fix is that the frame is NAMED in the same string as the number.
+var _gimbal_frame_view := false    # handshake gimbal_frame_view — 7th marker, and the FIRST that
+                                   # RESTORES the button rather than dropping it
 # Slice-36 DISPLAY-ONLY FREEZE on the shipped requirement (see `_handover_peak_hold`): `head_off_peak_deg`
 # is a running maximum, so it runs to 179.4998° at CPA on EVERY arm, hit or miss, and a peak cannot
 # forget. This holds the last sample taken while r > 200 m — the same gate the core's own requirement
@@ -378,6 +397,12 @@ const STEERING_RUNGS := ["skid_to_turn", "bank_to_turn"]
 # fidelity carries `seeker_axes`; it is checked BEFORE `steering`/`airframe` (the "check the NEW key
 # first" rule — slices 21/22/24, 4th occurrence) so the ONE toggled fidelity owns the shared button.
 const SEEKER_AXES_RUNGS := ["pitch_plane", "az_el"]
+# Slice-37: the GIMBAL SERVO'S REFERENCE FRAME (body_referenced ↔ space_stabilized) — the first rung
+# on the shared button since slice 25, and the ORDER IS THE SHOWCASE'S: the wire opens on
+# `body_referenced` (slice 34/35/36's shipped servo, quiet and hitting at this wire's R̂) so the FIRST
+# press is the one that breaks it. ⚠ Mirrors the core's `SEEKER_HEAD_MODES` and must stay in that
+# order — a client ring that started on the other rung would open the showcase on its own punchline.
+const SEEKER_HEAD_RUNGS := ["body_referenced", "space_stabilized"]
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
 # --- terrain 3-D view (slice 18): the client's FIRST true 3-D view. Populated only when the
@@ -586,6 +611,12 @@ func _on_scenario(obj: Dictionary) -> void:
 	# two failures it prevents, and note that slice 35's "branch selector, not a hole plug" sentence
 	# does NOT transfer to it.
 	_gimbal_handover_view = bool(obj.get("gimbal_handover_view", false))
+	# Slice-37 SERVO-REFERENCE-FRAME discriminator, and ⚠ it is the FIRST of this family gated on a
+	# **FIDELITY** rather than a comp key — deliberately, because the thing that distinguishes a
+	# slice-37 wire IS the rung (it reuses slice 34's head verbatim, so there is no slice-37 comp key
+	# to gate on). It does BOTH jobs like slice 36's marker, but the BUTTON job is the OPPOSITE one:
+	# it RESTORES the button rather than dropping it. See `_gimbal_frame_view`'s own comment.
+	_gimbal_frame_view = bool(obj.get("gimbal_frame_view", false))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -1256,6 +1287,32 @@ func _enter_airframe3d_mode(obj: Dictionary) -> void:
 	# `"seeker_axes"` arm of `_update_fid_btn` re-shows the button unconditionally and never reaches the
 	# `"airframe"` arm's defences. ⚠ THE MIRROR IS THE PROOF: strip this marker in the UI test and the
 	# button must come BACK.
+	# SLICE 37 — THE SERVO'S REFERENCE FRAME, checked FIRST ("check the NEW key first", 10th occurrence)
+	# and ⭐⭐ THE FIRST BRANCH IN THIS DISPATCH SINCE SLICE 25 THAT **KEEPS** THE BUTTON. Every gimbal
+	# branch below drops it, because slices 26–36 had no rung to cycle — the lesson was a slider every
+	# time. `:seeker_head` IS a rung, it is live-settable with no `set_fidelity` guard (there is no draw
+	# topology to flip — measured: over a mid-run press the RNG state stays EQUAL to the never-pressed
+	# run's while the trajectories differ by 2.000 m), and THE PRESS IS THE LESSON: at the wire's
+	# default R̂ the body-referenced head is quiet and hits, and one press makes the same missile ring
+	# 85.4× harder with nothing else changed.
+	# ⚠⚠ IT MUST BE FIRST OR IT IS UNREACHABLE — this wire raises `radome_view`, `gimbal_view` AND
+	# `gimbal_rate_view`, so all three of the branches below would hide the button before this one ran.
+	# That is the OPPOSITE hazard from slice 36's (whose wire raised none of the drop markers and had to
+	# ADD a drop); the two are the same lesson from the two sides, which is why both are spelled out.
+	# ⚠ AND THE SECOND SITE IS `_update_fid_btn` — but NOT as a defence inside its `"airframe"` arm this
+	# time: `_fid_kind` is a NEW value here, so the button's label lives in its own match arm, exactly
+	# as slice 24's `"steering"` and slice 25's `"seeker_axes"` do. Both are `_fid_kind` values that
+	# appear in NO drawing gate (the 3-D view keys off `_mode`, not `_fid_kind`), which is what makes a
+	# new kind free — slice 21's "only `_draw_missile`'s gate needed this kind added" checked, and here
+	# the answer is that none did.
+	if _gimbal_frame_view:
+		_fid_kind = "seeker_head"
+		if not _prop_btn.pressed.is_connected(_on_seeker_head_pressed):
+			_prop_btn.pressed.connect(_on_seeker_head_pressed)   # guarded for the headless UI test
+		_prop_btn.tooltip_text = "Cycle seeker head servo frame (set_fidelity): body_referenced → space_stabilized"
+		_prop_btn.visible = true
+		_build_airframe3d_scene()
+		return
 	if _gimbal_handover_view:
 		_fid_kind = "airframe"                      # the 3-D view's drawing/badge treatment, unchanged
 		_prop_btn.visible = false
@@ -1754,6 +1811,90 @@ func _handover_req_text(peak: float, window: float, lost: bool) -> String:
 	return "requirement (peak) %.2f°  vs  window %.1f°%s" % \
 			[peak, window, "   ← OVER" if peak > window else ""]
 
+# ⭐⭐ SLICE 37 — THE SERVO REFERENCE FRAME's verdict. A THREE-WAY on `lost × ringing`, with the FRAME
+# NAMED IN EVERY STRING, and the naming is the whole design: a HUD only ever sees ONE arm, so what has
+# to be legible is THE PRESS — the student holds one design still, changes the architecture, and reads
+# the verdict change. Naming the rung is what turns two consecutive frames into a comparison.
+# ⚠ THE TWO RINGING STRINGS ARE DELIBERATELY SYMMETRIC and neither hints at the other rung. Near the
+# slider's ceiling BOTH rungs ring, and a label like "RINGING TOO" would be asserting a fact about an
+# arm this frame has no access to — the asymmetry the slice teaches is something the student MEASURES
+# by pressing, not something the client may claim on their behalf.
+# ⚠ THE COLOUR RIDES THE LATCH AND THE LABEL RIDES THE PEAK-HOLD, inherited from 34/35 with their
+# reasons: a ringing arm here still HITS (every arm on this wire does, 0.16–1.9 m), and a limit cycle
+# crosses zero twice per cycle so an instantaneous ring verdict mislabels half the frames (slice 27).
+# ⚠ EXTRACTED, LIKE `_fov_verdict_label` / `_budget_verdict_label` / `_gimbal_verdict_label` /
+# `_servo_verdict_label` / `_handover_verdict_label`, BECAUSE ANYTHING THE VERDICT COMPUTES INSIDE
+# `_draw` HAS NO HEADLESS PROOF — `_draw` never runs under `--headless` (convention 14; slice 31's
+# aim-point comparison shipped WRONG and only the windowed shot caught it).
+# ⚠ WIDTHS ARE MEASURED: ~34 characters at 20 px from `vp.x − 430`. All five are counted (28/26/25/30/29).
+func _frame_verdict_label(lost: bool, ringing: bool, stabilized: bool) -> String:
+	if lost:
+		return "TRACK LOST — the head let go"
+	if ringing:
+		return "SPACE-STABILIZED — RINGING" if stabilized else "BODY-REFERENCED — RINGING"
+	return "SPACE-STABILIZED — loop STABLE" if stabilized else "BODY-REFERENCED — loop STABLE"
+
+# ⚠⚠ SLICE 37 — THE DEMAND LINE, AND ITS ONLY JOB IS TO STOP AN INVITED SUBTRACTION. `head_rate_dps`
+# keeps its slice-35 name across this button and MEANS A DIFFERENT THING ON EACH SIDE OF IT: under
+# `:body_referenced` it is the step in BODY angles, so it INCLUDES tracking out the missile's own
+# rotation; under `:space_stabilized` it is the step in INERTIAL angles, with body motion already
+# rejected. The core's seam says so at the telemetry line; nothing on the wire otherwise would.
+# ⭐⭐ AND THE TRAP IS LIVE ON THIS WIRE IN BOTH DIRECTIONS. At the slider's default the press makes the
+# demand RISE (0.9 → 17.3 °/s, because the space arm is the one that rings there); at its ceiling,
+# where BOTH rungs ring and a demand comparison is legal at all, the press makes it FALL 3.4× (63.1 →
+# 18.4) while the ring goes UP 1.7×. A student who reads the fall alone concludes *"the stabilized head
+# is the cheaper build"* — three true numbers whose invited arithmetic is exactly the inference the
+# core forbids (cheaper in SERVO BANDWIDTH, dearer in STABILITY MARGIN). Slice 36's INVITED-ARITHMETIC
+# defect in a new quantity, and the fix is that the frame is printed INSIDE the same string.
+# ⚠ A ZERO HERE IS AMBIGUOUS BY CONSTRUCTION (the handover tick and every held tick both ship 0.0 —
+# the two-run discipline's fourth quantity), which is why the head's state is on its own line below.
+# ⚠ WIDTH MEASURED: ~55 characters at 15 px. Longest form is 54 with the PEGGED tag.
+func _frame_demand_text(dem: float, cap: float, sat: bool, stabilized: bool) -> String:
+	return "head rate %.1f°/s in the %s frame  vs %.0f°/s%s" % \
+			[dem, "INERTIAL" if stabilized else "BODY", cap, "  PEGGED" if sat else ""]
+
+# ⭐⭐ SLICE 37 — THE MECHANISM, IN ONE LINE PER RUNG, and it is the line that makes the two above
+# readable together. The position servo's LAG is not merely slowness: it LOW-PASSES the missile's own
+# body motion out of the radome's INDEX, and slice 26's limit cycle lives at 1.7–2.1 Hz — exactly where
+# a τ = 0.05 s filter is worth 12–16 % of gain and ~30° of phase. Stabilize the head and that filter is
+# gone (unity gain at every frequency, measured on a frozen-geometry bench), so the index sees the body
+# in full. ⇒ the improvement REMOVES margin, which is why the wire needs a sentence and not just numbers.
+# ⚠ IT NAMES THE MECHANISM, NEVER A THRESHOLD: no client-side stability test appears anywhere on this
+# wire, because |R_crit| moves with N and ρ (convention 13 — slice 26's rule, still in force).
+func _frame_mech_text(stabilized: bool) -> String:
+	return "SPACE-STABILIZED: no lag — the index sees the body" if stabilized \
+			else "BODY-REFERENCED: the servo's LAG filters the index"
+
+# ⭐ SLICE 37 — THE CURE LINE, and slice 30's rule paying a FOURTH time (33 = FOV, 34 = detector
+# window, 35 = servo bandwidth, 37 = the head's REFERENCE FRAME). Two numbers the CORE ships, never a
+# client-side stability test: |R_crit| moves with N and ρ, so a "residual < x ⇒ unstable" line would be
+# physics in GDScript AND wrong the moment a scenario changes N (convention 13, slice 26's rule).
+# ⚠⚠ EXTRACTED FROM `_draw` **BECAUSE THE FIRST SHOT CAUGHT IT AT 59 CHARACTERS** against the measured
+# ~55-character budget — inside `_draw` it had no headless proof at all (convention 14), so the width
+# could only ever be caught by a capture. Now the UI test pins it.
+# ⚠ "button goes dead" rather than "frame stops mattering": shorter, and truer — at the aim point the
+# two rungs read 0.05901 and 0.06030 (1.022×), so what visibly stops working is the CONTROL.
+func _frame_cure_text(rhat: float, aim: float) -> String:
+	return "R̂ %+.3f   aim point R₀+2A %+.3f   ← button goes dead" % [rhat, aim]
+
+# ⭐⭐ SLICE 37 — THE RING LINE, AND THE PEAK'S **VALUE** IS ON IT BECAUSE THE FIRST PAIR OF SHOTS
+# CAUGHT THE INSTANTANEOUS NUMBER LYING. Slices 26–36 all drew the live body rate beside a tag driven
+# by the peak-hold, and on those wires that was fine because nothing invited a frame-to-frame
+# comparison. HERE THE WHOLE DEMONSTRATION IS TWO FRAMES EITHER SIDE OF ONE BUTTON PRESS — and the
+# captures read `ring r −0.019 rad/s` on the QUIET arm against `ring r +0.021 rad/s` on the one
+# RINGING 84× harder, because a limit cycle crosses zero twice per cycle and a single frame catches it
+# wherever it happens to be. Two live, TRUE numbers whose comparison says the architecture did not
+# matter — the exact inverse of the claim, and slice 36's INVITED ARITHMETIC in this slice's own
+# headline quantity. The DECAYING PEAK separates them (~0.02 against ~1.3, the ratio the slice is
+# about), so it is drawn as a number and not only as an orange tag.
+# ⚠ AN INSTRUMENT, NOT PHYSICS (convention 13): a peak-hold of a shipped key, exactly slice 27's, and
+# the LIVE value stays on the line beside it so nothing is hidden behind the instrument.
+# ⚠ EXTRACTED for convention 14's reason — inside `_draw` it would have no headless proof, which is
+# precisely how it shipped wrong for one capture. Width measured: 51 characters at the widest.
+func _frame_ring_text(live: float, peak: float, lag: float, yaw_ch: bool) -> String:
+	return "ring %s %+.3f (peak %.2f) rad/s%s  lag %.2f°" % \
+			["r" if yaw_ch else "q", live, peak, "  RINGING" if peak > 0.5 else "", lag]
+
 func _gyro_verdict_label(ringing: bool, eff: float, worst: float) -> String:
 	if ringing:
 		return "GYRO — RINGING: loop sees R̂(1+s)"
@@ -2018,6 +2159,66 @@ func _draw_handover_hud_lines(vp: Vector2) -> void:
 	draw_string(_font, Vector2(vp.x - 430, 198), "head: %s" % ("HOLDING — no error signal since the break" if _gimbal_lost else "TRACKING"),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _gimbal_lost else Color(0.55, 1.00, 0.65))
 
+# ⭐⭐ SLICE 37 — the five lines that ARE the servo's reference frame, split out like 32/33/34/35/36's
+# (same measured width: ~55 characters at 15 px from `vp.x − 430`; every line below is counted).
+# THE PAIR A STUDENT MUST SEE IS *THE RING* BESIDE *THE DEMAND*, because they move in OPPOSITE
+# directions across the press and the whole payload is that there is no free direction. Slice 35 found
+# the arc's first two-sided knob; this wire moves that shape onto the ARCHITECTURE — the stabilized
+# head is cheaper in SERVO BANDWIDTH and dearer in STABILITY MARGIN, and both halves are on screen.
+# ⚠⚠ THE FRAME IS NAMED INSIDE THE DEMAND LINE AND THAT IS THE ONE NON-NEGOTIABLE THING HERE — see
+# `_frame_demand_text`. Drawing `head_rate_dps` unlabelled across this button would be three true
+# numbers inviting the one conclusion the core's seam comment forbids.
+# ⚠ THE RING LINE FOLLOWS THE RINGING CHANNEL through the shared helper, not a hardcoded key: this
+# wire's lead is in AZIMUTH so it reads `omega_r`, but the branch is reachable by any head on any
+# glass and a rate line on the wrong channel prints a calm number under an orange tag (slice 28/33).
+# ⚠ THE DETECTOR BUDGET IS ONE REASSURANCE LINE, NOT THE HEADLINE: the window is authored at 25°
+# against a worst measured requirement of 5.391° over the whole slider, so it never binds — and that
+# is what makes every `rms r` here a STABILITY read at all (the two-run discipline). It is drawn
+# because a budget that never binds still has to be SEEN not to bind.
+# ⚠ THE RANGE AND CROSS-RANGE LINES ARE NOT HERE — the shared block above draws them at y = 66/88.
+func _draw_frame_hud_lines(vp: Vector2) -> void:
+	var stab := str(_fidelity.get("seeker_head", "body_referenced")) == "space_stabilized"
+	var chan := _ring_channel_key()
+	var rr := float(_telemetry.get(_af3d_missile + chan, 0.0))
+	var yaw_ch := chan == ".omega_r"
+	var dem := float(_telemetry.get(_af3d_missile + ".head_rate_dps", 0.0))
+	var cap := float(_telemetry.get(_af3d_missile + ".gimbal_rate_dps", 0.0))
+	var sat := float(_telemetry.get(_af3d_missile + ".head_rate_sat", 0.0)) >= 0.5
+	var off := float(_telemetry.get(_af3d_missile + ".head_off_deg", 0.0))
+	var marg := float(_telemetry.get(_af3d_missile + ".gimbal_fov_margin_deg", 0.0))
+	var rhat := float(_telemetry.get(_af3d_missile + ".radome_slope_est", 0.0))
+	var aim := float(_telemetry.get(_af3d_missile + ".radome_slope_worst", 0.0))
+	# ⭐⭐ THE MECHANISM, IN WORDS — why the two numbers below trade against each other at all.
+	draw_string(_font, Vector2(vp.x - 430, 110), _frame_mech_text(stab),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.45, 0.90, 1.00))
+	# THE STABILITY SIDE — coloured by the peak-hold (slice 27's reason: a limit cycle crosses zero
+	# twice per cycle, so an instantaneous verdict mislabels half the frames).
+	# ⚠⚠ AND THE PEAK'S **VALUE** IS DRAWN BESIDE THE LIVE RATE BECAUSE THE FIRST PAIR OF SHOTS CAUGHT
+	# THE INSTANTANEOUS NUMBER LYING — see `_frame_ring_text`. This is the one line whose two states a
+	# student compares ACROSS THE PRESS, so it is the one line that must not need the tag to be read.
+	draw_string(_font, Vector2(vp.x - 430, 132), _frame_ring_text(rr, _radome_qpeak, off, yaw_ch),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _radome_qpeak > 0.5 else COL_TICK)
+	# …and THE BANDWIDTH SIDE, with its FRAME printed in the same string. See `_frame_demand_text`.
+	draw_string(_font, Vector2(vp.x - 430, 154), _frame_demand_text(dem, cap, sat, stab),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45) if sat else COL_TICK)
+	# ⭐ THE CURE — slice 30's rule paying a FOURTH time (33 = FOV, 34 = detector window, 35 = servo
+	# bandwidth, 37 = THE REFERENCE FRAME), and here it is the slider's own FLOOR: at R₀+2A the two
+	# rungs read 0.05890 and 0.06016 (1.021×), so the BUTTON GOES DEAD. Two shipped numbers, never a
+	# client-side stability test — |R_crit| moves with N and ρ (convention 13, slice 26's rule).
+	# ⚠⚠ THE TRAILING CLAUSE WAS SHORTENED BY THE FIRST SHOT AND THE MEASUREMENT IS WHY. "← frame stops
+	# mattering" made this line 59 characters against the measured ~55-character budget at 15 px from
+	# `vp.x − 430`; at 1600 px it cleared the right edge by ~10 px and any narrower window would have
+	# cut the clause — the 4th occurrence of that overrun after slices 26, 28 and 36, and the part that
+	# gets cut is always the part that carries the meaning. "← button goes dead" is also the truer
+	# phrase: at the aim point the two rungs read 0.05901 and 0.06030, so the CONTROL is what stops
+	# working. Pinned by width in `slice37_ui_test.gd`.
+	draw_string(_font, Vector2(vp.x - 430, 176), _frame_cure_text(rhat, aim),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	# THE DETECTOR BUDGET + THE HEAD's STATE — the window never binds on this wire, which is the
+	# precondition for reading the ring at all. Coloured by the shipped SIGN and by the LATCH.
+	draw_string(_font, Vector2(vp.x - 430, 198), "detector budget %+.1f°   head: %s" % [marg, "HOLDING — no error signal since the break" if _gimbal_lost else "TRACKING"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if (_gimbal_lost or marg < 0.0) else Color(0.55, 1.00, 0.65))
+
 func _draw_airframe3d_hud() -> void:
 	# The 3-D layer renders the world; the 2-D canvas only LABELS it (the terrain-view discipline).
 	# The headline: the plant, the cross-range miss (los_range), and the out-of-plane excursion.
@@ -2093,7 +2294,31 @@ func _draw_airframe3d_hud() -> void:
 	# ⚠ AND THE BUTTON IS NOT FREE HERE EITHER — see `_enter_airframe3d_mode`. Slices 26–35 all dropped it
 	# by riding `radome_view`; this is the first no-glass wire of the arc, so the drop needs both sites
 	# (slice 26's finding, 4th occurrence) and this marker owns that too.
-	if _gimbal_handover_view:
+	# SLICE 37 — THE SERVO'S REFERENCE FRAME, checked FIRST and a SWITCH ahead of every branch below
+	# ("check the NEW key first", 10th occurrence). ⚠⚠ AND THE REASON IS SLICE 36's — BOTH FAILURES AT
+	# ONCE — rather than slice 35's single one, which is why it is spelled out and not cross-referenced.
+	# (1) THE SUBJECT. This wire raises `gimbal_rate_view`, so without this branch slice 35's servo
+	# block takes it and prints a comfortable demand-vs-cap budget on a wire whose entire subject is
+	# WHICH FRAME that demand is measured in — slice 35's own INVISIBLE SLICE, one slice later.
+	# (2) ⚠⚠ WORSE, IT IS AN INVITED SUBTRACTION. `head_rate_dps` keeps its name across this button and
+	# changes MEANING with the rung (body-frame demand, which includes tracking out the missile's own
+	# rotation, against inertial-frame demand with body motion already rejected). At the slider's
+	# ceiling the press makes that number FALL 3.4× while the ring RISES 1.7×, so slice 35's unlabelled
+	# line would invite exactly the reading the core's seam forbids: *the stabilized head is the cheaper
+	# build*. It is cheaper in SERVO BANDWIDTH and dearer in STABILITY MARGIN. Slice 36's INVITED
+	# ARITHMETIC defect in a new quantity — three live, true numbers under a correct verdict line.
+	# ⚠ AND THE BUTTON IS NOT FREE HERE EITHER, IN THE DIRECTION NO EARLIER SLICE NEEDED — see
+	# `_enter_airframe3d_mode`: this is the first wire of the family with a rung to cycle, so the marker
+	# RESTORES the button that three separate markers on this same wire would otherwise drop.
+	if _gimbal_frame_view:
+		lbl = _frame_verdict_label(_gimbal_lost, _radome_qpeak > 0.5,
+				str(_fidelity.get("seeker_head", "body_referenced")) == "space_stabilized")
+		# ⚠ THE COLOUR RIDES THE LATCH, NOT THE PEAK-HOLD, inherited from 34/35 with their reason and
+		# one of this wire's own: EVERY arm in the slider's domain HITS (0.16–1.9 m) on BOTH rungs, so a
+		# ring-coloured headline would paint every successful intercept orange — and the ring is named
+		# in the LABEL, which is where the comparison the student is making actually lives.
+		col = Color(1.00, 0.62, 0.30) if _gimbal_lost else Color(0.45, 0.90, 1.00)
+	elif _gimbal_handover_view:
 		lbl = _handover_verdict_label(_gimbal_lost,
 				float(_telemetry.get(_af3d_missile + ".gimbal_handover_err_deg", 0.0)))
 		# ⚠ THE COLOUR RIDES THE LATCH, and here that is not merely inherited — it is the ONLY honest
@@ -2290,7 +2515,13 @@ func _draw_airframe3d_hud() -> void:
 	# invisible slice AND the stale-readout class in one frame. It draws FIVE lines like 34's and 35's, and
 	# shares exactly two of them (the detector budget and the head's state); the mechanism line and the
 	# requirement-vs-window line are this slice's own, and no ring line is drawn at all.
-	if _gimbal_handover_view:
+	# SLICE 37 — THE SERVO'S REFERENCE FRAME, checked FIRST here too and for the reason the two chains
+	# must ALWAYS agree: a headline naming the frame above body lines drawing slice 35's unlabelled
+	# demand-vs-cap pair would be the invited subtraction with a correct verdict sitting on top of it —
+	# which is precisely the shape slice 36's windowed shot caught and no test would have.
+	if _gimbal_frame_view:
+		_draw_frame_hud_lines(vp)
+	elif _gimbal_handover_view:
 		_draw_handover_hud_lines(vp)
 	elif _gimbal_rate_view:
 		_draw_gimbal_rate_hud_lines(vp)
@@ -2579,6 +2810,17 @@ func _update_fid_btn() -> void:
 			# steering/atmosphere — the rung IS the lesson, so no visibility branch.
 			_prop_btn.visible = true
 			_prop_btn.text = "seeker: %s" % str(_fidelity.get("seeker_axes", "?"))
+		"seeker_head":
+			# ⭐⭐ SLICE 37: the button IS the servo-reference-frame cycler (body_referenced ↔
+			# space_stabilized), and this arm is the SECOND SITE of the button's RESTORATION — the
+			# mirror image of the drop that the `"airframe"` arm below performs three times over. It
+			# gets its OWN arm rather than a defence inside `"airframe"` (slice 26/32/36's shape)
+			# precisely because the outcome is the opposite one: those arms exist to STOP a re-show,
+			# this one exists to GUARANTEE one. ⚠ `visible = true` is EXPLICIT and not inherited —
+			# falling through to the `"airframe"` arm would cycle the HELD `:airframe` key, which is
+			# the convention-9 "toggle a held key" trap those very defences were built for.
+			_prop_btn.visible = true
+			_prop_btn.text = "head: %s" % str(_fidelity.get("seeker_head", "?"))
 		"airframe":
 			if _gimbal_handover_view:
 				# SLICE 36 THE HANDOVER BASKET — the SECOND site of the same drop, and here it is
@@ -2868,6 +3110,33 @@ func _on_seeker_axes_pressed() -> void:
 	var next: String = SEEKER_AXES_RUNGS[(i + 1) % SEEKER_AXES_RUNGS.size()] if i >= 0 else "pitch_plane"
 	_fidelity["seeker_axes"] = next
 	_client.send({"type": "set_fidelity", "key": "seeker_axes", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
+func _on_seeker_head_pressed() -> void:
+	# ⭐⭐ SLICE 37 — THE GIMBAL SERVO'S REFERENCE FRAME, and this is the first rung on the shared button
+	# since slice 25 (slices 26–36 all dropped it — the lesson was a slider every time). Both rungs fly
+	# the SAME head, the SAME glass, the SAME believed slope, the SAME seed and the SAME 40 °/s servo;
+	# the ONLY variable is WHICH FRAME the servo closes its loop in. Under :body_referenced (the default
+	# — the showcase OPENS on the design that WORKS) the servo target is the LOS in BODY angles, so the
+	# servo's job includes TRACKING OUT the missile's own rotation, and its LAG therefore LOW-PASSES
+	# body motion out of the radome's INDEX. Press once → :space_stabilized holds the pointing in the
+	# INERTIAL frame (head-mounted rate gyros), body motion is REJECTED PASSIVELY, the index is
+	# unfiltered — and at this wire's R̂ the SAME quiet missile RINGS 85.4× harder. ⚠ IT STILL HITS: the
+	# miss is not the metric here, as in every slice of this family since 26.
+	# ⚠⚠ THE TEXTBOOK IMPROVEMENT REMOVES MARGIN — the classical reason gimbals exist INVERTS on this
+	# wire, because the position servo's lag was doing stability work nobody had asked it for.
+	# ⚠ Class 4a — DRAW-INVARIANT (no draw topology to flip), so LIVE-SETTABLE with NO set_fidelity
+	# guard, UNLIKE :cfar/:scan. Measured rather than assumed: over a mid-run press the RNG state after
+	# 4000 ticks is EQUAL to the never-pressed run's while the trajectories differ by 2.000 m, and the
+	# head's pointing CARRIES ACROSS the press (its body angle moves 1.034× a normal tick's motion —
+	# one birth held in two frames, not two births). The client owns the displayed rung (badge + button
+	# locally; the server applies it on the next tick).
+	var cur := str(_fidelity.get("seeker_head", "body_referenced"))
+	var i := SEEKER_HEAD_RUNGS.find(cur)
+	var next: String = SEEKER_HEAD_RUNGS[(i + 1) % SEEKER_HEAD_RUNGS.size()] if i >= 0 else "body_referenced"
+	_fidelity["seeker_head"] = next
+	_client.send({"type": "set_fidelity", "key": "seeker_head", "value": next})
 	_render_badge()
 	_update_fid_btn()
 

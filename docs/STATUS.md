@@ -5202,6 +5202,116 @@ dropped). Slices 1–35 byte-identical, proven ON THE WIRE (slice 34's and slice
 green). Two loader/marker sweeps in `test_missile.jl` were TIGHTENED to enumerated carrier sets rather
 than deleted, which is how slice 35's own "a second wire growing this key would fail here" paid off.
 
+**Slice 37 — THE HEAD'S OWN GYRO: A SPACE-STABILIZED SERVO GIVES BACK THE MARGIN THE POSITION
+SERVO'S LAG WAS QUIETLY BUYING** — **COMPLETE** (2026-08-17, 7222 → 7323 → 7394 → 7396 → **7496**),
+all four gates green. The deferral slice 34 named THIRD, and ⚠⚠ **ITS OWN WORDING WAS REFUTED BEFORE
+ANY PROBE RAN**: "a rate-stabilized head measures inertial LOS rate DIRECTLY, the classical reason
+gimbals exist" is ALREADY TRUE of the shipped model — `missile.jl:1652` is `az_el(û_tru)`, NOT
+`look_angles(att, û_tru)`, so this seeker has reported INERTIAL angles since slice 25 and the α-β
+tracker an INERTIAL rate. What is body-referenced is the **SERVO**, and the live claim is its
+REFERENCE FRAME. ⭐⭐ **STABILIZING IT REMOVES MARGIN — THE CLASSICAL REASON GIMBALS EXIST INVERTS ON
+THIS WIRE** — because the position servo's LAG was doing stability work nobody asked it for: it
+LOW-PASSES the missile's own body motion out of the radome's INDEX, and slice 26's limit cycle lives
+at 1.7–2.1 Hz, exactly where a τ = 0.05 s filter is worth 12–16 % of gain and ~30° of phase. Full
+gate-by-gate detail in `docs/plans/slice37.md`; probes in `M:\claud_projects\temp\slice37g{,2,3}\`.
+⚠ PART I of that plan is a DIFFERENT candidate — MEMORY TRACK / RE-ACQUISITION — **KILLED at gate 0**
+(a break in this arc is not an episode but the rest of the flight; what makes it terminal is the
+ESTIMATOR's frozen rate, not where the head points, so the cure 34/35/36 all banked was MIS-LOCATED).
+
+**GATE 3 (7396 → 7496, +100) — the wire, the button that comes back, and a number that lied.**
+⭐⭐ **THE DEMONSTRATION IS ONE BUTTON PRESS ON A DESIGN THAT WAS ALREADY GOOD**: at R̂ = −0.18 (slice
+34's own shipped design) the body-referenced head is QUIET (`rms r` **0.01195**, intercept 2.084 m)
+and one press — same glass, same believed slope, same seed, same servo, same handover — makes the same
+missile RING at **1.00094**, **83.8× frame** (85.4× per tick), and it STILL HITS (2.689 m). ⭐ The
+onset is found TWICE, once per servo frame, quoted BRACKET TO BRACKET: body **(−0.170, −0.165]** at
+4.32×, space **(−0.210, −0.205]** at 9.09× — and the two are asserted DISJOINT FROM BOTH SIDES (across
+the space bracket the body rung is still on its plateau; across the body bracket the space rung is
+already ringing), which is what makes it ONE ladder walked twice rather than two readings of one
+boundary. ⚠⚠ **THE ONSET RULE IS THE LARGEST SINGLE-STEP RATIO AND STAYS THRESHOLD-FREE** — gate 0's
+advisor catch still doing work, and load-bearing here: the body rung reads 0.17284 at −0.165, an order
+of magnitude above its own plateau AND BELOW the arc's 0.30 ring line, so a threshold would have
+mis-bracketed it. The whole ladder is printed so a reader can redraw the line, and the ~40–45 % of
+margin given back is quoted as a RANGE while the ORDER of the rungs is what is asserted.
+
+⭐⭐ **THE SLIDER'S FLOOR IS SLICE 30's AIM POINT AND IT IS WHERE THE BUTTON GOES DEAD** — body 0.05901
+against space 0.06030, **1.022×**, both quiet ⇒ aim R̂ at the glass's worst-case slope and THE
+ARCHITECTURE DOES NOT MATTER. Slice 30's rule pays a **FOURTH** time (33 = FOV, 34 = detector window,
+35 = servo bandwidth, 37 = the head's REFERENCE FRAME), and the proof is a control that visibly stops
+working. ⚠ **THE CEILING'S OBVIOUS JUSTIFICATION WAS TESTED AND REFUTED**: the body rung saturates its
+40 °/s limit on up to 64.6 % of band ticks past −0.14, so the limit might have been ATTENUATING its
+ring (slice 35's mechanism leaking in) — re-flown with the limit REMOVED the body arm's `rms r` moves
+by at most **1.04×** anywhere. The ceiling instead rests on the arm where BOTH rungs ring, the only
+kind on which the demand comparison is legal at all: there the space head RINGS 1.70× HARDER AND ASKS
+ITS SERVO FOR 3.15× LESS PEAK SLEW (17.650 vs 55.681 °/s, 0.00 % vs 17.5 % saturated) ⇒ **the
+body-referenced servo's demand is almost all BODY MOTION, not target motion** — and ⚠ that does NOT
+license "the stabilized head is the cheaper build": cheaper in SERVO BANDWIDTH, dearer in STABILITY
+MARGIN, slice 35's one-knob-two-bounds shape moved onto the ARCHITECTURE.
+
+⭐⭐ **THE CLIENT FINDING IS A BUTTON INVERSION, AND IT REVERSES TWELVE SLICES OF PRECEDENT.** Slices
+26–36 each had no rung to cycle, so `radome_view` / `seeker_fov_view` / `gimbal_handover_view` all
+HIDE the shared button and 32/33/34/35 rode one for free. `:seeker_head` IS a rung — the first on this
+button since slice 25 — and this wire raises **three** of those drop markers, so a NEW
+`gimbal_frame_view` exists to **UN-DROP** it, checked FIRST at both sites. ⚠ The rule is written at the
+marker: it is NOT "a gimbal marker drops the button"; it is *the button shows what there is to cycle,
+and these wires mostly have nothing*. ⚠ **GATED ON THE FIDELITY, not a comp key — the first in this
+family** (the rung reuses slice 34's head verbatim) — and on the KEY, never value-guarded on
+`:space_stabilized`, since the wire OPENS on `:body_referenced` and a value guard would hide the button
+on exactly the arm the showcase starts from. ⭐ **THE MIRROR IS THE EXACT INVERSE OF SLICE 36's**:
+there, stripping the marker made a button APPEAR that had to be dropped; here it makes it VANISH.
+`_fid_kind` takes a NEW value `"seeker_head"` (free — slice 21's "which drawing gate needs this kind?"
+re-checked, and **none did**), so the label needs its own `_update_fid_btn` arm or the `_:` default
+prints `prop: ?` on a wire with no propagation rung.
+
+⚠⚠ **THE HUD HALF IS AN INVITED SUBTRACTION — slice 36's gate-3 defect in a new quantity.**
+`head_rate_dps` keeps its slice-35 name across this button and MEANS A DIFFERENT THING ON EACH SIDE OF
+IT (BODY-frame demand, which includes tracking out the missile's own rotation, against INERTIAL-frame
+demand with body motion already rejected). At the slider's ceiling the press makes it FALL 3.15× while
+the ring RISES 1.70×, so slice 35's unlabelled line would invite exactly the "cheaper build"
+conclusion the seam forbids ⇒ **the frame is printed INSIDE the same string as the number**, and the
+UI test asserts the same demand renders DIFFERENTLY on the two rungs.
+
+⭐⭐ **AND THE SHOT CAUGHT A NUMBER LYING — the finding only a capture could produce.** The first pair
+of shots rendered the branch correctly and still could not be compared: `ring r −0.019 rad/s` on the
+QUIET arm against `ring r +0.021 rad/s` on the one ringing **84× harder**, because a limit cycle
+crosses zero twice per cycle and one frame catches it wherever it happens to be. Slices 26–36 all drew
+the live rate beside a peak-hold TAG and that was fine — **nothing on those wires invited a
+frame-to-frame comparison; here the whole demonstration IS two frames either side of one press.** ⇒
+the decaying peak's **value** now sits beside the live rate (**0.02 against 1.08, ~54×**), with both
+live values still on screen. ⚠ The same pair caught a **59-character** cure line against the measured
+~55 budget (the right-edge overrun's 4th occurrence after 26/28/36), shortened to `← button goes dead`
+— also the truer phrase. Both lines were extracted to pure helpers, which is the only reason they are
+now pinned by width at all (convention 14).
+
+⚠⚠ **A FRAME VERIFIER STRUCTURALLY CANNOT SEE THE PRESS, AND THE FRAME GRID MISREADS IT.** On the emit
+grid the space→body press shows a **0.939°** step in `head_angle_deg` (~16× a normal frame) — which
+reads exactly like the head being RE-BORN, the failure the seam's stamp exists to prevent. It is not:
+per tick the head moves **0.0074°**, ~9× LESS than the tick before, and the frame figure is the SPACE
+rung's own body-angle motion (0.0649 °/tick — a head held inertially is carried by the rotating body at
+unity gain) accumulated over 16 ticks. ⇒ **the press is visible in the RATE, not the POSITION, and it
+goes the other way**: the carry-along STOPS. [[ewsim-missile-verifier-sampling]] in a new quantity, so
+`slice37_verify.gd` asserts NOTHING about a step across the press and the continuity tooth lives in
+`test_missile.jl`, both directions, against gate 2's measured 2.696° counterfactual.
+
+**THE FOUR PROOFS.** `net/slice37_verify.gd` — 19 arms, `out == 0` on every one (the precondition that
+makes each `rms r` a stability read), `defl_sat` 0 everywhere, replay bit-identical **on BOTH rungs**
+(a replay proven only on the body arm would leave the new branch unproven where it executes), and
+⭐⭐ a MID-RUN PRESS arm — the one path gates 0–2 could not cover, since they toggled in Julia. ⚠⚠ It
+needed a TWO-LEG arm because `_serve_session!` **drains every queued command before it steps at all**,
+so `[step K, set_fidelity, step N−K]` sent back-to-back applies the toggle at tick 0 and silently
+measures a from-launch arm. `net/slice37_ui_test.gd` — 11 teeth, 20-way value-guard, the inverse
+mirror, and the button asserted to send `set_fidelity` (never `set_param`) with the LABEL moving with
+it (slice 19's lying-picture lesson). Headless `Sandbox.tscn` smoke-load reached `EWSIM_SERVER_DONE`.
+TWO windowed shots, retaken after the ring-line fix. Class **4a**, the THIRTEENTH consecutive RNG-live
+slice; the rung is live-settable with NO `set_fidelity` guard, MEASURED rather than assumed (a mid-run
+press leaves the RNG state EQUAL to the never-pressed run's while the trajectories differ by 2.000 m).
+⭐ Gate 2's own `@test isempty(carriers)` was written to be tightened here and was
+(`== ["slice37_frame.yaml"]`); two slice-35 carrier enumerations fired as FAILING asserts and were
+correct to — the second time that list has earned its keep. Slices 1–36 byte-identical.
+⚠ **OWED: the proofs ran on port 8770** — an unrelated `python` process (PID 40916) held 8765 and it
+is not this project's to kill. The port is one integer constant, already reverted; the 8765 re-run is
+owed whenever that process exits.
+
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

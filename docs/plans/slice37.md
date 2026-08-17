@@ -986,3 +986,183 @@ stability or envelope verdict (which is what slice 36's separate-mechanism findi
 what keeps the BRACKET cells clean is the separate fact that no ladder arm reaches the stop at all.
 ⚠ In this project the attribution sentence is the thing a later slice quotes, so it is fixed in the
 plan AND at the tooth.
+
+---
+
+# GATE 3 AS BUILT (2026-08-17) — the wire, the button that comes back, and a number that lied
+
+**Status: gate 3 COMPLETE and green. Suite 7396 → 7496 (+100, all in `test_missile.jl`); slices 1–36
+byte-identical.** Four proofs green: `slice37_verify.gd` (19 arms), `slice37_ui_test.gd` (11 teeth,
+20-way value-guard), the `Sandbox.tscn` headless smoke-load (`EWSIM_SERVER_DONE`), and TWO windowed
+shots. Probes in `M:\claud_projects\temp\slice37g3\`.
+
+⚠ **THE PROOFS WERE RUN ON PORT 8770, NOT 8765** — an unrelated `python` process (PID 40916) held the
+default port and it is not this project's to kill. The port is ONE integer constant, reverted in both
+files after the runs; the re-run on 8765 is owed whenever that process exits. Nothing else differed.
+
+## §II.23 THE WIRE — `scenarios/slice37_frame.yaml`
+
+`slice35_rate.yaml` **KEY FOR KEY**, with ONE number changed and one fidelity authored, and the test
+asserts that against the shipped slice-35 file rather than against literals so the two cannot drift
+apart. The one number is `radome_slope_est` = **−0.18**, slice 34's own shipped design, not 26–35's
+boresight default: the demonstration is a BUTTON, so the wire must open where the button DOES
+something, and at the boresight BOTH rungs ring and the press moves `rms r` by 1.27× — a true number
+and a dead demonstration.
+
+⭐⭐ **ONE KNOB AND ONE BUTTON, WHICH IS WHAT CONVENTION 9 ASKS ON A WIRE WHOSE LESSON IS A RUNG.**
+`:seeker_head` is the button; R̂ is the slider, and its job is to walk the SAME stability boundary
+TWICE so the press is a mechanism and not a cell. The wire OPENS on `:body_referenced` — authored BY
+NAME so the file states which rung it opens on — so the FIRST press is the one that breaks it.
+
+**BOTH DOMAIN ENDPOINTS MEASURED (slice 26's post-commit rule), and they are different kinds of
+boundary:**
+
+* **FLOOR −0.33 = slice 30's aim point `radome_slope_worst` EXACTLY, and it is the floor because THAT
+  IS WHERE THE BUTTON GOES DEAD** — body 0.05901 against space 0.06030, **1.022×**, both quiet.
+  ⭐⭐ The rule pays a FOURTH time (33 = FOV, 34 = detector window, 35 = servo bandwidth, 37 = the
+  head's REFERENCE FRAME) and the proof is a control that visibly stops working. ⚠ Deliberately NOT
+  below it (slice 35's floor was −0.36, reachable and overshootable): the one-sided constraint is
+  slice 30's shipped lesson and a wire about the ARCHITECTURE has no room for it.
+* **CEILING −0.14 = the arm where BOTH rungs ring**, which is the ONLY kind of arm on which the DEMAND
+  comparison is legal at all. ⚠⚠ **AND THE OBVIOUS JUSTIFICATION WAS TESTED AND REFUTED.** The body
+  rung saturates its 40 °/s limit on up to 64.6 % of band ticks past the ceiling, so the limit might
+  have been ATTENUATING its ring (slice 35's mechanism leaking into this slice's ratio). Re-flown with
+  the limit REMOVED, the body arm's `rms r` moves by **at most 1.04×** anywhere — it is not. ⚠ There
+  is also NO WALL past −0.14: at −0.03 the window still never binds and `head_max` is 23.614° against
+  the 30° stop. What actually stops the domain is that past it the only column still moving is the
+  BODY rung's SATURATION (17.5 → 64.6 %), which is slice 35's axis on a wire whose servo is authored,
+  while the ring gap the slider exists to teach has settled into its tail (1.698× at −0.14 against
+  1.268× at −0.03). **A refuted hypothesis and a measured replacement, not an argument.**
+
+⚠ The servo stays AUTHORED at slice 35's 40 °/s and its disqualification is a MEASUREMENT: §II.18's
+demand inversion is this slice's own finding, and putting the servo live beside this button would put
+slice 35's TWO-SIDED KNOB — a third mechanism — on a wire whose subject is the reference frame.
+
+## ⭐⭐ §II.24 THE CLIENT — THE FIRST MARKER IN THIS FAMILY WHOSE JOB IS TO **UN-DROP** THE BUTTON
+
+**THE MARKER-HOLE RE-CHECK CAME BACK POSITIVE ON BOTH HALVES, AND THE BUTTON HALF INVERTS TWELVE
+SLICES OF PRECEDENT.** Slices 26–36 each had no rung to cycle — the lesson was a slider every time —
+so `radome_view`, `seeker_fov_view` and `gimbal_handover_view` all HIDE the shared button, and
+32/33/34/35 rode one of them for free. `:seeker_head` IS a rung, the first on this button since slice
+25, and **this wire raises `radome_view`, `gimbal_view` AND `gimbal_rate_view`** — three separate
+drops. Without a marker of its own, the one slice in twelve that has something to cycle would ship
+with no control at all.
+
+⇒ `gimbal_frame_view`, checked FIRST at both client sites, and the rule written down at the marker:
+**it is NOT "a gimbal marker drops the button"; it is *the button shows what there is to cycle, and
+these wires mostly have nothing*.** A later slice reading only 26–36 would learn the wrong one.
+
+⚠ **GATED ON THE FIDELITY, NOT A COMP KEY — the first marker in this family that is**, because the
+rung reuses slice 34's head verbatim and there is no slice-37 comp key to gate on. ⚠ And gated on the
+KEY, never value-guarded on `:space_stabilized`: the wire OPENS on `:body_referenced`, so a value
+guard would hide the button on exactly the arm the showcase starts from — the one direction that is
+fatal. Both rungs raise it, asserted.
+
+**THE SECOND SITE IS LOAD-BEARING IN THE OPPOSITE DIRECTION FROM SLICE 36's.** `_fid_kind` takes a NEW
+value `"seeker_head"` (free — the 3-D view keys off `_mode`, and slice 21's "only `_draw_missile`'s
+gate needed this kind added" was re-checked: **none did**, exactly as for slice 24's `steering` and
+slice 25's `seeker_axes`), so the label lives in its own `_update_fid_btn` arm. Without that arm the
+`_:` default would print `prop: ?` on a wire with no propagation rung.
+
+⭐ **THE MIRROR IS THE EXACT INVERSE OF SLICE 36's**: there, stripping the marker made a button APPEAR
+that had to be dropped; here it makes the button VANISH. Same mechanism, opposite sign, both asserted.
+
+**THE HUD HALF IS AN INVITED SUBTRACTION** — slice 36's own gate-3 defect in a new quantity.
+`gimbal_rate_view` is raised, so without the new branch slice 35's servo block takes the wire and
+pairs `head_rate_dps` against the rate cap **WITHOUT NAMING ITS FRAME**. That key means BODY-frame
+demand on one rung and INERTIAL-frame demand on the other, and at the slider's ceiling the press makes
+it FALL 3.15× while the ring RISES 1.70×. Every number true; the invited arithmetic — *press it, watch
+the demand drop, conclude the stabilized head is the cheaper build* — is exactly what the seam forbids.
+⇒ **the frame is printed INSIDE the same string as the number**, and the UI test asserts the SAME
+demand renders DIFFERENTLY on the two rungs.
+
+## ⭐⭐ §II.25 THE SHOT'S OWN FINDING — THE RING NUMBER LIED ACROSS THE PRESS
+
+The first pair of captures rendered the branch correctly and **still could not be compared**:
+
+| | headline | ring line |
+|---|---|---|
+| shot A (body, quiet) | BODY-REFERENCED — loop STABLE | `ring r −0.019 rad/s   head lag 1.91°` |
+| shot B (space, ringing 84×) | SPACE-STABILIZED — RINGING | `ring r +0.021 rad/s  RINGING  head lag 1.50°` |
+
+**−0.019 against +0.021 on two arms 84× apart.** A limit cycle crosses zero twice per cycle, so one
+frame catches it wherever it happens to be — slices 26–36 all drew the live rate beside a peak-hold
+tag and that was fine, **because nothing on those wires invited a frame-to-frame comparison. Here the
+whole demonstration IS two frames either side of one button press.** Two live, TRUE numbers whose
+comparison says the architecture did not matter: the exact inverse of the claim.
+
+⇒ the DECAYING PEAK's **value** is now drawn beside the live rate (`_frame_ring_text`, extracted for
+convention 14 — inside `_draw` it had no headless proof, which is how it shipped wrong for one
+capture). Re-shot: **peak 0.02 against 1.08, ~54×**, with both live values still on the line so
+nothing hides behind the instrument. ⚠ An INSTRUMENT, not physics — a peak-hold of a shipped key,
+exactly slice 27's.
+
+⚠ **AND THE SAME PAIR CAUGHT A RIGHT-EDGE OVERRUN, the 4th after 26/28/36**: the cure line shipped at
+**59 characters** against the measured ~55-character budget, clearing the edge by ~10 px at 1600 px
+and cut at any narrower window. Shortened to `← button goes dead`, which is also the truer phrase — at
+the aim point the two rungs read 0.05901 and 0.06030, so what visibly stops working is the CONTROL.
+Both lines are now pinned by width in the UI test, which is only possible because they are pure
+helpers.
+
+## §II.26 THE VERIFIER — 19 ARMS, AND THE ONSET RULE STAYS THRESHOLD-FREE
+
+⭐ **THE LADDER IS WALKED TWICE, five rungs per servo frame on gate 2's own 0.005 grid, and the
+brackets are established by the LARGEST SINGLE-STEP RATIO** — never by comparing an `rms r` to a line.
+That is gate 0's advisor catch still doing work: **the body rung reads 0.17284 at R̂ = −0.165, an order
+of magnitude above its own 0.012 plateau AND BELOW the arc's 0.30 ring line**, so a threshold would
+have mis-bracketed it. The whole ladder is printed so a reader can redraw the line.
+
+    BODY   −0.210:0.01518  −0.205:0.01418  −0.180:0.01195  −0.175:0.01364  −0.170:0.03999  −0.165:0.17284   → 4.32× at (−0.170, −0.165]
+    SPACE  −0.210:0.04578  −0.205:0.41602  −0.180:1.00094  −0.175:1.02118  −0.170:1.04757  −0.165:1.05386   → 9.09× at (−0.210, −0.205]
+
+⭐⭐ **AND THE TWO BRACKETS ARE ASSERTED DISJOINT FROM BOTH SIDES**, which is what makes this ONE ladder
+walked twice rather than two readings of one boundary: across the SPACE bracket the body rung is still
+on its plateau (0.01518 / 0.01418), and across the BODY bracket the space rung is ALREADY ringing
+(1.04757 / 1.05386). Either half alone is consistent with a single shifted curve.
+
+⚠ The RING line is used ONLY where the two sides differ by two orders of magnitude (the showcase, the
+aim point). The ~40–45 % of margin given back is quoted as a RANGE; what is asserted is the ORDER of
+the rungs, which is threshold-free.
+
+**Headline pair:** at R̂ = −0.18, body **0.01195** / miss 2.084 m against space **1.00094** / miss
+2.689 m — **83.8× frame** (85.4× per tick), both hitting, `out == 0` on all 19 arms.
+
+⭐⭐ **THE MID-RUN PRESS ARM — the one path gates 0–2 could not cover**, because they toggled in Julia
+and gate 3 is the first time the command a button sends reaches the rung boundary at an arbitrary tick
+(gate 2's CATCH-1 territory). ⚠⚠ **IT NEEDED A TWO-LEG ARM AND THE REASON IS A SERVER FACT:
+`_serve_session!` DRAINS EVERY QUEUED COMMAND BEFORE IT STEPS AT ALL**, so `[step K, set_fidelity,
+step N−K]` sent back-to-back applies the toggle at tick 0 and silently measures a from-launch arm. The
+first leg must be FLOWN before the press is sent. Pressed at tick 6400 the arm finishes at rms r
+0.88320 against 1.00094 from launch (11.8 %), hits, and `out` stays 0.
+
+## ⚠⚠ §II.27 A FRAME VERIFIER STRUCTURALLY CANNOT SEE THE PRESS, AND THE FRAME GRID MISREADS IT
+
+On the emit grid the **space→body** press shows a **0.939°** step in `head_angle_deg` — ~16× a normal
+frame — which reads exactly like the head being RE-BORN, the failure the seam's stamp exists to
+prevent. **It is not.** Per tick the head moves **0.0074°** at the press, ~9× LESS than the tick
+before. The frame figure is the SPACE rung's own body-angle motion (0.0649 °/tick — a head held
+inertially is carried along by the rotating body at unity gain) accumulated over 16 ticks, ending at
+the press.
+
+⇒ **THE PRESS IS VISIBLE IN THE RATE, NOT THE POSITION, AND IT GOES THE OTHER WAY**: the carry-along
+STOPS, which is the rung's own mechanism in a single tick. [[ewsim-missile-verifier-sampling]] in a
+new quantity. **`slice37_verify.gd` therefore asserts NOTHING about a step across the press**, and the
+continuity tooth lives in `test_missile.jl` where it can be read per tick — both directions, against
+gate 2's measured 2.696° counterfactual rather than a chosen epsilon.
+
+## §II.28 THE CORE EDITS, AND THE ASSERT GATE 2 LEFT FOR THIS GATE
+
+* **`_airframe_view_info` gains `gimbal_frame_view`** — the only core change of substance.
+* ⭐ **GATE 2's OWN `@test isempty(carriers)` WAS WRITTEN TO BE TIGHTENED HERE, and it was** — now
+  `carriers == ["slice37_frame.yaml"]`. The `isempty` form would have gone on passing forever while
+  quietly ceasing to say anything the moment a wire was added.
+* ⚠ **TWO SLICE-35 CARRIER LISTS FIRED AS FAILING ASSERTS AND WERE CORRECT TO** (the second time that
+  list has earned its keep — slice 36 was the first): a slice-37 wire is slice 35's with one number
+  changed, so it carries `gimbal_rate_dps` and raises `gimbal_rate_view`. Both enumerations widened.
+* New testset: the wire against slice 35's file key-for-key, the fidelity, the marker + its mirror +
+  its both-rungs property, convention 9, and the per-tick press continuity.
+
+## §II.29 WHAT REMAINS OWED
+
+* ⚠ **Re-run `slice37_verify.gd` and the smoke-load on port 8765** once PID 40916 releases it. The
+  constant is already reverted; the 8770 runs are otherwise identical.
