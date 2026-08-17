@@ -1300,8 +1300,31 @@ IT IS SLICE 38, SHIPPED AND COMPLETE (2026-08-17, all four gates, `docs/plans/sl
 SCOPING WARNING WAS THE RIGHT ONE TO GIVE BUT LANDED ON THE WRONG HALF**: the gain error on the
 rejection path does NOT collapse onto slice 26's boundary (measured — 20.2× against an equivalent
 radome, because `s` adds PHASE and scaling a slope cannot), and what DID need the slice-31 trap
-treatment was the BIAS, which turned out to need ~10³× a bad real gyro. Its own successors are listed
-in the slice-38 paragraph above (a NULLING-LOOP head servo first). Then: **A SECOND-ORDER HEAD SERVO (ω_a/ζ_a)** — inherited from slice 35 UNCHANGED and now
+treatment was the BIAS, which turned out to need ~10³× a bad real gyro.
+⚠⚠ **ITS OWN FIRST-NAMED SUCCESSOR — A NULLING-LOOP HEAD SERVO — IS NOW DEAD, NOT DEFERRED: KILLED AT
+GATE 0 (2026-08-17, 5 probes, `docs/plans/slice39.md`), AND SLICE 38's PREDICTION IS REFUTED IN THE
+STRONGEST AVAILABLE FORM.** It predicted the two gyro currencies would SWAP (bias carrying the slice,
+scale factor inert). ⭐⭐ **NEITHER CURRENCY EXISTS ON THAT RUNG: a nulling loop with INFINITE LOOP GAIN
+is not an ARCHITECTURE, it is a REPARAMETERIZATION OF THE SERVO TIME CONSTANT** —
+`nulling(τ, s, b) ≡ feed-forward(τ(1+s), 0, b/(1+s))`, measured END TO END at **5.8e−09 m** of
+trajectory over 12 000 ticks across four cells INCLUDING `s > 0`, with the bias twin re-flown ON THE
+CLEAN TREE (no patch — a pure shipped slice-38 arm) landing on 0.97634 / 2.12049° / 1.2097 to the
+quoted digit. The false-fidelity class (15's `k_δ`, 19's dead `speed`, 31's `(R̂, s)`) caught EARLIER
+THAN EVER BEFORE — before any kernel, key, rung, scenario or client code existed. ⚠ The onset table
+is NOT flat and that is the second half of the kill: it gives back 0 cells at a real −5 % part (against
+feed-forward's 2) but walks to 5 cells at a dead gyro, and the walk is PROVABLY `τ_eff = τ(1+s)`, not
+a gyro effect. ⚠⚠ The ONE regime that does not collapse (`|1+s| → 0`, where the demand diverges and the
+gimbal saturates) is ENTIRELY the consequence of the probe's own cap-after-division ordering and IS NOT
+EARNED — do not quote it. ⭐ What survives is a design sentence — *on a feed-forward head the gyro's
+scale factor is a STABILITY spec; on a nulling head it is a BANDWIDTH spec, and a bandwidth spec is one
+you already own* — and a LIVE SUCCESSOR, **FINITE LOOP GAIN** (this model rejects body motion perfectly
+at EVERY frequency, which is exactly why it collapsed onto a first-order lag; a real loop's rejection
+falls off above its own bandwidth, and slice 26's limit cycle lives at 1.7–2.1 Hz, exactly there).
+⚠⚠ TWO THINGS MUST BE PROBED BEFORE THAT GETS A PLAN: does a finite-K loop's rejection curve actually
+DIFFER from a first-order lag's at the ring frequency (**the identical trap in a new letter** — slice
+37's frozen-geometry bench answers it), and are `K` and `τ` SEPARABLE AT ALL (if not, it is slice 37's
+τ axis again, which is already a named deferral in its own right).
+Then: **A SECOND-ORDER HEAD SERVO (ω_a/ζ_a)** — inherited from slice 35 UNCHANGED and now
 sharper, because this slice showed the FIRST-ORDER lag is doing stability work, so an inertia and a
 resonance would change how much (slice 15's actuator is the precedent); and **THE τ AXIS AS ITS OWN
 SLICE** (⚠ gate 1 measured BOTH terms moving with τ — the honest range over τ ∈ [0.005, 0.2] is 0 % to

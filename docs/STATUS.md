@@ -5422,7 +5422,15 @@ Four proofs green (verifier, 10-tooth UI test, smoke-load with BOTH halves captu
 slices 34/35/36/37's UI tests all re-run green.
 
 **Deferred (NAMED):** a NULLING-LOOP head servo (the other classical architecture, where the scale
-factor goes nearly inert and the bias carries everything — the natural A/B); GYRO NOISE (draw-topology
+factor goes nearly inert and the bias carries everything — the natural A/B) — ⚠⚠ **SINCE KILLED AT
+GATE 0 (2026-08-17, 5 probes, nothing shipped, suite still 7564), `docs/plans/slice39.md`: a nulling
+loop with INFINITE LOOP GAIN is not an architecture, it is a REPARAMETERIZATION OF THE SERVO TIME
+CONSTANT — `nulling(τ, s, b) ≡ feed-forward(τ(1+s), 0, b/(1+s))` measured end to end at 5.8e−09 m of
+trajectory over 12 000 ticks, across four cells including `s > 0`, with the bias twin re-flown ON THE
+CLEAN TREE as a pure shipped arm. The prediction that the two currencies SWAP is refuted in the
+strongest available form: NEITHER exists on that rung. What survives is a design sentence (on a
+feed-forward head the scale factor is a STABILITY spec; on a nulling head a BANDWIDTH spec) and a live
+successor, FINITE LOOP GAIN — whose own two gates are named in the plan**; GYRO NOISE (draw-topology
 grounds, unchanged); PER-AXIS scale factors and head-gyro MISALIGNMENT (this one is COMMON-MODE, which
 is exactly why it collapses onto one number); and slice 37's other two, a SECOND-ORDER head servo and
 THE τ AXIS AS ITS OWN SLICE — both now sharper, because this slice shows the REJECTION path has its own
