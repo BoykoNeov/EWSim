@@ -704,11 +704,37 @@ loop, protocol, and scenario loader don't change. This is where most growth shou
   limit (now the sharpest of these, since slice 28 makes the look angle the quantity the whole lesson
   turns on), and the aero+inertial cross-coupling / departure of a real BTT airframe.
   See `docs/STATUS.md`.
-- **Sibling domains that reuse the shared libs.** IR/EO seekers and IRST (add an IR
-  environment channel to `env`, reuse `frames.jl`/`estimation.jl`); communications EW —
-  jamming of frequency-hopping / spread-spectrum links — as a parallel to radar EW;
-  multi-sensor track fusion (JPDA/MHT/track-to-track) growing inside `estimation.jl` once
-  radar + DF + IR coexist in one scenario.
+- **Sibling domains that reuse the shared libs.** IR/EO seekers and IRST (reuse
+  `frames.jl`/`estimation.jl`); communications EW — jamming of frequency-hopping /
+  spread-spectrum links — as a parallel to radar EW; multi-sensor track fusion
+  (JPDA/MHT/track-to-track) growing inside `estimation.jl` once radar + DF + IR coexist in
+  one scenario.
+  **[SCOPED — 2026-08-17, `docs/plans/arc-ir-seekers.md`]** the IR/heat-seeker half is now
+  scoped as an ARC (scoping only — no gate 0 spent, no slice number claimed). Nothing IR is
+  modelled today: the seeker measures an ANGLE and the `:scan` profile paints an AUTHORED
+  `intensity` with no range law at all (`missile.jl:2908`), which is precisely why slice 13
+  could call chaff and a flare "the SAME mechanic at this fidelity" and be right. **The one
+  genuinely new physics is a RADIOMETRIC SIGNAL MODEL** (`J(aspect, band)·τ_atm(R,band)·A/R²`);
+  everything else in the arc — tracker, FOV, gimbal, the `:none`/`:gated` seduction seam, the
+  `:decoy` entity — already ships and is reused unchanged. ⚠ **TWO CORRECTIONS TO THIS BULLET'S
+  OWN WORDING, both measured:** (1) the `env` channel is NOT needed by the entry slice — one
+  seeker reads target comp keys directly, exactly as `_scan_sources` does today, and `env`
+  earns itself only at IRST / multiple consumers (the slice-4 `Jammer` shape); (2) radiometry
+  need NOT be draw-topology-flipping — `_observe_point3d!` already draws 2 `randn`
+  unconditionally (`missile.jl:1677`) and `detect_once` samples unconditionally and gates the
+  BOOLEAN (`detection.jl:300`), so an SNR-driven σ or a `detect_once`-shaped acquisition test
+  is **class 4a, introduce-safe and live-togglable**. ⭐ The arc also pays an ALREADY-NAMED
+  debt: its first entry is the RANGE half of "seeker range / SNR acquisition limits", which
+  slices 32/33/34 each deferred while modelling only the ANGLE half. ⚠ Its ordering is NOT
+  settled and it does not take one queue position against the AGREED SEQUENCE above — the
+  signature/aspect entries are ACTOR fidelity (an aircraft that can be seen passively), while
+  the spectral / tracker-generation / countermeasure entries are lesson slices that jump the
+  queue. ⚠⚠ Two entries (the reticle-tracker generations, and IRCM/DIRCM on top of them) are
+  given NO ordering position and need their own gate-0 probe first. ⚠⚠ And §12's FALSE
+  PRECISION watch-item binds hard here: real signatures, flare compositions and seeker
+  performance are classified / export-controlled, so generations are named as MECHANISM STEPS
+  (uncooled rear-aspect → cooled all-aspect → two-colour → imaging), NEVER as model
+  designations, with every number authored and labelled illustrative.
 
 ### Tier B — one new contract each (and exactly which seam moves)
 
