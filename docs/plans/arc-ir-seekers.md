@@ -112,6 +112,30 @@ a pure lib + a fidelity rung — a pure Tier-A swap, no contract change.
 Each entry: the lesson, the seam, what it reuses, the metric, and the risk. **The metric matters as
 much as the lesson in this project** — see §4's warning about boolean outcomes.
 
+### S. THE TARGET'S SIGNATURE — the emitter side, and the arc's one ACTOR-GRADE entry
+
+⚠ **LISTED FIRST AND SEPARATELY ON PURPOSE.** Every other entry in this spine is seeker-side or
+countermeasure-side. The thing that makes ANY of them work is the target being an EMITTER, and
+today a target is a point with a position and nothing else. **This is the single largest change to
+an EXISTING entity kind in the whole arc**, and — per §5 — it is the one piece that is ACTOR
+fidelity rather than a lesson, which makes it the part most likely to be taken FIRST and
+INDEPENDENTLY of everything else. It therefore needs its own entry to point at.
+
+- **Lesson (as an actor upgrade):** an aircraft becomes something that can be SEEN PASSIVELY —
+  by a seeker, later by an IRST (G), and with a signature that depends on where you look from (B)
+  and on what it is doing (throttle setting).
+- **Seam — three options, and only the third moves a contract:**
+  1. ⭐ **Comp keys on the existing `:target`** (tailpipe temperature and area, plume, airframe
+     term, throttle) — the `alt_hold_m` (slice 18) / `cross_speed_mps` (slice 30) precedent
+     exactly: presence-gated, absent ⇒ byte-identical. **Pure Tier-A, nothing else moves.**
+  2. A new `Subsystem` publishing the signature each tick — still pure Tier-A, and the right shape
+     if the signature becomes STATEFUL (afterburner transients, cooling).
+  3. An `env` IR channel — **the only one that is a contract move, and it is NOT needed until more
+     than one consumer reads the field** (i.e. at G, or at multiple seekers). See §1.
+- **Recommendation:** start at option 1. It is the cheapest thing in the arc that is independently
+  worth having, and A is then simply the SEEKER side of the same physics.
+- **Risk:** low, and it is the entry least dependent on the rest of the arc surviving its probes.
+
 ### A. THE RADIOMETRIC LINK BUDGET AND THE LOCK RANGE — §1 made into a slice
 
 - **Lesson:** *the range at which a seeker can see a target is a BAND decision and an ATMOSPHERE
@@ -202,9 +226,12 @@ much as the lesson in this project** — see §4's warning about boolean outcome
 
 ## §3 ORDERING — and the one contested decision
 
-**Proposed: A → B → E → C → (D, F, G as their own decisions).**
+**Proposed: S → A → B → E → C → (D, F, G as their own decisions).**
 
-A is unarguably first (everything needs radiometry). B is cheap and pays the most per unit of work.
+S and A are two sides of one physics (emitter, receiver) and may well be ONE slice — but S is
+listed separately because it is the entry that can be taken alone, on actor-fidelity grounds, if
+the rest of the arc is deferred (§5). A is otherwise unarguably first: everything needs radiometry.
+B is cheap after A and pays the most per unit of work.
 
 ⚠ **THE CONTESTED ONE IS E-BEFORE-C, and the argument is worth making explicitly rather than
 picking silently:**
@@ -251,9 +278,10 @@ HANDOFF §11 carries an **AGREED SEQUENCE (user, 2026-07-20)**: (1) slice 22 [do
 SCALE, (3) ACTOR FIDELITY. An IR arc is a new LESSON arc and therefore competes with items 2 and 3
 — **except that it does not compete cleanly, and the split is worth stating plainly:**
 
-- ⭐ **§1/A/B are ACTOR FIDELITY.** A target that has an infrared signature is an aircraft that can
-  be SEEN PASSIVELY — an actor upgrade under the dual aim's own grading (FOIL-grade vs
-  ACTOR-grade), not merely a lesson. These parts SERVE the agreed sequence.
+- ⭐ **S (and with it A/B) is ACTOR FIDELITY.** A target that has an infrared signature is an
+  aircraft that can be SEEN PASSIVELY — an actor upgrade under the dual aim's own grading
+  (FOIL-grade vs ACTOR-grade), not merely a lesson. These parts SERVE the agreed sequence, and **S
+  is deliberately scoped to be takeable ON ITS OWN** if the rest is deferred.
 - ⚠ **C/D/E/F are lesson slices** and DO jump the queue ahead of scenario scale.
 - ⭐ **G (IRST) is a sensor an actor needs** and leans back toward actor fidelity again.
 
