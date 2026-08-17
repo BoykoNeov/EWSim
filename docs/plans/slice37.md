@@ -1150,6 +1150,13 @@ new quantity. **`slice37_verify.gd` therefore asserts NOTHING about a step acros
 continuity tooth lives in `test_missile.jl` where it can be read per tick — both directions, against
 gate 2's measured 2.696° counterfactual rather than a chosen epsilon.
 
+⚠ **AND THE TRAP IS ON THE *RETURN* PRESS, NOT THE SHOWCASE ONE — say which, because a reader would
+otherwise assume the worse case sits on the press the slice actually demonstrates.** The shipped
+showcase presses **body→space**, where the step is 1.06× a normal tick, i.e. continuous in the
+ordinary sense and nothing to misread. The 0.939° frame step is on **space→body** — the press a
+student makes when they press twice, or when they cycle back to compare. Both directions are pinned
+in the core tooth; only the second one can be misread, and only from a frame.
+
 ## §II.28 THE CORE EDITS, AND THE ASSERT GATE 2 LEFT FOR THIS GATE
 
 * **`_airframe_view_info` gains `gimbal_frame_view`** — the only core change of substance.
@@ -1162,7 +1169,49 @@ gate 2's measured 2.696° counterfactual rather than a chosen epsilon.
 * New testset: the wire against slice 35's file key-for-key, the fidelity, the marker + its mirror +
   its both-rungs property, convention 9, and the per-tick press continuity.
 
-## §II.29 WHAT REMAINS OWED
+
+## ⚠⚠ §II.29 GATE-3 POST-REVIEW (advisor) — THE SMOKE-LOAD PROVED HALF OF WHAT IT CLAIMED
+
+**THE BLOCKING CATCH.** The smoke-load captured the SERVER's log and asserted `EWSIM_SERVER_DONE` — the
+scene connected and handshaked — but **never captured GODOT's stdout**, so the other half of the
+convention's own assertion (*no `SCRIPT ERROR` / `Parse Error` / `GDScript backtrace`*) was simply
+unmade. ⚠⚠ **AND THAT HALF IS THE ONE THIS GATE NEEDED**, because `Sandbox.gd` carries 271 of this
+slice's new lines and its new HUD block is called **only from `_draw`, which never runs headless**: a
+defect there would let the scene connect and handshake exactly as it did, `DONE` would appear, and the
+smoke-load would pass green over a broken HUD.
+
+⚠ A second, smaller gap in the same proof: the run was made while `Sandbox.gd` still carried the
+temporary `PORT := 8770`, so **the shipped bytes had never been loaded at all**.
+
+**RE-RUN, BOTH HALVES:**
+
+* Against a live server with Godot's stdout AND stderr captured: **CLEAN** — the version banner and
+  nothing else, empty stderr, `EWSIM_SERVER_DONE` reached. ⭐ And the capture channel is proven live
+  rather than assumed: the UI-test run earlier in the same session printed `GDScript backtrace` lines
+  through it, so an empty sweep is a negative result and not a silent one.
+* The SHIPPED file (`PORT := 8765`) re-loaded through `slice37_ui_test.gd`, which `preload`s
+  `Sandbox.gd` and calls every new helper: **clean, exit 0**.
+
+⚠ **WHAT THE SMOKE-LOAD STILL DOES NOT PROVE, STATED PLAINLY**: GDScript parse errors are whole-file
+and compile-time, so this covers them — but a RUNTIME fault inside `_draw_frame_hud_lines` would still
+be invisible headless. **The two windowed shots are that function's only proof**, and both were retaken
+AFTER the `_frame_ring_text` / `_frame_cure_text` extractions (shot A reads `(peak 0.02)` and
+`← button goes dead`, which is how the retake is identifiable).
+
+## §II.30 TWO TEXT CORRECTIONS FROM THE SAME REVIEW
+
+* **THE MID-RUN ARM'S 25 % ENVELOPE WAS A NUMBER I CHOSE** — gate 0's own catch, in this file's one
+  remaining tolerance. It is now bounded by a MEASUREMENT and the assert says so: presses at ticks
+  2000 / 4000 / 6000 / 6400 give band `rms r` 1.01231 / 1.02777 / 0.95534 / 0.88320 against the
+  from-launch 1.00094 — a spread of 0.883–1.028. ⚠ And the reason it is not tighter is now stated
+  rather than implied: the first `PRESS_AT` ticks fly the OTHER rung, so exact agreement would be the
+  surprising result.
+* **§II.27's TRAP IS ON THE *RETURN* PRESS AND DID NOT SAY SO.** The shipped showcase presses
+  body→space, where the step is 1.06× a normal tick; the 0.939° frame step is space→body — the press a
+  student makes when they press twice or cycle back to compare. Both directions are pinned in the core
+  tooth; only the second can be misread, and only from a frame.
+
+## §II.31 WHAT REMAINS OWED
 
 * ⚠ **Re-run `slice37_verify.gd` and the smoke-load on port 8765** once PID 40916 releases it. The
   constant is already reverted; the 8770 runs are otherwise identical.

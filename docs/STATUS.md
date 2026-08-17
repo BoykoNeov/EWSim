@@ -5300,7 +5300,7 @@ needed a TWO-LEG arm because `_serve_session!` **drains every queued command bef
 so `[step K, set_fidelity, step N−K]` sent back-to-back applies the toggle at tick 0 and silently
 measures a from-launch arm. `net/slice37_ui_test.gd` — 11 teeth, 20-way value-guard, the inverse
 mirror, and the button asserted to send `set_fidelity` (never `set_param`) with the LABEL moving with
-it (slice 19's lying-picture lesson). Headless `Sandbox.tscn` smoke-load reached `EWSIM_SERVER_DONE`.
+it (slice 19's lying-picture lesson). Headless `Sandbox.tscn` smoke-load reached `EWSIM_SERVER_DONE` ⚠ **and, after the gate-3 review, with GODOT's OWN stdout captured and swept for `SCRIPT ERROR`/`Parse Error`/`GDScript backtrace` — the first run asserted only the SERVER's half, and that is the weaker half here: `Sandbox.gd` carries 271 of this slice's new lines and its HUD block runs ONLY from `_draw`, which never executes headless, so a defect there would connect, handshake and pass green. ⭐ The sweep is a real negative (the UI-test run in the same session printed `GDScript backtrace` lines through that same channel), and the SHIPPED bytes were re-loaded separately because the first run still carried the temporary port. ⚠ It still proves PARSE only — a runtime fault inside `_draw_frame_hud_lines` remains the two shots' to catch.**
 TWO windowed shots, retaken after the ring-line fix. Class **4a**, the THIRTEENTH consecutive RNG-live
 slice; the rung is live-settable with NO `set_fidelity` guard, MEASURED rather than assumed (a mid-run
 press leaves the RNG state EQUAL to the never-pressed run's while the trajectories differ by 2.000 m).

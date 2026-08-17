@@ -487,11 +487,22 @@ func _verdict() -> bool:
 		return _fail(("⭐⭐ PHASE BUTTON: the mid-flight press must actually take effect (rms r %.5f " +
 			"against the %.2f line). If this reads quiet, `set_fidelity seeker_head` is not reaching " +
 			"the seam — and the button is the whole demonstration") % [float(mp["rms"]), RING])
+	# ⚠⚠ THE ENVELOPE IS BOUNDED BY A MEASUREMENT, NOT CHOSEN — gate 0's advisor catch (a threshold I
+	# picked doing load-bearing work) applied to this file's one remaining tolerance. Pressing at ticks
+	# 2000 / 4000 / 6000 / 6400 gives band `rms r` 1.01231 / 1.02777 / 0.95534 / 0.88320 against the
+	# from-launch 1.00094, i.e. the press tick moves the settled ring over a MEASURED spread of
+	# 0.883–1.028 (−11.8 % … +2.7 %). 0.25 is that spread with room, and the reason it is not tighter
+	# is stated rather than implied: the first `PRESS_AT` ticks fly the OTHER rung, so the missile
+	# enters the band from a different state and an exact agreement would be the surprising result.
 	if not (absf(float(mp["rms"]) - float(pr["rms"])) / float(pr["rms"]) < 0.25):
 		return _fail(("⭐⭐ PHASE BUTTON: …and the pressed arm must land in the same regime as the same " +
-			"rung flown FROM LAUNCH (%.5f vs %.5f). ⚠ NOT bit-identity — the first %d ticks genuinely " +
-			"differ — but a mid-run rung that produced a DIFFERENT steady state would mean the " +
-			"boundary carries state it should not") % [float(mp["rms"]), float(pr["rms"]), PRESS_AT])
+			"rung flown FROM LAUNCH (%.5f vs %.5f, %.1f %% apart). ⚠ NOT bit-identity — the first %d " +
+			"ticks genuinely differ — and NOT a tight bound: presses at ticks 2000/4000/6000/6400 were " +
+			"MEASURED at 1.01231/1.02777/0.95534/0.88320 against 1.00094, a spread of 0.883-1.028, so " +
+			"this envelope is bounded by that measurement. What it catches is a mid-run rung that " +
+			"produced a DIFFERENT STEADY STATE, i.e. a boundary carrying state it should not") %
+			[float(mp["rms"]), float(pr["rms"]),
+			 100.0 * absf(float(mp["rms"]) - float(pr["rms"])) / float(pr["rms"]), PRESS_AT])
 	# ⚠⚠ NOTHING HERE ASSERTS A STEP ACROSS THE PRESS, AND THE REASON IS A GATE-3 MEASUREMENT: on this
 	# frame grid the space→body press shows a 0.939 deg step in `head_angle_deg`, ~16x a normal frame,
 	# which reads exactly like the head being re-born. It is not — at the press TICK the head moves
