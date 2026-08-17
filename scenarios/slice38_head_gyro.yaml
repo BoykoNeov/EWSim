@@ -55,8 +55,11 @@
 # NAMED APPROXIMATIONS (§1): FEED-FORWARD stabilization — the head holds its pointing by feeding
 # forward the negated gyro reading, so gyro error is a GAIN ON THE REJECTION PATH, which is the
 # quantity slice 37 measured its margin out of. The classical alternative, a NULLING loop driving
-# `ω̃_head → 0`, has steady state `−b/(1+s)`: scale factor nearly INERT, bias-only. That is a
-# DELIBERATE fork and the natural A/B successor, not an oversight. Also: a COMMON-MODE scale factor
+# `ω̃_head → 0`, has steady state `−b/(1+s)`. ⭐ THAT MAKES THE SUCCESSOR A FALSIFIABLE PREDICTION AND
+# NOT MERELY "the other architecture": this wire measures the SCALE FACTOR to be the realistic,
+# load-bearing half and the BIAS to need ~10³× a real gyro, and a nulling loop should SWAP the two
+# currencies — bias load-bearing, scale factor nearly inert. A DELIBERATE fork, not an oversight.
+# Also: a COMMON-MODE scale factor
 # (per-axis errors and gimbal misalignment are a separate slice — slice 31's own shape), NO gyro
 # noise, a FIRST-ORDER servo with a rate limit, a PERFECTLY handed-over head, a circular stop and
 # window; plus everything 26–37 named, unchanged — ONE odd scalar slope curve PER AXIS, a PERFECT

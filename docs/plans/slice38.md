@@ -368,8 +368,13 @@ byte-identical BY GATING.
 
 ## Named deferrals
 
-* **A NULLING-LOOP HEAD SERVO** (§0.1) — the other classical architecture, where the scale factor goes
-  nearly inert and the bias carries everything. The natural A/B against this slice.
+* **A NULLING-LOOP HEAD SERVO** (§0.1), AND IT IS A FALSIFIABLE PREDICTION RATHER THAN A DESCRIPTION.
+  This slice measured that in a FEED-FORWARD head the SCALE FACTOR is the realistic, load-bearing half
+  (−5 % is a real part and moves the boundary two cells) while the BIAS needs ~10³× a bad real gyro.
+  A nulling loop drives `ω̃_head → 0` and has steady state `−b/(1+s)` ⇒ **THE TWO CURRENCIES SHOULD
+  SWAP**: the bias becomes the term that carries the slice and the scale factor should go nearly
+  INERT. That is a prediction this arc can be wrong about, which is what makes it worth flying — and
+  the A/B is against a slice whose numbers are already on the wire.
 * **GYRO NOISE** — draw-topology, as above; and slice 25's ~1000:1 roll-loop low-pass says probe first,
   it may be DEAD.
 * **PER-AXIS SCALE FACTORS AND HEAD-GYRO MISALIGNMENT** — this one is COMMON-MODE, which is exactly
