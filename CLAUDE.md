@@ -1136,9 +1136,30 @@ AZIMUTH because that is where the lead and the excursion are — slice 28's chan
 optimum shift there, which is a tooth rather than a slice).**
 **SLICE 34's OWN REMAINING DEFERRALS: ⚠⚠ MEMORY TRACK / RE-ACQUISITION IS OFF THIS LIST — KILLED AT GATE 0, see
 above and `docs/plans/slice37.md` (34/35/36 all recorded the break as TERMINAL and all three assumed a coasting
-head was the cure; it is not, and the mis-location is the result); THE HEAD'S OWN GYRO (a rate-stabilized head measures
-inertial LOS rate DIRECTLY, which is the classical reason gimbals exist and a DIFFERENT mechanism from anything in
-26–35). ⚠ "A RATE-LIMITED HEAD" IS NO LONGER ON THIS LIST — SLICE 35 SHIPPED IT, and its OWN named successor is
+head was the cure; it is not, and the mis-location is the result). **⚠⚠ THE HEAD'S OWN GYRO IS NO LONGER A DEFERRAL —
+IT IS SLICE 37, GATE 0 COMPLETE (2026-08-17, 6 probes, `docs/plans/slice37.md` PART II), AND ITS OWN WORDING WAS
+REFUTED THERE.** "A rate-stabilized head measures inertial LOS rate DIRECTLY" is ALREADY TRUE of the shipped model —
+`missile.jl:1652` is `az_el(û_tru)`, NOT `look_angles(…)`, so the seeker already reports INERTIAL angles and the α-β
+tracker an INERTIAL rate. What is body-referenced is the **SERVO**, and the live claim is its REFERENCE FRAME:
+stabilize the head inertially and body motion is REJECTED rather than tracked out, so the servo demand collapses
+(⭐ 8.19× at the boresight design and 0.86× when quiet — an inertial servo buys NOTHING on a design that does not
+ring) and ⭐⭐ SLICE 35's TWO-SIDED KNOB GOES INERT (ring FLAT 1.01× and window FLAT across the whole 60→8 °/s domain,
+against 2.29× and 2.17× shipped) — ⭐⭐ **BUT IT GIVES BACK 45 % OF THE MARGIN SLICE 34's GIMBAL BOUGHT, because the
+position servo's LAG WAS SILENTLY DOING STABILITY WORK: it LOW-PASSES body motion out of the glass's INDEX** (measured
+on a frozen-geometry bench against `1/√(1+(2πfτ)²)` to 3–4 digits, and EXACTLY unity gain at every frequency for the
+stabilized head, with the ring living at 1.7–2.1 Hz where that filter is worth 12–16 % of gain and ~30° of phase).
+THREE HEADS, ONE WIRE, ONE 0.005 GRID, ONE THRESHOLD: strapdown (−0.265, −0.260], position-servoed (−0.165, −0.160],
+rate-stabilized (−0.210, −0.205] — and TWO OF THE THREE NEED NO PATCH AT ALL, which is what makes the third credible.
+⇒ **THE CLASSICAL REASON GIMBALS EXIST INVERTS ON THIS WIRE.** ⚠ The reparameterization gate is answered by a BOUND,
+not a tolerance (a 25× faster servo at a 50× smaller τ stops at 4.796° and cannot reach the stabilized head's 3.861°)
+⇒ RUNG, not knob. ⚠ The τ→0 isolation FAILS against the shipped seam (`max|Δpos|` plateaus at 42.572 m) and holds
+EXACTLY (0.000e+00) against a FRESH-ATTITUDE head — the residual is ONE TICK OF ATTITUDE, a property of the seam's
+ORDERING and not of the servo, so no "collapse" may be claimed. ⚠⚠ FRAMING A — a strapdown reconstruction with a
+CORRUPTED gyro — WAS KILLED BEFORE IT WAS PROBED: `s·ω_body` on the measured LOS rate is `−R·ω_body` to first order,
+so the loop cannot tell a body-motion-isolation gain error from a radome slope error and the claim collapses onto
+slice 26's boundary (slice 31's shape, convention 4's copy-paste trap). ⭐ SLICE 30's RULE PAYS A FOURTH TIME (33 =
+FOV, 34 = detector window, 35 = servo bandwidth, 37 = the head's REFERENCE FRAME): at `radome_slope_worst` both heads
+are quiet, flat and cheap ⇒ the ARCHITECTURE DOES NOT MATTER THERE. ⚠ "A RATE-LIMITED HEAD" IS NO LONGER ON THIS LIST — SLICE 35 SHIPPED IT, and its OWN named successor is
 **A SECOND-ORDER SERVO (ω_a/ζ_a)**: slice 35's head is first-order-WITH-a-rate-limit, while a real gimbal has an
 inertia and a bandwidth, and slice 15's actuator is the precedent for exactly what that adds.** Also: **a RECTANGULAR / PER-AXIS FOV — and slice 34 SHARPENS it (it ships one circular
 window AND one circular stop, and gate 1 wrote down that the circular shape rests on a SPECIES argument because no

@@ -930,6 +930,11 @@ index six slices are built on, so reading the diff is not enough.
   stop).
 * **THE HEAD'S OWN GYRO** — a rate-stabilized head measures inertial LOS rate directly, which is
   the classical reason gimbals exist and a DIFFERENT mechanism from anything here.
+  ⚠⚠ **THIS WORDING WAS REFUTED AT SLICE 37's GATE 0 (2026-08-17, `docs/plans/slice37.md` PART II).**
+  `missile.jl:1652` is `az_el(û_tru)`, NOT `look_angles(att, û_tru)` — the shipped seeker ALREADY
+  reports inertial LOS angles and the α-β tracker ALREADY produces an inertial LOS rate, so the
+  headline promised here is already true and cannot be shipped. What is body-referenced is the
+  **SERVO**, and the live claim is its REFERENCE FRAME. Do not re-import the framing above.
 * Everything 26–33 named and did not spend: seeker range / SNR acquisition limits; the handover
   basket as an authored quantity; estimating `R̂` in flight (blocked by 26's P7A, sharpened by 29);
   a 2-D slope `R(look_az, look_el)`; an asymmetric error curve; a SINGLE IMU; gyro NOISE

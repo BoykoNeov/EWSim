@@ -4787,7 +4787,14 @@ rate; slice 32's α-β choice, one layer out) — ⚠⚠ **SINCE KILLED AT GATE 
 rate, so no head change reaches it**; **A RECTANGULAR / PER-AXIS STOP** (gate 1 wrote down that
 its circular shape rests on a species argument, because no flying arm had ever bound it — gate 2's §2.5
 bound it for the first time); **THE HEAD'S OWN GYRO** (a rate-stabilized head measures inertial LOS rate
-directly — the classical reason gimbals exist, and a DIFFERENT mechanism from anything here); plus
+directly — the classical reason gimbals exist, and a DIFFERENT mechanism from anything here)
+— ⚠⚠ **TAKEN AS SLICE 37 AND THIS WORDING REFUTED AT ITS GATE 0** (2026-08-17, `docs/plans/slice37.md`
+PART II): the shipped seeker ALREADY reports inertial LOS angles (`missile.jl:1652` is `az_el(û_tru)`,
+not `look_angles(…)`), so what is body-referenced is the **SERVO** and the live claim is its REFERENCE
+FRAME — and it INVERTS the classical argument, because the position servo's LAG was silently low-passing
+body motion out of the glass's INDEX (three heads on one grid: strapdown (−0.265, −0.260], position-servoed
+(−0.165, −0.160], rate-stabilized (−0.210, −0.205] ⇒ stabilizing gives back 45 % of what slice 34 bought,
+while slice 35's two-sided knob goes INERT); plus
 everything 26–33 named and did not spend.
 
 ---

@@ -1,7 +1,10 @@
-# Slice 37 — MEMORY TRACK / RE-ACQUISITION: **KILLED AT GATE 0** (§11 Tier-A)
+# Slice 37 — PART I: MEMORY TRACK / RE-ACQUISITION, **KILLED AT GATE 0** · PART II: **THE HEAD'S OWN GYRO**, the slice that took the slot (§11 Tier-A)
 
-**Status: DEAD, NOT DEFERRED. Killed at gate 0 on 2026-08-17 in five probes, no core change shipped.**
-The slice-37 slot is FREE and its candidates are listed at the bottom.
+**ONE NUMBERED PLAN FILE HOLDS BOTH — the `docs/plans/slice20.md` precedent** (a candidate killed in
+its own gate 0, and the slice that then filled the slot, in one file so the kill cannot be re-proposed
+without meeting it). **PART II begins at "THE HEAD'S OWN GYRO" below.**
+
+**Part I status: DEAD, NOT DEFERRED. Killed at gate 0 on 2026-08-17 in five probes, no core change shipped.**
 
 The candidate: the deferral slice 34 named third, slice 35 carried forward unchanged, and slice 36
 SHARPENED into a falsifiable prediction —
@@ -226,9 +229,8 @@ has a domain.
 
 ## The slice-37 slot: candidates, untouched by any of this
 
-* **THE HEAD'S OWN GYRO** (slice 34's, unspent) — a rate-stabilized head measures inertial LOS rate
-  DIRECTLY, which is the classical reason gimbals exist and a different mechanism from anything in
-  26–36.
+* ⚠⚠ **THE HEAD'S OWN GYRO — TAKEN. It is PART II of this file**, and its gate 0 REFUTED the wording
+  above ("measures inertial LOS rate DIRECTLY"): the shipped seeker already does. See §II.0.
 * **A SECOND-ORDER SERVO (ω_a / ζ_a)** — slice 35's own named successor; slice 15's actuator is the
   precedent for what an inertia and a bandwidth add over a lag plus a rate limit.
 * **A HANDOVER BASKET WITH A DISTRIBUTION** — slice 36's own first-named successor (a covariance and a
@@ -236,3 +238,223 @@ has a domain.
   fail by different mechanisms, so a Pk over it is a mixture of two failure modes, not one.
 * **THE CAGE vs THE AIM AS ITS OWN A/B**, **THE ELEVATION HALF**, **A RECTANGULAR / PER-AXIS STOP**,
   **SEEKER RANGE / SNR ACQUISITION LIMITS** — all as slice 36 left them.
+
+---
+---
+
+# PART II — SLICE 37 AS SHIPPED: **THE HEAD'S OWN GYRO**
+
+## A RATE-STABILIZED HEAD: THE SERVO LAG WAS DOING STABILITY WORK
+
+**Status: gate 0 COMPLETE (2026-08-17, six probes). The claim is real, the reparameterization gate is
+answered by a BOUND, and the lesson INVERTS the deferral's own framing.** Raw numbers:
+`M:\claud_projects\temp\slice37g\g0_results.md`. Probe patch applied for P2–P5 and **REVERTED** before
+P6; `git diff --stat` empty; suite green.
+
+Wire: `scenarios/slice35_rate.yaml` to the digit (seed 32, vy 200, glass R₀ = −0.03 / A = −0.15 /
+k = 12, window 25°, stop 30°, τ = 0.05, n_pn = 8, σ 5e-5). Band `r ∈ [500, 3000] m` (28/33/34/35's).
+Metric `rms r` — slice 28's YAW channel, because the lead is in azimuth.
+
+---
+
+## §II.0 THE FRAMING CORRECTION, BEFORE ANY PROBE (advisor) — the deferral's own wording is WRONG
+
+`docs/plans/slice34.md:931` named this slice as *"a rate-stabilized head measures inertial LOS rate
+DIRECTLY, which is the classical reason gimbals exist"*. **`missile.jl:1652` is `az_el(û_tru)`, NOT
+`look_angles(att, û_tru)`.** The seeker already reports **INERTIAL** LOS angles, the α-β tracker
+already produces an **INERTIAL** LOS rate, and PN is frame-consistent — the shipped model is an
+implicitly, perfectly body-motion-isolated seeker. ⇒ **THE HEADLINE THE DEFERRAL PROMISED IS ALREADY
+TRUE AND CANNOT BE SHIPPED.** What is body-referenced is the **SERVO**: `head_tgt = look_angles(att,
+…)` and `head_slew_full` rate-limits the step in **BODY** coordinates.
+
+⚠⚠ **FRAMING A WAS KILLED BEFORE IT WAS PROBED — IT IS SLICE 31's TRAP.** "Strapdown reconstruction
+with a corrupted gyro" adds `s·ω_body` to the measured LOS rate; the radome adds `−R·ω_body` to first
+order. **The loop cannot distinguish a body-motion-isolation gain error from a radome slope error**,
+so the stability claim collapses onto slice 26's boundary and what survives is slice 31's shipped
+shape with a bigger gain — a second design-rule slice of the same shape, i.e. convention 4's
+copy-paste false-claim trap. It does not ship, and it is written down here so it is not re-proposed.
+
+⇒ **THE SLICE IS THE SERVO'S REFERENCE FRAME.** Head state becomes an INERTIAL pointing direction,
+the rate limit bounds the **INERTIAL** step, the body-relative angle is DERIVED (and is what the stop
+and the glass see), and body motion is **REJECTED PASSIVELY** instead of tracked out.
+
+---
+
+## §II.1 THE PREMISE, ARITHMETICALLY (P1, no patch) — HOLDS, and the asymmetry is the interesting half
+
+`dem` = slice 35's `head_rate_dps`; `wl` = ‖measured inertial LOS rate‖, what a stabilized head must
+slew at. **dem/wl is the saving an inertially-referenced servo would buy:**
+
+| arm (40 °/s) | rms r | dem_rms | wb_rms | wl_rms | **dem/wl** |
+|---|---|---|---|---|---|
+| R̂ = −0.18 (slice 34's design) | 0.01172 | 0.303 | 0.979 | 0.354 | **0.86** |
+| R̂ = −0.16 (one rung up) | 0.35421 | 15.801 | 20.323 | 2.070 | **7.63** |
+| R̂ = −0.03 (boresight) | 0.86288 | 70.561 | 49.699 | 8.618 | **8.19** |
+| R̂ = −0.33 (slice 30's rule) | 0.05890 | 1.604 | 3.558 | 0.855 | **1.88** |
+
+⇒ an inertial servo buys **essentially nothing on a quiet design (0.86×) and 8.19× on a ringing one**.
+Slice 35's demand really is the missile's own rotation. ⚠ Had these columns not co-scaled the slice
+was dead for the price of a calculator — which is why this probe ran first.
+
+---
+
+## §II.2 THE FRAME TOOTH (P2, bench) — the #1 SIGN TRAP's 12th occurrence guarded before flight
+
+⚠ **THIS SLICE IS *ABOUT* A FRAME CHANGE and the sign trap has fired 11 times**, so the invariants are
+measured on a bench before anything flies.
+
+**P2a — freeze the geometry, spin the body.** Inertial LOS fixed, body rotating at ω, τ = 0.05 s. The
+SHIPPED head chases a target that moves IN ITS OWN FRAME and settles to a steady-state pointing error
+**≈ τ·ω** (0.135679° vs 0.143239° at ω = 0.05; 1.421764° vs 1.432394° at ω = 0.50); the STABILIZED
+head's error is **0.000000000° at every ω**. ⚠ The ω ≥ 0.8 rows (74.7°, 95.4°) are the 40 °/s RATE
+LIMIT breaking the small-error regime, NOT the lag law — do not quote them as such.
+
+**P2b — at zero body rate the two frames are the same frame:** `max|STAB(expressed in body) − SHIP|`
+over 3000 ticks = **1.110e−16 rad**. ⇒ the heads are distinguishable ONLY by body rotation.
+
+---
+
+## §II.3 ⭐⭐ THE REPARAMETERIZATION GATE, ANSWERED BY A BOUND (P3b) — the result that licenses the slice
+
+Convention 4 and `atmosphere.jl`'s discriminator ask whether the off-state is knob-reachable. Target
+cell R̂ = −0.03; **the STABILIZED head at 8 °/s reaches `off_band` 3.861** (dem 29.261).
+
+| τ (s) | rate | rms r | off_band | dem_rms |
+|---|---|---|---|---|
+| 0.050 | 8 | 0.38591 | 12.828 | 143.07 |
+| 0.050 | 200 | 0.88465 | 5.916 | 38.12 |
+| 0.010 | 200 | 1.01252 | 4.979 | 45.61 |
+| 0.001 | 200 | 1.06497 | **4.796** | 48.50 |
+
+⇒ **A 25× FASTER SERVO WITH A 50× SMALLER TIME CONSTANT STOPS AT 4.796 AND CANNOT REACH 3.861.**
+The gate is answered by a **BOUND, not a tolerance window** — ⚠ the first draft used a 15 %
+"REACHES IT" column, which invites *where did 15 % come from?*; the bound needs no threshold at all.
+**⇒ RUNG, NOT KNOB.** The absent key must be bit-identical BY CONSTRUCTION (a branch whose else-arm
+is slice 34/35's line TEXTUALLY UNCHANGED), never a `ω_ref = 0` trusted to cancel — the `-0.0` trap
+20/21/26/27/28/35/36 all name.
+
+---
+
+## §II.4 ⚠⚠ THE ISOLATION FAILS IN τ, AND WHERE IT ACTUALLY LIVES (P4a / P5b — the advisor's blocking catch)
+
+The first draft read *"convergence ⇒ the difference IS the frame"*. **The plain reading of that table
+is that the two curves CROSS**: shipped `rms r` RISES 0.01172 → 0.06051 as τ falls while stabilized
+FALLS 1.00097 → 0.01704, the order SWAPS near τ = 0.005, and Δ is NON-MONOTONE (minimum at 0.005,
+growing after). Slice 34's isolation was `max|Δpos| = 0.0 EXACTLY`. Re-measured in that quantity:
+
+| τ (s) | 0.05 | 0.01 | 0.001 | 1e−4 | 1e−5 | 1e−6 |
+|---|---|---|---|---|---|---|
+| `max abs Δpos` (m) | 64.235 | 32.613 | **42.572** | **42.572** | **42.572** | **42.572** |
+
+⇒ **THE TWO HEADS DO NOT COLLAPSE IN ANY LIMIT OF τ.** ⭐ **P5b LOCATES THE RESIDUAL AND THE
+ISOLATION EXISTS — AGAINST A DIFFERENT HEAD.** The shipped seam expresses its servo target in the
+attitude **OF THE TICK IT WAS MEASURED** (`head_tgt = look_angles(att(k), …)`, consumed at k+1), while
+the stabilized target is attitude-FREE and is consumed against att(k+1). A bench head that
+re-expresses the target in the CURRENT attitude ("FRESH"):
+
+| τ (s) | 0.05 | 0.01 | 0.001 | 1e−5 | 1e−7 |
+|---|---|---|---|---|---|
+| abs(STAB − FRESH) (rad) | 2.568e−02 | 5.589e−03 | **0.000e+00** | **0.000e+00** | **0.000e+00** |
+| abs(STAB − SHIP) (rad) | 2.621e−02 | 6.210e−03 | 6.259e−04 | 6.259e−04 | 6.259e−04 |
+
+⇒ at τ → 0 the stabilized head is **BIT-IDENTICAL** to a body-referenced head whose target is
+re-expressed in the current attitude, and **the residual against the SHIPPED head is EXACTLY ONE TICK
+OF ATTITUDE** — a property of the seam's ORDERING, not of the servo, and not removable by τ.
+⚠ **THE PLAN MUST NOT CLAIM A COLLAPSE THE DATA DOES NOT SHOW**; the honest statement is *"the frame
+difference has a τ → 0 limit only against a fresh-attitude head; against the shipped seam there is an
+irreducible one-tick term."*
+
+---
+
+## §II.5 ⭐⭐ THE MECHANISM, MEASURED AGAINST CLOSED FORM (P4b) — NOT inferred from `rms r`
+
+⚠ *"The servo lag was doing stability work"* is a claim about **THE INDEX** (the head's BODY-frame
+angle — the part of the dome the ray passes through), so it is measured there. Geometry FROZEN, body
+oscillating sinusoidally, τ = 0.05 s:
+
+| f (Hz) | SHIP gain | **STAB gain** | `1/sqrt(1+(2πfτ)^2)` |
+|---|---|---|---|
+| 0.25 | 0.9970 | **1.0000** | 0.9969 |
+| 1.00 | 0.9547 | **1.0000** | 0.9540 |
+| 1.70 | 0.8838 | **1.0000** | 0.8821 |
+| 2.10 | 0.8370 | **1.0000** | 0.8347 |
+| 4.00 | 0.6263 | **1.0000** | 0.6227 |
+
+⇒ **THE SHIPPED SERVO IS A LOW-PASS FILTER ON THE PARASITIC PATH**, matching the first-order law to
+3–4 digits at EVERY frequency, and the stabilized head's index tracks body motion at **UNITY GAIN,
+EXACTLY, AT EVERY FREQUENCY**. ⭐ The ring lives at **1.7–2.1 Hz** (slice 26), where that filter is
+worth 12–16 % of gain and ~30° of phase — **which is what a design one rung inside the bracket has
+been living on since slice 34, unnamed.**
+
+---
+
+## §II.6 ⭐⭐ THE LADDER: THREE HEADS, ONE WIRE, ONE 0.005 GRID, ONE THRESHOLD (P4c / P5a / P6)
+
+| head | onset bracket | `rms r` either side | patch? |
+|---|---|---|---|
+| **STRAPDOWN** (no head) | **(−0.265, −0.260]** | 0.07250 → 0.32320 | no — SHIPPED path |
+| **GIMBAL, position-servoed** | **(−0.165, −0.160]** | 0.17308 → 0.35421 | no — SHIPPED path |
+| **GIMBAL, RATE-STABILIZED** | **(−0.210, −0.205]** | 0.04536 → 0.41625 | yes |
+
+⚠ **TWO OF THE THREE RUNGS NEED NO PATCH AT ALL, which is what makes the third credible**, and both
+shipped rungs REPRODUCE slice 34's own brackets ((−0.27, −0.24] and (−0.18, −0.16], measured on slice
+34's wires) — a validation, stated rather than assumed. ⚠ **A LADDER QUOTED ACROSS TWO GRIDS IS NOT A
+LADDER** (the advisor's catch, applied to my own first fix): slice 34's numbers are NOT borrowed, they
+are re-flown here — [[ewsim-fin-dynamics-direction]]'s *re-run the comparison that entitled an earlier
+slice to its finding before borrowing it*, slice 36 gate 2.
+
+⭐⭐ **THE HEADLINE ARITHMETIC.** Slice 34's gimbal bought 0.2625 → 0.1625 = **0.100** of margin.
+Rate-stabilizing **GIVES BACK 0.045 — 45 % of it** — and lands BETWEEN the strapdown and the
+position-servoed gimbal. **THE CLASSICAL REASON GIMBALS EXIST INVERTS ON THIS WIRE.**
+
+---
+
+## §II.7 ⭐⭐ THE TRADE (P5c) — SLICE 35's TWO-SIDED KNOB DISSOLVES, and that is the payload
+
+**R̂ = −0.03, slice 28's boresight characterization (the disease):**
+
+| servo | SHIP rms r | SHIP off | SHIP dem | STAB rms r | STAB off | STAB dem |
+|---|---|---|---|---|---|---|
+| 60 °/s | 0.88469 | 5.915 | 38.33 | 1.09405 | 4.583 | 13.10 |
+| 25 °/s | 0.70495 | 9.524 | 128.65 | 1.09409 | 4.584 | 13.10 |
+| 8 °/s | 0.38591 | 12.828 | 143.07 | 1.10480 | 3.861 | 29.26 |
+
+⭐⭐ The shipped head walks **0.885 → 0.386 in ring (2.29×) while its window requirement GROWS 5.915 →
+12.828 (2.17×)** — slice 35's trade, reproduced to its own published shape. The stabilized head is
+**FLAT IN BOTH**: ring 1.094 → 1.105 (**1.01×**), window 4.583 → 3.861. ⇒ **THE SERVO KNOB GOES
+INERT. Slice 35's knob had NO FREE DIRECTION; this head has NO DIRECTION AT ALL** — you are stuck
+with the ring you have, and the window is cheap and constant.
+
+**R̂ = −0.33, slice 30's aim point `radome_slope_worst` (the cure):** both heads quiet (0.05775 vs
+0.05897 at 8 °/s), both flat, both cheap (off 1.598 vs 1.561; dem 1.57 vs 2.01).
+⭐ **SLICE 30's RULE PAYS A FOURTH TIME** (33 = FOV, 34 = detector window, 35 = servo bandwidth,
+**37 = the head's REFERENCE FRAME**): at the aim point the ARCHITECTURE DOES NOT MATTER.
+
+---
+
+## §II.8 ISOLATION FROM THE CAGE, AND THE 30° CAVEAT (P4d)
+
+`head_max` (body-relative travel) against the 30° stop, worst anywhere in the ladder: **23.614°
+(shipped) / 23.332° (stabilized)** at R̂ = −0.03. ⇒ **THE STOP NEVER BINDS — NO CAGE** (slice 36's
+gate 0 established caging as a SEPARATE mechanism with its own verdict, so a cage here would be an
+attribution error), and the small-angle bend keeps its headroom. ⚠ Counter-intuitively the stabilized
+head's travel is **NOT** systematically larger: on the ringing arms the shipped head rings less but
+LAGS more, and the two effects trade. **Do not assume the stabilized head swings further — measure it.**
+
+---
+
+## §II.9 What gate 1 owes
+
+* **RUNG** `:seeker_head = (:body_referenced, :rate_stabilized)` (name TBD at gate 1) on the HELD
+  `:airframe: six_dof` + `gimbal_tau_s` host — INERT without a head, refused without `two_angle`.
+* **Class 4a**, 12th consecutive RNG-live: NO new `randn`; the draw count is identical on both rungs.
+  ⚠ Gyro NOISE stays determinism-blocked (an unconditional third draw desyncs 25–31 — the slice-13
+  `:scan` 4b shape); it is NOT this slice.
+* ⚠ **Implementation note carried from the probe:** clamp the stop by a body round-trip **only when
+  `head_clamp` actually clamps**. The probe round-tripped every in-window tick (a no-op to ~1e−16),
+  which is fine for a probe and wrong for a shipped seam.
+* **Two-run discipline** — every arm quoted in this gate has `out% = 0.00`. A windowed arm's `rms r`,
+  `head_angle_deg`, `head_rate_sat` and (slice 36) the LOS excursion all read plausibly wrong.
+* ⚠ The MISS is NOT the metric (every arm hits; the stabilized head often misses LESS while ringing
+  MORE — 9.979 → 3.838 at R̂ = −0.03/40 °/s — because its window requirement is smaller).
+
