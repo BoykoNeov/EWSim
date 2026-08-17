@@ -8162,8 +8162,14 @@ end
             # slice-37 wire PLUS one comp key, so it carries the rate-limited head unchanged and the
             # servo is AUTHORED there too (its ONE knob is the head gyro's scale factor). The set
             # grows; the claim — "slices 1-34 stay byte-identical by GATING" — does not move.
+            # ⚠ SLICE 40 WIDENED IT A FOURTH TIME AND THE ASSERT CAUGHT IT AGAIN. Its TWO wires are
+            # slice-37 wires plus a rung and two comp keys, so they carry the rate-limited head — and
+            # they author it WIDE (120 °/s) as an ISOLATION, because at slice 37's 40 the limit binds
+            # 20–53 % of band ticks on the lightly damped arms AND ATTENUATES THE RING. The servo is
+            # AUTHORED there, not a slider (their ONE knob is the gimbal's damping ratio).
             @test carriers == ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml",
-                               "slice37_frame.yaml", "slice38_head_gyro.yaml"]
+                               "slice37_frame.yaml", "slice38_head_gyro.yaml",
+                               "slice40_heavy.yaml", "slice40_resonance.yaml"]
         end
     end
 
@@ -8228,7 +8234,10 @@ end
                              # authored servo too. Exempting it is not a weakening — it is the same
                              # fact the slice-38 marker exists to handle, since FOUR route markers now
                              # fire on one wire and the newest has to be checked ahead of all of them.
-                             "slice38_head_gyro.yaml"]
+                             "slice38_head_gyro.yaml",
+                             # ⚠ SLICE 40: two wires, each a slice-37 wire plus a rung, each carrying
+                             # slice 35's authored servo — WIDE, as an isolation.
+                             "slice40_heavy.yaml", "slice40_resonance.yaml"]
             for f in readdir(base)
                 endswith(f, ".yaml") || continue
                 f in expected_rate && continue
@@ -10332,6 +10341,49 @@ end
             @test !haskey(t3, "m1.gimbal_omega_hz")
             @test !haskey(t3, "m1.gimbal_zeta")
             @test !haskey(t3, "m1.head_index_gain")
+        end
+    end
+
+    @testset "the HANDSHAKE MARKER — `gimbal_servo_view`, and the three it is checked ahead of" begin
+        # ⭐⭐ THE 9th MARKER OF THIS FAMILY, AND ONLY THE SECOND WHOSE JOB IS TO **UN-DROP** THE
+        # SHARED BUTTON (slice 37's was the first). A slice-40 wire raises `radome_view`,
+        # `gimbal_view` AND `gimbal_rate_view`, every one of which HIDES the button — and on this
+        # wire the PRESS IS THE LESSON, because a first-order lag cannot ring on this design at all.
+        # ⚠ AND ITS HUD HALF IS THE STALE-READOUT CLASS's ~11th OCCURRENCE IN ITS WORST FORM: without
+        # the branch, slice 35's block draws a DEMAND-vs-CAP pair against a rate limit AUTHORED WIDE
+        # HERE PRECISELY SO IT NEVER BINDS. Every number TRUE, the verdict "servo FREE", and the
+        # INERTIA ringing the missile never mentioned — slice 35's own invisible-slice failure mode,
+        # pointed back at slice 35's own HUD.
+        # ⚠⚠ READ OFF THE **SHIPPED YAML**, NOT OFF `so_world` — and the first draft of this tooth
+        # did the latter and failed. `so_world` authors `:seeker_head` in its fidelity dict for its
+        # own convenience, which raises slice 37's marker; the SCENARIOS deliberately do not, and
+        # that absence IS the claim being pinned. A marker test built on a synthetic world can only
+        # prove what the helper happened to author.
+        let base = joinpath(@__DIR__, "..", "..", "scenarios")
+            for f in ("slice40_resonance.yaml", "slice40_heavy.yaml")
+                info = EWSim._airframe_view_info(load_scenario(joinpath(base, f)).world)
+                @test get(info, :gimbal_servo_view, false) === true
+                # the superset relation — what makes this a BRANCH SELECTOR and why it is FIRST
+                for k in (:radome_view, :gimbal_view, :gimbal_rate_view, :airframe_6dof)
+                    @test get(info, k, false) === true
+                end
+                # ⚠⚠ AND `gimbal_frame_view` MUST BE DOWN. The slice-40 scenarios deliberately do
+                # NOT author `seeker_head`: raising slice 37's marker would point the shared button
+                # at the servo's FRAME instead of its ORDER — a different slice's rung on this
+                # slice's wire, and convention 9's "one button, one lesson" broken invisibly.
+                @test get(info, :gimbal_frame_view, false) === false
+                @test get(info, :gimbal_gyro_view, false) === false
+            end
+        end
+        # ⚠ GATED ON THE FIDELITY KEY, NOT ITS VALUE — so the marker is up on BOTH rungs. A value
+        # guard would hide the button on exactly the arm a student would press it FROM if a wire ever
+        # opened on the lag (slice 37's own reasoning, and its wire DID open on the other rung).
+        let (w, sub) = so_world(servo = :first_order, wn = 2.0, zeta = 0.1)
+            @test get(EWSim._airframe_view_info(w), :gimbal_servo_view, false) === true
+        end
+        # …and DOWN on a wire that does not author the rung, so slices 1–39 are untouched.
+        let (w, sub) = so_world()
+            @test get(EWSim._airframe_view_info(w), :gimbal_servo_view, false) === false
         end
     end
 

@@ -5436,6 +5436,174 @@ is exactly why it collapses onto one number); and slice 37's other two, a SECOND
 THE τ AXIS AS ITS OWN SLICE — both now sharper, because this slice shows the REJECTION path has its own
 spec.
 
+---
+
+## Slice 40 — A HEAVIER GIMBAL: THE SECOND-ORDER HEAD SERVO (2026-08-17)
+
+**Status: SHIPPED AND COMPLETE, all four gates. Suite 7564 → 7693 (+129). Slices 1–39 byte-identical,
+proven ON THE WIRE (the `:first_order` rung is `max|Δpos| = 0.000e+00` against the rung being absent,
+over 12 000 ticks, with and without the new comp keys authored beside it).** Full plan and every
+gate-0 table in `docs/plans/slice40.md`; raw probe output in `M:\claud_projects\temp\slice40g\`.
+
+**THE LESSON.** Slices 34–39's head is a FIRST-ORDER LAG with a rate limit — one number, and a servo
+that moves a fraction of its error every tick. A real gimbal has INERTIA, so its servo is
+second-order (`θ̈ = ω_n²(θ_cmd − θ) − 2ζω_n θ̇`), and that is a new MECHANISM rather than a refinement,
+because of what a lag cannot do. Slice 37 measured its whole margin in **GAIN** — the lag LOW-PASSES
+body motion out of the radome's INDEX (0.882 at the ring's 1.7 Hz against a STRAPDOWN seeker's exactly
+1.000) — and a first-order lag is **BOUNDED IN BOTH CURRENCIES: gain ≤ 1 and phase ≥ −90°, at every
+frequency, for every τ.** It could only ever make the index quieter. A second-order servo leaves both
+bounds.
+
+⭐⭐ **THE HEADLINE IS A PAIR OF WIRES WHOSE INDEX GAINS DIFFER BY 32×, AND BOTH RING.** On slice 34's
+own shipped design (R̂ = −0.18, which the first-order head flies QUIET at rms r 0.01181):
+
+| servo | index gain @1.7 Hz | phase @1.7 Hz | `rms r` |
+|---|---|---|---|
+| **1st τ = 0.05 — THE SHIPPED HEAD** | 0.882 | −28.1° | **0.01181** (quiet) |
+| 2nd ω_n = 2.0 Hz, ζ = 1.00 | 0.581 | −80.7° | 0.01212 (quiet) |
+| 2nd ω_n = 2.0 Hz, ζ = 0.10 — **RESONANT** | **3.073** | −31.5° | **0.51659 (44×)** |
+| 2nd ω_n = 0.5 Hz, ζ = 0.10 — **HEAVY** | **0.095** | −176.3° | **0.42414 (36×)** |
+
+⇒ a servo **NINE TIMES QUIETER than the shipped lag rings THIRTY-SIX TIMES HARDER**. ⚠⚠ AND THE
+CONVERSE IS MEASURED TOO, WHICH IS WHAT KEEPS THE CLAIM HONEST: phase past −90° does not by itself
+ring (`0.5 Hz, ζ = 1.0` sits at −147° and reads 0.0184 — quiet). ⇒ the claim stops at **NEITHER
+NUMBER, READ AT A FIXED FREQUENCY, ORDERS THE OUTCOME**, and no loop-crossover argument is made,
+because the frequency the loop actually closes at is the ONE QUANTITY THIS GATE COULD NOT MEASURE
+(§0.7 below).
+
+⭐ **THE SENTENCE THE TWO WIRES EXIST TO SAY: INERTIA IS NOT THE ENEMY — UNDAMPED INERTIA IS.** The
+SAME added inertia buys ≈15 cells of R̂ margin at ζ = 1.0 (onset (−0.100, −0.090] against the shipped
+head's (−0.170, −0.165]) and rings at EVERY cell of that grid at ζ = 0.1. **The damping decides the
+SIGN of what the inertia does**, which is why ζ is the slider and ω_n is the wire.
+
+⚠ **RUNG, NOT KNOB, AND THE GATE IS ANSWERED BY A BOUND** (slice 39's kill, pre-empted before any
+kernel existed): analytically no τ reaches gain > 1 or phase < −90°, and IN FLIGHT the shipped knob's
+own domain swept **800× over τ ∈ [0.001, 0.8] spans `rms r` 0.0104…0.0343 and NEVER RINGS** — 15×
+below the quieter of the two second-order arms. ⚠ At large ζ the rung nearly collapses onto a lag of
+`τ_eff = 2ζ/ω_n` (ratios 1.059 / 1.056 / 1.016 / 1.005 against the matched first-order arm — CLOSE,
+never identical, always the same direction), which is where the button goes quiet, stated rather than
+hidden.
+
+⚠⚠ **THE DISCRETIZATION IS PART OF THE CLAIM AND IS PINNED, NOT ASSUMED** (advisor, before the
+kernel): the claim lives in the lightly-damped regime, which is exactly where an integrator's own
+numerical damping could masquerade as physics. Three oracles in `test_frames.jl` — the step response
+against the CLOSED FORM converges at FIRST ORDER (**6.269e−03 → 6.259e−04 for a 10× dt, ratio
+10.02**; a flat column would mean the recursion is not solving this equation), the discrete free
+response's EFFECTIVE ζ is within **0.0003–0.011 OF ONE DOMAIN CELL**, and its damped frequency within
+3e−04…2e−03 relative. ⚠ The recursion's own stability limit is measured too (decays at 200 Hz,
+DIVERGES to NaN at 300 Hz on the shipped dt), and validate-at-LOAD bounds `gimbal_omega_hz` at 100 Hz
+with a 3× margin — convention 5, on the integrator's number rather than on taste.
+
+⚠⚠ **FOUR PREDICTIONS WERE REFUTED AND ALL FOUR ARE LOAD-BEARING.** (1) **THE KILL RISK, FLOWN
+FIRST** (advisor's blocking question): as the gimbal gets heavier, does the TRACK BREAK before the
+resonance rings? If so the headline would be slice 34's mechanism wearing a new name. Measured
+`out_band = 0.00 %` on EVERY arm of every ladder — ω_n 0.5…30 Hz, ζ 0.05…3.0, with and without the
+rate limit. (2) **THE RING'S OWN FREQUENCY IS NOT MEASURABLE ON THIS WIRE** — the sharpest available
+claim (*the loop rings where the gimbal resonates*, which would have made the limit cycle's FREQUENCY
+a design variable for the first time in the arc) had a CONTROL row in its probe, and **the control
+failed**: a periodogram put the first-order head's ring at 0.80 Hz where slices 26–39 measure
+1.7–2.1 Hz. Re-flown under slice 26 §P7B's own conditions (σ = 0, its PAIR of estimators) **the
+oracle failed again and the two estimators disagree on the control itself** (0.91 vs 0.23 Hz) ⇒ NO
+FREQUENCY CLAIM IS MADE, and the hypothesis is recorded as UNTESTED rather than as refuted physics.
+(3) *"A well-damped second-order gimbal has more margin than the lag"* does not generalise as
+written — at ζ = 1.0 the onset depends on ω_n (0 cells at 5 Hz, +3 at 2, ≈+9 at 1, ≈+15 at 0.5), and
+what it became is better: MONOTONE IN THE INERTIA. ⭐ The 5 Hz row explains itself (`τ_eff` = 0.0637,
+within 27 % of the shipped τ = 0.05 — the overdamped collapse arriving in flight). (4) **THE SEAM's
+OWN PREDICTION, REFUTED AT GATE 2**: gate 1 wrote in three places that the resonance would be nearly
+INERT on slice 37's space-stabilized rung (that head rejects body motion passively, so its index gain
+is 1 whatever its servo order). **It is not inert** — at R̂ = −0.28, where that rung flies QUIET on
+the first-order servo (0.04258), the same servo rings it to **0.26150, 6.1×**, with `out_band` 0.00 %
+and the head 4.0° off and nowhere near its stop. ⚠ And the FIRST reading of it would have been wrong
+TWICE: read at R̂ = −0.18 the same arm shows `rms r` FALLING while the miss opens 944× — slice 33/34's
+METRIC INVERSION signature — on an arm whose head is ALSO pinned at its stop with `off_max` 68.6°.
+⭐⭐ Why the prediction was wrong SHARPENS the mechanism: **body motion is only ONE of the two things
+this servo is fed** — the other is slice 34's own fixed point (the head is aimed by the BENT
+measurement), live on both frames. **A lag low-passes whatever it is fed; a resonance amplifies it.**
+Corrected in `frames.jl`, `missile.jl` and the plan.
+
+⚠⚠ **GATE 1 CAUGHT THE SEAM'S OWN DECISION BECOMING REACHABLE ON A CLAIMED ARM.** The kernel's stop
+is INELASTIC (it zeroes the rate state), because a head winding up against a clamp produces an
+oscillation that would FAKE this resonance exactly — and asserted PER ARM (advisor: not from the max
+one happened to see), the heavy wire read `head_max = 30.000` EXACTLY at slice 37's stop. Opening it
+moved the ring ~1 % (0.55230 → 0.54614), so the mechanism was never the clamp — but the arm was not
+CLEAN. ⇒ **wire B authors a 50° stop**, and ⭐ the finding has its own payload: **THE RING IS SPENT IN
+GIMBAL TRAVEL** (41.5° against the quiet arms' 18.117°) — slice 33's "the ring is an FOV budget item"
+and slice 34's "spent in detector window" arriving in a THIRD currency.
+
+⚠ **WIRE B ALSO AUTHORS ITS DETECTOR WINDOW WIDE, ON A NUMBER** (slice 35's precedent): a heavy
+gimbal's tracking error is an order of magnitude larger than a resonant one's (22.482° vs 5.138° at
+the same ζ), so slice 37's inherited 25° window BREAKS THE TRACK at ζ ≤ 0.05. At 35° every cell reads
+`out_band` 0.00 % with ≥ 7.5° of margin — and **the wire flies BIT-IDENTICALLY at 45°**, which is what
+PROVES it non-binding rather than merely observed to be.
+
+⚠⚠ **AND `gimbal_rate_dps` IS AUTHORED WIDE (120 °/s) AS AN ISOLATION WITH A CROSS-REFERENCE, NOT AS
+A CONFOUND REMOVAL** (advisor): at slice 37's 40 °/s the rate limit binds 20–53 % of band ticks on the
+lightly damped arms AND **ATTENUATES the ring** (0.65648 against the free 0.79973 at ζ = 0.05) —
+slice 35's own TWO-SIDED knob reappearing on a new architecture. ⇒ the honest sentence is that **the
+shipped servo was partly HIDING this.** At 120 it binds 0.00 % on every arm of both wires, and the
+verifier asserts that per arm.
+
+**KNOB DOMAIN, BOTH ENDPOINTS MEASURED WITH THEIR REASONS** (slice 26's post-commit discipline), 16
+cells: FLOOR **0.05** for TWO independent reasons — below it slice 35's rate limit comes back even at
+120 °/s (`sat_band` 2.05 % at 0.03, 15.13 % at 0.01) AND the ladder stops being monotone there
+(0.83533 / 0.84329 / 0.84872 at ζ = 0.01/0.02/0.03 against 0.79973 at 0.05); CEILING **1.00** because
+the ring is on the quiet plateau (0.01212 against the control's own 0.01181) and past it the servo
+COLLAPSES toward a lag ⇒ the button and the slider would be doing the same thing. ⭐ **THE ANALYTIC
+EDGE ζ = 1/√2 IS INSIDE THE DOMAIN** — beyond it the closed-loop response has no peak above 1 at ANY
+frequency — a landmark DERIVED before it was measured, and the shipped `head_index_gain` crosses 1.0
+across it (1.11838 at ζ = 0.5, 0.81058 at 0.7071), which the verifier asserts as a CROSSING rather
+than re-deriving the closed form.
+
+**CLIENT.** The 9th handshake marker, `gimbal_servo_view`, and only the SECOND of this family whose
+job is to **UN-DROP** the shared button (slice 37's was the first) — a slice-40 wire raises
+`radome_view`, `gimbal_view` AND `gimbal_rate_view`, every one of which hides it, and here the PRESS
+IS THE LESSON. ⚠⚠ Its HUD half is the stale-readout class's ~11th occurrence in its WORST form:
+without the branch, slice 35's block draws a DEMAND-vs-CAP pair against a rate limit authored WIDE
+here precisely so it never binds — every number TRUE, the verdict "servo FREE", and the INERTIA
+ringing the missile never mentioned (slice 35's own invisible-slice failure mode, pointed back at
+slice 35's own HUD). ⚠ Gated on the FIDELITY KEY and not its value (slice 37's choice), and the
+scenarios deliberately DO NOT author `seeker_head` — raising slice 37's marker would point the shared
+button at the servo's FRAME instead of its ORDER, which is convention 9 broken invisibly. ⭐⭐ THE
+STATE ONLY THIS BRANCH CAN NAME IS A DEAD KNOB: on the first-order rung ζ is BIT-IDENTICALLY inert (a
+lag has no ω_n and no ζ), so the mechanism line says so — slice 38's finding in a new key. ⭐⭐ AND THE
+GAIN LINE IS A LABEL AND NEVER A VERDICT, because the other wire refuses that reading; it prints the
+live number beside BOTH references (the lag's 0.88 and a strapdown seeker's 1.00) and the UI test
+asserts no verdict word appears in it.
+
+⚠⚠ **THE SHOT CAUGHT A DEFECT NO TEST HAD** (convention 14's fourth proof earning its keep): the cure
+line read *"cure: damp it (ζ→1)"* on an arm ALREADY at ζ = 1.00 and already quiet, under a verdict
+line correctly reading "DAMPED GIMBAL — loop QUIET" — every number true and the INSTRUCTION stale.
+Made state-aware and pinned in all three states. ⚠ Its state-aware draft then landed EXACTLY on the
+measured 55-character budget and was trimmed to 49 — this family's right-edge overrun has five
+occurrences (26/28/36/37/38).
+
+**Four proofs green.** `S40V OK` (16 arms: open 0.51706 RINGS / button 0.01207 QUIET = **42.8×** /
+cure 0.01282 = 40.3× / ladder MONOTONE across all 9 cells / the gain crossing at the analytic edge /
+the slider bit-identically inert on the lag rung / replay bit-identical at BOTH slider ends and on
+BOTH rungs / a mid-run press quieting the ringing arm / every arm window-clear, rate-free,
+stop-clear, `defl_sat` 0, CPA reached); a 10-tooth UI test; BOTH wires smoke-loaded to
+`EWSIM_SERVER_DONE`; and THREE shots — `RESONANT GIMBAL — RINGING` (ring r +0.743, peak 0.84, index
+gain 3.07) / `FIRST-ORDER LAG — bounded` (+0.015, gain 0.88, "ζ slider INERT") / `DAMPED GIMBAL —
+loop QUIET` (−0.000, gain 0.58). ⚠ TWO verifier defects were caught by its own header's warnings: the
+`set_param` field is `target` not `entity` (slice 19's NOT-A-DEAD-KNOB tripwire fired — the server
+ignored every slider silently and the first arms passed because they happened to request the AUTHORED
+value), and `%.3e` is not a GDScript specifier (slice 21's bug — three numbers printed as format
+strings on a GREEN run). ⚠ FOUR carrier/mirror asserts fired and were right to — slice 35's
+enumeration of which wires carry its servo key has now earned its keep a FOURTH time.
+
+**Deferred (NAMED):** **THE τ AXIS AS ITS OWN SLICE** (slice 37's, unchanged and now sharper — this
+slice shows the lag's bound is what its margin was made of); **FINITE LOOP GAIN** (slice 39's live
+successor, untouched here); a RECTANGULAR / PER-AXIS stop and window; SEEKER RANGE / SNR ACQUISITION
+LIMITS; GYRO NOISE (draw-topology grounds); PER-AXIS gyro scale factors and MISALIGNMENT. ⚠ And this
+slice's own: **A FREQUENCY ESTIMATOR THAT WORKS ON THIS WIRE** — §0.7's refutation is not a dead end
+but a prerequisite, and *the loop rings where the gimbal resonates* is a real hypothesis nobody can
+test until it exists; **THE (ω_n, ζ) SURFACE AS A DESIGN CHART** (this slice ships two measured cells
+of it and a monotone slider through each); and **A SECOND-ORDER FIN ACTUATOR** — slice 15's actuator
+is first-order-with-a-rate-limit for exactly the reason slices 34–39's head was, and the bound argued
+here is not specific to a seeker head.
+
+---
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

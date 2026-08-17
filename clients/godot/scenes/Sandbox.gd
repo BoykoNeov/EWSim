@@ -1970,11 +1970,23 @@ func _head_servo_gain_text(g: float) -> String:
 
 # THE CURE — and there are TWO, one per control, which is this wire's own shape (slice 38's button
 # and slider were two ends of ONE axis; here they are two different architectures arriving at the
-# same quiet from opposite sides). ⚠ WIDTH: 53 characters.
-func _head_servo_cure_text(second_order: bool) -> String:
-	if second_order:
+# same quiet from opposite sides).
+#
+# ⚠⚠ IT IS STATE-AWARE AND THE SHOT IS WHY. The first version printed "cure: damp it (ζ→1)" on an
+# arm ALREADY sitting at ζ = 1.00 and already quiet — advice for a cure the student had just
+# applied, under a verdict line correctly reading "DAMPED GIMBAL — loop QUIET". Every number in the
+# frame was true and the instruction was stale: the stale-readout class in its cheapest form, caught
+# by the capture and by nothing else (convention 14 — a `_draw` verdict has no headless proof, which
+# is why these are pure helpers, and why the SHOT is still a separate proof from the UI test).
+# ⚠ WIDTH: 53 characters at the longest.
+func _head_servo_cure_text(second_order: bool, ringing: bool) -> String:
+	if not second_order:
+		return "the lag cannot ring here — press to give it INERTIA"
+	if ringing:
 		return "cure: damp it (ζ→1) or press for the LAG — both quiet"
-	return "the lag cannot ring here — press to give it INERTIA"
+	# ⚠ 49 chars, not 55: the first state-aware draft landed EXACTLY on the measured budget, and this
+	# family's right-edge overrun has five occurrences (26/28/36/37/38). Leave the margin.
+	return "damped: same inertia, quiet — or press for the LAG"
 
 func _head_gyro_verdict_label(lost: bool, ringing: bool, stabilized: bool) -> String:
 	if lost:
@@ -2403,8 +2415,9 @@ func _draw_head_servo_hud_lines(vp: Vector2) -> void:
 	# wire (0.095, ringing) is the measurement that says it does not.
 	draw_string(_font, Vector2(vp.x - 430, 154), _head_servo_gain_text(g),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
-	# THE CURE — two of them, one per control.
-	draw_string(_font, Vector2(vp.x - 430, 176), _head_servo_cure_text(second),
+	# THE CURE — two of them, one per control, and the line follows the STATE (see its helper: the
+	# first version advised damping an arm that was already damped).
+	draw_string(_font, Vector2(vp.x - 430, 176), _head_servo_cure_text(second, _radome_qpeak > 0.5),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
 	# THE DETECTOR BUDGET + THE HEAD's STATE — the precondition for reading the ring at all: the
 	# window never binds anywhere in the slider's domain on either wire (measured, and on wire B
