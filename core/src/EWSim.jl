@@ -182,6 +182,7 @@ export seeker_fov_margin
 # collapse COMPLETELY — the same bracket for every τ ≤ 0.005, gap exactly 0.0000. A 42 m trajectory
 # difference worth nothing to the loop.
 export SEEKER_HEAD_MODES, head_clamp_inertial, head_slew_inertial
+export head_drift_inertial                      # slice 38 — an imperfect head gyro
 export off_axis_angle, head_slew, head_clamp, head_slew_full
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step

@@ -1152,6 +1152,69 @@ function head_slew_inertial(head_az::Real, head_el::Real, tgt_az::Real, tgt_el::
     return (p[1], p[2], p[3], p[4], dem, sat)
 end
 
+"""
+    head_drift_inertial(az, el, ω_body, s, bias, att, dt) -> (az_i, el_i)   (radians)
+
+One tick of the drift an IMPERFECT head-mounted rate gyro leaves in a space-stabilized head's
+pointing (slice 38). Returns the pointing UNCHANGED, bit-for-bit, when there is no drift.
+
+⭐⭐ **THE MECHANISM, AND WHY IT IS A GAIN ON THE REJECTION PATH.** A space-stabilized head holds its
+pointing by feeding forward the NEGATED gyro reading, so it commands a gimbal rate of `−ω̃` against a
+body turning at `ω`. What is left over is its inertial rate:
+
+    ω − ω̃  =  ω − ((1+s)·ω + b)  =  **−s·ω − b**
+
+⇒ a SCALE-FACTOR error leaks a FRACTION of the missile's own body motion back into the pointing, and
+a BIAS drifts it at a constant rate whatever the body does. Slice 37 measured its whole margin out of
+how much body motion reaches the radome's INDEX; this is the sensor that decides how much.
+
+⚠⚠ **THE REJECTION GAIN IS NOT `|1+s|` AND `s = −1` IS NOT A FROZEN INDEX** — gate 0's first
+refutation, recorded here because the intuition is very natural and wrong. A head whose gyro reads
+NOTHING is carried along by the body, but it is **still slewed by its servo toward the target with lag
+τ**, which is precisely what [`head_slew_full`](@ref)'s body-referenced caller does. So the dead-gyro
+degenerate is slice 37's OTHER RUNG, not a frozen head: measured on a frozen-geometry bench at the
+limit cycle's own 1.7 Hz, the index gain walks 1.00000 → 0.88608 with phase 0° → −27.578° as `s` goes
+0 → −1, against the body-referenced rung's own 0.88405 / −27.561°.
+
+⚠ **AND THAT DOES NOT MAKE SLICE 37's RUNG KNOB-REACHABLE, THOUGH IT COMES CLOSE ENOUGH TO SAY SO
+CAREFULLY.** The onset bracket walks all the way onto the body rung's own at `s ≤ −0.80`, so NO CLAIM
+MAY BE MADE IN THE RING METRIC. What separates them is measured elsewhere: 1.556 m of trajectory on a
+ringing arm (0.089 m on a quiet one — the right direction for a body-motion mechanism, against 40.29 m
+for the honest architecture pair), two distinct code paths, and the plain physical fact that a gyro
+reading zero IS an unstabilized head. A correct degenerate, not a false fidelity.
+
+⭐ **THE SIGN IS THE #1 TRAP's 11th OCCURRENCE IN THIS ARC AND IS PINNED ON A BENCH, NOT ARGUED.** An
+inverted sign still produces a plausible sweep (the ring still moves, in the same shape). The tooth is
+the one row that cannot be read two ways: with the servo absent and the body turning, `s = −1` freezes
+the head's **BODY** angle EXACTLY while its inertial angle sweeps the whole body rotation.
+
+⚠ Convention 6 — nothing non-finite is manufactured from finite input, and nothing moves when nothing
+should: a zero residual rate (`s = 0` with a zero `bias`), a non-positive `dt`, or a non-finite `s` or
+`bias` all return the input pointing bit-for-bit. ⭐ THE ZERO CASE IS THE ONE THAT MATTERS: it is what
+makes an authored `s = 0` BIT-IDENTICAL to the keys being absent BY CONSTRUCTION rather than by
+measurement — the slice-20/21/26/27/28/29 structural-byte-identity shape, and the reason the shipped
+seam never writes `+ 0.0` and trusts the zero.
+
+⚠ The bias is a BODY-AXIS vector, because the gyro is mounted on the airframe's own structure; the
+residual is rotated to the frame the pointing is HELD in exactly once, here.
+"""
+function head_drift_inertial(az::Real, el::Real, ω_body::Vec3, s::Real, bias::Vec3,
+                             att::Quat, dt::Real)
+    a = Float64(az); e = Float64(el)
+    (isfinite(s) && isfinite(bias[1]) && isfinite(bias[2]) && isfinite(bias[3])) || return (a, e)
+    dt > 0.0 || return (a, e)
+    ω̃ = gyro_reading(ω_body, s, bias)                 # slice 31's kernel, unchanged
+    Ωb = Vec3(ω_body[1] - ω̃[1], ω_body[2] - ω̃[2], ω_body[3] - ω̃[3])   # = −s·ω − b
+    Ωi = rotate(att, Ωb)                               # …in the frame the pointing is held in
+    n = sqrt(Ωi[1]^2 + Ωi[2]^2 + Ωi[3]^2)
+    # ⚠ THE ZERO GUARD IS THE BYTE-IDENTITY CONTRACT, not an optimisation: `quat_from_axis_angle`
+    # of a zero-norm axis is not a rotation at all, and returning the input here is what slices
+    # 34–37 are proven bit-identical against.
+    n > 0.0 || return (a, e)
+    return az_el(rotate(quat_from_axis_angle(Vec3(Ωi[1] / n, Ωi[2] / n, Ωi[3] / n), n * dt),
+                        los_unit_from_angles(a, e)))
+end
+
 # --- THE SEEKER'S FIELD OF VIEW (slice 32, §11 Tier-A — the deferral 26/28/29/30/31 each named) ---
 #
 # Slices 26–31 made the LOOK ANGLE the central quantity of the whole radome family, and then each

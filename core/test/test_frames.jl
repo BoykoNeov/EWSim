@@ -1930,4 +1930,146 @@
             end
         end
     end
+
+    # ── AN IMPERFECT HEAD GYRO (slice 38) — the sensor that decides how much body motion the
+    #    radome's index actually sees. Slice 37's stabilized head rejects body motion at EXACTLY
+    #    unity gain at every frequency, because the model stores the inertial angles; that is a §1
+    #    approximation it named FIRST among its deferrals. A real head-mounted gyro has a scale
+    #    factor and a bias, and feeding forward its reading leaves the pointing drifting at
+    #    `−s·ω − b`. ⇒ slice 37's whole margin becomes a GYRO SPEC.
+    @testset "THE HEAD'S OWN GYRO (slice 38) — the leak that decides how much index the body gets" begin
+        û38 = los_unit(Vec3(0.0, 0.0, 0.0), Vec3(6000.0, 2000.0, 4200.0))
+        az38, el38 = az_el(û38)
+        qy38(θ) = qnormalize(quat_from_axis_angle(Vec3(0.0, 1.0, 0.0), θ))
+        DT38 = 1.0e-3
+        Z38 = Vec3(0.0, 0.0, 0.0)
+
+        @testset "the SIGN, on the one row that cannot be read two ways" begin
+            # ⚠ THE #1 SIGN TRAP's 11th OCCURRENCE IN THIS ARC, and it is guarded BEFORE anything
+            # flies: an inverted sign still produces a plausible sweep (the ring still moves, in the
+            # same shape), so the tooth cannot be "the ring responds". It is this: with the SERVO
+            # ABSENT and the body turning at a known rate, a gyro that reads NOTHING (s = −1) leaves
+            # the head CARRIED EXACTLY WITH THE BODY — its BODY angle frozen while its INERTIAL
+            # angle sweeps the whole body rotation. Any other sign convention breaks this row.
+            ωy = 0.20                       # attitude turns by −θ about +y ⇒ ω_body = (0, −ωy, 0)
+            ω38 = Vec3(0.0, -ωy, 0.0)
+            b0 = look_angles(qy38(0.0), û38)
+            a, e = az38, el38
+            worst = 0.0
+            for k in 1:5000
+                a, e = head_drift_inertial(a, e, ω38, -1.0, Z38, qy38(-ωy * (k - 1) * DT38), DT38)
+                bb = look_angles(qy38(-ωy * k * DT38), los_unit_from_angles(a, e))
+                worst = max(worst, hypot(bb[1] - b0[1], bb[2] - b0[2]))
+            end
+            # the BODY angle is frozen (measured 8.543e−14 over these 5000 ticks)…
+            @test worst < 1.0e-12
+            # …while the INERTIAL angle swept with the body: the body turned 1.0 rad and the
+            # pointing's elevation moved 0.715 rad of it (the rest is the spherical mapping — this
+            # LOS sits ~18° off the rotation plane, so Δel is NOT the rotation angle and must not
+            # be asserted as though it were).
+            @test 0.70 < e - el38 < 0.73
+            # ⭐ PAIRED WITH THE DOES-NOT-HAPPEN CASE (the house rule for an invariant tooth): a
+            # PERFECT gyro leaves the pointing alone entirely, so the same 5000 ticks move the BODY
+            # angle by the full body rotation instead of freezing it.
+            let a2 = az38, e2 = el38
+                for k in 1:5000
+                    a2, e2 = head_drift_inertial(a2, e2, ω38, 0.0, Z38,
+                                                 qy38(-ωy * (k - 1) * DT38), DT38)
+                end
+                @test (a2, e2) === (az38, el38)
+                let bb = look_angles(qy38(-ωy * 5000 * DT38), los_unit_from_angles(a2, e2))
+                    @test hypot(bb[1] - b0[1], bb[2] - b0[2]) > 0.9
+                end
+            end
+        end
+
+        @testset "the drift IS a Rodrigues rotation by the gyro's own residual (independent oracle)" begin
+            # ⚠⚠ THE ORACLE IS AN INDEPENDENT RODRIGUES RECOMPUTE (convention 11: a DIFFERENT
+            # algorithm), and getting there cost TWO WRONG ORACLES THAT BOTH LOOKED LIKE TOLERANCE
+            # PROBLEMS — worth recording, because either would have shipped as a loose `atol`:
+            #   (a) `acos` of the dot product is precision-limited to ~1.2e−04 rad on a 2e−4
+            #       rotation (half the mantissa, the classic acos-near-1 loss);
+            #   (b) predicting the SWEPT ANGLE as |Ω|·dt is WRONG BY CONSTRUCTION — a vector rotated
+            #       about an axis moves by |Ω|·dt·sin(ψ), ψ being its angle to that axis. On the
+            #       widest cell that reads 24 %, which is not a tolerance, it is a wrong formula.
+            # Against the right oracle the kernel is exact to 3.554e−16 over these 108 cells.
+            worst = 0.0
+            for s in (-1.0, -0.5, -0.2, -0.05, 0.0, 0.3), θ in (0.0, 0.3, -0.7),
+                ω in (Vec3(0.0, -0.2, 0.0), Vec3(0.05, -0.2, 0.11), Vec3(-0.3, 0.0, 0.4)),
+                bias in (Z38, Vec3(0.0, 0.01, -0.02))
+
+                q = qy38(θ)
+                a, e = head_drift_inertial(az38, el38, ω, s, bias, q, DT38)
+                # the residual rate, from slice 31's SHIPPED kernel — a COMPOSITION, never a
+                # restatement of `(1+s)·ω + b` (the second-implementation trap this file names for
+                # `off_axis_angle`, `head_slew` and the clamp's own predicate).
+                ω̃ = gyro_reading(ω, s, bias)
+                Ωb = Vec3(ω[1] - ω̃[1], ω[2] - ω̃[2], ω[3] - ω̃[3])
+                u0 = los_unit_from_angles(az38, el38); u1 = los_unit_from_angles(a, e)
+                Ωi = rotate(q, Ωb)
+                nn = sqrt(Ωi[1]^2 + Ωi[2]^2 + Ωi[3]^2)
+                if nn > 0
+                    kx, ky, kz = Ωi[1]/nn, Ωi[2]/nn, Ωi[3]/nn
+                    φ = nn * DT38; c = cos(φ); sφ = sin(φ)
+                    kd = kx*u0[1] + ky*u0[2] + kz*u0[3]
+                    cr = (ky*u0[3] - kz*u0[2], kz*u0[1] - kx*u0[3], kx*u0[2] - ky*u0[1])
+                    r = (u0[1]*c + cr[1]*sφ + kx*kd*(1-c),
+                         u0[2]*c + cr[2]*sφ + ky*kd*(1-c),
+                         u0[3]*c + cr[3]*sφ + kz*kd*(1-c))
+                    worst = max(worst, sqrt((u1[1]-r[1])^2 + (u1[2]-r[2])^2 + (u1[3]-r[3])^2))
+                else
+                    worst = max(worst, sqrt((u1[1]-u0[1])^2 + (u1[2]-u0[2])^2 + (u1[3]-u0[3])^2))
+                end
+            end
+            @test worst < 1.0e-14
+        end
+
+        @testset "the leak is a FRACTION of body motion — LINEAR in s, and the bias is not a leak" begin
+            q = qy38(0.25); ω = Vec3(0.02, -0.20, 0.07)
+            # the swept angle, by the chord formula (accurate where `acos` is not)
+            swept(s, bias) = let (a, e) = head_drift_inertial(az38, el38, ω, s, bias, q, DT38),
+                                 u0 = los_unit_from_angles(az38, el38),
+                                 u1 = los_unit_from_angles(a, e)
+                2 * asin(clamp(sqrt((u1[1]-u0[1])^2 + (u1[2]-u0[2])^2 + (u1[3]-u0[3])^2) / 2,
+                               -1.0, 1.0))
+            end
+            r1 = swept(-1.0, Z38)
+            # ⭐ THE SCALE FACTOR IS A GAIN ON THE REJECTION PATH: the drift at `s` is EXACTLY |s|
+            # times the drift at a DEAD gyro (measured to ~1.7e−12 — and note it was ~1e−8 through
+            # the `acos` oracle, which is what a loose tooth would have hidden).
+            for s in (-0.5, -0.2, -0.05, 0.3)
+                @test isapprox(swept(s, Z38) / r1, abs(s); atol = 1.0e-11)
+            end
+            # ⭐ AND THE BIAS IS A DIFFERENT CURRENCY, PINNED AS SUCH: it drifts the head with the
+            # body PERFECTLY STILL, which no scale-factor error can do. (This is why the two halves
+            # of slice 38 land in different places — the leak is proportional to what the missile is
+            # doing, the bias is not.)
+            @test head_drift_inertial(az38, el38, Z38, -0.5, Z38, q, DT38) === (az38, el38)
+            @test head_drift_inertial(az38, el38, Z38, 0.0, Vec3(0.0, 0.05, 0.0), q, DT38) !==
+                  (az38, el38)
+        end
+
+        @testset "byte-identity and the degenerates (conventions 5 and 6)" begin
+            q = qy38(0.3); ω = Vec3(0.02, -0.20, 0.07)
+            # ⭐⭐ THE ONE THAT MATTERS: a PERFECT gyro returns the pointing bit-for-bit, which is
+            # what makes an authored `s = 0` BIT-IDENTICAL to the keys being absent BY CONSTRUCTION
+            # rather than by measurement — the slice-20/21/26/27/28/29 structural-byte-identity
+            # shape, and the reason the seam never writes `+ 0.0` and trusts the zero.
+            @test head_drift_inertial(az38, el38, ω, 0.0, Z38, q, DT38) === (az38, el38)
+            # a live knob can never crash a tick, and nothing non-finite is manufactured (conv. 6)
+            @test head_drift_inertial(az38, el38, ω, -0.5, Z38, q, 0.0)  === (az38, el38)
+            @test head_drift_inertial(az38, el38, ω, -0.5, Z38, q, -1.0) === (az38, el38)
+            @test head_drift_inertial(az38, el38, ω, NaN, Z38, q, DT38)  === (az38, el38)
+            @test head_drift_inertial(az38, el38, ω, Inf, Z38, q, DT38)  === (az38, el38)
+            @test head_drift_inertial(az38, el38, ω, -0.5, Vec3(Inf, 0.0, 0.0), q, DT38) ===
+                  (az38, el38)
+            @test head_drift_inertial(az38, el38, ω, -0.5, Vec3(0.0, NaN, 0.0), q, DT38) ===
+                  (az38, el38)
+            @test all(isfinite, head_drift_inertial(az38, el38, Vec3(1.0e9, -1.0e9, 1.0e9),
+                                                    -1.0e9, Z38, q, DT38))
+            # Int arguments give the Float64 answer (the house type-stability check)
+            @test head_drift_inertial(0, 0, Vec3(0.0, 1.0, 0.0), -1, Z38, qy38(0.0), 1) ===
+                  head_drift_inertial(0.0, 0.0, Vec3(0.0, 1.0, 0.0), -1.0, Z38, qy38(0.0), 1.0)
+        end
+    end
 end
