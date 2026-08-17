@@ -1,0 +1,214 @@
+# slice40_resonance — A HEAVIER GIMBAL: THE SECOND-ORDER HEAD SERVO AND ITS RESONANCE (HANDOFF §11
+# Tier-A, slice 40 gate 3). WIRE A of two. The EIGHTEENTH slice of the bank-to-turn / 3-D arc (23 =
+# the 6-DOF substrate + skid-to-turn, 24 = bank-to-turn + roll-lag, 25 = a seeker in the 6-DOF loop,
+# 26 = the radome parasitic loop, 27 = the compensation autopilot, 28 = the slope CURVE, 29 = the
+# SCHEDULED compensator, 30 = the ENVELOPE, 31 = an imperfect gyro, 32 = the seeker's field of view,
+# 33 = the ring as an FOV budget item, 34 = the gimbal, 35 = the rate-limited head, 36 = the handover
+# basket, 37 = the servo's reference frame, 38 = an imperfect head gyro), and the deferral slices 35,
+# 37 AND 38 each named and none spent.
+#
+# > THE LESSON, IN ONE SENTENCE. Slices 34–39's head is a FIRST-ORDER LAG — one number, and a servo
+# > that moves a fraction of its error every tick. A real gimbal has INERTIA, so its servo is
+# > SECOND-ORDER, and that is not a refinement: a first-order lag is BOUNDED in both currencies (its
+# > index gain can never exceed 1 and its phase can never pass −90°, at every frequency, for every
+# > τ), so it could only ever make the glass's index QUIETER — which is exactly how slice 37's margin
+# > was bought. A second-order servo leaves both bounds.
+#
+# ⭐⭐ SO THE SHOWCASE IS ONE BUTTON PRESS ON A DESIGN THAT WAS ALREADY GOOD (slice 37's shape). At
+# R̂ = −0.18 — slice 34's OWN shipped design — the first-order head flies QUIET (rms r 0.01181, miss
+# 0.187 m). Give the SAME gimbal an inertia with light damping and the SAME missile, the SAME glass,
+# the SAME seed and the SAME handover RINGS at 0.51659 — 44× — and still hits, as every ringing arm
+# in this family since slice 26 has.
+#
+# ⭐⭐ AND THE PAYLOAD IS THE PAIR OF WIRES, NOT EITHER ONE. This wire's ringing servo has an INDEX
+# GAIN OF 3.07 — 3.5× the shipped lag's 0.88, and above the STRAPDOWN seeker's 1.00, i.e. worse than
+# no gimbal at all. Wire B (`slice40_heavy.yaml`) rings just as hard with an index gain of 0.095, a
+# TENTH of the lag's. ⇒ **NEITHER NUMBER, READ AT A FIXED FREQUENCY, ORDERS THE OUTCOME**, and only
+# an architecture with TWO numbers can show that.
+#
+# ⭐ THE CURE IS THE SLIDER, AND IT IS THE SAME INERTIA: walk ζ from 0.05 to 1.0 and the ring falls
+# 0.79973 → 0.01212, 66×, back onto the quiet plateau the first-order head already sits on. ⇒
+# **INERTIA IS NOT THE ENEMY — UNDAMPED INERTIA IS.** A well-damped gimbal of the same mass is not
+# merely as good as the shipped lag: at ω_n = 0.5 Hz and ζ = 1.0 it holds ≈15 more cells of R̂ margin.
+#
+# ⚠⚠ THE SLIDER IS INERT ON THE OTHER SIDE OF THE BUTTON — MEASURED, AND THE HUD SAYS SO. A
+# first-order head has no ω_n and no ζ, so on that rung every value of this slider flies the SAME
+# missile BIT-IDENTICALLY (`max|Δpos| == 0.0`). That is slice 38's finding in a new key — a live
+# control that does nothing is the stale-readout class in a new form — and it is why the wire OPENS
+# on the second-order rung rather than on the good design: from the quiet side, the slider would be
+# dead in the hand.
+#
+# ⚠ NO NEW CAP, NO NEW DRAW, AND THE INSTABILITY IS SLICE 26's — what is new is the SERVO that
+# decides how much of the missile's own motion reaches the glass. Class 4a, 2 randn/tick, the
+# FIFTEENTH consecutive RNG-live slice — the seed is load-bearing and conventions 3/11 apply.
+#
+# NAMED APPROXIMATIONS (§1): the servo is stepped by SEMI-IMPLICIT EULER at the scenario's dt, and
+# that is PINNED rather than assumed (the step response converges at first order against the closed
+# form, ratio 10.02 for a 10× dt, and the discrete response's effective ζ is within 0.0003–0.011 OF
+# ONE DOMAIN CELL — the resonance is not an integrator artifact). ⚠ THE RING'S OWN FREQUENCY IS NOT
+# MEASURED ON THIS WIRE and no claim depends on it: gate 0's estimator failed its own first-order
+# control twice (`docs/plans/slice40.md` §0.7), which is why the lesson stops at *neither number,
+# read at a fixed frequency, orders the outcome* and makes no loop-crossover argument. Also: ONE
+# circular stop and ONE circular detector window, a PERFECTLY handed-over head, a PERFECT head gyro
+# (slice 38's slider is absent here), and everything 26–38 named unchanged — ONE odd scalar slope
+# curve PER AXIS, ONE isotropic σ and a TRUTH Vc, diagonal inertia, symmetric cruciform, lift
+# drag-free, constant ρ (a FLIGHT CONDITION — say "low dynamic pressure", never "high altitude").
+#
+# UNITS (§1 trifecta): pos/vel SI; angles rad INSIDE the core; `gimbal_stop_deg` / `gimbal_fov_deg` /
+# `head_angle_deg` / `head_off_deg` in DEGREES at the wire boundary; `gimbal_rate_dps` /
+# `head_rate_dps` in DEGREES PER SECOND; `gimbal_tau_s` in SECONDS; **`gimbal_omega_hz` in HERTZ**
+# (→ rad/s at the seam, ONE `2π`, beside the seam's one `deg2rad`) and **`gimbal_zeta` DIMENSIONLESS**
+# (a damping RATIO); radome slopes DIMENSIONLESS (rad of bend per rad of look); σ_seek in RADIANS;
+# `cross_speed_mps` in m/s and SIGNED; I in kg·m²; ρ in kg/m³; launch ELEVATION in DEGREES.
+# dt = 1e-3 / emit_every = 16.
+name: slice40_resonance
+seed: 32
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # SIX keys, and `head_servo` is the only one that is TOGGLED (convention 9). `airframe` /
+  # `autopilot` / `guidance` / `seeker` / `seeker_axes` are HELD at slice 23–38's values to the digit.
+  # `steering` is OMITTED (the loader default IS :skid_to_turn).
+  #
+  # ⚠⚠ `seeker_head` IS DELIBERATELY **NOT AUTHORED** AND THAT IS A CLIENT DECISION WITH TEETH. The
+  # loader default is `:body_referenced`, which is the rung this slice holds — but authoring it by
+  # name would raise slice 37's `gimbal_frame_view` marker, and the client's shared button would then
+  # cycle the head's FRAME instead of its ORDER. One button, one lesson (convention 9): on this wire
+  # the rung that carries the lesson is `head_servo`, so `seeker_head` stays at its default and its
+  # marker stays down. (The core is indifferent — the rung is read through `get(..., :body_referenced)`
+  # either way; what changes is which fidelity the button offers.)
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+  # ⭐⭐ THE WIRE OPENS ON THE SECOND-ORDER SERVO — the RINGING side — and that is the opposite of
+  # slice 37's choice for a measured reason: on the first-order rung this slice's slider is
+  # BIT-IDENTICALLY INERT, so opening there would hand the student a dead control. From here BOTH
+  # controls do something: the BUTTON goes back to the shipped lag (quiet), and the SLIDER damps the
+  # same inertia (quiet). Two cures, one control each.
+  head_servo: second_order
+
+entities:
+  # The interceptor — `scenarios/slice37_frame.yaml`'s, KEY FOR KEY, with TWO keys added
+  # (`gimbal_omega_hz`, `gimbal_zeta`) and ONE number changed (`gimbal_rate_dps` 40 → 120). Held to
+  # the digit because the whole claim is that giving the head an INERTIA and nothing else rings a
+  # design that was quiet; any other difference would be a second variable in a one-variable
+  # measurement.
+  #
+  # ⚠⚠ THE SERVO RATE IS THE ONE CHANGED NUMBER AND IT IS AN ISOLATION, MEASURED AND NOT PREFERRED.
+  # At slice 37's 40 °/s, slice 35's rate limit binds 20–53 % of band ticks on the lightly-damped
+  # arms — and it ATTENUATES the ring (0.65648 against the free 0.79973 at ζ = 0.05), which is slice
+  # 35's own TWO-SIDED knob reappearing on a new architecture. At 120 it binds 0.00 % on every arm of
+  # both wires. ⇒ THE HONEST SENTENCE IS THAT THE SHIPPED SERVO WAS PARTLY HIDING THIS, not that a
+  # confound was removed. ⚠ At ζ ≤ 0.03 it binds again even at 120 (2.05 % at 0.03, 15.13 % at 0.01),
+  # which is one of the two reasons the slider's FLOOR is 0.05.
+  #
+  # ⚠ elevation_deg = 12.0 IS LOAD-CONSUMED AND IS NOT A KNOB (the slice-19 DEAD-KNOB class).
+  #
+  # THE GLASS (26–38's, unchanged in form): R₀ = −0.03 boresight slope, A = −0.15 the slope CURVE's
+  # depth (so `radome_slope_worst` = R₀ + 2A = −0.33), k = 12.0 AUTHORED and DISQUALIFIED BY
+  # NON-MONOTONICITY at slice 28. R̂ = −0.18 is SLICE 34's OWN SHIPPED DESIGN, chosen because the
+  # first-order head flies it QUIET — the press has to break something that worked.
+  #
+  # THE HEAD: τ = 0.05 (the FIRST-ORDER rung's number — LIVE only on that side of the button),
+  # stop 30°, window 25°. ⚠ NEITHER BINDS ANYWHERE IN THE SLIDER'S DOMAIN and it is MEASURED across
+  # it rather than assumed: head travel peaks at 23.673° against the 30° stop, the detector
+  # requirement peaks at 5.211° against the 25° window, and `out` is 0.00 % in every cell — which is
+  # the precondition that makes every `rms r` on this wire a stability read at all (slice 33/34's
+  # metric inversion), AND the precondition for the kernel's INELASTIC-STOP decision to stay out of
+  # the answer (gate 1's own blocking finding, on the other wire).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      # ⭐⭐ gimbal_omega_hz = 2.0 — THE GIMBAL'S NATURAL FREQUENCY, AUTHORED AND DISQUALIFIED AS A
+      # SLIDER BY NON-MONOTONICITY (slice 28's `k`, the 4th occurrence). The resonant peak is a
+      # COINCIDENCE effect — it PEAKS where ω_n meets the loop's own band and falls off on BOTH sides
+      # — so at ζ = 0.3 the ring runs 0.079 (0.5 Hz) → 0.107 (1 Hz) → 0.098 (2 Hz) → 0.019 (10 Hz) →
+      # 0.031 (30 Hz). A slider on that would teach that a heavier gimbal is safer, then that it is
+      # not. ⚠ IT IS THE WIRE, NOT THE KNOB: 2.0 Hz here (a resonance INSIDE the band — a GAIN
+      # failure) and 0.5 Hz on wire B (a HEAVY gimbal below it — a PHASE failure, at a tenth of the
+      # gain). The contrast between the two files is the payload.
+      #
+      # ⭐⭐ gimbal_zeta = 0.10 — THE SLIDER, AUTHORED WHERE IT RINGS. See `knobs` for both endpoints
+      # and their measured reasons.
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               radome_slope: -0.03, radome_ripple: -0.15, radome_ripple_k: 12.0,
+               radome_slope_est: -0.18,
+               gimbal_tau_s: 0.05, gimbal_stop_deg: 30.0, gimbal_fov_deg: 25.0,
+               gimbal_rate_dps: 120.0,
+               gimbal_omega_hz: 2.0, gimbal_zeta: 0.10}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # ⭐ THE CROSSING TARGET, and the crossing is what makes the glass matter at all. Same start point
+  # as 23–38 (cross-range +Y = 2000 m off the x–z plane) at slice 28's vy = 200 m/s — the geometry
+  # that holds a SUSTAINED ~15° lead, so the seeker parks on the steep part of the slope curve and the
+  # loop is closed by its LOCAL DERIVATIVE there. ⚠ A STATIC target would make this slice dead along
+  # with the whole family (slice 28 measured the lead at 0.04°→0.54° there). AERODYNAMICALLY FREE.
+  # ⚠ `cross_speed_mps` IS AUTHORED AND IS NOT A KNOB, as on 34/35/37/38 — it moves the LEAD, i.e.
+  # slice 32's whole axis. The authored `vel` and the pin AGREE at the default.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 200.0, 0.0]
+    target: {rcs_m2: 1.0, cross_speed_mps: 200.0}
+
+knobs:
+  # ⭐⭐ ONE KNOB AND ONE BUTTON, which is what convention 9 asks — and here they are TWO DIFFERENT
+  # CURES rather than two ends of one axis (slice 38's shape inverted): the BUTTON goes back to the
+  # architecture that cannot ring, and the SLIDER fixes the architecture that can.
+  #
+  # Every other candidate is disqualified and the verifier asserts their absence: `gimbal_omega_hz`
+  # (NON-MONOTONE — see above; it is the WIRE), `radome_slope_est` (slice 37's slider — it moves the
+  # DESIGN, and this wire's whole claim is that the SERVO moves the boundary at a FIXED design),
+  # `gimbal_rate_dps` (slice 35's two-sided knob, and here an ISOLATION authored wide),
+  # `gimbal_tau_s` (it is the OTHER rung's parameter — live only across the button), `gimbal_fov_deg`
+  # / `gimbal_stop_deg` (a live window makes the break an ACQUISITION break), `head_gyro_scale_err`
+  # (slice 38's slider — absent here), `cross_speed_mps` (slice 32's axis — the LEAD), `n_pn` and
+  # `rho` (they move the parasitic boundary AND the guidance loop), `af_alpha_max` (slice 26's
+  # amplitude instrument), `sigma_seek` (it degrades the lesson beside it), `radome_slope` /
+  # `radome_ripple` (the GLASS is HARDWARE), `elevation_deg` (the slice-19 DEAD-KNOB class).
+  #
+  # THE ONE KNOB (`gimbal_zeta`) — BOTH ENDPOINTS MEASURED WITH THEIR REASONS (slice 26's
+  # post-commit discipline), on this wire, at this design, 16 cells:
+  #   FLOOR 0.05: TWO INDEPENDENT REASONS, both measured. (1) BELOW IT SLICE 35's RATE LIMIT COMES
+  #     BACK even at the authored 120 °/s — `sat_band` 2.05 % at ζ = 0.03 and 15.13 % at 0.01 — so a
+  #     lower floor would be measuring THAT knob. (2) The ladder stops being monotone there (0.83533
+  #     / 0.84329 / 0.84872 at ζ = 0.01 / 0.02 / 0.03 against 0.79973 at 0.05), because the limit is
+  #     shaping the ring. ⇒ the floor is where the slider is still the only thing acting.
+  #   CEILING 1.00: THE RING HAS REACHED THE QUIET PLATEAU AND THE ARCHITECTURE HAS STOPPED BEING
+  #     ONE. At ζ = 1.0 the wire reads 0.01212 against the first-order control's own 0.01181, and
+  #     past it a second-order servo COLLAPSES toward a first-order lag of `τ_eff = 2ζ/ω_n` (measured
+  #     against the matched lag at four cells: ratios 1.059 / 1.056 / 1.016 / 1.005 — close, never
+  #     identical, always the same direction). ⇒ past the ceiling the BUTTON and the SLIDER would be
+  #     doing the same thing, which is the honest place to stop.
+  #
+  # ⚠ THE LADDER IS MONOTONE ACROSS THE WHOLE DOMAIN (0.79973 → 0.01212, 66×) with its sharpest step
+  # between 0.20 (0.29269) and 0.30 (0.09830), 3.0×. ⭐ AND THE ANALYTIC EDGE ζ = 1/√2 ≈ 0.7071 IS
+  # INSIDE IT: beyond that value the closed-loop response has NO PEAK ABOVE 1 AT ANY FREQUENCY, which
+  # is a domain landmark DERIVED before it was measured, and the shipped `head_index_gain` crosses
+  # 1.0 within one cell of it (1.11838 at ζ = 0.5, 0.81058 at 0.7071).
+  #
+  # ⚠⚠ THE LABEL IS LENGTH-BUDGETED (slice 32's shots paid for it): knob labels are drawn FULL-WIDTH
+  # in the UI CanvasLayer, which paints OVER the Node2D `_draw` HUD whose column starts at
+  # `vp.x − 430`; at ~6.2 px per character that is a budget of ~110 CHARACTERS.
+  - {target: m1, key: gimbal_zeta, min: 0.05, max: 1.0,
+     label: "GIMBAL DAMPING ζ — inertia is not the enemy, UNDAMPED inertia is"}

@@ -881,6 +881,29 @@ function _airframe_view_info(w::World)
         haskey(w.entities[m].comp, :head_gyro_bias_y)   ||
         haskey(w.entities[m].comp, :head_gyro_bias_z) for m in missiles) &&
         (info[:gimbal_gyro_view] = true)
+    # ⭐⭐ SLICE 40 — THE SERVO'S ORDER, the 9th marker of this family, and it is the SECOND that
+    # exists to **UN-DROP** the shared button (slice 37's was the first). `:head_servo` is a genuine
+    # two-rung fidelity and on this wire the button IS the lesson — press it and a ringing missile
+    # goes quiet, because the shipped first-order lag cannot ring at all here. Without this marker
+    # the client's dispatch hides the button three times over: a slice-40 wire raises `radome_view`,
+    # `gimbal_view` AND `gimbal_rate_view`, every one of which drops it.
+    #
+    # ⚠⚠ AND THE HUD HALF IS THE STALE-READOUT CLASS's ~11th OCCURRENCE, in its WORST form again:
+    # without this branch, `gimbal_rate_view` takes the wire and slice 35's block draws it — a
+    # DEMAND-vs-CAP pair against a rate limit AUTHORED WIDE HERE PRECISELY SO IT NEVER BINDS
+    # (`sat_band` 0.00 % in every cell of the slider's domain). Every number would be TRUE, the
+    # verdict would read "servo FREE", and the slice — an INERTIA that rings the missile — would be
+    # invisible. Slice 35's own failure mode, pointed back at slice 35's own HUD.
+    #
+    # ⚠ GATED ON THE **FIDELITY KEY**, not on a comp key and not on its VALUE — slice 37's choice and
+    # for its reason, sharpened by this wire: the key is what distinguishes a slice-40 wire (the comp
+    # keys `gimbal_omega_hz`/`gimbal_zeta` are permitted beside `:first_order` too, deliberately, so
+    # that the button's other side is reachable), and a value guard on `:second_order` would hide the
+    # button on exactly the arm a student presses it FROM if a wire ever opened on the lag.
+    # ⚠ The loader REFUSES `head_servo` without a head for EITHER rung (`scenario.jl`), so this can
+    # never be raised on a wire with no servo to talk about; slices 1–39 author no such key ⇒ they
+    # are byte-identical and their markers are untouched.
+    haskey(w.fidelity, :head_servo) && (info[:gimbal_servo_view] = true)
     return info
 end
 

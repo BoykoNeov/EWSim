@@ -1,0 +1,114 @@
+# slice40_heavy — A HEAVIER GIMBAL: THE PHASE HALF (HANDOFF §11 Tier-A, slice 40 gate 3). WIRE B of
+# two — read `scenarios/slice40_resonance.yaml` FIRST; this file is that wire with ONE authored
+# number moved (`gimbal_omega_hz` 2.0 → 0.5) and the two limits its own ring needs.
+#
+# > WHY THERE ARE TWO WIRES. Wire A's ringing servo has an INDEX GAIN OF 3.07 at the ring's own
+# > 1.7 Hz — 3.5× the shipped lag's 0.88, and above the STRAPDOWN seeker's 1.00, i.e. worse than no
+# > gimbal at all. That is the intuitive failure: a resonance AMPLIFIES the missile's own motion into
+# > the glass. This wire is the one that cannot be read that way.
+#
+# ⭐⭐ THE HEADLINE, AND IT IS THE PAIR: this gimbal's index gain is **0.095 — A TENTH OF THE SHIPPED
+# LAG's — AND IT RINGS 36× HARDER THAN THE LAG DOES** (0.41555 against 0.01181, at the SAME design,
+# glass, seed and handover). Its phase has run to −176°, where a first-order lag can never pass −90°.
+# ⇒ **NEITHER NUMBER, READ AT A FIXED FREQUENCY, ORDERS THE OUTCOME.** Slice 37 measured its whole
+# margin in GAIN — the lag LOW-PASSES body motion out of the radome's index — and that is TRUE and
+# INCOMPLETE, which only an architecture with TWO numbers could have shown.
+#
+# ⚠⚠ AND THE CONVERSE IS MEASURED TOO, WHICH IS WHAT KEEPS THE CLAIM HONEST: phase past −90° does
+# NOT by itself ring. This wire at ζ = 1.0 sits at −147° and reads 0.01840 — QUIET, and in fact
+# holding ≈15 more cells of R̂ margin than the shipped first-order head (its onset is (−0.100, −0.090]
+# against the lag's (−0.170, −0.165]). ⇒ **INERTIA IS NOT THE ENEMY — UNDAMPED INERTIA IS**, and the
+# same slider that cures wire A cures this one.
+#
+# ⚠ THE RING'S OWN FREQUENCY IS NOT MEASURED AND NO CLAIM RESTS ON IT (`docs/plans/slice40.md` §0.7:
+# gate 0's estimator failed its own control twice, so the hypothesis that the loop moves onto the
+# gimbal's resonance is recorded as UNTESTED, not as physics). The two wires are therefore quoted as
+# two measured cells of a two-parameter surface, not as two points on an explained curve.
+#
+# ⚠ Everything else is `slice40_resonance.yaml`'s, to the digit and for its reasons — the glass, the
+# design R̂ = −0.18, the crossing target, the 120 °/s servo isolation, the slider and its domain.
+# Class 4a, 2 randn/tick, seed load-bearing. Units as wire A's.
+name: slice40_heavy
+seed: 32
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # ⚠ `seeker_head` deliberately NOT authored — see wire A: authoring it would raise slice 37's
+  # marker and point the shared button at the head's FRAME instead of its ORDER.
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+  head_servo: second_order
+
+entities:
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      # ⭐⭐ gimbal_omega_hz = 0.5 — A GIMBAL FIVE TIMES HEAVIER THAN WIRE A's, whose resonance sits
+      # BELOW the loop's own band. Its index gain at 1.7 Hz is 0.095 and it is FLAT across the whole
+      # slider domain (0.09470 at ζ = 0.01 to 0.07962 at ζ = 1.0 — a 16 % spread against wire A's
+      # 3.60 → 0.58, a factor of six). ⇒ ON THIS WIRE THE SLIDER MOVES THE RING 30× WITHOUT MOVING
+      # THE INDEX GAIN, which is the sharpest single statement of the headline available anywhere in
+      # the slice, and it is visible on the HUD as two numbers that refuse to move together.
+      #
+      # ⚠⚠ TWO LIMITS ARE WIDER THAN WIRE A's AND BOTH ARE MEASUREMENTS, NOT PREFERENCES:
+      #   `gimbal_stop_deg: 50` — a heavy gimbal's ring is SPENT IN GIMBAL TRAVEL (`head_angle_deg`
+      #     peaks at 41.498° against the quiet arms' 18.117°), and gate 1 caught this wire reading
+      #     `head_max = 30.000` EXACTLY at slice 37's 30° stop — the kernel's INELASTIC-STOP decision
+      #     becoming reachable on a claimed arm, which is exactly the shape that would FAKE a
+      #     resonance. Opening the stop moved the ring by ~1 % (0.55230 → 0.54614), so the mechanism
+      #     was never the clamp — but the arm was not CLEAN, and now it is. ⭐ This is slice 33's
+      #     "the ring is an FOV budget item" and slice 34's "the ring is spent in detector window"
+      #     arriving in a THIRD currency, the mechanical stop.
+      #   `gimbal_fov_deg: 35` — a heavy gimbal's TRACKING ERROR is an order of magnitude larger than
+      #     a resonant one's (22.482° against 5.138° at the same ζ), so slice 37's inherited 25°
+      #     window BREAKS THE TRACK at ζ ≤ 0.05 (`out_band` 6.91 %, `off_max` running to 123° below
+      #     that) — and a windowed arm is not a stability read at all (slice 33/34's inversion).
+      #     Authored wide ON A NUMBER, slice 35's precedent: at 35° every cell of the domain reads
+      #     `out_band` 0.00 % with ≥ 7.5° of margin, and the wire flies **BIT-IDENTICALLY at 45°**
+      #     (0.55874 / 0.42840 / 0.41555 / … cell for cell), which is what PROVES it non-binding
+      #     rather than merely observed to be.
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               radome_slope: -0.03, radome_ripple: -0.15, radome_ripple_k: 12.0,
+               radome_slope_est: -0.18,
+               gimbal_tau_s: 0.05, gimbal_stop_deg: 50.0, gimbal_fov_deg: 35.0,
+               gimbal_rate_dps: 120.0,
+               gimbal_omega_hz: 0.5, gimbal_zeta: 0.10}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 200.0, 0.0]
+    target: {rcs_m2: 1.0, cross_speed_mps: 200.0}
+
+knobs:
+  # THE SAME ONE KNOB AS WIRE A, with the same disqualifications — and its FLOOR is measured on THIS
+  # wire rather than inherited: at ζ = 0.05 the ring reads 0.55874 with `out_band` 0.00 % and
+  # `head_max` 41.498° inside the authored 50° stop; below it the track breaks even at the wide
+  # window (`out_band` 36–67 % at ζ ≤ 0.03). The CEILING is wire A's, for wire A's reason (the ring
+  # is on its plateau at 0.01840 and the servo has begun collapsing toward a first-order lag).
+  # ⚠ THE LADDER IS MONOTONE ACROSS THE DOMAIN (0.55874 → 0.01840, 30×), and its sharpest step is
+  # between 0.20 (0.28889) and 0.30 (0.07874), 3.7×.
+  - {target: m1, key: gimbal_zeta, min: 0.05, max: 1.0,
+     label: "GIMBAL DAMPING ζ — a tenth of the lag's index gain, and it rings anyway"}

@@ -246,6 +246,20 @@ var _gimbal_frame_view := false    # handshake gimbal_frame_view — 7th marker,
 #       knob, and a student who presses the button and then drags the slider would otherwise be
 #       watching an unlabelled nothing. The HUD names that state instead.
 var _gimbal_gyro_view := false     # handshake gimbal_gyro_view — 8th marker; the HUD, not the button
+# Slice-40 SERVO-ORDER discriminator — the 9th marker of this family, and the SECOND whose job is to
+# UN-DROP the shared button (slice 37's was the first). ⭐⭐ It does BOTH jobs, and both are
+# load-bearing:
+#   THE BUTTON — `:head_servo` is a genuine two-rung fidelity and on this wire the press IS the
+#       lesson: a ringing missile goes QUIET when the servo goes back to the shipped first-order lag,
+#       because a lag's index gain is bounded by 1 and its phase by −90° and it CANNOT ring here.
+#       Without this marker the dispatch hides the button three times over (a slice-40 wire raises
+#       `radome_view`, `gimbal_view` AND `gimbal_rate_view`).
+#   THE HUD — without this branch `gimbal_rate_view` takes the wire and slice 35's block draws a
+#       DEMAND-vs-CAP pair against a rate limit AUTHORED WIDE HERE PRECISELY SO IT NEVER BINDS
+#       (`sat_band` 0.00 % in every cell of the slider's domain). Every number true, the verdict
+#       "servo FREE", and the INERTIA that is ringing the missile never mentioned — slice 35's own
+#       invisible-slice failure mode, pointed back at slice 35's own HUD (~11th occurrence).
+var _gimbal_servo_view := false    # handshake gimbal_servo_view — 9th marker; button AND HUD
 # Slice-36 DISPLAY-ONLY FREEZE on the shipped requirement (see `_handover_peak_hold`): `head_off_peak_deg`
 # is a running maximum, so it runs to 179.4998° at CPA on EVERY arm, hit or miss, and a peak cannot
 # forget. This holds the last sample taken while r > 200 m — the same gate the core's own requirement
@@ -424,6 +438,13 @@ const SEEKER_AXES_RUNGS := ["pitch_plane", "az_el"]
 # press is the one that breaks it. ⚠ Mirrors the core's `SEEKER_HEAD_MODES` and must stay in that
 # order — a client ring that started on the other rung would open the showcase on its own punchline.
 const SEEKER_HEAD_RUNGS := ["body_referenced", "space_stabilized"]
+# Slice-40 A HEAVIER GIMBAL: the SERVO-ORDER cycler on the HELD :six_dof plant and the HELD
+# body-referenced head. first_order (slices 34–39's shipped lag — one number, and its index gain can
+# never exceed 1 nor its phase pass −90° at ANY frequency, which is exactly why it could only ever
+# make the radome's index quieter) ↔ second_order (a gimbal with INERTIA: `θ̈ = ω_n²(θ_cmd − θ) −
+# 2ζω_n θ̇`, which leaves BOTH of those bounds). ⚠ The `:head_servo` fidelity, NOT `:seeker_head` —
+# the servo's ORDER, not its FRAME, and no shipped wire authors both.
+const HEAD_SERVO_RUNGS := ["first_order", "second_order"]
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
 # --- terrain 3-D view (slice 18): the client's FIRST true 3-D view. Populated only when the
@@ -642,6 +663,10 @@ func _on_scenario(obj: Dictionary) -> void:
 	# because what distinguishes this wire is the imperfect sensor and the RUNG is shared with slice
 	# 37. It routes the HUD only; the button is slice 37's and is already right. See its own comment.
 	_gimbal_gyro_view = bool(obj.get("gimbal_gyro_view", false))
+	# Slice 40 — the servo's ORDER. Raised on the FIDELITY KEY (slice 37's choice, not slice 38's),
+	# because what distinguishes this wire is the rung: its comp keys `gimbal_omega_hz`/`gimbal_zeta`
+	# are permitted beside `:first_order` too, deliberately, so the button's other side is reachable.
+	_gimbal_servo_view = bool(obj.get("gimbal_servo_view", false))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -1341,6 +1366,20 @@ func _enter_airframe3d_mode(obj: Dictionary) -> void:
 	# ⚠⚠ THE TWO DISPATCH CHAINS MUST ALWAYS AGREE ON ORDER (34/35/36/37 each wrote this down): a
 	# headline naming the gyro above body lines describing the FRAME would be the invited comparison
 	# with a correct verdict sitting on top of it.
+	# SLICE 40 — THE SERVO'S ORDER, checked FIRST ("check the NEW key first", 12th occurrence). ⚠ Its
+	# button treatment RESEMBLES the two branches below it and is NOT the same: those cycle the head's
+	# FRAME (`seeker_head`), this cycles its ORDER (`head_servo`) — two different fidelities, and a
+	# wire that authored both would have to choose. The slice-40 scenarios deliberately do NOT author
+	# `seeker_head`, so its marker stays down and this branch owns the button unambiguously
+	# (convention 9: one button, one lesson).
+	if _gimbal_servo_view:
+		_fid_kind = "head_servo"
+		if not _prop_btn.pressed.is_connected(_on_head_servo_pressed):
+			_prop_btn.pressed.connect(_on_head_servo_pressed)    # guarded for the headless UI test
+		_prop_btn.tooltip_text = "Cycle gimbal servo ORDER (set_fidelity): first_order → second_order"
+		_prop_btn.visible = true
+		_build_airframe3d_scene()
+		return
 	if _gimbal_gyro_view:
 		_fid_kind = "seeker_head"
 		if not _prop_btn.pressed.is_connected(_on_seeker_head_pressed):
@@ -1890,6 +1929,53 @@ func _handover_req_text(peak: float, window: float, lost: bool) -> String:
 # why the UI test now pins the two budgets SEPARATELY instead of one number for all strings.
 # ⚠ Nothing was lost in the shortening: the mechanism the long versions spelled out is already the
 # line directly beneath them (`_head_gyro_mech_text`), which is where it belongs.
+# ⭐⭐ SLICE 40 — THE VERDICT, AND ITS THIRD STATE IS THE ONE THE SLICE IS ABOUT. The two rungs are not
+# "good" and "bad": a first-order lag CANNOT ring on this wire at all (its index gain is bounded by 1
+# and its phase by −90° at every frequency, for every τ — measured across an 800× τ sweep that never
+# rings), so its own label says WHY rather than reporting a quiet it could not have failed to have.
+# ⚠ WIDTH: the headline is drawn LARGER and from a different origin than the body lines, and its
+# budget is ~30 CHARACTERS — slice 38's shots paid for that number, where a 50-char headline ran off
+# the right edge while the body-line width tooth passed at ~55. Longest form here is 28.
+func _head_servo_verdict_label(lost: bool, ringing: bool, second_order: bool) -> String:
+	if lost:
+		return "TRACK LOST — the head let go"
+	if not second_order:
+		return "FIRST-ORDER LAG — bounded"
+	return "RESONANT GIMBAL — RINGING" if ringing else "DAMPED GIMBAL — loop QUIET"
+
+# THE MECHANISM, one line per rung — and on the LAG rung its job is to name a DEAD CONTROL. A
+# first-order head has no ω_n and no ζ, so this slice's slider is BIT-IDENTICALLY inert there
+# (`max|Δpos| == 0.0`, measured): slice 38's finding in a new key, and the reason the wire opens on
+# the second-order rung instead. ⚠ WIDTH: 54 and 50 characters at 15 px, inside the ~55 budget.
+# ⚠ THE LAG LINE PRINTS NO τ, AND THAT IS NOT A SIMPLIFICATION. `gimbal_tau_s` is NOT a telemetry
+# key, so a τ on this line would be a CLIENT-SIDE CONSTANT dressed as data — the stale-readout class
+# in its cheapest form. It is also the weaker sentence: the bound holds for EVERY τ, which is the
+# whole reason this rung cannot ring here, so naming one value would undersell it.
+func _head_servo_mech_text(second_order: bool, wn: float, z: float) -> String:
+	if second_order:
+		return "INERTIA: ω_n %.1f Hz  ζ %.2f — a servo that can PEAK" % [wn, z]
+	return "LAG: gain ≤ 1, phase ≥ −90° at ANY τ — ζ slider INERT"
+
+# ⭐⭐ THE PAYLOAD LINE, AND IT IS DRAWN AS A COMPARISON BECAUSE THE NUMBER ALONE IS A TRAP. The
+# shipped `head_index_gain` is how much of the missile's own body motion reaches the part of the dome
+# the ray goes through, read at the ring's own 1.7 Hz — the quantity slice 37 measured its ENTIRE
+# margin out of (the lag's 0.88 against a strapdown seeker's 1.00). On THIS wire a ringing servo
+# reads 3.07, above strapdown: worse than no gimbal at all, which is the intuitive story.
+# ⚠⚠ AND THE OTHER WIRE REFUSES THAT STORY: `slice40_heavy.yaml` rings just as hard at 0.095, a TENTH
+# of the lag's. So the line prints the reference values beside the live one and NEVER a verdict — the
+# gain does not order the outcome, and a HUD that coloured it would be asserting that it does.
+# ⚠ WIDTH: 52 characters at the widest.
+func _head_servo_gain_text(g: float) -> String:
+	return "index gain %.2f @1.7Hz   lag 0.88   strapdown 1.00" % g
+
+# THE CURE — and there are TWO, one per control, which is this wire's own shape (slice 38's button
+# and slider were two ends of ONE axis; here they are two different architectures arriving at the
+# same quiet from opposite sides). ⚠ WIDTH: 53 characters.
+func _head_servo_cure_text(second_order: bool) -> String:
+	if second_order:
+		return "cure: damp it (ζ→1) or press for the LAG — both quiet"
+	return "the lag cannot ring here — press to give it INERTIA"
+
 func _head_gyro_verdict_label(lost: bool, ringing: bool, stabilized: bool) -> String:
 	if lost:
 		return "TRACK LOST — the head let go"
@@ -2289,6 +2375,43 @@ func _head_gyro_walk_text() -> String:
 # head's state). The mechanism line, the sensor-spec line and the walk line are this slice's own,
 # and the cure line slice 37 draws is DELIBERATELY ABSENT: `radome_slope_est` is authored here, not a
 # slider, so a line inviting the student to drag it would name a control this wire does not have.
+# ⭐⭐ SLICE 40 — FIVE LINES, AND ONLY TWO ARE SHARED WITH THE FAMILY. The ring line (slice 37's, with
+# its peak-hold) and the detector budget carry over verbatim; the mechanism, the INDEX GAIN and the
+# cure are this slice's own. What is NOT drawn is slice 35's demand-vs-cap pair — deliberately: the
+# rate limit is authored wide on both slice-40 wires precisely so it never binds, and drawing a
+# "servo FREE" verdict beside a missile shaking itself is the invisible-slice failure this branch
+# exists to prevent.
+func _draw_head_servo_hud_lines(vp: Vector2) -> void:
+	var second := str(_fidelity.get("head_servo", "first_order")) == "second_order"
+	var chan := _ring_channel_key()
+	var rr := float(_telemetry.get(_af3d_missile + chan, 0.0))
+	var yaw_ch := chan == ".omega_r"
+	var off := float(_telemetry.get(_af3d_missile + ".head_off_deg", 0.0))
+	var marg := float(_telemetry.get(_af3d_missile + ".gimbal_fov_margin_deg", 0.0))
+	var wn := float(_telemetry.get(_af3d_missile + ".gimbal_omega_hz", 0.0))
+	var z := float(_telemetry.get(_af3d_missile + ".gimbal_zeta", 0.0))
+	var g := float(_telemetry.get(_af3d_missile + ".head_index_gain", 0.0))
+	# THE MECHANISM — and on the lag rung, the fact that the slider is inert (slice 38's shape).
+	draw_string(_font, Vector2(vp.x - 430, 110), _head_servo_mech_text(second, wn, z),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.45, 0.90, 1.00) if second else Color(0.70, 0.70, 0.75))
+	# THE RING — slice 37's line, reused for the reason it was written: a limit cycle crosses zero
+	# twice per cycle, so the peak-hold's VALUE sits beside the live rate or half the frames lie.
+	draw_string(_font, Vector2(vp.x - 430, 132), _frame_ring_text(rr, _radome_qpeak, off, yaw_ch),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _radome_qpeak > 0.5 else COL_TICK)
+	# ⭐⭐ THE INDEX GAIN, WITH ITS TWO REFERENCE VALUES AND NO VERDICT — see `_head_servo_gain_text`.
+	# ⚠ DELIBERATELY UNCOLOURED: colouring it would assert that it orders the outcome, and the other
+	# wire (0.095, ringing) is the measurement that says it does not.
+	draw_string(_font, Vector2(vp.x - 430, 154), _head_servo_gain_text(g),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	# THE CURE — two of them, one per control.
+	draw_string(_font, Vector2(vp.x - 430, 176), _head_servo_cure_text(second),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	# THE DETECTOR BUDGET + THE HEAD's STATE — the precondition for reading the ring at all: the
+	# window never binds anywhere in the slider's domain on either wire (measured, and on wire B
+	# authored wide on a number to make it so).
+	draw_string(_font, Vector2(vp.x - 430, 198), "detector budget %+.1f°   head: %s" % [marg, "HOLDING — no error signal since the break" if _gimbal_lost else "TRACKING"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if (_gimbal_lost or marg < 0.0) else Color(0.55, 1.00, 0.65))
+
 func _draw_head_gyro_hud_lines(vp: Vector2) -> void:
 	var stab := str(_fidelity.get("seeker_head", "body_referenced")) == "space_stabilized"
 	var chan := _ring_channel_key()
@@ -2456,7 +2579,16 @@ func _draw_airframe3d_hud() -> void:
 	# agree: a headline naming the FRAME above body lines about the GYRO is the same defect one level
 	# up. ⚠ The colour rule is inherited unchanged (the latch, not the peak-hold): every arm in this
 	# slider's domain HITS on both rungs, so a ring-coloured headline would paint every intercept.
-	if _gimbal_gyro_view:
+	# SLICE 40 — checked FIRST here as at the other two sites, because all three dispatch chains must
+	# agree: a headline naming the GYRO or the FRAME above body lines about the servo's ORDER is the
+	# same defect one level up. ⚠ The colour rule is inherited unchanged (the latch, not the
+	# peak-hold): every arm in this slider's domain HITS on both rungs, so a ring-coloured headline
+	# would paint every intercept.
+	if _gimbal_servo_view:
+		lbl = _head_servo_verdict_label(_gimbal_lost, _radome_qpeak > 0.5,
+				str(_fidelity.get("head_servo", "first_order")) == "second_order")
+		col = Color(1.00, 0.62, 0.30) if _gimbal_lost else Color(0.45, 0.90, 1.00)
+	elif _gimbal_gyro_view:
 		lbl = _head_gyro_verdict_label(_gimbal_lost, _radome_qpeak > 0.5,
 				str(_fidelity.get("seeker_head", "body_referenced")) == "space_stabilized")
 		col = Color(1.00, 0.62, 0.30) if _gimbal_lost else Color(0.45, 0.90, 1.00)
@@ -2673,7 +2805,14 @@ func _draw_airframe3d_hud() -> void:
 	# ALWAYS agree. Slice 37's block is the one that would take this wire, and every key it reads is
 	# LIVE here — so it would print a true frame-comparison verdict, and a cure line naming a slider
 	# this wire does not have, above a lesson about the SENSOR. The stale-readout class's worst form.
-	if _gimbal_gyro_view:
+	# SLICE 40 — THE SERVO'S ORDER, checked FIRST here too and for the reason the two chains must
+	# ALWAYS agree. `gimbal_rate_view` is the block that would otherwise take this wire, and its
+	# DEMAND-vs-CAP pair reads against a rate limit AUTHORED WIDE HERE PRECISELY SO IT NEVER BINDS —
+	# every number true, the verdict "servo FREE", and the INERTIA that is ringing the missile never
+	# mentioned. Slice 35's own invisible-slice failure mode, pointed back at slice 35's own HUD.
+	if _gimbal_servo_view:
+		_draw_head_servo_hud_lines(vp)
+	elif _gimbal_gyro_view:
 		_draw_head_gyro_hud_lines(vp)
 	elif _gimbal_frame_view:
 		_draw_frame_hud_lines(vp)
@@ -2966,6 +3105,16 @@ func _update_fid_btn() -> void:
 			# steering/atmosphere — the rung IS the lesson, so no visibility branch.
 			_prop_btn.visible = true
 			_prop_btn.text = "seeker: %s" % str(_fidelity.get("seeker_axes", "?"))
+		"head_servo":
+			# ⭐⭐ SLICE 40: the button IS the servo-ORDER cycler (first_order ↔ second_order), and this
+			# is the SECOND SITE of the button's restoration — the same shape as the `"seeker_head"`
+			# arm below and NOT the same key. A slice-40 wire raises `radome_view`, `gimbal_view` and
+			# `gimbal_rate_view`, every one of which drops the button, so without this arm the press
+			# that IS the lesson would be unavailable. ⚠ `visible = true` is EXPLICIT for the same
+			# reason it is below: falling through to `"airframe"` would cycle the HELD `:airframe`
+			# key, the convention-9 "toggle a held key" trap.
+			_prop_btn.visible = true
+			_prop_btn.text = "servo: %s" % str(_fidelity.get("head_servo", "?"))
 		"seeker_head":
 			# ⭐⭐ SLICE 37: the button IS the servo-reference-frame cycler (body_referenced ↔
 			# space_stabilized), and this arm is the SECOND SITE of the button's RESTORATION — the
@@ -3266,6 +3415,32 @@ func _on_seeker_axes_pressed() -> void:
 	var next: String = SEEKER_AXES_RUNGS[(i + 1) % SEEKER_AXES_RUNGS.size()] if i >= 0 else "pitch_plane"
 	_fidelity["seeker_axes"] = next
 	_client.send({"type": "set_fidelity", "key": "seeker_axes", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
+func _on_head_servo_pressed() -> void:
+	# ⭐⭐ SLICE 40 — THE GIMBAL SERVO'S ORDER, and this is the second rung on the shared button in this
+	# family (slice 37's frame was the first). Both rungs fly the SAME head, the SAME glass, the SAME
+	# believed slope, the SAME seed and the SAME 120 °/s servo; the ONLY variable is whether the servo
+	# is a first-order LAG or a second-order MASS-SPRING-DAMPER. Under :second_order (the default on
+	# both slice-40 wires — the showcase OPENS on the design that RINGS, because on the other rung this
+	# slice's slider is bit-identically inert) the head has an INERTIA, and at ζ = 0.10 it rings the
+	# missile 44×. Press once → :first_order is slices 34–39's shipped lag, whose index gain can never
+	# exceed 1 and whose phase can never pass −90°, and the SAME missile goes quiet.
+	# ⚠ IT STILL HITS on both rungs: the miss is not the metric here, as in every slice since 26.
+	# ⚠⚠ THE PRESS AND THE SLIDER ARE TWO DIFFERENT CURES, not two ends of one axis (slice 38's shape
+	# inverted): the button goes back to an architecture that CANNOT ring, the slider damps the one
+	# that can. A student should try both and notice they arrive at the same quiet from opposite sides.
+	# ⚠ Class 4a — DRAW-INVARIANT (no draw topology to flip), so LIVE-SETTABLE with NO set_fidelity
+	# guard, UNLIKE :cfar/:scan. ⚠ The head's POINTING carries across the press; its RATE STATE does
+	# not, and cannot — a first-order head has none, so re-entering the second-order rung starts from
+	# rest (the core's `:head_servo_frame` stamp owns that, and it is physics rather than bookkeeping).
+	# The client owns the displayed rung (badge + button locally; the server applies it next tick).
+	var cur := str(_fidelity.get("head_servo", "first_order"))
+	var i := HEAD_SERVO_RUNGS.find(cur)
+	var next: String = HEAD_SERVO_RUNGS[(i + 1) % HEAD_SERVO_RUNGS.size()] if i >= 0 else "first_order"
+	_fidelity["head_servo"] = next
+	_client.send({"type": "set_fidelity", "key": "head_servo", "value": next})
 	_render_badge()
 	_update_fid_btn()
 
