@@ -158,13 +158,28 @@ export seeker_fov_margin
 # one-tick sampling delay, which is worth nothing. ⚠ `boresight_angle` is now DEFINED from
 # `off_axis_angle` at `ref = (0,0)`, bit-identically: a head CAGED at boresight IS a strapdown seeker
 # — an identity about the ANGLE, never a licence to collapse slice 32/33's window keys onto the head
-# ones. KNOB (`gimbal_fov_deg`), no rung; `τ` and the stop are AUTHORED (τ because gate 0 measured it
-# does not move the onset — the dead-knob discipline applied before the knob exists).
+# ones. KNOB (`gimbal_fov_deg`), no rung; `τ` and the stop are AUTHORED — ⚠ τ because it is a
+# CONFOUNDED lever, NOT a dead one: slice 34's own gate 2 (§2.3) overturned its gate-0 reading, and
+# slice 37's gate 1 re-flew it on a 0.005 grid with the rate limit removed (the bracket walks
+# (−0.145, −0.140] at τ = 0.2 → (−0.175, −0.170] at τ ≤ 0.02, MONOTONE). It moves the amplitude on
+# every arm, so a student dragging it moves the verdict without moving the mechanism.
 # Slice 35 (§11 Tier-A): A RATE-LIMITED HEAD — `head_slew` gains a defaulted `rate_max`, and with it
 # the arc's FIRST TWO-SIDED KNOB: slowing the servo ATTENUATES the ring and GROWS the tracking error
 # the detector window must cover, because the motion that holds the track is the motion that feeds
 # the loop. `head_slew_full` is its implementation, exported so gate 2's telemetry reads the DEMAND
 # and the saturation FLAG off the shipped kernel instead of re-deriving the step at the seam.
+# Slice 37 (§11 Tier-A): THE HEAD'S REFERENCE FRAME — the deferral slice 34 named FOURTH, and ⚠⚠ its
+# own wording was REFUTED at gate 0. "A rate-stabilized head measures inertial LOS rate DIRECTLY" is
+# ALREADY TRUE of the shipped model (`missile.jl`'s seeker is `az_el(û_tru)`, so the measurement has
+# been inertial since slice 25). What is body-referenced is the SERVO — and stabilizing it REMOVES
+# margin: ⭐⭐ the position servo's LAG WAS DOING STABILITY WORK, low-passing body motion out of the
+# glass's INDEX (measured against `1/√(1+(2πfτ)²)` to 3–4 digits, unity gain EXACTLY when stabilized,
+# with slice 26's ring at 1.7–2.1 Hz where that filter is worth 12–16 % of gain). ⇒ THE CLASSICAL
+# REASON GIMBALS EXIST INVERTS ON THIS WIRE. RUNG, not knob — the gate is answered by a BOUND (a 25×
+# faster servo at a 50× smaller τ cannot reach the stabilized head's window requirement), and the two
+# heads do not collapse in any limit of τ against the shipped seam (an irreducible ONE TICK OF
+# ATTITUDE, a property of the seam's ordering).
+export SEEKER_HEAD_MODES, head_clamp_inertial, head_slew_inertial
 export off_axis_angle, head_slew, head_clamp, head_slew_full
 # Missile airframe dynamics (slice 8): force model + fixed-step integrators
 export gravity_accel, drag_accel, total_accel, rk4_step, euler_step, integrator_step

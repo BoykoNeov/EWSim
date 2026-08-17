@@ -432,6 +432,13 @@ on BOTH heads and check the bracket walks with τ on the shipped head in the dir
 predicts, and **does NOT walk on the stabilized one** (whose index gain is τ-independent at unity).
 That is a prediction the mechanism makes and the alternatives do not.
 
+> ⚠⚠ **THE SECOND HALF OF THAT PREDICTION IS WRONG AND GATE 1 (§II.11) REPLACED IT WITH SOMETHING
+> STRONGER.** The stabilized bracket walks MORE (0.055 against 0.030) and **in the OPPOSITE
+> DIRECTION**, so the right statement is about the GAP: it closes monotonely as τ → 0 (0.095 →
+> 0.010, 9.5×), because the frame stops mattering exactly where the filter stops existing. ⭐ AND
+> **THE 0.040 ABOVE IS A τ = 0.05 STATEMENT** — one point on that curve — so *"≈40–45 % of what the
+> gimbal bought"* is true AT THE SHIPPED TIME CONSTANT and must be written with it.
+
 ---
 
 ## §II.7 ⭐⭐ THE TRADE (P5c) — SLICE 35's TWO-SIDED KNOB DISSOLVES, and that is the payload
@@ -468,7 +475,7 @@ LAGS more, and the two effects trade. **Do not assume the stabilized head swings
 
 ---
 
-## §II.9 What gate 1 owes
+## §II.9 What gate 1 owed
 
 * **RUNG** `:seeker_head = (:body_referenced, :rate_stabilized)` (name TBD at gate 1) on the HELD
   `:airframe: six_dof` + `gimbal_tau_s` host — INERT without a head, refused without `two_angle`.
@@ -490,4 +497,182 @@ LAGS more, and the two effects trade. **Do not assume the stabilized head swings
   `head_angle_deg`, `head_rate_sat` and (slice 36) the LOS excursion all read plausibly wrong.
 * ⚠ The MISS is NOT the metric (every arm hits; the stabilized head often misses LESS while ringing
   MORE — 9.979 → 3.838 at R̂ = −0.03/40 °/s — because its window requirement is smaller).
+
+---
+---
+
+# GATE 1 AS BUILT (2026-08-17) — the pure kernels, and the causal chain closed
+
+**Status: gate 1 COMPLETE and green. Suite 7222 → 7323 (+101 asserts, all in `test_frames.jl`); every
+prior assert unmoved, so slices 1–36 are byte-identical.** Raw measurements:
+`M:\claud_projects\temp\slice37g1\g1_results.md` (`g1a_tau_shipped.jl`, `g1b_tau_both.jl`,
+`g1c_frozen.jl`). Probe patch re-applied for G1b/G1c calling **the shipped gate-1 kernels**, and
+**REVERTED** — `git diff --stat` shows no `missile.jl`.
+
+## §II.10 What shipped: TWO kernels, and why it is two and not one
+
+`frames.jl` gains a slice-37 section and three names, exported:
+
+* **`SEEKER_HEAD_MODES = (:body_referenced, :space_stabilized)`** — the rung's tuple, defined ONCE
+  here and referenced by `LIVE_FIDELITY_MODES` at gate 2 (convention 7). ⚠ **NAMED
+  `:space_stabilized`, NOT `:rate_stabilized`** (§II.9 left the name open): the classical term names
+  the loop's SENSOR, and §II.0 measured that this project's seeker has reported an INERTIAL LOS RATE
+  since slice 25 — so `:rate_stabilized` would assert the one thing already true. What moves is
+  WHERE THE POINTING IS HELD. `:rate_stabilized ∉ SEEKER_HEAD_MODES` is asserted, so the refutation
+  cannot be quietly undone by a later rename.
+* **`head_clamp_inertial(az, el, att, stop) -> (az_i, el_i, az_b, el_b)`** — the airframe's BODY
+  stop applied to a head whose pointing is held in SPACE. Returns BOTH pairs, because the stop, the
+  glass's index and the detector window are all body-relative while the servo state is not: ONE
+  conversion site, or `test_frames.jl` proves a second implementation of it and nothing about what
+  flies.
+* **`head_slew_inertial(head_az, head_el, tgt_az, tgt_el, att, τ, dt, stop; rate_max)`
+  `-> (az_i, el_i, az_b, el_b, demand, rate_sat)`** — one tick of the space-stabilized servo:
+  `head_slew_full(…, Inf)` in the INERTIAL frame, then `head_clamp_inertial`.
+
+⭐ **IT IS TWO KERNELS FOR `head_clamp`'s OWN REASON — THE SECOND CALLER.** Slice 34 split
+`head_clamp` out because the seam's HANDOVER must clamp the same way the servo does, and a
+space-stabilized handover has exactly that need in the new frame. Gate 2 calls `head_clamp_inertial`
+directly at handover, as slice 34's seam calls `head_clamp`.
+
+⭐ **AND IT IS `head_slew_full` INSIDE, NOT A SECOND SERVO.** The first-order gain, the exact-landing
+assignment, the radial `step > cap` limit and every convention-5/6 degenerate are the SAME CODE, so
+the two rungs differ ONLY in the frame their angles live in and in where the stop is taken — which is
+what makes §II.11's ladder a measurement of the FRAME rather than of two different servos. Pinned:
+`demand` and `rate_sat` are `head_slew_full`'s own values on every attitude and every stop, and at
+the identity attitude with a free stop the inertial pair is `===` `head_slew`'s.
+
+⚠⚠ **THE ROUND TRIP IS CONDITIONAL, AND IT IS A CORRECTNESS REQUIREMENT RATHER THAN A SAVING**
+(§II.9's implementation note, which the gate-0 probe got wrong by round-tripping every tick). The
+body↔inertial round trip is exact in exact arithmetic and NOT in doubles, so an unconditional one
+would inject a slow RANDOM WALK into the one piece of state whose whole thesis is that it does not
+move with the body. ⭐ **The binding test is `head_clamp`'s OWN DOCUMENTED CONTRACT** — *"returns its
+input UNCHANGED (bit-for-bit) when the stop does not bind"* — consumed as `===`, never a second
+`hypot(az_b, el_b) > max(stop, 0)`: that restatement is a SECOND IMPLEMENTATION of the clamp's
+predicate (the trap `head_slew_full` names for its own `rate_sat`), and it would also have to restate
+the NaN-stop and `stop ≤ 0` degenerates instead of inheriting them.
+
+⚠ **THE BODY PAIR PAYS ONE ROUND TRIP EVEN AT THE IDENTITY ATTITUDE (~1e−16), AND THAT IS PINNED AS A
+BOUND RATHER THAN LEFT AS A SURPRISE.** It is RECOMPUTED from the inertial state every tick and never
+integrated, so nothing accumulates — the asymmetry between the two returned pairs (inertial EXACT,
+body approximate) is deliberate and asserted in both directions.
+
+## ⭐⭐ §II.11 THE CAUSAL CHAIN, CLOSED — AND §II.6's PREDICTION WAS HALF WRONG
+
+Both heads, one 0.005 grid, 25 cells each, **rate limit REMOVED** (the isolation: at a finite rate a
+τ sweep confounds the servo low-pass with rate saturation, because at τ → 0 the step is the full error
+every tick — `frames.jl:907-911`). `out% = 0.00` and `sat% = 0.00` on all 250 arms.
+
+| τ (s) | body-referenced | step | space-stabilized | step | **gap** |
+|---|---|---|---|---|---|
+| 0.200 | (−0.145, −0.140] | 1.82× | (−0.240, −0.235] | 5.21× | **0.0950** |
+| 0.100 | (−0.165, −0.160] | 2.52× | (−0.230, −0.225] | 6.93× | 0.0650 |
+| 0.050 | (−0.170, −0.165] | 4.42× | (−0.210, −0.205] | 9.22× | **0.0400** |
+| 0.020 | (−0.175, −0.170] | 6.72× | (−0.190, −0.185] | 9.91× | 0.0150 |
+| 0.010 | (−0.175, −0.170] | 11.23× | (−0.185, −0.180] | 12.26× | **0.0100** |
+
+⚠ **THE BRACKET RULE IS §II.6's, UNCHANGED AND THRESHOLD-FREE** (the largest single-step ratio), and
+⭐ **τ = 0.05 REPRODUCES BOTH OF §II.6's BRACKETS WITH THE RATE LIMIT REMOVED** — so the isolation
+does not move the numbers it isolates, and the two measurements are the same measurement.
+
+⭐⭐ **THE GAP *IS* THE FILTER: IT CLOSES MONOTONELY AS τ → 0, 0.095 → 0.010, A 9.5× COLLAPSE.** The
+frame stops mattering exactly where the filter stops existing. That is §II.5's index gain measured
+through to the bracket instead of inferred, and it is the prediction §II.6 asked gate 1 for.
+
+⭐⭐ **ONE KNOB, TWO SIGNS — AND THAT IS THE PART NO CONFOUND CAN PRODUCE.** More lag HELPS the
+body-referenced head (its lag low-passes body motion out of the glass's index) and HURTS the
+stabilized one (whose index gain is unity at every τ, so the lag only slows its tracking of the bent
+measurement and weakens slice 34's fixed-point cancellation). Both heads carry the fixed-point
+weakening; only one carries the filter — which is why subtracting them isolates it. Slice 28's rule
+(*a confound cannot produce a non-monotone response to a monotone change*) in a new quantity: here it
+is opposite SIGNS from one knob.
+
+⚠⚠ **SO §II.6's WORDING — "does NOT walk on the stabilized one" — IS REFUTED, AND THE ADVISOR'S
+PRE-MEASUREMENT WARNING IS WHY IT WAS NOT ASSERTED THAT WAY.** The stabilized head's INDEX gain is
+τ-independent at unity, but its POINTING still tracks the bent measurement through the same `dt/τ`
+gain, so slice 34's fixed-point path survives with a τ in it. Demanding "flat" would have made a real
+0.055 walk read as a bug in the new branch.
+
+⚠ **THE GAP DOES NOT REACH ZERO (0.010 at τ = 0.01), AND THAT FLOOR WAS INDEPENDENTLY LOCATED.**
+§II.4 measured the irreducible residual against the shipped seam to be exactly ONE TICK OF ATTITUDE
+(`abs(STAB − SHIP)` plateauing at 6.259e−4 rad while `abs(STAB − FRESH)` reaches 0.000e+00). Two
+different measurements, the same floor — which is why *"the two heads collapse in the τ → 0 limit"* is
+still the wrong sentence.
+
+⚠ **THE CO-VANISHING IS AN ORDERING, NOT AN IDENTITY** (slice 26's rule, not slice 21/22's): the
+first-order attenuation `1 − 1/√(1+(2πfτ)²)` at the ring's 1.9 Hz runs 0.614 / 0.358 / 0.141 / 0.027
+/ 0.007 across the same τ grid against a gap-above-floor of 0.085 / 0.055 / 0.030 / 0.005 / 0.000 —
+monotone together and NOT proportional. Do not write it as an exact factorization.
+
+## ⭐ §II.12 THE FROZEN HEAD IN BOTH FRAMES — the mechanism PINNED, not trended
+
+Slice 34 §0.4 did not infer its mechanism from a trend: it FROZE the head (τ = 1e9) and measured that
+a head frozen IN THE BODY makes a CONSTANT bend — nothing for `dε/dt` to differentiate — so it is
+quiet at every R̂. A head frozen IN SPACE has a body-relative index that KEEPS MOVING at unity gain,
+so the same degenerate must land on the OPPOSITE side. ⚠ Window FREE on both arms (a frozen head's
+tracking error runs to ~33°; at the wire's 25° window both would break and read quiet for slice 33's
+reason — the two-run discipline applied BEFORE the measurement).
+
+| R̂ = −0.03, τ = 1e9 | `rms r` | `off_max` ° | `head_max` ° |
+|---|---|---|---|
+| body-referenced (frozen in BODY ⇒ frozen INDEX) | **0.01472** | 33.079 | 18.117 |
+| **space-stabilized (frozen in SPACE ⇒ index still moves)** | **0.52112** | 11.951 | 28.002 |
+| strapdown control | 1.07211 | — | — |
+
+⭐⭐ **35.4× AT THE BORESIGHT DESIGN — and the frozen body arm reproduces slice 34's OWN 0.01472 and
+1.07211 TO FIVE DECIMALS**, which validates this whole harness against a shipped number rather than
+against itself.
+
+⚠ The contrast appears ONLY at −0.03: at −0.12 / −0.18 / −0.33 both freezes are quiet, because a
+frozen-in-space head is its own plant with its own bracket somewhere in (−0.12, −0.03).
+
+⚠⚠ **TWO HONEST CAVEATS ON THESE REDUCTIO ARMS.** (1) The frozen SPACE head is a **BETTER** tracker,
+not a worse one — `off_max` 11.95° against 33.08° — because holding a direction in space keeps it near
+the LOS while holding one in the body does not. Slice 34's *"it has stopped being a gimbal and become
+a staring seeker whose window is the whole lead"* does NOT transfer to this frame. (2) **`head_max`
+reaches 30.000° at R̂ = −0.33 — THE 30° STOP BINDS, the first arm anywhere in slices 34–37 to do so.**
+§II.8's *"the stop never binds"* is a statement about the LADDER arms and does not extend here.
+
+## §II.13 A STALE PROOF CORRECTED IN TWO SHIPPED FILES (and it is not this slice's finding)
+
+`frames.jl:856-859` and `EWSim.jl`'s slice-34 block both carried slice 34's **gate-0** reason for τ
+being AUTHORED: *"τ does not move the stability onset anywhere in `[0.02, 0.2]`; only the amplitude
+sags."* ⚠ **Slice 34's OWN GATE 2 (§2.3) had already overturned that** — *"its ladder skipped −0.17
+and −0.16, which is exactly where the bracket is… τ is a CONFOUNDED LEVER"* — and the correction never
+reached the docstrings. Both now carry the confounded-lever reading and gate 1's own ladder. **The
+conclusion is unchanged (τ stays authored) and the corrected reason is STRONGER**: a lever that moves
+the verdict on every arm without moving the mechanism is a worse slider than a dead one.
+⇒ [[ewsim-fin-dynamics-direction]]'s *re-run the comparison that entitled an earlier slice to its
+finding before borrowing it* — pointed at a docstring rather than at a claim, and the reason to run
+G1a FIRST was that it could have refuted this slice's title for the price of one sweep.
+
+## §II.14 WHAT GATE 2 OWES (§II.9's list, updated by what gate 1 measured)
+
+* The **rung** `:seeker_head` (`SEEKER_HEAD_MODES`) on the HELD `:airframe: six_dof` + `gimbal_tau_s`
+  host. ⚠⚠ **GATE IT ON THE LIVE `:airframe`, NEVER ON `haskey(:head_i_az)`** — the latent-bug class
+  that has fired SEVEN times on exactly this question (21's `_atm_on`, 23, 26, 27, 29, 32, 34), and
+  here it is WORSE than the earlier occurrences: a frozen attitude makes the body↔inertial conversion
+  the IDENTITY, so the two rungs would silently BECOME each other rather than visibly break. Refuse
+  the rung without `gimbal_tau_s` at load (there is no head to stabilize) — slice 21's "refused rather
+  than silently branch-ordered".
+* The **HANDOVER** calls `head_clamp_inertial(az_tru, el_tru, att, stop)`, and the **servo target** is
+  the measured INERTIAL angles `(az_m, el_m)` — no attitude at all, which is §II.4's residual's whole
+  origin. ⚠ Bit-identity for `:body_referenced` must be BY CONSTRUCTION (a branch whose else-arm is
+  slice 34/35's lines TEXTUALLY UNCHANGED), never a `ω_ref = 0` trusted to cancel.
+* ⚠ **THE `HOLD` BRANCH IS PHYSICS AND NOT HOUSEKEEPING, and the probe already had to decide it.**
+  When the target leaves the detector window a body-referenced head HOLDS ITS BODY ANGLE; a
+  space-stabilized head holds its INERTIAL angle, so its body angle KEEPS MOVING (and its stop can
+  still bind). No arm quoted at gate 0 or gate 1 reaches that branch (`out% = 0.00` everywhere), so
+  gate 2 must either exercise it or say it is unexercised — slice 34's gate-2 advisor catch on
+  `fov_rad` is the precedent for what an unreached branch costs.
+* **Class 4a**, 12th consecutive RNG-live: NO new `randn`, draw count identical on both rungs.
+  ⚠ Gyro NOISE stays determinism-blocked (an unconditional third draw desyncs 25–31 — the slice-13
+  `:scan` 4b shape); it is NOT this slice.
+* **Telemetry**: the head's body pair already ships (`head_angle_deg`, `head_off_deg`), and
+  `head_rate_dps` / `head_rate_sat` keep their slice-35 meaning IN THE SERVO'S OWN FRAME — which is
+  the point of the rung and must be SAID, not assumed, because the same key name now measures a
+  different frame's demand on each rung.
+* **Two-run discipline** — every arm quoted must have `out% = 0.00`. A windowed arm's `rms r`,
+  `head_angle_deg`, `head_rate_sat` and (slice 36) the LOS excursion all read plausibly wrong.
+* ⚠ The MISS is NOT the metric (see above) — and gate 1 adds a second reason not to reach for it: on
+  the frozen reductio arms the two heads' misses are 0.160 and 0.169 m while `rms r` parts by 35.4×.
 

@@ -1669,4 +1669,265 @@
             end
         end
     end
+
+    # --- SLICE 37 — THE HEAD'S REFERENCE FRAME (§11 Tier-A) -------------------------------
+    #
+    # Slices 34/35's head is BODY-referenced: its state, its target and its rate limit all live in
+    # body coordinates, so the servo's job includes TRACKING OUT the missile's own rotation. Mount
+    # the rate gyros on the HEAD instead and the pointing is held IN SPACE — classically a
+    # "rate-stabilized" gimbal, and the classical reason gimbals exist.
+    #
+    # ⚠⚠ AND ON THIS WIRE IT REMOVES MARGIN RATHER THAN ADDING IT, because the position servo's LAG
+    # WAS DOING STABILITY WORK: it LOW-PASSES body motion out of the radome's INDEX. That is a claim
+    # about a first-order filter and it is measured HERE, in closed form, rather than inferred from a
+    # flight trend — `docs/plans/slice37.md` §II.5 and gate 1's own G1b/G1c.
+    #
+    # ⚠ THIS SLICE IS *ABOUT* A FRAME CHANGE AND THE #1 SIGN TRAP HAS FIRED ELEVEN TIMES, so every
+    # invariant below is a BENCH measurement with an EXTERNAL closed form as its oracle (`τ·ω` for
+    # the lag, `1/√(1+(2πfτ)²)` for the index gain) and never a restatement of the implementation.
+    @testset "THE HEAD'S REFERENCE FRAME (slice 37) — the lag that was doing stability work" begin
+
+        # An arbitrary fixed INERTIAL line of sight, and a body that can be rotated about it.
+        û37 = los_unit(Vec3(0.0, 0.0, 0.0), Vec3(6000.0, 2000.0, 4200.0))
+        az37, el37 = az_el(û37)
+        qy37(θ) = qnormalize(quat_from_axis_angle(Vec3(0.0, 1.0, 0.0), θ))
+        DT37 = 1.0e-3
+
+        @testset "SEEKER_HEAD_MODES — the one-list-no-drift const (convention 7)" begin
+            @test SEEKER_HEAD_MODES == (:body_referenced, :space_stabilized)
+            # ⚠ NAMED `:space_stabilized`, NOT `:rate_stabilized` — gate 0 §II.0 measured that the
+            # shipped seeker ALREADY reports an inertial LOS RATE (`missile.jl` is `az_el(û_tru)`,
+            # not `look_angles(att, û_tru)`), so the classical name would assert the one thing that
+            # is already true. What moves is WHERE THE POINTING IS HELD.
+            @test !(:rate_stabilized in SEEKER_HEAD_MODES)
+            # a SEPARATE key from the tracker (`SEEKER_MODES`) and the dimensionality
+            # (`SEEKER_AXES_MODES`) — three orthogonal seeker keys, no shared rung names
+            @test isempty(intersect(SEEKER_HEAD_MODES, SEEKER_MODES))
+            @test isempty(intersect(SEEKER_HEAD_MODES, SEEKER_AXES_MODES))
+        end
+
+        @testset "head_clamp_inertial — the stop stays the AIRFRAME's, and the round trip is CONDITIONAL" begin
+            free = deg2rad(1.0e6)
+
+            # (1) THE ROUND TRIP IS CONDITIONAL, AND THAT IS A CORRECTNESS REQUIREMENT: the body↔
+            # inertial round trip is exact in exact arithmetic and NOT in doubles, so an
+            # unconditional one would inject a slow random walk into the one piece of state whose
+            # whole thesis is that it does NOT move with the body. `===`, over a rotation sweep, on
+            # BOTH returned inertial components.
+            let n_bad = 0
+                for θ in range(-1.2, 1.2; length = 61)
+                    p = head_clamp_inertial(az37, el37, qy37(θ), free)
+                    (p[1] === Float64(az37) && p[2] === Float64(el37)) || (n_bad += 1)
+                end
+                @test n_bad == 0
+            end
+
+            # (2) …and the BODY pair it returns beside it is the SAME PHYSICAL DIRECTION. ⚠ THE
+            # ORACLE IS THE DAY-ONE ROUND TRIP (`rotate` ∘ `rotate_inv`), NOT `look_angles` RESTATED
+            # — asserting the body pair equals `look_angles(att, los_unit_from_angles(…))` would be
+            # the implementation compared with itself, the tautology class slice 33's gate 1 hit.
+            for θ in (-0.9, -0.3, 0.0, 0.4, 1.1)
+                p = head_clamp_inertial(az37, el37, qy37(θ), free)
+                @test rotate(qy37(θ), los_unit_from_angles(p[3], p[4])) ≈ û37 atol=1e-12
+            end
+            # ⚠ AND THE BODY PAIR PAYS ONE ROUND TRIP EVEN AT THE IDENTITY ATTITUDE (~1e−16) — it is
+            # RECOMPUTED from the inertial state every tick and never integrated, so nothing
+            # accumulates. Pinned as a bound rather than left as a surprise for a later reader.
+            let p = head_clamp_inertial(az37, el37, id, free)
+                @test p[3] ≈ Float64(az37) atol=1e-15
+                @test p[4] ≈ Float64(el37) atol=1e-15
+                @test p[1] === Float64(az37) && p[2] === Float64(el37)   # the inertial pair: EXACT
+            end
+
+            # (3) WHEN THE STOP BINDS, all four numbers move together: the BODY pair lands on the
+            # stop circle, and the returned INERTIAL pair is that clamped direction expressed back
+            # in space. ⚠ PAIRED with (1)'s non-binding case — a conditional round trip whose
+            # binding half is never exercised proves nothing about the condition.
+            let stop = deg2rad(5.0), θ = 0.35, q = qy37(θ)
+                p = head_clamp_inertial(az37, el37, q, stop)
+                @test hypot(p[3], p[4]) ≈ stop atol=1e-15         # ⚠ RADIAL scaling: `hypot` lands
+                @test !(p[1] === Float64(az37))                   #   on the circle to the last ULP,
+                @test !(p[2] === Float64(el37))                   #   and the input is NOT returned
+                # the inertial pair IS the clamped body direction, rotated back out
+                @test rotate_inv(q, los_unit_from_angles(p[1], p[2])) ≈
+                      los_unit_from_angles(p[3], p[4]) atol=1e-12
+                # …and it is a DIFFERENT direction from the unclamped one (the stop really bound)
+                @test !isapprox(los_unit_from_angles(p[1], p[2]), û37; atol = 1e-6)
+            end
+
+            # (4) ⭐⭐ THE CAGED DEGENERATE IS SLICE 34's IDENTITY READ IN THE OTHER FRAME, and it is
+            # measured rather than inherited. `stop ≤ 0` pins the BODY pair at the origin — which by
+            # `off_axis_angle`'s identity is a strapdown seeker — so the head's INERTIAL angles
+            # track the missile's attitude EXACTLY: a caged body-referenced head FREEZES, a caged
+            # space-stabilized one FOLLOWS THE NOSE. ⚠ Same identity, opposite motion — and the
+            # GLASS cannot tell, because either way the index is identically zero. A bench
+            # distinction about the STATE, deliberately not a flight claim.
+            for dead in (0.0, -0.0, -1.0), θ in (-0.7, 0.2, 1.0)
+                q = qy37(θ)
+                p = head_clamp_inertial(az37, el37, q, dead)
+                @test iszero(p[3]) && iszero(p[4])                      # caged at boresight
+                @test off_axis_angle(p[3], p[4], 0.21, -0.13) ===
+                      off_axis_angle(0.0, 0.0, 0.21, -0.13)             # ⇒ a strapdown seeker
+                @test (p[1], p[2]) == az_el(rotate(q, Vec3(1.0, 0.0, 0.0)))   # …and it IS the nose
+            end
+
+            # (5) convention 6, inherited from `head_clamp` rather than restated: a NaN stop
+            # degenerates to NO stop, which short-circuits the round trip too (never a NaN head).
+            let p = head_clamp_inertial(az37, el37, qy37(0.4), NaN)
+                @test p[1] === Float64(az37) && p[2] === Float64(el37)
+                @test all(isfinite, p)
+            end
+            # `Real`, not `Float64` — the same widening the rest of the family takes
+            @test head_clamp_inertial(0, 0, id, 10) ===
+                  head_clamp_inertial(0.0, 0.0, id, 10.0)
+        end
+
+        @testset "head_slew_inertial — ONE servo, TWO frames (the bench that IS the mechanism)" begin
+            free = deg2rad(1.0e6)
+            τ37  = 0.05
+
+            # (1) ⭐ IT IS `head_slew_full`, NOT A SECOND SERVO. At the identity attitude with a free
+            # stop the inertial pair is `===` the shipped kernel's, and the DEMAND and the
+            # SATURATION FLAG are the shipped kernel's on EVERY attitude — the stop and the frame
+            # cannot touch them, which is what makes gate 1's ladder a measurement of the FRAME
+            # rather than of two different servos.
+            let h = (0.31, -0.17), t = (-0.44, 0.22)
+                @test head_slew_inertial(h..., t..., id, τ37, DT37, free; rate_max = 5.0)[1:2] ===
+                      head_slew(h..., t..., τ37, DT37, free; rate_max = 5.0)
+                f = head_slew_full(h..., t..., τ37, DT37, Inf; rate_max = 5.0)
+                for θ in (-0.8, 0.0, 0.6), st in (free, deg2rad(5.0), 0.0)
+                    p = head_slew_inertial(h..., t..., qy37(θ), τ37, DT37, st; rate_max = 5.0)
+                    @test p[5] === f[3] && p[6] === f[4]
+                end
+            end
+
+            # (2) ⚠ AT ZERO BODY RATE THE TWO FRAMES ARE THE SAME FRAME — 3000 ticks, the stabilized
+            # head expressed in body against the shipped head. PAIRED with a does-differ case,
+            # because an invariant tooth that only ever runs the invariant branch cannot catch a
+            # frame applied where it does not belong.
+            function twin_walk(ω; τ = τ37, n = 3000, rate = Inf)
+                q = id
+                hi = (0.0, 0.0); hb = (0.0, 0.0); dmax = 0.0
+                for _ in 1:n
+                    q = qnormalize(qmul(quat_from_axis_angle(Vec3(0.0, 1.0, 0.0), -ω * DT37), q))
+                    s = head_slew_inertial(hi..., az37, el37, q, τ, DT37, free; rate_max = rate)
+                    hi = (s[1], s[2])
+                    tb = look_angles(q, û37)
+                    hb = head_slew(hb..., tb..., τ, DT37, free; rate_max = rate)
+                    sb = look_angles(q, los_unit_from_angles(hi...))
+                    dmax = max(dmax, abs(sb[1] - hb[1]), abs(sb[2] - hb[2]))
+                end
+                return (dmax = dmax, q = q, hi = hi, hb = hb)
+            end
+            @test twin_walk(0.0).dmax < 1e-14              # SAME FRAME (measured 1.1e−16 rad)
+            @test twin_walk(0.20).dmax > 1e-3              # …and DIFFERENT once the body rotates
+
+            # (3) ⭐⭐ THE LAG LAW, WITH AN EXTERNAL CLOSED FORM AS ITS ORACLE. Freeze the geometry
+            # and spin the body: the BODY-referenced head is chasing a target that moves in its own
+            # frame and settles to a steady-state pointing error ≈ τ·ω, while the SPACE-stabilized
+            # head's target does not move in its frame and its error goes to ZERO. That is the whole
+            # mechanism, in one column.
+            # ⚠ THE RATE LIMIT IS REMOVED HERE AND THE HIGH-ω ROWS ARE EXCLUDED, both deliberately
+            # (`docs/plans/slice37.md` §II.2): past ω ≈ 0.8 rad/s at a 40 °/s limit the rate limit
+            # breaks the small-error regime and `τ·ω` stops being the oracle at all (the probe
+            # measured 74.7° against a τ·ω column of 2.3°). Excluded rather than loosened until
+            # they pass.
+            for ω in (0.05, 0.20, 0.50)
+                r = twin_walk(ω)
+                e_stab = off_axis_angle(look_angles(r.q, los_unit_from_angles(r.hi...))...,
+                                        look_angles(r.q, û37)...)
+                e_ship = off_axis_angle(r.hb..., look_angles(r.q, û37)...)
+                @test e_stab < 1e-12                       # 0.000000000° at every ω
+                # the discrete first-order lag settles JUST BELOW the continuous `τ·ω` bound…
+                @test e_ship < τ37 * ω
+                @test e_ship ≈ τ37 * ω rtol=0.10           # …and within 10 % of it (measured 0.7–5.3 %)
+                @test e_ship > 1e3 * e_stab                # and the two are not the same number
+            end
+
+            # (4) ⭐⭐ THE MECHANISM ITSELF: THE INDEX GAIN. The quantity slice 26's loop is closed by
+            # is the head's BODY-frame angle — the part of the dome the ray passes through — so the
+            # claim "the servo lag was doing stability work" is a claim about a TRANSFER FUNCTION on
+            # that quantity, and it is measured against the first-order law rather than inferred
+            # from `rms r`. Geometry frozen, body oscillating sinusoidally at `f`.
+            # ⭐ Slice 26's limit cycle lives at 1.7–2.1 Hz, where that filter is worth 12–16 % of
+            # gain — which is what a design one rung inside slice 34's bracket had been living on,
+            # unnamed, since slice 34.
+            function index_gain(f; τ = τ37, amp = 0.02, ncyc = 12)
+                n = round(Int, ncyc / (f * DT37))
+                q = id; hi = (0.0, 0.0); hb = (0.0, 0.0)
+                bmin_s = Inf; bmax_s = -Inf; bmin_b = Inf; bmax_b = -Inf; bmin_t = Inf; bmax_t = -Inf
+                for k in 1:n
+                    θ = amp * sin(2π * f * k * DT37)
+                    q = qnormalize(quat_from_axis_angle(Vec3(0.0, 1.0, 0.0), θ))
+                    s = head_slew_inertial(hi..., az37, el37, q, τ, DT37, free)
+                    hi = (s[1], s[2])
+                    tb = look_angles(q, û37)
+                    hb = head_slew(hb..., tb..., τ, DT37, free)
+                    if k > n ÷ 2                                    # LAST HALF only — transients out
+                        bmin_s = min(bmin_s, s[4]); bmax_s = max(bmax_s, s[4])   # STAB body index
+                        bmin_b = min(bmin_b, hb[2]); bmax_b = max(bmax_b, hb[2]) # SHIP body index
+                        bmin_t = min(bmin_t, tb[2]); bmax_t = max(bmax_t, tb[2]) # the DRIVE
+                    end
+                end
+                drive = bmax_t - bmin_t
+                return ((bmax_s - bmin_s) / drive, (bmax_b - bmin_b) / drive)
+            end
+            for f in (0.25, 1.0, 1.7, 2.1, 4.0)
+                g_stab, g_ship = index_gain(f)
+                lag = 1 / sqrt(1 + (2π * f * τ37)^2)         # the EXTERNAL closed form
+                @test g_ship ≈ lag atol=5e-3                # matched to 3–4 digits at every f
+                @test g_stab ≈ 1.0 atol=1e-3                # UNITY, at every f — no filter at all
+                @test g_stab > g_ship                       # …and the ordering, at every f
+            end
+            # ⭐ THE RING'S OWN BAND, as its own assert rather than a comment: at 1.7–2.1 Hz the
+            # shipped servo removes 12–16 % of the index gain the stabilized head passes in full.
+            for f in (1.7, 2.1)
+                g_stab, g_ship = index_gain(f)
+                @test 0.11 < (g_stab - g_ship) < 0.18
+            end
+
+            # (5) THE DEGENERATES (convention 5/6), and the one that is NOT slice 34's. Every freeze
+            # here freezes the INERTIAL state exactly as `head_slew_full` pins it…
+            let h = (0.31, -0.17), t = (-0.44, 0.22), q = qy37(0.4)
+                for (τd, rt) in ((Inf, Inf), (τ37, 0.0), (τ37, -1.0))
+                    p = head_slew_inertial(h..., t..., q, τd, DT37, free; rate_max = rt)
+                    @test (p[1], p[2]) === h
+                end
+                @test head_slew_inertial(h..., t..., q, τ37, 0.0, free;
+                                         rate_max = 1.0)[1:2] === h        # dt = 0
+                @test head_slew_inertial(h..., t..., q, τ37, -1.0, free;
+                                         rate_max = 1.0)[1:2] === h        # dt < 0
+                @test head_slew_inertial(h..., t..., q, τ37, 0.0, free;
+                                         rate_max = Inf)[1:2] === h        # the DEFAULT's NaN cap
+                # a NaN rate is NO limit, never a NaN head
+                @test head_slew_inertial(h..., t..., q, τ37, DT37, free; rate_max = NaN) ===
+                      head_slew_inertial(h..., t..., q, τ37, DT37, free)
+                # a NaN τ still PROPAGATES — an AUTHORED input is validate-at-LOAD's business
+                @test all(isnan, head_slew_inertial(h..., t..., q, NaN, DT37, free)[1:4])
+                # convention 6 — finite in, finite out, at any magnitude
+                @test all(isfinite, head_slew_inertial(h..., 1.0e9, -1.0e9, q, 1.0e-9, DT37,
+                                                       1.0e9; rate_max = 1.0e-9))
+                @test head_slew_inertial(0, 0, 1, 1, id, 0, 1, 10; rate_max = 1) ===
+                      head_slew_inertial(0.0, 0.0, 1.0, 1.0, id, 0.0, 1.0, 10.0; rate_max = 1.0)
+            end
+            # …⭐⭐ BUT A FROZEN SPACE-STABILIZED HEAD IS NOT SLICE 34's FROZEN-INDEX REDUCTIO. Slice
+            # 34 froze the head IN THE BODY, which makes a CONSTANT bend — nothing for `dε/dt` to
+            # differentiate — and measured it QUIET at every R̂ (0.01472 at the boresight design).
+            # Freeze this one and the INERTIAL state holds while the BODY index keeps moving at
+            # unity gain, so the same degenerate lands on the OPPOSITE side of the mechanism.
+            # Gate 1's G1c flew exactly that: 0.01472 (frozen in body) against 0.52112 (frozen in
+            # space) at the same R̂ = −0.03, a 35.4× split. Here is the bench half of it.
+            let q0 = qy37(0.0), q1 = qy37(0.30), h = (0.31, -0.17), t = (-0.44, 0.22)
+                a = head_slew_inertial(h..., t..., q0, Inf, DT37, free)
+                b = head_slew_inertial(h..., t..., q1, Inf, DT37, free)
+                @test (a[1], a[2]) === (b[1], b[2])          # the INERTIAL state froze identically…
+                # …and the BODY index moved WITH the body. ⚠ ON THE PAIR, NOT ON THE AZIMUTH: a pure
+                # PITCH carries the index in ELEVATION and barely moves the azimuth (0.0025 rad
+                # against 0.297 for a 0.30 rad rotation), so an azimuth-only assert reads "frozen"
+                # for a head that is tracking the body exactly — the #1 SIGN TRAP's neighbour, the
+                # WRONG-CHANNEL trap, and this assert failed that way on its first run.
+                @test max(abs(a[3] - b[3]), abs(a[4] - b[4])) > 0.1
+            end
+        end
+    end
 end

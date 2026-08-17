@@ -853,10 +853,17 @@ hides.
 free, but a radial clamp CAN increase it (the head is pulled off the line to the target), so the
 tooth EXCLUDES the stop-binding case explicitly rather than being loosened until it passes.
 
-⚠ **`τ` IS AUTHORED, NOT A SLIDER, AND §0.4 IS THE REASON** — the slice-19 dead-knob discipline
-applied BEFORE the knob exists rather than after it ships. Under the head this slice actually flies
-(the one that tracks its own BENT measurement) τ does not move the stability onset ANYWHERE in
-`[0.02, 0.2]`; only the amplitude sags. The single live slider is the detector window. The
+⚠⚠ **`τ` IS AUTHORED, NOT A SLIDER — BUT IT IS A *CONFOUNDED* LEVER AND NOT A DEAD ONE, AND THIS
+LINE ONCE SAID OTHERWISE.** Slice 34's gate 0 read *"τ does not move the stability onset anywhere in
+`[0.02, 0.2]`; only the amplitude sags"*, and its OWN gate 2 (§2.3) overturned that — the gate-0
+ladder skipped −0.17 and −0.16, which is exactly where the bracket is. Slice 37's gate 1 re-flew it
+on a **0.005 grid with the rate limit removed** (so the low-pass is isolated from rate saturation)
+and the bracket walks MONOTONELY: **(−0.145, −0.140] at τ = 0.2 → (−0.165, −0.160] at 0.1 →
+(−0.170, −0.165] at 0.05 → (−0.175, −0.170] at τ ≤ 0.02**, with `out% = 0.00` on every cell. More
+servo lag buys MORE margin — which is slice 37's mechanism (the lag low-passes body motion out of
+the glass's index) seen from the τ side. ⇒ it stays authored for a STRONGER reason than a dead knob:
+it moves the amplitude on every arm, so a student dragging it moves the verdict without moving the
+mechanism. The single live slider is the detector window. The
 degenerates are still physics and are still pinned: **`τ = Inf` FREEZES the head** (`gain = 0`),
 which is §0.4's frozen-head arm — quiet at EVERY R̂ including the worst, because a head frozen in the
 body frame produces a CONSTANT bend and there is nothing for `dε/dt` to differentiate. ⚠ That arm is
@@ -990,6 +997,153 @@ function head_slew_full(head_az::Real, head_el::Real, tgt_az::Real, tgt_el::Real
     end
     p = head_clamp(az, el, stop)                       # the CIRCULAR stop — the ONE clamp site,
     return (p[1], p[2], dem, sat)                      # shared with the seam's handover init
+end
+
+# --- THE HEAD'S REFERENCE FRAME (slice 37, §11 Tier-A — the deferral slice 34 named FOURTH) --------
+#
+# Slices 34/35 gave the seeker a head with its own pointing state, its own first-order servo and its
+# own maximum slew rate — and all of it in the BODY frame. `head_tgt = look_angles(att, …)`, and
+# `head_slew_full` rate-limits a step in body coordinates, so the servo's job includes TRACKING OUT
+# the missile's own rotation. A real gimbal need not work that way: mount rate gyros ON THE HEAD,
+# close the servo loop on them, and the head holds its pointing IN SPACE while the body moves around
+# it. Classically that is a "rate-stabilized" (space-stabilized) head, and it is THE reason gimbals
+# exist.
+#
+# ⚠⚠ AND THE CLASSICAL REASON DOES NOT APPLY HERE, WHICH IS WHY THIS IS A SLICE. The deferral's own
+# wording (`docs/plans/slice34.md:931`) was *"a rate-stabilized head measures inertial LOS rate
+# DIRECTLY"* — and `missile.jl`'s seeker is `az_el(û_tru)`, NOT `look_angles(att, û_tru)`: it has
+# reported INERTIAL LOS angles since slice 25 and the α-β tracker an INERTIAL rate, so the shipped
+# model is ALREADY a perfectly body-motion-isolated MEASUREMENT. The wording was refuted before any
+# probe ran (`docs/plans/slice37.md` §II.0). What is body-referenced is the SERVO, and stabilizing it
+# turns out to REMOVE margin rather than add it: the position servo's lag was LOW-PASSING body motion
+# out of the glass's INDEX — measured against `1/√(1+(2πfτ)²)` to 3–4 digits, against unity gain
+# EXACTLY at every frequency for the stabilized head (§II.5), with slice 26's limit cycle living at
+# 1.7–2.1 Hz where that filter is worth 12–16 % of gain and ~30° of phase.
+#
+# ⚠ RUNG, NOT KNOB, AND THE GATE IS ANSWERED BY A BOUND RATHER THAN A TOLERANCE (§II.3): a 25×
+# faster servo at a 50× smaller time constant stops at `off_band` 4.796° and cannot reach the
+# stabilized head's 3.861°, so no in-domain value of any shipped knob reaches this off-state. ⚠ And
+# the two heads do NOT collapse in any limit of τ against the SHIPPED seam — the residual is exactly
+# ONE TICK OF ATTITUDE (the seam expresses its target in `att(k)` and consumes it at `k+1`), a
+# property of the seam's ORDERING and not of the servo (§II.4). Against a fresh-attitude head the
+# limit IS exact (0.000e+00 at τ ≤ 1e−3), and that is the honest statement.
+#
+# ⚠ THE STOP IS STILL THE AIRFRAME'S. A gimbal's mechanical travel is a BODY-relative quantity no
+# matter what frame its servo closes in, and so is the glass it looks through — so both kernels below
+# return the BODY pair alongside the inertial one. ONE conversion site, or `test_frames.jl` proves a
+# second implementation of it and nothing about what flies (the trap this file names for
+# `off_axis_angle`, `head_slew_full`'s `rate_sat` and slice 32's inline FOV predicate).
+
+"""
+    SEEKER_HEAD_MODES
+
+The `:seeker_head` fidelity's rungs — the GIMBAL SERVO's REFERENCE FRAME (slice 37):
+
+* `:body_referenced` — slices 34/35's shipped head. State, target and rate limit all in the BODY
+  frame, so the servo must TRACK OUT the missile's own rotation, and its first-order lag LOW-PASSES
+  body motion out of the radome's index. Bit-identical to the rung not existing.
+* `:space_stabilized` — the head holds its pointing in the INERTIAL frame (head-mounted rate gyros;
+  classically "rate-stabilized"). Body motion is REJECTED PASSIVELY rather than tracked out, the
+  index tracks it at UNITY GAIN, and slice 34's margin is partly GIVEN BACK.
+
+⚠ **NAMED `:space_stabilized`, NOT `:rate_stabilized`, AND THE REASON IS §II.0's REFUTATION.** The
+classical term names the loop's sensor; this project's seeker already reports an inertial LOS RATE
+(slice 25), so a rung called `:rate_stabilized` beside it would assert the very thing gate 0
+measured to be already true. What moves is WHERE THE POINTING IS HELD — in space, not on the body.
+
+Convention 7 (one-list-no-drift): defined ONCE here and REFERENCED by `LIVE_FIDELITY_MODES` and the
+server's `set_fidelity` validation — never re-listed.
+"""
+const SEEKER_HEAD_MODES = (:body_referenced, :space_stabilized)
+
+"""
+    head_clamp_inertial(az, el, att, stop) -> (az_i, el_i, az_b, el_b)   (radians)
+
+The MECHANICAL STOP applied to a head whose pointing is held in the INERTIAL frame: the inertial
+direction `(az, el)` is expressed in the BODY frame through `att` (body→inertial), offered to
+[`head_clamp`](@ref) there, and — **only if the stop actually bound** — carried back to inertial.
+Returns BOTH pairs, because the stop, the radome's index and the detector window are all
+BODY-relative while the servo state is not.
+
+⚠⚠ **THE ROUND TRIP IS CONDITIONAL, AND THAT IS A CORRECTNESS REQUIREMENT RATHER THAN A SAVING**
+(`docs/plans/slice37.md` §II.9, carried from the gate-0 probe, which round-tripped every tick). The
+body↔inertial round trip is exact in exact arithmetic and NOT in doubles (~1e−16 per tick), so an
+unconditional one would inject a slow random walk into the one piece of state whose whole thesis is
+that it does NOT move with the body. On the common path the inertial pair returned here is `===` its
+input.
+
+⭐ **THE BINDING TEST IS [`head_clamp`](@ref)'s OWN DOCUMENTED CONTRACT** — *"returns its input
+UNCHANGED (bit-for-bit) when the stop does not bind"* — consumed as `===`, never a second
+`hypot(az_b, el_b) > max(stop, 0)`. That restatement would be a SECOND IMPLEMENTATION of the clamp's
+predicate, which is exactly the trap [`head_slew_full`](@ref) names for its own `rate_sat` flag: a
+predicate re-derived beside the branch it reports can disagree with it at the boundary tick, where
+the disagreement is least visible. It also inherits the NaN-stop and `stop ≤ 0` degenerates for
+free instead of restating them.
+
+⭐⭐ **THE CAGED DEGENERATE IS A NEW READING OF SLICE 34's IDENTITY, AND IT IS MEASURED HERE RATHER
+THAN INHERITED.** `stop ≤ 0` pins the head to boresight, and [`off_axis_angle`](@ref)'s identity
+makes a caged head a strapdown seeker — but for a space-stabilized head it is the BODY pair that
+pins at `(0, 0)`, so the glass's index is IDENTICALLY ZERO and the head's INERTIAL angles track the
+missile's attitude exactly. A caged body-referenced head freezes; a caged space-stabilized head
+FOLLOWS THE NOSE. Same identity, different frame, opposite motion.
+
+⚠ Convention 6: nothing non-finite is manufactured from finite input — a NaN `stop` degenerates to
+NO stop inside [`head_clamp`](@ref), which short-circuits the round trip too.
+"""
+function head_clamp_inertial(az::Real, el::Real, att::Quat, stop::Real)
+    a = Float64(az); e = Float64(el)
+    b_az, b_el = look_angles(att, los_unit_from_angles(a, e))
+    c_az, c_el = head_clamp(b_az, b_el, stop)
+    # `head_clamp`'s contract: input back bit-for-bit unless the stop bound. NO round trip then.
+    (c_az === b_az && c_el === b_el) && return (a, e, b_az, b_el)
+    i_az, i_el = az_el(rotate(att, los_unit_from_angles(c_az, c_el)))
+    return (i_az, i_el, c_az, c_el)
+end
+
+"""
+    head_slew_inertial(head_az, head_el, tgt_az, tgt_el, att, τ, dt, stop; rate_max = Inf)
+        -> (az_i, el_i, az_b, el_b, demand, rate_sat)
+
+One tick of a SPACE-STABILIZED head's pointing servo (slice 37): [`head_slew_full`](@ref)'s law and
+[`head_slew_full`](@ref)'s radial rate limit, with the head's state, its target and its step ALL in
+the INERTIAL frame, followed by [`head_clamp_inertial`](@ref) for the airframe's BODY-relative stop.
+`demand` and `rate_sat` keep their slice-35 meaning — the step the servo was asked for (radians,
+post-gain, pre-limit, pre-stop) and whether the limit bound — now measured in the frame this servo
+works in, which is the whole point of the rung.
+
+⭐ **IT IS [`head_slew_full`](@ref), NOT A SECOND SERVO.** The first-order gain, the exact-landing
+assignment, the radial `step > cap` limit and every convention-5/6 degenerate are the SAME CODE, so
+the two rungs differ ONLY in the frame their angles live in and in where the stop is taken. That is
+what makes the ladder in `docs/plans/slice37.md` §II.6 a measurement of the FRAME rather than of two
+different servos — and it is why the inner call is handed `stop = Inf`: the mechanical stop cannot
+be applied in the inertial frame at all, so [`head_clamp`](@ref) inside is a bit-for-bit no-op
+(`m > Inf` is false) and there remains exactly ONE stop site.
+
+⭐⭐ **THE MECHANISM, ON A BENCH, IN ONE COLUMN (§II.2a).** Freeze the geometry and spin the body at
+`ω`: the body-referenced head is chasing a target that MOVES IN ITS OWN FRAME and settles to a
+steady-state pointing error `≈ τ·ω` (0.1357° vs 0.1432° at ω = 0.05 rad/s; 1.4218° vs 1.4324° at
+ω = 0.50), while this head's error is **0.000000000° at every ω** — its target does not move in its
+frame. ⚠ The bench holds only in the SMALL-ERROR regime: past ω ≈ 0.8 rad/s at a 40 °/s limit the
+RATE LIMIT breaks it and the `τ·ω` column stops being the oracle, so the tooth excludes those rows
+rather than being loosened until they pass.
+
+⚠ **AT ZERO BODY RATE THE TWO FRAMES ARE THE SAME FRAME** — the heads agree to 1.1e−16 rad over
+3000 ticks (§II.2b), which is what says the rungs are distinguishable ONLY by body rotation. Pinned
+PAIRED with a does-differ case, the house rule for an invariant tooth.
+
+⚠ **AND THE STABILIZED HEAD IS NOT THE `τ = Inf` REDUCTIO IN A NEW FRAME.** Slice 34's frozen head
+is frozen IN THE BODY, so it produces a CONSTANT bend and is quiet at every R̂ — nothing for `dε/dt`
+to differentiate. A head frozen in SPACE keeps a moving body-relative index (the body rotates under
+it), so the same degenerate lands on the opposite side of the mechanism. The `τ = Inf` /
+`rate_max ≤ 0` / `dt ≤ 0` freezes are still freezes OF THE INERTIAL STATE, exactly as
+[`head_slew_full`](@ref) pins them; what differs is what the glass then sees.
+"""
+function head_slew_inertial(head_az::Real, head_el::Real, tgt_az::Real, tgt_el::Real,
+                            att::Quat, τ::Real, dt::Real, stop::Real; rate_max::Real = Inf)
+    # The INERTIAL step — the shipped servo, with NO stop (the stop is not an inertial quantity).
+    a, e, dem, sat = head_slew_full(head_az, head_el, tgt_az, tgt_el, τ, dt, Inf; rate_max = rate_max)
+    p = head_clamp_inertial(a, e, att, stop)           # the ONE stop site, in the BODY frame
+    return (p[1], p[2], p[3], p[4], dem, sat)
 end
 
 # --- THE SEEKER'S FIELD OF VIEW (slice 32, §11 Tier-A — the deferral 26/28/29/30/31 each named) ---
