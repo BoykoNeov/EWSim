@@ -862,6 +862,25 @@ function _airframe_view_info(w::World)
     # never be raised on a wire with no servo to talk about, and slices 1–36 author no such key ⇒ they
     # are byte-identical and their markers are untouched.
     haskey(w.fidelity, :seeker_head) && (info[:gimbal_frame_view] = true)
+    # ⭐⭐ SLICE 38 — AN IMPERFECT HEAD GYRO, the 8th marker of this family, and it exists for the HUD
+    # rather than for the button. A slice-38 wire is a slice-37 wire PLUS one comp key, so it raises
+    # `gimbal_frame_view` too and the button is ALREADY correct there (the rung is live and it is one
+    # end of this slice's own axis — pressing it is meaningful here in a way it is not on 32–36).
+    # ⚠⚠ WHAT IS **NOT** CORRECT IS THE HUD, AND THAT IS THE ~10th OCCURRENCE OF THE STALE-READOUT
+    # CLASS (advisor, predicted before any client code): slice 37's block is a FRAME COMPARISON whose
+    # cure line names `radome_slope_est` against `radome_slope_worst`. Every key it reads is LIVE on
+    # this wire, so it would print a fluent, entirely true verdict about the SERVO'S FRAME on a wire
+    # whose subject is the GYRO — slice 34's own worst form, where nothing is stale.
+    # ⇒ this is slice 35's "a BRANCH SELECTOR, not a hole plug", and the branch must be checked FIRST
+    # at BOTH client sites for the reason slice 37 wrote down: this wire raises `radome_view`,
+    # `gimbal_view`, `gimbal_rate_view` AND `gimbal_frame_view`, so any later branch wins.
+    # ⚠ GATED ON THE COMP KEY, not on the fidelity, and that is the OPPOSITE choice from slice 37's
+    # one line above — for the same reason it made its own: what distinguishes THIS wire is the
+    # imperfect gyro, which is a comp key, and the rung is shared with slice 37.
+    any(haskey(w.entities[m].comp, :head_gyro_scale_err) ||
+        haskey(w.entities[m].comp, :head_gyro_bias_y)   ||
+        haskey(w.entities[m].comp, :head_gyro_bias_z) for m in missiles) &&
+        (info[:gimbal_gyro_view] = true)
     return info
 end
 

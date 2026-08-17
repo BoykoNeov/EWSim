@@ -50,7 +50,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Current status
 
-**Slices 1–37 COMPLETE & green — 7222 tests at slice 36 gate 3; slice 37 is DONE and the suite is now 7496.**
+**Slices 1–38 COMPLETE & green — 7222 tests at slice 36 gate 3; slice 37 took it to 7496 and slice 38 is DONE at 7564.**
 (⚠ the count FELL *at slice 35 gate 3* — 6892 → 6876 — and that direction is accounted for: ~87 new asserts in,
 ~103 out, because a per-entity scenario sweep collapsed into ONE strictly-stronger exact-set assert. The 6876 →
 6988 → 7057 → 7067 → 7222 walk since then is slice 36's four gates.) **The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–36
@@ -436,6 +436,61 @@ head's 3.861°). Class 4a (13th consecutive RNG-live), replay bit-identical ON B
 (the first since slice 25). ⚠ The proofs FIRST ran on port 8770 — an unrelated python process held
 8765 — and ✅ the 8765 re-run is DISCHARGED (verifier `S37V OK` reproducing every number to the digit,
 and the smoke-load green with BOTH halves captured). (7496)**
+**And slice 38 AN IMPERFECT HEAD GYRO: SLICE 37's MARGIN IS A GYRO SPEC — the deferral slice 37
+named FIRST. Slice 37's whole result rests on a PERFECT gyro: its stabilized head rejects body
+motion at EXACTLY unity gain at every frequency, because the model simply STORES the inertial
+angles. Give the gyro a scale-factor error and the rejection LEAKS (`ω − ω̃ = −s·ω − b`, so the
+pointing DRIFTS), and ⭐⭐ SLICE 37's STABILITY BOUNDARY WALKS WITH GYRO QUALITY — on slice 37's own
+0.005 grid under its own threshold-free largest-step rule, every bracket INTERIOR: s = 0 →
+(−0.210, −0.205], which is slice 37's SPACE bracket EXACTLY; −0.02 → (−0.205, −0.200]; −0.05 →
+(−0.200, −0.195]; −0.20 → (−0.185, −0.180]; a DEAD gyro → (−0.170, −0.165], which is its BODY
+bracket EXACTLY. ⇒ THE TWO ARCHITECTURES SLICE 37 SHIPPED AS A BUTTON ARE THE TWO ENDS OF ONE
+HARDWARE SPEC, and A WORSE GYRO IS A MORE STABLE MISSILE: −5 % of scale factor, an ordinary
+cheap-MEMS part, gives back a QUARTER of the margin and −20 % gives back FIVE EIGHTHS. ⭐ THE DOMAIN
+FLOOR IS A MEASUREMENT (invisible at 1 %, resolves at 2 %), so the claim rests on a real part.
+⚠⚠ TWO PREDICTIONS WERE REFUTED AT GATE 0, BOTH LOAD-BEARING: the index gain is NOT `|1+s|` and
+`s = −1` is NOT a frozen index (it walks 1.00000 → 0.88608 with phase 0° → −27.578°, landing on the
+body rung's own 0.88405 / −27.561° — the error was conflating THE DRIFT CANCELLING BODY MOTION with
+THE SERVO BEING OFF, since a head carried by the body is STILL SLEWED by its servo, which IS the
+other rung); and THE BIAS WAS TO BE THE HEADLINE AND IS THE WEAK HALF (it needs ~10³× a bad real
+gyro — 103 °/hr moves rms r by 0.00064 — while the scale factor is a real part). The bias ships as
+the SECOND CURRENCY: a TWO-SIDED knob (43.2× in rms r while the tracking error moves the OTHER way,
+2.70° → 0.96°), and ⭐⭐ SLICE 30's RULE PAYS A FIFTH TIME — at the aim point the bias moves the
+tracking error 3.9× and the ring moves 1.0×, the FIRST time the rule buys off a SENSOR error rather
+than a design choice. ⚠⚠ THREE GATES PASSED BY MEASUREMENT: the BLOCKING one (does the bias collapse
+onto slice 32's LEAD axis? the lead holds at 14.59–14.68° across the whole sweep while `head_off`
+moves 2.84 → 1.31 and the verdict moves with it); the (s, R) COLLAPSE (20.2× against glass scaled
+×0.8, 3.3× the other way against glass AND belief scaled — `s` adds PHASE and scaling a slope
+cannot); and ⚠⚠ THE RUNG BOUND, WHICH HELD ONLY IN THE NARROW FORM — the walk REACHES the body
+bracket at a dead gyro, so NO CLAIM MAY BE MADE IN THE RING METRIC, and what survives is 1.556 m of
+trajectory separation on the ringing arm (0.089 quiet, against 40.29 for the honest pair), two
+distinct code paths, and a gyro reading ZERO physically BEING an unstabilized head. ⚠⚠ GATE 1 PAID
+TWO WRONG ORACLES THAT BOTH LOOKED LIKE TOLERANCE PROBLEMS: `acos` of a dot product is
+precision-limited to ~1.2e−04 rad on a 2e−4 rotation, and predicting the swept angle as `|Ω|·dt` is
+WRONG BY CONSTRUCTION (a vector rotated about an axis moves by `|Ω|·dt·sin ψ`) — 24 % on the widest
+cell, and swapping the FIRST oracle left the number BIT-FOR-BIT UNCHANGED, which is what exposed it.
+Against an independent Rodrigues recompute the kernel is exact to 3.554e−16. ⚠ GATE 2's ORDERING IS
+DRIFT-THEN-CLAMP (the head cannot drift THROUGH its gimbal limit, pinned where the stop binds on
+5572 ticks) and A GUESS BESIDE IT WAS WRITTEN AS AN ASSERT AND REFUTED BY IT (a perfect-gyro arm
+binds that stop slightly MORE, 5582 vs 5572) ⇒ the testset proves the ORDERING INVARIANT and nothing
+about causation. ⭐⭐ THE CLIENT IS A MARKER WHOSE ONLY JOB IS THE HUD (`gimbal_gyro_view`, the 8th of
+this family): a slice-38 wire raises FOUR earlier route markers and the BUTTON is already correct —
+for a REASON, since the two rungs are the two ENDS of this slider's axis — while slice 37's HUD block
+would print a fluent, entirely TRUE frame-comparison verdict, plus a cure line naming a slider this
+wire does not have, above a lesson about the SENSOR (the stale-readout class's WORST form, ~10th
+occurrence). ⭐⭐ AND THE STATE ONLY THIS BRANCH CAN NAME IS A DEAD KNOB — on the body-referenced rung
+the slider is BIT-IDENTICALLY INERT (`max|Δpos| = 0.0`), so the HUD says so: A LIVE CONTROL THAT DOES
+NOTHING IS THE STALE-READOUT CLASS IN A NEW FORM, not a stale number but a dead one. ⚠⚠ AND THE SHOT
+CAUGHT A DEFECT THE UI TEST HAD JUST PASSED — TWO WIDTH BUDGETS, NOT ONE: both new headlines ran off
+the right edge (50 and 47 chars) while the width tooth passed at the BODY lines' ~55, because the
+headline is drawn LARGER and from a different origin and its budget is ~30 (slice 37's longest is
+exactly 30, obeyed by this whole family without anyone writing it down) — the overrun's 5th
+occurrence after 26/28/36/37 and the FIRST in a headline. ⚠ FOUR CARRIER/MIRROR ASSERTS FIRED AND
+WERE RIGHT TO (slice 35's list earning its keep a THIRD time). ONE wire, ONE slider, and it OPENS ON
+THE STABILIZED RUNG — the opposite of slice 37's choice, because the slider's job is to make a
+RINGING missile quiet by making its gyro WORSE. Wire: 0.63736 → 0.01967 (32.4×), the ladder MONOTONE
+across all 9 cells with a SINGLE 18.8× knee, the ceiling ringing HARDER than perfect. Class 4a (14th
+consecutive RNG-live), replay bit-identical at both slider ends, button KEPT (slice 37's). (7564)**
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.
@@ -1240,11 +1295,13 @@ so the loop cannot tell a body-motion-isolation gain error from a radome slope e
 slice 26's boundary (slice 31's shape, convention 4's copy-paste trap). ⭐ SLICE 30's RULE PAYS A FOURTH TIME (33 =
 FOV, 34 = detector window, 35 = servo bandwidth, 37 = the head's REFERENCE FRAME): at `radome_slope_worst` both heads
 are quiet, flat and cheap ⇒ the ARCHITECTURE DOES NOT MATTER THERE.
-**SLICE 37's OWN DEFERRALS, in the order it named them: AN IMPERFECT HEAD GYRO** (the stabilized arm has
-EXACTLY unity body-motion-rejection gain at every frequency — an IDEAL head-mounted rate gyro, and slice
-31's scale factor and bias are the precedent for what an imperfect one adds; ⚠ scope it against slice
-31's own trap first, since a gain error on the rejection path may collapse onto slice 26's boundary the
-way FRAMING A did); **A SECOND-ORDER HEAD SERVO (ω_a/ζ_a)** — inherited from slice 35 UNCHANGED and now
+**SLICE 37's OWN DEFERRALS, in the order it named them: ⚠⚠ "AN IMPERFECT HEAD GYRO" IS NO LONGER ONE —
+IT IS SLICE 38, SHIPPED AND COMPLETE (2026-08-17, all four gates, `docs/plans/slice38.md`), AND ITS OWN
+SCOPING WARNING WAS THE RIGHT ONE TO GIVE BUT LANDED ON THE WRONG HALF**: the gain error on the
+rejection path does NOT collapse onto slice 26's boundary (measured — 20.2× against an equivalent
+radome, because `s` adds PHASE and scaling a slope cannot), and what DID need the slice-31 trap
+treatment was the BIAS, which turned out to need ~10³× a bad real gyro. Its own successors are listed
+in the slice-38 paragraph above (a NULLING-LOOP head servo first). Then: **A SECOND-ORDER HEAD SERVO (ω_a/ζ_a)** — inherited from slice 35 UNCHANGED and now
 sharper, because this slice showed the FIRST-ORDER lag is doing stability work, so an inertia and a
 resonance would change how much (slice 15's actuator is the precedent); and **THE τ AXIS AS ITS OWN
 SLICE** (⚠ gate 1 measured BOTH terms moving with τ — the honest range over τ ∈ [0.005, 0.2] is 0 % to

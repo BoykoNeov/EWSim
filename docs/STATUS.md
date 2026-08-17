@@ -5317,6 +5317,117 @@ halves captured (`EWSIM_SERVER_DONE`; Godot stdout = the version banner and noth
 EMPTY, zero `SCRIPT ERROR` / `Parse Error` / `GDScript backtrace`). Nothing differed but the integer.
 
 
+
+## Slice 38 — AN IMPERFECT HEAD GYRO: SLICE 37's MARGIN IS A GYRO SPEC (2026-08-17)
+
+**Status: SHIPPED AND COMPLETE, all four gates. Suite 7496 → 7564 (+68). Slices 1–37 byte-identical,
+proven ON THE WIRE (slice 37's verifier re-run reproduces 0.01195 / 1.00094 / 83.8× and both onset
+brackets to the digit).** Full plan and every gate-0 table in `docs/plans/slice38.md`; raw probe
+output in `M:\claud_projects\temp\slice38g\`.
+
+**THE LESSON.** Slice 37 showed that stabilizing the seeker head in space REMOVES stability margin,
+because the position servo's LAG had been quietly low-passing the missile's own body motion out of the
+radome's INDEX. That result rests entirely on a PERFECT gyro — the shipped stabilized head rejects body
+motion at EXACTLY unity gain at every frequency, because the model simply STORES the inertial angles,
+and slice 37 named that §1 approximation FIRST among its own deferrals. Give the gyro a scale-factor
+error and the rejection LEAKS (`ω − ω̃ = −s·ω − b`, so the pointing DRIFTS), and slice 37's stability
+boundary WALKS with gyro quality. ⇒ **THE TWO ARCHITECTURES SLICE 37 SHIPPED AS A BUTTON ARE THE TWO
+ENDS OF ONE HARDWARE SPEC, AND A WORSE GYRO IS A MORE STABLE MISSILE.**
+
+⭐⭐ **THE HEADLINE, ON SLICE 37's OWN 0.005 GRID UNDER ITS OWN THRESHOLD-FREE LARGEST-STEP RULE, EVERY
+BRACKET INTERIOR:** s = 0 → **(−0.210, −0.205]**, which is slice 37's SPACE bracket EXACTLY; −0.02 →
+(−0.205, −0.200]; −0.05 → (−0.200, −0.195]; −0.20 → (−0.185, −0.180]; −0.40 → (−0.175, −0.170]; a DEAD
+gyro (s ≤ −0.80) → **(−0.170, −0.165]**, which is slice 37's BODY bracket EXACTLY. Its whole margin is
+the 0.040 of R̂ (8 cells) between them ⇒ **−5 % of scale factor — an ordinary cheap-MEMS part — gives
+back a QUARTER of it and −20 % gives back FIVE EIGHTHS.** ⭐ The domain FLOOR is a measurement: the walk
+is INVISIBLE at 1 % and RESOLVES at 2 %, so the engineering claim rests on a mid-grade part.
+
+⚠⚠ **TWO PREDICTIONS WERE REFUTED AT GATE 0 AND BOTH ARE LOAD-BEARING.** (1) The index gain is NOT
+`|1+s|` and `s = −1` is NOT the frozen-index degenerate: it walks 1.00000 → 0.88608 with phase 0° →
+−27.578° at 1.7 Hz, landing on the body rung's own 0.88405 / −27.561°. The error was conflating *the
+drift cancelling body motion* with *the servo being off* — a head carried along by the body is STILL
+SLEWED by its servo with lag τ, which IS the body-referenced rung. (2) The BIAS was to be the headline
+and is the WEAK half: it needs ~10³× a bad real gyro to move anything (103 °/hr moves `rms r` by
+0.00064), while the scale factor's claim rests on a real part. It ships as the SECOND CURRENCY — a
+TWO-SIDED knob (43.2× in `rms r` while the tracking error moves the OTHER way, 2.70° → 0.96°) — and
+⭐⭐ **SLICE 30's RULE PAYS A FIFTH TIME**: at the aim point the bias moves the tracking error 3.9× and
+the ring moves **1.0×** (0.0598–0.0602 across the whole domain), the first time the rule buys off a
+SENSOR error rather than a design choice.
+
+**THREE GATES PASSED BY MEASUREMENT.** BLOCKING (bias vs the LEAD — does it collapse onto slice 32's
+axis?): the lead holds at 14.59–14.68° across the whole bias sweep while `head_off` moves 2.84 → 1.31
+and the verdict moves with it. THE `(s, R)` COLLAPSE: `s = −0.2` reads 0.29353 against 0.01453 for
+glass scaled ×0.8 (**20.2×**) and 0.98063 for glass AND belief scaled (**3.3×** the other way) — `s`
+adds PHASE, and scaling a slope cannot. ⚠⚠ THE RUNG BOUND HELD ONLY IN THE NARROW FORM AND THE PLAN
+SAYS SO: the walk REACHES the body bracket at a dead gyro, so NO CLAIM MAY BE MADE IN THE RING METRIC;
+what survives is 1.556 m of trajectory separation on the ringing arm (0.089 m quiet, against 40.29 m
+for the honest pair), two distinct code paths, and a gyro reading ZERO physically BEING an unstabilized
+head — a correct degenerate, not a false fidelity.
+
+**GATE 1** — `frames.jl` gains `head_drift_inertial`, a COMPOSITION of slice 31's `gyro_reading` that
+returns its input BIT-FOR-BIT at a zero residual (so an authored `s = 0` is byte-identical to the keys
+being absent BY CONSTRUCTION). ⚠⚠ **TWO WRONG ORACLES, BOTH OF WHICH LOOKED LIKE TOLERANCE PROBLEMS**:
+`acos` of the dot product is precision-limited to ~1.2e−04 rad on a 2e−4 rotation (it also hid the
+linearity result at ~1e−8, which the chord formula reads as 1.7e−12), and predicting the swept angle as
+`|Ω|·dt` is WRONG BY CONSTRUCTION (a vector rotated about an axis moves by `|Ω|·dt·sin ψ`) — that read
+24 % on the widest cell, and swapping the first oracle left the number BIT-FOR-BIT UNCHANGED, which is
+what exposed it. Against an independent Rodrigues recompute the kernel is exact to **3.554e−16**.
+
+**GATE 2** — one call in the `elseif _stab` arm, three loader keys (`head_gyro_scale_err` /
+`head_gyro_bias_y` / `_bias_z` — ⚠ NOT slice 31's `gyro_*`, which are the AUTOPILOT's gyro, a different
+sensor on the same missile), three telemetry keys named by WHICH SENSOR. **THE ORDERING IS
+DRIFT-THEN-CLAMP** and the seam says so: the head cannot drift THROUGH its own gimbal limit, pinned on a
+wire where the stop binds on 5572 ticks with `over` at 1.78e−15. ⚠ **A GUESS BESIDE IT WAS WRITTEN AS AN
+ASSERT AND REFUTED BY IT** — the draft claimed a perfect-gyro arm reaches that stop LESS often, "so the
+binding is the drift's doing"; it is not (5582 against 5572, very slightly MORE), so the testset proves
+the ORDERING INVARIANT and nothing about causation, and now says exactly that. **INERT ON THE BODY RUNG
+BY PLACEMENT, NOT BY A GUARD** (`max|Δpos| == 0.0` with the keys authored at ringing values).
+
+**GATE 3** — ONE wire (`scenarios/slice38_head_gyro.yaml`), ONE slider, and it OPENS ON THE STABILIZED
+RUNG, the opposite of slice 37's choice and for the mirror reason: the slider's job is to make a
+RINGING missile quiet by making its gyro WORSE, so the wire must open where the ring is. Verifier (14
+arms, `out == 0.00 %` on every one): **0.63736 → 0.01967, 32.4×**, both hitting; the ladder MONOTONE
+across all 9 cells (asserted CELL BY CELL — a first for this family after 19/20/22/28/35/36); the
+transition a SINGLE 18.8× step across s ∈ (−0.030, −0.050] ⇒ **the gyro spec has a KNEE**; the ceiling
+ringing HARDER than perfect (0.98525) — the half of the axis BEYOND slice 37's rung; and ⭐⭐ **the
+slider BIT-IDENTICALLY INERT on the other side of the button** (`max|Δpos| = 0.000000000 m`, `rms r`
+equal to nine digits). Replay bit-identical at BOTH ends. Class **4a**, the 14th consecutive RNG-live.
+
+⭐⭐ **THE CLIENT: A MARKER WHOSE ONLY JOB IS THE HUD** (`gimbal_gyro_view`, the 8th of this family, the
+second after slice 35 to be HUD-only, and the advisor predicted it before any client code). A
+slice-38 wire raises FOUR earlier route markers and the BUTTON is already correct — correct for a
+REASON, since `:seeker_head`'s two rungs are the two ENDS of this slider's axis. What is wrong without
+it is the HUD: slice 37's block would take the wire and EVERY KEY IT READS IS LIVE HERE, so it would
+print a fluent, entirely TRUE frame-comparison verdict — plus a cure line naming a slider this wire
+does not have — above a lesson about the SENSOR. The stale-readout class's WORST form, its ~10th
+occurrence. The mirror proves the branch is a SWITCH not an `or`: strip the marker and the BUTTON is
+unchanged while only the HUD falls through. ⭐⭐ **AND THE STATE ONLY THIS BRANCH CAN NAME IS A DEAD
+KNOB** — on the body-referenced rung the slider is inert, so the HUD says so rather than leaving a
+student to drag a live control and watch nothing: **a live control that does nothing is the
+stale-readout class in a NEW form, not a stale number but a dead one.**
+
+⚠⚠ **THE SHOT CAUGHT A DEFECT THE UI TEST HAD JUST PASSED: TWO WIDTH BUDGETS, NOT ONE.** The first pair
+of captures ran BOTH new headlines off the right edge (50 and 47 chars) while the width tooth PASSED,
+because it pinned the ~55-character budget the BODY lines are drawn against at 15 px. The headline is
+drawn LARGER and from a different origin, so its budget is ~30 — slice 37's longest is exactly 30, and
+every label in this family had quietly obeyed that without anyone writing it down. ⇒ the right-edge
+overrun's **5th occurrence** after 26/28/36/37 and **the FIRST in a headline**; the two budgets are now
+pinned separately. Re-taken: **`PERFECT GYRO — RINGING`** (ring r −0.817, peak 1.12, leak 0 %) against
+**`WORSE GYRO — loop QUIET`** (−0.014, peak 0.03, leak 5 %).
+
+⚠ **FOUR CARRIER/MIRROR ASSERTS FIRED AND WERE RIGHT TO** — slices 35 and 37 each enumerate which wires
+carry their keys and each mirrors "no other wire raises my marker"; a slice-38 wire legitimately
+carries both, the THIRD time slice 35's list has earned its keep. Widened with the reason, not deleted.
+Four proofs green (verifier, 10-tooth UI test, smoke-load with BOTH halves captured, TWO shots), and
+slices 34/35/36/37's UI tests all re-run green.
+
+**Deferred (NAMED):** a NULLING-LOOP head servo (the other classical architecture, where the scale
+factor goes nearly inert and the bias carries everything — the natural A/B); GYRO NOISE (draw-topology
+grounds, unchanged); PER-AXIS scale factors and head-gyro MISALIGNMENT (this one is COMMON-MODE, which
+is exactly why it collapses onto one number); and slice 37's other two, a SECOND-ORDER head servo and
+THE τ AXIS AS ITS OWN SLICE — both now sharper, because this slice shows the REJECTION path has its own
+spec.
+
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
 upgrade (the visual-polish-pass precedent): the first BAKED resources in the client — a new
 `clients/godot/fx/` directory of five text-format resources shared by every view, current AND future,

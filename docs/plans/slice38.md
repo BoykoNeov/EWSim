@@ -1,8 +1,9 @@
 # Slice 38 — **AN IMPERFECT HEAD GYRO: SLICE 37's MARGIN IS A GYRO SPEC** (§11 Tier-A)
 
-**Status: GATE 0 COMPLETE (2026-08-17, five probes). The claim is real, both reparameterization gates
-are answered by measurement, and TWO PREDICTIONS WERE REFUTED — one of them mine, one the advisor's,
-and both are load-bearing.** Raw numbers and every table in `M:\claud_projects\temp\slice38g\`
+**Status: SHIPPED AND COMPLETE (2026-08-17) — all four gates, suite 7496 → 7564, four proofs green.
+The claim is real, both reparameterization gates are answered by measurement, and TWO PREDICTIONS
+WERE REFUTED at gate 0 — one of them mine, one the advisor's, and both are load-bearing.** Raw
+numbers and every table in `M:\claud_projects\temp\slice38g\`
 (`lib38g.jl`, `p0_bench.jl`, `p1_blocking.jl`, `p2_collapse.jl`, `p3_ladders.jl`, `p4_grid.jl`,
 `p5_dead.jl`, `g0_results.md`).
 
@@ -237,7 +238,86 @@ plus three loader keys and three telemetry keys.
 
 ---
 
-# THE PLAN — GATE 3
+# GATE 3 — AS BUILT (2026-08-17): the wire, the marker whose only job is the HUD, and a headline that
+# ran off the edge
+
+**Status: gate 3 COMPLETE and green. Suite 7553 → 7564.** Four proofs green: `slice38_verify.gd`
+(14 arms), `slice38_ui_test.gd` (10 teeth), the `Sandbox.tscn` headless smoke-load with BOTH halves
+captured, and TWO windowed shots.
+
+## The wire — `scenarios/slice38_head_gyro.yaml`
+
+`slice37_frame.yaml` KEY FOR KEY with ONE number changed and ONE key added. ⚠ **IT OPENS ON THE
+STABILIZED RUNG, WHICH IS THE OPPOSITE OF SLICE 37's CHOICE AND FOR THE MIRROR REASON:** slice 37
+opened on the GOOD design so the first press would break it; here the slider's job is to make a
+RINGING missile quiet by making its gyro WORSE, so the wire must open where the ring is. The one
+number is `radome_slope_est` = **−0.20**, chosen BY MEASUREMENT as the design at which the slider
+decides the verdict (at a perfect gyro it rings 0.6375; at −5 % it is quiet 0.0196). Slice 37's own
+−0.18 would have put both ends of the slider on the ringing side.
+
+**The verifier's numbers** (frame-sampled, 14 arms, `out == 0.00 %` on every one):
+
+* **THE SHOWCASE** — `rms r` **0.63736** at a perfect gyro against **0.01967** at −5 %, **32.4×**,
+  both hitting (1.236 / 2.418 m), with the believed slope bit-identical between them.
+* **THE LADDER IS MONOTONE ACROSS THE WHOLE DOMAIN** — 0.98525 → 0.01440 over 9 cells, asserted CELL
+  BY CELL rather than end to end (an end-to-end check passes over any interior reversal). ⚠ A first
+  for this family after the wrinkles at 19/20/22/28/35/36.
+* **THE TRANSITION IS A SINGLE STEP** across s ∈ (−0.030, −0.050] at **18.8×** ⇒ the gyro spec has a
+  KNEE rather than a proportional cost.
+* **THE CEILING RINGS HARDER THAN PERFECT** (0.98525 against 0.63736) — the half of this axis lying
+  BEYOND slice 37's stabilized rung rather than between its two.
+* ⭐⭐ **THE SLIDER IS BIT-IDENTICALLY INERT ON THE OTHER SIDE OF THE BUTTON** — `max|Δpos| =
+  0.000000000 m` across its whole range on the body-referenced rung, with `rms r` equal to nine
+  digits (0.01340) and the same miss to three (3.971 m).
+* **REPLAY** bit-identical at BOTH ends of the slider (class 4a, the 14th consecutive RNG-live slice).
+
+## ⭐⭐ The client: a marker whose only job is the HUD (the advisor predicted it before any code)
+
+`gimbal_gyro_view`, raised on the COMP KEY — the OPPOSITE choice from slice 37's fidelity gate, and
+for the same reason it made its own: what distinguishes THIS wire is the imperfect sensor, and the
+RUNG is shared. It is checked FIRST at **all three** client sites (button, headline, HUD body).
+
+⚠ **THE BUTTON NEEDED NO DECISION AT ALL, AND THAT IS NEW.** A slice-38 wire raises FOUR earlier
+route markers, and `gimbal_frame_view` already keeps the button — correctly, because `:seeker_head`'s
+two rungs are the two ENDS of this slice's slider axis. What was wrong without the new marker is the
+HUD: slice 37's block would take the wire, and EVERY KEY IT READS IS LIVE HERE, so it would print a
+fluent and entirely TRUE frame-comparison verdict — plus a cure line naming a slider this wire does
+not have — above a lesson about the SENSOR. The stale-readout class's WORST form (slice 34's), where
+nothing is stale, and its ~10th occurrence. **The mirror proves the branch is a SWITCH, not an `or`:**
+strip the marker and the BUTTON is unchanged while only the HUD falls through.
+
+⭐⭐ **AND THE STATE ONLY THIS BRANCH CAN NAME IS A DEAD KNOB.** On the body-referenced rung the slider
+is inert, so the mechanism line reads *"BODY-REFERENCED: no gyro to corrupt — slider INERT"* rather
+than leaving a student to drag a live control and watch nothing happen. **A live control that does
+nothing is the stale-readout class in a NEW form — not a stale number but a dead one.**
+
+## ⚠⚠ THE SHOT CAUGHT A DEFECT THE UI TEST HAD JUST PASSED: TWO WIDTH BUDGETS, NOT ONE
+
+The first pair of captures ran BOTH new headlines off the right edge — *"PERFECT-ish GYRO — RINGING:
+the index sees the body"* (50 chars) and *"GYRO LEAK — the ring is bought by a WORSE sensor"* (47) —
+**while the width tooth passed**, because it pinned the ~55-character budget the BODY lines are drawn
+against at 15 px. THE HEADLINE IS DRAWN LARGER AND FROM A DIFFERENT ORIGIN, so its budget is ~30:
+slice 37's longest is "SPACE-STABILIZED — loop STABLE" at exactly 30, and every label in this family
+had quietly obeyed that without anyone writing it down. ⇒ the right-edge overrun's **5th occurrence**
+after 26/28/36/37 and **THE FIRST IN A HEADLINE**; the UI test now pins the two budgets SEPARATELY.
+Re-taken, the shots read **`PERFECT GYRO — RINGING`** (ring r −0.817, peak 1.12, `s +0.000`, leak
+0 %) against **`WORSE GYRO — loop QUIET`** (−0.014, peak 0.03, `s −0.050`, leak 5 %).
+
+## ⚠ Four carrier/mirror asserts fired, and they were right to
+
+Slices 35 and 37 each enumerate which shipped wires carry their keys, and each has a mirror asserting
+no OTHER wire raises their marker. A slice-38 wire legitimately carries both (`gimbal_rate_dps` and
+`seeker_head`), so all four fired — the **third** time slice 35's list has earned its keep. They are
+widened with the reason, not deleted: the claim being pinned is still that slices 1–34 stay
+byte-identical BY GATING.
+
+⚠ **SLICE 37 IS BYTE-IDENTICAL ON THE WIRE**, re-verified after the seam edit: `S37V OK`, 0.01195 /
+1.00094 = 83.8×, both onset brackets and the 1.022× dead button unchanged. All four prior UI tests
+(34/35/36/37) re-run and green.
+
+---
+
+# THE PLAN — GATE 3 (as written before the work; kept for the record)
 
 ## Gate 1 — the kernel and its teeth (DONE, above)
 

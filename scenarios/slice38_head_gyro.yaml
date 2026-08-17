@@ -1,0 +1,206 @@
+# slice38_head_gyro — AN IMPERFECT HEAD GYRO: SLICE 37's MARGIN IS A GYRO SPEC (HANDOFF §11 Tier-A,
+# slice 38 gate 3). The SIXTEENTH slice of the bank-to-turn / 3-D arc (23 = the 6-DOF substrate +
+# skid-to-turn, 24 = bank-to-turn + roll-lag, 25 = a seeker in the 6-DOF loop, 26 = the radome
+# parasitic loop, 27 = the compensation autopilot, 28 = the slope CURVE, 29 = the SCHEDULED
+# compensator, 30 = the ENVELOPE and the one-sided constraint, 31 = an imperfect gyro, 32 = the
+# seeker's field of view, 33 = the ring as an FOV budget item, 34 = the gimbal, 35 = the rate-limited
+# head, 36 = the handover basket, 37 = the servo's reference frame), and the deferral slice 37 named
+# FIRST.
+#
+# > THE LESSON, IN ONE SENTENCE. Slice 37 showed that stabilizing the head in space REMOVES stability
+# > margin — and that whole result rests on a PERFECT gyro, because the shipped stabilized head
+# > rejects body motion at exactly unity gain at every frequency (the model simply STORES the
+# > inertial angles). Give the gyro a scale-factor error and the rejection LEAKS: a fraction of the
+# > missile's own body motion comes back into the radome's INDEX, and slice 37's stability boundary
+# > WALKS with gyro quality.
+#
+# ⭐⭐ SO THE TWO ARCHITECTURES SLICE 37 SHIPPED AS A BUTTON ARE THE TWO ENDS OF ONE HARDWARE SPEC,
+# and the slider walks between them. Measured on slice 37's own 0.005 grid under its own
+# threshold-free largest-single-step rule, every bracket INTERIOR:
+#
+#     s = 0.00 (perfect)   (−0.210, −0.205]   ← slice 37's own SPACE bracket, EXACTLY
+#     s = −0.02 (2 %)      (−0.205, −0.200]      1/8 of its margin given back
+#     s = −0.05 (5 %)      (−0.200, −0.195]      2/8   ← an ordinary cheap-MEMS part
+#     s = −0.20            (−0.185, −0.180]      5/8
+#     s = −0.40            (−0.175, −0.170]      7/8
+#     s ≤ −0.80 (dead)     (−0.170, −0.165]      8/8 ← slice 37's own BODY bracket, EXACTLY
+#
+# ⇒ **A WORSE GYRO IS A MORE STABLE MISSILE.** Nobody buys one on purpose; the design rule is that
+# slice 37's margin has to be BUDGETED against the sensor that maintains it.
+#
+# ⭐ THE DOMAIN FLOOR IS A MEASUREMENT AND SO IS THE REALISM CLAIM: the walk is INVISIBLE at 1 %
+# (bracket unchanged, though the cells inside it move) and RESOLVES at 2 %. The engineering claim
+# therefore rests on a mid-grade MEMS part rather than an absurd one. ⚠ THAT IS TRUE OF THE SCALE
+# FACTOR ONLY — the head gyro's BIAS needs ~10³× a bad real gyro to move anything (at 103 °/hr it
+# moves `rms r` by 0.00064), which is slice 31's "chosen for visibility, not realism" posture and is
+# why the bias is NOT the slider here. The two must never be quoted in one breath.
+#
+# ⚠⚠ AND THE SLIDER IS **INERT ON THE OTHER SIDE OF THE BUTTON** — MEASURED, AND THE HUD SAYS SO.
+# A body-referenced head has no stabilization gyro to corrupt, so on that rung every value of this
+# slider flies the SAME missile: `rms r` 0.01310 and miss 0.058 m at s = 0, −0.05 and −0.20 alike,
+# bit-identically (`max|Δpos| == 0.0`). A live control that does nothing is the stale-readout class
+# in a NEW form — not a stale number but a dead knob — so `gimbal_gyro_view`'s HUD names the state
+# rather than leaving a student to drag a slider and watch nothing happen.
+#
+# ⚠ THE BUTTON IS SLICE 37's AND IT STAYS LIVE, which is a first for this family: 32–36 all dropped
+# it, 37 restored it, and here pressing it is MEANINGFUL in its own right because the two rungs are
+# the two ENDS of the slider's own axis. What is new is not the button but the HUD branch behind it.
+#
+# ⚠ NO NEW RUNG, NO NEW CAP, NO NEW INSTABILITY, NO NEW DRAW. Slice 26's limit cycle, slice 34's head
+# and slice 37's rung are all unchanged; what is new is the SENSOR that maintains the stabilization.
+# Class 4a, 2 randn/tick, the FOURTEENTH consecutive RNG-live slice — the seed is load-bearing and
+# conventions 3/11 apply. ⚠ GYRO NOISE IS A NAMED DEFERRAL ON DRAW-TOPOLOGY GROUNDS (an unconditional
+# third draw desyncs every 25–37 replay), not an oversight.
+#
+# NAMED APPROXIMATIONS (§1): FEED-FORWARD stabilization — the head holds its pointing by feeding
+# forward the negated gyro reading, so gyro error is a GAIN ON THE REJECTION PATH, which is the
+# quantity slice 37 measured its margin out of. The classical alternative, a NULLING loop driving
+# `ω̃_head → 0`, has steady state `−b/(1+s)`: scale factor nearly INERT, bias-only. That is a
+# DELIBERATE fork and the natural A/B successor, not an oversight. Also: a COMMON-MODE scale factor
+# (per-axis errors and gimbal misalignment are a separate slice — slice 31's own shape), NO gyro
+# noise, a FIRST-ORDER servo with a rate limit, a PERFECTLY handed-over head, a circular stop and
+# window; plus everything 26–37 named, unchanged — ONE odd scalar slope curve PER AXIS, a PERFECT
+# AUTOPILOT gyro (slice 31's is a DIFFERENT sensor on the same missile), ONE isotropic σ and a TRUTH
+# Vc, diagonal inertia, symmetric cruciform, lift drag-free, constant ρ (a FLIGHT CONDITION — say
+# "low dynamic pressure", never "high altitude").
+#
+# UNITS (§1 trifecta): pos/vel SI; angles rad INSIDE the core; `gimbal_stop_deg` / `gimbal_fov_deg` /
+# `head_angle_deg` / `head_off_deg` in DEGREES at the wire boundary; `gimbal_rate_dps` /
+# `head_rate_dps` in DEGREES PER SECOND; `gimbal_tau_s` in SECONDS; radome slopes DIMENSIONLESS (rad
+# of bend per rad of look); **`head_gyro_scale_err` DIMENSIONLESS** (a fraction: −0.05 = the gyro
+# reads 5 % LOW) and **`head_gyro_bias_y` / `_bias_z` in RAD/S**; σ_seek in RADIANS; `cross_speed_mps`
+# in m/s and SIGNED; I in kg·m²; ρ in kg/m³; launch ELEVATION in DEGREES → radians at the loader.
+# dt = 1e-3 / emit_every = 16.
+name: slice38_head_gyro
+seed: 32
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # SIX keys, and `seeker_head` is the only one that is TOGGLED — slice 37's own posture, and here
+  # the button is one END of the slider's axis rather than a second mechanism (convention 9).
+  # `airframe` / `autopilot` / `guidance` / `seeker` / `seeker_axes` are HELD at slice 23–37's values
+  # to the digit. `steering` is OMITTED (the loader default IS :skid_to_turn).
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+  # ⭐⭐ THE WIRE OPENS ON THE STABILIZED HEAD — slice 37's "improvement", and the arm where a PERFECT
+  # gyro RINGS. That is the opposite of slice 37's own choice (it opened on the GOOD design so the
+  # press would break it); here the slider's job is to make a ringing missile QUIET by making its
+  # gyro WORSE, so the wire must open where the ring is.
+  # ⚠ AUTHORED BY NAME rather than leaning on the default, so the file states which rung it opens on.
+  seeker_head: space_stabilized
+
+entities:
+  # The interceptor — `scenarios/slice37_frame.yaml`'s, KEY FOR KEY, with ONE number changed
+  # (`radome_slope_est`) and ONE key added (`head_gyro_scale_err`). Held to the digit because the
+  # whole claim is that corrupting the HEAD'S GYRO and nothing else moves slice 37's stability
+  # boundary; any other difference would be a second variable in a one-variable measurement.
+  #
+  # ⚠ elevation_deg = 12.0 IS LOAD-CONSUMED AND IS NOT A KNOB (the slice-19 DEAD-KNOB class).
+  #
+  # THE GLASS (26–37's, unchanged in form): R₀ = −0.03 boresight slope, A = −0.15 the slope CURVE's
+  # depth (so `radome_slope_worst` = R₀ + 2A = −0.33), k = 12.0 AUTHORED and DISQUALIFIED BY
+  # NON-MONOTONICITY at slice 28.
+  #
+  # THE HEAD: τ = 0.05 / stop 30° / window 25° / servo 40 °/s — slice 37's, all AUTHORED and all
+  # disqualified there for reasons that hold unchanged here. ⚠ THE STOP AND THE WINDOW NEVER BIND ON
+  # THIS WIRE and it is measured across the WHOLE slider domain rather than assumed: head travel is a
+  # FLAT 18.1172° in every cell (against the 30° stop and the 30° small-angle model-validity budget
+  # 28–37 each declared), the detector requirement peaks at 3.18°, and `out` is 0.00 % everywhere —
+  # which is the precondition that makes every `rms r` on this wire a stability read at all.
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      # ⭐ radome_slope_est R̂ = −0.20 — THE ONE NUMBER CHANGED FROM SLICE 37's WIRE, and it is chosen
+      # BY MEASUREMENT: it is the design at which the SLIDER decides the verdict. At a perfect gyro
+      # this design RINGS (rms r 0.6375) and at −5 % it is QUIET (0.0196) — a 32× split from the gyro
+      # alone, with the glass, the belief, the servo and the seed all held. Slice 37's own −0.18 would
+      # have put both ends of the slider on the ringing side.
+      #
+      # ⭐⭐ head_gyro_scale_err = 0.0 — THE SLIDER, AUTHORED AT A PERFECT GYRO. Authoring the ZERO is
+      # deliberate and it is free: the kernel returns its input BIT-FOR-BIT at a zero residual, so
+      # this file is byte-identical to one with no gyro key at all (`max|Δpos| == 0.0`, measured) —
+      # while the key's PRESENCE is what raises `gimbal_gyro_view` and ships the readouts the HUD
+      # draws. The wire therefore opens on the IDEAL sensor slice 37 assumed, and the student makes
+      # it worse.
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               radome_slope: -0.03, radome_ripple: -0.15, radome_ripple_k: 12.0,
+               radome_slope_est: -0.20,
+               gimbal_tau_s: 0.05, gimbal_stop_deg: 30.0, gimbal_fov_deg: 25.0,
+               gimbal_rate_dps: 40.0,
+               head_gyro_scale_err: 0.0}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # ⭐ THE CROSSING TARGET, and the crossing is what makes the glass matter at all. Same start point
+  # as 23–37 (cross-range +Y = 2000 m off the x–z plane) at slice 28's vy = 200 m/s — the geometry
+  # that holds a SUSTAINED ~15° lead, so the seeker parks on the steep part of the slope curve and the
+  # loop is closed by its LOCAL DERIVATIVE there. ⚠ A STATIC target would make this slice dead along
+  # with the whole family (slice 28 measured the lead at 0.04°→0.54° there). AERODYNAMICALLY FREE.
+  # ⚠ `cross_speed_mps` IS AUTHORED AND IS NOT A KNOB, as on 34/35/37 — it moves the LEAD, i.e. slice
+  # 32's whole axis, and gate 0 had to prove this slice is not that one (the bias sweep holds the lead
+  # at 14.59–14.68° while the verdict moves). The authored `vel` and the pin AGREE at the default.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, 200.0, 0.0]
+    target: {rcs_m2: 1.0, cross_speed_mps: 200.0}
+
+knobs:
+  # ⭐⭐ ONE KNOB AND ONE BUTTON, which is what convention 9 asks — and here they are the SAME AXIS
+  # expressed two ways, which is the slice: the button switches between the two architectures and the
+  # slider walks continuously between them.
+  #
+  # Every other candidate is disqualified and the verifier asserts their absence: `radome_slope_est`
+  # (slice 37's slider — it moves the DESIGN, and this wire's whole claim is that the GYRO moves the
+  # boundary at a FIXED design), `head_gyro_bias_z` (the second currency, and its visible domain is
+  # ~10³× a real gyro — it ships in the tests and the HUD, not on a slider), `gimbal_rate_dps` (slice
+  # 35's two-sided knob), `gimbal_tau_s` (it moves the SIZE of slice 37's mechanism — "confounded, not
+  # dead"), `gimbal_fov_deg` / `gimbal_stop_deg` (a live window makes the break an ACQUISITION break),
+  # `cross_speed_mps` (slice 32's axis — the LEAD), `n_pn` and `rho` (they move the parasitic boundary
+  # AND the guidance loop), `af_alpha_max` (slice 26's amplitude instrument), `sigma_seek` (it degrades
+  # the lesson beside it), `radome_slope` / `radome_ripple` (the GLASS is HARDWARE), `elevation_deg`
+  # (the slice-19 DEAD-KNOB class).
+  #
+  # THE ONE KNOB (`head_gyro_scale_err`) — BOTH ENDPOINTS MEASURED WITH THEIR REASONS (slice 26's
+  # post-commit discipline), on this wire, at this design, 14 cells:
+  #   FLOOR −0.20: THE RING HAS REACHED ITS PLATEAU. `rms r` runs 0.01426 at −0.20 against 0.01402 at
+  #     −0.30 — a 1.7 % change over half the remaining range, against the 32× the slider delivers
+  #     inside its domain. Past here the control stops doing visible work, which is the honest reason
+  #     to stop. ⚠ It is deliberately NOT taken to a DEAD gyro (s = −1): that degenerate reproduces
+  #     slice 37's BODY rung to 1–3 % cell for cell and is a TOOTH in `test_missile.jl`, not a slider
+  #     position — a slider whose end point is another slice's rung invites exactly the demotion
+  #     reading the plan spends a section refusing.
+  #   CEILING +0.10: an OVER-reading gyro, which OVER-rejects and rings HARDER than a perfect one
+  #     (0.98581 against 0.63754) — the half of the axis that lies BEYOND slice 37's space rung rather
+  #     than between the two. It is already 2× beyond any real part, and the ring is still rising
+  #     monotonically there, so the ceiling is a REALISM bound and not a physics one, and says so.
+  #
+  # ⚠ THE LADDER IS MONOTONE ACROSS THE WHOLE DOMAIN (0.98581 → 0.01426, 14 cells) — a first for this
+  # family after the non-monotone wrinkles at 19/20/22/28/35/36 — and the transition is a single step
+  # between −0.03 (0.37041) and −0.05 (0.01963), 18.9×.
+  #
+  # ⚠⚠ THE LABEL IS LENGTH-BUDGETED (slice 32's shots paid for it): knob labels are drawn FULL-WIDTH
+  # in the UI CanvasLayer, which paints OVER the Node2D `_draw` HUD whose column starts at
+  # `vp.x − 430`; at ~6.2 px per character that is a budget of ~110 CHARACTERS.
+  - {target: m1, key: head_gyro_scale_err, min: -0.20, max: 0.10,
+     label: "HEAD GYRO scale error s — a WORSE gyro is a MORE STABLE missile"}

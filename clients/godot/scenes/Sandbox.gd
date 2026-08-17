@@ -225,6 +225,27 @@ var _gimbal_handover_view := false # handshake gimbal_handover_view — 6th mark
 # in a new quantity, and the fix is that the frame is NAMED in the same string as the number.
 var _gimbal_frame_view := false    # handshake gimbal_frame_view — 7th marker, and the FIRST that
                                    # RESTORES the button rather than dropping it
+# Slice-38 AN IMPERFECT HEAD GYRO: a missile carrying an authored `head_gyro_*` key. The 8th marker of
+# this family, and the SECOND to be about the HUD alone rather than the button (slice 35's shape).
+#
+#   (1) THE BUTTON NEEDS NO DECISION HERE. A slice-38 wire is a slice-37 wire PLUS one comp key, so it
+#       raises `gimbal_frame_view` too and the button is ALREADY correct — and it is correct for a
+#       REASON rather than by luck: `:seeker_head`'s two rungs are the two ENDS of this slice's own
+#       slider axis, so pressing it is meaningful here in a way it is not on slices 32–36.
+#   (2) THE HUD IS THE WHOLE REASON THIS MARKER EXISTS, and it is the ~10th occurrence of the
+#       stale-readout class in its WORST form — the slice-34 shape, where nothing is stale. Every key
+#       slice 37's block reads is LIVE on this wire, so without this branch it would print a fluent and
+#       entirely TRUE verdict about the SERVO'S FRAME, with a cure line naming `radome_slope_est`
+#       against `radome_slope_worst`, on a wire whose subject is the GYRO and whose slider is neither
+#       of those numbers.
+#   (3) ⚠⚠ AND THERE IS A STATE ONLY THIS BRANCH CAN NAME: **ON THE BODY-REFERENCED RUNG THIS SLICE'S
+#       SLIDER IS INERT.** A body-referenced head has no stabilization gyro to corrupt, so every value
+#       of `head_gyro_scale_err` flies the SAME missile there — bit-identically (`max|Δpos| == 0.0`,
+#       measured; `rms r` 0.01310 and miss 0.058 m at s = 0, −0.05 and −0.20 alike). A LIVE CONTROL
+#       THAT DOES NOTHING is the stale-readout class in a NEW form: not a stale number but a dead
+#       knob, and a student who presses the button and then drags the slider would otherwise be
+#       watching an unlabelled nothing. The HUD names that state instead.
+var _gimbal_gyro_view := false     # handshake gimbal_gyro_view — 8th marker; the HUD, not the button
 # Slice-36 DISPLAY-ONLY FREEZE on the shipped requirement (see `_handover_peak_hold`): `head_off_peak_deg`
 # is a running maximum, so it runs to 179.4998° at CPA on EVERY arm, hit or miss, and a peak cannot
 # forget. This holds the last sample taken while r > 200 m — the same gate the core's own requirement
@@ -617,6 +638,10 @@ func _on_scenario(obj: Dictionary) -> void:
 	# to gate on). It does BOTH jobs like slice 36's marker, but the BUTTON job is the OPPOSITE one:
 	# it RESTORES the button rather than dropping it. See `_gimbal_frame_view`'s own comment.
 	_gimbal_frame_view = bool(obj.get("gimbal_frame_view", false))
+	# Slice 38 — the head's own gyro. Raised on a COMP KEY (`head_gyro_*`), unlike the line above,
+	# because what distinguishes this wire is the imperfect sensor and the RUNG is shared with slice
+	# 37. It routes the HUD only; the button is slice 37's and is already right. See its own comment.
+	_gimbal_gyro_view = bool(obj.get("gimbal_gyro_view", false))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -1305,6 +1330,25 @@ func _enter_airframe3d_mode(obj: Dictionary) -> void:
 	# appear in NO drawing gate (the 3-D view keys off `_mode`, not `_fid_kind`), which is what makes a
 	# new kind free — slice 21's "only `_draw_missile`'s gate needed this kind added" checked, and here
 	# the answer is that none did.
+	# SLICE 38 — THE HEAD'S OWN GYRO, checked FIRST ("check the NEW key first", 11th occurrence). ⚠ AND
+	# IT IS THE FIRST MEMBER OF THIS FAMILY WHOSE BUTTON TREATMENT IS **IDENTICAL** TO THE BRANCH BELOW
+	# IT — deliberately, and it is not redundancy. The button is slice 37's cycler and it is already
+	# correct here (the two rungs are the two ENDS of this slice's slider axis, so pressing it is
+	# meaningful), but the HUD is NOT: `_draw` dispatches on the same marker order, and slice 37's block
+	# would print a frame-comparison verdict on a wire whose subject is the gyro. Merging this branch
+	# into the one below would therefore be correct for the button and wrong for the HUD, which is
+	# exactly the pairing slice 35 named "a BRANCH SELECTOR, not a hole plug".
+	# ⚠⚠ THE TWO DISPATCH CHAINS MUST ALWAYS AGREE ON ORDER (34/35/36/37 each wrote this down): a
+	# headline naming the gyro above body lines describing the FRAME would be the invited comparison
+	# with a correct verdict sitting on top of it.
+	if _gimbal_gyro_view:
+		_fid_kind = "seeker_head"
+		if not _prop_btn.pressed.is_connected(_on_seeker_head_pressed):
+			_prop_btn.pressed.connect(_on_seeker_head_pressed)   # guarded for the headless UI test
+		_prop_btn.tooltip_text = "Cycle seeker head servo frame (set_fidelity): body_referenced → space_stabilized"
+		_prop_btn.visible = true
+		_build_airframe3d_scene()
+		return
 	if _gimbal_frame_view:
 		_fid_kind = "seeker_head"
 		if not _prop_btn.pressed.is_connected(_on_seeker_head_pressed):
@@ -1827,6 +1871,34 @@ func _handover_req_text(peak: float, window: float, lost: bool) -> String:
 # `_draw` HAS NO HEADLESS PROOF — `_draw` never runs under `--headless` (convention 14; slice 31's
 # aim-point comparison shipped WRONG and only the windowed shot caught it).
 # ⚠ WIDTHS ARE MEASURED: ~34 characters at 20 px from `vp.x − 430`. All five are counted (28/26/25/30/29).
+# ⭐⭐ SLICE 38 — THE HEADLINE, AND IT NAMES THE SENSOR RATHER THAN THE FRAME. Slice 37's label above
+# would be TRUE on this wire and still wrong to show: its subject is which frame the servo closes in,
+# and here that is AUTHORED while the GYRO is what the student is dragging.
+# ⚠⚠ THE `not stabilized` ARM IS THE ONE THAT MATTERS AND IT IS NOT COSMETIC: on the body rung this
+# slice's slider is INERT (measured bit-identically), so the headline must say the wire's own control
+# is doing nothing rather than report a ring the student cannot influence from here.
+# ⚠ THE RINGING VERDICT RIDES THE PEAK-HOLD, not the instantaneous rate — slice 27's finding, because
+# a limit cycle crosses zero twice per cycle.
+# ⚠⚠ THE LENGTHS HERE WERE FIXED BY A WINDOWED CAPTURE AND THE BUDGET IS **NOT** THE BODY LINES'.
+# The first pair of shots ran BOTH new headlines off the right edge — "PERFECT-ish GYRO — RINGING:
+# the index sees the body" (50 chars) and "GYRO LEAK — the ring is bought by a WORSE sensor" (47) —
+# while the UI test passed, because it pinned the ~55-character budget the BODY lines are drawn
+# against at 15 px. THE HEADLINE IS DRAWN LARGER AND FROM A DIFFERENT ORIGIN, so its budget is ~30
+# characters: slice 37's longest is "SPACE-STABILIZED — loop STABLE" at exactly 30, and every label
+# in this family has quietly obeyed that without anyone writing it down. ⇒ the right-edge overrun's
+# 5th occurrence after 26/28/36/37, and THE FIRST IN THE HEADLINE RATHER THAN A BODY LINE — which is
+# why the UI test now pins the two budgets SEPARATELY instead of one number for all strings.
+# ⚠ Nothing was lost in the shortening: the mechanism the long versions spelled out is already the
+# line directly beneath them (`_head_gyro_mech_text`), which is where it belongs.
+func _head_gyro_verdict_label(lost: bool, ringing: bool, stabilized: bool) -> String:
+	if lost:
+		return "TRACK LOST — the head let go"
+	if not stabilized:
+		return "BODY-REFERENCED — no gyro"
+	if ringing:
+		return "PERFECT GYRO — RINGING"
+	return "WORSE GYRO — loop QUIET"
+
 func _frame_verdict_label(lost: bool, ringing: bool, stabilized: bool) -> String:
 	if lost:
 		return "TRACK LOST — the head let go"
@@ -2176,6 +2248,76 @@ func _draw_handover_hud_lines(vp: Vector2) -> void:
 # is what makes every `rms r` here a STABILITY read at all (the two-run discipline). It is drawn
 # because a budget that never binds still has to be SEEN not to bind.
 # ⚠ THE RANGE AND CROSS-RANGE LINES ARE NOT HERE — the shared block above draws them at y = 66/88.
+# ⭐⭐ SLICE 38 — THE MECHANISM, ONE LINE, AND THE STATE THAT ONLY THIS WIRE HAS. A space-stabilized
+# head holds its pointing by feeding forward its gyro's reading, so a scale-factor error LEAKS a
+# fraction of the missile's own body motion straight back into the radome's index — which is the
+# quantity slice 37 measured its whole margin out of.
+# ⚠⚠ THE `stabilized == false` ARM IS THE ONE THAT EARNS THE FUNCTION: on the body-referenced rung
+# there is no stabilization loop for a gyro to corrupt, so THE SLIDER DOES NOTHING AT ALL — measured
+# bit-identically (`max|Δpos| == 0.0`; `rms r` 0.01310 at s = 0, −0.05 and −0.20 alike). A live control
+# that does nothing is the stale-readout class in a new form, and the only fix is to SAY SO.
+func _head_gyro_mech_text(stabilized: bool) -> String:
+	return "GYRO LEAK feeds the index — a WORSE gyro rings LESS" if stabilized \
+			else "BODY-REFERENCED: no gyro to corrupt — slider INERT"
+
+# ⭐ SLICE 38 — THE SENSOR'S OWN NUMBER BESIDE WHAT IT COSTS. `s` is the shipped scale-factor error and
+# `leak` its magnitude — the fraction of body motion the head fails to reject.
+# ⚠ THE LEAK IS **NOT** THE INDEX GAIN and the line must not imply it is: the index gain is what the
+# glass sees AFTER the servo has also acted (it runs 1.000 → 0.886 across the whole domain, not 1 → 0),
+# because a head carried along by the body is STILL SLEWED by its servo — which is precisely slice 37's
+# other rung. That refutation is gate 0's first, and it is why this line says "of body motion" rather
+# than naming an index gain the wire does not ship.
+# ⚠ WIDTH MEASURED: 52 characters at the widest (−0.200 / 20 %), against the ~55 budget at 15 px from
+# `vp.x − 430` — the right-edge overrun's 4 previous occurrences (26/28/36/37) are why this is counted
+# rather than eyeballed, and why the helper is extracted where the UI test can pin it (convention 14).
+func _head_gyro_spec_text(s: float, leak: float, inert: bool) -> String:
+	if inert:
+		return "gyro s %+.3f   (leak %.0f%% — not in this frame)" % [s, leak * 100.0]
+	return "gyro s %+.3f   leaks %.0f%% of body motion" % [s, leak * 100.0]
+
+# ⭐⭐ SLICE 38 — THE PAYLOAD LINE: the two architectures slice 37 shipped as a BUTTON are the two ENDS
+# of this slider, and the walk between them is what the student is dragging. The bracket figures are
+# the CORE's own onset measurements quoted as text, never a client-side stability test — |R_crit|
+# moves with N and ρ, so a "ring if x" line would be physics in GDScript and wrong the moment a
+# scenario changes N (convention 13, slice 26's rule, still in force).
+# ⚠ It names the SPEC, not a threshold: "2 % resolves, 5 % is a quarter" is a measured statement about
+# where the walk becomes visible on slice 37's own 0.005 grid, not a stability criterion.
+func _head_gyro_walk_text() -> String:
+	return "perfect→dead walks 37's SPACE bracket→its BODY one"
+
+# ⭐⭐ SLICE 38's OWN HUD — FIVE lines, sharing exactly two with slice 37's (the ring line and the
+# head's state). The mechanism line, the sensor-spec line and the walk line are this slice's own,
+# and the cure line slice 37 draws is DELIBERATELY ABSENT: `radome_slope_est` is authored here, not a
+# slider, so a line inviting the student to drag it would name a control this wire does not have.
+func _draw_head_gyro_hud_lines(vp: Vector2) -> void:
+	var stab := str(_fidelity.get("seeker_head", "body_referenced")) == "space_stabilized"
+	var chan := _ring_channel_key()
+	var rr := float(_telemetry.get(_af3d_missile + chan, 0.0))
+	var yaw_ch := chan == ".omega_r"
+	var off := float(_telemetry.get(_af3d_missile + ".head_off_deg", 0.0))
+	var marg := float(_telemetry.get(_af3d_missile + ".gimbal_fov_margin_deg", 0.0))
+	var s := float(_telemetry.get(_af3d_missile + ".head_gyro_scale_err", 0.0))
+	var leak := float(_telemetry.get(_af3d_missile + ".head_gyro_leak", 0.0))
+	# THE MECHANISM — and on the body rung, the fact that the slider is inert.
+	draw_string(_font, Vector2(vp.x - 430, 110), _head_gyro_mech_text(stab),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.45, 0.90, 1.00) if stab else Color(0.70, 0.70, 0.75))
+	# THE RING — slice 37's own line, reused verbatim for the reason it was written: the peak-hold is
+	# what makes the two states readable, because a limit cycle crosses zero twice per cycle and an
+	# instantaneous number lies about half the time (slice 27's finding, and slice 37's shots).
+	draw_string(_font, Vector2(vp.x - 430, 132), _frame_ring_text(rr, _radome_qpeak, off, yaw_ch),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _radome_qpeak > 0.5 else COL_TICK)
+	# THE SENSOR — its own number, and what fraction of body motion it fails to reject. Greyed on the
+	# body rung, where it is a true number about a sensor nothing is reading.
+	draw_string(_font, Vector2(vp.x - 430, 154), _head_gyro_spec_text(s, leak, not stab),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK if stab else Color(0.70, 0.70, 0.75))
+	# THE PAYLOAD — the slider walks between the two ends the BUTTON switches.
+	draw_string(_font, Vector2(vp.x - 430, 176), _head_gyro_walk_text(),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	# THE DETECTOR BUDGET + THE HEAD's STATE — slice 37's line, and the precondition for reading the
+	# ring at all: the window never binds on this wire (measured across the whole slider domain).
+	draw_string(_font, Vector2(vp.x - 430, 198), "detector budget %+.1f°   head: %s" % [marg, "HOLDING — no error signal since the break" if _gimbal_lost else "TRACKING"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if (_gimbal_lost or marg < 0.0) else Color(0.55, 1.00, 0.65))
+
 func _draw_frame_hud_lines(vp: Vector2) -> void:
 	var stab := str(_fidelity.get("seeker_head", "body_referenced")) == "space_stabilized"
 	var chan := _ring_channel_key()
@@ -2310,7 +2452,15 @@ func _draw_airframe3d_hud() -> void:
 	# ⚠ AND THE BUTTON IS NOT FREE HERE EITHER, IN THE DIRECTION NO EARLIER SLICE NEEDED — see
 	# `_enter_airframe3d_mode`: this is the first wire of the family with a rung to cycle, so the marker
 	# RESTORES the button that three separate markers on this same wire would otherwise drop.
-	if _gimbal_frame_view:
+	# SLICE 38 — checked FIRST here as at the other two sites, because all three dispatch chains must
+	# agree: a headline naming the FRAME above body lines about the GYRO is the same defect one level
+	# up. ⚠ The colour rule is inherited unchanged (the latch, not the peak-hold): every arm in this
+	# slider's domain HITS on both rungs, so a ring-coloured headline would paint every intercept.
+	if _gimbal_gyro_view:
+		lbl = _head_gyro_verdict_label(_gimbal_lost, _radome_qpeak > 0.5,
+				str(_fidelity.get("seeker_head", "body_referenced")) == "space_stabilized")
+		col = Color(1.00, 0.62, 0.30) if _gimbal_lost else Color(0.45, 0.90, 1.00)
+	elif _gimbal_frame_view:
 		lbl = _frame_verdict_label(_gimbal_lost, _radome_qpeak > 0.5,
 				str(_fidelity.get("seeker_head", "body_referenced")) == "space_stabilized")
 		# ⚠ THE COLOUR RIDES THE LATCH, NOT THE PEAK-HOLD, inherited from 34/35 with their reason and
@@ -2519,7 +2669,13 @@ func _draw_airframe3d_hud() -> void:
 	# must ALWAYS agree: a headline naming the frame above body lines drawing slice 35's unlabelled
 	# demand-vs-cap pair would be the invited subtraction with a correct verdict sitting on top of it —
 	# which is precisely the shape slice 36's windowed shot caught and no test would have.
-	if _gimbal_frame_view:
+	# SLICE 38 — THE HEAD'S OWN GYRO, checked FIRST here too and for the reason the two chains must
+	# ALWAYS agree. Slice 37's block is the one that would take this wire, and every key it reads is
+	# LIVE here — so it would print a true frame-comparison verdict, and a cure line naming a slider
+	# this wire does not have, above a lesson about the SENSOR. The stale-readout class's worst form.
+	if _gimbal_gyro_view:
+		_draw_head_gyro_hud_lines(vp)
+	elif _gimbal_frame_view:
 		_draw_frame_hud_lines(vp)
 	elif _gimbal_handover_view:
 		_draw_handover_hud_lines(vp)

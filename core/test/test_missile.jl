@@ -8158,8 +8158,12 @@ end
             # fidelity authored, so it carries the rate-limited head unchanged; the servo is AUTHORED
             # there rather than a slider (its ONE knob is R̂, its lesson is the BUTTON), which is
             # precisely why an `isempty`-style claim would have said nothing about it.
+            # ⚠ SLICE 38 WIDENED IT A THIRD TIME AND THE ASSERT CAUGHT IT AGAIN. Its wire is a
+            # slice-37 wire PLUS one comp key, so it carries the rate-limited head unchanged and the
+            # servo is AUTHORED there too (its ONE knob is the head gyro's scale factor). The set
+            # grows; the claim — "slices 1-34 stay byte-identical by GATING" — does not move.
             @test carriers == ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml",
-                               "slice37_frame.yaml"]
+                               "slice37_frame.yaml", "slice38_head_gyro.yaml"]
         end
     end
 
@@ -8219,7 +8223,12 @@ end
         # marker. The ordering that keeps it harmless is again the client's — `gimbal_frame_view` is
         # checked FIRST, and `slice37_ui_test.gd`'s mirror is what proves it.
         let expected_rate = ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml",
-                             "slice37_frame.yaml"]
+                             "slice37_frame.yaml",
+                             # ⚠ SLICE 38: a slice-37 wire PLUS one comp key, so it carries slice 35's
+                             # authored servo too. Exempting it is not a weakening — it is the same
+                             # fact the slice-38 marker exists to handle, since FOUR route markers now
+                             # fire on one wire and the newest has to be checked ahead of all of them.
+                             "slice38_head_gyro.yaml"]
             for f in readdir(base)
                 endswith(f, ".yaml") || continue
                 f in expected_rate && continue
@@ -9670,7 +9679,9 @@ end
             carriers = String[f for f in readdir(base)
                               if endswith(f, ".yaml") &&
                                  haskey(load_scenario(joinpath(base, f)).world.fidelity, :seeker_head)]
-            @test carriers == ["slice37_frame.yaml"]
+            # ⚠ SLICE 38 JOINS IT, AND THAT IS THE POINT OF ITS OWN WIRE: the rung is SHARED (slice
+            # 38 adds no rung at all), and its two values are the two ENDS of slice 38's slider axis.
+            @test carriers == ["slice37_frame.yaml", "slice38_head_gyro.yaml"]
         end
     end
 end
@@ -9756,7 +9767,11 @@ end
         # `!haskey`-as-a-feature). This is also the byte-identity claim, stated as a marker fact.
         for f in readdir(base)
             endswith(f, ".yaml") || continue
-            f == "slice37_frame.yaml" && continue
+            # ⚠ SLICE 38's WIRE RAISES IT TOO, LEGITIMATELY: it is a slice-37 wire PLUS one comp key,
+            # and the BUTTON it shows is slice 37's own (correct there, because the two rungs are the
+            # two ends of slice 38's slider). What slice 38 adds is a marker checked AHEAD of this one
+            # that re-routes only the HUD — so this mirror exempts that wire rather than being deleted.
+            (f == "slice37_frame.yaml" || f == "slice38_head_gyro.yaml") && continue
             let inf = EWSim._airframe_view_info(load_scenario(joinpath(base, f)).world)
                 inf === nothing || @test !haskey(inf, :gimbal_frame_view)
             end
@@ -10032,6 +10047,41 @@ end
         # ⚠ AND IT IS A DIFFERENT SENSOR FROM SLICE 31's, which corrupts the COMPENSATOR's gyro.
         # Neither of those keys is present here, and the two must never share a name.
         @test !haskey(telb, "m1.gyro_scale_err")
+    end
+
+    @testset "the HANDSHAKE MARKER — `gimbal_gyro_view`, and the four it must be checked ahead of" begin
+        # ⚠⚠ THE MARKER'S JOB IS THE **HUD**, NOT THE BUTTON (advisor, predicted before any client
+        # code). A slice-38 wire is a slice-37 wire PLUS one comp key, so it raises `gimbal_frame_view`
+        # too and the button is ALREADY correct — and correct for a REASON: `:seeker_head`'s two rungs
+        # are the two ENDS of this slice's slider axis. What is NOT correct is the HUD, because every
+        # key slice 37's block reads is LIVE here: it would print a fluent, entirely TRUE
+        # frame-comparison verdict — with a cure line naming a slider this wire does not have — above a
+        # lesson about the SENSOR. The stale-readout class's WORST form (slice 34's), where nothing is
+        # stale, and the ~10th occurrence in this family.
+        w, sub = gyro_world(; s = -0.05)
+        for _ in 1:20; tick!(w, sub, dt); empty!(w.events); end
+        info = EWSim._airframe_view_info(w)
+        @test get(info, :gimbal_gyro_view, false)
+        # …and ALL FOUR earlier route markers are raised too — the hazard, asserted as the POSITIVE
+        # facts that make the new one necessary (one MORE than slice 37 had to be checked ahead of).
+        @test get(info, :radome_view, false)
+        @test get(info, :gimbal_view, false)
+        @test get(info, :gimbal_rate_view, false)
+        @test get(info, :gimbal_frame_view, false)
+        # ⚠ GATED ON THE COMP KEY, not the fidelity — the OPPOSITE choice from slice 37's, for the same
+        # reason it made its own: what distinguishes THIS wire is the imperfect gyro, and the rung is
+        # shared. A slice-37 wire (no gyro key) must therefore NOT raise it, on EITHER rung.
+        for rung in (:space_stabilized, :body_referenced)
+            w2, sub2 = gyro_world(; head = rung)
+            for _ in 1:20; tick!(w2, sub2, dt); empty!(w2.events); end
+            i2 = EWSim._airframe_view_info(w2)
+            @test !get(i2, :gimbal_gyro_view, false)
+            @test get(i2, :gimbal_frame_view, false)     # …while slice 37's own marker still is
+        end
+        # …and a BIAS-only wire raises it too (the marker keys off any of the three).
+        w3, sub3 = gyro_world(; bz = 0.1)
+        for _ in 1:20; tick!(w3, sub3, dt); empty!(w3.events); end
+        @test get(EWSim._airframe_view_info(w3), :gimbal_gyro_view, false)
     end
 
     @testset "the loader: refused without a head, accepted beside EITHER rung" begin
