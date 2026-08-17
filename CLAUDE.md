@@ -433,8 +433,9 @@ COMMAND BEFORE IT STEPS AT ALL — `[step K, set_fidelity, step N−K]` back-to-
 tick 0 and silently measures a from-launch arm. ⚠ RUNG, NOT KNOB, and the gate is answered by a BOUND
 (a 25× faster servo at a 50× smaller τ stops at 4.796° of index gain and cannot reach the stabilized
 head's 3.861°). Class 4a (13th consecutive RNG-live), replay bit-identical ON BOTH RUNGS, BUTTON BACK
-(the first since slice 25). ⚠ The proofs ran on port 8770 — an unrelated python process held 8765 — and
-the 8765 re-run is owed. (7496)**
+(the first since slice 25). ⚠ The proofs FIRST ran on port 8770 — an unrelated python process held
+8765 — and ✅ the 8765 re-run is DISCHARGED (verifier `S37V OK` reproducing every number to the digit,
+and the smoke-load green with BOTH halves captured). (7496)**
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.

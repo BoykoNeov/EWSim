@@ -1213,5 +1213,10 @@ AFTER the `_frame_ring_text` / `_frame_cure_text` extractions (shot A reads `(pe
 
 ## §II.31 WHAT REMAINS OWED
 
-* ⚠ **Re-run `slice37_verify.gd` and the smoke-load on port 8765** once PID 40916 releases it. The
-  constant is already reverted; the 8770 runs are otherwise identical.
+* ✅ **DISCHARGED (2026-08-17, the next session).** PID 40916 had exited and both server-driven proofs
+  were re-run on 8765 off the SHIPPED bytes: `slice37_verify.gd` green (`S37V OK`, exit 0, 19 arms,
+  reproducing 0.01195 / 1.00094 / 83.8×, both onset brackets and the 1.022× dead button at the aim
+  point TO THE DIGIT — so the 8770 runs are confirmed identical, not merely assumed to be), and the
+  `Sandbox.tscn` smoke-load green with BOTH halves captured (`EWSIM_SERVER_DONE`; Godot stdout = the
+  version banner alone, stderr EMPTY, zero `SCRIPT ERROR` / `Parse Error` / `GDScript backtrace`).
+  ⚠ NOTHING REMAINS OWED FROM SLICE 37.

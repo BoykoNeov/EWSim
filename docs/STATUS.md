@@ -5307,9 +5307,14 @@ press leaves the RNG state EQUAL to the never-pressed run's while the trajectori
 ⭐ Gate 2's own `@test isempty(carriers)` was written to be tightened here and was
 (`== ["slice37_frame.yaml"]`); two slice-35 carrier enumerations fired as FAILING asserts and were
 correct to — the second time that list has earned its keep. Slices 1–36 byte-identical.
-⚠ **OWED: the proofs ran on port 8770** — an unrelated `python` process (PID 40916) held 8765 and it
-is not this project's to kill. The port is one integer constant, already reverted; the 8765 re-run is
-owed whenever that process exits.
+⚠ **THE PROOFS FIRST RAN ON PORT 8770** — an unrelated `python` process (PID 40916) held 8765 and it
+was not this project's to kill. The port is one integer constant, reverted immediately after those
+runs. ✅ **THE 8765 RE-RUN IS DISCHARGED (2026-08-17, next session)**: that process had exited, and
+BOTH server-driven proofs were re-run on the default port off the SHIPPED bytes — `slice37_verify.gd`
+green (`S37V OK`, exit 0, all 19 arms, reproducing 0.01195 / 1.00094 / 83.8×, both brackets and the
+1.022× dead button at the aim point TO THE DIGIT), and the `Sandbox.tscn` smoke-load green with BOTH
+halves captured (`EWSIM_SERVER_DONE`; Godot stdout = the version banner and nothing else, stderr
+EMPTY, zero `SCRIPT ERROR` / `Parse Error` / `GDScript backtrace`). Nothing differed but the integer.
 
 
 **Client baked-fx pass (2026-07-14, post-slice-18)** — the SECOND cross-cutting DISPLAY-ONLY client
