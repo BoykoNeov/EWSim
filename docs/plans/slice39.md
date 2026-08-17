@@ -1,6 +1,6 @@
 # Slice 39 — **A NULLING-LOOP HEAD SERVO: KILLED AT GATE 0** (§11 Tier-A)
 
-**Status: DEAD, NOT DEFERRED — killed in 5 probes (2026-08-17), with a general result worth more than
+**Status: DEAD, NOT DEFERRED — killed in 9 probes across 4 files (2026-08-17), with a general result worth more than
 the slice would have been.** No core change survives: the gate-0 patch was applied for the runs and
 **REVERTED** (`git diff` empty, suite green at **7564**, the slice-38 count unchanged). Raw numbers in
 `M:\claud_projects\temp\slice39g\` (`lib39g.jl`, `p0_degen.jl`, `p1_table.jl`, `p2_collapse.jl`,

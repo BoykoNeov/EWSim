@@ -1302,7 +1302,7 @@ rejection path does NOT collapse onto slice 26's boundary (measured — 20.2× a
 radome, because `s` adds PHASE and scaling a slope cannot), and what DID need the slice-31 trap
 treatment was the BIAS, which turned out to need ~10³× a bad real gyro.
 ⚠⚠ **ITS OWN FIRST-NAMED SUCCESSOR — A NULLING-LOOP HEAD SERVO — IS NOW DEAD, NOT DEFERRED: KILLED AT
-GATE 0 (2026-08-17, 5 probes, `docs/plans/slice39.md`), AND SLICE 38's PREDICTION IS REFUTED IN THE
+GATE 0 (2026-08-17, 9 probes in 4 files, `docs/plans/slice39.md`), AND SLICE 38's PREDICTION IS REFUTED IN THE
 STRONGEST AVAILABLE FORM.** It predicted the two gyro currencies would SWAP (bias carrying the slice,
 scale factor inert). ⭐⭐ **NEITHER CURRENCY EXISTS ON THAT RUNG: a nulling loop with INFINITE LOOP GAIN
 is not an ARCHITECTURE, it is a REPARAMETERIZATION OF THE SERVO TIME CONSTANT** —
