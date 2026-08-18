@@ -335,3 +335,216 @@ the seeker.**
   command, which is the shape of the slice-42 instrument bug that *"crawls at 1/50 rate"*. **The
   crawl signature is `t_lock` blowing up by ~50× at small ρ.** If any lead-clamped row shows it, the
   clamp is mis-built and every row from it is void.
+
+---
+
+# ⭐⭐⭐ §II — PROBES **P2–P5** (2026-08-18): **THE LAW, AND IT IS NOT THE SENTENCE SLICE 42 LEFT**
+
+**−SIDE ONLY.** The +side is excluded from every table below as stop-contaminated (§I.1, §I.3): its
+`lag ≡ S` to three digits across seven rates, and its do-nothing cell sits on the stop 57 % of in-band
+ticks. **The head is not flying the pattern there, so no number from it describes a search.**
+
+## ⚠⚠ §II.0 P2a — **THE ADVISOR'S DISCRIMINATOR, AND READING (B) IS REFUTED**
+
+Two readings of §I.3's monotone `t_lock` were equally consistent with everything measured: **(A)** the
+pattern's amplitude collapses but the head still sweeps, or **(B)** the head barely moves and the LOS
+simply walks into a nearly-stationary window, so the search does no searching at all. The
+discriminator is a **dither** — a half-width too small to ever reach the target:
+
+| half ° | ρ °/s | dir | miss (m) | t_lock | head excursion ° |
+|---|---|---|---|---|---|
+| 1 | 8 | ±1 | **305.112** | never | −0.73 … +0.74 |
+| 2 | 8 | ±1 | **305.112** | never | −1.73 … +1.73 |
+| 3 | 8 | +1 | 0.186 | 0.309 | 0.00 … **+2.07** |
+| 3 | 32 | ±1 | **305.112** | never | −1.11 … +1.11 |
+| 5 | 32 | ±1 | **305.112** | never | −1.92 … +1.92 |
+
+> **READING (B) IS DEAD.** A dither that cannot travel ≈2.07° never rescues, at any rate, in either
+> direction. **The head's travel is load-bearing.**
+
+## ⭐⭐⭐ §II.1 **FINDING 1 — THE COST OF ACQUISITION IS THE OVERLAP DEFICIT, NOT THE ERROR**
+
+The single most useful thing in this gate, and slice 42 never wrote it down. A head born `|err|` off
+the line of sight behind a `±fov` window does not have to travel `|err|`. **It has to travel
+`|err| − fov` — the amount by which the target is outside the window edge.** Right guess, ρ = 8:
+
+| err ° | fov ° | **deficit °** | head travel at lock ° | ratio | t_lock s |
+|---|---|---|---|---|---|
+| −12 | 10 | 2 | 2.073 | 1.0365 | 0.309 |
+| −14 | 10 | 4 | 4.144 | 1.0360 | 0.568 |
+| −16 | 10 | 6 | 6.224 | 1.0373 | 0.828 |
+| −18 | 10 | 8 | 8.304 | 1.0380 | 1.088 |
+| −20 | 10 | 10 | 10.392 | 1.0392 | 1.349 |
+| −18 | 15 | 3 | 3.104 | 1.0347 | 0.438 |
+| −20 | 15 | 5 | 5.176 | 1.0352 | 0.697 |
+| **−14** | **12** | **2** | **2.073** | 1.0365 | **0.309** |
+
+⭐⭐ **THE LAST ROW IS A NATURAL EXPERIMENT AND IT IS EXACT.** `err −14 / fov 12` and `err −12 / fov 10`
+are *different* errors behind *different* windows with the *same* deficit — and they return **the same
+travel (2.073), the same lock time (0.309) and the same miss (0.186), to every digit printed.**
+**The error and the window are not separately visible to the search. Only their difference is.**
+
+⭐ **AND IT HAS A CLOSED FORM, GOOD TO THREE DIGITS ON ALL EIGHT CELLS:**
+
+> **`t_lock = 1.036 · deficit / ρ + τ`**
+
+with τ = 0.05 s the servo's own lag (`ρ·τ` — §I.0 — measured, not fitted) and **1.036 the price of the
+LOS running away while the head travels.** Check: deficit 10 ⇒ 1.036·10/8 + 0.05 = 1.345 against a
+measured 1.349.
+
+## ⭐⭐⭐ §II.2 **FINDING 2 — THE RIGHT GUESS NEVER REACHES ITS COVERAGE.** That is why it looked free
+
+Slice 42 §V.4 said *"guess right and the width is FREE — ρ_min is FLAT across a 6× range of coverage."*
+The flatness reproduces exactly, and is now **stronger** (a 10× range, and the same digit not the same
+bracket) — and the reason turns the sentence inside out. ρ = 8, lead clamped:
+
+| S ° | 3 | 5 | 8 | 12 | 16 | 20 | 25 | 30 |
+|---|---|---|---|---|---|---|---|---|
+| **t_lock, right guess** | 0.309 | 0.309 | 0.309 | 0.309 | 0.309 | 0.309 | 0.309 | 0.309 |
+
+> ⭐⭐ **THE WIDTH IS NOT FREE — IT IS NEVER USED.** The head locks **2.07° into a pattern authored
+> 3° to 30° wide.** Coverage does not appear in the answer because the search ends before coverage
+> exists. ⇒ **quoting a search's coverage as its cost is a category error whenever the guess is
+> right**, and a flat row is therefore evidence of *nothing* on its own — exactly as F5 pre-registered.
+
+## ⭐⭐ §II.3 **FINDING 3 — THE WRONG GUESS PAYS `2S` IN TRAVEL, AND THE PRICE ACCELERATES**
+
+Same grid, wrong guess. The static geometric prediction is `dt_lock/dS = 2/ρ = 0.250` s per degree
+(out to the far edge and back again):
+
+| S ° | 3 | 5 | 8 | 12 | 16 | 20 | 25 | 30 |
+|---|---|---|---|---|---|---|---|---|
+| **t_lock, wrong guess** | 1.088 | 1.612 | 2.407 | 3.495 | 4.648 | 6.035 | **never** | **never** |
+| **measured slope s/°** | — | 0.262 | 0.265 | 0.272 | 0.288 | **0.347** | — | — |
+
+> ⭐⭐ **THE NAIVE TRAVEL-OVER-RATE LAW IS A LOWER BOUND, AND IT IS LOOSE EXACTLY WHERE THE DECISION IS
+> HARD.** The measured price per degree of coverage starts 5 % above the geometric prediction and ends
+> **39 % above it**, then diverges: at S = 25 and 30 the arm never locks at all at ρ = 8. **The excess
+> is the target moving while you look the wrong way — the same 3.6 % term that appears in finding 1's
+> constant, compounding over a search that is 20× longer.**
+
+⚠ **THIS IS THE HONEST REPLACEMENT FOR SLICE 42 §V.4's ρ_min TABLE**, which was flown with the servo
+bypassed and reported its own grid edge as a physical ceiling (§I.2).
+
+## ⚠⚠ §II.4 **FINDING 4 — AN OPEN-LOOP PATTERN GENERATOR WINDS UP AGAINST THE RATE LIMIT** … and F7's own gate cuts it down
+
+**The failure is real.** Slice 42's generator advances the command by `dir·ρ·dt` and reverses when
+*the command* reaches the half-width — it never looks at the head. So once the head saturates at
+`rate_max`, the command runs away and reverses while the head is still near the middle. At a fixed
+authored S = 20, err −12, wrong guess:
+
+| ρ °/s | 8 | 10 | 12 | 16 | 32 | 64 |
+|---|---|---|---|---|---|---|
+| **realized head excursion °, open loop** | −19.73 | −17.58 | −15.82 | −13.20 | −7.92 | **−4.39** |
+| **miss, open loop** | 0.131 | 0.333 | 0.120 | 0.321 | 0.039 | **305.112** |
+| **realized excursion °, lead = 1°** | −19.73 | −19.37 | −19.33 | −19.27 | −19.14 | **−19.03** |
+| **miss, lead = 1°** | 0.131 | 0.319 | 0.006 | 0.329 | 0.108 | **0.287** |
+
+> ⭐ **A SEARCH COMMANDED AT 64 °/s ON AN 8 °/s HEAD DOES NOT SWEEP FASTER AND IT DOES NOT MERELY
+> SWEEP LESS — IT FAILS OUTRIGHT** (305.112 m, never locks) at a coverage that rescues comfortably
+> when commanded at 8. **What saturates is not the rate. It is the AMPLITUDE.**
+> **F7 PASSES:** one line of anti-windup — bound how far the command may lead the head — removes the
+> collapse entirely (excursion flat −19.73 → −19.03 across an 8× rate range).
+
+⚠ **CONTAMINATION GUARDS BOTH CLEAR.** F7's pre-registered crawl signature (t_lock ×50 at low ρ) does
+not appear. And **below `rate_max` the clamp is provably inert** — ρ = 2, 4, 8 return identical digits
+at every lead ∈ {∞, 8, 4, 2, 1}, which is what says the clamp acts only where it should.
+
+### ⚠⚠⚠ §II.4a **AND THEN THE REPARAMETERIZATION GATE — RUN AGAINST MY OWN FINDING, AND IT BITES**
+
+The gate slices 39 and 41 died at, applied here before the finding was written down rather than after.
+**A designer could get this rescue far more cheaply: just refuse to author ρ above `rate_max`.** A =
+lead 1° at the authored ρ; B = the open-loop generator at `min(ρ, 8)`:
+
+| S ° | ρ = 8 | ρ = 16 | ρ = 32 | ρ = 64 |
+|---|---|---|---|---|
+| **A vs B, t_lock — S = 5** | +0.0 % | −12.5 % | −16.0 % | −18.4 % |
+| **S = 10** | +0.0 % | −7.1 % | −9.0 % | −10.4 % |
+| **S = 20** | +0.0 % | −5.2 % | −6.6 % | −7.5 % |
+| **rescue verdict A vs B** | same | same | same | same (**all 16 cells**) |
+
+> ⚠⚠ **THE LEAD CLAMP MOVES NO VERDICT. In all 16 cells A and B rescue or fail together** — including
+> S = 30, where both fail at a byte-identical 305.112 m. It buys 5–18 % of lock time and not one miss.
+> ⇒ **FINDING 4 IS A DESIGN CAUTION WITH A MEASURED SIZE, NOT AN ARCHITECTURE.** By this project's own
+> standard it is not a slice, and it must never be written as one. **What ships is the caution:
+> *authoring a sweep rate above the head's slew limit is not merely wasteful — it is a failure mode*,
+> and the one-line cure is `ρ ← min(ρ, rate_max)` at authoring time.**
+
+## §II.5 F4 AND F6 — BOTH ANSWERED, AND F6 IS THE ONE SLICE 42 DIED TO
+
+**F6 — THE STEP.** Every headline cell re-flown at `dt` = 5e−4:
+
+| cell | dt = 1e−3 | dt = 5e−4 | Δ |
+|---|---|---|---|
+| head travel at lock (deficit 6) | 6.2240 | 6.2240 | **0.0000** |
+| t_lock, right guess, S = 20 | 0.3090 | 0.3095 | +0.0005 s (+0.16 %) |
+| t_lock, wrong guess, S = 20 | 6.0350 | 6.0340 | −0.0010 s (−0.02 %) |
+
+> ⭐ **HALVING THE INTEGRATION STEP MOVES NOTHING.** Slice 42's knife-edge halved when the step halved
+> and died for it. **This does not.**
+
+**F4 — THE RESCUE GATE.** 40 −side arms across S ∈ {5,10,20,30} × ρ ∈ {2,4,8,16,32} × both guesses:
+
+> **30 rescues, largest 0.3398 m. 10 failures, smallest 305.1118 m. ZERO cells in between.** The
+> verdict is perfectly bimodal — **the rescue gate could be set anywhere from 0.34 m to 305 m without
+> changing a single cell.** F4's sampling worry does not apply to the −side.
+
+## ⭐⭐ §II.6 THE LAW, IN ONE PLACE
+
+> **1. A search's cost is the OVERLAP DEFICIT `|err| − fov`, not the pointing error.** Error and
+>    window are not separately visible; only their difference is (exact, two (err, fov) pairs).
+> **2. `t_lock = 1.036 · deficit / ρ + τ`** — three digits, eight cells, two windows.
+> **3. Guess the direction right and coverage is not free — it is NEVER REACHED.** Lock at 2.07° into
+>    a pattern 3–30° wide, `t_lock` identical to the digit across a 10× range of coverage.
+> **4. Guess wrong and coverage costs `2S` of travel — at a price that ACCELERATES**, 5 % over the
+>    geometric bound at S = 5 and 39 % at S = 20, diverging to never-locks by S = 25. **The target is
+>    moving while you look the wrong way, and that is the whole excess.**
+> **5. The head, not the command, is what searches.** An open-loop generator commanded above the
+>    head's slew limit converts excess rate into LOST COVERAGE and then into outright failure
+>    (−19.73° → −4.39° of realized sweep, rescue → 305.112 m). ⚠ **Cure `ρ ← min(ρ, rate_max)`;
+>    anti-windup is 5–18 % better and moves no verdict, so it is a caution, not an architecture.**
+
+## ⚠⚠⚠ §II.7 WHAT THIS DOES **NOT** LICENSE — §0.1, restated now that the numbers exist
+
+**The slice is still blocked, and nothing here changes that.** Findings 1–5 price the *search*. They
+do not price the *alternative*: on this wire a wider window still rescues every showcase cell for
+free (slice 42 §V.3), and finding 1 now says exactly why — **a wider `fov` reduces the deficit
+one-for-one, and the deficit is the entire cost.** ⭐ Finding 1 makes the free-window objection
+*sharper*, not weaker: widening the glass by 2° and travelling 2° further are **the same act**, and
+only one of them costs time.
+
+⇒ **A search-pattern slice STILL needs `SEEKER RANGE / SNR ACQUISITION LIMITS` first**, exactly as
+`docs/DEFERRALS.md` says. **This gate ships a LAW to that deferral, not a slice.**
+
+## §II.8 STANDING OF EVERY PRE-REGISTERED FALSIFIER
+
+| | verdict |
+|---|---|
+| **F0** servo smoke | **PASSES** — a real rate-limited servo flies a search; lag ≡ `ρ·τ` measured |
+| **F1** the grid edge | **FIRES** — slice 42's `none ≤ 16` is 18 and 22 °/s; its sentence WITHDRAWN |
+| **F2** ceiling = the knob | **REFUTED, before its own probe ran** (§I.3) — withdrawn, not run |
+| **F3** the +side is the stop | **CONFIRMED** — +side excluded from every table; not re-flown (advisor) |
+| **F4** the rescue gate | **CLEARED** — the verdict is bimodal with a 0.34 m ↔ 305 m empty band |
+| **F5** the collapse | **HOLDS as a LOWER BOUND, and the residue is the finding** (§II.3) |
+| **F6** the step | **CLEARED** — 0.0000 / +0.16 % / −0.02 % at half `dt` |
+| **F7** windup | **PASSES** — and §II.4a's own gate then cuts it to a caution |
+
+## §II.9 WHAT SLICE 43 GATE 0 LEAVES BEHIND
+
+**No code shipped. The suite stays at 7693.** `core/src/missile.jl` carried a probe patch during the
+run and was reverted before the write-up (`git checkout`, verified clean).
+
+**TO `docs/DEFERRALS.md`** — the frontier's entry is rewritten around findings 1–5 with its
+precondition intact, and slice 42 §V.4's `--` cells are corrected to 18 and 22 °/s.
+**TO `docs/LESSONS.md`** — three transferable disciplines:
+
+1. ⭐ **A GRID EDGE IS NOT A CEILING.** Slice 42 wrote *"a reported quantity that equals an authored
+   threshold is the threshold"* into LESSONS.md, and in the same gate reported its own ρ grid's
+   maximum as a physical limit. **A `--` in a swept table must name the sweep's bound beside it.**
+2. ⭐⭐ **A FLAT ROW IS EVIDENCE OF NOTHING UNTIL YOU KNOW THE MECHANISM STOPPED SHORT OF THE KNOB.**
+   "Coverage is free" and "coverage is never reached" produce the identical flat row and mean
+   opposite things. **Measure what the actuator actually did, not what it was told to do.**
+3. ⭐⭐ **DRIVE THE COMMAND, THEN CHECK THE ACTUATOR FOLLOWED IT.** Three separate instrument bugs in
+   this family are the same bug: the probe drove the *head* instead of the *command*, or drove the
+   command and never checked the head. **Carry a realized-excursion column, and a command-vs-actuator
+   lag column, on every actuated probe.**
