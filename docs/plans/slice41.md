@@ -638,9 +638,14 @@ Matched by corner frequency, `τ_a = 1/(2π f)`, same wire and same `R = −0.09
 | 20 Hz | 0.0405609 (τ = 7.958e−3) | 0.104459 | **2.58×** |
 
 ⭐ **AT THE SAME CORNER FREQUENCY THE SECOND-ORDER ACTUATOR COSTS MORE MARGIN THAN THE FIRST-ORDER
-ONE, AND THE GAP WIDENS AS THE ACTUATOR SLOWS.** That is the slice's own title arriving as a number,
-and it is the §0.2 mechanism: at its corner a second-order rung has spent ~90° of phase where a
-first-order rung has spent 45°, and phase is the currency here (§III.0).
+ONE, AND THE GAP WIDENS AS THE ACTUATOR SLOWS.** That is the slice's own title arriving as a number.
+
+⚠ **AND THE MECHANISM IS CHECKED AGAINST §I.5's OWN MEASURED PHASE, NOT AGAINST A TEXTBOOK FIGURE**
+(advisor). The comparison does NOT happen at the corner — it happens at the 1.65 Hz line (§III.0), far
+below both corners, and §I.5 measured exactly those two cells there: **−4.63°** for 30 Hz / ζ 0.7
+against **−3.47°** for `τ = 1/(2π·30)`. That is a **1.33× phase ratio against a 1.23× rms ratio** — the
+two agree to 8 %, on numbers taken from two different probes on two different days. Quoting “90° vs
+45° at the corner” would have been a textbook sentence about a place the loop never visits.
 
 ## ⚠⚠ §III.4 P4 IS ANSWERED, AND THE INHERITED SIGN WAS WRONG
 
@@ -662,8 +667,9 @@ Slice 40 shipped `ζ` as its slider and §0.4 P6 expected it here. **It does not
 | 20 Hz, ζ_a 0.7 | 0.104459 | — | 0/0 |
 | **20 Hz, ζ_a 0.1** | **0.0418136** | **2.50× BETTER** | **36/75** |
 
-**THE SIGN OF `ζ_a` FLIPS BETWEEN 30 Hz AND 20 Hz** — the fifth occurrence of the disqualifying class
-(`k` at 28, `ω_n` at 40, σ_seek at 25, the miss reversals at 20/22). And every lightly-damped cell
+**THE SIGN OF `ζ_a` APPEARS TO FLIP BETWEEN 30 Hz AND 20 Hz** — which would be the fifth occurrence of
+the disqualifying class (`k` at 28, `ω_n` at 40, σ_seek at 25, the miss reversals at 20/22). ⚠⚠ **IT MAY
+NOT BE CLAIMED AS ONE YET**, for the reason the next paragraph gives — see §III.6 item 4. And every lightly-damped cell
 fires **the actuator's own new inelastic stop**, so neither number is a clean read at all: §II.5
 predicted exactly this, and P7 is the reason it was counted. ⇒ **`ζ_a` is not the slider, and the two
 ζ_a = 0.1 cells above must be re-run at a widened `delta_max` — WITH the `:instant` control re-run at
@@ -679,9 +685,47 @@ the same widened value** (advisor) — before either is quoted.
 3. **THE SLICE'S AXIS IS THE ACTUATOR'S CORNER FREQUENCY AGAINST THE LOOP'S OWN MARGIN, NOT AGAINST
    THE RING.** §0.3 named `ω_a/ω_sp`; the numbers say the live comparison is `ω_a` against the
    *parasitic* loop's margin, which is a third thing again.
-4. **`ζ_a` IS DISQUALIFIED AS THE SLIDER** (non-monotone in sign, and contaminated). `ω_a` — or the
-   radome slope at a fixed `ω_a` — is the candidate, and P6 must be re-run on that.
+4. **`ζ_a` IS UNRESOLVED AS THE SLIDER, NOT YET DISQUALIFIED** — ⚠ the correction is the advisor's and
+   it matters: **both** ζ_a = 0.1 cells fire the actuator's own new clamp, so they are exactly the
+   reads §III.5 itself labels unusable, and *a contaminated cell cannot disqualify anything.* The
+   sign flip is a SIGNAL TO GO AND MEASURE, not a verdict. It is resolved only by re-running those
+   cells at a widened `delta_max` **with the `:instant` control re-run at the same widened value**.
+   `ω_a` — or the radome slope at a fixed `ω_a` — is the other candidate, and P6 covers both.
 5. **STILL UNRUN AND STILL ABLE TO KILL: P5 (REPARAMETERIZATION).** A destabilizing pole is harder to
    fake with `(k_α, k_q)` than a damping one, but slice 39 died here and it is answered by a bound,
    not a tolerance.
+
+
+## ⭐⭐⭐ §III.7 THE SHOULDER CONTROL — THE ACTUATOR'S COST IS A **MARGIN** COST, AND IT VANISHES
+
+⚠ **THE OBJECTION THIS ANSWERS, STATED FIRST** (advisor, and it BLOCKED the width of §III.2's claim):
+every ratio in §III.2 is against a *single* `:instant` number at a *single* `R`, and that number
+(0.0234857) is already **1.33× slice 26's own `R = −0.08` quiet read** (0.0175738). So `R = −0.09` is
+not flat baseline — it is on the **rising shoulder** of the onset. Nothing in §III.2 could yet
+distinguish *"a 30 Hz actuator costs 1.9×"* from *"`R = −0.09` is simply where anything costs 1.9×."*
+
+Same seed, same wire, same band, same rungs; only `radome_slope` moves. `aero = 0` and `clamp = 0/0`
+on **all nine** cells — every read below is unclamped.
+
+| R | `:instant` | 30 Hz, ζ 0.7 | **ratio** | 20 Hz, ζ 0.7 | **ratio** |
+|---|---|---|---|---|---|
+| **−0.085** | 0.0174387 | 0.0173123 | **0.99×** | 0.0174495 | **1.00×** |
+| **−0.088** | 0.0183264 | 0.0218027 | **1.19×** | 0.0304101 | **1.66×** |
+| **−0.090** | 0.0234857 | 0.0452563 | **1.93×** | 0.104459 | **4.45×** |
+
+⭐⭐ **THE RATIO COLLAPSES TO 1.00× AWAY FROM THE BOUNDARY AND GROWS AS THE BOUNDARY IS APPROACHED.**
+At `R = −0.085` a 20 Hz actuator — half the honest band, and the arm that costs 4.45× three cells
+later — is **free to four significant figures**. That is the alternative explanation refuted by
+measurement rather than by argument: the effect tracks the LOOP'S MARGIN, not the measuring point.
+
+⭐ **AND IT IS THE BETTER SENTENCE, NOT A NARROWER ONE.** The honest claim is not *"an actuator costs
+you 1.9×"*; it is **an actuator's phase lag is FREE while you have margin and RUINOUS when you do
+not** — which is the same shape as the arc's own `N·|R|` result (*you cannot buy N without buying
+glass*) and reads in the same currency. It also predicts §III.1: at `R = −0.10` the loop has no margin
+left to lose, so there is nothing for the actuator to take, which is a second and independent reason
+the authored design reads 0.4 % — beside the α_max clamp.
+
+⚠ **AND IT SETS THE DOMAIN A SHIPPED WIRE MAY BE AUTHORED IN.** A scenario authored at `R = −0.085`
+would hand the student a dead button; one authored at `R = −0.10` would hand them a dead button for a
+different reason. The live window is narrow and it is now measured, not guessed.
 
