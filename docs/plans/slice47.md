@@ -1,6 +1,11 @@
 # Slice 47 — THE MIDCOURSE PHASE (what a blind missile flies on, and what a wrong picture costs)
 
-**Status: GATE 0 — PLANNED, NOT YET PROBED (2026-08-18).**
+**Status: GATE 0 — RUN AND CLOSED (2026-08-19). §§1–3 WRITTEN. NO CORE CODE YET.**
+
+⭐ **The design fork is decided — THE SEEKER HEAD IS CUED ON THE MISSILE'S BELIEF, not on truth**
+(user, 2026-08-19: *“we are attempting to be closer to reality”*). Seven probes ran; **P1 (blocking)
+PASSED**, **P5 REFUTED this plan's own proposed headline**, and **P7 discharged the azimuth seam**.
+⚠ **Read §4 before §1** — two things written in §0 are corrected there by measurement.
 
 **What this slice is:** the missile stops getting its blind phase for free. Today, between launch and
 the moment the seeker's horizon opens, the missile commands **nothing at all** and its head is cued
@@ -161,6 +166,8 @@ hand-recompute** (convention 10, `docs/LESSONS.md`). Probes live in `M:\claud_pr
 | **P3** | Can slice 36's `gimbal_handover_err_deg` be **driven** by the midcourse, or must a second quantity coexist? | If driving it violates 36's stated body-frame sign convention or its `:stabilized` load refusal, **it must NOT be driven** — a second key is cheaper than a measured slice's name on a different physical birth. |
 | **P4** | Does the midcourse **error** move the headline columns MONOTONICALLY over a defensible domain? | ⚠ **Non-monotonicity is this project's standing disqualifier for a SHOWCASE SLIDER** (`k` 28, `ω_n` 40, `σ_seek` 25, miss-vs-`K` 20/22) — it does not kill the component, it kills the slider. If it reverses, the axis moves to whatever *is* monotone. |
 | **P5** | Does the three-way squeeze in §0.1 actually CLOSE — does widening `fov` to survive a bad handover cost enough horizon to make the error worse? | **If widening the window is still net-free, the squeeze is prose, not physics**, and the slice ships as a component-fidelity slice (the shape `DEFERRALS.md` §"What this changes about what to build" makes legal) with the null as documentation. |
+| **P6** | Where does the cost GO if the squeeze does not close? | added after P5 fell. ⚠ **Its ERROR arm is CONFOUNDED and not quotable** (§4.4); the fov control arm (P6b) is clean and carries the replacement headline. |
+| **P7** ⭐ | Can the missile steer OUT OF ITS LAUNCH PLANE at all? (raised by the advisor once the BELIEF branch was chosen: P1's error axis is cross-range ⇒ the midcourse steers in AZIMUTH, and `scenario.jl:350` forces `vel[2] = 0`) | **If cross-range does not develop, or sideslip diverges, or the resultant incidence pins — §1 MUST OPEN THE LAUNCH-HEADING SEAM FIRST**, which is a different and larger slice. **RUN, PASSED** (§4.6): branch (a), the seam is a note. |
 
 ## §0.7 — THE TWO-TEST VERDICT, DECLARED IN ADVANCE
 
@@ -201,15 +208,220 @@ client's `.get(k, 0.0)` print a DEFAULTED ZERO as a PASSED TEST.
 
 ## §1 — GATE 1: THE PURE PRIMITIVES
 
-*Not written. Blocked on P1 — see §0.1.*
+⭐ **THE FORK IS DECIDED (user, 2026-08-19): "we are attempting to be closer to reality" ⇒ THE HEAD
+IS CUED ON THE BELIEF.** §4.1's table is resolved on its first row. That decision is what makes this
+one slice with one lesson rather than two freebies priced together: **the midcourse computes where
+the target will be, it flies there, AND it points the head there — one picture, one quality figure,
+one thing to be wrong about.** Everything below assumes it.
+
+⚠ Pure means `core/src/guidance.jl`-class: no `w.rng`, no `World`, no `Entity`, no telemetry
+(convention 12). Everything here is a function of numbers and `Vec3`s, and every one of them is
+testable in `runtests.jl` with an INDEPENDENT recompute (convention 11).
+
+### §1.1 The three primitives
+
+1. **`intercept_time(p_rel, v_rel, V_m)`** — the constant-velocity closed form: the smallest
+   positive root of `‖p_rel + v_rel·t‖ = V_m·t`, i.e. the quadratic
+   `(‖v_rel‖² − V_m²)t² + 2(p_rel·v_rel)t + ‖p_rel‖² = 0`. ⚠ It has **three** degenerate cases and
+   each needs a defined, finite, non-throwing answer (conventions 5/6): no positive root (the target
+   outruns the missile), a near-zero leading coefficient (co-speed — the quadratic degenerates to
+   linear), and a negative discriminant. **A `NaN` here reaches JSON.**
+2. **`predicted_intercept_point(p_m, p_t, v_t, V_m)`** → `(pip::Vec3, t_go::Float64)` — dead-reckon
+   the target straight-line to `intercept_time` and return where it will be. **This IS the belief**:
+   the midcourse's entire picture of the future is one point and one time.
+3. **`midcourse_accel(p_m, v_m, pip; k, a_max)`** — the lateral command that flies the missile at
+   the PIP. ⭐ **Take the SIMPLEST law that is honestly a midcourse: steer the velocity vector onto
+   the line-of-sight to the PIP** — `a = k·V·(û_pip − v̂)⊥`, a pure attitude-pursuit of a fixed
+   point, clamped through the SHIPPED `clamp_accel`. It is deliberately NOT PN: PN needs a LOS rate
+   and the whole premise is that there is no seeker.
+
+### §1.2 ⚠⚠ THE SLICE-39 CHECK, RUN BEFORE ANY OF THIS IS WRITTEN
+
+*"A reparameterization must not ship as an ARCHITECTURE."* The obvious failure mode: **is "fly at a
+predicted intercept point" just PN against a displaced virtual target?** Answer it in a gate-0-style
+reduction probe (`p8_reduction.jl`), not in prose. The expected answer is **no, and for a reason
+that is the slice's content**: PN's command is `N·Vc·(ω×û)` — it is driven by a LOS **rate**, which
+a blind missile does not have and cannot have. Pursuit of a fixed point is driven by an **angle**.
+⚠ **If the probe shows the two are algebraically the same on this wire, say so and ship the small
+thing** — a `:midcourse` guidance arm that is PN against a virtual target, three lines, no
+architecture.
+
+### §1.3 The belief's ERROR is an AUTHORED, DETERMINISTIC PERTURBATION
+
+⚠ **§0.5 rule 3 is absolute: NO PER-TICK RNG DRAW.** The launch-time picture is wrong by a **signed
+authored constant**, applied ONCE at launch and then dead-reckoned:
+
+```
+    belief_t(0) = truth_t(0) + Δp        Δp = :midcourse_pos_err_m   (Vec3, authored, default 0)
+    belief_v(0) = truth_v(0) + Δv        Δv = :midcourse_vel_err_mps (Vec3, authored, default 0)
+```
+
+⭐ **AND THE SLIDER IS `Δv`, NOT `Δp`, FOR A MEASURED REASON**: P1 showed the handover error is the
+angle between where the target IS and where the picture SAID — an error that **GROWS through the
+blind phase** because it is a velocity error integrating. A position error is a constant offset that
+the closing geometry mostly eats. ⚠ **P4 (monotonicity over the domain) is re-run on the COMMANDED
+trajectory at gate 2** — P1's linearity was measured ballistic and does not transfer for free (§4.2).
+
+### §1.4 Tests (`core/test/test_midcourse.jl`, new file, added to `runtests.jl`)
+
+- **`intercept_time` against an INDEPENDENT recompute** — construct `(p_rel, v_rel, V_m)` from a
+  KNOWN answer (pick `t*`, place the target so the root is exactly `t*`), assert to `atol = 1e-9`.
+  Then the three degenerate cases assert **finite, defined, non-throwing** — never a value.
+- **The zero-error identity** — `Δp = Δv = 0` ⇒ the PIP is the true intercept point ⇒ `midcourse_accel`
+  points along the true collision course ⇒ **its lateral component is 0 to `atol`.** ⭐ This is the
+  slice-19 tripwire in its strongest form and it is also the null the showcase opens on.
+- **The sign test** — a target believed to be crossing FASTER must be led FURTHER. Assert the sign of
+  the lateral command against the sign of `Δv`, in the inertial frame, both directions. ⚠ Units /
+  frames / signs are the bug trifecta.
+- **`clamp_accel` reuse** — assert the command is the SHIPPED clamp, not a second implementation.
+
+---
 
 ## §2 — GATE 2: THE WIRE
 
-*Not written.*
+### §2.1 The guidance arm — `missile.jl:1187`
+
+A new `elseif` in the guidance chain, **with every existing arm textually verbatim** (§0.3 rule 1).
+⚠ **Never `a_dem + a_midcourse`.** The gate is **key presence AND the seeker never having locked**:
+
+```julia
+elseif guid === :pn && haskey(c, :midcourse_pip) && !get(c, :seek_init, false)
+    midcourse_accel(e.pos, e.vel, c[:midcourse_pip]::Vec3; …)
+```
+
+⚠⚠ **THE ORDER OF THE CHAIN IS ITSELF A DECISION.** The new arm must sit **before** the
+`haskey(c, :seeker_omega)` arm, because that arm is taken on **every tick of every seeker wire**
+(§0/P0) and would shadow this one entirely. Putting it first and gating it on `!seek_init` is what
+makes the handover a HANDOVER: midcourse until the tracker initialises, PN after, one switch, one
+tick. ⚠ **Pin the switch tick in a test** — an off-by-one there is a whole tick of the wrong law at
+the moment the slice is about.
+
+### §2.2 ⚠⚠ THE CUE ARM IS THE RISKIEST EDIT IN THE SLICE, AND IT IS NOT A NEW ARM
+
+`missile.jl:2437` writes `:head_tgt_az` / `:head_tgt_el` **UNCONDITIONALLY under `_gim`** from the
+measured (truth-derived) angles, and **slice 46's whole detection horizon reads through them.**
+Belief-cueing means gating an EXISTING unconditional write that a shipped slice depends on — which
+is a different and harder thing than adding a gated arm, and the ABSOLUTE GOLDEN is the check that
+catches a mistake here (§0.3 rule 3, convention 2).
+
+⭐⭐ **AND P2 EXPOSED THE ACTUAL FREEBIE, WHICH IS SHARPER THAN "THE HEAD SEES TRUTH".** The slew is
+gated at `:2103` / `:2129` on `off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h` — the
+**angular** window alone. `look_az_b` comes from `û_tru` (`:1879`). But `_detectable` (`:2413`,
+slice 46's link budget) gates only the **measurement**. ⇒ **the head today slews on an error signal
+for which there is no detection** — it tracks an echo the receiver cannot hear. That is not a
+missing feature, it is the cue and the track being the same code path.
+
+**The fix is a MODE, and it is small:**
+
+| while… | the head is… | its slew target is… |
+|---|---|---|
+| **not detectable** (slice 46's gate open) | **CUED** — open-loop, no window gate, because a cue is a command and not an error signal | the **BELIEF** LOS, in body angles via the shipped `look_angles` |
+| **detectable** | **TRACKING** — discipline 3's two-evaluation gate, VERBATIM | the measurement, `:2437` VERBATIM |
+
+⭐ **THIS GIVES STRUCTURAL BYTE-IDENTITY FOR FREE, AND IT IS THE GOOD KIND — the arm is UNREACHABLE
+on a wire without slice 46's rung.** With `detect_pt_w` absent, `_detectable ≡ true` (`:2415` else),
+so cue mode never runs and slices 11–45 are byte-identical **by construction**, not by a zero that
+cancels.
+
+⚠ **THE ORDERING CONSTRAINT IS REAL AND MUST NOT BE PAPERED OVER.** `_detectable` is computed at
+`:2413`; the slew runs at `:2103`, ~300 lines earlier. ⇒ the MODE is stored beside `:head_tgt_*` at
+`:2437` and consumed by the NEXT tick's slew — **the same one-tick seam discipline the servo already
+lives under** (discipline 2: the servo tracks the one-tick-delayed stored pair). Do not recompute
+detectability at `:2103`: that is a SECOND IMPLEMENTATION of the gate, the exact trap this file names
+for `off_axis_angle`.
+
+### §2.3 P3's ANSWER — A SECOND QUANTITY, AND THE REASON IS PHYSICS NOT BOOKKEEPING
+
+**Slice 36's `gimbal_handover_err_deg` MUST NOT be driven** (§4.5): it is a **STATIC tick-1 BIRTH
+OFFSET** consumed once in the `!seek_init` branch at `missile.jl:1999`. The belief error is a **RAMP**
+whose value AT THE LOCK INSTANT is the whole point (0 → 280 → 676 m of PIP error, §4.2). **A constant
+cannot express a ramp**, so driving 36's key would freeze the error at its launch value, which is
+zero. ⇒ the two coexist and are different physics: 36 asks *"what if the head is born pointing
+wrong?"*, 47 asks *"what if the missile has flown to the wrong place?"* ⚠ 36's `:stabilized` load
+refusal is inherited untouched — do not quietly widen it.
+
+### §2.4 The keys, and what refuses what at load
+
+| key | frame / units | default | validated |
+|---|---|---|---|
+| `midcourse: true` (or the law name) | — | absent ⇒ **no arm at all** | the ANCHOR: the loader refuses the error keys without it |
+| `midcourse_vel_err_mps` | inertial, m/s, `Vec3` | `[0,0,0]` | finite |
+| `midcourse_pos_err_m` | inertial, m, `Vec3` | `[0,0,0]` | finite |
+| `midcourse_k` | — | authored, NEVER a knob | `> 0` |
+
+⚠ **`a_max` is REUSED, never a second ceiling** (the slice-19 FINDING-14 shape): a midcourse that can
+pull more than the airframe is a lie the airframe pays for at handover.
+⚠ **CLAMP AT THE CONSUMER for anything live, VALIDATE AT LOAD for anything authored** (convention 5).
+
+### §2.5 The gate-2 checks
+
+1. **ABSOLUTE GOLDEN, both directions** — keys absent ⇒ byte-identical to slice 46; and the
+   `detect_pt_w`-absent wire ⇒ cue mode provably unreachable.
+2. **THE ZERO-ERROR NULL IS NOT BYTE-IDENTITY AND MUST NOT BE ASSERTED AS SUCH.** With `Δv = 0` the
+   midcourse still COMMANDS (a small correction of the launch heading); §0.1 measured that
+   perfect-midcourse ≈ ballistic ≈ hits, which is a metres-level agreement, not a bit-level one.
+   Assert **`cpa < 3 m` and `max |a_cmd|` while blind small**, never `dtraj == 0`.
+3. **The switch tick**, pinned (§2.1).
+4. **P4 RE-RUN ON THE COMMANDED TRAJECTORY** — P1's 0.4970 °/% is provisional (§4.2). The gate-2
+   number is the one gate 3 quotes.
+5. **The slice-19 tripwire** — a test asserting **each** authored key MOVES a measured quantity.
+   ⚠ This is the MODEL test, and it is the only outright kill available (§0.7).
+
+---
 
 ## §3 — GATE 3: THE SHOWCASE
 
-*Not written.*
+**`scenarios/slice47_midcourse.yaml`, `net/slice47_verify.gd`, `net/slice47_ui_test.gd`.**
+
+### §3.1 The lesson, and the one slider
+
+> **HOW GOOD DOES THE LAUNCH-TIME PICTURE HAVE TO BE?** A missile that cannot see its target flies on
+> what it was told at launch. Being told wrong costs nothing until the seeker opens its eyes — and
+> then it is paid all at once, in the one place the missile cannot get more of.
+
+**The slider is the midcourse velocity error**, quoted in **METRES of predicted-intercept-point error
+at the lock range**, not in per cent (§4.2: a percentage is a fraction of *this* target's speed and is
+scenario-specific; metres is the currency a midcourse is specified in).
+
+### §3.2 The headline columns — and the two gauges that are FORBIDDEN
+
+| column | why |
+|---|---|
+| **handover error at lock (deg)** vs the window | the direct output of the midcourse |
+| **peak `a_cmd` after lock, % of `a_max`, GATED `r > 200 m`** | slice 46's currency; §0.5 rule 2 — never quote the ungated figure |
+| **hold %** | the acquisition verdict, and the only honest column on a broken arm (§0.5 rule 4) |
+
+⚠⚠ **MISS IS FORBIDDEN AS THE GAUGE** (§0.5 rule 1 — killed twice). ⚠⚠ **AND SO IS
+`gimbal_fov_margin_deg`**, which is §4.4's new finding one level up: over the exact interval where
+P6b loses the engagement (authority 8.55 % → PINNED, hold 100 % → 6.90 %, CPA 2.6 → 271.9 m), the
+angle margin *improves* monotonically. **A gauge that reads "better" while the engagement is lost is
+not a gauge.**
+
+### §3.3 The scenario, and the ONE thing it must not inherit
+
+⚠⚠ **THE FREE RIDE IS AUTHORED (§0) AND THIS SCENARIO MUST NOT RE-AUTHOR IT.** Slice 46's target is
+authored INTO the missile's ballistic plane, so doing nothing is right. Slice 47's default cell must
+be one where **doing nothing is wrong**: the null arm (`Δv = 0`) hits because the midcourse FLIES,
+not because the launch heading happened to be the answer. ⭐ **Pin that with a third arm — midcourse
+absent — which must MISS.** Without it the showcase measures nothing, which is how slices 44 and 45
+died.
+
+⚠ The blind phase is reached by **SHRINKING THE TARGET** (`rcs_m2`), never by lengthening the launch
+range — slice 44 §V measured that an unpowered missile at 3000 m falls into the ground before it
+flies 20 km (§0.2). Inherit slice 46's `rcs_m2 = 0.001` default: 6955 blind ticks, `R_acq` 1436.7 m.
+
+⚠ **ONE LIVE KNOB beside ONE fidelity button** (the 32/34/37/40/46 shape, convention 9).
+
+### §3.4 The four proofs (convention 14) and the traps that have cost real hours
+
+**verifier · UI test · headless smoke-load · windowed shot.** ⚠ `STEPS` **must** be a multiple of
+`emit_every` (else a SILENT hang). ⚠ `%g` / `%.2e` are not GDScript specifiers and one bad one kills
+the whole `%` silently. ⚠⚠ **The HUD width budget is INHERITED (55 body / 30 headline) and asserted
+in PIXELS** — slice 46's 100/96-CHAR tooth passed GREEN while every line clipped at 1152 **and**
+1920 px. ⚠ A rung that stops EMITTING makes the client's `.get(k, 0.0)` print a **defaulted zero as
+a passed test** — the cue-mode keys must emit on every tick of both modes or not exist. ⚠ Anything
+computed inside `_draw` has NO headless proof. ⚠ **The Godot client is pure — ZERO physics**
+(convention 13): the belief point is DRAWN from telemetry, never dead-reckoned in GDScript.
 
 ## §4 — THE LOG (what actually happened)
 
@@ -263,8 +475,15 @@ gate-0 work, and the reason gate 0 exists — but §1 cannot be written until th
 
 | the head is cued on… | what a midcourse error costs | consequence for this slice |
 |---|---|---|
-| **the BELIEF** (a real datalink/midcourse cue) | **ANGLE** — P1's axis is live, linear, 0.4970 °/%, past the window at 280 m of PIP error | fixing the cue is **IN SCOPE**, not deferred; P1's table is this slice's number |
-| **TRUTH** (today, unchanged) | **AUTHORITY and GEOMETRY only** — the angle gate never sees it | P1's 20.5 % is **NOT this slice's number**, and the cost must be measured without P6's confound (§4.4) |
+| ⭐ **the BELIEF** — **CHOSEN** | **ANGLE** — P1's axis is live, linear, ~0.50 °/%, past the window at 280 m of PIP error | fixing the cue is **IN SCOPE**, not deferred. ⚠ P1's table establishes the axis is live, defensible and monotone; **its COEFFICIENT is PROVISIONAL and is re-measured at gate 2 on the COMMANDED trajectory** (§4.2) |
+| **TRUTH** (today, unchanged) — **NOT TAKEN** | **AUTHORITY and GEOMETRY only** — the angle gate never sees it | P1's 20.5 % would be **NOT this slice's number**, and the cost would have to be measured without P6's confound (§4.4) |
+
+> ⭐⭐ **DECIDED, 2026-08-19, BY THE USER: "we are attempting to be closer to reality" ⇒ THE BELIEF.**
+> A real seeker head is cued by whatever told the missile where to look, and on a blind missile that
+> is the midcourse, not omniscience. The cue and the guidance become ONE component with ONE authored
+> quality figure, which is also how convention 9 is satisfied — one lesson (*how good does the
+> launch-time picture have to be?*) rather than two freebies priced in one scenario. §§1–3 are
+> written on this branch; the truth branch is closed.
 
 ⭐ **The physical answer is the belief**: a seeker head is cued by whatever told the missile where to
 look, and on a blind missile that is the midcourse, not omniscience. But it must be CHOSEN and
@@ -301,6 +520,14 @@ RANGE.** ⚠ **Quote it in METRES, not in the 20.5 % it corresponds to**: the pe
 midcourse is actually specified and judged in, and it needs no side-claim about how good a launching
 radar's track is. 280 m at 6.8 s of blind flight is an ordinary midcourse, not an absurd one, so the
 falsifier in §0.6 does not fire: **the headline axis is defensible.**
+⚠⚠ **AND THE COEFFICIENT IS PROVISIONAL, WHICH THE PARAGRAPH ABOVE ALREADY IMPLIES AND THIS LINE
+MAKES EXPLICIT (advisor).** P1 sampled the handover geometry along the **BALLISTIC** trajectory — the
+one the missile flies when it commands nothing (P0). Once a belief-cued midcourse commands toward a
+WRONG predicted intercept point, the missile actively flies the wrong way, so the geometry at lock is
+**not** the geometry P1 sampled. ⇒ **the 0.4970 °/% is an order of magnitude and a SIGN, not the
+headline number.** What P1 establishes — and it is what the blocking probe was for — is that the axis
+is **live, defensible and monotone**. The number gate 3 quotes is re-measured at gate 2 on the
+commanded trajectory (§2.5 check 4).
 ⭐ And it is **STRICTLY LINEAR at 0.4970 °/%** across the whole domain (0.5023 / 1.0038 / 2.5025 /
 4.9928 / 7.4720 / 9.9547 at 1/2/5/10/15/20 %), which clears P4's non-monotonicity disqualifier
 outright — the axis this project usually has to hunt for is simply a straight line here.
@@ -378,25 +605,122 @@ instead of the RCS axis, and it settles what replaces §0.1's refuted squeeze:
 > the engagement is being lost — which is §0.5 rule 1 (miss is not the gauge) recurring one level up:
 > **`gimbal_fov_margin_deg` is not the gauge either.**
 
-### §4.5 GATE-0 VERDICT, AND WHAT §1 MUST DO
+### §4.6 P7 — **THE AZIMUTH SEAM IS NOT A BLOCKER, AND THE SHIPPED WIRE ALREADY FLIES IT** (2026-08-19)
 
-- **P0 ✓** the gap is real and is worse than the backlog said. **P2 ✓** a third freebie, deferred as
-  physics not showcase. **P1 ✓ THE BLOCKING PROBE PASSES** — defensible, linear, monotone.
-  **P5 ✗ REFUTED** — the squeeze is prose. **P6 ✓/⚠** — the cost transfers to authority, on a clean
-  control; the error arm is confounded and not quotable.
-- ⚠ **A STRUCTURAL FINDING FOR §1, FOUND WHILE BUILDING P1's CLEAN ARM AND NOT YET DISCHARGED: THE
-  LAUNCH STATE IS CONFINED TO THE x–z PLANE.** `scenario.jl:350` builds `e.vel` from
-  `speed`/`elevation_deg` with an explicit `0.0` cross-range component, and `missile.jl:439` mints
-  `:att_q` from `atan(e.vel[3], e.vel[1])` — **pitch only, `e.vel[2]` unread.** So a missile cannot
-  today be launched on a heading with any azimuth at all, and a midcourse that steers in azimuth must
-  open that seam or be born with an instant sideslip. ⚠ Check it against the `speed`(19) /
-  launch-altitude(21) class before touching it: an initial condition consumed once at load is
-  legitimate, but an attitude init that silently drops a velocity component is the other thing.
-- ⚠ **P3 IS NOT YET RUN, AND P1's OWN TABLE PREDICTS IT ANSWERS NO.** Slice 36's
-  `gimbal_handover_err_deg` is a **STATIC tick-1 BIRTH OFFSET** (`missile.jl:1999`, consumed once, in
-  the `!seek_init` branch). The belief error P1 measured **GROWS THROUGH THE BLIND PHASE** — 0 → 280 →
-  676 m of PIP error, i.e. a RAMP whose value at the lock instant is the whole point. **A constant
-  cannot express a ramp**, so driving 36's key would freeze the error at its launch value, which is
-  zero. ⇒ ⭐ **that, and not the frame mismatch, is the reason to mint a second quantity** — it is a
-  statement about the two things being different physics rather than about bookkeeping. ⚠ MEASURE it
-  before writing it down; it is a prediction from a table, not a probe result.
+⚠ **THIS PROBE WAS RUN BECAUSE THE FORK WAS DECIDED (§4.1), AND CHOOSING THE BELIEF PROMOTED §4.5's
+"structural finding" INTO GATE 1's PRECONDITION** (advisor). P1's entire error axis is **cross-range**
+— it was produced by perturbing the target's crossing speed — so **a midcourse that corrects it steers
+in AZIMUTH**, and the launch state has an explicit `0.0` cross-range velocity with `:att_q` minted
+from pitch alone. Two very different §1s hang on that: an ordinary lateral-acceleration midcourse, or
+a slice that must first open the launch-heading seam.
+
+**METHOD — no core patch, and the injection is at the honest seam.** `p7_azimuth.jl` appends a probe
+`Subsystem` to `sc.subs`; its `observe!` therefore runs **after** the seeker's (`subsystem.jl`: fixed
+phase order, list order within a phase) and overwrites `:seeker_omega` **while `!seek_init`**. PN then
+makes a real command through the real chain — `pn_accel_from_omega` → `clamp_accel` →
+`steering_command` → `alpha_autopilot_delta` (both fins) → `_integrate_6dof!`. While never-locked
+`:seeker_los` is `los_unit_from_angles(0,0) = (1,0,0)`, so an injected `ω` about `+ẑ` gives
+`a = N·Vc·(ω×û) = (0, N·Vc·ω_z, 0)` — **pure cross-range.** That is the seam exercised, which is all
+this probe needs; it is not the law.
+
+**SOUNDNESS FIRST** — the injection-absent arm is bit-identical to the raw wire:
+
+```
+dtraj(raw, subsystem-installed-but-wz=0) = 0.00e+00   lock 6956 vs 6956   cpa 2.9976 vs 2.9976
+```
+
+**P7.1 — IT TURNS OUT OF PLANE CLEANLY** (`α_max` = 0.30 rad = 17.19° is the RESULTANT
+`hypot(α,β)` ceiling, slice 23):
+
+```
+ wz rad/s     lock t    y @lock     vy @lock    max|al|    max|be|    max res     aero     defl     cpa m
+   0.0000     6.9560       0.00        0.000     8.7081     9.5764    12.7744     1235        0     2.998
+   0.0010     6.9040      96.52       28.618    11.4856     4.1225    12.1850      561        0     2.304
+   0.0020     6.8640     191.31       57.122    11.3254     4.3939    12.1467      542        0     2.730
+   0.0050     6.8180     472.75      141.258    10.4262    12.1651    12.7449     7143        0   162.612
+   0.0100     7.0420     990.00      273.247     0.1658     2.2917     2.2961        0        0  1167.745
+   0.0200    14.0000    4058.23      129.985     0.2008     4.5705     4.5728        0        0  2079.682
+```
+
+⭐ Cross-range develops **linearly in the injected rate** over the small-command domain (96.5 / 191.3
+m at lock for 0.001 / 0.002), the resultant incidence never approaches `α_max`, and **`defl_sat` is 0
+on every single arm** — the fin limit never binds. The `α`/`β` columns on the small arms are the
+**post-lock endgame**, not the blind phase (the `wz = 0` control shows the same 8.7 / 9.6°, and its
+blind phase is uncommanded by P0). ⚠ `wz ≥ 0.005` is an **absurd** midcourse — 473 m of cross-range
+before the seeker even opens — and it misses by 163 m and then 1168 m; the usable domain is
+`wz ≲ 0.002`, which conveniently brackets the 96–191 m of blind-phase displacement a real midcourse
+correction is worth.
+
+**P7.2 — AND THE SHIPPED WIRE ALREADY DOES THIS, WHICH IS THE STRONGEST FORM OF THE ANSWER.** At
+`rcs_m2 = 1.0` slice 46's horizon (8078.9 m) exceeds the 6436.7 m launch range, so the seeker locks
+at **tick 1** and PN commands cross-range from the start against a target authored at `y = +2000`:
+
+```
+lock tick 1   max|alpha| 0.7490 deg   max|beta| 0.8340 deg   max resultant 0.8344 deg
+aero_sat 0   defl_sat 0   cpa 2.3824 m
+   tick        t            y           vy      alpha       beta    |a_cmd|
+   1000    1.000         5.73       12.957     0.1149     0.6999      25.58
+   4000    4.000        81.15       31.251     0.6468     0.0606      15.02
+   8000    8.000       204.58       29.185     0.7217    -0.0480      46.54
+```
+
+⭐⭐ **THE MISSILE LEAVES ITS LAUNCH PLANE ON THE TOP ROW OF SLICE 46's OWN LADDER, hits at 2.38 m,
+and never saturates anything.** The in-plane birth is an **initial condition**, not a constraint.
+
+**P7.3 — THE NOSE FOLLOWS THE FLOWN VELOCITY: SIDESLIP TRIMS, IT DOES NOT RAMP.** Under a *constant*
+injected command the sideslip holds flat for five seconds and then unwinds smoothly through the
+handover:
+
+```
+   tick        t            y           vy   beta deg    |a_cmd|
+   1000    1.000        15.15       35.422     2.2516      58.86
+   3000    3.000       172.07      121.388     2.2908      59.80
+   5000    5.000       498.42      203.815     2.1865      57.77
+   7042    7.042       990.00      273.247     1.4940      37.55   <- LOCK
+  10000   10.000      1822.05      259.321    -1.7367      48.45
+  14000   14.000      2579.25      113.339    -2.1995      54.93
+```
+
+**A trim value, not a divergence.** None of the four pre-registered falsifiers fires.
+
+> ⭐⭐⭐ **VERDICT: BRANCH (a). §1 IS AN ORDINARY LATERAL-ACCELERATION MIDCOURSE AND THE SEAM IS A
+> NOTE, NOT A SLICE.** The 6-DOF plant has a full yaw channel (`af_cy_beta`, `I_zz`, `delta_yaw_cmd`)
+> and `steering_command` resolves a full 3-D demand onto **two** body axes with no
+> projection-and-discard — slice 23's "the discard dies" — so an azimuth-steering midcourse is
+> already-flown physics on this exact wire.
+
+⚠ **WHAT SURVIVES AS A NAMED DEFERRAL, AND IT IS A LATENT GAP RATHER THAN A BUG.** `missile.jl:439`
+minting `:att_q` from `atan(vel[3], vel[1])` is **consistent today** precisely because
+`scenario.jl:350` forces `vel[2] = 0` — nose along velocity, `α = β = 0` at launch, which is the
+correct initial condition. It becomes a **wrong number the moment a launch-AZIMUTH key is authored**,
+because the attitude would then be minted from a velocity component it silently drops. ⇒ **file it
+beside the launch-altitude(21) MODEL GAP: a seam reserved and not yet opened, with the tripwire being
+that whoever adds `azimuth_deg` to `scenario.jl` must fix `:att_q` in the same commit.** Slice 47 does
+**not** need it — the midcourse steers, it does not launch crooked.
+
+### §4.7 GATE-0 VERDICT — **GATE 0 IS CLOSED. §§1–3 ARE WRITTEN.**
+
+- **P0 ✓** the gap is real and is worse than the backlog said — the blind missile is BALLISTIC.
+  **P2 ✓** a third freebie, and it turned out to be the slice's **central design fork** rather than a
+  footnote. **P1 ✓ THE BLOCKING PROBE PASSES** — defensible (280 m of PIP error), linear, monotone;
+  ⚠ its COEFFICIENT is provisional (§4.2). **P5 ✗ REFUTED** — the three-way squeeze is prose, because
+  `t_lock` saturates against the CPA: **a feedback loop through a saturating variable is not a
+  feedback loop.** **P6 ✓/⚠** — the cost transfers to AUTHORITY, on a clean control; the error arm is
+  confounded and not quotable. **P7 ✓** — the azimuth seam is **not** a blocker, branch (a) (§4.6).
+- ⭐ **THE FORK IS DECIDED (§4.1): THE HEAD IS CUED ON THE BELIEF.** §§1–3 are written on that branch.
+- ⚠ **THE x–z-PLANE LAUNCH FINDING IS DISCHARGED BY P7** and demoted to a **named latent gap**: the
+  attitude init is consistent today because the loader forces `vel[2] = 0`, and becomes wrong only if
+  a launch-azimuth key is ever authored (§4.6, closing paragraph). It is **not** slice 47 work.
+- ⚠ **P3 IS ANSWERED FROM THE CODE, NOT FROM A PROBE, AND THAT IS THE RIGHT CALL (advisor).** Slice
+  36's `gimbal_handover_err_deg` is a **STATIC tick-1 BIRTH OFFSET** — `missile.jl:1999`, consumed
+  once, inside the `!seek_init` branch, read from a key that is never re-read. The belief error
+  **GROWS THROUGH THE BLIND PHASE** (0 → 280 → 676 m of PIP error, §4.2): a **RAMP** whose value AT
+  THE LOCK INSTANT is the whole point. **A constant cannot express a ramp**, so driving 36's key would
+  freeze the error at its launch value, which is zero. ⇒ ⭐ **a second quantity, and the reason is
+  that the two are different physics** — 36 asks *"what if the head is born pointing wrong?"*, 47 asks
+  *"what if the missile has flown to the wrong place?"* — **not** that their frames disagree. This is
+  a mechanism argument from lines already read, not a prediction awaiting measurement; §2.3 carries it.
+- ⚠ **WHAT GATE 1 STILL OWES A PROBE:** the slice-39 reduction check (§1.2) — *is pursuit of a
+  predicted intercept point just PN against a displaced virtual target?* That one is cheap, it is
+  pre-registered, and it is the only remaining way this slice ships an architecture where three lines
+  would do.

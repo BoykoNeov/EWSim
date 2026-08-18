@@ -527,6 +527,30 @@ it is blind. The horizon itself is no longer the missing piece.
   level up). ⚠ And a method catch worth carrying: **a probe that perturbs the TRUTH to emulate a wrong
   BELIEF is clean only for quantities read at a single instant** — anything integrated over the
   approach is measuring a different engagement (slice 47 P6's error arm, not quotable).
+  ⭐⭐ **GATE 0 IS NOW CLOSED AND THE DESIGN FORK IS DECIDED (user, 2026-08-19 — *"we are attempting to
+  be closer to reality"*): THE SEEKER HEAD IS CUED ON THE MISSILE'S BELIEF, NOT ON TRUTH.** That makes
+  the cue and the guidance ONE component with ONE authored quality figure (convention 9: one lesson —
+  *how good does the launch-time picture have to be?*). ⚠ **And P2's freebie has a sharper statement
+  than "the head sees truth": the slew is gated on the ANGULAR window alone** (`missile.jl:2103/2129`,
+  `off_axis_angle(… look_az_b …)` off `û_tru` at `:1879`) **while slice 46's `_detectable` (`:2413`)
+  gates only the MEASUREMENT ⇒ the head slews on an error signal for which there is no detection —
+  it tracks an echo the receiver cannot hear.** The fix is a MODE (cued while undetectable, tracking
+  once detectable) and it is byte-safe **by construction**: with `detect_pt_w` absent `_detectable ≡
+  true`, so the cue arm is UNREACHABLE on any slice 11–45 wire.
+- ⚠ **A LAUNCH AZIMUTH — A RESERVED SEAM, NOT A BUG, AND NOT SLICE 47's WORK (slice 47 P7,
+  2026-08-19).** `scenario.jl:350` builds `e.vel` with an explicit `0.0` cross-range component and
+  `missile.jl:439` mints `:att_q` from `atan(e.vel[3], e.vel[1])` — **pitch only, `e.vel[2]` unread.**
+  That is **CONSISTENT today** precisely because the loader forces `vel[2] = 0` (nose along velocity,
+  `α = β = 0` at launch, the correct initial condition), and it becomes a **wrong number the moment a
+  launch-azimuth key is authored.** ⇒ file it beside the launch-altitude(21) MODEL GAP, with the
+  tripwire that **whoever adds `azimuth_deg` to `scenario.jl` must fix `:att_q` in the same commit.**
+  ⭐ **The seam does NOT block an azimuth-steering midcourse, which was the reason to look**: P7
+  measured the missile leaving its launch plane cleanly — cross-range linear in the command, sideslip
+  TRIMMING rather than ramping (2.25° flat over 5 s), `defl_sat` 0 on every arm, resultant incidence
+  never near `α_max` — **and slice 46's own top ladder row already flies it**, locking at tick 1 and
+  hitting a `y = +2000` target at 2.38 m with `max|β| = 0.83°`. The in-plane birth is an INITIAL
+  CONDITION, not a constraint; `steering_command` resolves a full 3-D demand onto two body axes with
+  no projection-and-discard (slice 23, "the discard dies").
 - **RCS as a per-aspect quantity.** `rcs_m2` is a scalar on the target's comp. A real RCS swings
   10–20 dB with aspect angle, and against a CROSSING target (which every wire in this arc uses) that
   is a large, continuously-varying effect on the horizon. ⚠ Check the MODEL test first: does anything
