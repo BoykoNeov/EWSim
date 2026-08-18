@@ -695,6 +695,10 @@ the same widened value** (advisor) — before either is quoted.
    fake with `(k_α, k_q)` than a damping one, but slice 39 died here and it is answered by a bound,
    not a tolerance.
 
+⚠ **§III.6 IS SUPERSEDED IN TWO PLACES BY §§III.7–III.10, WHICH WERE RUN AFTER IT.** Item 1's ratios
+are now known to be a **margin** effect that vanishes off the shoulder (§III.7); item 4's `ζ_a` is now
+**disqualified on clean evidence** (§III.8), not merely unresolved. Items 2, 3 and 5 stand.
+
 
 ## ⭐⭐⭐ §III.7 THE SHOULDER CONTROL — THE ACTUATOR'S COST IS A **MARGIN** COST, AND IT VANISHES
 
@@ -728,4 +732,124 @@ the authored design reads 0.4 % — beside the α_max clamp.
 ⚠ **AND IT SETS THE DOMAIN A SHIPPED WIRE MAY BE AUTHORED IN.** A scenario authored at `R = −0.085`
 would hand the student a dead button; one authored at `R = −0.10` would hand them a dead button for a
 different reason. The live window is narrow and it is now measured, not guessed.
+
+
+## ⭐⭐ §III.8 `ζ_a` RESOLVED — CLEAN AT 20 Hz, AND AT 30 Hz IT DOES NOT RING, IT **DESTROYS THE FLIGHT**
+
+§III.5 could not claim anything because both lightly-damped cells fired the actuator's own new stop.
+Resolved two ways at once. **(1)** The instrument now counts that clamp **IN BAND** (`clampBAND`),
+differenced across band entry/exit — the cumulative counter cannot tell a band fire from the `r → 0`
+endgame spike, and §II.5 result 3 is exactly that the endgame fires on the *shipped control* too.
+**(2)** Each cell is re-flown at `delta_max` = 0.5 (authored) / 2.0 / 10.0, **with the `:instant`
+control re-flown at each** (advisor).
+
+| arm | δ_max | rms_r | miss | **clampBAND** | clampALL | aero |
+|---|---|---|---|---|---|---|
+| `:instant` | 0.5 / 2.0 / 10.0 | 0.0234857 (all three) | 0.280 | 0/0 | 0/0 | 0 |
+| **20 Hz, ζ_a 0.1** | 0.5 | **0.0418136** | 0.353 | **0/0** | 36/75 | 0 |
+| **20 Hz, ζ_a 0.1** | 2.0 | **0.0418136** | 0.353 | **0/0** | 83/104 | 0 |
+| **20 Hz, ζ_a 0.1** | 10.0 | **0.0418136** | 0.353 | **0/0** | 72/83 | 0 |
+| 30 Hz, ζ_a 0.1 | 0.5 | 0.39614 | 1.024 | **0/62** | 115/242 | 0 |
+| 30 Hz, ζ_a 0.1 | 2.0 | 1.37674 | **846.4** | **145/144** | 355/352 | 2741 |
+| **30 Hz, ζ_a 0.1** | 10.0 | **NaN — band empty** | **3552.6** | 0/0 | 169/183 | 0 |
+
+⭐⭐ **THE 20 Hz CELL IS BIT-IDENTICAL ACROSS A 20× RANGE OF THE STOP** — 0.0418136 at δ_max 0.5, 2.0
+and 10.0, with `clampBAND = 0/0` at all three. That is the strongest available proof of
+non-contamination: **the metric is invariant to the threshold of the thing suspected of setting it.**
+The cumulative counter's 36–83 fires are all in the `r → 0` endgame, which is what `clampBAND` was
+built to separate and what §II.5 predicted.
+
+⚠⚠ **AND THE 30 Hz CELL IS NOT "8.75× WORSE" — IT IS A LOST MISSILE.** As the stop is opened the
+same arm goes 0.396 → 1.377 (miss **846 m**) → **the band never happens at all** (miss **3553 m**).
+⇒ **at δ_max = 0.5 the mechanical stop was BOUNDING a divergence**, exactly as slice 26's own α_max
+clamp bounds its limit cycle. The instrument reports `NaN`, not a beautifully quiet `0.00000` computed
+from zero samples — slice 33's gate-2 finding, carried into this probe by design.
+
+⇒ **`ζ_a` IS DISQUALIFIED AS THE SLIDER, NOW ON EVIDENCE.** At 20 Hz light damping is **2.5×
+BETTER** than ζ_a = 0.7 (0.0418 vs 0.1045, both uncontaminated); at 30 Hz it loses the missile. The
+sixth entry in the non-monotone class, and the most violent one in the project.
+
+⭐ **AND THE MECHANISM IS ALREADY IN §I.5's TABLE, WHICH IS WHY THE FLIP IS NOT A SURPRISE ONCE
+READ.** A lightly-damped second-order lag contributes almost **no phase** at low frequency
+(§I.5: 30 Hz / ζ 0.1 is **−0.05°** at the 2 Hz ring, against **−4.63°** for ζ 0.7) — so on the
+radome loop it is the *gentler* actuator, which is the 20 Hz result. But it carries a resonant peak
+of `Q = 1/(2ζ_a) = 5` at its own frequency, and the α autopilot's rate feedback `k_q` is a direct
+fast path from body rate to deflection. **Where that peak lands, a second and much faster loop closes
+through it.** Two effects of one parameter, opposite in sign, in different frequency bands — which is
+what a non-monotone knob always turns out to be.
+
+⚠ **AND `ζ_a = 0.1` IS AT THE EDGE OF HONEST FOR A FIN ACTUATOR ANYWAY** (real fin servos run
+ζ ≈ 0.5–0.7). The divergence is real, but it is not a design a wire should be authored at, and the
+shipped domain must exclude it rather than showcase it.
+
+## ⭐⭐⭐ §III.9 THE THRESHOLD LADDER — THE ACTUATOR MOVES `R_crit`, IN THE ARC'S OWN CURRENCY
+
+The measurement §III.7 pointed at. Slice 26's whole architecture is a **threshold** (`N·|R| ≈ 0.39`,
+*you cannot buy N without buying glass*). If the actuator eats margin, it must move that threshold —
+and unlike an rms at a fixed design, a threshold cannot be trapped on the clamped plateau.
+
+Nine values of `R` × four arms, same seed / band / metric throughout. `*` marks a cell where the α_max
+clamp binds in band, i.e. the plateau. **The whole grid is printed** (§0.4).
+
+| R | `:instant` | 60 Hz | 30 Hz | 20 Hz |
+|---|---|---|---|---|
+| −0.0850 | 0.017439 | — | 0.017312 | 0.017449 |
+| −0.0880 | 0.018326 | — | 0.021803 | 0.030410 |
+| −0.0890 | 0.019713 | 0.022008 | 0.029819 | 0.047452 |
+| −0.0900 | 0.023486 | 0.029866 | 0.045256 | 0.104460 |
+| −0.0910 | 0.033742 | 0.045206 | 0.075717 | **0.595540\*** |
+| −0.0920 | 0.048279 | 0.063109 | **0.588630\*** | 0.800370\* |
+| −0.0930 | 0.206520 | **0.588670\*** | 0.798570\* | 0.788830\* |
+| −0.0940 | 0.678990\* | 0.799620\* | 0.789920\* | 0.762500\* |
+| −0.0950 | 0.822860\* | — | 0.762170\* | 0.754640\* |
+
+**Largest single-step ratio per column** — §0.4's verdict rule, applied unchanged, no threshold chosen
+by me:
+
+| arm | largest step | between |
+|---|---|---|
+| `:instant` | 4.28× | −0.092 → −0.093 |
+| 60 Hz | 9.33× | −0.092 → −0.093 |
+| 30 Hz | 7.77× | **−0.091 → −0.092** |
+| 20 Hz | 5.70× | **−0.090 → −0.091** |
+
+⭐⭐ **THE ONSET WALKS TOWARD ZERO AS THE ACTUATOR SLOWS. A CHEAPER ACTUATOR NEEDS A BETTER RADOME.**
+
+⚠ **AND THE MAGNITUDE IS QUOTED WITH ITS SENSITIVITY, BECAUSE THE CROSSING LEVEL IS A CHOICE**
+(§0.4's rule). Log-interpolated crossing of three very different levels — the geometric mid-point
+between floor and plateau, one well below it, one well above:
+
+| crossing level | `:instant` | 60 Hz | 30 Hz | 20 Hz | shift `:instant`→20 Hz |
+|---|---|---|---|---|---|
+| 0.050 | −0.09202 | −0.09130 | −0.09019 | −0.08907 | 0.00296 (**3.2 %**) |
+| 0.118 | −0.09261 | −0.09228 | −0.09122 | −0.09007 | 0.00254 (**2.7 %**) |
+| 0.300 | −0.09331 | −0.09270 | −0.09167 | −0.09061 | 0.00271 (**2.9 %**) |
+
+⭐ **MONOTONE IN `ω_a` AT EVERY LEVEL, AND THE SHIFT IS 2.7–3.2 % HOWEVER THE LINE IS DRAWN.** The
+claim survives its own sensitivity analysis with the ordering intact and the magnitude stable in the
+first two figures.
+
+In the arc's own currency, at the mid-level, with `N = n_pn = 4`:
+
+| arm | `R_crit` | `N·|R_crit|` |
+|---|---|---|
+| `:instant` | −0.09261 | 0.3705 |
+| 60 Hz | −0.09228 | 0.3691 |
+| 30 Hz | −0.09122 | 0.3649 |
+| 20 Hz | −0.09007 | 0.3603 |
+
+⭐ **CROSS-CHECK AGAINST A NUMBER NOBODY MEASURED FOR THIS SLICE:** the control column puts the
+shipped wire's own onset at **−0.0926**, and `slice26_radome.yaml`'s header — written fifteen slices
+ago on a coarser grid — records it as *between −0.09 and −0.095*. The two agree, and the control
+column was not tuned to make them.
+
+## ⭐⭐ §III.10 THE PAIR OF NUMBERS IS THE LESSON, AND NEITHER ALONE IS HONEST
+
+The threshold moves only **~3 %**. At a fixed design the same actuator changes the ring by up to
+**4.45×**. Both are true and they are the same fact seen twice: **the boundary is a cliff, so a
+3 % move of the cliff is the difference between quiet and ringing for anything parked near it.**
+
+⇒ The sentence the slice can carry: *an actuator's phase lag is free while you have margin and
+ruinous when you do not* — and the shipped wire must be authored in the narrow window where that is
+visible (§III.7: dead at −0.085, dead at −0.10, live between).
 
