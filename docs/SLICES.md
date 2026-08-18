@@ -581,7 +581,11 @@ step halves — it is `ω_LOS · dt`, one tick of line-of-sight motion, 0.0036°
 The one non-degenerate rescue (that the required margin is set by the RACE between the LOS rate and
 the servo) is refuted in the same probe, because a 7.5× faster servo returns the same miss to the
 digit, and the same offset on the OTHER SIGN does not die at all — there the LOS walks INTO the
-window and mints its own margin. ⭐ **A finding whose SIZE is set by the integrator's step cannot be
+window and mints its own margin. ⭐ The real mechanism, traced tick by tick rather than inferred, is
+better than the claim it replaces: **the head's command is written at the END of the tick, so the
+servo is idle for exactly one tick — and being one tick late is not something a faster servo fixes.**
+The margin a lock needs is one tick of line-of-sight motion, and the telemetry prints that increment
+directly. ⭐ **A finding whose SIZE is set by the integrator's step cannot be
 a lesson about hardware**, and the discipline that falls out is cheap and general: before shipping a
 narrow threshold effect, re-fly it at half `dt`. ⚠ Four times now in this arc — 39, 41, the search
 half of 42 and its acquisition half — **the probe was right, the table was right, and the SENTENCE on

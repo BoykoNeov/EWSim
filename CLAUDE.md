@@ -125,7 +125,9 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
   The gate-0 table already said so — the "worthless lock" cell's miss was BYTE-IDENTICAL to the never-locks
   cell's, i.e. the null case relabelled, and `off@lock == fov` to four decimals was the inclusive `off ≤ fov`
   gate echoing its own constant. The servo-vs-LOS *race* reading is refuted too (same digits at 8 and
-  60 °/s), and the mirror-image sign does not fail at all. ⇒ **before shipping a narrow threshold effect,
+  60 °/s — **the head's command is written at the END of the tick, so the servo is idle for exactly one
+  tick, and being one tick late is not something a faster servo fixes**), and the mirror-image sign does
+  not fail at all. ⇒ **before shipping a narrow threshold effect,
   RE-FLY IT AT HALF `dt`; and read a claimed STEP against the NULL cell first.**
 - **Seeker noise × the BTT roll loop** — DEAD. A ~1000:1 low-pass (std 1.07 vs 1.6e−5).
 - **A cubic radome curve** — killed at gate 0: unbounded slope, the bend diverges, no domain.

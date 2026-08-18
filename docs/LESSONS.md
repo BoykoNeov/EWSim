@@ -118,6 +118,14 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
   `ω·dt` lands inside all three; `hold_max` is exactly ONE TICK on every row. **A finding whose SIZE is
   set by the integrator's step cannot be a lesson about hardware** — and this is a much stronger kill
   than *"the effect is small"*, which only ever invites *"small on this wire"*. Two extra runs.
+- **⚠⚠ BYTE-IDENTITY ACROSS A KNOB PROVES INVARIANCE, NOT A MECHANISM — AND THE TEMPTATION TO WRITE
+  THE MECHANISM ANYWAY SURVIVES EVEN THE LESSON ABOVE.** Slice 42's kill record asserted *why* a 7.5×
+  servo changed nothing (*"the command is still equal to the head's own angle"*) one paragraph after
+  banking *"check the sentence against the table"* — and a five-tick trace showed the head's command
+  was NOT stale (a real one existed on tick 1) while the conclusion held for a better reason: the
+  command is written at the END of the tick, so the servo is idle for exactly one tick and both rates
+  are equally idle. **Print the state, don't infer it — a tick-by-tick trace of the three or four
+  numbers the branch reads is the cheapest probe in this repo and it is the one most often skipped.**
 - **⚠ AND A DEAD BAND THAT DEPENDS ON A *SIGN* IS A COINCIDENCE, NOT A MECHANISM.** The same |offset|
   on the other side of the rim did not fail at all — there the LOS walked INTO the window and minted its
   own margin. **Fly the mirror-image arm before naming a boundary effect.**

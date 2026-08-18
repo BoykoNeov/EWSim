@@ -5907,8 +5907,10 @@ wire, shipped 10° window, and re-flew the rim at three integration steps:
 | 1e−3 | +3.6290 | **0.00363** | −9.9980 | −9.9960 | 0.0010 s |
 | 5e−4 | +3.6285 | **0.00181** | −9.9990 | −9.9980 | 0.0005 s |
 
-**The band halves when the step halves; `ω·dt` falls inside its measured bracket at all three steps;
-`hold_max` is EXACTLY ONE TICK on every row.** The "acquisition margin" is the distance the line of
+**The load-bearing result is the HALVING — the band halves when the step halves.** (`ω·dt` inside its
+bracket at all three steps is corroboration, quoted as that: ⚠ the `dt = 1e-3` bracket is two grid
+points wide and clears by 0.00037°. P11's telemetry supplies the containment properly.) **`hold_max` is
+EXACTLY ONE TICK on every row.** The "acquisition margin" is the distance the line of
 sight travels between two evaluations of a once-per-tick gate. At the shipped `dt = 1e-3` it is
 0.0036° against a 10° window — **0.036 %**. ⇒ **A FINDING WHOSE SIZE IS SET BY THE INTEGRATOR'S STEP
 CANNOT BE A LESSON ABOUT HARDWARE** (now `docs/LESSONS.md`).
@@ -5916,9 +5918,15 @@ CANNOT BE A LESSON ABOUT HARDWARE** (now `docs/LESSONS.md`).
 **THE RESCUE HYPOTHESIS WAS TESTED AND REFUTED TOO (P8, §VI.1).** The one non-degenerate reading —
 *the required margin is set by the RACE between the LOS rate and the servo rate* — predicts the dead
 band shrinks as the servo speeds up. It does not move at all: `err −10` misses by **3620.675 m at both
-8 and 60 °/s, the same digits**, holding one tick on both. A 7.5× servo buys nothing, because the head
-never moves — the gate opens for one tick on a command still equal to the head's own angle and shuts
-before the servo has anything to chase. ⚠ And **the same |err| on the OTHER SIGN does not die**:
+8 and 60 °/s, the same digits**, holding one tick on both. ⭐⭐ **WHY, MEASURED (P11, §VI.1a — the first
+draft of this paragraph asserted it instead): THE SERVO IS ONE TICK LATE.** A real head command exists
+on tick 1 but is written at the END of that tick, so the tick-1 slew runs against the handover's own
+seeded command and moves the head ZERO — **both rates are equally idle on that tick**. The `off`
+telemetry then steps 10.000000 → **10.003629**, which is `ω_LOS·dt` to six decimals from an
+independent measurement, the gate shuts at tick 2, and — since a shut gate forbids slewing — `head_az`
+is CONSTANT TO 7 DECIMALS for the rest of the flight at both rates. ⇒ *the margin a lock needs is one
+tick of LOS motion, because the servo is one tick late* — and being late by one tick is not something
+a faster servo fixes. ⚠ And **the same |err| on the OTHER SIGN does not die**:
 `err +10` at 60 °/s holds (0.206 m, `off@lock` 9.9364 at tick 2), because there the LOS walks INTO the
 window and mints its own margin. Exact equality AND a direction of travel is a coincidence, not a
 mechanism.

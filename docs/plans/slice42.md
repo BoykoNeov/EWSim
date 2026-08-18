@@ -663,14 +663,45 @@ before a gap is visible only resolves an artifact more precisely.
 
 1. **A 7.5× SERVO BUYS NOTHING AT THE RIM.** `err −10` misses by **3620.675 m at both 8 and 60 °/s —
    the same digits** — and holds for exactly one tick on both. If the rim failure were a race, the
-   ceiling servo would win it. The trajectory is identical because the head never moves: the gate
-   opens for one tick on a command still equal to the head's own angle, and shuts before the servo
-   has anything to chase.
+   ceiling servo would win it. ⚠ **WHY is measured in §VI.1a and NOT inferred from that byte-identity**
+   — the first draft of this bullet asserted a mechanism it had not measured, which is the exact
+   failure §VI.0 exists to name (advisor's catch, and the second time in one file).
 2. **THE SAME |err| ON THE OTHER SIGN DOES NOT DIE.** `err +10` at 60 °/s HOLDS (0.206 m, `off@lock`
    **9.9364**, at tick **2**) — there the LOS walks INTO the window and mints its own margin. A
    "finding" that needs exact equality *and* a particular direction of LOS travel is a coincidence,
    not a mechanism.
 3. At 60 °/s the failing set over the whole 21-cell sweep is **exactly one cell: {−10}**.
+
+### ⭐⭐⭐ §VI.1a PROBE **P11** — THE MECHANISM, MEASURED: **THE SERVO IS ONE TICK LATE**
+
+`p11_mech.jl` prints the first five ticks at the equality cell and at the cell 0.05° inside it, at
+both servo rates. Degrees, `head_az` to 7 decimals:
+
+| cell | tick | `head_az` @ 8 | `head_az` @ 60 | `head_tgt` | `off` | valid |
+|---|---|---|---|---|---|---|
+| **err −10** | 1 | 8.1053652 | 8.1053652 | **18.1061990** | 10.000000 | yes |
+| **err −10** | 2 | **8.1053652** | **8.1053652** | 18.1086844 | **10.003629** | **NO** |
+| **err −10** | 3–5 | 8.1053652 | 8.1053652 | (live) | 10.007259 … | NO |
+| err −9.95 | 1 | 8.1553652 | 8.1553652 | 18.1061990 | 9.950000 | yes |
+| err −9.95 | 2 | 8.1633652 | **8.2153652** | 18.1086844 | 9.945629 / **9.893629** | yes |
+
+⭐ **THE HEAD IS IDLE FOR EXACTLY ONE TICK, AND THE REASON IS COMMAND LATENCY, NOT A STALE-LOOKING
+NUMBER.** A real command (`head_tgt` = 18.1061990°) EXISTS on tick 1 — so the first draft's *"a
+command still equal to the head's own angle"* was the wrong reason — but it is written at the END of
+tick 1, so the tick-1 slew runs against the handover's own seeded command and moves the head zero.
+**Both rates are equally idle on that tick**, which is the whole of why a 7.5× servo changes nothing.
+
+⭐⭐ **AND THE `off` COLUMN PRINTS `ω·dt` DIRECTLY:** 10.000000 → **10.003629** between ticks 1 and 2,
+which is §VI.3's `ω_LOS·dt` at `dt = 1e-3` **to six decimals, from a completely independent
+measurement**. At the equality cell that one increment is the entire failure: the gate shuts at tick
+2 and, since the head cannot slew while shut, never re-opens — `head_az` is CONSTANT TO 7 DECIMALS for
+the rest of the flight at both rates, which is why the two trajectories are bit-identical.
+
+⇒ **THE CORRECT SENTENCE, AND IT IS SHARPER THAN THE ONE IT REPLACES:** *the margin a lock needs is
+one tick of LOS motion, because the servo is one tick late.* The rate is irrelevant — being late by
+one tick is not something a faster servo fixes. 0.05° inside the rim the same latency costs 0.003629°
+of a 0.05° margin and the servo takes over from tick 2 (visibly: +0.008°/tick at 8, +0.060° at 60,
+`sat` = 1 on both).
 
 ⚠ **INSTRUMENT-HONESTY CHECK, AND IT PASSES:** at 8 °/s this probe returns `err 0 → 3290.078 m` and
 `err −6 → 0.191 m`, which are `slice36_handover`'s and `slice36_biased`'s SHIPPED numbers to the
@@ -704,8 +735,12 @@ written down BEFORE the run:
 | 1e−3 | +3.6290 | **0.00363** | −9.9980 | −9.9960 | 0.0010 s |
 | 5e−4 | +3.6285 | **0.00181** | −9.9990 | −9.9980 | 0.0005 s |
 
-> ⭐⭐⭐ **THE BAND HALVES WHEN THE STEP HALVES, AND `ω·dt` FALLS INSIDE ITS MEASURED BRACKET AT ALL
-> THREE STEPS.** `hold_max` is EXACTLY ONE TICK on every row. The "acquisition margin" is the distance
+> ⭐⭐⭐ **THE LOAD-BEARING RESULT IS THE HALVING: THE BAND HALVES WHEN THE STEP HALVES.** `ω·dt`
+> falling inside its bracket at all three steps is CORROBORATION, and is quoted as that rather than as
+> a second independent proof — ⚠ the `dt = 1e-3` bracket is only two grid points wide and `ω·dt` clears
+> its upper edge by 0.00037°, so a finer grid could move the containment without touching the scaling.
+> (§VI.1a then supplies the containment properly, from telemetry: the `off` column steps by exactly
+> 0.003629° between ticks 1 and 2.) `hold_max` is EXACTLY ONE TICK on every row. The "acquisition margin" is the distance
 > the line of sight travels between two evaluations of a once-per-tick gate — **a discretization
 > artifact, not a property of a seeker.** At the shipped `dt = 1e-3` it is 0.0036° against a 10°
 > window: **0.036 %.**
