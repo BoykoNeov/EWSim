@@ -53,6 +53,53 @@ component* — is this same error one level down, and it was written the day bef
 | 44 | seeker detection range / SNR | **PASS, EXACTLY** — `R_acq·fov` constant to 0.0000 %, log-log slope −1.000000, `r_acq` vs `snr_freespace` at +10.0000 dB; the plan says it outright: *"the physics is not what failed, what failed is the WIRE"* | FAIL — an 8079 m seeker against a 6437 m launch ⇒ the gate is byte-identical to no gate | **DEAD AS THE UNBLOCKER, ALIVE AS A MODEL — and arguably the biggest miss of the five.** A seeker with a detection horizon is not optional equipment for a simulator meant to carry different seekers against different targets at different ranges. `lib44.jl` is written and measured correct. ⚠ Its two survivors stand regardless (a late lock is paid in MANOEUVRE AUTHORITY and miss cannot show it; the narrow-window failures of 32/34 are the SERVO's). |
 | 45 | rectangular / per-axis window and stop | **PASS, BOTH HALVES** — the elevation stop BINDS 66–68 % of in-band ticks (read, clamping, working hardware); the box changes ACQUISITION on a searching head (disc never locks 305.11 m, box hits 0.24/0.23/0.15) | FAIL (stop) / CONDITIONAL (window) — miss 0.1912 m at every el stop over a 750× range; box ≡ disc byte-identically on 8/9 TRACKING rows | **BOTH HALVES DEAD AS A LESSON, BOTH ALIVE AS A MODEL.** ⚠ "The 7th false-fidelity knob" is a MISNOMER and must not be quoted: the other six were never READ; this one is read and binds two-thirds of the ticks. An azimuth ring and an elevation trunnion are independent mechanisms with independent authorable travel — that is hardware variety, which is the simulator's whole point. |
 
+### The OLDER kills, swept under the same two tests (2026-08-18)
+
+The reframe applies backwards, not only to 41–45. Every kill on the list was re-read and sorted by
+the MODEL test. ⚠ Nothing below is a new measurement — this is a re-classification of records that
+already exist, and each row names where its evidence lives.
+
+**A. ALIVE AS A MODEL — killed for LESSON reasons, the hardware is real and (mostly) already written:**
+
+| candidate | why it was killed | why it survives the MODEL test |
+|---|---|---|
+| **The ANGLE-DOMAIN radome corrector** (slice 27 gate 0, `docs/plans/slice27.md` §146–158) | It fails: the onset residual DRIFTS (−0.095 → −0.005 as `R̂` 0 → −0.30) and at PERFECT knowledge `R̂ = R = −0.50` it RINGS (rms 0.844, miss 131 m) where the rate arm is quiet (0.014). | ⭐ **It was BUILT and it fails PHYSICALLY, for a stated reason** (it needs the look angle and can only see it through the bend it is removing; the error is second order in `R·R̂`). That is a legitimate authorable **inferior design**, and a simulator that only carries designs that work cannot show why the shipped one is shipped. Ships as an alternative compensator rung, NOT as the default. ⚠ The general rule it taught (*compensate with a signal not itself corrupted by what you are compensating*) is unaffected either way. |
+| **MEMORY TRACK / a COASTING head** (slice 37 gate 0, 5 probes, `docs/plans/slice37.md`) | Mis-located: a break in this arc is not an episode but the rest of the flight (`coast_max` 6.0–7.9 s, `nreacq` 0 on every arm), so the cure belongs to the ESTIMATOR's frozen rate, not the head. | ⭐ Real seekers coast, and the HONEST coast was built (the head follows the tracker's coasted inertial estimate through the current attitude) — it rescued ONE boundary cell of fifteen. **Rescuing one cell is a small effect, not a non-existent one.** Ships as head behaviour; ⚠ its LESSON claim stays dead, and the estimator-side slice remains the real cure. |
+| **A SCALAR RATE-LIMITED FIN inside the coupled loop** (slice 20 gate 0, 4 probes) | `δ_max` structurally SHADOWS `δ̇_max` — the fin only needs to move fast when the command does, which needs high `k_α` or low damping, and both peg DEFLECTION first. | ⚠ The rate limit is SHIPPED already (slice 15's `fin_autopilot_step`, `δ̇_max` with `rate_sat` telemetry) — what died was making it the *lesson of the coupled loop*. **Shadowed at the tunings tried is not absent**, and the shadowing is itself a fact worth authoring. Low priority: nothing new to build. |
+| **GYRO NOISE** | Deferred on DRAW-TOPOLOGY grounds — an unconditional third `randn` desyncs every 25–31 replay. | ⚠ A **plumbing** constraint, not a physics verdict, and the pattern that solves it already exists (slice 13's `:scan` 4b shape). ⚠ Slice 25's ~1000:1 roll-loop low-pass says probe first — it may still be inert, but inert-and-modelled is the point of this reframe. |
+| **LAUNCH ALTITUDE** (slice 21, listed as a false-fidelity knob) | The knob's comp key did not exist — caught the same way as 19's `speed`. | ⭐⭐ **THIS ONE IS A MODEL GAP WEARING A DEAD-KNOB LABEL.** `_integrate_6dof!` (`missile.jl:479`) passes a CONSTANT `rho` to `total_accel`, and its own comment says the stage position `P` is *"threaded for the `rk4_6dof` contract and reserved for a future ρ(z) on this path"*. So on the path the ENTIRE 26–45 arc flies, altitude changes nothing — while `_integrate_coupled!` DOES call `air_density(P[3])`. Altitude cannot be a knob until that seam is closed, and the seam is already threaded. ⚠ Distinct from the point-mass/ballistic path gap (which touches slice 8's `rk4_step` byte-identity surface) — the 6-DOF one does not. |
+
+**B. CORRECTLY DEAD — they fail the MODEL test, and the reframe does not touch them:**
+
+- **The ACQUISITION KNIFE-EDGE** (42) — the effect's width IS the integration step (`ω_LOS·dt`, halves when
+  `dt` halves, 0.0036° at the shipped step) and the cell's miss is byte-identical to the never-locks cell.
+  **No component exists to author.** The only genuine kill of 41–45.
+- **`speed`** (19) — a live `set_param` wrote a comp key **no consumer reads**. A plumbing BUG, and it was
+  FIXED (`rho` became the live lever, with a tripwire asserting the knob MOVES `a_max_aero`).
+- **`k_δ`** (15) — cancels EXACTLY in the algebra (`τ_s·δ̇ = δ_cmd − δ` with `a = k_δ·δ` collapses to the
+  `:pid` plant relabelled, maxdiff ~3.8e−13). Not an independent parameter — there is nothing to author.
+- **`ζ` on the LAG rung** (40) — a first-order lag HAS no damping parameter; the slider is inert because the
+  model genuinely lacks the term. A rung-scoping matter, correctly handled.
+- **The NULLING-LOOP head servo** (39) — an algebraic IDENTITY with the shipped feed-forward under
+  transformed parameters (`nulling(τ,s,b) ≡ feed-forward(τ(1+s), 0, b/(1+s))`, 5.8e−09 m over 12000 ticks).
+  A reparameterization, not a component. ⚠ FINITE loop gain remains unproven and un-killed.
+- **A CUBIC radome curve** — unbounded slope, the bend DIVERGES, no valid domain. An unphysical model.
+
+**C. NEVER A COMPONENT KILL — a different class, and nothing to resurrect:**
+
+- **The NON-MONOTONICITY disqualifications** — `k` (28), `ω_n` (40), `σ_seek` (25), and the miss-vs-`K` /
+  miss-vs-`α_stall` reversals (20, 22). ⭐ **Every one of these is SHIPPED PHYSICS.** What was rejected is
+  their use as the SHOWCASE SLIDER (*a domain that reverses the lesson is not a domain*) — a statement about
+  teaching, which the reframe leaves standing. The components are alive and always were.
+- **The SEARCH PATTERN** (42/43/45) — blocked, never killed, and its law is banked.
+- **The `SEEKER NOISE × BTT ROLL LOOP` coupling** — the noise itself is shipped (25); what was killed is a
+  CLAIM about a coupling (~1000:1 low-pass, std 1.07 vs 1.6e−5), not a part.
+
+⭐⭐ **THE PATTERN ACROSS BOTH SWEEPS: the genuine kills are ALGEBRAIC OR NUMERICAL** (a cancellation, an
+identity, a discretization artifact, a divergence, an unread key) — **and every kill that was PHYSICAL was
+really a statement about the authored scenario.** That is the cheapest available test of whether a kill is
+about the model or about the wire, and it is worth applying to the NEXT one before writing it down.
+
 ### What this changes about what to build
 
 ⭐ **Three of the five have PROBE CODE THAT ALREADY WORKS**, in `M:\claud_projects\temp\slice41`,
