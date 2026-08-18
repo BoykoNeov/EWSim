@@ -1,6 +1,10 @@
 # Slice 45 — **THE ENGAGEMENT IS ANISOTROPIC AND THE HARDWARE IS ROUND: A PER-AXIS STOP, AND THE WINDOW HALF’S PRECONDITION** (§11 Tier-A)
 
-**Status: KILLED AT GATE 0 (2026-08-18). No code shipped; suite unchanged at 7693.**
+**Status: GATE-0 SPLIT VERDICT (2026-08-18). No code shipped; suite unchanged at 7693.**
+**The STOP half is KILLED. The WINDOW half is ALIVE and RE-AIMED onto the search-pattern slice.**
+⚠ PART II was written as a kill of BOTH halves and **PART III overturns half of it** — an advisor
+catch: §0.2 sub-claim (a) named an arm that PART II never flew. PART II is kept UNEDITED so the
+correction is legible; read §XI for the verdict that stands.
 §0 below is the SKELETON as it was written BEFORE any probe ran — predictions with falsifiers
 attached — and PART II is what the probes returned. Nothing in §0 has been edited after the fact.
 
@@ -530,3 +534,116 @@ box **does** hold at the break where the disc breaks, on every row.
 * ⚠ **P4 (the aspect-ratio grid) DID NOT RUN BY DESIGN** — §0.6 says P2's boundary optimum answers
   the gate and the grid is not flown. P2 found one. The grid would have measured a curve with no
   interior extremum.
+
+---
+
+# ⚠⚠⚠ PART III — P6/P7: **§VI.1 WAS WRONG FOR THE WINDOW HALF, AND THE ADVISOR CAUGHT IT**
+
+PART II's verdict rested on arms that did **not include the one §0.2 sub-claim (a) named**. Slice 43
+§IV.3's arm is the ρ = 1 **SEARCH** arm, and the search lives in slice 43's probe patch rather than
+in the shipped core — so P1–P5 skipped it, and *"dead on this wire, BOTH halves"* was written over a
+gap. **It is a third case that neither §II's natural arms nor §V's handover-authored elevation
+covers: elevation loaded by exogenous drift DURING a sweep** (slice 43 §V — the search branch never
+assigns `head_el`, so `Δel(t)` is a deadline the search does not control).
+
+Flown, with slice 43's search patch and slice 45's per-axis window applied together. **Controls
+reproduce slice 43's gate-0 record exactly** — ρ = 1.00 holds out at `bestOff` **10.0656** with
+Δaz **9.7519** / Δel **2.4934** at t = 3.994 s, and the disc's floor brackets at (1.01, **1.02**].
+
+## ⭐⭐⭐ §VIII — ON A SEARCHING HEAD THE SHAPE MOVES THE VERDICT: 305 m → 0.23 m
+
+| ρ | **DISC** lock / miss | **BOX** lock / miss |
+|---|---|---|
+| 0.50 – 0.90 | no / 305.1118 | no / **305.1118** (identical) |
+| **0.95** | **no / 305.1118** | **YES t = 3.769 / 0.2409** |
+| **1.00** | **no / 305.1118** | **YES t = 3.263 / 0.2285** |
+| **1.01** | **no / 305.1118** | **YES t = 3.190 / 0.1473** |
+| 1.02 | YES t = 3.809 / 0.2945 | YES t = 3.122 / **0.0616** |
+| **0 (NULL)** | no / 305.1118 | **no / 305.1118** (identical) |
+
+**The floor moves: `ρ*` = (1.01, 1.02] with a disc, (0.92, 0.93] with a box — 8.8 % less sweep rate
+for the same rescue.** ⚠ The NULL cell is identical on both gates, so this is not a gate that locks
+everything.
+
+> ⭐⭐⭐ **AND THE REASON IS STRUCTURAL, WHICH IS WHY IT IS THE RULE AND NOT THE ROW: A TRACKING HEAD
+> SITS NEAR ZERO ERROR ON BOTH AXES, SO A WINDOW'S CORNERS ARE NEVER VISITED. A SEARCHING HEAD
+> DELIBERATELY DRIVES ONE AXIS TO THE RIM — WHICH IS EXACTLY WHERE THE CORNERS LIVE.** §II's
+> byte-identity is not a fact about this wire's geometry; it is a fact about **tracking**. The shape
+> of a detector window is invisible to a tracker and visible to a searcher.
+
+## ⚠⚠ §IX — BUT AT MATCHED HALF-WIDTH THE RESCUE IS "MORE WINDOW", EXACTLY AS §0.1 ITEM 1 WARNED
+
+The pre-registered objection, run as its own control: `box(a) ⊇ disc(a)`, so does a slightly **wider
+disc** rescue the same cells?
+
+| gate on ρ = 1.00 | disc 10.00 | **disc 10.07** | disc 10.10 | disc 10.50 | disc 11.00 | disc 12.00 | box 10.00 |
+|---|---|---|---|---|---|---|---|
+| miss | 305.11 | **0.3590** | 0.0423 | 0.0786 | 0.0803 | **305.11** | 0.2285 |
+
+> ⚠ **A DISC 0.7 % WIDER RESCUES IT.** So at matched half-width the box's rescue is slice 42/43's
+> *"a wider window is free"* in a new letter, and **§0.1 item 1 forbids quoting §VIII as a shape
+> result on its own.** ⭐ (Aside, and it is slice 43's: disc 12.00 locks on **tick 1** and misses by
+> 305.11 — *a search has a best moment*, and locking at birth is not it.)
+
+## ⭐⭐⭐ §X — THE HELD-COST TEST IS WHERE IT SURVIVES, AND HERE IT IS A FLOWN VERDICT
+
+The box that rescues ρ = 1.00 needs `a_el` ≥ **1.90°** (1.85 never locks; 1.90 → 0.2285, and
+byte-identical up to `a_el` = 10 — the boundary-floor structure of §III again). So the rescuing box
+is **(10.00, 1.90)** and the cheapest rescuing disc is **10.07**. Priced under both pre-registered
+invariants, and then flown at the box's own budget:
+
+| | rescuing BOX (10.00, 1.90) | cheapest rescuing DISC (10.07) | equal-cost DISC — **flown** |
+|---|---|---|---|
+| **SUM** `a_az+a_el` vs `2r` | **11.90** | 20.14 (**1.69× more**) | r = 5.95 → **NEVER LOCKS**, 305.11 |
+| **PRODUCT** `4ab` vs `πr²` | **76.0** | 318.6 (**4.19× more**) | r = 4.92 → **NEVER LOCKS**, 305.11 |
+
+> ⭐⭐⭐ **THIS IS THE COMPARISON §IV COULD NOT MAKE, AND IT IS NOT AN ACCOUNTING SENTENCE — IT IS A
+> VERDICT.** Fix the budget by either invariant, spend it as a disc, and the arm **never acquires**;
+> spend the same budget as a box and it hits at 0.2285 m. **A cost claim you can fly is a lesson;
+> §IV's could not be flown because on a tracking arm both shapes have the same verdict at every
+> budget.** ⚠ §IV's sentence *"a cost claim needs a cost model this simulator does not have"* is
+> therefore **too broad and is corrected here**: it needs a cost model only where the two shapes
+> agree on the verdict. Where they disagree, held cost is measurable as a lock/no-lock.
+
+---
+
+# ⭐⭐⭐ §XI — THE CORRECTED VERDICT
+
+> **1. THE STOP HALF IS DEAD, UNCHANGED.** §III stands: the elevation trunnion is inert from 0.04°
+> to 30° — a 750× range — even where the clamp binds 66.66 % of ticks. The seventh false-fidelity
+> knob, and §0.2.0 had made it the PRIMARY claim. ⚠ **The species argument that promoted it was
+> sound and it promoted the wrong half.**
+
+> **2. THE WINDOW HALF IS ALIVE, AND ITS PRECONDITION IS NOT A GEOMETRY — IT IS A SEARCHING HEAD.**
+> §0.2's law (*the engagement is anisotropic and the hardware is round*) named the right asymmetry
+> and the wrong consumer. The elevation axis is not idle because the *engagement* is planar; it is
+> idle because a **tracker** keeps both axes near zero. Put a search on the head and the azimuth axis
+> is driven to the rim by design, the corners become reachable, and the shape decides.
+
+> ⚠⚠ **3. SO NOTHING SHIPS, AND FOR A NEW REASON: THE ONLY ARM WHERE THE SHAPE MATTERS LIVES INSIDE
+> AN UNSHIPPED FEATURE.** The search is slice 43's probe patch. A per-axis window cannot ship as its
+> own slice because its lesson has no flying wire without one. ⇒ **the per-axis FOV deferral is
+> RE-AIMED, not killed: it belongs to the search-pattern slice, as part of it rather than before
+> it.**
+
+> ⚠⚠⚠ **4. AND IT DOES *NOT* UNBLOCK THAT SLICE — THE OPPOSITE DIRECTION, MEASURED.** Slice 43 wrote
+> that a per-axis FOV *"would unblock a search-pattern slice just as `SEEKER RANGE / SNR ACQUISITION
+> LIMITS` would, and it is the cheaper of the two."* Slice 44 killed the first half. **This kills the
+> second, and the reason is precise:** the blocker is that *a wider window is free, so widen the
+> glass instead of searching* — and a box **does not make a wider window cost anything.** It makes
+> **searching cheaper** (ρ\* 1.02 → 0.93), which is the wrong direction to relieve that objection.
+> ⇒ ⭐⭐⭐ **THE SEARCH-PATTERN SLICE NOW HAS NO NAMED UNBLOCKER LEFT ON THIS WIRE EXCEPT SLICE 44's
+> MIDCOURSE-RANGE ENGAGEMENT.** That consequence is larger than slice 45's own verdict.
+
+> ⭐⭐ **5. THE METHOD LESSON, AND IT IS ABOUT THIS GATE'S OWN FAILURE.** PART II's kill was written
+> over an unflown sub-claim that PART I had named **first**, and the run that overturned it took one
+> script. ⚠ *"Not in the shipped core, skip it initially"* became *"never came back"*, and the
+> write-up did not notice because every arm it DID fly agreed. **A gate is not finished while a
+> sub-claim its own plan enumerated has no row.** The cheapest guard is mechanical: **before writing
+> a verdict, walk §0.2's sub-claims and point at the table that answers each one.**
+
+> ⭐ **6. WHAT SURVIVES AS MEASURED PHYSICS, CORRECTED.** §I's break geometry, §III's floor prediction
+> (0.3043 → flown (0.30, 0.31]), the 750× inert trunnion, and the 1.003× per-axis-clamp overhang all
+> stand — they are tracking-arm results and PART III does not touch them. **What is withdrawn is only
+> §VI.1's scope** (*"both halves"* → the stop half) and **§IV's generalisation** (*"a cost claim needs
+> a cost model"* → only where the verdicts agree).
