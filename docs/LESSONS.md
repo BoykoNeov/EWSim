@@ -45,6 +45,21 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
   whole ladder so a reader can redraw the line — and quote the sensitivity either way.
 - **One failure mode in a sweep can be two.** Slice 36's handover basket looked symmetric; its
   two sides fail by different mechanisms, so a single averaged metric over it is a mixture.
+- **A PROBE HARNESS FAILS SILENTLY AND GREEN, EXACTLY LIKE THE PHYSICS TRAPS DO.** Slice 41's
+  sweep script wrote all nine runs to ONE junk file and printed `ok` nine times: a backslashed
+  `"...\$VAR"` inside a bash double-quoted Windows path does not expand. Pass Windows paths
+  FORWARD-SLASHED, and never let a sweep report success from the exit code alone — have it print
+  the output it produced (a line count, a size), so "no output" cannot read as "passed". Same tell
+  as the `%g`-in-GDScript and `STEPS`/`emit_every` traps: a green run with nothing in it.
+- **Derive a stability boundary before you walk it, then check its DIRECTION against a datum the
+  repo already records.** Slice 41's plan predicted the semi-implicit rung was tighter at LOW
+  damping; it is tighter at HIGH damping. What settled it was not the walk but an existing comment
+  in `frames.jl` (decaying at 200 Hz, diverging at 300) that the wrong rule cannot explain and the
+  right one can. **A bound is a curve over its parameters until proven otherwise, and a bound
+  quoted as one number will be hard-coded by the gate that reads it.**
+- **Do not carry a convergence tooth to an EXACT form.** A dt-ratio column that reads flat means
+  "not solving this equation" only for an approximate stepper; for a closed-form update it is the
+  correct answer, and copying the tooth over manufactures a bug report against working code.
 - **Pin the integrator in the regime the claim lives in.** A lightly-damped claim is exactly
   where numerical damping can masquerade as physics — show first-order convergence and bound the
   discrete effective damping against a domain cell.

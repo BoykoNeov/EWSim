@@ -212,12 +212,13 @@ bisected for the onset of a non-decaying envelope.
 | 200 Hz | 0.05 | 1.2566 | 0.93506 | decays |
 | 300 Hz | 0.05 | 1.8850 | 0.90084 | decays — i.e. the shipped datum pins ζ ≈ 0.1, not ζ ≤ 0.05 |
 
-⚠⚠ **THE CONSEQUENCE FOR THE SLIDER, WHICH IS THE WHOLE POINT OF GETTING THE SIGN RIGHT.** If P6
-clears `ζ_a` as the slider on slice 40's shape (`[0.05, 1.0]`), the **BINDING CELL IS THE CEILING,
-`ζ = 1.0`, at 131.8 Hz** — not the ~303 Hz a walk at the floor would have reported. A domain authored
-off the floor goes unstable when the student drags the slider *up*, which is the worst possible place
-to put an instability. **Validate-at-LOAD must bound `fin_omega_hz` against the ζ the wire can
-reach, not against a single number.**
+⚠⚠ **THE CONSEQUENCE, AND IT IS A LOAD-TIME CONSTRAINT ON THE PAIR — IT DOES NOT WAIT FOR P6.**
+Whatever a wire authors as `fin_omega_hz`, the loader must reject it against **the worst `ζ_a` that
+wire can REACH**: the slider's ceiling if `ζ_a` is live, the authored value if it is not.
+**`fin_omega_hz` alone is not a validatable quantity.** Concretely, on slice 40's slider shape
+(`ζ ∈ [0.05, 1.0]`) the binding cell is the CEILING, `ζ = 1.0` — 131.8 Hz, not the ~303 Hz a walk at
+the floor would have reported. A domain authored off the floor goes unstable when the student drags
+the slider *up*, which is the worst possible place to put an instability.
 
 ## §I.2 THE TIGHTER BOUND: WHERE THE STEPPER MANUFACTURES AN OSCILLATION
 
@@ -255,6 +256,13 @@ by the sibling of this, an oracle that returned NaN at `ζ = 1`.)
 | 200 | 0.10 | 1.2566 | 0.100419 | 1.0042 | 237.2881 | 198.9975 | **19.24 %** |
 | 30 | 0.50 | 0.1885 | 0.525438 | 1.0509 | 27.027 | 25.9808 | 4.03 % |
 | 60 | 0.50 | 0.3770 | 0.556037 | 1.1121 | 56.338 | 51.9615 | 8.42 % |
+
+⚠ **THE TWO `ζ = 0.5` ROWS ARE THE LARGEST ERRORS QUOTED AND THEY RUN ON THE FEWEST PEAKS** (5, the
+estimator's minimum — a lightly-damped response gives 32), so they are exactly the cells LESSONS
+warns are *"a bracket at the edge of its own grid"*. **Checked rather than assumed:** widening the
+window to 40 / 80 / 160 time constants takes the peak count to 11 / 22 / 45 and moves `ζ_eff` from
+0.525438 to 0.525461 (30 Hz) and 0.556037 to 0.555986 (60 Hz) — stable in the sixth figure. ⇒ they
+are MEASURED, not truncated.
 
 ⭐ **THE SIGN OF THE ERROR IS THE REASSURING PART: `ζ_eff > ζ` IN EVERY CELL.** Semi-implicit Euler
 here ADDS damping; it cannot manufacture a ring by *removing* it. What it does distort, and badly, is
@@ -373,8 +381,11 @@ LEADS the continuous one by `ω·dt/2`:
 
 ## §I.6 WHAT P0 DECIDES
 
-1. **The authored domain is bounded by a CURVE `f_a ≤ h_max(ζ_a)/(2πΔt)`, and the honest ceiling is
-   the OVERSHOOT one: 117 Hz at ζ = 1.** No resonance may be claimed above it.
+1. **THE AUTHORED DOMAIN IS BOUNDED BY A CURVE, NOT A NUMBER:** `f_a ≤ h_over(ζ_a)/(2πΔt)`, using the
+   OVERSHOOT boundary of §I.2 rather than the looser stability one. **117 Hz is the value of that
+   curve AT `ζ_a = 1.0`, not the bound** — the curve reads 104.8 Hz at ζ = 1.2 and 50.5 Hz at ζ = 3.
+   ⚠ Gate 2 must implement the curve; hard-coding 117 reintroduces the single number this probe
+   exists to replace. No resonance may be claimed above it.
 2. **KILL RISK 3 (EULER ARTIFACT) DOES NOT BIND FOR A PHYSICALLY HONEST ACTUATOR.** A 20–60 Hz fin
    sits at `h ∈ [0.126, 0.377]`, a factor 2–6 inside the boundary at *every* ζ, with `ζ_eff` erring
    1.5–11 % **in the damping direction**. ⇒ **attention belongs on P2 (INERT) and P5 (REPARAM).**
@@ -466,11 +477,63 @@ The `τ_a` ladder is **NOT FLAT**, and on `slice26_radome` it is violently not f
 2. **THE VERDICT RULE IN §0.4 STANDS UNCHANGED** — largest single-step ratio, whole ladder printed,
    sensitivity quoted. Nothing here licenses a threshold.
 
-## §II.5 WHAT §II DECIDES
+## ⭐⭐ §II.5 THE SECOND CLAMP SITE, COUNTED — P7 HAS A HEAD START AND A PROBLEM
+
+Decision 4 gives the actuator a SECOND clamp site (the inelastic `δ_max` stop on the *achieved*
+deflection). It writes no telemetry, and `alpha_diag.defl_sat` still reports only the PRE-actuator
+`defl_p || defl_y` — so it could fire invisibly and make the §II.3 ladder a measurement of
+clamp-driven behaviour rather than of actuator dynamics (advisor; and slice 40's gate 1 caught
+exactly that arm for real). Counted, on the same two wires, 12800 ticks:
+
+| arm | new-clamp fires (pitch / yaw) | pre-actuator `defl_sat` ticks |
+|---|---|---|
+| **slice40_resonance** | | |
+| `:instant` (control) | 0 / 0 | 6 |
+| first order, τ 1e−6 … 1e−3 | **0 / 0** | 6 |
+| first order, τ 5e−3 | **0 / 0** | 14 |
+| first order, τ 2e−2 | **0 / 0** | 104 |
+| second order, 30 Hz, ζ 0.7 | 0 / 1 | 26 |
+| second order, 30 Hz, ζ 0.1 | **1051 / 942** | 351 |
+| second order, 5 Hz, ζ 0.7 | **32 / 33** | **12233** |
+| **slice26_radome** | | |
+| `:instant` (control) | 0 / 0 | 2 |
+| first order, τ 1e−6 … 2e−2 | **0 / 0** | 1–2 |
+| second order, 30 Hz, ζ 0.7 | 0 / 0 | 3 |
+| second order, 30 Hz, ζ 0.1 | **179 / 158** | 2 |
+| second order, 5 Hz, ζ 0.7 | 0 / 0 | 170 |
+
+**THREE RESULTS, AND THEY POINT DIFFERENT WAYS.**
+
+1. ⭐ **§II.4's SIGNPOST IS NOT CONTAMINATED.** The entire first-order ladder fires the new clamp
+   **zero** times on both wires, at every `τ_a`. The ladder measures actuator dynamics.
+2. ⚠⚠ **BUT THE SECOND-ORDER RUNG DOES HIT IT, AT PHYSICALLY HONEST SETTINGS.** A 30 Hz, `ζ_a = 0.1`
+   actuator — squarely inside §0.3's realistic band — pegs the stop on ~8 % of ticks on
+   `slice40_resonance`. ⇒ **P7 is a live constraint on the second-order rung, not an end-of-slice
+   assertion.** Any second-order arm must author `delta_max` wide enough that this reads 0, and
+   MEASURE that it does, before its rms means anything. Decision 4 called this correctly.
+3. ⚠⚠ **P7's TOOTH AS WRITTEN WOULD FAIL ON ITS OWN CONTROL, AND THE REASON IS THE ENDGAME.**
+   §0.4 P7 says *assert `defl_sat == 0` on EVERY claimed arm* — but the SHIPPED baseline is not 0:
+   `slice40_resonance` at `:instant` saturates on 6 ticks and `slice26_radome` on 2. Located in
+   time, they are a single contiguous burst at the very end of the flight (**ticks 11061–11066 of
+   12800**, and 9399–9400 of 12800) — the `r → 0` endgame spike that
+   [[ewsim-missile-verifier-sampling]] already requires every miss/saturation scan to exclude. ⇒
+   **P7 must inherit the arc's existing endgame exclusion rather than assert a flat zero**, and the
+   quantity it asserts is *saturation before the endgame*, on both clamp sites.
+   ⚠ The distinction has teeth: the `30 Hz, ζ 0.1` arm starts saturating at **tick 104**, not at the
+   endgame — so the exclusion separates a contaminated arm from a clean one instead of hiding it.
+
+⚠ And one arm is already disqualified by this table alone: **second order at 5 Hz, `ζ_a = 0.7` runs
+the PRE-actuator limit on 12233 of 12800 ticks** on `slice40_resonance`. That arm is saturated, not
+lagging, and nothing may be read off it — which is §0.3's *"absurd territory"* arriving as a number.
+
+## §II.6 WHAT §II DECIDES
 
 - **The placement is sound and the byte-identity risk is closed** — nine wires bit-exact across five
   distinct `:delta_cmd` paths, plus 7693/7693 including the absolute golden.
 - **The seam needs no new key for `dt`** (`:dt_s`, already written in phase 1 and already read in
   phase 4).
+- **P7 IS PROMOTED FROM AN END-OF-SLICE ASSERTION TO A PRECONDITION ON THE SECOND-ORDER RUNG**
+  (§II.5): the new clamp fires on ~8 % of ticks at a realistic 30 Hz / ζ 0.1 actuator, and P7's
+  `defl_sat == 0` must be re-worded to exclude the `r → 0` endgame or it fails on its own control.
 - **Kill risks 1 (INERT) and 2 (REPARAMETERIZATION) are untouched by §I and §II and remain the two
   that can kill this slice.** P2 and P5 are next; P3, P4, P6, P7 follow them.
