@@ -996,3 +996,86 @@ against the 30 Hz actuator column they were fitted to.
 across the ladder to within the 2.7–3.2 % the whole effect spans, **the actuator is a
 reparameterization and slice 41 dies here.**
 
+
+## ⭐⭐⭐ §IV.3 STEP 2 — **THE CURVE TEST FIRES THE FALSIFIER. THE PRE-REGISTERED VERDICT IS A KILL.**
+
+Two gain pairs, each fitted at `R = −0.09` on a *different* axis, re-flown across the full ladder and
+compared against the 30 Hz actuator column they were fitted to. Same seed, band, metric throughout.
+
+| R | `:instant` | **30 Hz actuator** | `k_α = 1.02` | `k_q = 0.295` | KA/act | KQ/act |
+|---|---|---|---|---|---|---|
+| −0.0850 | 0.017439 | 0.017312 | 0.0176622 | 0.0175816 | 1.020 | 1.016 |
+| −0.0880 | 0.018326 | 0.021803 | 0.0208205 | 0.0209835 | 0.955 | 0.962 |
+| −0.0890 | 0.019713 | 0.029819 | 0.0269101 | 0.0271706 | 0.902 | 0.911 |
+| −0.0900 | 0.023486 | 0.045256 | 0.0441061 | 0.0415007 | 0.975 | 0.917 |
+| −0.0910 | 0.033742 | 0.075717 | 0.0840543 | 0.0375959 | 1.110 | **0.497** |
+| −0.0920 | 0.048279 | 0.588630 | 0.482977 | 0.521617 | 0.821 | 0.886 |
+| −0.0930 | 0.206520 | 0.798570 | 0.767332 | 0.785390 | 0.961 | 0.983 |
+| −0.0940 | 0.678990 | 0.789920 | 0.808098 | 0.812139 | 1.023 | 1.028 |
+
+**And the quantity the falsifier was written over — `R_crit`, at all three crossing levels:**
+
+| crossing level | `:instant` | 30 Hz actuator | `k_α = 1.02` | `k_q = 0.295` | **KA vs act** | **KQ vs act** |
+|---|---|---|---|---|---|---|
+| 0.050 | −0.09202 | −0.09019 | −0.09019 | −0.09111 | **0.00 %** | **1.01 %** |
+| 0.118 | −0.09261 | −0.09122 | −0.09119 | −0.09143 | **0.02 %** | **0.24 %** |
+| 0.300 | −0.09331 | −0.09167 | −0.09173 | −0.09179 | **0.06 %** | **0.13 %** |
+
+⚠⚠⚠ **THE FALSIFIER OF §III.13 / §IV.2, WORD FOR WORD, WAS:** *"if a fitted `(k_α, k_q)` reproduces
+the arm's rms at `R = −0.09` and tracks its `R_crit` across the ladder to within the 2.7–3.2 % the
+whole effect spans, the actuator is a reparameterization and slice 41 dies here."*
+
+**IT REPRODUCES THE POINT (2.6 % / 8 %) AND IT TRACKS `R_crit` TO 0.00–1.01 % — an order of magnitude
+INSIDE the band the entire effect spans — ON BOTH GAIN AXES INDEPENDENTLY.** The verdict was fixed in
+writing one commit before the measurement existed, and it is not being renegotiated now that it is
+inconvenient.
+
+⇒ **KILL RISK 2 FIRES. ON THIS WIRE THE FIN ACTUATOR IS A REPARAMETERIZATION OF `(k_α, k_q)`.**
+The same death as slice 39.
+
+⚠ **AND THE §III.13 DISCRIMINATOR IS NOT RESCUED BY THE SHAPE EITHER** — checked before concluding,
+because *"a gain retune SHIFTS the curve; an added pole TILTS it"* was the whole argument. Largest
+single-step ratio: actuator 7.77×, `k_α` pair **5.75×**, `k_q` pair **13.87×**, all in the SAME
+interval (−0.091 → −0.092). The two gain pairs straddle the actuator rather than sitting to one side
+of it ⇒ **no systematic tilt; the scatter has no sign.** The pointwise ratios wander (0.90 … 1.11, and
+one 0.497 cell), but wandering is not tilting, and adopting "pointwise scatter" as a discriminator
+*after* seeing that `R_crit` matched would be precisely the post-hoc threshold §0.4 forbids.
+
+## ⭐⭐⭐ §IV.4 **WHY** IT IS A REPARAMETERIZATION HERE — AND IT NAMES WHAT A SURVIVING VERSION NEEDS
+
+This is not bad luck; the reason is in §III.0's own measurement and it should have been visible before
+the probe was run.
+
+**A pole and a gain differ only in that a pole's phase contribution VARIES WITH FREQUENCY.** §III.0
+measured that this loop's fin command is a **single line at 1.6488 Hz** carrying over half the energy,
+with the airframe filtering everything above it out of the body rate. ⇒ **the loop only ever visits
+ONE frequency, so it can only ever sample ONE point of the actuator's phase curve — and one point of a
+phase curve is a number, which is exactly what a gain is.**
+
+⭐ **THAT IS THE TRANSFERABLE LESSON AND IT IS WORTH MORE THAN THE SLICE WAS:** *an added dynamic
+element is only distinguishable from a retune by a loop that samples it at more than one frequency.*
+Slice 38's *"`s` adds PHASE and scaling a slope cannot"* is TRUE — but it only has teeth where the
+loop is broadband. On a single-mode limit cycle it has none.
+
+⇒ **THE ONE NAMED RESCUE, AND IT MUST BE PRE-REGISTERED AND RUN, NOT ASSUMED:** measure the actuator's
+effect at **two different ring frequencies** and show that no single `(k_α, k_q)` pair matches both.
+That is the honest form of the order/phase argument on this wire family. It requires a wire whose ring
+frequency MOVES (the ring sits near the airframe short period, so `inertia_kgm2` / `cma` are the
+candidate movers, and both are HARDWARE rather than knobs). ⚠ **It is a NEW gate-0 probe with its own
+falsifier, not a reason to discount this one.** Until it is run and passes, **slice 41 is dead.**
+
+## §IV.5 WHAT SURVIVES THE KILL
+
+1. **THE KERNEL AND ITS BOUND** (§I) — a fin actuator kernel, its discretization boundary as a
+   **curve** `h_max(ζ) = 2(√(1+ζ²) − ζ)` validated by three independent oracles, and the finding that
+   the shipped gimbal's own 200/300 Hz datum pins `ζ ≈ 0.1`. Reusable by anything that steps a
+   second-order servo.
+2. **THE SEAM AND ITS BYTE-IDENTITY PROOF** (§II) — nine wires bit-exact across five distinct
+   `:delta_cmd` writers, 7693/7693 including the absolute golden.
+3. **THE CLAMPED-PLATEAU TRAP** (§III.1) — *an rms measured where a clamp binds 78 % of the time
+   cannot move, and reads as a kill.* A method lesson for `docs/LESSONS.md`, not a slice lesson.
+4. **THE δ_max-INVARIANCE PROOF** (§III.8) — bit-identical across a 20× range of the stop is the
+   strongest non-contamination argument in this gate-0 record, and the pattern generalises.
+5. **THE PRE-REGISTRATION ITSELF** (§III.13) — it is the reason the *point* result did not kill the
+   slice wrongly at §IV.1, and the reason the *curve* result kills it honestly here. Both directions.
+
