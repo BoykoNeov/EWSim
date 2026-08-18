@@ -6234,3 +6234,83 @@ could not produce. Recorded so a later slice does not meet it as a surprise.
 > launched beyond the seeker's horizon — a MIDCOURSE phase — and that is its own slice**, because
 > this wire's missile is unpowered with zero drag area at 3000 m, so a 20 km engagement takes ≥28 s
 > over which gravity alone drops it **3845 m, into the ground.**
+
+---
+
+## Slice 45 — THE WINDOW'S SHAPE: A PER-AXIS STOP AND A PER-AXIS FOV — GATE-0 SPLIT VERDICT (2026-08-18)
+
+**No code shipped. Suite unchanged at 7693.** Plan and full tables: `docs/plans/slice45.md`
+(PART I = the skeleton as written before any probe; PART II = the tracking-arm results; PART III =
+the correction that overturned half of PART II). Seven probes, three probe patches (a per-axis
+window in `missile.jl`, a per-axis `head_clamp` in `frames.jl`, and slice 43's search patch), all
+applied and reverted; tree byte-clean and the suite re-run green afterwards.
+
+**THE VERDICT IS SPLIT, and the half the plan promoted is the half that died.**
+
+### The STOP half — DEAD, and it is the seventh false-fidelity knob
+
+§0.2.0 argued from the hardware's species that the STOP was the buildable half (a two-axis gimbal
+has an azimuth ring and an elevation trunnion; the disc is the artifact) while the WINDOW's disc is
+correct for the RF dish this family flies. The species argument was sound and **it promoted the
+wrong half.** With the azimuth stop held at 30°, the miss is **0.1912 m at every elevation stop from
+0.04° to 30°** — a **750× range** — even where the clamp binds **66.66 %** of in-band ticks. Box
+stop and disc stop at matched half-width give identical verdicts on every rung from 30° down to
+8.2°, and both fail at 8.1° with the same **3620.6755**.
+
+⚠ The hazard `frames.jl` names by name (*"a per-axis clamp would let the head sit at `√2·stop` while
+the readout compared against `stop`"*) is real and measures **1.003×** here.
+
+### The WINDOW half — ALIVE, and its precondition is a SEARCHING head
+
+On every **tracking** arm the shape is inert: box and disc at matched half-width are **byte-identical
+on eight of nine rows** (fov 1–10°, every row this family has quoted). The reason is in the break
+geometry — the window is lost on the **azimuth** axis at every half-width, `off@brk` equalling the
+half-width to four decimals with elevation contributing ~0.003° of it, an order of magnitude under
+one tick of LOS motion (slice 42's `ω·dt` argument in a new place).
+
+⚠⚠ **PART II concluded from that that both halves were dead. It was written over an unflown
+sub-claim** — §0.2(a) named slice 43's ρ = 1 **search** arm, which lives inside slice 43's probe
+patch. Flown (controls reproduce slice 43's record exactly: `bestOff` 10.0656, Δaz 9.7519,
+Δel 2.4934, disc floor (1.01, **1.02**]):
+
+| ρ | DISC | BOX |
+|---|---|---|
+| 0.50–0.90 | never locks, 305.11 m | **identical** |
+| 0.95 / 1.00 / 1.01 | **never locks, 305.11 m** | **locks — 0.2409 / 0.2285 / 0.1473 m** |
+| 1.02 | locks t = 3.809, 0.2945 | locks t = 3.122, **0.0616** |
+| 0 (NULL) | 305.11 | **identical** |
+
+**Sweep-rate floor `ρ*`: (1.01, 1.02] with a disc, (0.92, 0.93] with a box — 8.8 % less.**
+
+> ⭐⭐⭐ **THE RULE, AND IT IS STRUCTURAL RATHER THAN A PROPERTY OF THIS GEOMETRY: A TRACKING HEAD SITS
+> NEAR ZERO ERROR ON BOTH AXES, SO A WINDOW'S CORNERS ARE NEVER VISITED; A SEARCHING HEAD DRIVES ONE
+> AXIS TO THE RIM BY DESIGN, WHICH IS EXACTLY WHERE THE CORNERS LIVE.** The shape of a detector
+> window is invisible to a tracker and visible to a searcher.
+
+⚠ The pre-registered objection fires too (§0.1 item 1): a disc **0.7 % wider** (10.07°) rescues the
+same cell, so at matched half-width the box's rescue is slice 42/43's *"a wider window is free."*
+⭐⭐ **Where it survives is HELD COST, and there it is a flown verdict rather than an accounting
+sentence:** the rescuing box is (10.00, **1.90**) and the cheapest rescuing disc is 10.07 — spend the
+box's own budget as a disc (r = 5.95 by sum, r = 4.92 by area) and the arm **never acquires**.
+
+### Two corrections this gate made to its own write-up
+
+* **§VI.1's *"dead on this wire, BOTH halves"*** → the STOP half only.
+* **§IV's *"a cost claim needs a cost model this simulator does not have"*** → it needs one only
+  where the two shapes agree on the verdict; where they disagree, held cost is a lock/no-lock.
+
+### The cross-slice consequence, which is larger than the slice
+
+Slice 43 wrote that a per-axis FOV *"would unblock a search-pattern slice just as `SEEKER RANGE /
+SNR ACQUISITION LIMITS` would, and it is the cheaper of the two."* Slice 44 killed the first half.
+**This kills the second**, and precisely: the blocker is *a wider window is free, so widen the glass
+instead of searching* — and a box does not make a wider window cost anything. It makes **searching
+cheaper**, which is the wrong direction. ⇒ **the search-pattern slice has no named unblocker left on
+this wire except slice 44's MIDCOURSE-RANGE ENGAGEMENT.**
+
+### Other measured physics worth carrying
+
+The break is on the azimuth axis at every half-width 1–12°; the stop's demand ratio is **27.3 : 1**
+(18.1237° azimuth against 0.6643° elevation); the window's elevation half-width on a tracking arm is
+a **FLOOR at `max |Δel|`** — predicted **0.3043** from instrumentation before flying, flown flip at
+**(0.30, 0.31]**, byte-identical over the 32× range above it.

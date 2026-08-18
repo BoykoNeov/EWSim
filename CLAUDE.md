@@ -54,8 +54,8 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Where the project is (2026-08-18)
 
-**Slices 1–40 COMPLETE & green — 7693 tests.** (Slices 39, **41, 42 and 44** are KILL RECORDS and **43 is a
-GATE-0 LAW RECORD** — none shipped code, so the count is unchanged.)
+**Slices 1–40 COMPLETE & green — 7693 tests.** (Slices 39, **41, 42 and 44** are KILL RECORDS, **43 is a
+GATE-0 LAW RECORD** and **45 is a GATE-0 SPLIT VERDICT** — none shipped code, so the count is unchanged.)
 HANDOFF §10 items 1–13 — the committed roadmap — are DONE; slices 15–40 are into the §11
 Tier-A horizon.
 
@@ -127,7 +127,8 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
   deficit" were ALL measured and REFUTED — the search never assigns `head_el`, so that drift is EXOGENOUS).
   It DERIVES: `ρ* = min_t [Δaz₀−√(fov²−Δel²)]/(t−τ)` = 1.0174 °/s vs a flown bracket (1.01, 1.02], **U-shaped
   in t ⇒ a search has a BEST MOMENT.** ⭐ **First flying arm where a PER-AXIS FOV flips the verdict** (34's
-  deferral — its gate 2 bound the STOP; this binds the WINDOW). ⚠ 42 §V.4's ρ_min table is VOID (servo bypassed;
+  deferral — its gate 2 bound the STOP; this binds the WINDOW; **flown and CONFIRMED at slice 45** — ρ* falls
+  (1.01,1.02] → (0.92,0.93], see below). ⚠ 42 §V.4's ρ_min table is VOID (servo bypassed;
   `none ≤ 16` was its own grid edge — 18/22 °/s; +side is stop contamination). ⚠ **An open-loop sweep WINDS
   UP against `rate_max` — what saturates is the AMPLITUDE** (20° at 64 °/s → 4.4° swept, arm FAILS); cure
   `ρ ← min(ρ, rate_max)`, anti-windup is a CAUTION (no verdict moves in 16 cells).
@@ -145,6 +146,19 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
   and **hit at 0.22/0.19/0.10 m at 30 °/s from IDENTICAL lock instants** (a lock at the rim hands the servo a
   FULL-WINDOW SLEW; threshold in (8, 30], not bracketed). ⚠ A **PARTIAL-RESCUE** mode exists inside the gap
   slice 43 called empty (7.80 m at hold 55 %, 85.8 m at hold 31 %).
+- **A RECTANGULAR / PER-AXIS WINDOW AND STOP** (slice 45 gate 0) — **SPLIT.** ⚠ **STOP half DEAD** — miss
+  0.1912 m at **every** el stop 0.04–30° (**750×**) with the clamp binding 66.66 % of ticks: the **7th
+  false-fidelity knob**, and §0.2.0's species argument promoted exactly this half. ⭐⭐⭐ **WINDOW half ALIVE, and
+  its precondition is not a geometry but a *SEARCHING HEAD*: a TRACKER holds both axes near zero so the window's
+  CORNERS are never visited; a SEARCH drives one axis to the rim BY DESIGN, where the corners are.** Box ≡ disc
+  **byte-identically** on 8/9 tracking rows, yet on slice 43's ρ = 0.95/1.00/1.01 arm the disc **never locks
+  (305.11 m)** and the box **hits (0.24/0.23/0.15)**. ⚠ Never quote that without its control: a disc **0.7 %
+  wider** rescues it too ⇒ at matched half-width it is 42/43's "wider is free". ⭐⭐ It survives on **HELD COST as
+  a flown verdict** — spend the box's own budget as a disc (r 5.95 travel / 4.92 area) and it **never acquires**.
+  ⇒ **ships nothing — its only flying arm is inside an UNSHIPPED feature**, so it belongs INSIDE the search slice,
+  and ⚠⚠ **it does NOT unblock it** (a box makes SEARCHING cheaper, not a wider window costlier) ⇒ **the search
+  has no unblocker left but 44's midcourse engagement.** ⚠⚠ Method: PART II killed BOTH halves over a sub-claim
+  its own plan named FIRST and never flew — *a gate is not finished while a §0.2 sub-claim has no row.*
 - **AN "ACQUISITION KNIFE-EDGE" / "a lock at the rim is worth nothing"** (slice 42, gate 1) — DEAD. ⭐⭐ **The
   band is `ω_LOS · dt` — ONE INTEGRATION STEP: halve `dt` and it halves** (0.0036° against a 10° window).
   The gate-0 table already said so — the "worthless lock" cell's miss was BYTE-IDENTICAL to the never-locks

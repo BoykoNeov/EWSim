@@ -198,6 +198,32 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
   authored rate to `rate_max` gave the SAME rescue verdict in all 16 cells, 5–18 % apart in lock time.
   **A cure that moves no verdict is a caution.**
 
+- ⭐⭐⭐ **A GATE IS NOT FINISHED WHILE A SUB-CLAIM ITS OWN PLAN ENUMERATED HAS NO ROW IN ANY TABLE**
+  (slice 45, an advisor catch). That gate's PART II killed both halves of its slice on a table of
+  byte-identical pairs; its plan's FIRST sub-claim named an arm that lived inside an earlier slice's
+  probe patch, the probe run said *"skip it initially"*, and nothing came back to it. **The write-up
+  did not notice because every arm it DID fly agreed.** One script overturned half the verdict.
+  ⚠ **The guard is mechanical, not a matter of care: before writing a verdict, walk §0.2's
+  sub-claims and point at the table that answers each one.** Agreement among the arms you flew is
+  not evidence about the arm you did not.
+- ⭐⭐ **A SHAPE (or any structural change) EARNS A RUNG ONLY IF IT CHANGES BEHAVIOUR — AND "IT IS
+  CHEAPER" IS A CLAIM ABOUT A COST MODEL YOU MAY NOT HAVE** (slice 45). Two window shapes that give
+  bit-identical verdicts at every value differ only in what you would have paid, and this simulator
+  has no cost variable anywhere. ⚠ **The exception is the useful half:** where the two DISAGREE on
+  a verdict, held cost becomes flyable — fix the budget, spend it each way, and read lock/no-lock.
+  A cost claim you can fly is a lesson; one you can only assert is a slide.
+- ⭐⭐ **THE REPARAMETERIZATION GATE DOES NOT ALWAYS NEED A GRID — ASK WHETHER THE SECOND KNOB IS
+  INERT ABOVE A FLOOR** (slice 45, advisor). If knob B does nothing over its whole range above some
+  threshold, the pair was ONE knob plus a floor before any tuning started, and the threshold is
+  predictable from instrumentation: it is `max |the quantity B gates on|`. Predicted 0.3043° off a
+  trace, flown flip at (0.30, 0.31]. **Cheaper than the grid it replaces, and anchored on a
+  prediction, which makes it the sharp form of the test rather than a blind bracket.**
+- ⭐ **WHAT A LIMIT COSTS DEPENDS ON WHAT THE SUBSYSTEM IS DOING, NOT ONLY ON WHAT IT IS FLYING**
+  (slice 45). A window's SHAPE is invisible to a TRACKING head (which holds the target near the
+  middle, so the corners are never visited) and decisive for a SEARCHING one (which drives an axis
+  to the rim by design, where the corners are). ⚠ Before concluding a geometric feature is inert,
+  ask which OPERATING MODE would visit the part of the geometry that distinguishes it.
+
 ## While testing: teeth that actually bite
 
 - **Two wrong oracles can both look like a tolerance problem.** `acos` of a dot product is

@@ -1422,3 +1422,34 @@ write-up of this gate said the opposite of both, in sentences wider than their o
 caught them was the contamination columns the plan had registered before any number existed. **Five times
 now in this arc the probe was right, the table was right, and the sentence on top of the table was
 wrong.**
+
+⭐⭐⭐ **Slice 45 asked a question the family had been carrying since slice 34 without ever testing it:
+the seeker decides "can I see it?" by adding up the left-right error and the up-down error into one
+distance and comparing that to one radius — a circle. Real hardware is often a rectangle: two
+independent limits, one per axis. Does the SHAPE matter, or only the size?** The plan argued from the
+hardware that the mechanical gimbal was the half worth changing (a real gimbal has an azimuth ring
+and an elevation trunnion, genuinely independent) while the seeker's radio beam is genuinely round.
+That argument was sound and it picked the wrong half. **The gimbal's elevation limit turned out not
+to matter at all**: pin the head's elevation travel to a twentieth of a degree, so tight that the
+limit is jammed against two thirds of the time, and the missile hits exactly as it did with seventy
+times the freedom — the same miss, to every digit, across a 750-fold range. It is the seventh knob
+this project has found that looks like a design choice and is not.
+
+⚠⚠ **And the first write-up killed the other half too, wrongly — the correction is the more useful
+half of the slice.** On every arm where the seeker is TRACKING, a square window and a round one give
+bit-for-bit identical results, because a tracker holds the target near the middle of its window and
+the corners — the only place the two shapes differ — are never visited. That looked conclusive. But
+the plan's own first sub-claim had named an arm the write-up never flew: the one where the head is
+SEARCHING. Flown, it reverses the verdict. A searching head deliberately sweeps one axis out to the
+edge, which is exactly where the corners are, and there the square window turns a 305-metre miss into
+a 0.23-metre hit, and lets the search succeed at a 9 % slower sweep. ⭐⭐ **So the shape of a window
+is invisible to a tracker and visible to a searcher — which is a fact about what the seeker is DOING,
+not about the geometry it is flying.** The honest caveat came with it: a circle just 0.7 % bigger
+rescues the same arm, so the square's advantage is not that it works but that it works CHEAPLY —
+spend the square's own budget on a circle and the missile never finds the target at all. ⚠ Nothing
+ships, for a new reason: the only arm where the shape matters lives inside a feature that has not
+been built, so this belongs INSIDE the search slice rather than before it. And it does not unlock
+that slice either — it makes searching cheaper when what was needed was to make a wider window
+costlier — which leaves the search with exactly one candidate unblocker left, the long-range shot
+slice 44 named. ⭐ **The method lesson is about the gate's own failure: a gate is not finished while a
+sub-claim its own plan wrote down first still has no row in any table.**

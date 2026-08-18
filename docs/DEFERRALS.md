@@ -137,7 +137,7 @@ just its sensitivity. A per-axis gate of the same half-width LOCKS the arm the r
 RECTANGULAR / PER-AXIS FOV deferral would unblock a search-pattern slice just as `SEEKER RANGE / SNR ACQUISITION
 LIMITS` would, and it is the cheaper of the two.** ⚠⚠⚠ **HALF OF THAT SENTENCE IS NOW REFUTED — SLICE 44's GATE 0
 MEASURED `SEEKER RANGE / SNR ACQUISITION LIMITS` AND IT DOES **NOT** UNBLOCK ANYTHING** (2026-08-18,
-`docs/plans/slice44.md`; see the rewritten entry below). The per-axis half is untouched and stands on its own. ⚠ Does not
+`docs/plans/slice44.md`; see the rewritten entry below). ⚠⚠⚠ **AND THE PER-AXIS HALF IS NOW REFUTED TOO — SLICE 45's GATE 0 (2026-08-18, `docs/plans/slice45.md`, no code, suite unchanged at 7693). DO NOT QUOTE THE SENTENCE ABOVE.** A per-axis window does NOT unblock a search-pattern slice, and the reason is exact: the blocker is *a wider window is FREE, so widen the glass instead of searching*, and a box does **not** make a wider window cost anything — it makes **SEARCHING CHEAPER** (sweep-rate floor ρ* (1.01, 1.02] → (0.92, 0.93], 8.8 % less), which is the WRONG DIRECTION to relieve that objection. ⭐⭐⭐ **⇒ THE SEARCH-PATTERN SLICE HAS NO NAMED UNBLOCKER LEFT ON THIS WIRE EXCEPT SLICE 44's MIDCOURSE-RANGE ENGAGEMENT.** ⚠ Does not
 move with `dt` (10.0647 / 10.0656 / 10.0661 at 2e−3 / 1e−3 / 5e−4). ⚠ The LOS rate DOES rise 318× across the
 flight (0.271 → 86.05 °/s) — that is why a LATE acquisition is worthless, not why this arm fails. **(3) GUESS RIGHT AND COVERAGE IS NOT FREE — IT IS NEVER REACHED:** the head locks
 **2.07° into a pattern authored 3–30° wide**, which is why ρ_min looked flat. **(4) GUESS WRONG AND COVERAGE COSTS
@@ -278,7 +278,37 @@ SECOND-ORDER SERVO (ω_a/ζ_a)**, IS SLICE 40 AND IS ALSO SPENT (see above). ⚠
 the precedent, and slice 40 turns that round into a NEW deferral: **A SECOND-ORDER FIN ACTUATOR** — slice 15's fin
 is first-order-with-a-rate-limit for exactly the reason slices 34–39's head was, and the bound slice 40 argues (a
 first-order lag cannot exceed gain 1 or lag more than 90°, so it can only ever damp) is not specific to a seeker
-head.** Also: **a RECTANGULAR / PER-AXIS FOV — ⭐⭐ **SLICE 43's GATE 0 SUPPLIES THE FLYING ARM THIS DEFERRAL WAS MISSING:** on the
+head.** Also: **a RECTANGULAR / PER-AXIS FOV — ⚠⚠⚠ **MEASURED AT SLICE 45's GATE 0 (2026-08-18,
+`docs/plans/slice45.md`), AND THE VERDICT IS SPLIT: THE STOP HALF IS *DEAD*, THE WINDOW HALF IS *ALIVE BUT
+RE-AIMED*.** ⚠⚠ **THE STOP HALF IS DEAD AND IT WAS THE HALF THE PLAN PROMOTED.** §0.2.0 argued from the hardware's
+species that the mechanical stop is a box under BOTH readings (an azimuth ring and an elevation trunnion are
+independent mechanisms) while the RF dish's beam is genuinely round — the argument is sound and **it picked the
+wrong half**: with the azimuth stop held at 30° the miss is **0.1912 m at EVERY elevation stop from 0.04° to 30°**
+(a **750×** range) even where the clamp binds **66.66 %** of in-band ticks, and box-vs-disc at matched half-width
+is verdict-identical on every rung 30 → 8.2° (both failing at 8.1° with the same 3620.6755). **The SEVENTH
+false-fidelity knob** (`speed` 19, launch altitude 21, the handover bias key 36, `ζ` 40, `k_δ` 15, `(R̂,s)` 31).
+⚠ The `√2·stop` readout hazard `frames.jl` names is real and measures **1.003×** here.
+⭐⭐⭐ **THE WINDOW HALF IS ALIVE, AND WHAT IT NEEDS IS NOT A GEOMETRY BUT A *SEARCHING HEAD*.** On every
+TRACKING arm the shape is INERT — box ≡ disc **byte-identically** on eight of nine rows (fov 1–10°, every row this
+family has quoted) — because the window is lost on the AZIMUTH axis at every half-width (`off@brk` = fov to four
+decimals, elevation contributing ~0.003°, an order of magnitude under one tick of LOS motion; slice 42's `ω·dt`
+argument again). ⚠⚠ **SLICE 45's PART II CONCLUDED FROM THAT THAT BOTH HALVES WERE DEAD AND IT WAS WRONG — an
+advisor catch: its own §0.2 sub-claim (a) named slice 43's ρ = 1 SEARCH arm and PART II never flew it.** Flown
+(controls reproduce slice 43's record exactly): at ρ = 0.95 / 1.00 / 1.01 the DISC **never locks (305.11 m)** and
+the BOX **locks and hits at 0.2409 / 0.2285 / 0.1473 m**; the NULL cell (ρ = 0) is identical on both gates.
+⭐⭐⭐ **THE RULE, STRUCTURAL RATHER THAN A PROPERTY OF THIS GEOMETRY: A TRACKING HEAD SITS NEAR ZERO ERROR ON
+BOTH AXES SO A WINDOW'S CORNERS ARE NEVER VISITED; A SEARCHING HEAD DRIVES ONE AXIS TO THE RIM BY DESIGN, WHICH
+IS EXACTLY WHERE THE CORNERS LIVE.** ⚠ The pre-registered objection fires and must be quoted with it: a disc
+**0.7 % wider** (10.07°) rescues the same cell, so at matched half-width the box's rescue is 42/43's *"a wider
+window is free"*. ⭐⭐ **WHERE IT SURVIVES IS HELD COST, AND THERE IT IS A FLOWN VERDICT RATHER THAN AN ACCOUNTING
+SENTENCE:** the rescuing box is (10.00, **1.90**), the cheapest rescuing disc is 10.07 — spend the BOX's OWN budget
+as a disc (r = 5.95 by sum-of-travel, 4.92 by area) and the arm **NEVER ACQUIRES**. ⇒ **NOTHING SHIPS, FOR A NEW
+REASON: the only arm where the shape matters lives inside an UNSHIPPED feature, so this belongs INSIDE the
+search-pattern slice rather than before it.** ⚠ And see the line above — it does NOT unblock that slice.
+⭐ Also measured and worth carrying: the stop's demand ratio is **27.3 : 1** (18.1237° az against 0.6643° el), and
+on a TRACKING arm the window's elevation half-width is a **FLOOR at `max |Δel|`** — predicted **0.3043** off a trace
+before flying, flown flip at **(0.30, 0.31]**, byte-identical over the 32× range above it.
+⚠⚠ **THE SUPERSEDED FRAMING, kept so it is not re-imported: — ⭐⭐ **SLICE 43's GATE 0 SUPPLIES THE FLYING ARM THIS DEFERRAL WAS MISSING:** on the
 ρ = 1 search arm a per-axis window of the same 10° half-width would LOCK (Δaz = 9.75 < 10 AND Δel = 2.49 < 10)
 while the shipped RADIAL `hypot` gate holds it out at 10.0656° — **the first arm in this family where the
 window's SHAPE, not its size, decides acquisition** (⚠ precisely: 34 gate 2 §2.5 bound the STOP; this binds the WINDOW) (⚠ the verdict flip rests on 0.066° and is quoted as narrow,
