@@ -279,3 +279,17 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
 - **Quote the VERDICT, never the metres, once a track is lost.** Post-loss trajectories diverge,
   so the miss samples a divergence rather than measuring one — slice 44's failure magnitudes
   walked 320 → 439 → 627 m across a 4× range of `dt` while every verdict held.
+- **⭐⭐⭐ TWO AIMS ⇒ TWO TESTS ⇒ TWO VERDICTS — a gate-0 kill test measures the LESSON, not the
+  COMPONENT** (2026-08-18 user reframe, after five consecutive gate-0 records shipped no code).
+  *Reparameterizable*, *moves no verdict* and *false-fidelity knob* all answer **does dialing this
+  move the authored scenario's headline metric** — a question about the SLICE. The separate
+  question is **is the parameter READ by the physics each tick and does the response obey its own
+  units/signs/frames** — a question about the MODEL, and the only one whose failure kills a
+  component (a knob consumed once at load is a BUG). **Pass model / fail lesson ⇒ "dead as a
+  lesson, ALIVE AS A MODEL": ship the hardware with tests and authorable keys, bury the lesson
+  claim with its refutation.** ⚠ A reparameterization still must not ship as an ARCHITECTURE
+  (slice 39), and new proposals face the unchanged model bar. ⚠⚠ Corollary, and the reason this
+  went unnoticed for five slices: **four of the five failed the lesson test against the SAME
+  authored engagement** — slice 45's own *"a property measured in one operating mode is not a
+  property of the component"*, one level up. Detail: `docs/DEFERRALS.md` §"THE 2026-08-18
+  RE-VERDICT".

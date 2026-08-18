@@ -56,6 +56,9 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 **Slices 1–40 COMPLETE & green — 7693 tests.** (Slices 39, **41, 42 and 44** are KILL RECORDS, **43 is a
 GATE-0 LAW RECORD** and **45 is a GATE-0 SPLIT VERDICT** — none shipped code, so the count is unchanged.)
+⚠⚠ **FIVE CONSECUTIVE GATE-0 RECORDS SHIPPED NO CODE, AND ON 2026-08-18 THE USER RULED THAT THE KILL
+CRITERION ITSELF WAS AT FAULT — see "TWO AIMS ⇒ TWO TESTS ⇒ TWO VERDICTS" below. 41, 44 and 45 are
+"DEAD AS A LESSON, ALIVE AS A MODEL" and their probe code still exists; only 42 is dead outright.**
 HANDOFF §10 items 1–13 — the committed roadmap — are DONE; slices 15–40 are into the §11
 Tier-A horizon.
 
@@ -92,6 +95,26 @@ into `docs/SLICES.md`, the new/killed candidates into `docs/DEFERRALS.md`, any t
 method lesson into `docs/LESSONS.md`, and **only** the state line + any new dead end into
 `CLAUDE.md`. Keep `CLAUDE.md` under ~20 KB — it is loaded on every single turn.
 
+## ⭐⭐⭐ TWO AIMS ⇒ TWO TESTS ⇒ TWO VERDICTS (2026-08-18, user reframe — READ BEFORE KILLING ANYTHING)
+
+**EWSim is a teaching instrument AND a simulator** — different scenarios, different models,
+different subcomponents, different imperfections. Gate 0's kill tests (*reparameterizable*,
+*moves no verdict*, *false-fidelity knob*) measure **LESSON value ONLY**, and slices 41–45
+applied them as if they retired the **COMPONENT**. They do not. Every candidate now gets two:
+
+- **MODEL test — is the parameter READ by the physics every tick, and does the response obey
+  its own units/signs/frames?** A knob consumed once at load and never read again is a **BUG**;
+  that failure is the only one that kills a component outright.
+- **LESSON test — does dialing it move the authored scenario's headline metric?** Failing this
+  kills the **SLICE'S HEADLINE**, not the hardware.
+
+⇒ **PASS model / FAIL lesson = "DEAD AS A LESSON, ALIVE AS A MODEL": it ships as physics +
+tests + authorable keys, with the refuted lesson claim staying buried in the plan file.**
+*"It didn't move the miss on this one scenario"* is a statement about that scenario. ⚠ The bar
+for NEW proposals is UNCHANGED — read by the physics and correct in its own units, or no ship;
+and a reparameterization still must not ship as an **architecture** (slice 39's discipline).
+Per-slice re-verdicts for 41–45: `docs/DEFERRALS.md` §"THE 2026-08-18 RE-VERDICT".
+
 ## Dead ends — do not rebuild
 
 Kept inline because the expensive failure is not "I didn't read a file", it is **rebuilding
@@ -106,7 +129,9 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
   banked it and all three mis-located it.
 - **A scalar rate-limited fin inside the coupled loop** (the slice-20 candidate) — DEAD.
   `δ_max` structurally SHADOWS `δ̇_max`.
-- **A second-order FIN actuator** (slice 41, the deferral slice 40 named as its own) — DEAD, on
+- **A second-order FIN actuator** (slice 41, the deferral slice 40 named as its own) — **DEAD AS A
+  LESSON, ALIVE AS A MODEL** (re-verdict 2026-08-18; kernel + seam were built and are bit-exact across
+  five `:delta_cmd` writers, probe code in `M:\claud_projects\temp\slice41`), on
   REPARAMETERIZATION. Two single-axis `(k_α, k_q)` retunes each reproduce its whole threshold curve to
   0.00–1.01 %. ⭐⭐ **The reason is the rule to carry: a pole differs from a gain ONLY in that its phase
   VARIES with frequency, and that loop's fin command is a single 1.6488 Hz line — one point of a phase
@@ -132,7 +157,10 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
   `none ≤ 16` was its own grid edge — 18/22 °/s; +side is stop contamination). ⚠ **An open-loop sweep WINDS
   UP against `rate_max` — what saturates is the AMPLITUDE** (20° at 64 °/s → 4.4° swept, arm FAILS); cure
   `ρ ← min(ρ, rate_max)`, anti-windup is a CAUTION (no verdict moves in 16 cells).
-- **`SEEKER RANGE / SNR ACQUISITION LIMITS` AS THE UNBLOCKER FOR THE SEARCH** (slice 44 gate 0) — **DEAD.** The
+- **`SEEKER RANGE / SNR ACQUISITION LIMITS` AS THE UNBLOCKER FOR THE SEARCH** (slice 44 gate 0) — **DEAD *AS
+  THE UNBLOCKER*; THE SENSOR ITSELF IS ALIVE AS A MODEL** (re-verdict 2026-08-18 — the physics measured EXACT,
+  and a seeker with a detection horizon is not optional equipment for a simulator; `lib44.jl` +
+  patched `missile.jl` in `M:\claud_projects\temp\slice44`). The
   aperture identity is EXACT on the flying wire (`R_acq · fov` constant to 0.0000 %, slope −1.000000) and changes
   NOTHING: the authored Ku seeker reaches **8079 m against a 6437 m launch** ⇒ the missile starts already able to
   see, and the gate is byte-identical to no gate. A hit survives to −26 dB; the gate first bites at **−28 dB**
@@ -146,7 +174,9 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
   and **hit at 0.22/0.19/0.10 m at 30 °/s from IDENTICAL lock instants** (a lock at the rim hands the servo a
   FULL-WINDOW SLEW; threshold in (8, 30], not bracketed). ⚠ A **PARTIAL-RESCUE** mode exists inside the gap
   slice 43 called empty (7.80 m at hold 55 %, 85.8 m at hold 31 %).
-- **A RECTANGULAR / PER-AXIS WINDOW AND STOP** (slice 45 gate 0) — **SPLIT.** ⚠ **STOP half DEAD, on BOTH regimes** — miss
+- **A RECTANGULAR / PER-AXIS WINDOW AND STOP** (slice 45 gate 0) — **SPLIT** (⭐ re-verdict 2026-08-18: **BOTH
+  halves are ALIVE AS A MODEL** — the el stop BINDS 66–68 % of in-band ticks, i.e. it is read and working; what
+  died is the HEADLINE. Patches in `M:\claud_projects\temp\slice45`). ⚠ **STOP half DEAD AS A LESSON, on BOTH regimes** — miss
   0.1912 m at **every** el stop 0.04–30° (**750×**) tracking, and on a SEARCH arm miss/lock/demand are
   identical over (30, 0.30)…(30, 30.0) with the trunnion binding **68 %** of ticks: the **7th
   false-fidelity knob**, and §0.2.0's species argument promoted exactly this half. ⭐⭐⭐ **WINDOW half ALIVE, and

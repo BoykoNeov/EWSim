@@ -15,6 +15,60 @@ A short, always-loaded summary of the hardest kills lives in `CLAUDE.md` under
 
 ---
 
+## ⭐⭐⭐ THE 2026-08-18 RE-VERDICT — TWO AIMS, TWO TESTS, TWO VERDICTS
+
+**Written after the user's reframe: EWSim is a teaching instrument AND a simulator** — different
+scenarios, different models, different subcomponents, different imperfections. **Slices 41–45 were
+all killed at gate 0 by tests that measure LESSON value only** (*reparameterizable*, *moves no
+verdict*, *false-fidelity knob*), and the word DEAD was applied to the COMPONENT. That was wrong,
+and this section is the correction. The criterion now lives in `CLAUDE.md` as well.
+
+- **MODEL test** — is the parameter READ by the physics every tick, and does the response obey its
+  own units / signs / frames? **Failing this is the ONLY outright kill** (a knob consumed once at
+  load and never read again is a BUG, not a feature — `speed` 19, launch altitude 21, the handover
+  bias key 36, `ζ` on the lag rung 40, `k_δ` 15, `(R̂,s)` 31 all fail here and STAY dead).
+- **LESSON test** — does dialing it move the authored scenario's headline metric? Failing this kills
+  **the slice's HEADLINE**, not the hardware.
+
+⇒ **PASS model / FAIL lesson ⇒ "DEAD AS A LESSON, ALIVE AS A MODEL": it ships as physics + tests +
+authorable keys, and the refuted lesson claim stays buried in its plan file with its refutation
+intact.** ⚠ This does NOT lower the bar for new proposals (read by the physics, correct in its own
+units, or no ship), and a reparameterization still must not ship as an **ARCHITECTURE** — slice 39's
+discipline survives untouched. What dies is the inference *"it did not move the miss on this one
+scenario, therefore the component does not exist."*
+
+⚠⚠ **AND THE STRUCTURAL POINT UNDER ALL FIVE: FOUR OF THEM FAILED THE LESSON TEST AGAINST THE SAME
+SCENARIO** — the 6.4 km / 8.9 s terminal shot slices 26–45 all fly, chosen at slice 26 for the radome
+loop. A component measured inert on ONE authored engagement has been measured on one engagement.
+(Slice 45's own PART IV lesson — *a property measured in one operating mode is not a property of the
+component* — is this same error one level down, and it was written the day before this reframe.)
+
+### The five re-verdicts
+
+| slice | candidate | MODEL test | LESSON test | RE-VERDICT |
+|---|---|---|---|---|
+| 41 | second-order fin actuator | **PASS** — kernel clean, seam bit-exact across five `:delta_cmd` writers, physics real (a lag inside the MAIN loop DEstabilizes: 1.27–4.45× ring growth at 60→20 Hz, `R_crit` walks −0.0926 → −0.0901) | FAIL — two `(k_α,k_q)` retunes reproduce the whole curve to 0.00–1.01 % | **DEAD AS A LESSON, ALIVE AS A MODEL.** ⚠ The equivalence holds ONLY because that loop is a single 1.6488 Hz line — a property of the SCENARIO, not the actuator. A broadband loop (or a second wire) breaks it. Ships as authorable actuator hardware; must NOT ship as "the fin architecture". |
+| 42 | acquisition knife-edge | **FAIL** — the effect's width is `ω_LOS·dt`, ONE integration step, and HALVES when `dt` halves | FAIL — the "worthless lock" cell's miss is BYTE-IDENTICAL to the never-locks cell | **DEAD UNDER BOTH AIMS — the only genuine kill of the five.** There is no component here, only a discretization artifact. Nothing to author, nothing to ship. |
+| 43 | seeker search pattern | **N/A** — never a physics kill; it shipped a LAW (`travel = deficit/(1−ω/ρ)`, `ρ* = min_t […]`, confirmed 4/4 on untuned geometries) | BLOCKED — a wider window is FREE on this wire | **NOT A KILL AT ALL — BLOCKED, and the law is banked.** ⚠ The block is a property of the ENGAGEMENT, not of searching: a search costs time, and time is worthless when you were launched already able to see. |
+| 44 | seeker detection range / SNR | **PASS, EXACTLY** — `R_acq·fov` constant to 0.0000 %, log-log slope −1.000000, `r_acq` vs `snr_freespace` at +10.0000 dB; the plan says it outright: *"the physics is not what failed, what failed is the WIRE"* | FAIL — an 8079 m seeker against a 6437 m launch ⇒ the gate is byte-identical to no gate | **DEAD AS THE UNBLOCKER, ALIVE AS A MODEL — and arguably the biggest miss of the five.** A seeker with a detection horizon is not optional equipment for a simulator meant to carry different seekers against different targets at different ranges. `lib44.jl` is written and measured correct. ⚠ Its two survivors stand regardless (a late lock is paid in MANOEUVRE AUTHORITY and miss cannot show it; the narrow-window failures of 32/34 are the SERVO's). |
+| 45 | rectangular / per-axis window and stop | **PASS, BOTH HALVES** — the elevation stop BINDS 66–68 % of in-band ticks (read, clamping, working hardware); the box changes ACQUISITION on a searching head (disc never locks 305.11 m, box hits 0.24/0.23/0.15) | FAIL (stop) / CONDITIONAL (window) — miss 0.1912 m at every el stop over a 750× range; box ≡ disc byte-identically on 8/9 TRACKING rows | **BOTH HALVES DEAD AS A LESSON, BOTH ALIVE AS A MODEL.** ⚠ "The 7th false-fidelity knob" is a MISNOMER and must not be quoted: the other six were never READ; this one is read and binds two-thirds of the ticks. An azimuth ring and an elevation trunnion are independent mechanisms with independent authorable travel — that is hardware variety, which is the simulator's whole point. |
+
+### What this changes about what to build
+
+⭐ **Three of the five have PROBE CODE THAT ALREADY WORKS**, in `M:\claud_projects\temp\slice41`,
+`…\slice44` (`lib44.jl` + patched `missile.jl`), `…\slice45` (patches + eight probes). Their cost is
+**productionization** — wire, test, author, document — **not re-derivation.** ⚠ Verify each against
+the current HEAD before reuse; they were written against the tree as it stood on 2026-08-18.
+
+⭐⭐ **A NEW SLICE SHAPE THIS REFRAME MAKES LEGAL: A COMPONENT-FIDELITY SLICE.** Ship the hardware
+(detection horizon, actuator inertia, per-axis travel) with tests and authorable keys, and let the
+LESSON be *"here is the hardware, here is the regime where it bites, and here is the measured regime
+where it does not"* — the null result becomes part of the shipped documentation rather than a reason
+not to ship. ⚠ Convention 9 (**one lesson per scenario**) still governs the SHOWCASE; it does not
+govern what the core is allowed to model.
+
+---
+
 The NEXT named candidates:
 **(⚠⚠⚠ "A SECOND-ORDER FIN ACTUATOR" IS NO LONGER ON THIS LIST — IT IS **DEAD**, KILLED AT GATE 0 ON
 2026-08-18 (`docs/plans/slice41.md`), and it is the deferral SLICE 40 NAMED AS ITS OWN. **Do not
