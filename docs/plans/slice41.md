@@ -1079,3 +1079,53 @@ falsifier, not a reason to discount this one.** Until it is run and passes, **sl
 5. **THE PRE-REGISTRATION ITSELF** (§III.13) — it is the reason the *point* result did not kill the
    slice wrongly at §IV.1, and the reason the *curve* result kills it honestly here. Both directions.
 
+
+## §IV.6 ⚠ THE PRECISE SCOPE OF §IV.3's CLAIM — A LINE, NOT A SPACE
+
+§0.4 and §III.13 both require the bound to be over the `(k_α, k_q)` **space**. **What was actually
+run is TWO INDEPENDENT SINGLE-AXIS RETUNES**, each through the authored pair: `k_α = 1.02` with `k_q`
+authored, and `k_q = 0.295` with `k_α` authored. The claim the evidence supports is therefore
+*"two independent single-axis retunes each reproduce the actuator's whole threshold curve"* — **not**
+*"no pair in the space is distinguishable."*
+
+⭐ **THE DIRECTION MATTERS AND IT FAVOURS THE KILL** (advisor): a kill from *"some gain pair
+reproduces it"* is STRENGTHENED by finding more such pairs, and weakened only if the two found were
+flukes. Two independent axes both landing inside 1 % is strong. But §IV.5 and any `docs/STATUS.md`
+block must carry the narrower sentence, not the wider one.
+
+## §IV.7 ⭐⭐ THE TWO-FREQUENCY TEST — **PRE-REGISTERED HERE, BEFORE IT IS RUN**
+
+§IV.4 does not merely explain the kill, it makes a **falsifiable prediction**: *a loop that visits one
+frequency cannot distinguish a pole from a gain.* The converse is that a loop at a DIFFERENT frequency
+should need a DIFFERENT gain — because a gain is frequency-blind and a pole is not. **That prediction
+is testable on scenarios already in the tree, and it must be run before this kill is written into
+`docs/DEFERRALS.md` as final** (advisor).
+
+**THE SECOND FREQUENCY IS ALREADY MEASURED.** §III.0's table: `slice26_radome`'s fin command is a line
+at **1.6488 Hz**; `slice40_resonance`'s YAW channel carries a line at **0.90131 Hz** (26 % of its
+energy). **A 1.83× separation, on two wires that both already fly.**
+
+**THE TEST.** Fit a gain pair to a 30 Hz actuator arm on `slice26_radome` (done — `k_α = 1.02`,
+§IV.1), then apply **that same pair, unchanged**, to `slice40_resonance` and ask whether it still
+reproduces the 30 Hz actuator arm there.
+
+⚠ **WHAT THIS TEST DOES AND DOES NOT NEED.** `slice40_resonance` stacks a second-order gimbal servo
+at 2.0 Hz, which is why §III chose NOT to lead with it — attribution of its ring is muddy. **This test
+does not need clean attribution.** It asks a yes/no question about a GAIN PAIR (does one pair
+reproduce the actuator on both wires), not a claim about what slice 40's ring is made of.
+
+⚠ **AND THE CONTAMINATION PRECONDITION CARRIES OVER UNCHANGED**: the slice-40 arms must be read at a
+point where `aero` is not binding, or §III.1's clamped-plateau trap repeats on a new wire. If the
+authored `gimbal_zeta = 0.10` is on the plateau, the comparison moves to that wire's own shoulder,
+found the same way and reported the same way.
+
+### ⚠⚠ THE FALSIFIER, FIXED BEFORE ANY NUMBER EXISTS
+
+- **ONE PAIR REPRODUCES THE 30 Hz ARM ON BOTH WIRES**, each within the **2.7–3.2 %** band the whole
+  effect spans ⇒ **the kill stands UNCONDITIONALLY**, and across frequencies as well as within one.
+- **THE PAIR REPRODUCES ONE WIRE AND NOT THE OTHER** ⇒ there IS a genuine order/phase effect that a
+  retune cannot fake, and it is only visible with **two frequencies in view**. ⚠⚠ **THAT DOES NOT
+  UN-KILL SLICE 41 AS SCOPED** — the slice as written is one wire, one frequency, and on that wire it
+  is a reparameterization. It names a **RE-SCOPE WITH EVIDENCE** (a two-wire slice whose lesson IS the
+  frequency dependence) rather than a hope, and that re-scope would carry its own gate 0 from zero.
+
