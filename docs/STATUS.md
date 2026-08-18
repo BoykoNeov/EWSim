@@ -5510,6 +5510,14 @@ spec.
 
 ---
 
+## Slice 39 — A NULLING-LOOP HEAD SERVO — KILLED AT GATE 0 (2026-08-17)
+
+**Not a slice — a KILL RECORD. No code shipped; the suite stayed at 7564.** An infinite-gain
+nulling loop is not an architecture, it is a reparameterization of the servo time constant
+(`nulling(τ, s, b) ≡ feed-forward(τ(1+s), 0, b/(1+s))`, measured end to end at 5.8e−09 m of
+trajectory over 12 000 ticks). Full record, all 9 probes: `docs/plans/slice39.md`. The live
+successor it left behind (FINITE loop gain) is in `docs/DEFERRALS.md`.
+
 ## Slice 40 — A HEAVIER GIMBAL: THE SECOND-ORDER HEAD SERVO (2026-08-17)
 
 **Status: SHIPPED AND COMPLETE, all four gates. Suite 7564 → 7693 (+129). Slices 1–39 byte-identical,

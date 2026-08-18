@@ -82,7 +82,7 @@ this split exists to fix).
 | change architecture, frames, the wire protocol, the tick contract | `HANDOFF.md` |
 | quote slice N's numbers, test names, or gate detail | `docs/STATUS.md` — grep `## Slice N` |
 | recall what slice N's *lesson* was | `docs/SLICES.md` |
-| repeat a method that burned a gate before | `docs/LESSONS.md` — cross-slice method disciplines |
+| write a gate-0 probe, a verifier tooth, or a HUD branch | `docs/LESSONS.md` — cross-slice method disciplines |
 | re-run slice N's showcase / verifier | `docs/STATUS.md` §Slice N has the exact commands |
 
 **When a slice completes**, the doc ritual writes to FIVE places, in this order: the full
