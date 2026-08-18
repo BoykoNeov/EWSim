@@ -126,7 +126,16 @@ radius is what it COSTS, not what the search CAUSED). ⭐⭐⭐ **SO THE FLOOR D
 alone:** `Δaz(t,ρ) = Δaz₀(t) − ρ(t−τ)` (0.001°) plus the radial gate give
 `ρ* = min_t [Δaz₀(t) − √(fov² − Δel(t)²)]/(t−τ)` = **1.0174 °/s at t = 4.00 s** — flown, 1.01 NEVER locks and
 1.02 locks at t = 3.809 s. ⭐ The required-rate curve is **U-shaped** (2.399 / 1.017 / 2.019 at t = 1 / 4 / 7):
-**a search has a BEST MOMENT and one that misses it cannot recover by continuing.** ⚠ Does not
+**a search has a BEST MOMENT** (⚠ *"and cannot recover by continuing"* is DERIVED, not flown — the U's right arm
+is a property of the curve and no flown arm can acquire on it). ⭐⭐⭐ **CONFIRMED 4/4 ON GEOMETRIES IT WAS NOT
+TUNED ON, to the grid's 0.01 °/s:** ρ* = 1.0174 / 1.8817 / 2.6259 / 1.2193 at deficits 2 / 6 / 10 / 3 (last behind
+a 15° window), each the first LOCKING rung with the one below failing, and the predicted times within 0.07 s of
+the measured locks. ⚠ The ladder is anchored on the prediction, so it is the SHARP test (locks at ρ*, fails at
+ρ*−0.01), not a blind bracket.
+⭐⭐ **AND THIS GIVES THE BLOCKED DEFERRAL A SECOND, CHEAPER ROUTE TO BEING MOTIVATABLE:** the window's SHAPE, not
+just its sensitivity. A per-axis gate of the same half-width LOCKS the arm the radial gate rejects ⇒ **the
+RECTANGULAR / PER-AXIS FOV deferral would unblock a search-pattern slice just as `SEEKER RANGE / SNR ACQUISITION
+LIMITS` would, and it is the cheaper of the two.** ⚠ Does not
 move with `dt` (10.0647 / 10.0656 / 10.0661 at 2e−3 / 1e−3 / 5e−4). ⚠ The LOS rate DOES rise 318× across the
 flight (0.271 → 86.05 °/s) — that is why a LATE acquisition is worthless, not why this arm fails. **(3) GUESS RIGHT AND COVERAGE IS NOT FREE — IT IS NEVER REACHED:** the head locks
 **2.07° into a pattern authored 3–30° wide**, which is why ρ_min looked flat. **(4) GUESS WRONG AND COVERAGE COSTS

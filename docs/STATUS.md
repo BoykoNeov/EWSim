@@ -6015,7 +6015,16 @@ never lock and miss an identical 305.112 m at both errors; the + arms DO lock, l
    NEVER locks and ρ = 1.02 locks at t = 3.809 s, so **the prediction lies inside a sub-1 % bracket and
    calls the acquisition TIME too.** ⭐ The required-rate curve is **U-shaped** (2.399 / 1.017 / 2.019 °/s
    at t = 1 / 4 / 7): too early the swept axis has not closed, too late the unswept one has eaten the
-   budget — **a search has a best moment, and one that misses it cannot recover by continuing.** ⚠ F6 applied here too: off-axis reads 10.0647 / 10.0656 / 10.0661 at
+   budget — **a search has a best moment.** ⚠ *"and one that misses it cannot recover by continuing"* is
+   **DERIVED, NOT FLOWN** — the U's left arm and minimum are confirmed, its right arm is a property of the
+   derived curve, and by construction no flown arm can acquire on it (a higher rate always locks earlier).
+   ⭐⭐⭐ **AND THE DERIVATION HOLDS ON GEOMETRIES IT WAS NOT TUNED ON — 4/4 to the grid's 0.01 °/s:**
+   ρ* = 1.0174 / 1.8817 / 2.6259 / 1.2193 °/s predicted at deficits 2 / 6 / 10 / 3 (the last behind a 15°
+   window), each landing exactly on the first LOCKING rung with the rung below it failing; and the predicted
+   times 4.03 / 5.16 / 5.65 / 4.59 s match measured locks of 3.961 / 5.104 / 5.597 / 4.529 s — **within 0.07 s
+   on all four, across a 5× range of deficit and two window sizes.** ⚠ The ρ ladder is anchored on the
+   prediction (`ρ*−0.05 : 0.01 : ρ*+0.06`), so the test is the SHARP one — locks at ρ*, fails at ρ*−0.01 —
+   not a blind bracket, and must not be quoted as one. ⚠ F6 applied here too: off-axis reads 10.0647 / 10.0656 / 10.0661 at
    `dt` = 2e−3 / 1e−3 / 5e−4 — **it does not halve, it does not move.** ⭐⭐ **AND IT LANDS ON SLICE 34's
    RECTANGULAR / PER-AXIS FOV DEFERRAL WITH THE ARM THAT DEFERRAL WAS MISSING:** a per-axis window of the
    same 10° half-width would LOCK this arm (9.75 < 10 AND 2.49 < 10) while the shipped radial `hypot`

@@ -627,11 +627,18 @@ unswept channel spends the window down on its own schedule, and all the sweep ra
 axis it does move closes before the budget runs out. ⭐⭐⭐ Said that way the floor stops being a measurement
 and becomes a derivation — take the two curves off the arm that never acquires anything, ask at each instant
 what rate would be needed, and the answer has a clean minimum: **1.0174 degrees per second, at four seconds
-in.** Flown afterwards, 1.01 never acquires and 1.02 does, locking at 3.8 s. ⭐⭐ And the shape of that curve
+in.** Flown afterwards, 1.01 never acquires and 1.02 does, locking at 3.8 s. ⭐⭐⭐ And then the same
+arithmetic was run on three geometries it had never seen — a bigger miss, a much bigger miss, and a wider
+window — and it called all three, each landing on exactly the slowest rate that still works with the rate
+one notch below it failing, and each predicting **when** the lock would happen to within a tenth of a
+second. That is what turns a worked example into a law. ⭐⭐ And the shape of that curve
 is the lesson: it is a U, so **a search has a best moment — too early and the swept axis has not closed,
 too late and the other one has eaten the window — and a search that misses the moment cannot recover by
-continuing.** It also hands an older deferral the flying arm it had been missing, because a square window of
-the same size would have locked this one and a round one does not. Guess the direction wrong and you pay twice the coverage in travel, at a
+continuing.** ⭐⭐ It also hands an older deferral the flying arm it had been missing — a square window of the
+same size would have locked this one and a round one does not — and that quietly matters for whether any
+of this can ever be built: the search slice has been blocked because nothing in the model charges for a
+wider window, and here is a way the window matters that has nothing to do with charging for it. Its
+SHAPE. Which is a much cheaper thing to add than a sensitivity model. Guess the direction wrong and you pay twice the coverage in travel, at a
 price that **accelerates** rather than scaling: 5 % over the geometric bound at small coverage, 39 % at
 large, and past a point no lock at all — because the target keeps moving while you look the wrong way,
 and that excess is the whole finding. ⚠ The last piece is a trap rather than a lesson: an open-loop

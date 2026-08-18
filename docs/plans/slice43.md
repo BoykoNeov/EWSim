@@ -876,3 +876,63 @@ shape — *the measurement was right and the causal clause on top of it was wide
 search an effect the search's own code cannot produce. ⭐ **The cheapest guard is the one that caught
 the third: READ THE BRANCH AND ASK WHICH STATE IT WRITES. If the quantity in your causal sentence is
 never assigned by the mechanism you are crediting, the sentence is wrong before any probe runs.**
+
+---
+
+# ⭐⭐⭐ §VI — PROBE **P13**: **THE DERIVATION HOLDS ON GEOMETRIES IT WAS NOT TUNED ON**
+
+§V.2 derived and flew ρ\* on **one** cell. The form is general — both curves come off any no-search
+arm — but one confirmation is a worked example, not a law. Derived on three further geometries and
+flown on each:
+
+| err ° | fov ° | **deficit °** | **ρ\* PREDICTED** | flown bracket | **t\* PREDICTED** | **t_lock MEASURED** |
+|---|---|---|---|---|---|---|
+| −12 | 10 | 2 | **1.0174** | (1.0074, **1.0174**] | 4.03 | **3.961** |
+| −16 | 10 | 6 | **1.8817** | (1.8717, **1.8817**] | 5.16 | **5.104** |
+| −20 | 10 | 10 | **2.6259** | (2.6159, **2.6259**] | 5.65 | **5.597** |
+| −18 | 15 | 3 | **1.2193** | (1.2093, **1.2193**] | 4.59 | **4.529** |
+
+> ⭐⭐⭐ **FOUR FOR FOUR, AND EACH TO THE RESOLUTION OF THE TEST GRID.** Across a **5× range of deficit**
+> and **two window sizes**, every predicted floor lands inside its flown bracket — and the bracket is
+> **one grid step (0.01 °/s) wide.** ⭐ **The derivation also calls the ACQUISITION TIME**, predicted
+> 4.03 / 5.16 / 5.65 / 4.59 s against measured 3.961 / 5.104 / 5.597 / 4.529 — within 0.07 s on all four.
+
+⚠ **STATED PRECISELY, BECAUSE THE GRID IS ANCHORED ON THE PREDICTION:** the ρ ladder runs
+`ρ*−0.05 : 0.01 : ρ*+0.06`, so ρ\* is itself a grid point and the test is the sharp one — **does the arm
+lock at exactly ρ\*, and fail at ρ\*−0.01?** It does, on all four. That is a stronger test than a wide
+bracket, not a weaker one, but it is not a blind bracket and must not be quoted as one.
+
+## ⚠ §VI.1 ONE CLAIM MARKED **DERIVED, NOT FLOWN**
+
+> *"A search that misses the moment cannot recover by continuing"* (§V.2/§V.3) **rests on the rising
+> right arm of the ρ_req curve, which is derived, not flown.** What IS flown: the ρ\*−0.01 arm searches
+> for the entire engagement — well past the optimum — and never locks; and the ρ\* arm locks inside the
+> derived window (3.961 s against a predicted 4.03). ⚠ **No flown arm has acquired ON the right arm of
+> the U**, and by construction none can, since a higher rate always locks earlier. **The U's left arm
+> and its minimum are confirmed; its right arm is a property of the derived curve.**
+
+## ⭐⭐ §VI.2 THE LAW AS IT NOW STANDS — the final form
+
+> **1. THE COST OF ACQUIRING IS THE OVERLAP DEFICIT `|err| − fov`, NOT THE POINTING ERROR.**
+>    Exact: `err −14 / fov 12` ≡ `err −12 / fov 10` to every digit printed.
+> **2. `travel = deficit/(1 − ω/ρ)`, `t_lock = travel/ρ + τ`, FOR `ρ ≤ rate_max`.** ω is the LOS rate
+>    (anchored against telemetry, 15 cells); `+τ` is exact because a `ρ·τ` lag traversed at ρ costs τ
+>    seconds whatever ρ is. Above `rate_max` the τ term decays and finding 5 takes over.
+> **3. GUESS THE DIRECTION RIGHT AND COVERAGE IS NEVER REACHED** — not free, never *used*: lock at
+>    2.07° into a pattern authored 3–30° wide, same digit across a 10× range.
+> **4. GUESS WRONG AND COVERAGE COSTS `2S` OF TRAVEL AT AN ACCELERATING PRICE** — 5 % over the
+>    geometric bound at S = 5, 39 % at S = 20, never-locks by S = 25.
+> **5. THE HEAD, NOT THE COMMAND, IS WHAT SEARCHES.** An open-loop generator commanded above
+>    `rate_max` converts excess rate into LOST COVERAGE and then outright failure. ⚠ A caution, not an
+>    architecture — `ρ ← min(ρ, rate_max)` gives the same verdict in all 16 cells.
+> **6. ⭐⭐⭐ THE FLOOR IS A DEADLINE SET BY THE AXIS THE SEARCH DOES NOT SWEEP, AND IT IS DERIVABLE:**
+>    **`ρ* = min over t of [Δaz₀(t) − √(fov² − Δel(t)²)] / (t − τ)`** — computed from the arm that never
+>    acquires, confirmed 4/4 to 0.01 °/s across a 5× range of deficit and two windows, and it predicts
+>    the acquisition time to 0.07 s as well. **A search has a best moment.**
+
+⚠⚠ **AND THE SLICE IS STILL BLOCKED (§0.1, §II.7).** Finding 1 makes the free-window objection
+sharper, not weaker. ⭐ **What finding 6 adds to the blocked deferral is a second reason the window
+matters that has nothing to do with sensitivity: the window's SHAPE.** A per-axis gate of the same
+half-width locks the arm the radial gate rejects — so `SEEKER RANGE / SNR ACQUISITION LIMITS` is no
+longer the *only* precondition that would make a search-pattern slice motivatable; the
+**RECTANGULAR / PER-AXIS FOV** deferral would do it too, and it is the cheaper of the two.
