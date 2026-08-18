@@ -44,6 +44,28 @@
         end
     end
 
+    @testset "THE FRAME PIN — arg 2 is the target's ABSOLUTE velocity, never a relative one" begin
+        # ⚠⚠ Units / frames / signs are the bug trifecta, and this one is SET UP by the consumer:
+        # the guidance chain in `missile.jl` has a hoisted `rel_vel = tgt.vel - e.vel` three lines
+        # above where the midcourse arm goes, and passing THAT here returns a plausible-looking
+        # positive number instead of an error. So pin the DIFFERENCE, not just the right answer.
+        p_m = Vec3(0.0, 0.0, 3000.0)
+        p_t = Vec3(6000.0, 2000.0, 3000.0)
+        v_t = Vec3(0.0, -200.0, 0.0)
+        v_m = Vec3(700.0, 0.0, 0.0)
+        V_m = n3(v_m)
+        t_abs = intercept_time(p_t - p_m, v_t, V_m)                 # CORRECT: absolute target velocity
+        t_rel = intercept_time(p_t - p_m, v_t - v_m, V_m)           # the mix-up
+        @test t_abs > 0.0 && isfinite(t_abs)
+        @test t_rel > 0.0 && isfinite(t_rel)                        # …and it does NOT announce itself
+        @test !isapprox(t_abs, t_rel; atol = 0.1)                   # the two differ, materially
+        # the correct one satisfies the defining equation; the mix-up does not
+        @test n3(p_t + v_t * t_abs - p_m) ≈ V_m * t_abs atol = 1e-8
+        @test !isapprox(n3(p_t + v_t * t_rel - p_m), V_m * t_rel; atol = 1.0)
+        # and `predicted_intercept_point` is the wrapper that gets this right, so callers need not
+        @test predicted_intercept_point(p_m, p_t, v_t, V_m)[2] ≈ t_abs atol = 1e-12
+    end
+
     @testset "the SMALLEST positive root is the one returned" begin
         # A head-on closing geometry has TWO positive roots (the missile could meet the target on
         # the way in or, flying past and turning, on the way back). The midcourse wants the FIRST.
@@ -111,6 +133,13 @@
         @test n3(v_m) ≈ V_m atol = 1e-9
         a = midcourse_accel(p_m, v_m, pip; k = 1.0, a_max = 3000.0)
         @test n3(a) ≈ 0.0 atol = 1e-9                         # EXPLICIT atol, never ≈ 0
+
+        # ⚠⚠ THE LINE ABOVE IS WEAKER THAN THE IDENTITY IT IS NAMED FOR, AND THIS IS THE REST OF IT.
+        # `pursuit_accel` returns zero whenever `v̂ ∥ û` — REGARDLESS of whether the PIP is the true
+        # intercept point — so a zero command alone proves only that the missile points at the PIP,
+        # not that flying there INTERCEPTS. Propagate BOTH bodies for `t_go` and they must coincide:
+        # that is the collision-course content, and it is §1.5's tripwire in the form it asks for.
+        @test n3((p_m + v_m * t_go) - (p_t + v_t * t_go)) ≈ 0.0 atol = 1e-8
 
         # …and it is a real null rather than a dead function: nudge the heading off the PIP and the
         # command appears, and it points BACK toward the PIP (the ⟂-to-heading component of û_pip).

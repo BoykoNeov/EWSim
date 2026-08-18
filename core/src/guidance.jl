@@ -454,20 +454,26 @@ _terminal_cutoff(a::Vec3, r::Real, r_stop::Real) = r < r_stop ? zero(Vec3) : a
 # second implementation of one, and `test_midcourse.jl` carries that as a tooth.
 
 """
-    intercept_time(p_rel::Vec3, v_rel::Vec3, V_m::Real) -> Float64
+    intercept_time(p_rel::Vec3, v_t::Vec3, V_m::Real) -> Float64
 
 **How long until a missile of speed `V_m` can reach a constant-velocity target** (slice 47 §1.1
-item 1) — the closed form the whole midcourse rests on. With `p_rel` the target's position
-RELATIVE to the missile and `v_rel` the target's velocity relative to the missile's *frame* (the
-midcourse dead-reckons the target and treats the missile as free to point anywhere at speed `V_m`,
-so `v_rel` is the TARGET's velocity, not a difference of the two), the missile arrives when the
-distance it can fly equals the distance to where the target then is:
+item 1) — the closed form the whole midcourse rests on. The missile arrives when the distance it can
+fly equals the distance to where the target will then be:
 
-    ‖p_rel + v_rel·t‖ = V_m·t
-    ⇒ (‖v_rel‖² − V_m²)·t² + 2(p_rel·v_rel)·t + ‖p_rel‖² = 0
+    ‖p_rel + v_t·t‖ = V_m·t
+    ⇒ (‖v_t‖² − V_m²)·t² + 2(p_rel·v_t)·t + ‖p_rel‖² = 0
 
-and the answer is the **smallest positive root**. UNITS: `p_rel` metres, `v_rel` and `V_m` m/s,
-result SECONDS. The frame is INERTIAL — this is pure kinematics with no attitude in it at all.
+and the answer is the **smallest positive root**. UNITS: `p_rel` metres, `v_t` and `V_m` m/s, result
+SECONDS. The frame is INERTIAL — this is pure kinematics with no attitude in it at all.
+
+⚠⚠ **THE TWO ARGUMENTS ARE NOT IN THE SAME FRAME OF REFERENCE, AND THE NAMES SAY SO ON PURPOSE.**
+`p_rel` is the target's position **relative to the missile** (`p_t − p_m`); `v_t` is the target's
+**ABSOLUTE** velocity — *not* `v_t − v_m`. The missile's own velocity does not appear at all, because
+the midcourse treats it as free to point anywhere at speed `V_m`: only its SPEED is a constraint, its
+direction is the thing being solved for. ⚠ The consumer at `missile.jl`'s guidance chain has a hoisted
+`rel_vel = tgt.vel - e.vel` three lines above it, and passing THAT here is a units/frames/signs bug
+that still returns a plausible-looking positive number — `test_midcourse.jl` pins the difference so a
+future mix-up fails a test instead of flying.
 
 ⚠⚠ **FOUR DEGENERATE BRANCHES, NOT THREE, AND EVERY ONE RETURNS `0.0`** (conventions 5/6 — *a live
 knob can never crash a tick*, and *no Inf/NaN to JSON*). A `NaN` here reaches the wire through the
@@ -475,7 +481,7 @@ PIP, the guidance command and the telemetry, so each is handled explicitly:
 
 | branch | physically | returns |
 |---|---|---|
-| `‖v_rel‖² ≈ V_m²` (**co-speed**) — the quadratic degenerates to LINEAR | target as fast as the missile | `−c/b` if positive, else `0.0` |
+| `‖v_t‖² ≈ V_m²` (**co-speed**) — the quadratic degenerates to LINEAR | target as fast as the missile | `−c/b` if positive, else `0.0` |
 | co-speed **and** `p_rel·v_rel ≈ 0` — the linear term vanishes too | a pure crossing at equal speed | `0.0` |
 | negative discriminant | the target OUTRUNS the missile: no intercept exists | `0.0` |
 | both roots non-positive | the intercept is in the PAST | `0.0` |
@@ -491,10 +497,10 @@ absolute epsilon would be a different tolerance at every scale), pinned bit-for-
 gate-1 probe's arithmetic in `test_midcourse.jl` so the `midcourse_k` window P9 measured is
 calibrated against the function that actually ships.
 """
-function intercept_time(p_rel::Vec3, v_rel::Vec3, V_m::Real)
+function intercept_time(p_rel::Vec3, v_t::Vec3, V_m::Real)
     Vm = Float64(V_m)
-    a  = _norm3(v_rel)^2 - Vm^2                      # leading coeff: closing-speed deficit
-    b  = 2.0 * _dot(p_rel, v_rel)                    # 2·(range-rate-ish) term
+    a  = _norm3(v_t)^2 - Vm^2                        # leading coeff: closing-speed deficit
+    b  = 2.0 * _dot(p_rel, v_t)                      # 2·(range-rate-ish) term
     c  = _norm3(p_rel)^2                             # squared range
     if abs(a) < 1e-9 * max(1.0, Vm^2)                # CO-SPEED: the quadratic degenerates to linear
         abs(b) < 1e-12 && return 0.0                 #   …and the linear term vanishes too: no root
@@ -574,8 +580,15 @@ lock; `k` too large saturates it BEFORE lock, which is a different slice (plan �
       4000 m         0.5 only
 
 ⇒ **`k = 1.0` is the value that is clean across the whole plausible domain** (600–2500 m of
-cross-range correction: closes to 2.3–2.9 m, peak blind-phase demand 3.2–9.2 % of `a_max`, ZERO
-saturation frames before lock). It is AUTHORED and is NEVER a knob.
+cross-range correction: peak blind-phase demand 3.2–9.2 % of `a_max`, ZERO saturation frames before
+lock, hold 100 %, and the intercept closes). It is AUTHORED and is NEVER a knob.
+
+⚠ **CLOSURE IS A VERDICT HERE, NOT A METRE FIGURE.** The `k`-sweep probe stops its loop at `r < 3 m`
+and records the range on that same tick, so at 0.7 m of closure per tick EVERY arm that gets inside
+3 m reports 2.3–2.9 m — an artefact of the break, not a measurement (the class of error that cost
+slice 44 its §VII.1 figure). Re-flown THROUGH the closest approach (`p9b_cpa.jl`) the same arms read
+**0.13–0.28 m**, against **0.9874 m** for slice 46's own wire — and even that is frame-quantised, so
+the honest claim is the ORDER and the ORDERING, never the digits.
 """
 function midcourse_accel(p_m::Vec3, v_m::Vec3, pip::Vec3; k::Real = 1.0, a_max::Real = 3000.0)
     return clamp_accel(pursuit_accel(p_m, v_m, pip; k_guid = k), a_max)

@@ -912,16 +912,43 @@ failure modes**, which is more than the plan expected:
 frames**. `aeroB` / `aeroP` are aero-saturated frames **before** / **after** lock.
 
 ```
-Δy₀ = 600 m                                  Δy₀ = 1000 m
-   k    cpa m  blind%  auth%  aeroB  aeroP      k    cpa m  blind%  auth%  aeroB  aeroP
-0.25   2.4326    1.11  21.07      0    888   0.25  12.6659    1.54 100.00      0   6656
-0.50   2.3574    1.59   8.14      0     36   0.50   2.4418    2.29   9.75      0     50
-1.00   2.9447    3.18   4.18      0      1   1.00   2.3981    4.57   4.27      0      4
-2.00   2.7019    6.35   2.89      0      0   2.00   2.7267    9.14   3.21      0      0
-3.00   2.8507    9.52   2.83      0      0   3.00   2.3932   13.70   2.92    269      0
-5.00   2.7559   15.86   2.75    273      0   5.00   2.4850   22.84   2.80    484      0
-8.00   2.9217   25.38   2.72    395      0   8.00   2.6034   49.73   2.81    827      0
+Δy₀ = 600 m                                  Δy₀ = 1000 m                    Δy₀ = 1500 m
+   k    cpa m  blind%  auth%  aeroB  aeroP      k    cpa m  blind%  auth%  aeroB  aeroP      k  blind%  auth%  aeroB  aeroP
+0.25   2.4326    1.11  21.07      0    888   0.25  12.6659    1.54 100.00      0   6656   0.25    2.06 100.00      0   6326
+0.50   2.3574    1.59   8.14      0     36   0.50   2.4418    2.29   9.75      0     50   0.50    3.11  12.53      0     74
+1.00   2.9447    3.18   4.18      0      1   1.00   2.3981    4.57   4.27      0      4   1.00    6.22   4.74      0      8
+2.00   2.7019    6.35   2.89      0      0   2.00   2.7267    9.14   3.21      0      0   2.00   12.43   3.52    246      2
+3.00   2.8507    9.52   2.83      0      0   3.00   2.3932   13.70   2.92    269      0   3.00   18.65   2.99    526      0
+5.00   2.7559   15.86   2.75    273      0   5.00   2.4850   22.84   2.80    484      0   5.00   31.08   2.79    721      0
+8.00   2.9217   25.38   2.72    395      0   8.00   2.6549   36.54   2.76    593      0   8.00   49.73   2.81    827      0
 ```
+
+⚠⚠ **THE `cpa` COLUMN ABOVE IS AN ARTEFACT OF THE PROBE'S OWN STOPPING RULE AND IS NOT A
+MEASUREMENT** (advisor, caught after the first commit). `p9_null.jl` breaks its loop at `r < 3 m` and
+records the range **on that same tick**; at 700 m/s and `dt = 1e-3` the missile closes 0.7 m per tick,
+so *every* arm that gets inside 3 m necessarily reports something in (2.3, 3.0]. That is "got inside
+3 m", not closure quality — the exact class of error that cost slice 44 its §VII.1 figure. Re-flown
+**through** the closest approach (`p9b_cpa.jl`, log `p9blog.txt`), stopping on the turn-round instead
+of on a radius:
+
+```
+   Δy₀ m       k          cpa m          Δy₀ m       k          cpa m
+    1000    0.25        12.6659           2500    0.25       320.3806
+    1000    0.50         0.1381           2500    0.50         0.2335
+    1000    1.00         0.1349           2500    1.00         0.2781
+    1000    2.00         0.2721           2500    2.00         0.0234
+    1000    3.00         0.1468           2500    3.00         0.2013
+  ── CONTROL: slice 46's own wire, Δy₀ = 0, no midcourse ──  0.9874  (its verifier's exact figure)
+```
+
+⭐ **The control reproduces slice 46's published 0.9874 m to the digit, which is what licenses the
+rest of the table**, and the real closures are **0.13–0.28 m** — an order of magnitude better than the
+censored column, and better than the wire's own. ⚠ Even these are FRAME-QUANTISED
+([[ewsim-missile-verifier-sampling]]: a HIT samples coarsely, ~0.7 m per tick), so the quotable claim
+is the ORDER and the ORDERING ACROSS `k`, never the digits — and by §0.5 rule 1 the miss is not the
+gauge in the first place. ⚠⚠ **CONSEQUENCE FOR GATE 2: §2.5 check 2's `cpa < 3 m` is TAUTOLOGICAL on
+any arm that reaches 3 m if it inherits this stopping rule.** Write it as an assertion on a CPA
+integrated through the turn-round, or it is a check with no teeth.
 
 ⭐⭐ **THE ANSWER IS §1.4's MIDDLE OUTCOME — it closes, but the admissible `k` is a WINDOW BOUNDED AT
 BOTH ENDS, and the two ends are different physics:**
@@ -945,9 +972,9 @@ BOTH ENDS, and the two ends are different physics:**
 ```
 
 ⇒ ⭐ **`midcourse_k = 1.0` IS THE AUTHORED VALUE AND IT NOW HAS A MEASURED JUSTIFICATION** — the only
-gain clean across the whole plausible domain (600–2500 m of cross-range correction: cpa 2.3–2.9 m,
-peak blind demand 3.2–9.2 % of `a_max`, **zero** saturation frames before lock, hold 100 %). This is
-exactly what §1.4 said to learn here rather than at gate 2.
+gain clean across the whole plausible domain (600–2500 m of cross-range correction: peak blind demand
+3.2–9.2 % of `a_max`, **zero** saturation frames before lock, hold 100 %, and the intercept closes).
+This is exactly what §1.4 said to learn here rather than at gate 2.
 
 ⭐⭐ **AND IT DISCHARGES THE ADVISOR'S WARNING THAT P7's BRACKET WOULD NOT TRANSFER — IT DOES NOT.**
 P7 called 473 m of blind-phase cross-range *absurd* (a 163 m miss). Here the null arm flies **893 m**
@@ -972,8 +999,21 @@ re-run).** Does the midcourse's own authority swamp the error axis on the new ge
 ```
 
 ⭐ **THE ERROR AXIS IS ALIVE AND IT MOVES THE §3.2 HEADLINE COLUMN BY 5×** — a ±30 m/s belief error
-takes the post-lock authority from 4.27 % to ~21 % while the miss stays at 2.4–2.7 m, which is §0.5
-rule 1 (*miss is not the gauge*) confirmed on slice 47's own wire before gate 2 is written.
+takes the post-lock authority from 4.27 % to ~21 % while the miss stays flat (0.13 → 0.29 / 0.39 m on
+the uncensored re-fly), which is §0.5 rule 1 (*miss is not the gauge*) confirmed on slice 47's own
+wire before gate 2 is written.
+
+⚠⚠ **AND THIS BLOCK PRICES THE *TRUTH*-CUED HEAD, WHILE GATE 2 SHIPS THE *BELIEF*-CUED ONE — SO IT
+IS NOT A GATE-2 NUMBER** (advisor; the same caveat P1 carried as "the positions are off the wire; the
+cue mechanism is ASSUMED"). Every P9 arm ran the shipped unconditional truth-derived cue at
+`missile.jl:2437`. With `Δv = 0` that is harmless (belief ≡ truth). With `Δv ≠ 0` it is not: once
+§2.2's cue arm exists, the head points at the **believed** LOS while the target is somewhere else, so
+the handover error lands on the **10° window** instead of being absorbed by a head that was watching
+truth the whole time. At ±30 m/s the arm may not acquire at all — the same failure mode as the ABSENT
+arm — which would turn the slider's upper domain into "never locks" and leave the authority column
+with nothing to move over. ⇒ **the FIRST thing gate 2 measures once the cue arm exists is P9.3's ±Δv
+arms re-run with the handover error checked against `fov`, BEFORE `slice47_midcourse.yaml` is
+authored.** The 4.27 % → 21 % spread is a promise, not a result.
 ⚠ **AND THE RESPONSE IS SYMMETRIC IN THE SIGN OF `Δv` (21.62 vs 20.87; 22.32 vs 22.11), SO THE
 SLIDER IS V-SHAPED, NOT MONOTONE** — slice 36's basket precedent. The gate-2 P4 re-run must read
 monotonicity in **|Δv|**, or the axis must be authored as a magnitude; a signed slider judged for
@@ -990,12 +1030,28 @@ monotonicity would fire this project's standing disqualifier on an artefact of t
   branches of `intercept_time` each returning a chosen `0.0` (⇒ `pip = p_t` ⇒ pursuit of the believed
   present position, never a zero command).
 - **§1.5's tests are in `core/test/test_midcourse.jl`**, wired into `runtests.jl`. Suite green at
-  **9184** tests (7808 before). Teeth: a known-root construction; the `‖pip − p_m‖ = V_m·t_go`
-  identity; all four degenerate branches; the zero-error null *and* its off-null control; the sign in
-  both directions on the cross-range axis; `midcourse_accel == clamp_accel ∘ pursuit_accel` bit for
-  bit; the P8.a lead-angle identity; and a bit-equality pin against `p9_null.jl`'s own arithmetic, so
-  the measured `k` window is calibrated against the function that ships.
-- ⚠ **WHAT GATE 2 INHERITS:** §3.3's default cell is now **Δy₀ = +1000 m of cross-range** (target
-  authored at `y = 3000` instead of 2000) with `midcourse_k = 1.0`, and the P4 re-run must be read in
-  **|Δv|** (§5.2, P9.3). Nothing else in §§2–3 changes.
+  **9191** tests (7808 before). Teeth: a known-root construction; the `‖pip − p_m‖ = V_m·t_go`
+  identity; all four degenerate branches; the zero-error null *and* its off-null control *and* the
+  two-body propagation that makes it a COLLISION-course identity rather than merely an aligned one;
+  the sign in both directions on the cross-range axis; the **frame pin** on argument 2 (see below);
+  `midcourse_accel == clamp_accel ∘ pursuit_accel` bit for bit; the P8.a lead-angle identity; and a
+  bit-equality pin against `p9_null.jl`'s own arithmetic, so the measured `k` window is calibrated
+  against the function that ships.
+- ⚠⚠ **THE TRIFECTA SEAM GATE 2 WILL WALK INTO.** `intercept_time`'s second argument is the target's
+  **ABSOLUTE** velocity, not a relative one — the missile's velocity does not appear in the solution
+  at all, only its SPEED. The guidance chain has a hoisted `rel_vel = tgt.vel - e.vel` three lines
+  above where the arm goes, and passing that returns a plausible positive number rather than an
+  error. The parameter is named `v_t` for that reason and a test pins the difference.
+
+**⚠ WHAT GATE 2 INHERITS — four items, and two of them are corrections to this log:**
+
+1. **§3.3's default cell is `Δy₀ = +1000 m` of cross-range** (target authored at `y = 3000` instead
+   of 2000) with **`midcourse_k = 1.0`**.
+2. ⚠⚠ **§2.5 check 2's `cpa < 3 m` IS TAUTOLOGICAL** if it inherits the probe's `r < 3` stopping
+   rule — assert on a CPA integrated **through the turn-round** (§5.2's P9b block), or the check has
+   no teeth.
+3. ⚠⚠ **P9.3's 4.27 % → 21 % authority spread IS NOT A GATE-2 NUMBER** — it was measured with the
+   shipped TRUTH-cued head, and §2.2 ships a BELIEF-cued one. Re-run those arms with the handover
+   error checked against `fov` **before** `slice47_midcourse.yaml` is authored.
+4. **The P4 re-run must be read in `|Δv|`, not signed `Δv`** — the response is V-shaped (§5.2, P9.3).
 

@@ -55,7 +55,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Where the project is (2026-08-18)
 
-**Slices 1–40 + 46 COMPLETE & green — 9184 tests** (7808 before slice 47's gate 1). **Slice 47 (THE MIDCOURSE
+**Slices 1–40 + 46 COMPLETE & green — 9191 tests** (7808 before slice 47's gate 1). **Slice 47 (THE MIDCOURSE
 PHASE) is IN PROGRESS: gates 0 and 1 CLOSED** — `intercept_time` / `predicted_intercept_point` /
 `midcourse_accel` in `guidance.jl` + `test_midcourse.jl`; `midcourse_k = 1.0` MEASURED; gate 2 next
 (`docs/plans/slice47.md` §5). 39 and 41–45 are GATE-0 RECORDS (no code). ⚠⚠ **FIVE
