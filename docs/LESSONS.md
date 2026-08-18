@@ -153,6 +153,23 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
   the command-minus-actuator lag.** The lag is the tell — it should read `ρ·τ` (0.049–0.245° here, and
   it did); when it instead reads *the authored half-width to three digits*, the actuator is on a stop
   and is not flying the pattern at all.
+- **⭐⭐⭐ A HEDGE IS NOT A MEASUREMENT — AND DO NOT DRAW A MECHANISM FROM THE ARM THAT FAILED.** Slice 43
+  correctly convicted its own earlier section of fitting a constant along one axis, and then, one section
+  later, explained a sweep-rate floor with a line-of-sight table **measured on an arm that never locks,
+  with no search running at all** — the endgame of a failed intercept, used to explain the failure. It
+  carried the disclaimer *"quoted as MEASURED, not derived"* and that changed nothing: **the sentence
+  still named a cause.** Two candidate mechanisms were then measured and BOTH refuted, and the real one
+  was elsewhere entirely. ⇒ **If a claim names a mechanism, measure that mechanism on an arm that is not
+  the failure itself — or name no mechanism at all.** ⚠ The tell was in the author's own arithmetic: a
+  hand-check said the crossing should have happened seconds before the proposed cause could bite, and it
+  was written off to a channel that was never printed. **When your own back-of-envelope disagrees with
+  your explanation, print the channel you are blaming.**
+- **⭐⭐ A ONE-AXIS CONTROL ACTION INSIDE A RADIAL GATE LOSES ITS MARGIN TO THE AXIS IT DOES NOT MOVE.**
+  The seeker's window is a `hypot`, and a search that sweeps azimuth only closed azimuth to 9.75° inside
+  a 10° window and **still never acquired**, held out by 2.49° of drift on elevation (25 % of the window
+  radius). **Whenever an actuator moves in fewer dimensions than the gate measures, carry the orthogonal
+  component as a column** — and note that this is the cheapest kind of arm to hand a per-axis-vs-radial
+  design question, which had gone unanswered for nine slices for want of exactly one flying example.
 - **⭐⭐⭐ COUNT THE AXES A CLAIM VARIES OVER, NOT THE CELLS — AND NAME THE AXIS THE CLAIM'S OWN MECHANISM
   SAYS MUST MATTER.** Slice 43 quoted a closed form as *"three digits, eight cells, two windows"*, which
   reads as three axes and was ONE: all eight cells sat at a single sweep rate. **The mechanism named for

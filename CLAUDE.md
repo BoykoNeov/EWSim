@@ -120,10 +120,12 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
   ⭐⭐ **the cost of acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error** (err −14/fov 12
   ≡ err −12/fov 10 to every digit), so widening glass and travelling further are THE SAME ACT. Law:
   `travel = deficit/(1−ω/ρ)`, `t_lock = travel/ρ + τ` **for ρ ≤ rate_max** (ω = LOS rate, anchored to telemetry;
-  ⚠ a ρ-only form was an advisor catch — count AXES, not cells). ⚠ **Sweep floor 1.0–1.5 °/s, NOT ω(0) = 0.25:
-  the LOS rate rises 318× in flight, so a slow sweep NEVER CONVERGES.** Guess right and coverage is
-  **never REACHED** (lock 2.07° into a 3–30°
-  pattern — 42's "free" was a flat row misread); guess wrong and it costs `2S` at an **accelerating** price
+  ⚠ a ρ-only form was an advisor catch — count AXES, not cells). ⭐⭐ **Sweep floor 1.0–1.5 °/s = THE AXIS
+  THE SEARCH DOES NOT SWEEP** (an LOS-rate race and a missing reversal were both measured and REFUTED): at
+  ρ = 1 the swept axis closed to 9.75° INSIDE a 10° window and still failed, held out by 2.49° of UNSWEPT-axis
+  drift on the RADIAL gate — 25 % of the window radius; ⭐ **first flying arm where a PER-AXIS FOV would flip
+  the verdict** (slice 34's deferral). Guess right and coverage is **never REACHED** (lock 2.07° into a
+  3–30° pattern — 42's "free" was a flat row misread); guess wrong it costs `2S` at an **accelerating** price
   (5→39 % over `2/ρ`, never-locks by S = 25). ⚠ 42 §V.4's ρ_min table is VOID (servo bypassed; `none ≤ 16`
   was its own grid edge — 18 and 22 °/s; +side rows are stop contamination). ⚠ **An open-loop sweep WINDS UP
   against `rate_max` — what saturates is the AMPLITUDE** (20° commanded at 64 °/s → 4.4° swept, arm FAILS);

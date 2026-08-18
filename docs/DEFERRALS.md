@@ -115,9 +115,14 @@ SAME miss (0.186 m) to every digit; the error and the window are not separately 
 against measured `look_body_az_deg` telemetry to 5.6–13 % on 15 cells; the `+τ` is EXACT (0.0000 s on 12 cells)
 because a `ρ·τ` lag traversed at ρ costs τ seconds whatever ρ is, and it DECAYS above `rate_max`. ⚠ An earlier
 form of this (`1.036·deficit/ρ`) was measured at ρ = 8 ONLY and is superseded — the multiplier runs 1.031–1.357
-over the rate axis. **(2b) A FLOOR ON SWEEP RATE, 1.0–1.5 °/s, and it is NOT ω(0) = 0.25:** the LOS rate rises
-**318× across the flight** (0.271 → 86.05 °/s at t = 1 → 9 s), so **a sweep that is merely slow never CONVERGES**
-rather than converging late (measured, not derived — the gate is the 2-D off-axis angle). **(3) GUESS RIGHT AND COVERAGE IS NOT FREE — IT IS NEVER REACHED:** the head locks
+over the rate axis. **(2b) ⭐⭐⭐ A FLOOR ON SWEEP RATE (1.0–1.5 °/s), AND IT IS THE AXIS THE SEARCH DOES NOT SWEEP.** Two mechanisms
+were proposed and BOTH measured and refuted (an LOS-rate race; a missing reversal — at ρ = 1 the arm fails at
+EVERY coverage 2–20°, identical digits). **At ρ = 1 the head closed the SWEPT axis to 9.7519° — INSIDE a 10°
+window — and still never acquired, held out by 2.4934° of drift on the UNSWEPT axis making the RADIAL off-axis
+angle 10.0656°.** The deficit is a RADIAL quantity ⇒ **a slow one-axis search inflates its own deficit through
+the ORTHOGONAL channel while it works** (25 % of the window radius spent on an axis it never moves). ⚠ Does not
+move with `dt` (10.0647 / 10.0656 / 10.0661 at 2e−3 / 1e−3 / 5e−4). ⚠ The LOS rate DOES rise 318× across the
+flight (0.271 → 86.05 °/s) — that is why a LATE acquisition is worthless, not why this arm fails. **(3) GUESS RIGHT AND COVERAGE IS NOT FREE — IT IS NEVER REACHED:** the head locks
 **2.07° into a pattern authored 3–30° wide**, which is why ρ_min looked flat. **(4) GUESS WRONG AND COVERAGE COSTS
 `2S` OF TRAVEL AT AN ACCELERATING PRICE** — measured 0.262 → 0.347 s per degree against a geometric bound of
 `2/ρ` = 0.250 (5 % → 39 % over), diverging to never-locks by S = 25 at ρ = 8: **the target moves while you look
@@ -223,7 +228,12 @@ SECOND-ORDER SERVO (ω_a/ζ_a)**, IS SLICE 40 AND IS ALSO SPENT (see above). ⚠
 the precedent, and slice 40 turns that round into a NEW deferral: **A SECOND-ORDER FIN ACTUATOR** — slice 15's fin
 is first-order-with-a-rate-limit for exactly the reason slices 34–39's head was, and the bound slice 40 argues (a
 first-order lag cannot exceed gain 1 or lag more than 90°, so it can only ever damp) is not specific to a seeker
-head.** Also: **a RECTANGULAR / PER-AXIS FOV — and slice 34 SHARPENS it (it ships one circular
+head.** Also: **a RECTANGULAR / PER-AXIS FOV — ⭐⭐ **SLICE 43's GATE 0 SUPPLIES THE FLYING ARM THIS DEFERRAL WAS MISSING:** on the
+ρ = 1 search arm a per-axis window of the same 10° half-width would LOCK (Δaz = 9.75 < 10 AND Δel = 2.49 < 10)
+while the shipped RADIAL `hypot` gate holds it out at 10.0656° — **the first arm in this family where the
+window's SHAPE, not its size, decides acquisition** (⚠ the verdict flip rests on 0.066° and is quoted as narrow,
+though it is step-independent and 100× the per-tick LOS motion; the non-marginal number is the 25 % of window
+radius spent on the unswept axis). — and slice 34 SHARPENS it (it ships one circular
 window AND one circular stop, and gate 1 wrote down that the circular shape rests on a SPECIES argument because no
 flying arm had ever bound the stop; gate 2's §2.5 bound it for the first time); SEEKER RANGE / SNR ACQUISITION
 LIMITS (32/33/34 model only the ANGLE half of "can the seeker see it");**

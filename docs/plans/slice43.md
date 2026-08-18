@@ -625,6 +625,10 @@ as bounded there.**
 
 ## ⚠⚠ §III.4 P7b/P8 — **THERE IS A HARD FLOOR ON SWEEP RATE, AND IT IS NOT THE `ρ → ω` SINGULARITY**
 
+> ⚠⚠⚠ **THE FLOOR STANDS; THE MECHANISM BELOW IS REFUTED BY §IV — annotated, not deleted.** The LOS
+> blow-up table is drawn from an arm that never locks with NO search running, i.e. from the failure it
+> is used to explain. The real mechanism is the UNSWEPT AXIS (§IV.2).
+
 Deficit 2, right guess, ρ walked down:
 
 | ρ °/s | 2.0 | 1.5 | 1.0 | 0.75 | 0.5 | 0.4 | 0.3 |
@@ -659,9 +663,8 @@ here**, and no sentence in this file may imply otherwise.
 >    explained residual. The `+τ` is exact (0.0000 s on 12 cells) because a `ρ·τ` lag traversed at ρ
 >    costs τ seconds whatever ρ is. **Above `rate_max` the τ term decays (0.023 → 0.007 s) and finding
 >    5 takes over.**
-> **3. There is a FLOOR on the sweep rate — 1.0–1.5 °/s here — and it is NOT `ω(0)` (0.25 °/s).**
->    ⭐ **The line-of-sight rate grows 318× across the flight, so a sweep that is too slow never
->    converges rather than converging late.**
+> **3.** ⚠ **SUPERSEDED BY §IV.4** — the floor (1.0–1.5 °/s) stands, but it is the UNSWEPT AXIS eating
+>    the window, not the LOS rate and not a missing reversal (both measured, both refuted).
 > **4–6.** §II.6 items 3, 4, 5 (never-reached coverage; the accelerating wrong-guess price; open-loop
 >    windup) stand unchanged — none of them rests on the multiplier being constant.
 
@@ -670,3 +673,101 @@ eight cells, two windows"* counted **cells**, not **AXES**. Eight cells that all
 variable measure a curve at a point. ⭐ **Count the axes a claim varies over, and name the one the
 claim's own mechanism says must matter** — here the mechanism named drift, drift is a function of
 time, time is a function of rate, and rate was never swept.
+
+---
+
+# ⭐⭐⭐ §IV — PROBES **P9/P10**: **§III.4's MECHANISM IS REFUTED, AND WHAT REPLACES IT IS THE BEST THING IN THE GATE**
+
+**A second advisor catch, and it is the same circularity §III just criticised in §II.1.** §III.4
+explained the sweep-rate floor with an LOS blow-up **measured on an arm that never locks and misses
+305.112 m with no search running at all** — i.e. the endgame of a *failed* intercept, used to explain
+the failure. ⚠ **And my own arithmetic had already flagged it:** the head-versus-LOS crossing works out
+near t ≈ 3.7 s at ρ = 1, long before any blow-up, and I wrote the discrepancy off to "the elevation
+channel" **without measuring it**. §III.4's own hedge (*"quoted as measured, not derived"*) was not
+enough, because the sentence still named a cause.
+
+## §IV.1 P9a — THE DISCRIMINATOR: **IT IS NOT THE MISSING REVERSAL EITHER**
+
+The competing reading was that at ρ = 1 with S = 20 the head simply never reverses inside the flight,
+so the pattern gets no second pass. Walk the coverage down, ρ fixed:
+
+| ρ °/s \ S ° | 2 | 3 | 5 | 8 | 12 | 20 |
+|---|---|---|---|---|---|---|
+| **1.0** | never | never | **never** | **never** | never | never |
+| **1.5** | never | **1.753** | 1.753 | 1.753 | 1.753 | 1.753 |
+| **2.0** | never | **1.227** | 1.227 | 1.227 | 1.227 | 1.227 |
+
+> **Coverage plays no part in the floor.** At ρ = 1 the arm fails at *every* coverage, and at ρ ≥ 1.5
+> it succeeds at every coverage that exceeds the travel — the same digit throughout, which is
+> finding 3 (§II.2) again. **Both candidate mechanisms are dead. The floor is something else.**
+
+## ⭐⭐⭐ §IV.2 P9b/P10 — **A ONE-DIMENSIONAL SEARCH LOSES ITS MARGIN TO THE AXIS IT DOES NOT SWEEP**
+
+Closest angular approach on each arm, with the off-axis angle split into the swept channel and the
+unswept one. The window is **10.0°**, and the shipped gate is `off_axis_angle ≤ fov` — **RADIAL**:
+
+| ρ °/s | S ° | t s | **off-axis °** | **Δaz (swept)** | **Δel (UNSWEPT)** | locks? |
+|---|---|---|---|---|---|---|
+| **1.0** | 20 | 3.994 | **10.0656** | **9.7519** | **2.4934** | **no** |
+| **1.0** | 8 | 3.994 | **10.0656** | **9.7519** | **2.4934** | **no** |
+| **1.0** | 5 | 3.994 | **10.0656** | **9.7519** | **2.4934** | **no** |
+| 1.5 | 20 | 5.885 | 0.0002 | 0.0001 | −0.0000 | YES |
+| 2.0 | 20 | 4.417 | 0.0001 | 0.0001 | −0.0000 | YES |
+| 4.0 | 20 | 6.920 | 0.0001 | 0.0000 | −0.0001 | YES |
+| 8.0 | 20 | 6.920 | 0.0001 | −0.0000 | −0.0001 | YES |
+
+> ⭐⭐⭐ **THE ρ = 1 HEAD CLOSED THE SWEPT AXIS TO 9.7519° — INSIDE A 10° WINDOW — AND STILL NEVER
+> ACQUIRED**, because **2.4934° of drift on the axis the search never touches** made the radial
+> off-axis angle 10.0656°. It misses by **0.066°**, and it misses identically at S = 5, 8 and 20.
+>
+> **THE SWEEP-RATE FLOOR IS NOT A RACE AGAINST THE LINE-OF-SIGHT RATE. IT IS THE SEARCH TAKING LONG
+> ENOUGH FOR THE UNSWEPT AXIS TO EAT THE WINDOW.**
+
+⭐ **AND THIS IS FINDING 1 AGAIN, WHICH IS WHAT SAYS IT IS THE RIGHT MECHANISM AND NOT A THIRD STORY:**
+the deficit is a **radial** quantity. **A slow one-axis search does not merely take longer to close its
+own axis — it inflates its own deficit through the orthogonal channel while it works.** The robust
+number is not the 0.066° shortfall (which is narrow, and is quoted as narrow): it is that **2.4934° of
+a 10° window radius — 25 % of it — is consumed by an axis the search never moves.**
+
+⚠ **F6 APPLIED TO THIS FINDING TOO, because a 0.066° margin is exactly the shape slice 42 died to:**
+
+| dt | 2e−3 | 1e−3 | 5e−4 |
+|---|---|---|---|
+| **off-axis °** | 10.0647 | 10.0656 | 10.0661 |
+| **Δel °** | 2.4934 | 2.4934 | 2.4929 |
+
+> ⭐ **IT DOES NOT HALVE — IT DOES NOT MOVE AT ALL** (4 digits stable over a 4× range of step). Slice
+> 42's knife-edge halved when the step halved; this is not that.
+
+## ⭐⭐ §IV.3 **AND IT LANDS ON AN EXISTING DEFERRAL WITH THE ARM THAT DEFERRAL WAS MISSING**
+
+`docs/DEFERRALS.md` carries **a RECTANGULAR / PER-AXIS FOV** from slice 34, whose gate 1 recorded that
+the circular window *"rests on a SPECIES argument because no flying arm had ever bound"* the shape.
+
+> ⭐⭐ **HERE IS ONE. A per-axis window of the same 10° half-width would LOCK this arm** — Δaz = 9.75 < 10
+> **and** Δel = 2.49 < 10, both inside — while the shipped radial `hypot` gate holds it out at 10.0656.
+> **This is the first flying arm in the family where the WINDOW'S SHAPE, not its size, decides
+> acquisition.**
+
+⚠ Quoted with its margin: the *verdict* flip rests on 0.066°, which is narrow (though step-independent
+and 100× the per-tick LOS motion). **The non-marginal claim is the 25 % of window radius spent on the
+unswept axis; the rectangular-vs-circular verdict flip is the narrow one.**
+
+## ⭐ §IV.4 THE CORRECTED FLOOR — replacing §III.5 item 3
+
+> **3. THERE IS A FLOOR ON SWEEP RATE (1.0–1.5 °/s here), AND IT IS NEITHER A RACE AGAINST THE LOS RATE
+>    NOR A MISSING REVERSAL — both were measured and both are refuted.** ⭐⭐ **A one-dimensional search
+>    inside a two-dimensional window loses its margin to the axis it does not sweep:** at ρ = 1 the
+>    swept axis closed to 9.75° inside a 10° window and the arm still failed, held out by 2.49° of
+>    drift on the unswept axis (25 % of the window radius). **Sweep slowly enough and the orthogonal
+>    channel eats the window before the swept one closes.**
+
+⚠ **AND §III.4's LOS-RATE TABLE IS NOT DELETED, BUT ITS ROLE IS DEMOTED:** the 318× rise (0.271 → 86.05
+°/s over t = 1 → 9 s) is real and correctly measured, and it is why a *late* acquisition is worthless.
+**It is not why the ρ = 1 arm fails.**
+
+⚠⚠ **THE METHOD LESSON, and it is the SIXTH instance in this arc:** §III correctly convicted §II.1 of
+fitting a constant along one axis — **and then explained a floor with a table drawn from the very arm
+that failed.** *A hedge is not a measurement.* Writing *"quoted as measured, not derived"* under a
+sentence that still names a cause does not make the cause measured. **If a claim names a mechanism,
+either measure that mechanism on an arm that is not the failure itself, or name no mechanism at all.**
