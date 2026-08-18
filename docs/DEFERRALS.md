@@ -79,7 +79,25 @@ so the cure 34/35/36 all banked was MIS-LOCATED and no head feature can reach it
 subsystem: THE NEVER-ACQUIRED SIDE NEEDS A RE-CUE, NOT A COAST (a probe arm that cheats by feeding the head the
 measurement it cannot have goes 3620.675 → 0.110 m, and its provenance is LOGGED — the seam's unconditional
 `head_tgt` write, not the probe's seeding) ⇒ a SEARCH PATTERN / SECOND CUE slice owns that number, with its
-ceiling and its floor both already measured. ⚠ Reviving the memory track needs a TRACKER that maintains a usable
+ceiling and its floor both already measured. ⚠⚠ **THAT CEILING IS NOT AN ACQUISITION NUMBER — MEASURED AT SLICE
+42's GATE 0 (2026-08-18, `docs/plans/slice42.md` §I.1) AND THE SENTENCE ABOVE MUST NOT BE QUOTED WITHOUT THIS
+ONE.** A cue that STOPS at the first lock (what a search can actually do) reaches NONE of the 0.110 m: it locks
+at the same instant as the oracle and misses the full 3620.675 m. The oracle's rescue is a PERMANENT feed that
+also covers everything after the lock. ⭐ And gate 0 then found something sharper than the candidate it was
+probing: **THE ACQUISITION KNIFE-EDGE** — with the window EXACTLY equal to the birth offset the seeker locks,
+`off@lock` == fov to four decimals, the lock survives ONE TICK and the arm misses as if it had never locked;
+**0.05° more window turns the same lock into 8.854 s of track and a 0.224 m hit**, flat to the digit on both
+sides. The mechanism is `missile.jl:2086` — the slew gate can be ENTERED but never RE-ENTERED ⇒ **ACQUISITION
+NEEDS MARGIN, NOT COVERAGE.** ⚠ Also measured there and load-bearing for the search half: on the geometry that
+would ship a single 15° window rescues every showcase cell with NO search, so *"buy coverage with time instead
+of glass"* is not demonstrable while a wider window is FREE in this model — a search-pattern slice must first
+make the window COST something (detector sensitivity / resolution). ⭐ What a search DOES own, measured on the
+fixed instrument: **THE WRONG-GUESS FRONTIER** — the minimum sweep rate is FLAT across a 6× range of coverage
+when the direction guess is right and RISES MONOTONICALLY with coverage when it is wrong (4/5/7/8/10/11 °/s over
+S = 5→30°, and past S ≈ 20° on one side no rate buys it back). ⚠ TWO INSTRUMENT BUGS in that gate produced
+tables that read exactly like physics (a sweep command rebuilt from the head's own position crawls at 1/50 rate;
+a sweep that steps the HEAD rather than a COMMAND never reverses once the gimbal STOP binds) — **a search probe
+must be checked where the CLAMPS bind.** ⚠ Reviving the memory track needs a TRACKER that maintains a usable
 rate through a gap, not a head change — a larger slice, of which a coast is the corollary; THE CAGE vs THE AIM AS ITS OWN A/B (§0.8, built and measured, shipped only as a tooth — including a
 mechanism neither slice has named: the WRONG-WAY CHASE, where a head born BELOW the LOS slews UP toward +18.1°
 before the LOS reverses, and at 8 °/s that climb is unaffordable); THE ELEVATION HALF (the error is authored in

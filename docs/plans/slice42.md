@@ -557,3 +557,49 @@ margin* lesson and finding 2 is a *search pattern* lesson, and **convention 9 sa
 slices, not one.** Finding 1 is cheaper, sharper, threshold-free, and it is a property of code that
 already ships; finding 2 needs a new subsystem and lands on a model where the alternative (a wider
 window) is free. That choice is not made in this file yet.
+
+## ⭐⭐ §V.6 THE SCOPING CALL — **MADE HERE, NOT LEFT OPEN** (2026-08-18)
+
+§V.5 left the choice between the two findings open. It is answered now, so that a future session
+inherits a decision rather than re-deriving one:
+
+> **SLICE 42 IS THE ACQUISITION-MARGIN LESSON (§V.2). THE SEARCH-PATTERN FRONTIER (§V.4) BECOMES ITS
+> NAMED DEFERRAL.**
+
+The reasons, in the order that decided it:
+
+1. **The knife-edge is threshold-free and contamination-free.** It is a STEP — flat to the digit on
+   both sides over the whole ladder — not a slope with a line drawn on it. Slice 37's §II.0 had to
+   quote a sensitivity because its onset rested on a bracket the author chose; this one does not.
+2. **It needs no new subsystem and no new knob.** The mechanism is `missile.jl:2086`, code that has
+   shipped since slice 34: the slew gate can be ENTERED but never RE-ENTERED. Slice 33 already built
+   the vocabulary for the fix (`seeker_fov_margin`) on a wire where nothing was ever acquired at the
+   rim, so the lesson lands on existing structure rather than beside it.
+3. **The search half lands on a free alternative** (§V.3): a single 15° window rescues every showcase
+   cell on the geometry that would ship, and nothing in this model charges for the window. A slice
+   whose lesson is *"buy coverage with time"* cannot be motivated from inside a model where the thing
+   it is buying instead of is free.
+
+⚠ **AND THE DEFERRAL IS NAMED WITH ITS OWN PRECONDITION, so it is not re-attempted blind:**
+
+> **A SEARCH PATTERN / THE WRONG-GUESS FRONTIER** — the (S, ρ) law of §V.4 is real, monotone, and
+> passes the reparameterization gate on the fixed instrument. ⚠ **It must NOT be planned until the
+> DETECTOR WINDOW COSTS SOMETHING** (sensitivity, resolution, or acquisition range — the `SEEKER RANGE
+> / SNR ACQUISITION LIMITS` deferral is the natural carrier). Until then a wider window dominates it
+> for free and the slice has a law but no design question. ⚠ And whoever takes it inherits two
+> instrument hazards measured here: a sweep command rebuilt from the head's own position crawls at
+> 1/50 rate, and a sweep that steps the HEAD rather than a COMMAND never reverses once the gimbal stop
+> binds — **check a search probe where the CLAMPS bind.**
+
+## ⚠⚠ §V.7 WHAT SLICE 42 STILL HAS TO PROVE — the knife-edge is a PROBE result, not a shipped one
+
+Stated explicitly so §V.2 is never quoted as more than it is:
+
+**The knife-edge was measured on an AUTHORED `fov` ladder inside a probe.** It shows that a lock with
+zero margin is worth nothing and that 0.05° is worth 305 m — on a wire whose window was walked by hand.
+**It has NOT yet been shown to move a verdict on an unmodified shipping scenario**, and no kernel, comp
+key, rung or scenario exists for it. That is gate-1 work and it is the first thing gate 1 must do:
+find the shipping wire where the margin is the binding term, and show the step there without authoring
+the window to sit on it. ⚠ If the step only exists when the window is placed on the birth offset by
+hand, the finding is a curiosity about a measure-zero coincidence and the slice dies at gate 1 — that
+is the falsifier to pre-register before writing any code.
