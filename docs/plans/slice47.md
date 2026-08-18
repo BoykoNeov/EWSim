@@ -78,6 +78,12 @@ the window is not merely two-sided, it is two-sided *through a feedback path*.
 written past this section.** If a physically defensible midcourse error cannot drive the handover
 error past the 10° window, the headline dies here — at zero cost — instead of at gate 3.
 
+> ⚠⚠ **RESULT (2026-08-19, §4): P1 PASSED — the error axis is real, linear and monotone, and it
+> crosses the window at a 20.5 % target-velocity misestimate. BUT P5 FALSIFIED THE SQUEEZE: widening
+> the window IMPROVES the angle margin monotonically, because the lock time SATURATES against the
+> CPA. The three-way squeeze written above is PROSE, NOT PHYSICS, on this wire.** What replaces it is
+> in §4.3: the cost does not vanish, it MOVES — into slice 46's own currency. **Read §4 before §1.**
+
 ## §0.2 — THE CONSTRAINT THAT IS CITED, NOT RE-PROBED
 
 ⚠ **DO NOT SPEND A PROBE TRYING TO REACH "OUTSIDE THE HORIZON" BY MOVING THE LAUNCH.** Slice 44 §V
@@ -226,3 +232,136 @@ blind ticks = 6955   lock t = 6.9560 s   MAX |a_cmd| WHILE BLIND = 0.000000 m/s^
 so the probe is on the shipped wire and not a lookalike. **`DEFERRALS.md`'s "flying pure PN off a
 target it cannot see" is corrected to "flying NOTHING — commanding exactly zero for 6955 ticks — and
 arriving because the scenario authored the target into the missile's ballistic plane."**
+
+### §4.1 P2 — THE THIRD FREEBIE IS REAL: THE HEAD IS CUED OFF TRUTH, FOR FREE (2026-08-19)
+
+`p2_cue.jl`, shipped wire, default cell. Through the entire 6955-tick blind phase the detector's
+off-head-axis error never leaves the noise:
+
+```
+   tick       t   det    head_off  fov_margin look_body_az  head_angle   rate_sat
+      1   0.001     0     0.00000    10.00000    18.10198    18.11386          0
+   4000   4.000     0     0.05979     9.94021    19.80346    19.84793          0
+   6400   6.400     0     0.19190     9.80810    23.31121    23.82132          0
+   6956   6.956     1     0.30212     9.69788    25.31614    26.15544          0   <- LOCK
+MAX head_off_deg WHILE BLIND = 0.302005 deg   head_off AT LOCK = 0.302123 deg   (window = 10 deg)
+```
+
+⭐ **The head tracks the true LOS through 25° of body-frame travel while the seeker cannot see
+anything, and arrives at the lock instant 0.30° off a 10° window.** `:head_tgt_az` wins over the
+"does not slew" comment (§0): the target is written unconditionally under `_gim` from the measured
+angles, so the head is *externally cued off truth* for the whole blind phase, free and perfect.
+⇒ **THE BLIND PHASE IS FREE IN THREE SEPARATE WAYS** — no guidance command (P0), a perfect cue (P2),
+and an authored launch heading that is already the collision course (§0). ⚠ **This is one slice's
+worth of freebies, and convention 9 says they cannot all be priced in one scenario.** The cue is the
+one to defer: it is what a datalink/midcourse would *supply*, so it belongs to the same component and
+can ship as physics with its own key while the SHOWCASE prices only the guidance half.
+
+### §4.2 P1 — PASSED, AND THE AXIS IS LINEAR (2026-08-19) ⭐ **THE BLOCKING PROBE**
+
+`p1_error.jl` / `p5_squeeze.jl`. **No core patch is needed and that is the probe's whole idea: the
+AUTHORED LAUNCH HEADING *IS* the midcourse solution for the AUTHORED target** (P0), so perturbing the
+target's true crossing speed turns that heading into a wrong midcourse. The missile is uncommanded
+while blind, so its flown trajectory is **bit-identical across every arm** (`dtraj = 0.00e+00`,
+asserted per arm — this is also an independent confirmation of P0's mechanism). At the lock instant,
+`û_true` comes from the perturbed run and `û_pred` from the baseline run at the same tick and the
+same flown missile position; both sides are off the wire.
+
+```
+  err%   vy_true   lock t   traj-identical   PIP err @lock   HANDOVER ERR   vs 10° window
+   0.0    -200.0   6.9560         0.00e+00           0.0 m         0.0000   inside
+   5.0    -210.0   6.9160         0.00e+00          69.2 m         2.5025   inside
+  10.0    -220.0   6.8820         0.00e+00         137.6 m         4.9928   inside
+  15.0    -230.0   6.8510         0.00e+00         205.5 m         7.4720   inside
+  20.0    -240.0   6.8250         0.00e+00         273.0 m         9.9547   inside
+  20.5    -241.0   6.8230         0.00e+00               —        10.2057   *** PAST ***
+  30.0    -260.0   6.7860         0.00e+00         407.2 m        14.9618   *** PAST ***
+  50.0    -300.0   6.7580         0.00e+00         675.8 m        25.3970   *** PAST ***
+```
+
+⭐⭐ **THE WINDOW IS CROSSED AT A 20.5 % CROSSING-SPEED MISESTIMATE — 41 m/s of 200 m/s, or 280 m of
+predicted-intercept-point error at a 1437 m lock range.** That is an ORDINARY launch-time track error,
+not an absurd one, so the falsifier in §0.6 does not fire: **the headline axis is defensible.**
+⭐ And it is **STRICTLY LINEAR at 0.4970 °/%** across the whole domain (0.5023 / 1.0038 / 2.5025 /
+4.9928 / 7.4720 / 9.9547 at 1/2/5/10/15/20 %), which clears P4's non-monotonicity disqualifier
+outright — the axis this project usually has to hunt for is simply a straight line here.
+⭐ **The lock instant barely moves** (6.9560 → 6.8250 s over the whole domain, 1.9 %), so the effect
+is almost pure handover error rather than a lock-timing confound.
+
+### §4.3 P5 — **FALSIFIED. THE THREE-WAY SQUEEZE DOES NOT CLOSE** (2026-08-19)
+
+§0.1 predicted that widening the window to survive a bad handover would shorten the horizon enough
+(46's `R_acq · fov` identity) to lengthen the blind phase and make the error worse — a self-defeating
+cure. **Measured, at a fixed 15 % midcourse error, it is not true:**
+
+```
+fov deg    R_acq m      R*fov   lock t (s)     handover  MARGIN fov-err
+    6.0     2394.4    14366.6       5.5270       3.6971         2.3029
+   10.0     1436.7    14366.6       6.8510       7.4720         2.5280     better
+   15.0      957.8    14366.6       7.5210      11.9688         3.0312     better
+   25.0      574.7    14366.6       8.0710      20.2679         4.7321     better
+```
+
+The identity itself is confirmed to the digit (`R·fov` constant at 14366.6 m·deg = 80789 · 0.001^¼,
+which is slice 46's constant carried down the RCS ladder). But **the margin improves monotonically:
+widening the window is still the cure for the angle.** ⭐ **THE REASON IS A SATURATION, and it is the
+transferable part: `t_lock` cannot grow past the CPA.** Over a 4.2× window the lock time moves only
+5.53 → 8.07 s (1.46×) against a hard 8.9 s ceiling, so the accumulated error grows barely faster than
+the window that must contain it (`err/fov` walks 0.616 → 0.811 and *asymptotes* rather than crossing
+1.0). ⇒ **A FEEDBACK LOOP THROUGH A SATURATING VARIABLE IS NOT A FEEDBACK LOOP.** Write the squeeze
+down as refuted; do not ship it as a law.
+
+### §4.4 P6 — THE COST DOES NOT VANISH, IT MOVES (2026-08-19) ⚠ **AND P6's ERROR ARM IS CONFOUNDED**
+
+⚠⚠ **FIRST, THE METHOD CATCH, BECAUSE IT INVALIDATES HALF OF THIS PROBE'S OWN OUTPUT.** P1's
+perturbation changes the target's TRUE velocity, which is fine for a purely geometric quantity
+(measured at one instant, from one flown missile position) but **NOT fine for anything that depends on
+the closing engagement**: a target misestimated as 15 % *faster* really is faster, so it enters the
+horizon EARLIER and the missile locks with MORE authority left, not less. The tell is that the error
+arm outperforms its own control (authority 15.79 % against 23.55 % at fov 10). ⇒ **P6's error-arm
+authority column is NOT QUOTABLE**, and the general form is worth carrying: **a probe that perturbs
+the TRUTH to emulate a wrong BELIEF is clean only for quantities read at a single instant; anything
+integrated over the approach is measuring a different engagement.** A belief that is wrong *while the
+truth is fixed* cannot be probed on this wire at all, because the wire has no belief — building one
+is what the slice is for.
+
+**SECOND, THE CONTROL ARM (P6b), WHICH IS CLEAN — one target, one picture, only `fov` varying:**
+
+```
+fov deg    R_acq m  lock tick   authority %    hold %      CPA m
+    6.0     2394.4       5604          8.55    100.00      2.610
+   10.0     1436.7       6956         23.55     99.90      2.998
+   15.0      957.8       7647        100.00     17.25    159.457
+   25.0      574.7       8235        100.00      6.90    271.866
+```
+
+⭐⭐ **WIDENING THE WINDOW IS CATASTROPHIC EVEN WITH A PERFECT PICTURE, AND THE ANGLE GATE NEVER SEES
+IT COMING.** Over the same 6 → 25° sweep where P5's angle margin *improved* from 2.30° to 4.73°, the
+airframe goes 8.55 % → PINNED, the track collapses 100 % → 6.90 %, and the CPA opens 2.6 m → 271.9 m.
+**Both columns are read on the same runs.** This is slice 46's law re-measured on the `fov` axis
+instead of the RCS axis, and it settles what replaces §0.1's refuted squeeze:
+
+> ⭐⭐⭐ **THE HEADLINE THAT SURVIVES P5. A wider window does buy tolerance to a bad handover — and it
+> is never the right way to buy it, because the reach it sells is what the airframe was going to spend
+> on the intercept. ⇒ THE MIDCOURSE'S JOB IS NOT TO WIDEN THE WINDOW BUT TO KEEP THE ERROR SMALL
+> ENOUGH THAT NOBODY HAS TO.** The angle margin says "wider is better" over the exact interval where
+> the engagement is being lost — which is §0.5 rule 1 (miss is not the gauge) recurring one level up:
+> **`gimbal_fov_margin_deg` is not the gauge either.**
+
+### §4.5 GATE-0 VERDICT, AND WHAT §1 MUST DO
+
+- **P0 ✓** the gap is real and is worse than the backlog said. **P2 ✓** a third freebie, deferred as
+  physics not showcase. **P1 ✓ THE BLOCKING PROBE PASSES** — defensible, linear, monotone.
+  **P5 ✗ REFUTED** — the squeeze is prose. **P6 ✓/⚠** — the cost transfers to authority, on a clean
+  control; the error arm is confounded and not quotable.
+- ⚠ **A STRUCTURAL FINDING FOR §1, FOUND WHILE BUILDING P1's CLEAN ARM AND NOT YET DISCHARGED: THE
+  LAUNCH STATE IS CONFINED TO THE x–z PLANE.** `scenario.jl:350` builds `e.vel` from
+  `speed`/`elevation_deg` with an explicit `0.0` cross-range component, and `missile.jl:439` mints
+  `:att_q` from `atan(e.vel[3], e.vel[1])` — **pitch only, `e.vel[2]` unread.** So a missile cannot
+  today be launched on a heading with any azimuth at all, and a midcourse that steers in azimuth must
+  open that seam or be born with an instant sideslip. ⚠ Check it against the `speed`(19) /
+  launch-altitude(21) class before touching it: an initial condition consumed once at load is
+  legitimate, but an attitude init that silently drops a velocity component is the other thing.
+- ⚠ **P3 IS NOT YET RUN** (can slice 36's `gimbal_handover_err_deg` be driven rather than
+  duplicated?). It is not blocking — it decides how much of gate 2 is plumbing, not whether the slice
+  lives — but it should run before §2 is written.
