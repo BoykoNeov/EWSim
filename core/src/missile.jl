@@ -2083,7 +2083,25 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         else
             head_az = Float64(c[:head_az]); head_el = Float64(c[:head_el])
             # discipline 3, first evaluation: the error the detector HAD, before this tick's slew.
-            if off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h
+            # === SLICE 42 GATE-0 PROBE PATCH (applied and reverted around the run) ===
+            #   :until_lock — ORACLE cue toward `:head_tgt_*`, STOPS at the first lock.
+            #                 What a SEARCH can do: it stops when it has found the target.
+            #   :always     — slice 37 `:leak` VERBATIM — the cue never stops (ORACLE).
+            #   :mem_only   — slice 37 `:memory` VERBATIM — no cue; out of window the head
+            #                 coasts on the α-β tracker's own COASTED INERTIAL estimate
+            #                 through the CURRENT attitude. HONEST.
+            #   :cue_mem    — the COMBINATION. Pre-lock half is still an ORACLE, so it is
+            #                 a CEILING for search+coast, never a design.
+            _pc_mode  = get(c, :probe_cue_mode, :none)
+            _pc_after = get(c, :seek_init, false) === true
+            _pc_due   = haskey(c, :probe_cue_delay) && w.t ≥ Float64(c[:probe_cue_delay])
+            _pc_cue   = _pc_due && (_pc_mode === :always ||
+                                    ((_pc_mode === :until_lock || _pc_mode === :cue_mem) &&
+                                     !_pc_after))
+            _pc_mem   = _pc_after && (_pc_mode === :mem_only ||
+                                      (_pc_mode === :cue_mem && _pc_due))
+            if off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h ||
+               _pc_cue || _pc_mem
                 # ⚠ `head_slew_full`, NOT `head_slew` — the SHIPPED kernel returning the two
                 # quantities the servo knows and its pointing does not. The plan FORBIDS
                 # reconstructing them as a post-hoc difference of `:head_az`, and forbids the seam
@@ -2106,9 +2124,15 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
                                                ωn_h, ζ_h, dt, stop_h; rate_max = rate_h)
                 else
                     # ── 34/35/36/37 VERBATIM — the else-arm is the bit-identity control ──────────
+                    # === SLICE 42 PROBE: the memory arm substitutes the TARGET only. ===
+                    _t_az = Float64(c[:head_tgt_az]); _t_el = Float64(c[:head_tgt_el])
+                    if _pc_mem && off_axis_angle(head_az, head_el, look_az_b, look_el_b) > fov_h
+                        _t_az, _t_el = look_angles(c[:att_q]::Quat,
+                            los_unit_from_angles(Float64(get(c, :seek_az_est, 0.0)),
+                                                 Float64(get(c, :seek_el_est, 0.0))))
+                    end
                     head_az, head_el, head_dem, head_sat =
-                        head_slew_full(head_az, head_el,
-                                       Float64(c[:head_tgt_az]), Float64(c[:head_tgt_el]),
+                        head_slew_full(head_az, head_el, _t_az, _t_el,
                                        Float64(c[:gimbal_tau_s]), dt, stop_h; rate_max = rate_h)
                 end
             end

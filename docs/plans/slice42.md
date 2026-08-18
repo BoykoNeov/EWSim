@@ -151,3 +151,96 @@ No kernel, no comp key and no scenario is authored until all three are answered 
 3. Is the second-cue variant (a datalink from the launching platform — the honest `:leak`) the same
    slice or a different one? **DEFERRED BY CONVENTION 9** — one lesson per scenario. It is named here
    so that a later slice does not present it as this one's finding.
+
+---
+
+# §I — GATE 0, PROBE **P0** (2026-08-18): THE TIME BUDGET, AND A CEILING THAT WAS NOT WHAT IT SAID
+
+**The patch:** `core/src/missile.jl`'s body-arm slew gate and slew call, four out-of-window head
+behaviours behind `:probe_cue_mode`, applied and reverted around the run (slice 35/37 precedent).
+**VALIDATION FIRST:** the `:always` arm reproduces slice 37 §0.3's published `:leak` column to the
+digit — **0.110 / 0.131 / 2350.299** at err = −12 / −14 / −18. Nothing below is readable without it.
+
+## ⭐⭐ §I.1 THE CEILING SPLITS, AND A SEARCH OWNS NONE OF IT ALONE
+
+Four arms, all at Δt = 0 (a PERFECT, INSTANT cue), on the never-acquired cells:
+
+| err ° | CONTROL | `:mem_only` (slice 37 `:memory`) | cue **stops at lock** | cue + **honest memory** | `:always` (oracle) |
+|---|---|---|---|---|---|
+| −12 | 3620.675 | 3620.675 | **3620.675** | **0.110** | 0.110 |
+| −14 | 3620.675 | 3620.675 | **3620.675** | **0.131** | 0.131 |
+| −18 | 3620.675 | 3620.675 | **3620.675** | **2350.299** | 2350.299 |
+
+⭐⭐⭐ **A CUE THAT STOPS WHEN THE SEARCH SUCCEEDS RESCUES NOTHING — AND CUE + COAST REPRODUCES THE
+ORACLE EXACTLY, TO THE DIGIT, ON ALL THREE CELLS.** The two halves are each worth ZERO alone and the
+whole difference together. ⇒ **the 0.110 m that `docs/DEFERRALS.md` offers this slice as its ceiling
+is NOT an acquisition number**: an acquisition-only re-cue reaches none of it.
+
+⭐ **AND THE MECHANISM IS ONE TICK.** `cue stops at lock` locks at exactly the same instant as the
+oracle (t = 0.477 / 1.001 / 2.354 s) and then loses the window on the **very next tick** —
+`hold_max = 0.001 s`, one millisecond — and never gets it back. With the honest coast covering that
+single tick the same head then holds **continuously for 10.58 s** (`hold_max` 10.580, `in%` 95.6,
+`nreacq` 1). **The entire 3.6 km hangs on one tick.**
+
+⭐⭐ **WHY, AND IT IS AN ARCHITECTURE FINDING RATHER THAN A TUNING ONE.** Acquisition lands the target
+on the **window EDGE** (`off@lock` = 9.997–9.999° against a 10.0° window, every arm), because the
+servo's 8 °/s barely outruns the body-frame LOS's ≈ 7.4 °/s — the near-saturated chase the plan
+predicted (`sat%` 6.5–32 at lock). And the shipped head **only slews when the target is already
+inside the window** (`missile.jl:2086`). ⇒ **the slew gate is a latch that can be entered but never
+re-entered: a head that acquires at the edge is one tick from losing its target for the rest of the
+flight.** That is the same "a break is the rest of the flight" slice 37 measured, now visible at its
+own birth.
+
+⚠⚠ **AND IT REOPENS SLICE 37 §0.4 WITHOUT CONTRADICTING IT.** That probe looked for an EPISODIC break
+and found none — *"the window either holds outright or breaks terminally"*. That is TRUE on the
+shipped wire and it is true **because these arms never acquire at all**. Once anything gets the head
+to the window edge, the very next tick is a 1-ms break, and slice 37's own honest coast is worth the
+whole engagement there. **The memory track is not resurrected by this** — it is worth nothing on its
+own here (`:mem_only` = 3620.675, unchanged), exactly as slice 37 measured. What is new is that it is
+worth everything *downstream of an acquisition that does not yet exist*.
+
+## ⚠⚠ §I.2 THE TIME BUDGET — **F0 FIRES BY THE LETTER**
+
+Delay sweep in the only mode that rescues anything (`:cue_mem`), Δt = when the cue starts:
+
+| err ° | Δt 0 | 0.10 | 0.25 | 0.50 | 0.75 | 1.00 → 4.00 |
+|---|---|---|---|---|---|---|
+| −12 | **0.007–0.110** | **0.019** | **0.007** | 2443.001 | 2407.566 | 3620.675 (never locks) |
+| −14 | **0.131** | **0.249** | 2443.001 | 2407.566 | 3620.675 | 3620.675 |
+| −18 | 2350.299 | 2244.921 | 3620.675 | 3620.675 | 3620.675 | 3620.675 |
+
+> **F0 AS PRE-REGISTERED FIRES.** The falsifier required Δt = 1.5 s to rescue err = −12 (the time a
+> 12° sweep costs at 8 °/s). The measured budget is **between 0.25 and 0.50 s** — **6× short** — and
+> at −14 it is between 0.10 and 0.25 s against a 1.75 s sweep, **~10× short**. At −18 no delay
+> rescues anything, and Δt = 0 is a 2.35 km miss regardless.
+
+⚠ **CONTAMINATION, READ BEFORE THE VERDICT** (and it does not overturn it): `sat%` is 33–43 % on the
+rescued arms at −12/−14 and **99.8 % at −18** with `aero%` 29.2, so **the −18 row is a statement
+about the rate limit and the α ceiling, not about cueing** and is not quoted as a search result. The
+−12/−14 rows are clean enough to read (`aero%` ≤ 3.6).
+
+## ⚠⚠⚠ §I.3 WHAT F0 ACTUALLY MEASURED — STATED BEFORE ANY RE-SCOPE IS PROPOSED
+
+**The falsifier fired, and the measurement ALSO showed the falsifier models the wrong thing.** Both
+halves are recorded, in this order, because the second half is exactly the move by which a dead slice
+gets dishonestly rescued and it must be visible as a claim rather than smuggled in as a correction:
+
+A delayed oracle **stands still** for Δt and then goes straight at the target. **A search does not
+stand still — it sweeps.** And a one-way search sweeping in the CORRECT direction at the servo's rate
+limit is not the Δt = 1.5 s arm at all: it is **the Δt = 0 arm**, because both slew azimuth up at
+8 °/s. So what §I.2 prices is not "the sweep a search needs" — it is **the cost of guessing the
+direction WRONG**, and by that reading the budget is even tighter than the table says, since a
+wrong-way sweep must also travel back over the ground it lost.
+
+⇒ **F0's number stands and F0's INTERPRETATION does not.** The honest restatement of what P0 leaves:
+
+> On this wire a search that knows which way to look is free, and a search that must guess is
+> bankrupt within a quarter of a second. **The slice's lesson, if it has one, is the cost of not
+> knowing which way to look** — which makes §0.3's F2 (the DIRECTION BLOCKER) not a scoping question
+> but the whole slice.
+
+⚠ **AND F2 IS THEREFORE PROMOTED TO THE DECIDING PROBE, WITH THE ORACLE REMOVED ENTIRELY.** No arm of
+the next probe may contain a cue: the head sweeps blind, at an authored rate, in an authored
+direction, reversing at an authored half-width, and the honest coast runs after lock. If a blind
+symmetric search cannot rescue a single cell that a wide window does not already rescue, the slice
+dies at P2 and P1 is never reached.
