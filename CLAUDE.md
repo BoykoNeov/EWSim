@@ -119,7 +119,10 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
   **blocked on its precondition**: a wider window is FREE here, and slice 43 makes that objection SHARPER —
   ⭐⭐ **the cost of acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error** (err −14/fov 12
   ≡ err −12/fov 10 to every digit), so widening glass and travelling further are THE SAME ACT. Law:
-  `t_lock = 1.036·deficit/ρ + τ`; guess right and coverage is **never REACHED** (lock 2.07° into a 3–30°
+  `travel = deficit/(1−ω/ρ)`, `t_lock = travel/ρ + τ` **for ρ ≤ rate_max** (ω = LOS rate, anchored to telemetry;
+  ⚠ a ρ-only form was an advisor catch — count AXES, not cells). ⚠ **Sweep floor 1.0–1.5 °/s, NOT ω(0) = 0.25:
+  the LOS rate rises 318× in flight, so a slow sweep NEVER CONVERGES.** Guess right and coverage is
+  **never REACHED** (lock 2.07° into a 3–30°
   pattern — 42's "free" was a flat row misread); guess wrong and it costs `2S` at an **accelerating** price
   (5→39 % over `2/ρ`, never-locks by S = 25). ⚠ 42 §V.4's ρ_min table is VOID (servo bypassed; `none ≤ 16`
   was its own grid edge — 18 and 22 °/s; +side rows are stop contamination). ⚠ **An open-loop sweep WINDS UP

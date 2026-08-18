@@ -5989,8 +5989,21 @@ never lock and miss an identical 305.112 m at both errors; the + arms DO lock, l
    3.104 / 5.176° at deficits 3/5 behind a 15° window — ratio 1.035–1.039 throughout. **The natural
    experiment: `err −14 / fov 12` and `err −12 / fov 10` return travel 2.073°, t_lock 0.309 s and miss
    0.186 m — identical to every digit printed.** Error and window are not separately visible.
-2. ⭐⭐ **`t_lock = 1.036 · deficit / ρ + τ`** — three digits, eight cells, two windows. (deficit 10:
-   1.036·10/8 + 0.05 = 1.345 against a measured 1.349.) The 3.6 % is the LOS running away during travel.
+2. ⭐⭐ **`travel = deficit / (1 − ω/ρ)` and `t_lock = travel/ρ + τ`, FOR `ρ ≤ rate_max`** — where ω is
+   the LINE-OF-SIGHT RATE. ⚠ The first form of this (`1.036·deficit/ρ + τ`) was measured at ρ = 8 ONLY and
+   is superseded (`slice43.md` §III, an advisor catch): the multiplier runs **1.031–1.357** over the rate
+   axis, rising as the sweep slows, exactly as the drift mechanism named for it requires. ⭐ ω extracted
+   from the multiplier matches `m1.look_body_az_deg`'s measured derivative to **5.6–13 % on 15 cells**
+   (four deficits, four rates, two windows), one-sided because the telemetry averages while the binding
+   drift accrues at the end. ⭐ The `+τ` term is **exact — residual 0.0000 s on all 12 unsaturated cells**,
+   because a `ρ·τ` lag traversed at ρ °/s costs τ seconds whatever ρ is; **above `rate_max` it decays**
+   (+0.023 / +0.016 / +0.007 s at ρ = 12 / 16 / 32), which is where finding 5 takes over.
+2b. ⭐⭐ **THERE IS A FLOOR ON SWEEP RATE — 1.0–1.5 °/s — AND IT IS NOT ω(0) = 0.25 °/s.** The LOS rate is
+   not constant: measured on a never-locking arm it runs **0.271 / 0.344 / 0.455 / 0.633 / 0.948 / 1.582 /
+   3.190 / 9.676 / 86.05 °/s at t = 1–9 s — a 318× rise.** ⭐ **A search races a target that ACCELERATES
+   away from it, so a sweep that is merely slow does not acquire late — it never converges.** ⚠ Quoted as
+   MEASURED, not derived: a 1-D reading does not reproduce the floor's exact value because the gate is the
+   2-D off-axis angle and the elevation channel drifts too.
 3. ⭐⭐ **GUESS RIGHT AND COVERAGE IS NOT FREE — IT IS NEVER REACHED.** `t_lock` = **0.309 s, the same
    digit**, at S = 3, 5, 8, 12, 16, 20, 25, 30 (a 10× range): the head locks 2.07° into a pattern
    authored 3–30° wide. Slice 42's *"the width is FREE"* is a flat row misread.

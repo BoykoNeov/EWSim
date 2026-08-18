@@ -386,7 +386,13 @@ travel (2.073), the same lock time (0.309) and the same miss (0.186), to every d
 
 ⭐ **AND IT HAS A CLOSED FORM, GOOD TO THREE DIGITS ON ALL EIGHT CELLS:**
 
-> **`t_lock = 1.036 · deficit / ρ + τ`**
+> ⚠⚠⚠ **SUPERSEDED BY §III — AND BY THIS FILE'S OWN RULE THE SENTENCE IS ANNOTATED, NOT DELETED.**
+> **All eight cells are at ρ = 8**, so the 1.036 is one point of a curve, and the drift mechanism named
+> for it below REQUIRES it to vary with ρ (it runs 1.031–1.357 over the rate axis). The corrected form
+> is `travel = deficit / (1 − ω/ρ)` with ω the LOS rate, `t_lock = travel/ρ + τ`, **domain ρ ≤ rate_max**.
+> ⚠ *"three digits, eight cells, two windows"* counted CELLS, not AXES.
+
+> **`t_lock = 1.036 · deficit / ρ + τ`**   — *at ρ = 8 only; see §III.1*
 
 with τ = 0.05 s the servo's own lag (`ρ·τ` — §I.0 — measured, not fitted) and **1.036 the price of the
 LOS running away while the head travels.** Check: deficit 10 ⇒ 1.036·10/8 + 0.05 = 1.345 against a
@@ -493,7 +499,7 @@ lead 1° at the authored ρ; B = the open-loop generator at `min(ρ, 8)`:
 
 > **1. A search's cost is the OVERLAP DEFICIT `|err| − fov`, not the pointing error.** Error and
 >    window are not separately visible; only their difference is (exact, two (err, fov) pairs).
-> **2. `t_lock = 1.036 · deficit / ρ + τ`** — three digits, eight cells, two windows.
+> **2.** ⚠ **SUPERSEDED BY §III.5** — `travel = deficit/(1 − ω/ρ)`, `t_lock = travel/ρ + τ`, for `ρ ≤ rate_max`.
 > **3. Guess the direction right and coverage is not free — it is NEVER REACHED.** Lock at 2.07° into
 >    a pattern 3–30° wide, `t_lock` identical to the digit across a 10× range of coverage.
 > **4. Guess wrong and coverage costs `2S` of travel — at a price that ACCELERATES**, 5 % over the
@@ -548,3 +554,119 @@ precondition intact, and slice 42 §V.4's `--` cells are corrected to 18 and 22 
    this family are the same bug: the probe drove the *head* instead of the *command*, or drove the
    command and never checked the head. **Carry a realized-excursion column, and a command-vs-actuator
    lag column, on every actuated probe.**
+
+---
+
+# ⚠⚠⚠ §III — PROBES **P6–P8**: **§II.1's FORMULA WAS MEASURED ON ONE AXIS, AND THE CONSTANT IS NOT A CONSTANT**
+
+**An advisor catch, and it is the same shape as the four failures this arc has catalogued: the probe
+was right, the table was right, and the sentence on top was WIDER THAN THE MEASUREMENT.** §II.1 quoted
+`t_lock = 1.036 · deficit / ρ + τ` as *"three digits, eight cells, two windows"* — which reads as three
+axes and **was one**: every one of those eight cells is at ρ = 8. Worse, the mechanism §II.1 *named*
+for the 1.036 (the LOS running away while the head travels) **predicts that the number must vary with
+ρ** — halve the rate, double the travel time, double the drift. ⚠ **And §II.1's own ratio column was
+already monotone (1.0347 → 1.0392). A slow function of travel time was rounded to a constant, and then
+the constant was called a mechanism.**
+
+## ⭐⭐⭐ §III.1 P6 — THE RATE AXIS. **THE MULTIPLIER IS NOT CONSTANT, AND IT MOVES AS DRIFT PREDICTS**
+
+Deficit fixed, right guess, lead clamped. `multiplier` = head travel at lock ÷ deficit:
+
+| ρ °/s | 2 | 4 | 6 | 8 | 12 (sat) | 16 (sat) | 32 (sat) |
+|---|---|---|---|---|---|---|---|
+| **multiplier, deficit 2** | 1.177 | 1.076 | 1.050 | 1.036 | 1.033 | 1.033 | 1.031 |
+| **multiplier, deficit 6** | **1.357** | 1.087 | 1.051 | 1.037 | 1.035 | 1.035 | 1.034 |
+| **multiplier, deficit 10** | never | 1.109 | 1.058 | 1.039 | 1.039 | 1.038 | 1.038 |
+
+> ⚠ **1.036 IS THE VALUE AT ρ = 8 AND NOWHERE ELSE.** Over the measured domain the multiplier runs
+> **1.031 to 1.357**, and it rises monotonically as the sweep slows — which is the drift mechanism
+> behaving exactly as it should, and which §II.1's single-axis table could not have seen.
+
+⭐ **THE CLOSED FORM THAT PRODUCES IT.** If the LOS moves at ω while the head travels, the head must
+cover the deficit *plus* whatever the target added during the trip: `travel = deficit + ω·travel/ρ`, so
+
+> **`travel = deficit / (1 − ω/ρ)`**  and  **`t_lock = travel/ρ + τ`   (domain: ρ ≤ rate_max)**
+
+## ⭐⭐ §III.2 P7 — **THE DRIFT TERM IS THE LOS RATE, ANCHORED AGAINST TELEMETRY AND NOT FITTED**
+
+Convention 11 asks for an EXTERNAL anchor. ω extracted from the multiplier, `ω_fit = ρ(1 − 1/m)`,
+against `ω_tel` = d(`m1.look_body_az_deg`)/dt measured directly over the same window — 15 cells, four
+deficits (2, 3, 6, 10), four rates, two windows:
+
+| | ρ = 2 | ρ = 4 | ρ = 6 | ρ = 8 |
+|---|---|---|---|---|
+| **deficit 2** — ω_fit / ω_tel | 0.301 / 0.278 | 0.283 / 0.258 | 0.286 / 0.253 | 0.281 / 0.251 |
+| **deficit 6** | 0.526 / 0.436 | 0.321 / 0.294 | 0.291 / 0.274 | 0.288 / 0.265 |
+| **deficit 10** | never | 0.394 / 0.346 | 0.328 / 0.299 | 0.302 / 0.282 |
+| **deficit 3, fov 15** | 0.322 / 0.300 | 0.283 / 0.266 | 0.275 / 0.258 | 0.268 / 0.254 |
+
+> ⭐ **THE FITTED DRIFT PARAMETER IS THE MEASURED LINE-OF-SIGHT RATE, to within 5.6–13 % on 15 cells**
+> (one outlier at 20.8 %: deficit 6 at ρ = 2, the longest travel). ⚠ **AND THE RESIDUAL HAS ONE SIGN
+> AND A NAMED REASON** — `ω_fit > ω_tel` on every single cell, because `ω_tel` averages the LOS rate
+> across the whole search window while the drift that actually binds accrues at the END of it, where
+> the rate is highest (§III.4). **It is a biased anchor in a known direction, not a scatter.**
+
+## ⭐⭐ §III.3 P6 — **THE `+τ` TERM IS EXACT BELOW THE RATE LIMIT AND DECAYS ABOVE IT**
+
+This half is **not** circular: the prediction uses the *measured* travel, so the residual tests only
+the `+τ` claim. Across three deficits × four unsaturated rates:
+
+> **RESIDUAL = 0.0000 s ON EVERY UNSATURATED ROW** (12 cells; the largest is −0.0001).
+
+⭐ **AND THE IDENTITY BEHIND IT IS WHY IT IS RATE-INDEPENDENT:** below the limit the servo carries a
+steady lag of `ρ·τ` degrees (measured directly in §I.0), and `ρ·τ` degrees traversed at `ρ` °/s costs
+**exactly τ seconds regardless of ρ.**
+
+⚠⚠ **AND ABOVE `rate_max` IT DOES NOT APPLY — the domain clause §II.1 was missing.** With the command
+saturating the servo from tick 1 there is no steady lag to pay, and the residual against a τ-free
+prediction is **+0.0228 / +0.0157 / +0.0073 s at ρ = 12 / 16 / 32** — decaying toward zero, against
+0.0500 s below the limit. ⇒ **findings 2 and 5 meet exactly at ρ = `rate_max`, and both are now stated
+as bounded there.**
+
+## ⚠⚠ §III.4 P7b/P8 — **THERE IS A HARD FLOOR ON SWEEP RATE, AND IT IS NOT THE `ρ → ω` SINGULARITY**
+
+Deficit 2, right guess, ρ walked down:
+
+| ρ °/s | 2.0 | 1.5 | 1.0 | 0.75 | 0.5 | 0.4 | 0.3 |
+|---|---|---|---|---|---|---|---|
+| **t_lock s** | 1.227 | 1.753 | **never** | **never** | **never** | **never** | **never** |
+
+⚠ **The naive form does NOT predict this floor.** At ρ = 1 it asks for 2.96° of travel and 8.87° were
+available — every failing arm swept for the same **8.867 s**, i.e. it ran out of FLIGHT, not of
+coverage. ⭐ **The reason is that ω is not a constant either — it is the endgame blow-up**, measured
+directly on a never-locking arm with no search at all:
+
+| t s | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
+|---|---|---|---|---|---|---|---|---|---|
+| **d(LOS)/dt °/s** | 0.271 | 0.344 | 0.455 | 0.633 | 0.948 | 1.582 | 3.190 | 9.676 | **86.05** |
+
+> ⭐⭐ **A SEARCH IS RACING A TARGET THAT ACCELERATES AWAY FROM IT.** The LOS rate rises by **318× over
+> nine seconds**, so a sweep that is merely *slow* does not acquire *late* — **it never converges at
+> all**, and the floor sits at 1.0–1.5 °/s against an early LOS rate of 0.25 °/s, i.e. **≈5× the rate
+> it would have to beat at t = 0.**
+
+⚠⚠ **STATED AS MEASURED, NOT DERIVED.** A 1-D reading of the table above does not reproduce the exact
+floor — the acquisition gate is the **2-D off-axis angle** and the elevation channel drifts too. **The
+floor's value is quoted; its direction and its cause are measured; its exact position is NOT derived
+here**, and no sentence in this file may imply otherwise.
+
+## ⭐⭐ §III.5 THE CORRECTED LAW — replacing §II.6 items 1–2
+
+> **1. THE COST OF ACQUIRING IS THE OVERLAP DEFICIT `|err| − fov`, NOT THE POINTING ERROR.**
+>    Unchanged and exact (`err −14 / fov 12` ≡ `err −12 / fov 10` to every digit).
+> **2. `travel = deficit / (1 − ω/ρ)`, and `t_lock = travel/ρ + τ`, FOR `ρ ≤ rate_max`** — where ω is
+>    the line-of-sight rate, anchored against telemetry to 5.6–13 % on 15 cells with a one-sided,
+>    explained residual. The `+τ` is exact (0.0000 s on 12 cells) because a `ρ·τ` lag traversed at ρ
+>    costs τ seconds whatever ρ is. **Above `rate_max` the τ term decays (0.023 → 0.007 s) and finding
+>    5 takes over.**
+> **3. There is a FLOOR on the sweep rate — 1.0–1.5 °/s here — and it is NOT `ω(0)` (0.25 °/s).**
+>    ⭐ **The line-of-sight rate grows 318× across the flight, so a sweep that is too slow never
+>    converges rather than converging late.**
+> **4–6.** §II.6 items 3, 4, 5 (never-reached coverage; the accelerating wrong-guess price; open-loop
+>    windup) stand unchanged — none of them rests on the multiplier being constant.
+
+⚠ **THE METHOD LESSON, and it is the fifth instance of the same failure in this arc:** *"three digits,
+eight cells, two windows"* counted **cells**, not **AXES**. Eight cells that all share one value of a
+variable measure a curve at a point. ⭐ **Count the axes a claim varies over, and name the one the
+claim's own mechanism says must matter** — here the mechanism named drift, drift is a function of
+time, time is a function of rate, and rate was never swept.

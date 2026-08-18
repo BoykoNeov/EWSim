@@ -111,8 +111,13 @@ FINDINGS THAT REPLACE IT, all −side, all on the real servo:**
 **(1) THE COST OF ACQUISITION IS THE OVERLAP DEFICIT `|err| − fov`, NOT THE POINTING ERROR** — err −14 behind a
 12° window and err −12 behind a 10° window return the SAME travel (2.073°), the SAME lock time (0.309 s) and the
 SAME miss (0.186 m) to every digit; the error and the window are not separately visible, only their difference is.
-**(2) `t_lock = 1.036 · deficit / ρ + τ`** — three digits, eight cells, two windows (`τ` measured as the servo's
-own `ρ·τ` lag, 0.049–0.245°). **(3) GUESS RIGHT AND COVERAGE IS NOT FREE — IT IS NEVER REACHED:** the head locks
+**(2) `travel = deficit/(1 − ω/ρ)`, `t_lock = travel/ρ + τ`, DOMAIN `ρ ≤ rate_max`** — ω is the LOS RATE, matched
+against measured `look_body_az_deg` telemetry to 5.6–13 % on 15 cells; the `+τ` is EXACT (0.0000 s on 12 cells)
+because a `ρ·τ` lag traversed at ρ costs τ seconds whatever ρ is, and it DECAYS above `rate_max`. ⚠ An earlier
+form of this (`1.036·deficit/ρ`) was measured at ρ = 8 ONLY and is superseded — the multiplier runs 1.031–1.357
+over the rate axis. **(2b) A FLOOR ON SWEEP RATE, 1.0–1.5 °/s, and it is NOT ω(0) = 0.25:** the LOS rate rises
+**318× across the flight** (0.271 → 86.05 °/s at t = 1 → 9 s), so **a sweep that is merely slow never CONVERGES**
+rather than converging late (measured, not derived — the gate is the 2-D off-axis angle). **(3) GUESS RIGHT AND COVERAGE IS NOT FREE — IT IS NEVER REACHED:** the head locks
 **2.07° into a pattern authored 3–30° wide**, which is why ρ_min looked flat. **(4) GUESS WRONG AND COVERAGE COSTS
 `2S` OF TRAVEL AT AN ACCELERATING PRICE** — measured 0.262 → 0.347 s per degree against a geometric bound of
 `2/ρ` = 0.250 (5 % → 39 % over), diverging to never-locks by S = 25 at ρ = 8: **the target moves while you look

@@ -604,9 +604,18 @@ know where the mechanism stopped. ⭐⭐ What replaces both is a cleaner thing t
 down: **the cost of acquiring is the OVERLAP DEFICIT — how far the target sits OUTSIDE the window edge —
 and not the pointing error at all.** A head 14° off behind a 12° window and a head 12° off behind a 10°
 window are the same problem, and they return the same travel, the same lock time and the same miss to
-every digit printed. It closes to a formula — lock time is the deficit over the sweep rate, plus the
-servo's own lag, plus 3.6 % for the target running away while you travel — good to three digits over
-eight cells and two windows. Guess the direction wrong and you pay twice the coverage in travel, at a
+every digit printed. It closes to a formula — the head must cover the deficit PLUS whatever the target
+adds while it travels, so the travel is the deficit divided by one minus the ratio of the line-of-sight
+rate to the sweep rate, and the lock time is that over the sweep rate plus the servo's own lag. ⚠ The
+first version of that sentence quoted a fixed 3.6 % correction and was wrong in an instructive way:
+eight cells, all at ONE sweep rate. The mechanism it named — the target running away while you travel —
+is itself a function of how long you take, so the correction MUST move with the rate, and it does
+(3 % to 36 %). **Count the axes a claim varies over, not the cells.** Corrected, the drift term turns out
+to BE the line-of-sight rate, matched against the telemetry rather than fitted. ⭐⭐ And that buys the
+sharpest thing in the gate: because the line-of-sight rate is not constant but **rises 318-fold across
+the flight**, a search is racing a target that ACCELERATES away from it — so a sweep that is merely too
+slow does not acquire late, **it never converges at all**, and the floor sits five times higher than the
+rate it would have had to beat at launch. Guess the direction wrong and you pay twice the coverage in travel, at a
 price that **accelerates** rather than scaling: 5 % over the geometric bound at small coverage, 39 % at
 large, and past a point no lock at all — because the target keeps moving while you look the wrong way,
 and that excess is the whole finding. ⚠ The last piece is a trap rather than a lesson: an open-loop

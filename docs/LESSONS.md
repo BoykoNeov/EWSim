@@ -153,6 +153,16 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
   the command-minus-actuator lag.** The lag is the tell — it should read `ρ·τ` (0.049–0.245° here, and
   it did); when it instead reads *the authored half-width to three digits*, the actuator is on a stop
   and is not flying the pattern at all.
+- **⭐⭐⭐ COUNT THE AXES A CLAIM VARIES OVER, NOT THE CELLS — AND NAME THE AXIS THE CLAIM'S OWN MECHANISM
+  SAYS MUST MATTER.** Slice 43 quoted a closed form as *"three digits, eight cells, two windows"*, which
+  reads as three axes and was ONE: all eight cells sat at a single sweep rate. **The mechanism named for
+  its constant was drift; drift is a function of travel time; travel time is a function of rate; and rate
+  was never swept.** Swept, the "constant" ran 1.031–1.357 — and the corrected form was strictly better,
+  because the drift term turned out to BE a directly measurable telemetry quantity instead of a fitted
+  number. **Before quoting a fit, ask what its own explanation says should move it, and check that you
+  moved it.** ⚠ Corollary: **state the DOMAIN.** The same form's `+τ` term is exact below the actuator's
+  rate limit and decays above it, and neither the formula nor the finding that takes over above the limit
+  said where the boundary was.
 - **⚠⚠ AN OPEN-LOOP COMMAND GENERATOR WINDS UP AGAINST A RATE LIMIT, AND WHAT SATURATES IS THE
   AMPLITUDE, NOT THE RATE.** Commanding a 20° triangle at 64 °/s to an 8 °/s head does not sweep it
   faster or even merely less — the head realizes **4.4° of 20° and the arm fails outright** at a
