@@ -1,7 +1,12 @@
 # Slice 41 — **A SECOND-ORDER FIN ACTUATOR: THE ACTUATOR INSIDE THE CONTROL LOOP** (§11 Tier-A)
 
-**STATUS: P0 AND P1a/P1b RUN (2026-08-18) — see §I and §II. THE SLICE IS NOT YET CLEARED:
-P2 (INERT) and P5 (REPARAMETERIZATION), the two risks that can still kill it, are UNRUN.**
+**⚠⚠⚠ STATUS: THIS IS A KILL RECORD (2026-08-18). SLICE 41 DIED AT GATE 0 ON P5.**
+P0/P1 were clean (§I, §II) and P2 survived (§III — the actuator is real, and it eats radome margin).
+**P5 KILLED IT** (§IV): on this wire two independent single-axis `(k_α, k_q)` retunes each reproduce the
+actuator's ENTIRE threshold curve to 0.00–1.01 %, against a pre-registered falsifier of 2.7–3.2 %.
+**The reason is §IV.4 and it is worth more than the slice was:** a pole differs from a gain only in
+that its phase VARIES with frequency, and this loop is a single 1.6488 Hz line. Read §IV.9 for the
+verdict and the named re-scope. **Do not rebuild slice 41 as written.**
 
 **§0–§0.6 below are the PRE-PROBE record and are left exactly as written**: every number in them
 is a *prediction or a domain*, not a measurement, and §0.2 exists because the inherited framing for
@@ -1129,3 +1134,98 @@ found the same way and reported the same way.
   is a reparameterization. It names a **RE-SCOPE WITH EVIDENCE** (a two-wire slice whose lesson IS the
   frequency dependence) rather than a hope, and that re-scope would carry its own gate 0 from zero.
 
+
+## ⚠⚠ §IV.8 THE TWO-FREQUENCY TEST, RUN — LEG 1 IS **DEGENERATE**, AND SAYING SO IS THE POINT
+
+### §IV.8a The suspect cell first — it is real scatter, and the kill is unaffected
+
+§IV.3's `k_q` column had one cell at half the actuator's value (0.497 at `R = −0.091`) between
+neighbours at 0.917 and 0.886. Re-flown: **0.0375959023726 — bit-identical.** Real scatter, not a band
+-boundary artifact, and the `R_crit` interpolation for that column did not rest on a bad point.
+
+### ⚠⚠ §IV.8b Leg 1 (`slice40_resonance`) RETURNS A PASS THAT IS NOT A MEASUREMENT
+
+The pre-registered leg: apply the slice26-fitted pairs, unchanged, to `slice40_resonance`.
+
+| arm on `slice40_resonance` (authored) | rms_r | vs control | aero |
+|---|---|---|---|
+| `:instant` (**control**) | 0.516589 | — | 645 |
+| 30 Hz actuator, ζ 0.7 | 0.512471 | **0.992×** | 683 |
+| `k_α = 1.02` | 0.521435 | **1.009×** | 625 |
+| `k_q = 0.295` | 0.519694 | **1.006×** | 614 |
+
+By the letter of §IV.7's falsifier this is a PASS — `k_α` sits 1.75 % from the actuator, inside the
+2.7–3.2 % band. ⚠⚠ **AND IT MUST NOT BE COUNTED AS ONE.** Every arm is within 0.9 % of the **control**
+as well: **on this wire the actuator does nothing, the gains do nothing, and a test whose control
+also passes is not a test** — *"a tooth that passes can still be a tautology"* (`docs/LESSONS.md`).
+⇒ **LEG 1 IS DEGENERATE AND CONFIRMS NOTHING.** The pre-registered route was the right one to try and
+the wrong one to trust, and it is recorded as run rather than quietly replaced.
+
+⭐ *Why* it is inert is §III.7's margin story again, on a third wire: slice 40's design is COMPENSATED
+(`R̂ = −0.18` against a worst slope of −0.33), so there is no parasitic margin left for an actuator to
+eat, and its ring is the gimbal servo's own resonance rather than a marginally-stable radome loop.
+
+### ⭐⭐ §IV.8c A NON-DEGENERATE SECOND FREQUENCY, ON THE SAME WIRE
+
+The airframe's pitch inertia moves the short period, and the ring sits on it. **Measured** with the
+spectrum probe of §III.0, one variable changed:
+
+| `af_I` | ring line | note |
+|---|---|---|
+| 20 (authored) | **1.6488 Hz** | the wire as shipped |
+| 40 | 1.6497 Hz | does not move — a heavier airframe does not lower this ring |
+| **10** | **2.7503 Hz** | **1.67× up, same wire, no second resonator** |
+
+⚠ **AND THE DEAD-KEY GUARD EARNED ITS PLACE HERE, IN A PROBE.** The first attempt overrode
+`af_inertia` — a key **nothing reads** (it is `af_I`, `scenario.jl:823`). It minted the key silently
+and the spectrum came back *identical at three inertias*, which reads exactly like "inertia does not
+move the ring." The slice-19 dead-knob class, inside the instrument rather than the wire. The ladder
+probe already carried the guard; the spectrum probe did not, and now does.
+
+The onset at `af_I = 10` lands between −0.090 and −0.092 — **essentially where it is at `af_I = 20`**,
+which is slice 26's own finding that *the threshold is the guidance loop's, not the airframe's*. ⇒
+**the same threshold at a 1.67× different ring frequency: exactly the comparison §IV.7 wanted.**
+
+### ⭐⭐⭐ §IV.8d Leg 2 — THE SAME PAIR **OVER-SHOOTS** AT THE SHIFTED FREQUENCY
+
+Same pairs, unchanged, at the same shoulder position (`R = −0.090`). `aero = 0` on the control, the
+actuator and `k_α`.
+
+| | ring 1.6488 Hz (`af_I = 20`) | ring 2.7503 Hz (`af_I = 10`) |
+|---|---|---|
+| `:instant` control | 0.0234857 | 0.0205975 |
+| 30 Hz actuator | 0.0452563 (**1.93×**) | 0.0687297 (**3.34×**) |
+| `k_α = 1.02` | 0.0441061 — **matches to 2.6 %** | 0.0871173 — **over-shoots by 27 %** |
+| `k_q = 0.295` | 0.0415007 — matches to 8 % | 0.1013112 — **over-shoots by 47 %** |
+
+⭐ **THE PAIR THAT REPRODUCED THE ACTUATOR TO 2.6 % AT 1.65 Hz OVER-SHOOTS IT BY 27 % AT 2.75 Hz** —
+an order of magnitude outside the 2.7–3.2 % band, on both axes, in the same direction. And the
+actuator itself costs more at the higher ring (3.34× vs 1.93×), which is the sign a phase lag predicts:
+at 2.75 Hz a 30 Hz actuator contributes more phase than at 1.65 Hz.
+
+⚠⚠ **AND IT IS CONFOUNDED, WHICH IS WHY IT DOES NOT OVERTURN ANYTHING.** Changing `af_I` changes the
+**plant**, not only the ring frequency — so `k_α = 1.02` is a different perturbation relative to a
+different airframe, and *"the pair no longer matches"* has at least two live explanations. This is
+**suggestive, not clean**, and it is written down as such.
+
+## §IV.9 ⭐⭐ THE FINAL VERDICT — THE KILL STANDS, AND THE RE-SCOPE IS NAMED WITH EVIDENCE
+
+**SLICE 41 AS SCOPED IS DEAD.** One wire, one ring frequency, and on it **two independent single-axis
+retunes each reproduce the actuator's entire threshold curve to 0.00–1.01 %** (§IV.3) — an order of
+magnitude inside the band the whole effect spans. The falsifier was fixed in writing before the
+measurement existed and it fired. This is slice 39's death in a new letter.
+
+**AND THE REASON IS THE TRANSFERABLE RESULT** (§IV.4): a pole differs from a gain only in that its
+phase VARIES with frequency, and this loop is a single 1.6488 Hz line. **One point of a phase curve is
+a number, and a number is what a gain is.**
+
+**THE RE-SCOPE, NAMED BUT NOT CLAIMED.** §IV.8d shows a fitted pair failing by 27–47 % once the ring
+moves — which is what a pole predicts and a gain does not. ⚠ It is **confounded by the plant change**
+and it is **not evidence the slice as scoped survives**. What it earns is a place on
+`docs/DEFERRALS.md` as a candidate with a measured hook: *a slice whose lesson IS that an actuator is
+distinguishable from a retune only when the loop is seen at more than one frequency* — which would
+need a way to move the ring WITHOUT moving the plant, and which starts its own gate 0 from zero.
+
+⚠ **DO NOT REBUILD SLICE 41 AS WRITTEN.** A single-mode limit cycle cannot tell an actuator pole from
+a gain retune, and no amount of care in the kernel, the seam or the ladder changes that — §I and §II
+were both clean and neither mattered to the verdict.
