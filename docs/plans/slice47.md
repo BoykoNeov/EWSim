@@ -262,7 +262,30 @@ blind phase** because it is a velocity error integrating. A position error is a 
 the closing geometry mostly eats. ⚠ **P4 (monotonicity over the domain) is re-run on the COMMANDED
 trajectory at gate 2** — P1's linearity was measured ballistic and does not transfer for free (§4.2).
 
-### §1.4 Tests (`core/test/test_midcourse.jl`, new file, added to `runtests.jl`)
+### §1.4 ⚠⚠ P9 — THE SECOND GATE-1 PROBE, AND IT DECIDES §3.3's DEFAULT CELL
+
+**§2.5 check 2 and §3.3 cannot both be casually true on the same wire (advisor), and the tension is
+real physics rather than a drafting slip.** §3.3 demands a geometry where **doing nothing is wrong**,
+pinned by a third arm (midcourse absent) that must MISS. §2.5 check 2 asserts the `Δv = 0` arm still
+closes to `cpa < 3 m`. But slice 46's wire hits at **2.998 m BALLISTICALLY** — so breaking the
+free ride means authoring a **new geometry**, and on that geometry the perfect midcourse must fly a
+**substantial** correction. **Whether a `k·V·(û_pip − v̂)⊥` pursuit converges to a few metres there is
+UNMEASURED.**
+
+⇒ **`p9_null.jl`, at gate 1, before §3.3's default cell is fixed:** on a candidate geometry where
+ballistic misses, does the **zero-error** midcourse close to a few metres, and at what `midcourse_k`?
+
+| outcome | what it means |
+|---|---|
+| closes at the authored `k` | §3.3's three arms all stand; write the scenario |
+| closes only after tuning `k` | **learn it HERE, not at gate 2** — and `k` becomes an authored number with a measured justification rather than a guess |
+| does not close at any `k` | ⚠ **pursuit of a fixed point is the wrong law for this geometry** and §1.1's item 3 must change — cheap now, expensive after gate 2 |
+
+⚠ **Do not carry this to gate 2.** It is one probe on the shipped wire with an authored target
+displacement, and it is the difference between a showcase with three arms that mean something and
+one whose null arm hits for a reason nobody measured.
+
+### §1.5 Tests (`core/test/test_midcourse.jl`, new file, added to `runtests.jl`)
 
 - **`intercept_time` against an INDEPENDENT recompute** — construct `(p_rel, v_rel, V_m)` from a
   KNOWN answer (pick `t*`, place the target so the root is exactly `t*`), assert to `atol = 1e-9`.
@@ -285,9 +308,30 @@ A new `elseif` in the guidance chain, **with every existing arm textually verbat
 ⚠ **Never `a_dem + a_midcourse`.** The gate is **key presence AND the seeker never having locked**:
 
 ```julia
-elseif guid === :pn && haskey(c, :midcourse_pip) && !get(c, :seek_init, false)
-    midcourse_accel(e.pos, e.vel, c[:midcourse_pip]::Vec3; …)
+elseif guid === :pn && haskey(c, :midcourse) && !get(c, :seek_init, false)
+    midcourse_accel(e.pos, e.vel, predicted_intercept_point(e.pos, belief_p, belief_v, ‖e.vel‖)…)
 ```
+
+⚠⚠ **THE GATE IS THE AUTHORED ANCHOR `:midcourse`, AND *NOT* A COMPUTED KEY LIKE `:midcourse_pip`
+(advisor).** A PIP is something the missile *works out*, so `haskey(c, :midcourse_pip)` would be true
+on every wire the moment the arm exists — **a tautology, which is the exact failure `:seeker_omega`
+already demonstrates at this very line** (§0/P0: written unconditionally, so its `haskey` guard gates
+nothing). Presence gates must test a key **a scenario author wrote and a slice 11–46 wire did not.**
+
+**WHERE THE BELIEF LIVES, AND IN WHICH PHASE — the load-bearing detail:**
+
+1. **The launch snapshot is minted ONCE, lazily, on the first tick** (`:midcourse_p0`, `:midcourse_v0`,
+   `:midcourse_t0`) from the truth plus the authored `Δp`/`Δv` — **the `:att_q` lazy-init shape at
+   `missile.jl:439`**, which survives reset via reload.
+2. **The believed target position is a PURE DEAD-RECKON of that snapshot** —
+   `belief_p(t) = p₀ + v₀·(t − t₀)` — so it is computable **in place, in whichever phase needs it,
+   with no cross-phase dependency at all.** ⭐ That is what makes the cue clean: the head's cue
+   direction is formed in **phase 3** (`observe!`) and the guidance command in **phase 4** (`decide!`)
+   **from the same three stored numbers**, not from each other. No ordering hazard, and no repeat of
+   convention 8's telemetry-phase gotcha.
+3. **The PIP is recomputed EVERY TICK inside the arm**, never stored-and-reused: the missile is
+   moving, so the intercept solution moves with it. `:midcourse_pip` exists **only as telemetry** (the
+   client draws the belief point — convention 13, zero physics in GDScript).
 
 ⚠⚠ **THE ORDER OF THE CHAIN IS ITSELF A DECISION.** The new arm must sit **before** the
 `haskey(c, :seeker_omega)` arm, because that arm is taken on **every tick of every seeker wire**
@@ -363,7 +407,12 @@ pull more than the airframe is a lie the airframe pays for at handover.
    Assert **`cpa < 3 m` and `max |a_cmd|` while blind small**, never `dtraj == 0`.
 3. **The switch tick**, pinned (§2.1).
 4. **P4 RE-RUN ON THE COMMANDED TRAJECTORY** — P1's 0.4970 °/% is provisional (§4.2). The gate-2
-   number is the one gate 3 quotes.
+   number is the one gate 3 quotes. ⚠ **AND THE RE-RUN ALSO RECORDS THE PEAK BLIND-PHASE `a_cmd`
+   ACROSS THE WHOLE SLIDER DOMAIN, CHECKED AGAINST P7's CLEAN BRACKET** (advisor): P7 measured the
+   out-of-plane seam clean for injected rates `≲ 0.002 rad/s`, i.e. 96–191 m of blind-phase
+   cross-range, and *absurd* above it (473 m of displacement before the seeker even opens ⇒ a 163 m
+   miss). **A slider whose top end PINS THE AIRFRAME BEFORE LOCK is a different slice** — the lesson
+   is a bad handover, not a midcourse that flew itself into saturation.
 5. **The slice-19 tripwire** — a test asserting **each** authored key MOVES a measured quantity.
    ⚠ This is the MODEL test, and it is the only outright kill available (§0.7).
 
