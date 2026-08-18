@@ -47,7 +47,7 @@ component* — is this same error one level down, and it was written the day bef
 
 | slice | candidate | MODEL test | LESSON test | RE-VERDICT |
 |---|---|---|---|---|
-| 41 | second-order fin actuator | **PASS** — kernel clean, seam bit-exact across five `:delta_cmd` writers, physics real (a lag inside the MAIN loop DEstabilizes: 1.27–4.45× ring growth at 60→20 Hz, `R_crit` walks −0.0926 → −0.0901) | FAIL — two `(k_α,k_q)` retunes reproduce the whole curve to 0.00–1.01 % | **DEAD AS A LESSON, ALIVE AS A MODEL.** ⚠ The equivalence holds ONLY because that loop is a single 1.6488 Hz line — a property of the SCENARIO, not the actuator. A broadband loop (or a second wire) breaks it. Ships as authorable actuator hardware; must NOT ship as "the fin architecture". |
+| 41 | second-order fin actuator | **PASS** — kernel clean, seam bit-exact across five `:delta_cmd` writers, physics real (a lag inside the MAIN loop DEstabilizes: 1.27–4.45× ring growth at 60→20 Hz, `R_crit` walks −0.0926 → −0.0901) | FAIL — two `(k_α,k_q)` retunes reproduce the whole curve to 0.00–1.01 % | **DEAD AS A LESSON, ALIVE AS A MODEL.** ⚠ Scope the equivalence honestly: it was MEASURED on a loop whose fin command is a single 1.6488 Hz line, and whether it survives a BROADBAND loop is UNPROVEN — the one available probe (halving `af_I` moves the ring to 2.7503 Hz and the matched gain pair over-shoots 27–47 %) is CONFOUNDED, because `af_I` moves the plant as well as the frequency. Ships as authorable actuator hardware; must NOT ship as "the fin architecture". |
 | 42 | acquisition knife-edge | **FAIL** — the effect's width is `ω_LOS·dt`, ONE integration step, and HALVES when `dt` halves | FAIL — the "worthless lock" cell's miss is BYTE-IDENTICAL to the never-locks cell | **DEAD UNDER BOTH AIMS — the only genuine kill of the five.** There is no component here, only a discretization artifact. Nothing to author, nothing to ship. |
 | 43 | seeker search pattern | **N/A** — never a physics kill; it shipped a LAW (`travel = deficit/(1−ω/ρ)`, `ρ* = min_t […]`, confirmed 4/4 on untuned geometries) | BLOCKED — a wider window is FREE on this wire | **NOT A KILL AT ALL — BLOCKED, and the law is banked.** ⚠ The block is a property of the ENGAGEMENT, not of searching: a search costs time, and time is worthless when you were launched already able to see. |
 | 44 | seeker detection range / SNR | **PASS, EXACTLY** — `R_acq·fov` constant to 0.0000 %, log-log slope −1.000000, `r_acq` vs `snr_freespace` at +10.0000 dB; the plan says it outright: *"the physics is not what failed, what failed is the WIRE"* | FAIL — an 8079 m seeker against a 6437 m launch ⇒ the gate is byte-identical to no gate | **DEAD AS THE UNBLOCKER, ALIVE AS A MODEL — and arguably the biggest miss of the five.** A seeker with a detection horizon is not optional equipment for a simulator meant to carry different seekers against different targets at different ranges. `lib44.jl` is written and measured correct. ⚠ Its two survivors stand regardless (a late lock is paid in MANOEUVRE AUTHORITY and miss cannot show it; the narrow-window failures of 32/34 are the SERVO's). |
@@ -70,6 +70,7 @@ govern what the core is allowed to model.
 ---
 
 The NEXT named candidates:
+⚠⚠ **RE-VERDICT 2026-08-18 — see §"THE 2026-08-18 RE-VERDICT" at the top of this file: DEAD AS A LESSON, ALIVE AS A MODEL. The refutation below stands as written and is load-bearing; what changed is that it kills the SLICE'S HEADLINE, not the component.**
 **(⚠⚠⚠ "A SECOND-ORDER FIN ACTUATOR" IS NO LONGER ON THIS LIST — IT IS **DEAD**, KILLED AT GATE 0 ON
 2026-08-18 (`docs/plans/slice41.md`), and it is the deferral SLICE 40 NAMED AS ITS OWN. **Do not
 rebuild it as written.** Give slice 15's fin an INERTIA the way slice 40 gave the gimbal one, and the
@@ -208,7 +209,8 @@ could sit anywhere in that band).
 ⚠⚠⚠ **AND THE PRECONDITION IS UNCHANGED AND IS NOW SHARPER, NOT WEAKER: finding (1) says a wider `fov` reduces
 the deficit ONE-FOR-ONE, and the deficit is the ENTIRE cost — so widening the glass by 2° and travelling 2°
 further are THE SAME ACT, and only one of them costs time.** A search-pattern SLICE still must not be planned
-until the detector window COSTS something. ⚠⚠⚠ **THE CARRIER THIS LINE NAMED — `SEEKER RANGE / SNR ACQUISITION
+until the detector window COSTS something. ⚠⚠ **RE-VERDICT 2026-08-18 — see §"THE 2026-08-18 RE-VERDICT" at the top of this file: DEAD AS A LESSON, ALIVE AS A MODEL. The refutation below stands as written and is load-bearing; what changed is that it kills the SLICE'S HEADLINE, not the component.**
+⚠⚠⚠ **THE CARRIER THIS LINE NAMED — `SEEKER RANGE / SNR ACQUISITION
 LIMITS` — WAS BUILT AND MEASURED AT SLICE 44's GATE 0 AND IT IS NOT THE CARRIER** (2026-08-18,
 `docs/plans/slice44.md`, no code shipped, suite unchanged at 7693). The aperture identity is EXACT on the flying
 wire (`R_acq · fov` constant to **0.0000 %** over a 4× fov range, log-log slope **−1.000000**, `r_acq` checked
@@ -332,7 +334,8 @@ SECOND-ORDER SERVO (ω_a/ζ_a)**, IS SLICE 40 AND IS ALSO SPENT (see above). ⚠
 the precedent, and slice 40 turns that round into a NEW deferral: **A SECOND-ORDER FIN ACTUATOR** — slice 15's fin
 is first-order-with-a-rate-limit for exactly the reason slices 34–39's head was, and the bound slice 40 argues (a
 first-order lag cannot exceed gain 1 or lag more than 90°, so it can only ever damp) is not specific to a seeker
-head.** Also: **a RECTANGULAR / PER-AXIS FOV — ⚠⚠⚠ **MEASURED AT SLICE 45's GATE 0 (2026-08-18,
+head.** ⚠⚠ **RE-VERDICT 2026-08-18 — see §"THE 2026-08-18 RE-VERDICT" at the top of this file: DEAD AS A LESSON, ALIVE AS A MODEL. The refutation below stands as written and is load-bearing; what changed is that it kills the SLICE'S HEADLINE, not the component.**
+Also: **a RECTANGULAR / PER-AXIS FOV — ⚠⚠⚠ **MEASURED AT SLICE 45's GATE 0 (2026-08-18,
 `docs/plans/slice45.md`), AND THE VERDICT IS SPLIT: THE STOP HALF IS *DEAD*, THE WINDOW HALF IS *ALIVE BUT
 RE-AIMED*.** ⚠⚠ **THE STOP HALF IS DEAD AND IT WAS THE HALF THE PLAN PROMOTED.** §0.2.0 argued from the hardware's
 species that the mechanical stop is a box under BOTH readings (an azimuth ring and an elevation trunnion are
