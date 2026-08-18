@@ -21,7 +21,7 @@ three-level ledger; read the level you actually need:
 
 ## 1. The current head of the arc (slices 1–40 as one running narrative)
 
-**Slices 1–40 COMPLETE & green — 7222 tests at slice 36 gate 3; slice 37 took it to 7496, slice 38 to 7564, and slice 40 is DONE at 7693.** (⚠ SLICE 39 IS A KILL RECORD, NOT A SLICE — the nulling-loop head servo died at gate 0; `docs/plans/slice39.md`.)
+**Slices 1–40 COMPLETE & green — 7222 tests at slice 36 gate 3; slice 37 took it to 7496, slice 38 to 7564, and slice 40 is DONE at 7693.** (⚠ SLICES 39 AND 41 ARE KILL RECORDS, NOT SLICES — the nulling-loop head servo died at gate 0 (`docs/plans/slice39.md`), and the second-order FIN actuator died at gate 0 on reparameterization (`docs/plans/slice41.md`). Neither shipped code; the suite is unchanged at 7693.)
 (⚠ the count FELL *at slice 35 gate 3* — 6892 → 6876 — and that direction is accounted for: ~87 new asserts in,
 ~103 out, because a per-entity scenario sweep collapsed into ONE strictly-stronger exact-set assert. The 6876 →
 6988 → 7057 → 7067 → 7222 walk since then is slice 36's four gates.) **The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–36
@@ -528,6 +528,33 @@ rung), and THE GAIN LINE IS A LABEL AND NEVER A VERDICT because the other wire r
 ⚠⚠ THE SHOT CAUGHT A DEFECT NO TEST HAD: the cure line advised damping an arm already damped — every
 number true, the INSTRUCTION stale. Class 4a (15th consecutive RNG-live), replay bit-identical at both
 slider ends AND both rungs, button BACK. (7693)**
+
+**⚠⚠ SLICE 41 IS A KILL RECORD, NOT A SLICE — a second-order FIN actuator died at gate 0, and the
+suite stayed at 7693 (`docs/plans/slice41.md`).** The candidate was the one slice 40 named as its own:
+slice 15's fin is a first-order lag with a rate limit for exactly the reason slices 34–40's head was,
+so give the fin an INERTIA too. The kernel was clean, the seam was clean (nine wires bit-exact across
+five distinct `:delta_cmd` writers), and the physics was REAL — the inherited sign even inverted, which
+is the headline the plan had hoped for: a lag on the head's feed-forward path had been *"silently doing
+stability work"*, but the same component inside the MAIN control loop **eats phase margin and
+destabilizes**. At one step inside slice 26's own stability boundary the ring goes 1.27× / 1.58× /
+1.93× / 4.45× at 60 / 40 / 30 / 20 Hz, monotone and unclamped, and the radome threshold itself walks
+−0.0926 → −0.0901: *a cheaper actuator needs a better radome*. ⭐ And it is a MARGIN effect, not a
+cost — off the shoulder a 20 Hz actuator is free to seven figures, so an actuator's phase lag is free
+while you have margin and ruinous when you do not. **None of it survived P5.** Two independent
+single-axis `(k_α, k_q)` retunes each reproduce the actuator's ENTIRE threshold curve to 0.00–1.01 %,
+against a falsifier of 2.7–3.2 % that was fixed in writing one commit before the measurement existed.
+⭐⭐ **THE REASON IS WORTH MORE THAN THE SLICE WAS: a pole differs from a gain ONLY in that its phase
+VARIES with frequency, and this loop's fin command is a single 1.6488 Hz line — so the loop samples one
+point of a phase curve, and one point of a phase curve is a number, which is what a gain is.** Slice
+38's *"`s` adds PHASE and scaling a slope cannot"* is true but has teeth only where the loop is
+broadband; on a single-mode limit cycle it has none. ⚠ The gate also walked into and out of three traps
+now banked in `docs/LESSONS.md`: run at the wire's AUTHORED design the whole slice reads a 0.4 % INERT
+kill, because the α_max clamp binds 78 % of band ticks there and a clamped amplitude cannot move; P5
+worded as a POINT fit answers *yes* (`k_α = 1.01` matches the 60 Hz arm to 0.9 %) and would have killed
+the slice at the right time for the wrong reason; and the pre-registered confirmation leg returned a
+PASS in which every arm also sat within 0.9 % of the CONTROL — a test whose control passes is not a
+test. **The pre-registration is what saved it from a wrong death and then delivered the right one.**
+
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.

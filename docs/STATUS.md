@@ -5825,6 +5825,54 @@ waypoint queues; save/load of a battle plan.
 
 ---
 
+## Slice 41 — A SECOND-ORDER FIN ACTUATOR — KILLED AT GATE 0 (2026-08-18)
+
+**Not a slice — a KILL RECORD. No code shipped; the suite stayed at 7693.** Full record, all probes:
+`docs/plans/slice41.md`; raw probe output and the reverted prototype in `M:\claud_projects\temp\slice41\`.
+
+**WHAT DIED, AND ON WHAT.** Put a first/second-order actuator on the FIN (slice 15's fin is
+first-order-with-a-rate-limit for the reason slices 34–40's head was). The pre-registered falsifier —
+written one commit before the measurement existed — was *"if a fitted `(k_α, k_q)` reproduces the
+arm's rms at the design point AND tracks its `R_crit` across the ladder to within the 2.7–3.2 % the
+whole effect spans, the actuator is a reparameterization."* **It tracks to 0.00–1.01 %, at three
+crossing levels, on two independent gain axes.** Slice 39's death in a new letter.
+
+⭐⭐ **THE REASON, AND IT IS WORTH MORE THAN THE SLICE WAS.** A pole differs from a gain ONLY in that
+its phase VARIES with frequency. The probe measured this loop's fin command to be a **single line at
+1.6488 Hz** carrying over half its energy, with the airframe filtering the rest out of the body rate.
+⇒ **a loop that visits one frequency samples one point of a phase curve, and one point of a phase
+curve is a number — which is what a gain is.** Slice 38's *"`s` adds PHASE and scaling a slope
+cannot"* is TRUE but has teeth only where the loop is BROADBAND. On a single-mode limit cycle it has
+none.
+
+**WHAT WAS REAL BEFORE IT DIED (P2 survived, §III).** The actuator does eat radome margin and the
+inherited sign was WRONG: a lag on slices 34–40's feed-forward path was *"silently doing stability
+work"*; inside the MAIN control loop the same component **destabilizes**. At `R = −0.09` the ring goes
+1.27× / 1.58× / 1.93× / 4.45× at 60 / 40 / 30 / 20 Hz (monotone, unclamped), and `R_crit` walks
+−0.0926 → −0.0901 from an ideal actuator to a 20 Hz one — *a cheaper actuator needs a better radome*,
+2.7–3.2 % however the line is drawn. ⚠ **AND IT IS A MARGIN EFFECT: at `R = −0.085` a 20 Hz actuator
+is FREE to seven figures.** None of this saves the slice — every one of those numbers is reproduced
+by a gain retune.
+
+**THREE TRAPS THIS GATE WALKED INTO AND OUT OF, ALL NOW IN `docs/LESSONS.md`:**
+1. **The clamped plateau.** Run at the wire's authored design, P2 read 0.4 % and would have fired the
+   INERT kill — because the α_max clamp binds **78 % of band ticks** there, so the rms is insensitive
+   BY CONSTRUCTION. The lesson only exists one step inside the boundary.
+2. **The point fit that kills the wrong slice.** P5 as originally worded (*can any `(k_α, k_q)`
+   reproduce the arm?*) answers **yes** at the design point — `k_α = 1.01` matches the 60 Hz arm to
+   0.9 %. Run that way, slice 41 dies at §IV.1 for a reason that is `k_q` being *part of the radome
+   loop* (~98 % of its damping), not a reproduction of a pole. **The pre-registration saved it from a
+   wrong death and then delivered the right one.**
+3. **A degenerate confirmation.** The pre-registered second leg (apply the fitted pair to
+   `slice40_resonance`) returns a PASS by the letter — and every arm is within 0.9 % of the CONTROL
+   too. **A test whose control also passes is not a test.** Recorded as run, not counted.
+
+**THE SUCCESSOR IT LEAVES BEHIND** (`docs/DEFERRALS.md`): a slice whose lesson IS the frequency
+dependence. Halving `af_I` moves this ring 1.6488 → 2.7503 Hz while leaving the onset put (slice 26's
+own *"the threshold is the guidance loop's, not the airframe's"*), and there the pair that matched to
+2.6 % **over-shoots by 27 %** — the sign a phase lag predicts. ⚠ CONFOUNDED by the plant change, so it
+is a measured hook and NOT a claim.
+
 ## Slice 1 — radar to detection to ROC (the first slice; block sits at EOF)
 
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +

@@ -16,6 +16,41 @@ A short, always-loaded summary of the hardest kills lives in `CLAUDE.md` under
 ---
 
 The NEXT named candidates:
+**(⚠⚠⚠ "A SECOND-ORDER FIN ACTUATOR" IS NO LONGER ON THIS LIST — IT IS **DEAD**, KILLED AT GATE 0 ON
+2026-08-18 (`docs/plans/slice41.md`), and it is the deferral SLICE 40 NAMED AS ITS OWN. **Do not
+rebuild it as written.** Give slice 15's fin an INERTIA the way slice 40 gave the gimbal one, and the
+kernel is clean, the seam is clean (nine wires bit-exact across five distinct `:delta_cmd` writers)
+and the PHYSICS IS REAL — the inherited sign even inverts, which is the headline the plan hoped for:
+a lag on the head's feed-forward path was *"silently doing stability work"*, but the same component
+inside the MAIN control loop **eats phase margin and destabilizes** (at one step inside slice 26's
+boundary the ring goes 1.27× / 1.58× / 1.93× / 4.45× at 60 / 40 / 30 / 20 Hz, monotone and unclamped,
+and `R_crit` walks −0.0926 → −0.0901: *a cheaper actuator needs a better radome*).
+**IT DIES ON REPARAMETERIZATION ANYWAY**: two independent single-axis `(k_α, k_q)` retunes each
+reproduce the actuator's ENTIRE threshold curve to **0.00–1.01 %**, against a falsifier of 2.7–3.2 %
+fixed in writing one commit before the measurement existed. ⭐⭐ **AND THE REASON IS THE PART TO CARRY
+FORWARD: a pole differs from a gain ONLY in that its phase VARIES with frequency, and that loop's fin
+command is a single 1.6488 Hz line — one point of a phase curve is a number, which is what a gain is.**
+Slice 38's *"`s` adds PHASE and scaling a slope cannot"* is TRUE and has teeth only where the loop is
+BROADBAND. ⚠ Before proposing ANY new dynamic element on this family, run the spectrum probe first
+(`p2_spectrum.jl`): a single-line spectrum predicts this kill before a kernel is written.)**
+
+**⭐ THE ONE LIVE SUCCESSOR SLICE 41 LEAVES — *A SLICE WHOSE LESSON IS THE FREQUENCY DEPENDENCE
+ITSELF*.** §IV.4's explanation makes a falsifiable prediction, and §IV.8d has a measured hook for it:
+halving `af_I` moves that ring **1.6488 → 2.7503 Hz** while leaving the onset essentially put (slice
+26's own *"the threshold is the guidance loop's, not the airframe's"*), and there the gain pair that
+matched the actuator to 2.6 % **over-shoots it by 27 %** (47 % on the other axis) — the sign a phase
+lag predicts and a gain does not. ⚠⚠ **IT IS CONFOUNDED AND IT IS NOT A CLAIM**: changing `af_I`
+changes the PLANT, not only the ring frequency, so *"the pair no longer matches"* has two live
+explanations. What this candidate needs before it is worth a slice is **a way to move the ring
+WITHOUT moving the plant** — and it starts its own gate 0 from zero, with a fresh falsifier. ⚠ Its
+first probe is NOT a kernel: it is the two-frequency separation, on the shipped wire, with the plant
+held. If that cannot be built, the candidate dies with it.
+
+**⚠ AND ONE ROUTE IS ALREADY CLOSED FOR IT: `slice40_resonance` IS NOT THE SECOND WIRE.** Its design
+is COMPENSATED (`R̂ = −0.18` against a worst slope of −0.33), so there is no parasitic margin for an
+actuator to eat and its ring is the gimbal servo's own resonance. Measured: the actuator moves it
+**0.992×** and the gain pairs 1.009× / 1.006× — every arm within 0.9 % of the CONTROL. A test whose
+control passes is not a test.
 **(⚠ "THE GIMBAL" IS NO LONGER ON THIS LIST — SLICE 34 SHIPPED IT, and ⚠⚠ BOTH HALVES OF THE LESSON SLICE 33's
 GATE 0 BANKED FOR IT WERE REFUTED at slice 34's own gate 0: "the gimbal that saves your envelope PARKS YOU ON THE
 WORST GLASS" rests on a contrast that does not exist — the head parks nowhere the body was not already looking,

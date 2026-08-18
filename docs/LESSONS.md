@@ -26,6 +26,21 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
   before building it.** (The memory-track kill: the cure belonged to the estimator, not the head.)
 - **When a slice REMOVES a key, re-derive every downstream behaviour that key was silently
   providing.** A client drop-branch inherited by count is not inherited at all.
+- **⭐⭐ A NEW DYNAMIC ELEMENT IS ONLY DISTINGUISHABLE FROM A RETUNE BY A LOOP THAT SAMPLES IT AT MORE
+  THAN ONE FREQUENCY.** Slice 41 died here. A pole differs from a gain ONLY in that its phase VARIES
+  with frequency; the fin command on that wire was a single 1.6488 Hz line, so the loop sampled ONE
+  point of a phase curve — and one point of a phase curve is a number, which is what a gain is. Slice
+  38's *"`s` adds PHASE and scaling a slope cannot"* is TRUE and has teeth only where the loop is
+  BROADBAND. **Before building any new dynamic element, measure the SPECTRUM of the signal it will sit
+  on** — a detrended periodogram of the command it filters, ~40 lines and no dependency. A
+  single-line spectrum predicts the reparameterization kill before a kernel is written.
+- **⚠⚠ Pre-register the falsifier — and re-check its WORDING against what the probes have since
+  learned.** Slice 41's P5 as originally worded (*can any `(k_α, k_q)` reproduce the arm?*) answers
+  **yes** at the design point, because one of those gains is PART of the loop being measured (~98 % of
+  its damping), so retuning it moves the boundary directly. That is the confounded-lever objection,
+  not a reproduction of a pole. Re-worded over the whole THRESHOLD CURVE instead of a point, the same
+  probe killed the slice honestly. **The pre-registration prevented a wrong death and then delivered
+  the right one — both directions are the value.**
 
 ## While probing: what a probe is allowed to conclude
 
@@ -43,6 +58,27 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
   it as a bound.
 - **A number you invented must not decide a headline.** Either derive the threshold or print the
   whole ladder so a reader can redraw the line — and quote the sensitivity either way.
+- **⭐⭐ AN rms MEASURED WHERE A CLAMP BINDS CANNOT MOVE, AND READS AS A KILL.** Slice 41's P2, run at
+  its wire's AUTHORED design, read 0.4 % across the whole physically-honest band — because the α_max
+  clamp bound **78 % of band ticks** there, so the metric was insensitive BY CONSTRUCTION. The same
+  ladder one step inside the stability boundary read 1.27×–4.45×. **Carry a contamination column on
+  EVERY arm (each clamp, counted IN BAND) and read it before the result column** — a wire authored to
+  SHOW an instability is usually authored past the point where anything else can be measured on it.
+- **⭐ To prove a clamp is not setting your metric, VARY THE CLAMP — don't argue.** Slice 41's suspect
+  cell was bit-identical across a **20×** range of `delta_max`: invariance to the threshold of the
+  thing suspected of setting it is the strongest non-contamination argument available, and it costs
+  one extra run. (Its neighbour moved 0.396 → miss 846 m → no band at all over the same range — the
+  clamp had been BOUNDING a divergence, which is the failure this check exists to catch.)
+- **⚠ A CUMULATIVE counter cannot separate a band fire from the `r → 0` endgame spike** — difference
+  it across band entry/exit. Slice 41's arms looked contaminated (36–83 fires) and were clean in band;
+  the shipped CONTROL fires in the endgame too ([[ewsim-missile-verifier-sampling]]).
+- **⚠⚠ A test whose CONTROL also passes is not a test.** Slice 41's pre-registered confirmation leg
+  returned a PASS by the letter of its falsifier — and every arm sat within 0.9 % of the control as
+  well, because on that wire nothing did anything. Recorded as DEGENERATE and counted as nothing.
+  **Check the control against the falsifier before reading the arms.**
+- **⚠ The dead-knob trap lives INSIDE probes too.** A slice-41 probe overrode `af_inertia` — a key
+  nothing reads (it is `af_I`) — and returned an identical spectrum at three inertias, reading exactly
+  like *"inertia does not move the ring"*. **Guard every override: `haskey(comp, key) || @warn`.**
 - **One failure mode in a sweep can be two.** Slice 36's handover basket looked symmetric; its
   two sides fail by different mechanisms, so a single averaged metric over it is a mixture.
 - **A PROBE HARNESS FAILS SILENTLY AND GREEN, EXACTLY LIKE THE PHYSICS TRAPS DO.** Slice 41's

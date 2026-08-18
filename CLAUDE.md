@@ -54,7 +54,8 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Where the project is (2026-08-18)
 
-**Slices 1–40 COMPLETE & green — 7693 tests.** (Slice 39 is a KILL RECORD, not a slice.)
+**Slices 1–40 COMPLETE & green — 7693 tests.** (Slices 39 **and 41** are KILL RECORDS, not slices —
+neither shipped code, so the count is unchanged.)
 HANDOFF §10 items 1–13 — the committed roadmap — are DONE; slices 15–40 are into the §11
 Tier-A horizon.
 
@@ -105,6 +106,15 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
   banked it and all three mis-located it.
 - **A scalar rate-limited fin inside the coupled loop** (the slice-20 candidate) — DEAD.
   `δ_max` structurally SHADOWS `δ̇_max`.
+- **A second-order FIN actuator** (slice 41, the deferral slice 40 named as its own) — DEAD, on
+  REPARAMETERIZATION. Two single-axis `(k_α, k_q)` retunes each reproduce its whole threshold curve to
+  0.00–1.01 %. ⭐⭐ **The reason is the rule to carry: a pole differs from a gain ONLY in that its phase
+  VARIES with frequency, and that loop's fin command is a single 1.6488 Hz line — one point of a phase
+  curve is a number, which is what a gain is.** Slice 38's *"`s` adds PHASE and scaling a slope
+  cannot"* has teeth only where the loop is BROADBAND. ⇒ **before proposing any new dynamic element
+  here, measure the SPECTRUM of the signal it will sit on.** (The physics was real — inside the main
+  control loop a lag DEstabilizes, the opposite of its sign on 34–40's feed-forward path — and it did
+  not matter.)
 - **Seeker noise × the BTT roll loop** — DEAD. A ~1000:1 low-pass (std 1.07 vs 1.6e−5).
 - **A cubic radome curve** — killed at gate 0: unbounded slope, the bend diverges, no domain.
 - **An angle-domain radome corrector** — built and measured, does NOT ship: it needs the look
@@ -118,7 +128,9 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
 - **Harness traps that cost real hours** — a verifier's `STEPS` MUST be a multiple of the
   scenario's `emit_every` (else it hangs silently); `%g` / `%.2e` are not GDScript specifiers and
   a bad one makes the WHOLE `%` fail silently on a green run; frame-sampling error is asymmetric
-  (a miss samples faithfully, a HIT samples coarsely).
+  (a miss samples faithfully, a HIT samples coarsely); an rms measured where a clamp binds cannot move
+  and reads as a KILL (slice 41: α_max bound 78 % of band ticks at the authored design, so a real
+  1.27–4.45× effect read 0.4 %) — carry a contamination column IN BAND on every arm and read it first.
 
 ## Conventions / hard-won disciplines
 
