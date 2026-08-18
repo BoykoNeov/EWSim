@@ -425,6 +425,162 @@ byte-identical slice-9 path. Slice-10 `:pn` scenarios author `r_stop ≈ 30–50
 """
 _terminal_cutoff(a::Vec3, r::Real, r_stop::Real) = r < r_stop ? zero(Vec3) : a
 
+# ══ SLICE 47 — THE MIDCOURSE PHASE ═══════════════════════════════════════════════════════════════
+# What a BLIND missile flies on. Slices 11–46 all take the `haskey(c, :seeker_omega)` arm at
+# missile.jl:1187 on every tick, and while the tracker has never initialised its reported rate is
+# zero — so the pre-lock missile commands EXACTLY NOTHING and is BALLISTIC (slice 47 gate-0 P0,
+# 6955 ticks of `a_cmd ≡ 0`). That zero is an accident of the never-locked init, not a designed
+# behaviour, and these three primitives are what replaces it.
+#
+# THE PICTURE IS ONE POINT AND ONE TIME. A midcourse has no seeker, so it cannot have a LOS RATE —
+# which is what PN is made of. What it has instead is a BELIEF about where the target is and where
+# it is going, handed over at launch and dead-reckoned. From that belief it works out where the
+# target WILL BE when the missile can reach it (`predicted_intercept_point`) and flies at that
+# point (`midcourse_accel`). One picture, one quality figure, one thing to be wrong about.
+#
+# ⭐ AND IT IS NOT PN UNDER A CHANGE OF VARIABLES — the slice-39 check, run BEFORE any of this was
+# written (gate-1 probe `p8_reduction.jl`, plan §1.2). Writing `c = û·v̂`, pursuit-of-a-PIP commands
+# along `û − c·v̂` (⟂ the HEADING) while PN against that same point commands along `c·û − v̂` (⟂ the
+# LINE OF SIGHT); those are parallel iff `c² − 1 = 0`, i.e. only where the pointing error is zero
+# and BOTH commands vanish. Measured on the shipped wire the angle between the two laws equals the
+# LEAD ANGLE to four decimals on every sampled instant, and the magnitude ratio spreads 48.5× along
+# one engagement (PN carries a `1/r` that pursuit does not), so no fixed `(k, N)` reparameterization
+# exists — the best single fit leaves a 30 % residual at the instant it is fitted and 55× that
+# downrange. ⇒ a genuinely different law, and the plan's "ship the small thing" branch does not fire.
+#
+# ⭐ WHAT *IS* A REUSE, AND IT IS THE WHOLE OF PRIMITIVE 3: `k·V·(û_pip − v̂)⊥` IS `pursuit_accel`
+# with the PIP standing in for the target — BIT-IDENTICAL over 2000 random geometries (`p8_reduction`
+# P8.b, max difference 0.000e+00). So `midcourse_accel` is a CLAMP AROUND A SHIPPED KERNEL, never a
+# second implementation of one, and `test_midcourse.jl` carries that as a tooth.
+
+"""
+    intercept_time(p_rel::Vec3, v_rel::Vec3, V_m::Real) -> Float64
+
+**How long until a missile of speed `V_m` can reach a constant-velocity target** (slice 47 §1.1
+item 1) — the closed form the whole midcourse rests on. With `p_rel` the target's position
+RELATIVE to the missile and `v_rel` the target's velocity relative to the missile's *frame* (the
+midcourse dead-reckons the target and treats the missile as free to point anywhere at speed `V_m`,
+so `v_rel` is the TARGET's velocity, not a difference of the two), the missile arrives when the
+distance it can fly equals the distance to where the target then is:
+
+    ‖p_rel + v_rel·t‖ = V_m·t
+    ⇒ (‖v_rel‖² − V_m²)·t² + 2(p_rel·v_rel)·t + ‖p_rel‖² = 0
+
+and the answer is the **smallest positive root**. UNITS: `p_rel` metres, `v_rel` and `V_m` m/s,
+result SECONDS. The frame is INERTIAL — this is pure kinematics with no attitude in it at all.
+
+⚠⚠ **FOUR DEGENERATE BRANCHES, NOT THREE, AND EVERY ONE RETURNS `0.0`** (conventions 5/6 — *a live
+knob can never crash a tick*, and *no Inf/NaN to JSON*). A `NaN` here reaches the wire through the
+PIP, the guidance command and the telemetry, so each is handled explicitly:
+
+| branch | physically | returns |
+|---|---|---|
+| `‖v_rel‖² ≈ V_m²` (**co-speed**) — the quadratic degenerates to LINEAR | target as fast as the missile | `−c/b` if positive, else `0.0` |
+| co-speed **and** `p_rel·v_rel ≈ 0` — the linear term vanishes too | a pure crossing at equal speed | `0.0` |
+| negative discriminant | the target OUTRUNS the missile: no intercept exists | `0.0` |
+| both roots non-positive | the intercept is in the PAST | `0.0` |
+
+⭐ **`0.0` IS A CHOSEN VALUE, NOT A FAILURE CODE**, and the choice matters: `t_go = 0` makes the
+PIP the *believed present position* (`predicted_intercept_point` below), so a degenerate cell
+degrades to **pure pursuit of where the target is believed to be** — still a command, still flying.
+A zero *command* would have been the other option and it is precisely slice 47 P0's bug: a
+midcourse that silently stops commanding in a degenerate cell reads as a law that does not work.
+
+The co-speed test is `|a| < 1e-9·max(1, V_m²)` — a RELATIVE test (`a` has units m²/s², so a fixed
+absolute epsilon would be a different tolerance at every scale), pinned bit-for-bit against the
+gate-1 probe's arithmetic in `test_midcourse.jl` so the `midcourse_k` window P9 measured is
+calibrated against the function that actually ships.
+"""
+function intercept_time(p_rel::Vec3, v_rel::Vec3, V_m::Real)
+    Vm = Float64(V_m)
+    a  = _norm3(v_rel)^2 - Vm^2                      # leading coeff: closing-speed deficit
+    b  = 2.0 * _dot(p_rel, v_rel)                    # 2·(range-rate-ish) term
+    c  = _norm3(p_rel)^2                             # squared range
+    if abs(a) < 1e-9 * max(1.0, Vm^2)                # CO-SPEED: the quadratic degenerates to linear
+        abs(b) < 1e-12 && return 0.0                 #   …and the linear term vanishes too: no root
+        t = -c / b
+        return t > 0.0 ? t : 0.0
+    end
+    disc = b^2 - 4a * c
+    disc < 0.0 && return 0.0                         # the target OUTRUNS the missile: no real root
+    s  = sqrt(disc)
+    t1 = (-b - s) / (2a)
+    t2 = (-b + s) / (2a)
+    lo, hi = minmax(t1, t2)
+    lo > 0.0 && return lo                            # the SMALLEST positive root
+    hi > 0.0 && return hi
+    return 0.0                                       # both roots in the past
+end
+
+"""
+    predicted_intercept_point(p_m::Vec3, p_t::Vec3, v_t::Vec3, V_m::Real) -> (pip::Vec3, t_go::Float64)
+
+**THIS IS THE BELIEF** (slice 47 §1.1 item 2): dead-reckon the (believed) target straight-line for
+[`intercept_time`](@ref) seconds and return where it will be. The midcourse's ENTIRE picture of the
+future is one point and one time — that is what makes the slice one lesson with one quality figure
+rather than a filter with a covariance.
+
+`p_m` is the missile's position, `p_t`/`v_t` the **believed** target position and velocity (on the
+shipped wire those are a launch snapshot plus an authored error, dead-reckoned — see
+`missile.jl`'s `:midcourse_p0`/`:midcourse_v0`), `V_m` the missile's speed. All INERTIAL, SI.
+
+**The defining identity, and it is the test tooth:** `‖pip − p_m‖ = V_m·t_go` exactly (to float) —
+the missile flying at `V_m` straight to the PIP arrives exactly when the target does. On a
+degenerate `t_go = 0` the PIP is `p_t` itself and the identity reads `‖p_t − p_m‖ = 0`, which is
+FALSE and deliberately so: that is the branch where no intercept exists and the law degrades to
+pursuit of the believed present position (see [`intercept_time`](@ref)).
+
+⚠ Recompute this EVERY TICK, never store-and-reuse: the missile is moving, so the intercept
+solution moves with it.
+"""
+function predicted_intercept_point(p_m::Vec3, p_t::Vec3, v_t::Vec3, V_m::Real)
+    t_go = intercept_time(p_t - p_m, v_t, V_m)
+    return (p_t + v_t * t_go, t_go)
+end
+
+"""
+    midcourse_accel(p_m::Vec3, v_m::Vec3, pip::Vec3; k = 1.0, a_max = 3000.0) -> Vec3
+
+**The command that flies a blind missile at its predicted intercept point** (slice 47 §1.1 item 3):
+steer the VELOCITY VECTOR onto the line-of-sight to the PIP,
+
+    a = k·V·(û_pip − v̂)⊥   clamped through the SHIPPED `clamp_accel` at `a_max`
+
+— a pure attitude-pursuit of a fixed point. `k` has units 1/s (a turn-rate gain), `a_max` m/s².
+
+⭐⭐ **IT IS DELIBERATELY NOT PN, AND THE REASON IS THE WHOLE PREMISE:** PN's command is `N·Vc·(ω×û)`,
+driven by a LOS **rate**, which a missile with no seeker does not have and cannot have. Pursuit of a
+fixed point is driven by an **angle**. The two are not reparameterizations of each other — see the
+`p8_reduction` note above the primitives.
+
+⭐ **AND IT IS `pursuit_accel` WITH THE PIP IN PLACE OF THE TARGET, BIT-IDENTICALLY** (P8.b, max
+difference `0.000e+00` over 2000 geometries). Written as a call rather than as its own arithmetic so
+there is exactly ONE pursuit kernel in the core — `test_midcourse.jl` asserts that, and it also
+asserts the clamp is the SHIPPED `clamp_accel` rather than a second magnitude limiter.
+
+⚠ **`a_max` IS THE AIRFRAME's, REUSED — never a second ceiling** (the slice-19 FINDING-14 shape): a
+midcourse that can pull more than the airframe is a lie the airframe pays for at handover.
+
+**THE MEASURED `k` WINDOW** (gate-1 probe `p9_null.jl`, on slice 46's wire with the target displaced
+in cross-range so that doing nothing MISSES). The window is bounded at BOTH ends and it NARROWS as
+the correction grows — `k` too small leaves the residual for the endgame and PINS the airframe AFTER
+lock; `k` too large saturates it BEFORE lock, which is a different slice (plan §2.5 check 4):
+
+    correction   admissible k (zero blind-phase saturation, ≤ a few post-lock frames)
+       600 m         0.5 … 3.0
+      1000 m         0.5 … 2.0
+      1500 m         0.5 … 1.0
+      2500 m         0.5 … 1.0
+      4000 m         0.5 only
+
+⇒ **`k = 1.0` is the value that is clean across the whole plausible domain** (600–2500 m of
+cross-range correction: closes to 2.3–2.9 m, peak blind-phase demand 3.2–9.2 % of `a_max`, ZERO
+saturation frames before lock). It is AUTHORED and is NEVER a knob.
+"""
+function midcourse_accel(p_m::Vec3, v_m::Vec3, pip::Vec3; k::Real = 1.0, a_max::Real = 3000.0)
+    return clamp_accel(pursuit_accel(p_m, v_m, pip; k_guid = k), a_max)
+end
+
 """
     autopilot_step(mode::Symbol, a_cmd::Vec3, state::AutopilotState, dt::Float64;
                    kp = 1.0, ki = 0.0, kd = 0.0, tau = 0.3) -> (a_ach::Vec3, state′::AutopilotState)

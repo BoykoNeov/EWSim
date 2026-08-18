@@ -773,3 +773,229 @@ that whoever adds `azimuth_deg` to `scenario.jl` must fix `:att_q` in the same c
   predicted intercept point just PN against a displaced virtual target?* That one is cheap, it is
   pre-registered, and it is the only remaining way this slice ships an architecture where three lines
   would do.
+
+---
+
+## §5 — GATE 1: THE LOG
+
+### §5.1 P8 — **NOT A REPARAMETERIZED PN, AND PRIMITIVE 3 IS A SHIPPED KERNEL** (2026-08-19)
+
+`p8_reduction.jl` (log: `p8log.txt`). The slice-39 check, run **before any of §1 was written**, and it
+owes **two** answers rather than one (advisor): *is the midcourse a reparameterized PN?* and *is it
+the shipped pursuit law?*
+
+**P8.b FIRST, because a wrong answer there means everything else measures the wrong function.**
+
+```
+max |hand-written §1.1 expression − shipped pursuit_accel| over 2000 geometries: 0.000e+00 m/s²
+```
+
+⭐ **`k·V·(û_pip − v̂)⊥` IS `pursuit_accel(p_m, v_m, pip; k_guid = k)`, BIT-IDENTICALLY.** So §1.1
+item 3 is a **clamp around a shipped kernel**, never a second implementation of one — there is
+exactly one pursuit kernel in the core, and `test_midcourse.jl` carries that as a tooth.
+
+**P8.a — vs PN, sampled along the shipped wire's flown trajectory** (convention 10: the wire is the
+oracle, never a hand-recompute). `MID` = pursuit-to-PIP (⟂ the HEADING); `PNF` = PN against that same
+PIP as a virtual target (⟂ the LINE OF SIGHT); `PNT` = the shipped truth PN, as a reference:
+
+```
+   tick    range m   t_go s  lead deg      |MID|      |PNF|  ∠(MID,PNF)  ∠(MID,PNT) |MID|/|PNF|
+   1000     5710.9   7.7726    2.5964    94.8591    32.5113      2.5964     18.3555     2.9177
+   2000     4986.5   6.7932    2.9644   108.0027    42.3394      2.9644     18.5383     2.5509
+   3000     4264.0   5.8108    3.5849   130.2471    59.6554      3.5849     18.4289     2.1833
+   4000     3543.8   4.8260    4.5392   164.4492    90.5836      4.5392     18.4474     1.8154
+   5000     2826.2   3.8398    6.0079   216.9874   149.8649      6.0079     18.9895     1.4479
+   6000     2112.3   2.8544    8.4469   303.8761   280.8095      8.4469     20.5657     1.0821
+   7000     1405.4   1.8755   13.2287   472.4402   653.9217     13.2287     24.4074     0.7225
+   8000      680.8   0.8934    3.3202   119.1963   355.1692      3.3202     14.6529     0.3356
+```
+
+⭐⭐ **`∠(MID,PNF)` EQUALS THE LEAD ANGLE TO FOUR DECIMALS ON EVERY ROW.** That is the determinant
+argument measured on the wire rather than asserted in prose: writing `c = û·v̂`, pursuit commands
+along `û − c·v̂` and PN along `c·û − v̂`, which are parallel iff `c² − 1 = 0` — only where the
+pointing error is zero and **both commands vanish**. The two laws are perpendicular to *different*
+vectors, and the angle between them **is** the pointing error itself.
+⭐ **AND THE MAGNITUDES DO NOT SCALE TOGETHER: `|MID|/|PNF|` walks 2.9177 → 0.3356, a 48.5× spread
+along ONE engagement**, because PN carries a `1/r` that pursuit does not. So a `k` tuned at one range
+is wrong at every other, and no fixed `(k, N)` pair exists.
+
+**P8.c — the one fit worth running** (advisor: one fixed virtual displacement + one fixed `N` for the
+whole trajectory; a per-tick refit is not a reparameterization and was not run). Fitted at tick 1000
+over `d ∈ [−3000, 3000] m` × `N ∈ [0.25, 40]`:
+
+```
+BEST FIT at tick 1000: d = +1450.0 m, N = 40.00  → residual 28.4976 m/s² (|MID| = 94.8591)
+   tick        |MID|    |PN(d,N)|     residual resid/|MID|
+   1000      94.8591      89.9262      28.4976      0.3004
+   3000     130.2471     559.2354     443.8512      3.4078
+   5000     216.9874    1809.1785    1645.2437      7.5822
+   8000     119.1963    6617.2547    6567.0845     55.0947
+```
+
+**The fit cannot even close at the instant it is fitted** — a 30 % residual, with `N` pinned at the
+grid's edge (itself the tell that no solution lies inside) — and it degrades to 55× downrange.
+
+> ⭐⭐⭐ **VERDICT: the reduction FAILS, which is the good outcome.** Pursuit of a predicted intercept
+> point is not PN against a displaced virtual target under any fixed reparameterization, so §1.2's
+> "ship the small thing" branch does not fire and slice 39's discipline is satisfied. **But P8.b
+> makes the ship small anyway, for a different reason: the new law is a CLAMP AROUND A KERNEL THE
+> CORE ALREADY HAS.** The architecture added is three functions, one of which is one line.
+
+### §5.2 P9 — **THE NULL CLOSES, AND THE `k` WINDOW IS BOUNDED AT BOTH ENDS** (2026-08-19)
+
+`p9_null.jl` (log: `p9log.txt`). §1.4's probe: on a geometry where ballistic MISSES, does the
+zero-error midcourse close to a few metres, and at what `midcourse_k`?
+
+**METHOD — NO CORE PATCH, and it is P7's seam generalised from one axis to an arbitrary command.**
+A probe `Subsystem` appended to `sc.subs` runs its `observe!` after the seeker's and, while
+`!seek_init`, overwrites **both** `:seeker_omega` and `:seeker_los`. Since the shipped arm computes
+`(N·Vc)·(ω × û)`, choosing `û := v̂` (the missile's own heading) and `ω := (v̂ × a_mid)/(N·Vc)` returns
+`a_mid` **exactly** — a pursuit command is already ⟂ `v̂`. It then flows through the real chain:
+`_terminal_cutoff` (a no-op at `r_stop = 0`) → the SHIPPED `clamp_accel` → `steering_command` →
+`alpha_autopilot_delta` → both fins → `_integrate_6dof!`. The injection is intentionally
+**unclamped**: §1.1 item 3 clamps through the shipped clamp, and this is that clamp.
+
+**P9.0 SOUNDNESS — the advisor's blocking item, because P7 overwrote ONE key and this overwrites TWO.**
+First from the code: `:seeker_los` / `:seeker_omega` are **write-only sinks**, recomputed from
+`az_est`/`el_est` every tick at `missile.jl:2629-2630` and read at exactly one place, the guidance arm
+at `:1188` (grep over `core/src`: no other reader), so the overwrite cannot feed back into the α-β
+filter. Then measured:
+
+```
+raw wire       : lock 6956   cpa 2.9976 m   peak a_cmd post-lock (r>200) 23.55 %
+k = 0 injected : lock 6956   cpa 2.9976 m   peak a_cmd post-lock (r>200) 23.55 %   dtraj 0.00e+00 m
+injection self-check: worst |a_cmd_flown − a_cmd_intended| = 0.000e+00 m/s²  (guard fired 0, injected 6955)
+```
+
+⭐ **BIT-IDENTICAL, and the self-check is exact on all 6955 injected ticks** — the seam delivers
+precisely the command asked for. ⚠ The `Vc` guard (`|N·Vc| < 1` ⇒ skip, because `ω = (v̂ × a_mid)/(N·Vc)`
+would otherwise divide by zero and `clamp_accel` would SAFELY return zero, i.e. the command would
+silently vanish and read as "the law does not work") **never fired**, which is itself the answer to
+whether it was needed here.
+
+**P9.1 — THE THIRD ARM (§3.3). Displace the target in cross-range, midcourse ABSENT:**
+
+```
+   Δy₀ m     lock   t_lock s   r_lock m        cpa m auth % r>200    hold %   aeroSat   maxRes°
+       0     6956     6.9560     1436.3       2.9976        23.55    100.00      1235   12.7744
+     150     7057     7.0570     1436.6      70.2253       100.00     53.61      6933   12.7841
+     300     7182     7.1820     1436.0     209.7832       100.00     54.79      6763   12.7654
+     600     7510     7.5100     1436.3     827.8718         0.00     50.59         0    0.1402
+    1000     8210     8.2100     1436.5    1203.7137         0.00     37.90         0    0.1402
+    1500       -1          —          —    1678.7287         0.00       NaN         0    0.1402
+    2500       -1          —          —    2634.1871         0.00       NaN         0    0.1402
+```
+
+⚠ **THE `cpa` COLUMN IS NOT QUOTABLE ON ANY ROW BELOW THE FIRST** (§0.5 rule 4 — verdict, never
+metres, on an arm that lost the track). The verdicts are what matter, and there are **two distinct
+failure modes**, which is more than the plan expected:
+
+- **Δy₀ = 150–300 m** — the head still reaches the target, the tracker initialises, and **PN pins the
+  airframe trying to recover** (authority 100 %, 6763–6933 saturated frames, hold ≈ 54 %).
+- **Δy₀ ≥ 600 m** — ⭐⭐ **the head cannot reach the target at all.** At handover the target sits ~50°
+  off the missile's axis against a **30° gimbal stop**, so `in_fov` is never true, the tracker never
+  initialises, the never-locked estimate reports zero, and the missile flies **BALLISTIC to the
+  end** — `auth 0.00 %`, `aeroSat 0`, `maxRes 0.1402°`, i.e. it never manoeuvres once. `lock` here is
+  the RANGE gate opening (`seeker_detect` is slice 46's link-budget flag), not a track; the `hold`
+  figures below 100 % are the range gate re-closing as the missile flies **past**.
+
+> ⭐⭐⭐ **THAT SECOND MODE IS THE STRONGEST FORM OF §3.3's "DOING NOTHING IS WRONG", AND IT IS BETTER
+> THAN THE ONE THE PLAN ASKED FOR.** Without a midcourse the target is not merely off-boresight at
+> handover — **it is outside the head's mechanical travel.** The midcourse's job is not to shorten a
+> correction, it is to arrive with the target *inside the head's reach at all*.
+> ⚠ **AND THAT IS ALSO A POINTING ERROR THE MISSILE CANNOT RESOLVE — the search family's stated
+> precondition (§0.8).** It is a NOTE, not a claim: slice 47 does not measure a search, and §0.8's
+> rule stands until slice 48 does.
+
+**P9.2 — THE NULL ARM (Δp = Δv = 0): does pursuit-of-the-PIP close, and at what `k`?**
+⚠ CPA alone decides nothing (advisor): a cell is admissible only if it closes **with zero saturation
+frames**. `aeroB` / `aeroP` are aero-saturated frames **before** / **after** lock.
+
+```
+Δy₀ = 600 m                                  Δy₀ = 1000 m
+   k    cpa m  blind%  auth%  aeroB  aeroP      k    cpa m  blind%  auth%  aeroB  aeroP
+0.25   2.4326    1.11  21.07      0    888   0.25  12.6659    1.54 100.00      0   6656
+0.50   2.3574    1.59   8.14      0     36   0.50   2.4418    2.29   9.75      0     50
+1.00   2.9447    3.18   4.18      0      1   1.00   2.3981    4.57   4.27      0      4
+2.00   2.7019    6.35   2.89      0      0   2.00   2.7267    9.14   3.21      0      0
+3.00   2.8507    9.52   2.83      0      0   3.00   2.3932   13.70   2.92    269      0
+5.00   2.7559   15.86   2.75    273      0   5.00   2.4850   22.84   2.80    484      0
+8.00   2.9217   25.38   2.72    395      0   8.00   2.6034   49.73   2.81    827      0
+```
+
+⭐⭐ **THE ANSWER IS §1.4's MIDDLE OUTCOME — it closes, but the admissible `k` is a WINDOW BOUNDED AT
+BOTH ENDS, and the two ends are different physics:**
+
+- **`k` too small** — the midcourse is too lazy, arrives with a residual, and **the ENDGAME pays**:
+  post-lock authority pins at 100 % and the airframe saturates for thousands of frames (`aeroP`). At
+  the larger displacements `k = 0.25` does not close at all (320 m at Δy₀ = 2500, 522 m at 4000).
+- **`k` too large** — the midcourse **saturates the airframe BEFORE lock** (`aeroB`), which is
+  §2.5 check 4's explicit disqualifier: *a slider whose top end pins the airframe before lock is a
+  different slice.*
+
+**The window NARROWS as the required correction grows, and it narrows from the top:**
+
+```
+   correction   admissible k        clean at k = 1.0?
+       600 m      0.5 … 3.0                yes
+      1000 m      0.5 … 2.0                yes
+      1500 m      0.5 … 1.0                yes
+      2500 m      0.5 … 1.0                yes
+      4000 m      0.5 only                  no (aeroB 458)
+```
+
+⇒ ⭐ **`midcourse_k = 1.0` IS THE AUTHORED VALUE AND IT NOW HAS A MEASURED JUSTIFICATION** — the only
+gain clean across the whole plausible domain (600–2500 m of cross-range correction: cpa 2.3–2.9 m,
+peak blind demand 3.2–9.2 % of `a_max`, **zero** saturation frames before lock, hold 100 %). This is
+exactly what §1.4 said to learn here rather than at gate 2.
+
+⭐⭐ **AND IT DISCHARGES THE ADVISOR'S WARNING THAT P7's BRACKET WOULD NOT TRANSFER — IT DOES NOT.**
+P7 called 473 m of blind-phase cross-range *absurd* (a 163 m miss). Here the null arm flies **893 m**
+of cross-range while blind at Δy₀ = 1000 and hits at **2.40 m** for **4.57 %** of `a_max` with zero
+saturation. The difference is the SHAPE of the command, not its size: P7 held a **constant injected
+rate** through the whole blind phase (displacement grows quadratically, demand never stops), while a
+heading correction **does its work early and then flies straight**. ⇒ **a method lesson worth
+carrying: a probe that injects a CONSTANT RATE prices a DIFFERENT manoeuvre from the one a converging
+law actually flies, and its "absurd" boundary does not transfer.**
+
+**P9.3 — ONE NONZERO-Δv ARM (the advisor's cheap add; NOT a substitute for §2.5 check 4's gate-2 P4
+re-run).** Does the midcourse's own authority swamp the error axis on the new geometry?
+
+```
+   Δy₀ m       k    Δvy m/s       cpa m  blind a_cmd%  auth % r>200    hold %    aeroB
+    1000    1.00        0.0      2.3981          4.57          4.27    100.00        0
+    1000    1.00      -30.0      2.6709          3.65         21.62    100.00        0
+    1000    1.00       30.0      2.6175          5.48         20.87    100.00        0
+    2500    1.00        0.0      2.9003          9.15          4.57    100.00        0
+    2500    1.00      -30.0      2.4796          8.38         22.32    100.00        0
+    2500    1.00       30.0      2.4627          9.90         22.11    100.00        0
+```
+
+⭐ **THE ERROR AXIS IS ALIVE AND IT MOVES THE §3.2 HEADLINE COLUMN BY 5×** — a ±30 m/s belief error
+takes the post-lock authority from 4.27 % to ~21 % while the miss stays at 2.4–2.7 m, which is §0.5
+rule 1 (*miss is not the gauge*) confirmed on slice 47's own wire before gate 2 is written.
+⚠ **AND THE RESPONSE IS SYMMETRIC IN THE SIGN OF `Δv` (21.62 vs 20.87; 22.32 vs 22.11), SO THE
+SLIDER IS V-SHAPED, NOT MONOTONE** — slice 36's basket precedent. The gate-2 P4 re-run must read
+monotonicity in **|Δv|**, or the axis must be authored as a magnitude; a signed slider judged for
+monotonicity would fire this project's standing disqualifier on an artefact of the sign convention.
+
+### §5.3 GATE-1 STATUS — **THE TWO PROBES ARE RUN AND THE PRIMITIVES ARE SHIPPED**
+
+- **P8 ✓** the reduction FAILS (the good outcome): not a reparameterized PN, and primitive 3 is a
+  clamp around the shipped `pursuit_accel`, bit-identically.
+- **P9 ✓** §1.4's middle outcome: the null closes, `midcourse_k = 1.0` is measured rather than
+  guessed, and §3.3's third arm is pinned by a **stronger** mechanism than the plan expected (the
+  gimbal STOP, not a shortfall of correction time).
+- **§1.1's three primitives are in `core/src/guidance.jl`**, exported, with the four degenerate
+  branches of `intercept_time` each returning a chosen `0.0` (⇒ `pip = p_t` ⇒ pursuit of the believed
+  present position, never a zero command).
+- **§1.5's tests are in `core/test/test_midcourse.jl`**, wired into `runtests.jl`. Suite green at
+  **9184** tests (7808 before). Teeth: a known-root construction; the `‖pip − p_m‖ = V_m·t_go`
+  identity; all four degenerate branches; the zero-error null *and* its off-null control; the sign in
+  both directions on the cross-range axis; `midcourse_accel == clamp_accel ∘ pursuit_accel` bit for
+  bit; the P8.a lead-angle identity; and a bit-equality pin against `p9_null.jl`'s own arithmetic, so
+  the measured `k` window is calibrated against the function that ships.
+- ⚠ **WHAT GATE 2 INHERITS:** §3.3's default cell is now **Δy₀ = +1000 m of cross-range** (target
+  authored at `y = 3000` instead of 2000) with `midcourse_k = 1.0`, and the P4 re-run must be read in
+  **|Δv|** (§5.2, P9.3). Nothing else in §§2–3 changes.
+

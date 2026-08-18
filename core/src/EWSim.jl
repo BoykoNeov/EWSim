@@ -268,6 +268,10 @@ export pursuit_accel, autopilot_step, clamp_accel, autopilot_init, AUTOPILOT_MOD
 export pn_accel, pn_accel_from_omega, GUIDANCE_MODES
 # Slice 12: augmented PN — TPN + (N/2)·a_T⊥ target-accel feedforward (the :apn rung).
 export pn_accel_augmented
+# Slice 47: the MIDCOURSE phase — what a BLIND missile flies on. `intercept_time` is the
+# constant-velocity closed form, `predicted_intercept_point` IS the belief (one point, one time),
+# and `midcourse_accel` is a clamp around the SHIPPED `pursuit_accel` (bit-identical — p8_reduction).
+export intercept_time, predicted_intercept_point, midcourse_accel
 # Slice 14 (capstone): cooperative salvo — time-to-go + impact-time-control (the :salvo rung).
 export time_to_go, salvo_consensus, impact_time_control_accel, COOPERATION_MODES
 # Slice 18 (§11 Tier A): the authored Gaussian-hill heightfield + sampled-profile LOS

@@ -55,7 +55,10 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Where the project is (2026-08-18)
 
-**Slices 1–40 + 46 COMPLETE & green — 7808 tests.** 39 and 41–45 are GATE-0 RECORDS (no code). ⚠⚠ **FIVE
+**Slices 1–40 + 46 COMPLETE & green — 9184 tests** (7808 before slice 47's gate 1). **Slice 47 (THE MIDCOURSE
+PHASE) is IN PROGRESS: gates 0 and 1 CLOSED** — `intercept_time` / `predicted_intercept_point` /
+`midcourse_accel` in `guidance.jl` + `test_midcourse.jl`; `midcourse_k = 1.0` MEASURED; gate 2 next
+(`docs/plans/slice47.md` §5). 39 and 41–45 are GATE-0 RECORDS (no code). ⚠⚠ **FIVE
 CONSECUTIVE gate-0 records shipped nothing, and on 2026-08-18 the kill CRITERION itself was ruled at fault**
 (the two-test rule below): 41, 44 and 45 are **ALIVE AS A MODEL**, probe code in `M:\claud_projects\temp\slice4N`;
 only 42 is dead outright; 43 is BLOCKED. ⭐ **Slice 46 DISCHARGED 44's re-verdict** — it shipped 44's exact
