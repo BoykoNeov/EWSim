@@ -190,3 +190,148 @@ Cheapest kill first, teeth last, so that a dead slice costs one run and not ten.
    finding. Not predicted either way; measured at P3.
 3. Whether a reversal costs anything beyond its travel (the command reverses instantly; the servo
    cannot). At ρ near the cap this should bite, and at ρ far below it should not.
+
+---
+
+# §I — GATE 0, PROBES **P0/P1** (2026-08-18): **F0 PASSES, F1 FIRES, AND MY OWN CEILING CLAIM IS IN TROUBLE**
+
+## §I.0 P0 — **F0 PASSES, AND ITS PREDICTION IS NOW MEASURED RATHER THAN ASSUMED**
+
+Same cell, two drives, `gimbal_rate_dps = 8`:
+
+| err ° | S ° | dir | ρ °/s | miss `:direct` | miss `:servo` | lag ° | stop% | sat% | t_lock s |
+|---|---|---|---|---|---|---|---|---|---|
+| −12 | 10 | +1 (right) | 2 | 0.184 | **0.146** | 0.098 | 0.0 | 11.2 | 1.227 |
+| −12 | 10 | +1 | 4 | 0.036 | **0.061** | 0.196 | 0.0 | 11.5 | 0.588 |
+| −12 | 10 | −1 (WRONG) | 5 | 0.105 | **0.309** | 0.245 | 0.0 | 5.1 | 5.180 |
+| −14 | 10 | +1 | 2 | 0.089 | **0.172** | 0.098 | 0.0 | 10.1 | 2.506 |
+| +12 | 10 | −1 (right) | 1 | 0.057 | **0.099** | 0.049 | 0.0 | 17.5 | 1.525 |
+| +12 | 10 | +1 (WRONG) | 8 | 0.288 | **0.327** | **9.997** | **29.1** | 18.4 | 2.679 |
+
+> ⭐ **A REAL FIRST-ORDER RATE-LIMITED SERVO FLIES A SEARCH FINE. F0 does not fire.** Every cell the
+> bypass rescued, the servo rescues.
+
+⭐ **AND THE LAG IS EXACTLY `ρ·τ`, TO THREE DIGITS, ON EVERY UNSATURATED ROW** — 0.049 / 0.098 /
+0.196 / 0.245° at ρ = 1 / 2 / 4 / 5 against τ = 0.05. That is the closed form the falsifier
+*predicted*, now measured on the shipped kernel. It is immaterial against a 10° window, which is why
+§V.4's numbers mostly survive the bypass — **but "mostly" is not "all", and the last row is why.**
+
+⚠⚠ **THE LAST ROW TRIPS F0's OWN ESCAPE CLAUSE** (*"if the measured lag is anywhere near the window
+width, the prediction is wrong and the mechanism must be found before the run continues"*): at ρ = 8,
+the lag is **9.997° — a full window** — and the head is on the stop 29 % of in-band ticks. `ρ·τ` would
+be 0.4°. **The 25× excess is not the servo's lag, it is the CLAMP**: the command is unclamped and the
+head is not, so while the head is parked on the stop the command runs away from it without bound.
+
+## ⚠⚠ §I.1 THE NULL CELLS — AND **THE TWO SIGNS ARE NOT THE SAME FAILURE**
+
+Read first, per `docs/LESSONS.md`:
+
+| err ° | no-search miss (m) | ever locks? | stop% |
+|---|---|---|---|
+| −12 | 305.112 | **no** | 0.0 |
+| −14 | 305.112 | **no** | 0.0 |
+| +12 | 423.494 | **YES** | **56.5** |
+| +14 | 483.430 | **YES** | **56.6** |
+
+⭐⭐ **THE MINUS SIDE IS AN ACQUISITION FAILURE AND THE PLUS SIDE IS NOT.** The − arms never lock and
+both miss the *same* 305.112 m (the signature of a null that does not depend on the error at all).
+The + arms **do** lock, and still miss — and they spend **57 % of their in-band ticks pinned on the
+30° stop with no search running at all.**
+
+⇒ ⚠ **F3 IS ALREADY LIVE BEFORE ITS OWN PROBE.** Slice 42 §III.1's *"the failing set is two-sided
+here"* is true only in the sense that both signs miss. **They miss for different reasons**, and the
++ side's reason is visible in the do-nothing cell.
+
+## ⭐⭐ §I.2 P1a — **F1 FIRES: `none ≤ 16` WAS THE GRID EDGE, AND IT IS NOW A NUMBER**
+
+The four cells slice 42 §V.4 reported as `--`, walked to 64 °/s on the same `:direct` instrument:
+
+| err ° | dir | S ° | **ρ_min** | miss (m) | stop% | lag ° |
+|---|---|---|---|---|---|---|
+| +12 | +1 | 25 | **18** | 0.246 | 32.3 | 24.977 |
+| +12 | +1 | 30 | **22** | 0.315 | 31.8 | 29.979 |
+| +14 | +1 | 25 | **18** | 0.246 | 32.3 | 24.978 |
+| +14 | +1 | 30 | **22** | 0.315 | 31.8 | 29.980 |
+
+> ⚠⚠ **SLICE 42 §V.4's SENTENCE — *"past S ≈ 20° on the +side there is no rate that buys it back"* —
+> IS WITHDRAWN. There is: 18 °/s and 22 °/s.** The `--` was the top of an authored 1…16 grid echoing
+> itself back, which is **the exact lesson slice 42 itself wrote into `docs/LESSONS.md` eight days
+> earlier** and then did not apply to its own surviving table.
+
+⚠ Note also `lag ≈ S` **to the digit** (24.977 at S = 25, 29.979 at S = 30) — the head is a full
+half-width behind its command. That is not a servo lag, it is the head sitting on the stop while the
+command sweeps the whole pattern without it. **These rows describe a command, not a head.**
+
+## ⚠⚠⚠ §I.3 P1b — **§0.2's CEILING CLAIM IS REFUTED: COMMANDING ABOVE `rate_max` STILL HELPS**
+
+The candidate law said ρ_max = `gimbal_rate_dps`, so on `:servo` the digits should stop changing at
+ρ = 8. They do not:
+
+| err | dir | S | ρ °/s | miss `:servo` | miss `:direct` | lag ° | stop% | t_lock s |
+|---|---|---|---|---|---|---|---|---|
+| −12 | −1 (wrong) | 20 | 4 | 305.112 | 305.112 | 0.196 | 0.0 | — |
+| −12 | −1 | 20 | 6 | 305.112 | 305.112 | 0.294 | 0.0 | — |
+| −12 | −1 | 20 | **8** | **0.131** | 0.129 | 0.392 | 0.0 | **6.035** |
+| −12 | −1 | 20 | 10 | 0.333 | 0.185 | 6.094 | 0.0 | **5.174** |
+| −12 | −1 | 20 | 12 | 0.120 | 0.037 | 10.532 | 0.0 | **4.604** |
+| −12 | −1 | 20 | 16 | 0.321 | 0.332 | 16.715 | 0.0 | **3.821** |
+| −12 | −1 | 20 | 32 | 0.039 | 0.059 | 20.990 | 0.0 | **2.353** |
+
+> ⚠⚠ **`t_lock` FALLS MONOTONICALLY FROM 6.035 s TO 2.353 s AS THE COMMANDED RATE GOES FROM 1× TO 4×
+> THE SERVO'S OWN LIMIT.** A head that cannot slew faster than 8 °/s nonetheless acquires **2.6×
+> sooner** when told to sweep at 32. **⇒ F2's central claim — that the search's rate ceiling IS the
+> servo knob — is false as stated in §0.2, and it is withdrawn here rather than at F2's own probe.**
+
+⚠ **AND THE +SIDE ROWS OF THE SAME PROBE ARE CONTAMINATION, NOT PHYSICS** (err +12, dir +1, S = 15):
+`lag` reads **14.990 / 14.995 / 14.996 / 14.996 / 14.985 / 14.989 / 14.974** across ρ = 4 → 32 — i.e.
+**pinned at the half-width S = 15 to three digits, at every rate** — with stop% 53.2 → 10.9. The head
+is on the stop and the command is sweeping without it. `miss` there runs 258.959 / 414.581 / 324.076
+before rescuing at ρ = 10, which is not a bracket and must not be read as one.
+
+## §I.4 WHERE THIS LEAVES THE GATE — **the law is not the one §0.2 named**
+
+**Standing:** F0 does not fire (there is something here). **F1 fires** (§V.4's `--` withdrawn).
+**F2's claim is refuted early** (the servo limit is not the ceiling). **F3 is confirmed on the +side
+before its own probe** (lag ≡ S, stop% up to 57 % *with no search running*).
+
+⭐ **THE MECHANISM P1b IMPLIES, STATED AS A PREDICTION SO THE NEXT PROBE CAN KILL IT:** the command
+is an unclamped, unlimited integrator; the head is clamped and rate-limited. So when ρ_cmd exceeds
+`rate_max`, **what collapses is not the head's rate — it is the pattern's AMPLITUDE.** The command's
+half-period is `S/ρ_cmd`, and in that time a saturated head covers only `rate_max · S/ρ_cmd`. ⇒
+
+> **PREDICTED: the head's realized excursion is `A = S · min(1, rate_max/ρ_cmd)`,**
+> so past the servo limit **asking for more rate SPENDS coverage, one for one** — and slice 42's
+> (S, ρ) grid is in COMMANDED coordinates that the head never flies.
+
+⚠ **THIS IS A PREDICTION AND NOTHING ELSE. It is not yet measured, and the alternative reading — that
+a fast dither near the birth angle simply waits for the LOS to walk into it, so the "search" is doing
+no searching at all — is equally consistent with every number above.** P2 measures the head's actual
+excursion and separates them.
+
+## ⚠⚠ §I.5 **F7 — PRE-REGISTERED BEFORE P2/P3 RUN.** Is the amplitude collapse PHYSICS or MY OWN GENERATOR?
+
+Written before the dither ladder or the lead ladder exists, because §I.4's prediction has an obvious
+alternative that would make it an artifact and I want the criterion fixed first.
+
+Slice 42's search command is an **OPEN-LOOP integrator**: it advances by `dir·ρ·dt` every tick and
+reverses when *the command* reaches the half-width. It never looks at the head. So when the head
+saturates at `rate_max`, the command runs away and reverses while the head is still out near the
+middle of the pattern — **and that is integrator WINDUP, a property of the generator I wrote, not of
+the seeker.**
+
+> **THE FIX IS ONE LINE AND IT HAS A NAME: bound how far the command may lead the head
+> (`:probe_search_lead`). That is anti-windup, applied to a search pattern.**
+
+* **PREDICTED:** with a finite lead, **commanding ρ above `rate_max` becomes INERT** — t_lock and
+  miss stop changing at ρ = `gimbal_rate_dps`, and the realized excursion stops collapsing.
+* **IF THAT HOLDS:** §I.4's amplitude collapse is **real but is a property of the OPEN-LOOP
+  generator**, the honest law is a statement about *search-pattern architecture* rather than about
+  seeker hardware, and — ⭐ — **§0.2's ceiling claim is restored CONDITIONALLY**: the servo is the
+  ceiling *if and only if your pattern generator knows about the head.*
+* **IF IT DOES NOT HOLD** (ρ > rate_max still moves the numbers with the lead clamped in), then the
+  collapse is not windup, my mechanism is wrong, and nothing about amplitude ships until the real
+  one is found.
+* ⚠ **CONTAMINATION GUARD:** the lead clamp is a second feedback path from `head_az` into the
+  command, which is the shape of the slice-42 instrument bug that *"crawls at 1/50 rate"*. **The
+  crawl signature is `t_lock` blowing up by ~50× at small ρ.** If any lead-clamped row shows it, the
+  clamp is mis-built and every row from it is void.
