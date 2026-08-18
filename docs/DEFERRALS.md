@@ -504,12 +504,29 @@ it is blind. The horizon itself is no longer the missing piece.
 
 ### New candidates raised by slice 46
 
-- **A MIDCOURSE PHASE (inertial / datalink), THEN the search pattern.** Now the top of the backlog.
-  Slice 46's default cell already flies **434 frames blind** and reaches its target anyway — because
-  it is flying pure PN off a target it cannot see, which is a MODEL GAP, not a design. What a blind
-  missile should fly is an inertial midcourse toward a predicted intercept point, and that is the
-  thing a search pattern searches from. ⚠ Note the two are the same slice's two halves, and slice 43's
-  law (`travel = deficit/(1−ω/ρ)`, the U-shaped best moment) is already banked for the second half.
+- **A MIDCOURSE PHASE (inertial / datalink), THEN the search pattern.** Now the top of the backlog,
+  and **slice 47's gate 0 is written and RUN** (`docs/plans/slice47.md`, 2026-08-19).
+  ⚠⚠ **CORRECTION, MEASURED (slice 47 P0), AND IT STANDS WHATEVER BECOMES OF SLICE 47:** this entry
+  used to read *"it is flying pure PN off a target it cannot see."* **That is wrong. It is flying
+  NOTHING.** On the shipped wire `|a_cmd|` is **EXACTLY 0.0 for 6955 consecutive blind ticks** and the
+  missile still arrives at 2.998 m — because the Seeker writes `:seeker_omega` unconditionally
+  (`missile.jl:2629`) while the never-locked init zeroes every estimate, so PN reads a zero LOS rate,
+  **and because the scenario authors the target into the missile's ballistic plane.** ⭐ A second
+  freebie measured alongside it (P2): the head is **CUED OFF TRUTH for free** through the whole blind
+  phase — 0.30° off a 10° window after 25° of body-frame travel. ⇒ the gap is not "bad guidance while
+  blind", it is **no guidance, a free perfect cue, and a launch heading that is already the answer.**
+  ⚠ Note the midcourse and the search are the same slice's two halves, and slice 43's law
+  (`travel = deficit/(1−ω/ρ)`, the U-shaped best moment) is already banked for the second half.
+  ⚠ **Slice 47's own headline proposal — a three-way "squeeze" in which widening the window to survive
+  a bad handover shortens the horizon enough to make the error worse — was REFUTED AT GATE 0**
+  (`t_lock` saturates against the CPA, so the angle margin improves monotonically). What replaced it:
+  ⭐⭐ **a wider window does buy handover tolerance and is never the right way to buy it, because the
+  reach it sells is what the airframe was going to spend on the intercept** — over a 6→25° sweep with
+  a PERFECT picture the authority goes 8.55 % → PINNED, hold 100 → 6.90 %, CPA 2.6 → 271.9 m while the
+  angle margin *improves*. ⇒ **`gimbal_fov_margin_deg` is not the gauge either** (§0.5 rule 1, one
+  level up). ⚠ And a method catch worth carrying: **a probe that perturbs the TRUTH to emulate a wrong
+  BELIEF is clean only for quantities read at a single instant** — anything integrated over the
+  approach is measuring a different engagement (slice 47 P6's error arm, not quotable).
 - **RCS as a per-aspect quantity.** `rcs_m2` is a scalar on the target's comp. A real RCS swings
   10–20 dB with aspect angle, and against a CROSSING target (which every wire in this arc uses) that
   is a large, continuously-varying effect on the horizon. ⚠ Check the MODEL test first: does anything
