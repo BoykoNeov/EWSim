@@ -8,6 +8,8 @@ Pre-implementation design plans live in `docs/plans/sliceN.md`.
 
 ---
 
+## Slice 2 — propagation fidelity — two_ray lobing + horizon mask
+
 Slice 2 (propagation fidelity — `two_ray`) — **COMPLETE. Steps 1–3 + coverage-diagram stretch
 done & green** (420 tests).
 Step 1: `rf.jl` two-ray physics behind the `propagation` knob. `two_ray_phase` (Δφ =
@@ -109,6 +111,8 @@ low-elevation window keeps ~2–4 cells/lobe and centres the 100 m target in the
 Visually confirmed 2026-06-21 (headless PNG render of the notebook cells: clean lobe fan, dark
 nulls, cyan horizon curve bounding the masked wedge; no headless *visual* test — same gap as
 slice-1 `_draw`, numbers pinned, picture eyeballed).
+
+## Slice 3 — CFAR sandbox + N-pulse integration
 
 **Slice 3 — CFAR sandbox (+ pulse integration)** (HANDOFF §10 item 3) — **Steps 1–4 done & green (798
 tests); wire + UI machine-verified AND the cfar range-power `_draw` now VISUALLY CONFIRMED
@@ -287,6 +291,8 @@ toggle/slider UI test needs NO server: `godot --headless --path clients/godot --
 res://net/slice3_ui_test.gd`. **(stretch, deferred)** a Pluto CFAR diagram (Pd/Pfa vs SNR per
 variant, or threshold-curve panels over the profile).
 
+## Slice 4 — jamming / EP — J/S burn-through
+
 **Slice 4 — jamming / EP** (HANDOFF §10 item 4) — **COMPLETE. Gates 1–4 done & green (923 tests);
 wire + UI machine-verified AND the spatial jammer-marker `_draw` VISUALLY CONFIRMED (2026-06-23).**
 Planned FULL in `docs/plans/slice4.md` (4 staged gates: `rf.jl` jamming
@@ -436,6 +442,8 @@ then `godot --headless --path clients/godot --script res://net/slice4_verify.gd`
 `load_scenario`s standoff itself, so launch it against the SELFSCREEN server). The UI test needs NO
 server: `godot --headless --path clients/godot --script res://net/slice4_ui_test.gd`. **(stretch,
 deferred)** a Pluto burn-through diagram (`clients/notebooks/slice4_burnthrough.jl`).
+
+## Slice 5 — DF / geolocation — bearings-only fix + GDOP ellipse
 
 **Slice 5 — DF / geolocation** (bearings-only emitter location + the GDOP error ellipse; HANDOFF §10
 item 5) — **COMPLETE. Gates 1–3 done & green (1055 tests); wire + UI machine-verified AND the plan-view
@@ -598,6 +606,8 @@ headless: start that server, then `godot --headless --path clients/godot --scrip
 res://net/slice5_verify.gd` (exit 0 = pass; serves one client then exits). The UI test needs NO server:
 `godot --headless --path clients/godot --script res://net/slice5_ui_test.gd`. **(stretch, deferred)**
 offline `batch.jl` `kind=:geoloc_mc` + `clients/notebooks/slice5_gdop.jl` Pluto MC-vs-CRLB overlay.
+
+## Slice 6 — multi-emitter EW — PRI-histogram deinterleaver
 
 **Slice 6 — multi-emitter EW** (interleaved pulse trains → PRI-histogram deinterleaver; HANDOFF §10
 item 6) — **COMPLETE. Gates 1–3 done & green (1238 tests); wire + UI machine-verified AND the
@@ -764,6 +774,8 @@ start that server, then `godot --headless --path clients/godot --script res://ne
 = pass; serves one client then exits). The UI test needs NO server: `godot --headless --path clients/godot
 --script res://net/slice6_ui_test.gd`. **(stretch, deferred)** offline `batch.jl` `kind=:pri_mc`
 (deinterleave success-rate vs jitter/emitter-density) + `clients/notebooks/slice6_pri.jl` Pluto diagram.
+
+## Slice 7 — GPS — pseudoranges, trilateration, DOP + RAIM
 
 **Slice 7 — GPS (pseudoranges → trilateration → DOP + RAIM)** (HANDOFF §9 REUSE milestone / §10 item 7)
 — **COMPLETE. Gates 1–3 done & green (1492 tests); wire + UI machine-verified AND the GPS sky/residual
@@ -949,6 +961,8 @@ clients/godot --script res://net/slice7_verify.gd` (exit 0 = pass; it `load_scen
 launch it against the slice7_dop server). The UI test needs NO server: `godot --headless --path clients/godot
 --script res://net/slice7_ui_test.gd`. All 1492 tests: `pwsh tools/test.ps1`.
 
+## Slice 8 — ballistic missile — the force integrator + frames.jl
+
 **Slice 8 — missile (ballistic): the airframe integrator + `frames.jl`** (HANDOFF §10 item 8, the first
 slice of the missile-guidance arc) — **COMPLETE. Gates 1–3 done & green (1633 tests); wire + UI
 machine-verified AND the missile spatial-view `_draw` VISUALLY CONFIRMED (2026-07-01).** Planned FULL in
@@ -1105,6 +1119,8 @@ then `godot --headless --path clients/godot --script res://net/slice8_verify.gd`
 client then exits). The UI test needs NO server: `godot --headless --path clients/godot --script
 res://net/slice8_ui_test.gd`. All 1633 tests: `pwsh tools/test.ps1`.
 
+## Slice 9 — the PID autopilot under a pursuit outer law
+
 **Slice 9 — missile: the PID autopilot (inner loop) under a pursuit outer law** (HANDOFF §10 item 9, the
 SECOND slice of the missile-guidance arc) — **COMPLETE. Gates 1–3 done & green (1723 tests); wire + UI
 machine-verified AND the guided-missile spatial `_draw` VISUALLY CONFIRMED (2026-07-01).** The missile's
@@ -1205,6 +1221,8 @@ NO server: `godot --headless --path clients/godot --script res://net/slice9_ui_t
 
 ---
 
+## Slice 10 — proportional navigation + g-limit saturation
+
 **Slice 10 — missile: proportional navigation (outer loop) + g-limit saturation-as-lesson** (HANDOFF §10 item
 10, the THIRD and FINAL slice of the missile-guidance arc) — **COMPLETE. Gates 1–3 done & green (1829 tests);
 wire + UI machine-verified AND the guided-missile spatial `_draw` VISUALLY CONFIRMED (2026-07-02).** The
@@ -1292,6 +1310,8 @@ res://net/slice10_verify.gd` (exit 0 = pass; it branches on the scenario name). 
 tools/test.ps1`.
 
 ---
+
+## Slice 11 — noisy seeker + LOS-rate filtering
 
 **Slice 11 — missile: noisy seeker + LOS-rate filtering (the missile's FIRST `observe!`)** (HANDOFF §10 item
 11, the FIRST slice of the seeker arc) — **COMPLETE. Gates 0–3 done & green (1921 tests); wire + UI
@@ -1403,6 +1423,8 @@ clients/godot --script res://net/slice11_ui_test.gd`. All 1921 tests: `pwsh tool
 
 ---
 
+## Slice 12 — augmented PN + a maneuvering target
+
 **Slice 12 — missile: augmented PN + a maneuvering-target mover (the seeker arc's RNG-free payoff)** (HANDOFF
 §10 item 10's deferred half — "g-limit saturation modeled, this is *why* augmented PN matters") — **COMPLETE.
 Gates 0–3 done & green (2008 tests); wire + UI machine-verified AND the spatial `_draw` VISUALLY CONFIRMED
@@ -1511,6 +1533,8 @@ a_max, saturated lit, wide miss]; drag a_max UP to 350+ to watch `:pn` recover, 
 harder). Re-run the gate-3 proof headless: start that server, then `godot --headless --path clients/godot
 --script res://net/slice12_verify.gd` (exit 0 = pass). The UI test needs NO server: `godot --headless --path
 clients/godot --script res://net/slice12_ui_test.gd`. All 2008 tests: `pwsh tools/test.ps1`.
+
+## Slice 13 — countermeasures — a decoy vs a CFAR-scanning seeker
 
 **Slice 13 — countermeasures: a decoy that seduces a CFAR-scanning seeker + an α-β discrimination gate (the
 suite-fusing slice)** (HANDOFF §10 item 12 — "chaff (= RGPO), flares (IR decoys); seeker discrimination = the
@@ -1679,6 +1703,8 @@ sweep + an offline `batch.jl` miss-vs-`I`/gate grid (own seeded stream — the d
 
 ---
 
+## Slice 14 — cooperative salvo guidance (the capstone)
+
 **Slice 14 — cooperative guidance: a salvo of interceptors sharing time-to-go for SIMULTANEOUS arrival (HANDOFF
 §10 item 13 — "Cooperative guidance … Capstone")** — **COMPLETE. Gates 0–3 done & green (2259 tests). THE
 COMMITTED ROADMAP IS CLOSED.** The missile guidance arc (slices 8–12) built the single-interceptor stack; slice
@@ -1788,6 +1814,8 @@ an offline `batch.jl` Δτ-vs-geometry grid (RNG-free here — the distribution 
 
 ---
 
+## Slice 15 — a RATE-LIMITED FIN SERVO
+
 **Slice 15 — actuator/fin dynamics: a RATE-LIMITED FIN SERVO (HANDOFF §11 Tier-A, the FIRST horizon extension)** —
 **COMPLETE. Gates 0–3 done & green (2347 tests).** The §10 committed roadmap (items 1–13) was DONE at slice 14;
 slice 15 OPENS §11 Tier-A by taking the **actuator/fin half** of "6-DOF airframe + actuator/fin dynamics" and
@@ -1872,6 +1900,8 @@ res://net/slice15_verify.gd` (exit 0 = pass). The UI test needs NO server: `… 
 
 ---
 
+## Slice 16 — the 6-DOF airframe I — pitch-plane rotational dynamics
+
 **Slice 16 — the 6-DOF airframe, FIRST HALF: pitch-plane ROTATIONAL DYNAMICS (HANDOFF §11 Tier-A)** — the
 DEFERRED rotational half of the Tier-A "6-DOF airframe + actuator/fin dynamics" entry (slice 15 did the
 actuator/fin half). The FIRST rotational state in the project: slices 8–15's missile was a POINT MASS whose
@@ -1936,6 +1966,8 @@ the gate-3 proof headless: start that server, then the console Godot `--headless
 res://net/slice16_verify.gd` (exit 0 = pass). The UI test needs NO server: `… --script res://net/slice16_ui_test.gd`.
 
 ---
+
+## Slice 17 — the 6-DOF airframe II — the alpha to lift to gamma coupling
 
 **Slice 17 — the α→lift→γ COUPLING: rotation feeds translation (HANDOFF §11 Tier-A, the 6-DOF airframe's
 SECOND half)** — the FIRST rotation→translation coupling in the project (2488 tests). Slice 16 made `att`
@@ -2037,6 +2069,8 @@ the 2488-test suite is out of scope of this change by construction.
 
 ---
 
+## Slice 18 — TERRAIN MASKING + the 3-D client view
+
 **Slice 18 — TERRAIN MASKING + the 3-D client view (HANDOFF §11 Tier-A "higher fidelity behind existing
 knobs" — `propagation` is the named seam) — COMPLETE & green (2604 tests).** USER-DIRECTED INSERTION
 (2026-07-14, "work on 3d representation and terrain"): the inner α/g autopilot slice17.md had slotted as
@@ -2132,6 +2166,8 @@ the console Godot `--headless --path clients/godot --script res://net/slice18_ve
 pass). The UI test needs NO server: `… --script res://net/slice18_ui_test.gd`.
 
 ---
+
+## Slice 19 — the inner alpha/g AUTOPILOT + the flight-condition ceiling
 
 **Slice 19 — the inner α/g AUTOPILOT: the airframe flies its own command (HANDOFF §11 Tier-A, the 6-DOF
 arc's closed inner loop)** — the slice that makes the coupled airframe STEER ITSELF, and the FIRST time an
@@ -2290,6 +2326,8 @@ point_mass and the same PN law hits. Re-run the gate-3 proof headless: start tha
 server: `… --script res://net/slice19_ui_test.gd`.
 
 ---
+
+## Slice 20 — INDUCED DRAG — the missile lowers its own ceiling
 
 **Slice 20 — INDUCED DRAG: the missile lowers its own ceiling by maneuvering (HANDOFF §11 Tier-A)** — the
 project's FIRST DEGENERATIVE SPIRAL, and the cash-in of an approximation slices 17/19 shipped EXPLICITLY:
@@ -2453,6 +2491,8 @@ clients/godot --script res://net/slice20_verify.gd` (exit 0 = pass). The UI test
 `… --script res://net/slice20_ui_test.gd`.
 
 ---
+
+## Slice 21 — THE EXPONENTIAL ATMOSPHERE
 
 **Slice 21 — THE EXPONENTIAL ATMOSPHERE: the ceiling you lower by CLIMBING (HANDOFF §11 Tier-A)** — the
 honest completion of slices 19/20's constant-ρ, and the last named deferral of the aero arc's opening trio.
@@ -2669,6 +2709,8 @@ miss opens to 1.7 km. Re-run the gate-3 proof headless: start that server, then 
 
 ---
 
+## Slice 22 — NONLINEAR C_L(alpha) / TRUE STALL
+
 **Slice 22 — NONLINEAR `C_L(α)` / TRUE STALL: the ceiling the AIRFRAME sets (HANDOFF §11 Tier-A)** — the aero
 arc's nearest and most load-bearing named deferral, carried explicitly by slices 19, 20 and 21, and the one
 that closes the LEAK bounding two shipped knobs. Slices 19–21 gave cap #4 (`a_max_aero`) three movers and
@@ -2877,6 +2919,8 @@ res://net/slice22_verify.gd` (exit 0 = pass; it auto-detects which half). The UI
 
 ---
 
+## Slice 23 — 6-DOF SUBSTRATE + SKID-TO-TURN
+
 **Slice 23 — 6-DOF SUBSTRATE + SKID-TO-TURN: the out-of-plane engagement (HANDOFF §11 Tier-A)** — the FIRST
 slice of the bank-to-turn / 3-D arc, and the slice that cashes **the sharpest approximation the whole aero arc
 carried**: since slice 19, `alpha_command` PROJECTS the guidance command onto the in-plane direction
@@ -2972,6 +3016,8 @@ induced/separation drag and ρ(z) on the 6-DOF path (a later composition).
 
 ---
 
+## Slice 24 — BANK-TO-TURN + ROLL-LAG
+
 **Slice 24 — BANK-TO-TURN + ROLL-LAG: the steering law that must bank before it turns (HANDOFF §11 Tier-A)**
 — the SECOND slice of the bank-to-turn / 3-D arc, the payoff of the STT-first split, on slice 23's 6-DOF
 substrate. Slice 23's SKID-TO-TURN makes maneuver lift in BOTH body planes at once (α pitch + β yaw), so its
@@ -3049,6 +3095,8 @@ body-rate parasitic loop); **ζ ≠ 1 / a 2nd roll knob / a 2nd-order roll actua
 in the 6-DOF loop (→ 4a/RNG-live — **DONE, slice 25**); induced/separation drag + ρ(z) on the 6-DOF path.
 
 ---
+
+## Slice 25 — A SEEKER IN THE 6-DOF LOOP
 
 **Slice 25 — A SEEKER IN THE 6-DOF LOOP: the seeker that cannot see out of the plane (HANDOFF §11 Tier-A)**
 — the THIRD slice of the bank-to-turn / 3-D arc and its FIRST SENSOR slice. Slices 23 and 24 gave the missile
@@ -3148,6 +3196,8 @@ is a ~1000:1 low-pass — `std(Δφ_cmd)` 1.07 rad/tick vs `std(Δφ_ach)` 1.6e-
 precedent — do not re-propose it cold); the out-of-plane MANEUVERING target (composes with this slice).
 
 ---
+
+## Slice 26 — THE RADOME / BODY-RATE PARASITIC LOOP
 
 Slice 26 (§11 Tier-A, the bank-to-turn / 3-D arc's NAMED END POINT) — **THE RADOME / BODY-RATE
 PARASITIC LOOP: the seeker that sees the missile's own nose — COMPLETE & green (4470 tests).**
@@ -3362,6 +3412,8 @@ CFAR; a MEASURED `Vc`; the 3-D `:raw` arm; the out-of-plane MANEUVERING target (
 
 ---
 
+## Slice 27 — THE RADOME-SLOPE COMPENSATION AUTOPILOT
+
 **Slice 27 — THE RADOME-SLOPE COMPENSATION AUTOPILOT: buying margin with a gyro (HANDOFF §11 Tier-A)**
 — the FIFTH slice of the bank-to-turn / 3-D arc, and the one **slice 26 named as its own successor**
 ("a rate-gyro feed-forward that cancels the parasitic term — the natural slice 27, and it needs this
@@ -3556,6 +3608,8 @@ the out-of-plane MANEUVERING target.
 
 ---
 
+## Slice 28 — R(look) — THE SLOPE CURVE AND THE BAND THE ENGAGEMENT VISITS
+
 **Slice 28 — `R(look)`: THE SLOPE CURVE, AND THE BAND THE ENGAGEMENT VISITS (HANDOFF §11 Tier-A)** —
 the SIXTH slice of the bank-to-turn / 3-D arc, and a deferral BOTH slice 26 and slice 27 named ("a
 look-angle-dependent slope `R(look)` — it composes sharply: against a wiggly real slope curve a
@@ -3749,6 +3803,8 @@ it would sweep the look angle through the curve FASTER).
 
 ---
 
+## Slice 29 — R-hat(look) — THE SCHEDULE THAT LOOKS THROUGH ITS OWN RADOME
+
 **Slice 29 — `R̂(look)`: THE SCHEDULE THAT LOOKS THROUGH ITS OWN RADOME (HANDOFF §11 Tier-A)** — the
 SEVENTH slice of the bank-to-turn / 3-D arc, and the deferral slice 28 named as its own successor
 ("LOOK-ANGLE-SCHEDULED `R̂(look)` — the engineering answer to this slice, exactly as 27 was to 26").
@@ -3902,6 +3958,8 @@ finding about DWELL).
 
 ---
 
+## Slice 30 — THE ENVELOPE, AND THE ONE-SIDED CONSTRAINT
+
 **Slice 30 — THE ENVELOPE, AND THE ONE-SIDED CONSTRAINT (HANDOFF §11 Tier-A)** — the EIGHTH slice of
 the bank-to-turn / 3-D arc, and the deferral slice 29 named as its own STRONGEST successor. Slice 26
 measured — and never used — the fact that the radome constraint is **ONE-SIDED**: only a NEGATIVE
@@ -4037,6 +4095,8 @@ that a STEP deliberately is not); the NON-MONOTONE SWEEP as a shipped proof (it 
 not this one).
 
 ---
+
+## Slice 31 — AN IMPERFECT GYRO — THE MARGIN IS A GYRO BUDGET
 
 **Slice 31 — AN IMPERFECT GYRO: THE MARGIN IS A GYRO BUDGET (HANDOFF §11 Tier-A)** — the NINTH slice
 of the bank-to-turn / 3-D arc, and the deferral slices 27, 28, 29 and 30 ALL named as a §1
@@ -4181,6 +4241,8 @@ slice's bias domain is bounded by the look angle reaching 30°, exactly where a 
 stopped), the out-of-plane MANEUVERING target.
 
 ---
+
+## Slice 32 — THE SEEKER'S FIELD OF VIEW
 
 **Slice 32 — THE SEEKER'S FIELD OF VIEW: THE ENVELOPE IS SET BY WHAT THE SEEKER CAN SEE (HANDOFF §11
 Tier-A)** — the TENTH slice of the bank-to-turn / 3-D arc, and a deferral every one of 26–31 named
@@ -4426,6 +4488,8 @@ bound on this glass.**
 
 ---
 
+## Slice 33 — THE RING IS AN FOV BUDGET ITEM
+
 **Slice 33 — THE RING IS AN FOV BUDGET ITEM: WHAT THE PARASITIC LOOP COSTS YOU IS THE ENVELOPE
 (HANDOFF §11 Tier-A)** — the ELEVENTH slice of the bank-to-turn / 3-D arc, and the successor slice 32
 itself nominated. ⚠ **THE DEFERRAL'S NAME IS LOOSE AND THE SLICE DID NOT INHERIT IT**: slice 32's §
@@ -4625,6 +4689,8 @@ HANDOVER BASKET as an authored quantity; and everything 26–32 named and did no
 
 ---
 
+## Slice 34 — THE GIMBAL — the head points where the glass says
+
 **Slice 34 — THE GIMBAL: THE HEAD POINTS WHERE THE GLASS SAYS THE TARGET IS (HANDOFF §11 Tier-A)** —
 the TWELFTH slice of the bank-to-turn / 3-D arc, and the successor slices 32 AND 33 both nominated.
 ⚠ **BOTH HALVES OF THE BANKED DEFERRAL WERE REFUTED AT GATE 0** and the live claim was found in a
@@ -4800,6 +4866,8 @@ while slice 35's two-sided knob goes INERT); plus
 everything 26–33 named and did not spend.
 
 ---
+
+## Slice 35 — A RATE-LIMITED HEAD
 
 **Slice 35 — A RATE-LIMITED HEAD: THE BANDWIDTH THAT HOLDS THE TRACK IS THE BANDWIDTH THAT FEEDS THE
 LOOP (HANDOFF §11 Tier-A)** — COMPLETE (2026-08-09), gates 0–3. The deferral slice 34
@@ -4984,6 +5052,8 @@ measurement, 2 randn/tick, the seed load-bearing). **KNOB, not rung**; the butto
 `M:\claud_projects\temp\slice35\`.
 
 ---
+
+## Slice 36 — THE HANDOVER BASKET
 
 **Slice 36 — THE HANDOVER BASKET: THE CHEAPEST PLACE TO HAND A SEEKER ITS TARGET IS NOT AT THE
 TARGET** — **COMPLETE** (2026-08-10, 6876 → 6988 → 7057 → 7067 → **7222**), all four gates green. Slice 32's P5, promoted by slice 34 to a live constraint and sharpened by slice 35 into the
@@ -5201,6 +5271,8 @@ consecutive RNG-live slice); button DROPPED (the 12th — and the FIRST that nee
 dropped). Slices 1–35 byte-identical, proven ON THE WIRE (slice 34's and slice 35's verifiers re-run
 green). Two loader/marker sweeps in `test_missile.jl` were TIGHTENED to enumerated carrier sets rather
 than deleted, which is how slice 35's own "a second wire growing this key would fail here" paid off.
+
+## Slice 37 — THE HEAD'S OWN GYRO — the servo's reference frame
 
 **Slice 37 — THE HEAD'S OWN GYRO: A SPACE-STABILIZED SERVO GIVES BACK THE MARGIN THE POSITION
 SERVO'S LAG WAS QUIETLY BUYING** — **COMPLETE** (2026-08-17, 7222 → 7323 → 7394 → 7396 → **7496**),
@@ -5744,6 +5816,8 @@ screen fronts); terrain-aware movement; EW/sensor-coverage effects on detection 
 waypoint queues; save/load of a battle plan.
 
 ---
+
+## Slice 1 — radar to detection to ROC (the first slice; block sits at EOF)
 
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
 tick contract + determinism; wire protocol + Godot↔Julia socket seam proven
