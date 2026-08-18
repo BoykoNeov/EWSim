@@ -537,3 +537,151 @@ lagging, and nothing may be read off it — which is §0.3's *"absurd territory"
   `defl_sat == 0` must be re-worded to exclude the `r → 0` endgame or it fails on its own control.
 - **Kill risks 1 (INERT) and 2 (REPARAMETERIZATION) are untouched by §I and §II and remain the two
   that can kill this slice.** P2 and P5 are next; P3, P4, P6, P7 follow them.
+
+---
+
+# §III — P2: THE INERT LADDER (2026-08-18)
+
+**Run on the prototype-patched tree (`prototype_seam.patch` re-applied, plus two probe-only clamp
+counters). Instrument: `p2_ladder.jl`, which reads slice 40's verifier metric to the digit — rms of
+`omega_r` over the FIRST-DESCENDING band `500 ≤ r ≤ 3000` — and carries the contamination columns
+without which an rms means nothing (advisor).**
+
+⚠⚠ **THE WIRE IS `slice26_radome`, LED DELIBERATELY** (advisor). `slice40_resonance`'s ring **IS** a
+second-order servo at 2.0 Hz / ζ = 0.1; putting a second second-order resonator in the same loop makes
+attribution impossible — you cannot say which one moved. Slice 26 has no gimbal at all, so its ring is
+purely the radome loop.
+
+## ⭐⭐ §III.0 P2a — WHERE THE FIN COMMAND HAS ITS ENERGY (the blocking pre-probe, advisor)
+
+Run BEFORE the ladder and on the **SHIPPED TREE** — `:instant` *is* the tree, so no patch is involved
+and this is a property of the wire, not of the prototype. Detrended periodogram (mean + linear
+removed: the turn is a ramp and its DC would swamp every band being compared) of `δ_cmd` /
+`δ_yaw_cmd` over the same band. Probe: `p2_spectrum.jl`.
+
+| wire / channel | dominant line | its share | >3 Hz | >20 Hz | >60 Hz |
+|---|---|---|---|---|---|
+| **slice26** pitch | **1.6488 Hz** | 0.551 | 0.187 | 0.111 | 0.074 |
+| **slice26** yaw | **1.6488 Hz** | 0.499 | 0.264 | 0.136 | 0.084 |
+| slice40 pitch | 58.81 Hz | **0.016** | 0.998 | 0.990 | **0.703** |
+| slice40 yaw | 0.90131 Hz | 0.260 | 0.509 | 0.429 | 0.294 |
+
+⭐ **SLICE 26's FIN COMMAND IS A LINE AT 1.65 Hz** — the radome ring itself (the wire's header records
+1.7–2.1 Hz), carrying over half the energy, with ~81 % of the total below 3 Hz. The remainder is a
+broadband floor and it is the seeker's own white noise: it never reaches the body rate, because the
+airframe (short period 1.4 Hz) is already a far harder low-pass than any actuator could be.
+
+⚠⚠ **AND SLICE 40's PITCH CHANNEL HAS NO LINE AT ALL** — its largest single bin is 1.6 % and 70 % of
+its energy sits above 60 Hz. That channel is noise, not a lesson, and it is the second independent
+reason (beside the stacked resonators) that slice 40 is the WRONG wire to lead P2 with.
+
+⇒ At 1.65 Hz a 20–60 Hz actuator has gain 1.0002 and phase −2.7° … −8° (§I.5). **So the actuator
+cannot act by attenuating the command; if it acts at all, it acts by PHASE.** That is §0.2's
+mechanism, and it makes the ladder a test of exactly one thing.
+
+## ⭐⭐ §III.1 THE PLAN'S OWN P2, RUN AS WRITTEN — AND IT READS A FALSE KILL
+
+At the **authored** design `R = −0.10` the wire is already ringing:
+
+| arm | rms_r | miss | clamp | defl_band | **aero (of 3639 band ticks)** |
+|---|---|---|---|---|---|
+| `:instant` (control) | 0.808626 | 2.179 | 0/0 | 0 | **2850 (78 %)** |
+| 2nd, 30 Hz, ζ 0.7 | 0.811669 | 2.346 | 0/0 | 0 | 2712 |
+| 2nd, 20 Hz, ζ 0.7 | 0.814515 | 2.284 | 0/0 | 0 | 2515 |
+
+**0.4 % across the whole physically-honest band. Read as written, P2 fires the INERT kill.**
+
+⚠⚠ **IT IS NOT A KILL, IT IS THE WRONG MEASURING POINT, AND THE CONTAMINATION COLUMN SAYS SO IN
+NUMBERS** (advisor, pre-registered): **78 % of band ticks have the α_max clamp binding.** Slice 26's
+own header says it in words — *"past onset the α_max clamp BOUNDS the cycle, so it is a PLATEAU, not
+growth"* — and its own R ladder shows it (68.5× at −0.10 against 65.8 / 64.0 / 64.4 / 63.6 at
+−0.12 … −0.30). **A clamped amplitude cannot move, so at the authored design the rms is insensitive
+BY CONSTRUCTION.** Anything measured there measures the clamp.
+
+⇒ **THE ACTUATOR EATS MARGIN, SO IT MUST BE MEASURED WHERE THERE IS MARGIN LEFT TO EAT** — i.e. on
+the QUIET side of slice 26's own onset (`R_crit = −0.095`), not past it.
+
+## ⭐⭐⭐ §III.2 THE LADDER AT `R = −0.09` — ONE STEP INSIDE THE STABILITY BOUNDARY
+
+Same seed, same wire, same everything; `radome_slope` moved from the authored −0.10 to −0.09, which
+slice 26 itself measured as **QUIET** (its own ladder: 1.1× the R = 0 baseline). `aero = 0` on the
+control and on every arm down to 20 Hz ⇒ **these rms values are unclamped and free to move in both
+directions.**
+
+| ω_a (ζ_a = 0.7) | rms_r | vs `:instant` | step ratio | miss | clamp | defl_band | aero |
+|---|---|---|---|---|---|---|---|
+| `:instant` | 0.0234857 | 1.00× | — | 0.280 | 0/0 | 0 | 0 |
+| 60 Hz | 0.0298658 | 1.27× | 1.27 | 0.420 | 0/1 | 0 | 0 |
+| 40 Hz | 0.0369971 | 1.58× | 1.24 | 0.590 | 0/0 | 0 | 0 |
+| 30 Hz | 0.0452563 | 1.93× | 1.22 | 0.958 | 0/0 | 0 | 0 |
+| 20 Hz | 0.104459 | 4.45× | 2.31 | 0.508 | 0/0 | 0 | 0 |
+| **15 Hz** | **0.613926** | **26.1×** | **⭐ 5.88** | 0.861 | 0/0 | 0 | 906 |
+| 10 Hz | 0.754769 | 32.1× | 1.23 | 0.970 | 0/0 | 0 | 1370 |
+
+⭐ **MONOTONE ACROSS THE WHOLE BAND, AND THE LARGEST SINGLE STEP IS 20 → 15 Hz AT 5.88×** — §0.4's
+verdict rule applied unchanged, with no threshold chosen by me, and the ladder printed whole so a
+reader can redraw the line. Past that step the `aero` column turns on (906, then 1370 ticks), i.e.
+**the arm has entered the same clamped plateau §III.1 was stuck on** — so 26× and 32× are plateau
+magnitudes and only the 60 → 20 Hz rows are free reads.
+
+⚠ **THE 15 AND 10 Hz ARMS ARE BELOW A PHYSICALLY HONEST ACTUATOR** (§0.3: a real fin runs 20–60 Hz).
+What ships is **the 20–60 Hz range, which is unclamped, monotone, and already 1.27× … 4.45×** — the
+eruption below it is where the ladder is going, not what the slice is sold on.
+
+## §III.3 THE ORDER IS THE LESSON — FIRST ORDER IS MILDER AT THE SAME CORNER
+
+Matched by corner frequency, `τ_a = 1/(2π f)`, same wire and same `R = −0.09`:
+
+| corner | first order (`τ_a`) | second order (ζ_a = 0.7) | ratio 2nd/1st |
+|---|---|---|---|
+| 30 Hz | 0.0368852 (τ = 5.305e−3) | 0.0452563 | **1.23×** |
+| 20 Hz | 0.0405609 (τ = 7.958e−3) | 0.104459 | **2.58×** |
+
+⭐ **AT THE SAME CORNER FREQUENCY THE SECOND-ORDER ACTUATOR COSTS MORE MARGIN THAN THE FIRST-ORDER
+ONE, AND THE GAP WIDENS AS THE ACTUATOR SLOWS.** That is the slice's own title arriving as a number,
+and it is the §0.2 mechanism: at its corner a second-order rung has spent ~90° of phase where a
+first-order rung has spent 45°, and phase is the currency here (§III.0).
+
+## ⚠⚠ §III.4 P4 IS ANSWERED, AND THE INHERITED SIGN WAS WRONG
+
+§0.2 forbade predicting the direction. **Measured: the actuator DESTABILIZES.** Every rung, every
+corner frequency, monotone, on an unclamped read. The lag that was *"silently doing stability work"*
+on slices 34–40's feed-forward path does the opposite inside the main control loop — **same
+component, same bound, opposite sign, because of where it sits in the loop.** §0.2's refusal to
+inherit the sign was the right call, and the inversion is the headline it predicted it might be.
+
+## ⚠⚠ §III.5 `ζ_a` IS NON-MONOTONE **AND** CONTAMINATED — IT IS NOT THE SLIDER
+
+Slice 40 shipped `ζ` as its slider and §0.4 P6 expected it here. **It does not survive**, on the same
+`R = −0.09` wire:
+
+| arm | rms_r | vs ζ_a = 0.7 | clamp (pitch/yaw) |
+|---|---|---|---|
+| 30 Hz, ζ_a 0.7 | 0.0452563 | — | 0/0 |
+| **30 Hz, ζ_a 0.1** | **0.39614** | **8.75× WORSE** | **115/242** |
+| 20 Hz, ζ_a 0.7 | 0.104459 | — | 0/0 |
+| **20 Hz, ζ_a 0.1** | **0.0418136** | **2.50× BETTER** | **36/75** |
+
+**THE SIGN OF `ζ_a` FLIPS BETWEEN 30 Hz AND 20 Hz** — the fifth occurrence of the disqualifying class
+(`k` at 28, `ω_n` at 40, σ_seek at 25, the miss reversals at 20/22). And every lightly-damped cell
+fires **the actuator's own new inelastic stop**, so neither number is a clean read at all: §II.5
+predicted exactly this, and P7 is the reason it was counted. ⇒ **`ζ_a` is not the slider, and the two
+ζ_a = 0.1 cells above must be re-run at a widened `delta_max` — WITH the `:instant` control re-run at
+the same widened value** (advisor) — before either is quoted.
+
+## §III.6 WHAT §III DECIDES SO FAR
+
+1. **KILL RISK 1 (INERT) DOES NOT FIRE — but it very nearly did, for a reason that was a measurement
+   artifact.** The plan's own P2, at the authored design, reads 0.4 %; the same ladder one step inside
+   the boundary reads **1.27× … 4.45× over 60 → 20 Hz** and **5.88× at the next step down**.
+2. **THE MECHANISM IS PHASE, AND IT IS MEASURED, NOT ASSUMED** (§III.0: the command is a 1.65 Hz line,
+   where a 20–60 Hz actuator's gain is 1.0002).
+3. **THE SLICE'S AXIS IS THE ACTUATOR'S CORNER FREQUENCY AGAINST THE LOOP'S OWN MARGIN, NOT AGAINST
+   THE RING.** §0.3 named `ω_a/ω_sp`; the numbers say the live comparison is `ω_a` against the
+   *parasitic* loop's margin, which is a third thing again.
+4. **`ζ_a` IS DISQUALIFIED AS THE SLIDER** (non-monotone in sign, and contaminated). `ω_a` — or the
+   radome slope at a fixed `ω_a` — is the candidate, and P6 must be re-run on that.
+5. **STILL UNRUN AND STILL ABLE TO KILL: P5 (REPARAMETERIZATION).** A destabilizing pole is harder to
+   fake with `(k_α, k_q)` than a damping one, but slice 39 died here and it is answered by a bound,
+   not a tolerance.
+
