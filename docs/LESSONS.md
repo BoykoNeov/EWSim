@@ -255,6 +255,35 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
   *instruction* stale.
 - **There are TWO width budgets, not one.** A width tooth can pass at the body lines' ~55 chars
   while a headline drawn larger from a different origin overruns at ~30.
+- **⭐⭐⭐ A SLICE INHERITS THE FAMILY'S MEASURED WIDTH BUDGET; IT DOES NOT DECLARE ITS OWN — AND THE
+  BUDGET IS PIXELS, NOT CHARACTERS** (slice 46, one slice after the bullet above was written). Slice
+  46's first three shots ran ALL five body lines AND all four headlines off the right edge, at 1152 px
+  **and again at 1920 px**, while its own 100/96-CHARACTER tooth passed green. Three compounding
+  failures, and each is the general lesson:
+  - **A budget a slice picks for itself is not a budget.** The number has to come from the ORIGIN.
+    Here that is `vp.x − 430`: 430 px of room, and the family had already measured what fits in it.
+  - **A right-anchored origin does not get roomier with a bigger window — it MOVES.** So "it will be
+    fine on a real monitor" is false: there is no window size at which an over-long line fits. Any
+    reasoning of the form "the shot is just small" is the bug talking.
+  - **`⇒ ° ← — | ⭐` are one `length()` each and many pixels each.** In HUD prose dense with them the
+    char count under-reads real width by a per-line amount you cannot predict. ⇒ assert on
+    `get_string_size(s, …, SIZE).x <= ROOM` at the SAME font and size `_draw` uses — then the tooth
+    and the photograph can no longer disagree, which is the entire point of having both.
+  ⚠ The mock the UI test builds never runs `_ready`, so `_font` is null there: assign it from the
+  same source `_ready` does, or the tooth crashes rather than fails — and if you paper over that with
+  a fallback font you are measuring a different typeface than the one in the picture.
+- **⭐⭐ A DEFAULTED ZERO RENDERED AS A PASSED TEST** (slice 46, caught by a photograph and by nothing
+  else). A rung that switches physics OFF usually stops EMITTING that physics' telemetry — so every
+  `.get(key, 0.0)` in the client silently becomes a confident zero, and a line that formats it reads
+  as a comparison that was made and came out favourably. Slice 46's HUD printed `RANGE sees` and
+  `range 2846 m vs horizon 0 m ⇒ +0 m` **in its green "passed" colour** on the rung where no range
+  test exists. ⇒ **pass the rung's state in as a PARAMETER and print `—`/`n/a`; never infer "the test
+  passed" from numbers whose absence you defaulted away.** This is the stale-readout class in its
+  purest form: not a stale number, a FABRICATED one. ⚠ It is worst in exactly the lines that exist to
+  say WHICH limit ran out, because those are the lines a student reads to choose a cure.
+- **Compressing a headline must not delete the slice's number.** When a headline is cut to its budget
+  the figure it carried has to land in a body line, and a tooth has to assert it there — otherwise
+  fixing the width quietly removes the one figure the slice exists to show.
 - **Anything the verdict computes inside `_draw` has no headless proof.** Extract it to a pure
   helper the UI test can call.
 
@@ -267,6 +296,16 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
   Slice 44's V in acquisition TIME was real and priced nothing: a second spent unable to SEE cost
   nothing, a second spent with the servo unable to CATCH UP was unrecoverable. Same axis, same
   units, incommensurable.
+- **⚠⚠ THE r → 0 ENDGAME SPIKE REACHES EVERY GUIDANCE QUANTITY, NOT JUST THE ONES ALREADY GATED**
+  (slice 46, correcting slice 44 §VII.1). `[[ewsim-missile-verifier-sampling]]`'s range gate was
+  written for miss / `a_cmd` / saturation; slice 44 read a NEW quantity — peak `a_cmd` as a fraction of
+  `a_max` — and did not gate it, so its "the free cell flies at **100.00 %** of `a_max`" was measuring
+  the degenerate geometry of the last fraction of a second. Gated at `r > 200 m` the same cell reads
+  **10.45 %** against a free arm's **3.10 %**. ⇒ **when a slice introduces a new guidance-derived
+  readout, apply the endgame gate to it before quoting it** — and note which way the correction cuts:
+  the effect SURVIVED and became STRICTLY MONOTONE, so the spike was manufacturing the
+  non-monotonicity, not the signal. An ungated endgame can invent an effect AND can hide the shape of
+  a real one.
 - **A flat headline metric can hide a budget being spent to the last percent.** The "free"
   arm of slice 44 flew at **100.00 %** of `a_max` while its miss stayed at 0.25 m; one cell
   further the demand FELL because the track was gone. Carry the authority/contamination column

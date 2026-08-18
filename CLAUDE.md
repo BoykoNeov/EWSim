@@ -55,17 +55,22 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Where the project is (2026-08-18)
 
-**Slices 1–40 COMPLETE & green — 7693 tests.** 39 and 41–45 are GATE-0 RECORDS — none shipped code, so the
-count is unchanged. ⚠⚠ **FIVE CONSECUTIVE gate-0 records shipped nothing, and on 2026-08-18 the kill
-CRITERION itself was ruled at fault** (see the two-test rule below): 41, 44 and 45 are **ALIVE AS A MODEL**
-and their probe code survives in `M:\claud_projects\temp\slice4N`; only 42 is dead outright; 43 is BLOCKED.
+**Slices 1–40 + 46 COMPLETE & green — 7808 tests.** 39 and 41–45 are GATE-0 RECORDS (no code). ⚠⚠ **FIVE
+CONSECUTIVE gate-0 records shipped nothing, and on 2026-08-18 the kill CRITERION itself was ruled at fault**
+(the two-test rule below): 41, 44 and 45 are **ALIVE AS A MODEL**, probe code in `M:\claud_projects\temp\slice4N`;
+only 42 is dead outright; 43 is BLOCKED. ⭐ **Slice 46 DISCHARGED 44's re-verdict** — it shipped 44's exact
+physics as the seeker's DETECTION HORIZON, which is what the re-verdict is FOR.
 HANDOFF §10 items 1–13 are DONE; 15–40 are into the §11 Tier-A horizon.
 
-The live arc is the **missile seeker/radome family (26–40)**: a seeker looks through a radome whose bend
+The live arc is the **missile seeker/radome family (26–40, 46)**: a seeker looks through a radome whose bend
 depends on the look angle, so the missile's own motion feeds back into the line-of-sight it reports and past
 a loop gain it shakes itself into a limit cycle. 27–31 built and priced the gyro feed-forward cure; 32–33
 made it a field-of-view budget; 34–38 put the seeker on a **gimbal** (index, servo bandwidth, handover,
 reference frame, gyro); 40 gave that gimbal **inertia**. Per-slice detail: `docs/SLICES.md`.
+
+**46 gave the seeker a RECEIVER**: the window IS the beamwidth, so `R_acq · fov` is CONSTANT (80789 m·deg)
+— a wider window costs REACH, inverting 32–36 — and a late lock is paid in MANOEUVRE AUTHORITY (2.5 → 100 %
+of `a_max`), never in MISS, which reads non-monotone and backwards.
 
 **The rule that keeps paying** (33, 34, 35, 37, 38): *aim `R̂` at the glass's worst-case slope*
 (`radome_slope_worst`) and the cost — of FOV, detector window, servo bandwidth, servo frame — mostly
@@ -128,14 +133,17 @@ Evidence, numbers and the re-verdict table: `docs/DEFERRALS.md` §"THE 2026-08-1
 - **A SEEKER SEARCH PATTERN** (42/43/45) — **BLOCKED, never killed**, on its precondition. ⭐⭐ **The cost of
   acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error** ⇒ widening the glass and
   travelling further are THE SAME ACT, and a wider window is FREE here. Its LAW (sweep floor, `t_lock`, the
-  U-shaped best moment) and its three instrument bugs are in DEFERRALS. **Only unblocker left: 44's
-  MIDCOURSE engagement.**
-- **Seeker range / SNR limits AS THE UNBLOCKER** (44) — **DEAD as the unblocker, ALIVE AS A MODEL** (the
-  physics measured EXACT; the wire launches INSIDE the seeker's horizon, 8079 m vs 6437 m). ⭐⭐ **A detection
-  gate can only price a design variable if the ENGAGEMENT is launched OUTSIDE the sensor's horizon — a
-  property of the WIRE.** ⚠ Two survivors bigger than the law: **a late lock is paid in MANOEUVRE AUTHORITY
-  and MISS cannot show it** (the last FREE cell flies at 100.00 % of `a_max`); and **the narrow-window
-  failures of 32/34 are THE SERVO's** (identical lock instants, hit at 30 °/s, miss at 8 °/s).
+  U-shaped best moment) and its three instrument bugs are in DEFERRALS. **Slice 46 supplied the horizon but
+  does NOT unblock it** — what remains is a MIDCOURSE PHASE (something to fly on while blind), now the top
+  of the backlog and much cheaper than it was.
+- **Seeker range / SNR limits AS THE UNBLOCKER** (44) — **DEAD as the unblocker, ALIVE AS A MODEL — and
+  SHIPPED by slice 46.** ⭐⭐ **A detection gate can only price a design variable if the ENGAGEMENT is
+  launched OUTSIDE the sensor's horizon — a property of the WIRE** (8079 m vs 6437 m, ratio 1.255, which
+  46's null cell reproduces). ⚠ Both survivors CONFIRMED on 46's shipped wire, one CORRECTED: **a late
+  lock is paid in MANOEUVRE AUTHORITY and MISS cannot show it**; and **the narrow-window failures of
+  32/34 are THE SERVO's** (46 binds the rate limit for 205 frames of the ACQUISITION SLEW at 30 °/s).
+  ⚠⚠ **DO NOT QUOTE 44 §VII.1's “100.00 % of `a_max`”** — an r → 0 ENDGAME read; gated at r > 200 m that
+  cell spends 10.45 % against 3.10 %, and the effect SURVIVES and becomes MONOTONE.
 - **A rectangular / per-axis window and stop** (45) — **DEAD AS A LESSON, ALIVE AS A MODEL, both halves.**
   ⭐⭐⭐ **A TRACKER holds both axes near zero so a window's CORNERS are never visited; a SEARCH drives one
   axis to the rim BY DESIGN, which is where the corners are.** ⚠ Never quote the box's rescue without its
@@ -158,7 +166,9 @@ Evidence, numbers and the re-verdict table: `docs/DEFERRALS.md` §"THE 2026-08-1
 - **Harness traps that cost real hours** — a verifier's `STEPS` MUST be a multiple of `emit_every` (else a
   SILENT hang); `%g`/`%.2e` are not GDScript specifiers and one bad one kills the WHOLE `%` silently;
   frame-sampling error is ASYMMETRIC (a miss samples faithfully, a HIT coarsely); an rms measured where a
-  CLAMP binds cannot move and reads as a KILL. Teeth: `docs/CONVENTIONS.md` §14, `docs/LESSONS.md`.
+  CLAMP binds cannot move and reads as a KILL; a HUD width budget is INHERITED (55 body / 30 headline) and
+  asserted in PIXELS — 46's 100/96-CHAR tooth passed GREEN while every line clipped at 1152 AND 1920 px; and a
+  rung that stops EMITTING makes the client's `.get(k, 0.0)` print a DEFAULTED ZERO as a PASSED TEST. Teeth: `docs/CONVENTIONS.md` §14, `docs/LESSONS.md`.
 
 ## Conventions / hard-won disciplines (ONE LINE EACH; the teeth are `docs/CONVENTIONS.md`)
 

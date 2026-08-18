@@ -1453,3 +1453,44 @@ that slice either — it makes searching cheaper when what was needed was to mak
 costlier — which leaves the search with exactly one candidate unblocker left, the long-range shot
 slice 44 named. ⭐ **The method lesson is about the gate's own failure: a gate is not finished while a
 sub-claim its own plan wrote down first still has no row in any table.**
+
+## Slice 46 — the seeker's detection horizon (2026-08-18)
+
+Until now the seeker's question was purely "is the target inside the window I am pointing at?" — an
+angle question, answered at any range. This slice gives it a receiver: the echo has to be strong
+enough to hear, so a distant or a stealthy target is invisible even when it is dead centre in the
+window. **And the two halves turn out to be one design variable, not two.** The window IS the beam
+the antenna makes, a narrow beam needs a big dish, and a big dish reaches further — so reach times
+window is a constant of the design (measured at 80789 metre-degrees, dead flat across a fourfold
+range). Slices 32–36 taught that widening the window is free; with a receiver it is exactly not.
+Making the target sixteen times bigger buys only twice the range, which is why the obvious lever is
+the weak one.
+
+**The number this slice exists for is not the miss.** This is the same physics slice 44 built and
+killed two days earlier for reading flat: across the whole range of the new knob the miss barely
+moved, so it looked like a component that did nothing. What was moving was how hard the airframe had
+to pull. A missile that acquires late has less time to correct, and it pays for that in turn — not in
+where it lands. Along this slice's ladder the peak demand runs 2.5 → 3.0 → 7.4 → 100 → 100 percent of
+everything the airframe has, while the miss wanders up and then down with no order to it at all. The
+cell in the deepest trouble is one that still HITS: it is flying at a hundred percent of its limit to
+do so, and there is no other number on the screen that can say that. ⭐⭐ **A flat headline is not
+evidence of a flat effect — it can be the wrong gauge pointed at a real one.**
+
+⚠ **And slice 44's own authority figure needed correcting, which is a lesson in itself.** It reported
+its "free" cell at 100 % of the limit; that reading was taken through the last fraction of a second
+before impact, where every guidance number spikes because the geometry is degenerate. Excluded, the
+same cell reads 10 %, against 3 % for the untouched arm — the effect is smaller, cleaner, and now
+strictly ordered. The spike was the non-monotone thing, not the physics.
+
+⚠⚠ **The client half cost two findings that only a photograph could produce.** Every line of the new
+readout ran off the right edge of the screen — at two different window sizes — while the test meant
+to prevent exactly that passed green. Two compounding reasons: the readout is anchored to the right
+edge, so a wider window does not help; and the test counted CHARACTERS while the screen draws PIXELS,
+and these lines are full of arrows and symbols that are one character and many pixels. The budget was
+also one this slice invented for itself instead of inheriting the one an earlier slice had already
+measured and paid for. **A budget a slice declares for itself is not a budget** — and the fix is to
+measure the thing you actually care about (width on screen) rather than a proxy for it. Second, on
+the rung where the receiver is switched off the core sends none of the new numbers, so the readout
+was filling in zeros and printing "range 2846 m versus horizon 0 m" in the green it uses for a passed
+check — a value that was never computed, displayed as a test that passed. Both lines now refuse to
+report a comparison that was never made.

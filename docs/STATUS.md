@@ -6340,3 +6340,155 @@ The break is on the azimuth axis at every half-width 1–12°; the stop's demand
 (18.1237° azimuth against 0.6643° elevation); the window's elevation half-width on a tracking arm is
 a **FLOOR at `max |Δel|`** — predicted **0.3043** from instrumentation before flying, flown flip at
 **(0.30, 0.31]**, byte-identical over the 32× range above it.
+
+---
+
+## Slice 46 — THE SEEKER'S DETECTION HORIZON (2026-08-18)
+
+**SHIPPED — 3 gates, 7693 → 7808 tests.** The first slice to ship under the 2026-08-18 two-test
+re-verdict, and the physics it ships is the physics slice 44 built at gate 0 and killed. Slice 44's
+kill was of the LESSON ("a delayed acquisition costs nothing — the miss does not move"); the MODEL
+passed its own test exactly and was re-verdicted **ALIVE AS A MODEL**. This slice productionizes it
+and, in doing so, finds the number slice 44's headline could not see.
+
+### Why this slice, and what it unblocks
+
+The search-pattern family (42/43/45) is **BLOCKED, never killed**, on one precondition: an engagement
+launched OUTSIDE the seeker's horizon. That sentence cannot be authored until the horizon exists as
+shipped physics with authorable keys. Slice 46 is that precondition, not the search slice itself.
+
+### Gate 1 — three pure kernels (`core/src/rf.jl`), 40 assertions in `test_radar_eq.jl`
+
+```julia
+aperture_gain(beamwidth_rad; eta = 0.6)      # G = η·4π/θ²
+aperture_diameter(freq_hz, beamwidth_rad)    # D = 1.02·λ/θ
+detection_range(rp, rcs_m2; snr_min_db = 10) # (SNR·R⁴ / SNR_min)^(1/4)
+const SEEKER_DETECT_MODES = (:none, :snr)
+```
+
+`detection_range` does not re-derive the link budget — it evaluates `snr_freespace(rp, σ, 1.0)`,
+which IS `SNR·R⁴`, and takes the ¼ power. One constant, one place, no second copy to drift.
+
+**⭐⭐ THE APERTURE IDENTITY, and the reason the two halves of "can the seeker see it?" are ONE design
+variable.** The window IS the beamwidth. A beamwidth implies a gain (`η·4π/θ²`), a gain implies a
+horizon (`R ∝ √G`), so `R_acq · fov = constant`. Measured on the wire: **80789.2051 m·deg**, and the
+log-log slope of `R_acq` against `fov` is **−1 to 1e−12**. ⇒ **slices 32–36 taught "a wider window is
+free"; with a link budget it is exactly not** — widening the glass shortens the reach in exact
+proportion. Pinned with external anchors (λ(16 GHz) = 18.74 mm; a 2° beam is 0.5476 m of dish) and
+the half-angle trap pinned as `/4` rather than `/2`.
+
+**The σ^¼ law:** 16× the target's RCS buys 2× the range. Every arm of the ladder confirms
+`R·σ^(−1/4) = 8078.9205` to ten digits across a 4× range of horizon.
+
+### Gate 2 — the wire (`core/src/missile.jl`, `scenario.jl`), 73 assertions in `test_missile.jl`
+
+Seven authorable keys in the `seeker:` block, presence-gated on `detect_pt_w`:
+`detect_pt_w`, `detect_freq_hz`, `detect_tint_s`, `detect_nf_db`, `detect_loss_db`, `detect_eta`,
+`detect_snr_min_db`. The target's `rcs_m2` is read from the TARGET's comp, not the missile's — an
+RCS belongs to the thing being seen. Refused without `two_angle: true` and without a window.
+
+The predicate is one conjunct: `in_fov = in_fov && _detectable`, and `x && true === x` for a Bool,
+so every prior scenario is **byte-identical by construction** — the null cells assert `===`.
+
+Five telemetry keys, gated on the rung: `seeker_r_acq_m`, `seeker_range_margin_m` (SIGNED — the core
+forms it from the same two numbers the predicate tested, the client never subtracts), `seeker_snr_db`
+(floored at −120, never −Inf), `seeker_detect` (0/1, the RANGE verdict ALONE), `seeker_aperture_m`.
+
+**The authority gauge `a_cmd_frac` is gated on the BUDGET KEY ALONE, not the rung** — it has to be
+readable on BOTH sides of the button or the A/B that is the whole lesson cannot be measured.
+
+**Gate 2 reproduced slice 44 §VII.1 exactly:** miss 0.2237 / 0.3491 / 0.3267 / 0.2514 / 85.84 m,
+hold 99.99 / 99.96 / 99.98 / 99.96 / 31.20 %, peak `a_cmd` 19.10 / 14.54 / 34.66 / 100.00 / 20.91 %
+of `a_max`.
+
+**⚠⚠ CORRECTION TO SLICE 44 §VII.1 — its "100.00 % of `a_max`" is an r → 0 ENDGAME read.** Every
+guidance quantity spikes as range goes to zero; the last FREE cell was measured through that spike.
+Gated at `r > 200 m`, the same cell spends **10.45 %** against the free arm's **3.10 %**. The effect
+SURVIVES the correction and becomes STRICTLY MONOTONE once gated — it was the spike that was
+non-monotone, not the physics. (Same class as the endgame gate in `[[ewsim-missile-verifier-sampling]]`,
+applied to a quantity that gate had never been pointed at.)
+
+### Gate 3 — `scenarios/slice46_horizon.yaml`, the HUD, `slice46_verify.gd`, `slice46_ui_test.gd`
+
+Seed 32, `dt` 1e−3, `emit_every` 16. Missile `m1` carries a head with a 10° window and NO glass;
+target `tgt1` at `[6000, 2000, 4200]`, `rcs_m2: 0.001`, crossing at −200 m/s. **ONE knob: the
+target's RCS, log-scaled 1e−4 → 1.0.** One button: `seeker_detect none ↔ snr`.
+
+**⚠ THE SERVO IS AUTHORED WIDE AT 240 °/s, AS AN ISOLATION.** At the family's shipped 30 °/s the rate
+limit binds for **205 frames**, all inside a 1948–2094 m window — the ACQUISITION SLEW at the lock
+instant, which is slice 34/32's narrow-window failure re-run and slice 44 §VII.2's own survivor. Gate
+2 measured 60/120/240 °/s to give **identical misses, locks and authority to four decimals**, so the
+isolation costs nothing.
+
+**⭐⭐⭐ THE HEADLINE METRIC IS NOT THE MISS, AND THAT IS THE CORRECTION SLICE 44'S DEATH PAID FOR.**
+
+| rcs (m²) | `R_acq` (m) | `R·σ^(−¼)` | lock (s) | peak auth | hold | miss (m) |
+|---|---|---|---|---|---|---|
+| 1.000000 | 8078.9 | 8078.9205 | 0.016 | **2.5 %** | 100.00 % | 4.5411 |
+| 0.100000 | 4543.1 | 8078.9205 | 2.624 | **3.0 %** | 100.00 % | 4.7861 |
+| 0.010000 | 2554.8 | 8078.9205 | 5.392 | **7.4 %** | 100.00 % | 1.3812 |
+| 0.000500 | 1208.1 | 8078.9205 | 7.296 | **100.0 %** | 100.00 % | 56.9191 |
+| 0.000100 | 807.9 | 8078.9205 | 7.872 | **100.0 %** | **61.97 %** | 210.7717 |
+
+The authority column is monotone and spans 40×. **The miss column is NON-MONOTONE — one up, two
+down** (4.541 → 4.786 → 1.381 → 0.987 over the arms that hold) — and across the BUTTON it moves the
+WRONG WAY (0.9874 gated vs 4.5411 free). A verifier reading it would report a component that does
+nothing, which is exactly how this physics got killed once already. ⇒ the verifier asserts on
+**authority** and **hold %**, and asserts the miss only as "both arms hit".
+
+**The last two arms are the finding.** They are spending 100 % of `a_max` — everything the airframe
+has — and the 0.0005 arm is STILL HITTING while doing it. There is no other number on screen that
+can say a hit is in trouble.
+
+Default cell (rcs 0.001): `R_acq` 1436.7 m, blind for **434 frames**, locks at **6.960 s @ 1433 m**,
+peak authority 22.8 %, holds 100 %, misses 0.9874 m. Button arm: locks at **0.016 s @ 6426 m**, peak
+authority 2.5 % — a **9.0×** swing in what the airframe spends, at a flat miss.
+
+**Verifier: 10 arms, exit 0.** open / replay / button / button_rep / five ladder rungs / midpress.
+Replay determinism `max|Δpos| = 0.000000000000 m over 600 frames` on both rungs. The NULL cell (rcs
+1.0) reproduces slice 44's own blocker: horizon 8078.9 m against a 6436.7 m launch, **ratio 1.255** —
+the wire launches INSIDE the horizon, which is why slice 44 measured nothing. The FLOOR cell holds
+only 61.97 % and its metres are deliberately NOT quoted (post-loss trajectories diverge). `midpress`
+presses at 3.200 s and locks at 3.216 s — one tick, so the gate is read live and not latched.
+
+**UI test: 9 teeth, exit 0.** Including the MIRROR — without the `seeker_detect_view` marker the
+button stays VISIBLE and silently becomes slice 25's `seeker_axes` cycler, a failure that looks fine
+on screen. This wire raises NO drop marker at all (no glass, and a body-fixed window is refused
+beside a head), which is why the marker is load-bearing here for a new reason.
+
+**Three windowed shots** (`blind` / `spent` / `free`, in `M:\claud_projects\temp\slice46\`), and both
+of the findings below came from LOOKING at them, not from any test:
+
+- **⚠⚠ THE HUD WIDTH BUDGET IS INHERITED, NOT DECLARED — AND IT IS PIXELS.** The first three shots ran
+  ALL FIVE body lines and ALL FOUR headlines off the right edge, at 1152 px **and again at 1920 px**,
+  while a self-declared 100/96-character tooth passed GREEN. Two reasons, both fatal to the proxy:
+  the origin `vp.x − 430` is anchored to the RIGHT edge, so **there is no window size at which a
+  90-char line fits**; and `⇒ ° ← | — ⭐` are one `length()` each and many pixels each. Slice 38's own
+  tooth text says *"the first pair of slice-38 shots ran two headlines off the right edge while this
+  very tooth passed at the body-line budget"* — the same failure, one slice after it was written
+  down. Lines are now cut to the family's measured **55/30**, and the tooth asserts
+  `get_string_size(…).x ≤ 430` at the same font and size `_draw` uses. Measured: body ≤ 51 chars /
+  **399 px**, headline ≤ 28 chars / **279 px**.
+- **⚠⚠ TWO STALE READOUTS THE PHOTOGRAPHS CAUGHT AND NO TEST DID.** On the `none` rung the core emits
+  none of the five detect keys, so the client's `.get(…, 0.0)` was printing `RANGE sees` and
+  `range 2846 m vs horizon 0 m ⇒ +0 m` **in green** — a DEFAULTED ZERO rendered as a PASSED TEST, in
+  the two lines whose entire job is to say which limit ran out. Both now take `gated` as a parameter
+  (not an inference from the numbers) and decline to report a test that was never run:
+  `RANGE — (off)` and `range 2846 m — no horizon on this rung`, greyed.
+- The headline gave up its number to the 30-char budget (`LATE LOCK: PAID IN FULL`); a tooth asserts
+  the `100%` survives in the authority body line, so the compression cannot silently delete the one
+  figure the slice exists to show.
+
+### Two enumerations widened (the fifth time each has earned its keep)
+
+`slice46_horizon.yaml` authors `gimbal_rate_dps`, so it joins the carrier list and the
+`gimbal_rate_view` mirror in `test_missile.jl`. Both were caught by the assert, not by inspection —
+which is the fifth consecutive slice for which that has been true.
+
+### Re-run
+
+```
+pwsh tools/julia.ps1 --project=core tools/server.jl scenarios/slice46_horizon.yaml
+godot --headless --path clients/godot --script res://net/slice46_verify.gd     # exit 0 = pass
+godot --headless --path clients/godot --script res://net/slice46_ui_test.gd    # no server needed
+```

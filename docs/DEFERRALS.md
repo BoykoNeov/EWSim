@@ -449,3 +449,85 @@ because `dynamics.jl`'s steppers take a `v -> a(v)` closure with NO position in 
 path carrying no altitude lesson. A named deferral, and its own slice. Nor is it §11's RF "layered atmosphere /
 ducting" entry, which lives behind the `propagation` knob and touches the radar path — do not conflate them.)
 
+
+---
+
+## ⭐ SLICE 46 DISCHARGED SLICE 44's RE-VERDICT — the first "ALIVE AS A MODEL" actually shipped (2026-08-18)
+
+Slice 46 took the row marked *"arguably the biggest miss of the five"* in the table above and shipped
+it: three pure kernels, seven authorable `detect_*` keys, a `:seeker_detect` rung, five telemetry
+readouts, a scenario, a HUD branch, a 10-arm verifier and a 9-tooth UI test. 7693 → 7808 tests.
+**This is what the re-verdict is FOR** — the physics slice 44 measured EXACT was never the problem;
+only its use as slice 44's headline was. Full as-built: `docs/STATUS.md` §Slice 46.
+
+**Both of slice 44's survivors were confirmed on the shipped wire, and one of them was CORRECTED:**
+
+- ⭐⭐ **"A late lock is paid in MANOEUVRE AUTHORITY and MISS cannot show it" — CONFIRMED, and it is
+  now a shipped slider.** Down the RCS ladder peak `a_cmd` runs **2.5 → 3.0 → 7.4 → 100.0 → 100.0 %**
+  of `a_max` (monotone, 40× span) while the miss is **NON-MONOTONE** (4.541 → 4.786 → 1.381 → 0.987)
+  and moves the WRONG WAY across the button (0.9874 gated vs 4.5411 free). The cell in the deepest
+  trouble is one that HITS.
+- ⚠⚠ **BUT SLICE 44 §VII.1's "the last FREE cell flies at 100.00 % of `a_max`" IS WRONG AS QUOTED —
+  it is an r → 0 ENDGAME read.** Gated at `r > 200 m` that cell spends **10.45 %** against the free
+  arm's **3.10 %**. ⇒ **do not quote the 100.00 % figure**; quote the gated pair, or the ladder above.
+  The effect SURVIVES and becomes STRICTLY MONOTONE once gated — the spike was manufacturing the
+  disorder, not the physics. (New method lesson, `docs/LESSONS.md`: the endgame gate belongs on EVERY
+  new guidance-derived readout, not only on the three it was written for.)
+- ⭐ **"The narrow-window failures of 32/34 are THE SERVO's" — CONFIRMED AGAIN, from a new direction.**
+  Slice 46's wire binds the rate limit for **205 frames** at the shipped 30 °/s, all inside a
+  1948–2094 m window: the ACQUISITION SLEW at the lock instant. Authored wide at 240 °/s it vanishes,
+  and 60/120/240 °/s give identical misses, locks and authority to four decimals — so the isolation
+  is free and the effect is unambiguously the actuator's.
+
+**⭐⭐ THE APERTURE IDENTITY is the slice's own new law, and it inverts a rule five slices taught.**
+The window IS the beamwidth ⇒ `G = η·4π/θ²` ⇒ `R_acq ∝ √G` ⇒ **`R_acq · fov = constant`** (measured
+80789.2051 m·deg off the wire; log-log slope −1 to 1e−12). Slices 32–36 taught *"a wider window is
+free"*; with a link budget it is **exactly not** — reach shortens in exact proportion. And `R·σ^(−¼)`
+is constant to ten digits, so 16× the RCS buys only 2× the range: **the obvious lever is the weak
+one.**
+
+### ⚠ WHAT THIS DOES AND DOES NOT DO FOR THE BLOCKED SEARCH SLICE (42/43/45)
+
+**It supplies the precondition and does NOT by itself unblock the search.** The search family is
+blocked on *"an engagement launched OUTSIDE the seeker's horizon"* — slice 44's law. Slice 46 makes
+that sentence AUTHORABLE (the seven keys, the rung, the target's `rcs_m2`), and its own NULL cell
+still reproduces the block exactly: at `rcs_m2 = 1.0` the horizon is **8078.9 m** against a
+**6436.7 m** launch, ratio **1.255** — inside, as it always was. What remains is a **MIDCOURSE
+ENGAGEMENT**: a wire whose launch range exceeds the horizon at a sensible RCS. On this scenario that
+is now a one-line authoring change (the ladder's lower rungs already do it — at `rcs_m2 = 0.001` the
+seeker is blind for 434 frames and locks 6.96 s in), but a *scenario* is not the same as a
+*midcourse guidance phase*, which is what a search actually needs to be searching FROM.
+
+⇒ **The search slice's remaining unblocker is unchanged in kind and much cheaper in cost:** author a
+launch outside the horizon on top of slice 46's keys, and give the missile something to fly on while
+it is blind. The horizon itself is no longer the missing piece.
+
+### New candidates raised by slice 46
+
+- **A MIDCOURSE PHASE (inertial / datalink), THEN the search pattern.** Now the top of the backlog.
+  Slice 46's default cell already flies **434 frames blind** and reaches its target anyway — because
+  it is flying pure PN off a target it cannot see, which is a MODEL GAP, not a design. What a blind
+  missile should fly is an inertial midcourse toward a predicted intercept point, and that is the
+  thing a search pattern searches from. ⚠ Note the two are the same slice's two halves, and slice 43's
+  law (`travel = deficit/(1−ω/ρ)`, the U-shaped best moment) is already banked for the second half.
+- **RCS as a per-aspect quantity.** `rcs_m2` is a scalar on the target's comp. A real RCS swings
+  10–20 dB with aspect angle, and against a CROSSING target (which every wire in this arc uses) that
+  is a large, continuously-varying effect on the horizon. ⚠ Check the MODEL test first: does anything
+  read aspect today? Cheap to wire, and it makes the horizon breathe.
+- **A `detect` rung above `:snr` — integration / range gating / a false-alarm floor.** The rung tuple
+  is `(:none, :snr)`; the obvious third is a CFAR-style threshold with a false-alarm rate, which the
+  radar side already has (`detection.jl`). ⚠ Class-(b) hazard: it would flip the draw topology.
+- **A NOISE floor on `snr_db` and a probabilistic lock.** Today the gate is deterministic
+  (`r ≤ R_acq`), which is why the wire stays byte-identical. A `P_d` draw would make acquisition
+  stochastic — genuinely more realistic, and directly at odds with convention 3 (the per-look draw
+  COUNT must be rung-invariant). ⚠ Plan the draw topology BEFORE proposing this, not after.
+
+### Killed / not worth doing, from slice 46's own measurements
+
+- **Any showcase built on MISS for this component — DEAD, twice now.** Slice 44 killed the component
+  on it; slice 46 measured it non-monotone along the ladder AND backwards across the button. ⚠ This
+  is NOT a component kill (see the two-test rule) — it kills MISS AS THE GAUGE for anything that
+  moves the ACQUISITION INSTANT. Reach for the authority column instead.
+- **A self-declared HUD width budget — DEAD as a practice.** See `docs/LESSONS.md`; slice 46's tooth
+  passed green at 100/96 chars while every line ran off the edge at two window sizes. Budgets are
+  inherited from the family and asserted in PIXELS.
