@@ -1,7 +1,8 @@
 # Slice 45 — **THE ENGAGEMENT IS ANISOTROPIC AND THE HARDWARE IS ROUND: A PER-AXIS STOP, AND THE WINDOW HALF’S PRECONDITION** (§11 Tier-A)
 
-**Status: GATE-0 SKELETON (2026-08-18). No code. Nothing measured yet.**
-Everything below §0 is a PREDICTION with a falsifier attached, written before the first probe runs.
+**Status: KILLED AT GATE 0 (2026-08-18). No code shipped; suite unchanged at 7693.**
+§0 below is the SKELETON as it was written BEFORE any probe ran — predictions with falsifiers
+attached — and PART II is what the probes returned. Nothing in §0 has been edited after the fact.
 
 Inherited from: `docs/DEFERRALS.md` (**a RECTANGULAR / PER-AXIS FOV**, named by slice 34's gate 1,
 sharpened by slice 43's gate 0 §IV.3), `core/src/frames.jl` (`off_axis_angle`'s and `head_clamp`'s
@@ -312,3 +313,220 @@ renamed precondition — the same product slices 41, 42 and 44 delivered.**
 > one gate 1 may make.** "Toggling the rung is bit-identical" is the class-(a) sentence and would be
 > a FALSE CLAIM here — the copy-paste trap convention 4 names by name, caught previously by advisor
 > and pre-empted here in writing.
+
+---
+
+# PART II — THE GATE-0 RESULTS (2026-08-18)
+
+**VERDICT: KILLED AT GATE 0. No code ships. Suite unchanged at 7693.**
+Four probes, two probe patches (`missile.jl` per-axis window, `frames.jl` per-axis stop), both
+applied and reverted around the runs; tree byte-clean afterwards and the suite re-run green.
+
+⭐ **Every reason below was pre-registered in PART I.** Risk 1 is realized in its strongest available
+form, P2's prediction is confirmed to the grid's resolution, and §0.2.0's primary claim — the STOP —
+died harder than the half it was promoted over.
+
+---
+
+## §I — P1/P2: THE BREAK IS PURE AZIMUTH, AND THAT IS THE WHOLE STORY
+
+The first cut measured `max |Δaz|`, `max |Δel|` over the flight and read **107–109°** — slice 34
+§2.6's post-lock-loss runaway, exactly as that section warns. ⚠ *A max over a flight that diverges
+measures the divergence.* Re-instrumented at the only tick where a box and a disc of the same
+half-width can disagree — **the tick the window is LOST**:
+
+| arm | miss | t_brk | **Δaz@brk** | **Δel@brk** | off@brk |
+|---|---|---|---|---|---|
+| 34 sweep fov 1 | 3624.77 | 0.040 | −1.0051 | **0.0578** | 1.0068 |
+| 34 sweep fov 2 | 3609.35 | 0.062 | −2.0159 | **0.0698** | 2.0171 |
+| 34 sweep fov 4 | 3389.69 | 0.110 | −4.0012 | **0.0897** | 4.0022 |
+| 34 sweep fov 6 | 3495.14 | 0.174 | −6.0202 | **0.1235** | 6.0215 |
+| 44 fov 8.0 | 3154.56 | 0.269 | −8.0083 | **0.1758** | 8.0102 |
+| 44 fov 8.6 | 3111.53 | 0.307 | −8.6055 | **0.1815** | 8.6074 |
+| 44 fov 9.0 | 3328.36 | 0.338 | −9.0054 | **0.2061** | 9.0078 |
+| 36 handover err 0 (fov 10) | 3290.08 | 0.434 | −10.0041 | **0.2478** | 10.0072 |
+| 44 fov 12.0 | 3256.49 | 0.877 | −11.9964 | **0.3571** | 12.0018 |
+
+> ⭐⭐ **`off@brk` EQUALS THE HALF-WIDTH TO FOUR DECIMALS ON EVERY ROW, AND ELEVATION CONTRIBUTES
+> `hypot(fov, 0.25) − fov ≈ 0.003°` OF IT.** The window is lost on the azimuth axis, at every
+> half-width from 1° to 12°. **A disc and a box therefore fire on the same tick** — the difference
+> between them is an order of magnitude below one tick of LOS motion (~0.015°/tick here). This is
+> slice 42's `ω·dt` argument arriving in a new place: *a difference smaller than the integrator's
+> step is not a hardware difference.*
+
+**THE STOP's two axes, on the same arms** (`head_tgt_*`, pre-clamp, read on arms that HOLD so the
+runaway cannot contaminate them): demand **18.1237° azimuth against 0.6643° elevation — 27.3 : 1**,
+and the realized head sits at 18.1071 / 0.6561. The elevation trunnion is asked for two thirds of a
+degree while the azimuth ring is asked for eighteen.
+
+---
+
+## ⚠⚠⚠ §II — P3: BOX ≡ DISC, **BYTE-IDENTICALLY**, AT EVERY HALF-WIDTH THAT DECIDES ANYTHING
+
+A probe-only per-axis predicate behind `:probe_box` (absent the key, `off_axis_angle` verbatim — the
+CONTROL rows reproduce the unpatched numbers to the digit: 3290.0785 / 0.1912 / 0.2237 / 3389.6852).
+
+| fov | **DISC miss** | **BOX miss** |
+|---|---|---|
+| 1.0 | 3624.7685 | **3624.7685** |
+| 2.0 | 3609.3457 | **3609.3457** |
+| 4.0 | 3389.6852 | **3389.6852** |
+| 6.0 | 3495.1384 | **3495.1384** |
+| 8.0 | 3154.5551 | **3154.5551** |
+| 8.6 | 3111.5346 | **3111.5346** |
+| 9.0 | 3328.3550 | **3328.3550** |
+| 10.0 | 3290.0785 | **3290.0785** |
+| 12.0 | 3256.4886 | 3124.4768 |
+
+> ⭐⭐⭐ **EIGHT OF NINE ROWS ARE BIT-IDENTICAL, INCLUDING EVERY ROW THE FAMILY HAS EVER QUOTED.**
+> `box(a) ⊇ disc(a)` is a theorem — the box is strictly more window — and it **buys nothing**,
+> because the extra region it admits (the corners) is a region the LOS never occupies on this wire.
+> ⚠ The one row that differs (fov 12) is a FAILURE on both sides, so by slice 44's rule its metres
+> are not quotable: **quote the VERDICT, and the verdict is identical.**
+
+**THE SAME ON THE STOP** (a probe-only per-axis `head_clamp` behind a NaN-guarded `Ref`; the control
+reproduces the circular clamp bit-for-bit). Box stop vs disc stop at matched half-width, on the arm
+that HOLDS: miss **0.1912 on every rung from 30° down to 8.2°**, and both fail at 8.1° with the same
+**3620.6755**. Not one verdict moves.
+
+> ⚠ **AND THE HAZARD `frames.jl` NAMES IS REAL BUT 0.3 % HERE.** Its docstring warns that *"a
+> PER-AXIS clamp would let the head sit at `√2·stop` while the readout compared against `stop`."*
+> Measured at stop 8.1: the box head sits at (8.1000, 0.6560), i.e. `hypot` = 8.1265 = **1.003×** the
+> stop. The overhang is real and it is three parts in a thousand — for the same reason everything
+> else here is inert.
+
+---
+
+## ⭐⭐⭐ §III — P2's PREDICTION CONFIRMED: THE WINDOW'S ELEVATION HALF-WIDTH IS A **FLOOR**, AND THE STOP'S IS **INERT**
+
+P2 predicted (before flying) that if `max |Δel|` is bounded well below the half-widths in play, the
+box's optimum is on the **BOUNDARY at `a_el` = max |Δel|** — one knob plus a floor, no interior
+optimum. `max |Δel|` on the holding arm measured **0.3043°**. Flown, with `a_az` held at 10:
+
+| `a_el` | 0.10 | 0.20 | 0.30 | **0.31** | 0.35 | 0.50 | 1.00 | 10.00 |
+|---|---|---|---|---|---|---|---|---|
+| miss | 3438.14 | 3210.06 | 2485.27 | **0.1912** | **0.1912** | **0.1912** | **0.1912** | **0.1912** |
+
+> ⭐⭐⭐ **THE FLIP IS AT (0.30, 0.31], AGAINST A PREDICTED FLOOR OF 0.3043 — THE GRID'S OWN
+> RESOLUTION.** The prediction was written before the arm was flown, so this is the SHARP form of the
+> test (slice 43's ρ\* template), not a blind bracket. **And above the floor the miss is BYTE-IDENTICAL
+> across a 32× range of `a_el`.** There is no interior optimum, no trade curve, and nothing to tune:
+> the second knob is a floor and the first knob is the whole design.
+
+**THE STOP'S ELEVATION TRUNNION IS WORSE THAN A FLOOR — IT IS ENTIRELY DEAD.** With `a_az` held at
+30°, the miss is **0.1912 at every `a_el` from 0.04° to 30°** — a **750× range** — even where the
+clamp binds **66.66 %** of in-band ticks:
+
+| `a_el` | 0.10 | 0.30 | 0.50 | 0.65 | 0.70 | 1.00 | 5.00 | 30.00 |
+|---|---|---|---|---|---|---|---|---|
+| miss | **0.1912** | **0.1912** | **0.1912** | **0.1912** | **0.1912** | **0.1912** | **0.1912** | **0.1912** |
+| stop-bound % | 66.66 | 13.90 | 1.45 | 0.07 | 0.00 | 0.00 | 0.00 | 0.00 |
+
+> ⚠⚠ **THE SEVENTH MEMBER OF THE FALSE-FIDELITY CLASS, AND §0.2.0 HAD PROMOTED IT TO THE SLICE'S
+> PRIMARY CLAIM.** Pin the head's elevation to a tenth of a degree, bind that clamp on two thirds of
+> the ticks, and the engagement does not notice. ⚠ It is *not* the same mechanism as the window's
+> floor and the two must not be conflated: the window gates on `Δel` directly, so starving it breaks
+> the track; the stop gates on where the head sits, and the LOS elevation is small enough that a
+> pinned head is still inside the window.
+
+---
+
+## ⭐ §IV — THE HELD-COST COMPARISON: BOTH INVARIANTS AGREE, AND IT DOES NOT SAVE THE SLICE
+
+Minimum limits that hold slice 36's shipped biased handover (`err_az = −6`), flown on a 0.01° grid:
+
+| | minimum DISC | minimum BOX | SUM (`2r` vs `a_az+a_el`) | PRODUCT (`πr²` vs `4ab`) |
+|---|---|---|---|---|
+| **window** | r = **8.10** (8.09 → 2742 m) | (**8.10**, **0.31**) | 16.200 vs **8.410** → box 1.93× | 206.12 vs **10.04** → box 20.5× |
+| **stop** | r = **8.15** (8.10 → 3620 m) | (**8.15**, **≤0.04**) | 16.300 vs **8.19** → box 2.0× | 208.67 vs **1.30** → box 160× |
+
+> ⭐ **THE ROBUSTNESS REQUIREMENT §0.5 P3s PRE-REGISTERED IS MET: both invariants agree.** The box is
+> cheaper under travel AND under area. **And it changes nothing**, because — §II — the two shapes have
+> the same verdict everywhere. ⚠⚠ **SO WHAT SURVIVED IS A PURE COST CLAIM, AND THIS SIMULATOR HAS NO
+> COST MODEL.** There is no cost variable in `World`, `Entity` or any comp dict; the "saving" exists
+> only in a sentence a reader has to be told. **A lesson you cannot fly is not a lesson this project
+> ships** (the invariant at the top of `CLAUDE.md`: if it can't run headless from `runtests.jl`, it's
+> in the wrong place).
+
+---
+
+## ⚠⚠⚠ §V — THE ONE ARM THAT LOADS BOTH AXES, AND WHY IT IS NOT A RESCUE
+
+Elevation *can* be loaded — by authoring it into the handover (`err_el`). Then the break geometry
+genuinely rotates (Δaz −9.97 → −5.52 while Δel 0.76 → 8.34, with `off@brk` pinned at 10.00), and a
+box **does** hold at the break where the disc breaks, on every row.
+
+| `err_el` | +0.0 | +2.0 | +4.0 | +6.0 | +8.0 | +9.5 |
+|---|---|---|---|---|---|---|
+| DISC miss | 3290.08 | 3261.52 | 3514.97 | 3580.05 | 3528.46 | 3521.06 |
+| BOX miss | 3290.08 | 3339.80 | 3517.87 | 3541.00 | 3336.40 | 3425.38 |
+
+> ⚠⚠ **EVERY ROW IS A FAILURE ON BOTH SIDES.** The box holds one extra tick and then loses the track
+> anyway, because `err_az = 0` at 8 °/s does not hold on this wire for reasons slice 36 already
+> measured and slice 44 §VII.2 relocated onto the servo. **No verdict moves, and the metres are the
+> forbidden currency.**
+> ⭐⭐ **AND THE DISTINCTION IS THE WHOLE PRECONDITION: authoring elevation into the HANDOVER is not
+> the same as an ENGAGEMENT that loads elevation.** A handover error is an initial condition that
+> decays; a climbing or diving target loads the axis for the whole approach. The first is reachable
+> with a key and proves nothing; the second is a wire change and is the thing this deferral has
+> actually been waiting for.
+
+---
+
+## ⭐⭐⭐ §VI — WHAT THIS KILLS, AND THE RULE THAT IS BIGGER THAN THE SLICE
+
+> **1. THE RECTANGULAR / PER-AXIS FOV DEFERRAL IS DEAD ON THIS WIRE — BOTH HALVES.** The window half
+> is byte-identical to the disc at every half-width that decides anything; the stop half's elevation
+> axis is inert over a 750× range. Slice 34 gate 1's *species argument* is **answered by measurement
+> for the first time**, and the answer is that on this engagement the shape is not discriminable.
+
+> ⭐⭐⭐ **2. THE TRANSFERABLE RULE: A SHAPE EARNS A RUNG ONLY IF IT CHANGES BEHAVIOUR. If two shapes
+> are byte-identical everywhere in the domain and differ only in what you would have paid for them,
+> what you have is a COST claim — and a cost claim needs a cost model.** Slice 41 killed a *dynamic*
+> element that reduced to a gain; this kills a *geometric* element that reduces to a price. Same
+> family of error, different currency.
+
+> ⭐⭐ **3. AND ITS CHEAP FORM, WHICH IS THE METHOD PAYOFF: THE REPARAMETERIZATION GATE DOES NOT NEED
+> A GRID.** §0.6 fixed a 3 % bound over a swept grid; **P2 reached the same verdict from
+> instrumentation alone**, by asking whether the second knob is inert over its whole range above a
+> floor. If it is, the pair was one knob before any tuning started. ⚠ **The advisor promoted P2 ahead
+> of the grid probes for exactly this reason, and the promotion is what made the gate cheap.**
+
+> ⭐⭐ **4. THE PHYSICAL REASON, AND IT IS THE ONE TO CARRY: A TWO-DIMENSIONAL LIMIT ON A
+> ONE-DIMENSIONAL ENGAGEMENT HAS ONE DIMENSION.** §0.2's candidate law was RIGHT that the elevation
+> half of both budgets is bought and never spent (27 : 1 on the stop, `Δel ≤ 0.36°` at every break).
+> **Its predicted consequence was wrong in an instructive way:** the axis that is never spent is not
+> an axis you can trade away for advantage — it is an axis that is free *at every value*, which is
+> precisely why reshaping around it moves nothing.
+
+> ⚠⚠ **5. THE PRECONDITION, RENAMED — the shape of every kill in this family since 42.** What a
+> shape slice needs is **AN ENGAGEMENT THAT LOADS BOTH ANGULAR AXES THROUGHOUT THE APPROACH** (a
+> climbing / diving / out-of-plane manoeuvring target). Slice 36's `THE ELEVATION HALF` deferral —
+> filed as *"a tooth rather than a slice"* — **is promoted to that precondition.** ⚠ And §V says what
+> will not do: an elevation error authored at handover is an initial condition, not an engagement.
+
+> ⭐ **6. WHAT ELSE SURVIVES AS MEASURED PHYSICS** (worth carrying even though nothing ships): the
+> break is on the azimuth axis at every half-width 1–12°, with `off@brk` = fov to four decimals; the
+> stop's demand ratio is **27.3 : 1**; the per-axis-clamp overhang `frames.jl` feared is **1.003×**,
+> not `√2`; and the window's elevation floor is **`max |Δel|`**, predicted at 0.3043 and flown at
+> (0.30, 0.31].
+
+---
+
+## §VII — THE CHECKS THAT RAN, AND ONE THAT DID NOT
+
+* **CONTROL rows on both patches** — key absent / `Ref` NaN reproduces the shipped numbers to the
+  digit (3290.0785, 0.1912, 0.2237, 3389.6852; and the circular clamp bit-for-bit). Convention 2.
+* **CONTAMINATION COLUMNS (P5)** carried on every table and read first — `sat %`, `aero %`,
+  `stop-bound %`, `hold %`. They are what caught §I's runaway contamination and what makes the
+  §III stop table readable (66.66 % bound and still inert).
+* **THE SUITE** — re-run after reverting both patches: **7693 / 7693**, unchanged.
+* ⚠ **P6 (half `dt`) DID NOT RUN, AND IT DOES NOT NEED TO.** It exists to test whether a *narrow*
+  verdict flip is an artifact of the step. **No verdict flipped anywhere** — the headline is a set of
+  byte-identical pairs, and byte-identity does not become non-identity at a finer step. ⚠ The one
+  number that *is* narrow (the 0.31° floor) is a floor on a knob, not a box-vs-disc comparison, and
+  slice 43 already cleared the closely-related 0.066° arm across 2e−3 / 1e−3 / 5e−4. **Recorded as
+  not-run with its reason, rather than quietly skipped.**
+* ⚠ **P4 (the aspect-ratio grid) DID NOT RUN BY DESIGN** — §0.6 says P2's boundary optimum answers
+  the gate and the grid is not flown. P2 found one. The grid would have measured a curve with no
+  interior extremum.
