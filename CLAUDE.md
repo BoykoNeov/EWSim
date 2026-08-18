@@ -29,6 +29,7 @@ PowerShell 5.1 mangles double quotes passed to `julia -e`. **Put Julia code in a
 - `docs/SLICES.md` — the digest: one paragraph per slice, what its lesson was.
 - `docs/DEFERRALS.md` — the backlog **and the kill list**. Read before planning a slice.
 - `docs/LESSONS.md` — cross-slice method disciplines (probing, teeth, client proofs).
+- `docs/CONVENTIONS.md` — the conventions' TEETH (function names, rungs, numbers) behind CLAUDE.md's hooks.
 
 ## Invariants that catch the real bugs
 
@@ -54,25 +55,21 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Where the project is (2026-08-18)
 
-**Slices 1–40 COMPLETE & green — 7693 tests.** (Slices 39, **41, 42 and 44** are KILL RECORDS, **43 is a
-GATE-0 LAW RECORD** and **45 is a GATE-0 SPLIT VERDICT** — none shipped code, so the count is unchanged.)
-⚠⚠ **FIVE CONSECUTIVE GATE-0 RECORDS SHIPPED NO CODE, AND ON 2026-08-18 THE USER RULED THAT THE KILL
-CRITERION ITSELF WAS AT FAULT — see "TWO AIMS ⇒ TWO TESTS ⇒ TWO VERDICTS" below. 41, 44 and 45 are
-"DEAD AS A LESSON, ALIVE AS A MODEL" and their probe code still exists; only 42 is dead outright.**
-HANDOFF §10 items 1–13 — the committed roadmap — are DONE; slices 15–40 are into the §11
-Tier-A horizon.
+**Slices 1–40 COMPLETE & green — 7693 tests.** 39 and 41–45 are GATE-0 RECORDS — none shipped code, so the
+count is unchanged. ⚠⚠ **FIVE CONSECUTIVE gate-0 records shipped nothing, and on 2026-08-18 the kill
+CRITERION itself was ruled at fault** (see the two-test rule below): 41, 44 and 45 are **ALIVE AS A MODEL**
+and their probe code survives in `M:\claud_projects\temp\slice4N`; only 42 is dead outright; 43 is BLOCKED.
+HANDOFF §10 items 1–13 are DONE; 15–40 are into the §11 Tier-A horizon.
 
-The live arc is the **missile seeker/radome family (slices 26–40)**: a seeker looks through a
-radome whose bend depends on the look angle, so the missile's own body motion feeds back into
-the line-of-sight it reports and past a loop gain it shakes itself into a limit cycle. Slices
-27–31 built the gyro feed-forward cure and priced it (belief accuracy, the slope *curve*, the
-engagement envelope, gyro error); 32–33 turned it into a field-of-view budget; 34–38 put the
-seeker on a **gimbal** and worked through its index, its servo bandwidth, its handover, its
-reference frame and its gyro; 40 gave that gimbal **inertia** (a second-order servo).
+The live arc is the **missile seeker/radome family (26–40)**: a seeker looks through a radome whose bend
+depends on the look angle, so the missile's own motion feeds back into the line-of-sight it reports and past
+a loop gain it shakes itself into a limit cycle. 27–31 built and priced the gyro feed-forward cure; 32–33
+made it a field-of-view budget; 34–38 put the seeker on a **gimbal** (index, servo bandwidth, handover,
+reference frame, gyro); 40 gave that gimbal **inertia**. Per-slice detail: `docs/SLICES.md`.
 
-**The rule that keeps paying** (slices 33, 34, 35, 37, 38): *aim `R̂` at the glass's worst-case
-slope* (`radome_slope_worst`) and the cost — of FOV, of detector window, of servo bandwidth, of
-which frame the servo closes in — mostly goes away.
+**The rule that keeps paying** (33, 34, 35, 37, 38): *aim `R̂` at the glass's worst-case slope*
+(`radome_slope_worst`) and the cost — of FOV, detector window, servo bandwidth, servo frame — mostly
+goes away.
 
 ## Read on demand — DO NOT preload these
 
@@ -82,242 +79,116 @@ this split exists to fix).
 
 | Before you… | Read |
 |---|---|
-| plan slice 45 / pick the next slice | `docs/DEFERRALS.md` — the backlog **and the kill list** |
+| plan slice 46 / pick the next slice | `docs/DEFERRALS.md` — the backlog **and the kill list** |
 | change architecture, frames, the wire protocol, the tick contract | `HANDOFF.md` |
 | quote slice N's numbers, test names, or gate detail | `docs/STATUS.md` — grep `## Slice N` |
 | recall what slice N's *lesson* was | `docs/SLICES.md` |
 | write a gate-0 probe, a verifier tooth, or a HUD branch | `docs/LESSONS.md` — cross-slice method disciplines |
+| touch the RNG, the wire, a fidelity rung, a live knob, a test or the Godot client | `docs/CONVENTIONS.md` — the teeth behind the one-line hooks below |
 | re-run slice N's showcase / verifier | `docs/STATUS.md` §Slice N has the exact commands |
 
 **When a slice completes**, the doc ritual writes to FIVE places, in this order: the full
 as-built block into `docs/STATUS.md` (under a `## Slice N — TITLE (date)` heading), a paragraph
 into `docs/SLICES.md`, the new/killed candidates into `docs/DEFERRALS.md`, any transferable
-method lesson into `docs/LESSONS.md`, and **only** the state line + any new dead end into
-`CLAUDE.md`. Keep `CLAUDE.md` under ~20 KB — it is loaded on every single turn.
+method lesson into `docs/LESSONS.md`, and into `CLAUDE.md` **only** the state line + any new dead end **as ONE LINE**
+(name, VERDICT WORD, one clause of why, pointer). ⚠⚠ **`CLAUDE.md` is a REFERENCE / ROUTER file — keep
+it under ~16 KB** (it is 15.2 KB after the 2026-08-18 trim, down from 25.2). It is loaded on every single
+turn, and it grew by absorbing detail that belongs in `docs/DEFERRALS.md` and `docs/CONVENTIONS.md`.
 
-## ⭐⭐⭐ TWO AIMS ⇒ TWO TESTS ⇒ TWO VERDICTS (2026-08-18, user reframe — READ BEFORE KILLING ANYTHING)
+## ⭐⭐⭐ TWO AIMS ⇒ TWO TESTS ⇒ TWO VERDICTS (2026-08-18 — READ BEFORE KILLING ANYTHING)
 
-**EWSim is a teaching instrument AND a simulator** — different scenarios, different models,
-different subcomponents, different imperfections. Gate 0's kill tests (*reparameterizable*,
-*moves no verdict*, *false-fidelity knob*) measure **LESSON value ONLY**, and slices 41–45
-applied them as if they retired the **COMPONENT**. They do not. Every candidate now gets two:
+**EWSim is a teaching instrument AND a simulator** (different scenarios, models, subcomponents,
+imperfections). Gate 0's kill tests measure **LESSON value only**, and slices 41–45 applied them as if they
+retired the COMPONENT. Two tests now: **MODEL** — is the parameter READ by the physics each tick and correct
+in its own units/signs/frames? *The only outright kill* (a knob consumed at load is a BUG). **LESSON** —
+does dialing it move the authored scenario's headline metric? *Failing this kills the SLICE'S HEADLINE, not
+the hardware.* ⇒ **Pass model / fail lesson = "DEAD AS A LESSON, ALIVE AS A MODEL": it ships as physics +
+tests + authorable keys.** ⚠ Unchanged: the bar for NEW proposals, and slice 39's rule that a
+reparameterization must not ship as an ARCHITECTURE. Detail: `docs/DEFERRALS.md` §"THE 2026-08-18
+RE-VERDICT".
 
-- **MODEL test — is the parameter READ by the physics every tick, and does the response obey
-  its own units/signs/frames?** A knob consumed once at load and never read again is a **BUG**;
-  that failure is the only one that kills a component outright.
-- **LESSON test — does dialing it move the authored scenario's headline metric?** Failing this
-  kills the **SLICE'S HEADLINE**, not the hardware.
+## Dead ends — do not rebuild (ONE LINE EACH; the detail is `docs/DEFERRALS.md`)
 
-⇒ **PASS model / FAIL lesson = "DEAD AS A LESSON, ALIVE AS A MODEL": it ships as physics +
-tests + authorable keys, with the refuted lesson claim staying buried in the plan file.**
-*"It didn't move the miss on this one scenario"* is a statement about that scenario. ⚠ The bar
-for NEW proposals is UNCHANGED — read by the physics and correct in its own units, or no ship;
-and a reparameterization still must not ship as an **architecture** (slice 39's discipline).
-Per-slice re-verdicts for 41–45: `docs/DEFERRALS.md` §"THE 2026-08-18 RE-VERDICT".
+⚠ **Read the VERDICT WORD.** **DEAD** = the component does not exist (a cancellation, an identity, a
+discretization artifact, an unread key). **DEAD AS A LESSON / ALIVE AS A MODEL** = the hardware is real
+and shippable, only the headline died (see the two-test rule above). **BLOCKED** = never killed at all.
+Evidence, numbers and the re-verdict table: `docs/DEFERRALS.md` §"THE 2026-08-18 RE-VERDICT".
 
-## Dead ends — do not rebuild
+- **A nulling-loop head servo** (39) — **DEAD**: an algebraic IDENTITY with the shipped feed-forward under
+  transformed parameters (5.8e−09 m over 12000 ticks). ⚠ FINITE loop gain is un-killed and unproven.
+- **Memory track / a coasting head** (37) — **DEAD AS A LESSON, ALIVE AS A MODEL**: a break in this arc is
+  not an episode but the rest of the flight ⇒ the cure belongs to the ESTIMATOR's frozen rate, not the head.
+  Three slices mis-located it.
+- **A scalar rate-limited fin inside the coupled loop** (20) — **DEAD AS A LESSON**: `δ_max` structurally
+  SHADOWS `δ̇_max`. The rate limit itself is SHIPPED (slice 15).
+- **A second-order FIN actuator** (41) — **DEAD AS A LESSON, ALIVE AS A MODEL**, on REPARAMETERIZATION.
+  ⭐⭐ **The rule to carry: a pole differs from a gain ONLY in that its phase VARIES with frequency, and that
+  loop's fin command is a single 1.6488 Hz line.** ⇒ **measure the SPECTRUM of the signal a new dynamic
+  element will sit on BEFORE proposing it** (`p2_spectrum.jl`).
+- **A SEEKER SEARCH PATTERN** (42/43/45) — **BLOCKED, never killed**, on its precondition. ⭐⭐ **The cost of
+  acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error** ⇒ widening the glass and
+  travelling further are THE SAME ACT, and a wider window is FREE here. Its LAW (sweep floor, `t_lock`, the
+  U-shaped best moment) and its three instrument bugs are in DEFERRALS. **Only unblocker left: 44's
+  MIDCOURSE engagement.**
+- **Seeker range / SNR limits AS THE UNBLOCKER** (44) — **DEAD as the unblocker, ALIVE AS A MODEL** (the
+  physics measured EXACT; the wire launches INSIDE the seeker's horizon, 8079 m vs 6437 m). ⭐⭐ **A detection
+  gate can only price a design variable if the ENGAGEMENT is launched OUTSIDE the sensor's horizon — a
+  property of the WIRE.** ⚠ Two survivors bigger than the law: **a late lock is paid in MANOEUVRE AUTHORITY
+  and MISS cannot show it** (the last FREE cell flies at 100.00 % of `a_max`); and **the narrow-window
+  failures of 32/34 are THE SERVO's** (identical lock instants, hit at 30 °/s, miss at 8 °/s).
+- **A rectangular / per-axis window and stop** (45) — **DEAD AS A LESSON, ALIVE AS A MODEL, both halves.**
+  ⭐⭐⭐ **A TRACKER holds both axes near zero so a window's CORNERS are never visited; a SEARCH drives one
+  axis to the rim BY DESIGN, which is where the corners are.** ⚠ Never quote the box's rescue without its
+  control — a disc 0.7 % wider rescues it too. ⚠ It does NOT unblock the search slice.
+- **An "acquisition knife-edge"** (42 gate 1) — **DEAD**: the band is `ω_LOS·dt`, ONE integration step, and
+  it HALVES when `dt` halves (0.0036° against a 10° window). ⇒ **re-fly any narrow threshold effect at half
+  `dt`, and read a claimed STEP against the NULL cell first.**
+- **Seeker noise × the BTT roll loop** — **DEAD as a COUPLING claim** (~1000:1 low-pass); the noise itself is
+  shipped (25).
+- **A cubic radome curve** — **DEAD**: unbounded slope, the bend diverges, no domain.
+- **An angle-domain radome corrector** — **DEAD AS THE DEFAULT, ALIVE AS A MODEL**: it needs the look angle
+  and can only see it *through* the bend it is removing. ⇒ **compensate with a signal that is not itself
+  corrupted by what you are compensating.**
+- **Dead knobs that are BUGS, not features** — `speed` (19, FIXED — `rho` is the live lever), `k_δ` (15,
+  cancels exactly), `ζ` on the lag rung (40), the handover bias key (36), `(R̂,s)` (31). ⚠⚠ **Launch altitude
+  (21) is NOT one of these — it is a MODEL GAP**: `_integrate_6dof!` passes a CONSTANT `rho` on the path the
+  whole 26–45 arc flies, and its own comment reserves the seam for ρ(z).
+- **Disqualified by non-monotonicity** — `k` (28), `ω_n` (40), `σ_seek` (25), miss-vs-`K` / miss-vs-`α_stall`
+  (20, 22). ⚠ **NOT component kills — that physics is SHIPPED**; only their use as the showcase SLIDER died.
+- **Harness traps that cost real hours** — a verifier's `STEPS` MUST be a multiple of `emit_every` (else a
+  SILENT hang); `%g`/`%.2e` are not GDScript specifiers and one bad one kills the WHOLE `%` silently;
+  frame-sampling error is ASYMMETRIC (a miss samples faithfully, a HIT coarsely); an rms measured where a
+  CLAMP binds cannot move and reads as a KILL. Teeth: `docs/CONVENTIONS.md` §14, `docs/LESSONS.md`.
 
-Kept inline because the expensive failure is not "I didn't read a file", it is **rebuilding
-something already killed**. One line each; the reasoning is in `docs/DEFERRALS.md` and
-`docs/plans/sliceN.md`.
+## Conventions / hard-won disciplines (ONE LINE EACH; the teeth are `docs/CONVENTIONS.md`)
 
-- **A nulling-loop head servo** (slice 39) — DEAD. Infinite loop gain is a reparameterization of
-  the servo time constant, not an architecture (5.8e−09 m over 12000 ticks). What survives is
-  *finite* loop gain, and even that must first prove its rejection curve differs from a lag's.
-- **Memory track / re-acquisition** — DEAD. A break in this arc is not an episode, it is the rest
-  of the flight; the cure belongs to the ESTIMATOR (frozen rate), not the head. Three slices
-  banked it and all three mis-located it.
-- **A scalar rate-limited fin inside the coupled loop** (the slice-20 candidate) — DEAD.
-  `δ_max` structurally SHADOWS `δ̇_max`.
-- **A second-order FIN actuator** (slice 41, the deferral slice 40 named as its own) — **DEAD AS A
-  LESSON, ALIVE AS A MODEL** (re-verdict 2026-08-18; kernel + seam were built and are bit-exact across
-  five `:delta_cmd` writers, probe code in `M:\claud_projects\temp\slice41`), on
-  REPARAMETERIZATION. Two single-axis `(k_α, k_q)` retunes each reproduce its whole threshold curve to
-  0.00–1.01 %. ⭐⭐ **The reason is the rule to carry: a pole differs from a gain ONLY in that its phase
-  VARIES with frequency, and that loop's fin command is a single 1.6488 Hz line — one point of a phase
-  curve is a number, which is what a gain is.** Slice 38's *"`s` adds PHASE and scaling a slope
-  cannot"* has teeth only where the loop is BROADBAND. ⇒ **before proposing any new dynamic element
-  here, measure the SPECTRUM of the signal it will sit on.** (The physics was real — inside the main
-  control loop a lag DEstabilizes, the opposite of its sign on 34–40's feed-forward path — and it did
-  not matter.)
-- **A SEEKER SEARCH PATTERN** (42 gate 0; **re-measured and LAWED at slice 43 gate 0**) — DEFERRED, not dead,
-  **blocked on its precondition**: a wider window is FREE here, and 43 makes that objection SHARPER —
-  ⭐⭐ **the cost of acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error** (err −14/fov 12
-  ≡ err −12/fov 10 to every digit) ⇒ widening glass and travelling further are THE SAME ACT. Law:
-  `travel = deficit/(1−ω/ρ)`, `t_lock = travel/ρ + τ`, **domain ρ ≤ rate_max** (ω = LOS rate; ⚠ a ρ-only
-  form was an advisor catch — **count AXES, not cells**). Guess right and coverage is **never REACHED**
-  (lock 2.07° into a 3–30° pattern — 42's "free" was a flat row misread); guess wrong it costs `2S` at an
-  **accelerating** price (5→39 % over `2/ρ`). ⭐⭐ **Sweep floor = THE AXIS THE SEARCH DOES NOT SWEEP, and it
-  is a DEADLINE not a feedback** (an LOS-rate race, a missing reversal, and "the search inflates its own
-  deficit" were ALL measured and REFUTED — the search never assigns `head_el`, so that drift is EXOGENOUS).
-  It DERIVES: `ρ* = min_t [Δaz₀−√(fov²−Δel²)]/(t−τ)` = 1.0174 °/s vs a flown bracket (1.01, 1.02], **U-shaped
-  in t ⇒ a search has a BEST MOMENT.** ⭐ **First flying arm where a PER-AXIS FOV flips the verdict** (34's
-  deferral — its gate 2 bound the STOP; this binds the WINDOW; **flown and CONFIRMED at slice 45** — ρ* falls
-  (1.01,1.02] → (0.92,0.93], see below). ⚠ 42 §V.4's ρ_min table is VOID (servo bypassed;
-  `none ≤ 16` was its own grid edge — 18/22 °/s; +side is stop contamination). ⚠ **An open-loop sweep WINDS
-  UP against `rate_max` — what saturates is the AMPLITUDE** (20° at 64 °/s → 4.4° swept, arm FAILS); cure
-  `ρ ← min(ρ, rate_max)`, anti-windup is a CAUTION (no verdict moves in 16 cells).
-- **`SEEKER RANGE / SNR ACQUISITION LIMITS` AS THE UNBLOCKER FOR THE SEARCH** (slice 44 gate 0) — **DEAD *AS
-  THE UNBLOCKER*; THE SENSOR ITSELF IS ALIVE AS A MODEL** (re-verdict 2026-08-18 — the physics measured EXACT,
-  and a seeker with a detection horizon is not optional equipment for a simulator; `lib44.jl` +
-  patched `missile.jl` in `M:\claud_projects\temp\slice44`). The
-  aperture identity is EXACT on the flying wire (`R_acq · fov` constant to 0.0000 %, slope −1.000000) and changes
-  NOTHING: the authored Ku seeker reaches **8079 m against a 6437 m launch** ⇒ the missile starts already able to
-  see, and the gate is byte-identical to no gate. A hit survives to −26 dB; the gate first bites at **−28 dB**
-  (a 0.0025 m² target). ⭐⭐ **A detection gate can only price a design variable if the ENGAGEMENT is launched
-  OUTSIDE the sensor's horizon — a property of the WIRE, not the sensor** (26–43 fly a 6.4 km / 8.9 s TERMINAL
-  shot). ⇒ precondition **RENAMED to a MIDCOURSE-RANGE ENGAGEMENT**, its own slice (unpowered, zero drag ⇒ a
-  20 km shot drops 3845 m into the ground). ⭐⭐ **Two survivors, both bigger than the law:** a late lock is paid
-  in **MANOEUVRE AUTHORITY and MISS cannot show it** (last FREE cell flies at **100.00 % of `a_max`** at miss
-  0.2514 m; one step further the demand FALLS to 20.91 % because the track is gone — **flatness is not slack**);
-  and ⚠⚠ **the narrow-window failures of 32/34 are the SERVO's** — fov 8.0/8.6/8.8 miss 362/439/402 m at 8 °/s
-  and **hit at 0.22/0.19/0.10 m at 30 °/s from IDENTICAL lock instants** (a lock at the rim hands the servo a
-  FULL-WINDOW SLEW; threshold in (8, 30], not bracketed). ⚠ A **PARTIAL-RESCUE** mode exists inside the gap
-  slice 43 called empty (7.80 m at hold 55 %, 85.8 m at hold 31 %).
-- **A RECTANGULAR / PER-AXIS WINDOW AND STOP** (slice 45 gate 0) — **SPLIT** (⭐ re-verdict 2026-08-18: **BOTH
-  halves are ALIVE AS A MODEL** — the el stop BINDS 66–68 % of in-band ticks, i.e. it is read and working; what
-  died is the HEADLINE. Patches in `M:\claud_projects\temp\slice45`). ⚠ **STOP half DEAD AS A LESSON, on BOTH regimes** — miss
-  0.1912 m at **every** el stop 0.04–30° (**750×**) tracking, and on a SEARCH arm miss/lock/demand are
-  identical over (30, 0.30)…(30, 30.0) with the trunnion binding **68 %** of ticks: the **7th
-  false-fidelity knob**, and §0.2.0's species argument promoted exactly this half. ⭐⭐⭐ **WINDOW half ALIVE, and
-  its precondition is not a geometry but a *SEARCHING HEAD*: a TRACKER holds both axes near zero so the window's
-  CORNERS are never visited; a SEARCH drives one axis to the rim BY DESIGN, where the corners are.** Box ≡ disc
-  **byte-identically** on 8/9 tracking rows, yet on slice 43's ρ = 0.95/1.00/1.01 arm the disc **never locks
-  (305.11 m)** and the box **hits (0.24/0.23/0.15)**. ⚠ Never quote that without its control: a disc **0.7 %
-  wider** rescues it too ⇒ at matched half-width it is 42/43's "wider is free". ⭐⭐ It survives on **HELD COST as
-  a flown verdict** — spend the box's own budget as a disc (r 5.95 travel / 4.92 area) and it **never acquires**.
-  ⇒ **ships nothing — its only flying arm is inside an UNSHIPPED feature**, so it belongs INSIDE the search slice,
-  and ⚠⚠ **it does NOT unblock it** (a box makes SEARCHING cheaper, not a wider window costlier) ⇒ **the search
-  has no unblocker left but 44's midcourse engagement.** ⚠⚠ Method: PART II killed BOTH halves over a sub-claim
-  its own plan named FIRST and never flew — *a gate is not finished while a §0.2 sub-claim has no row.*
-- **AN "ACQUISITION KNIFE-EDGE" / "a lock at the rim is worth nothing"** (slice 42, gate 1) — DEAD. ⭐⭐ **The
-  band is `ω_LOS · dt` — ONE INTEGRATION STEP: halve `dt` and it halves** (0.0036° against a 10° window).
-  The gate-0 table already said so — the "worthless lock" cell's miss was BYTE-IDENTICAL to the never-locks
-  cell's, i.e. the null case relabelled, and `off@lock == fov` to four decimals was the inclusive `off ≤ fov`
-  gate echoing its own constant. The servo-vs-LOS *race* reading is refuted too (same digits at 8 and
-  60 °/s — **the head's command is written at the END of the tick, so the servo is idle for exactly one
-  tick, and being one tick late is not something a faster servo fixes**), and the mirror-image sign does
-  not fail at all. ⇒ **before shipping a narrow threshold effect,
-  RE-FLY IT AT HALF `dt`; and read a claimed STEP against the NULL cell first.**
-- **Seeker noise × the BTT roll loop** — DEAD. A ~1000:1 low-pass (std 1.07 vs 1.6e−5).
-- **A cubic radome curve** — killed at gate 0: unbounded slope, the bend diverges, no domain.
-- **An angle-domain radome corrector** — built and measured, does NOT ship: it needs the look
-  angle and can only see it *through* the bend it is removing. General rule: **compensate with a
-  signal that is not itself corrupted by what you are compensating.**
-- **False-fidelity / dead knobs** — a knob consumed once at load is not a knob: `speed` (slice 19),
-  launch altitude (21), the handover bias key (36), `ζ` on the lag rung (40), `k_δ` (15), `(R̂,s)`
-  (31). **Compose your own equivalences before believing a rung is an architecture.**
-- **Disqualified by non-monotonicity** — `k` (28), `ω_n` (40), σ_seek (25), and the miss-vs-K /
-  miss-vs-α_stall reversals (20, 22). A domain that reverses the lesson is not a domain.
-- **Harness traps that cost real hours** — a verifier's `STEPS` MUST be a multiple of the
-  scenario's `emit_every` (else it hangs silently); `%g` / `%.2e` are not GDScript specifiers and
-  a bad one makes the WHOLE `%` fail silently on a green run; frame-sampling error is asymmetric
-  (a miss samples faithfully, a HIT samples coarsely); an rms measured where a clamp binds cannot move
-  and reads as a KILL (slice 41: α_max bound 78 % of band ticks at the authored design, so a real
-  1.27–4.45× effect read 0.4 %) — carry a contamination column IN BAND on every arm and read it first.
+**Grep `docs/CONVENTIONS.md` before acting on any of these** — the hooks below name the trap, that file
+has the function names, the rungs and the measured numbers. Do NOT paraphrase a hook into a decision.
 
-## Conventions / hard-won disciplines
-
-The patterns that recur across every slice. Each names its teeth — grep the file, don't
-paraphrase away the specifics.
-
-1. **A slice = 3 gates.** Pure primitives (a `*.jl` lib, closed-form + MC tests) → wired
-   subsystem (the tick contract) → scenario + Godot view + verifier. A new mode-const lib is
-   included **before `radar.jl`** so `LIVE_FIDELITY_MODES` can reference it.
-
-2. **Byte-identity is the master check — slices are additive.** A new slice must leave every
-   prior slice bit-for-bit identical. Never touch a shared symbol on the radar/detection path.
-   Proven by the `_sample_z` N_p=1 **absolute golden** (`test_detection.jl`) + `test_determinism.jl`.
-   `test_determinism` only compares run-A-vs-B, so it CANNOT catch a draw-ORDER regression — the
-   absolute golden does (it caught two real 1-ULP desyncs, e.g. `√(snr/2)` vs `√snr·√½`).
-
-3. **Draw-topology hazard — the sharpest determinism trap.** The per-look RNG draw *count* must
-   be invariant to fidelity rung, slider value, AND target position/SNR. Gate the
-   detection/telemetry on snr/visible — **never the draw**. `detect_once`/`_draw_profile!`/
-   `_draw_toa_stream`/`_draw_pseudoranges` draw unconditionally; gating a draw desyncs replay.
-
-4. **Three fidelity classes — don't conflate them (the copy-paste false-claim trap):**
-   - **(a) draw-invariant RNG rungs** — a toggle keeps the RNG in lockstep and changes only
-     detection booleans / telemetry values; introduce-safe (namespaced by consumption — nothing
-     reads the key without its subsystem). `:propagation`, `:ep`, `:estimator`, `:deinterleaver`,
-     the GPS error toggles, `:raim`.
-   - **(b) draw-topology-flipping** — `:cfar` alone: *introducing* it flips point→profile draws →
-     replay desync, so `set_fidelity` **rejects introducing** it (switching among cfar rungs is
-     bit-identical).
-   - **(c) physics-changing, no RNG** — `:integrator`, `:autopilot`: a toggle CHANGES the
-     trajectory. "draw-count invariance" is *vacuous* here — do NOT copy the toggle-bit-identical
-     language; it's a false claim (advisor catch).
-
-5. **A live knob can never crash a tick.** A throw inside `build_env!`/`observe!`/`decide!`/`tick!`
-   lands in the session's IO/EOF-only catch and silently drops the connection. Two guard sites:
-   **validate-at-LOAD** for immutable authored inputs (bandwidth>0, σθ>0, pri>0, mass>0,
-   cd_area≥0, tau/a_max>0, even `n_train`, `n_cells≥1`, ≥2 sensors, ≥4 sats, fidelity rungs);
-   **clamp-at-CONSUMER** for live sliders (odd `n_train`→`max(2,2*(raw÷2))`, σθ floor, `R_j=0`
-   skip). Only declared **knobs** are live-settable.
-
-6. **No Inf/NaN to JSON.** `_snr_db_wire` floors dB to `_SNR_DB_FLOOR=-120`; `_finite`/
-   `_finite_coord` clamp readouts to the exported `FINITE_CEIL=1e9`. A null (F⁴=0), a mask, S→0,
-   a singular geometry ships huge-but-finite — never `±Inf`/NaN. The class of the slice-1 `%g` bug.
-
-7. **One-list-no-drift for mode tuples.** `PROPAGATION_MODES`/`CFAR_VARIANTS`/`ESTIMATOR_MODES`/…
-   are defined ONCE in the pure lib and **referenced** by `LIVE_FIDELITY_MODES` and the server's
-   `set_fidelity` validation — never re-listed (the drift-catch).
-
-8. **Telemetry-phase gotcha.** `tick!` calls `empty!(w.env)` immediately after phase-1
-   `integrate!`, wiping any phase-1 telemetry. So a force-integrator publishes its readout from
-   **phase-2 `build_env!`** (post-`empty!`); a `decide!` subsystem is **phase 4** (post-`empty!`,
-   writes `w.env[:telemetry]` directly); the radar readout is **phase-3 `observe!`**.
-
-9. **One lesson per scenario.** Don't stack fidelities that muddy a lesson (slice-3 CFAR OMITS
-   `:propagation` so two_ray nulls can't inject zeros; slice-4 splits the 2×2 EP lesson across two
-   scenarios). The shared client fidelity button is unambiguous only with one toggled fidelity.
-
-10. **Probe empirically, THEN pin against the live wire oracle.** Tune showcase numbers with a
-    throwaway probe (link-budget SNR / masking / crossover / DOP resist hand-derivation), then pin
-    tests against the ACTUAL `_target_snr` / `build_env!→observe!→decide!` path — NOT a
-    hand-recompute (which replicates any decomposition slip). The coverage grid is pinned
-    cell-for-cell vs the live oracle.
-
-11. **Test teeth, not tautologies.** Explicit `atol` (rtol-`≈0` always passes); MC in a Wilson 4σ
-    band using its OWN `Xoshiro` (never `w.rng`); an EXTERNAL anchor (Swerling loss ordering,
-    `1/(1+Kp)` undershoot, common-α `Pfa_GO≤Pfa_CA≤Pfa_SO`) not a self-calibrated round-trip; a
-    mismatched-EP no-op is a bit-exact `==` (not "calibrated to pass"); an INDEPENDENT recompute
-    (a *different* algorithm) as the oracle catches a transpose.
-
-12. **§9 shared libs are pure, measurement-agnostic, and cross-domain.** `geometry.jl`/
-    `estimation.jl`/`frames.jl`/`gnss.jl` have no `w.rng` and are dependency-free closed-form (no
-    LinearAlgebra — the `_range` house style). The same `gauss_newton` fixes a DF emitter (N=2)
-    and a GPS receiver (N=4); the pseudolinear path keeps the stable 2×2 cofactor. `frames.jl` is
-    the 3-D superset of `geometry.jl`'s 2-D (conceptually shared, NOT code-merged).
-
-13. **The Godot client is pure — zero physics.** One protocol impl (`SimClient.gd`, referenced by
-    `preload` not `class_name`). One adaptive `Sandbox.tscn` picks its view from the handshake
-    (`range_axis_m`→cfar, `pri_axis_us`→esm, `estimator`+no-axis→geoloc plan, `raim`→gps sky,
-    `integrator`/`autopilot`→spatial). CORE outputs (threshold curve, error ellipse, histogram)
-    are DRAWN from telemetry — α/cov NEVER recomputed in GDScript. `_update_readout` skips Array
-    telemetry (the `float()`-crash watch-item).
-
-14. **Every gate-3 ships four proofs:** a headless `sliceN_verify.gd` (drives the real server,
-    asserts the lesson as a number + held-seed bit-identical replay across a rung toggle); a
-    `sliceN_ui_test.gd` (mock client, no server — the button/slider path); a `Sandbox.tscn`
-    headless smoke-load (server `DONE` ⇒ scene connected, catches parse bugs); and a windowed
-    **shot-harness** capture to eyeball `_draw` (Godot skips `_draw` headless). See
-    [[ewsim-godot-headless]].
-    ⚠⚠ **A VERIFIER'S `STEPS` MUST BE A MULTIPLE OF THE SCENARIO'S `emit_every`** (slice 31; slice 30
-    escaped it only by accident, 20000 = 16×1250). The server emits every `emit_every`th tick, so
-    `STEPS = 15000` at `emit_every = 16` makes the LAST frame `t = 14.992` while the drain loop waits
-    for `t ≥ STEPS·dt` = 15.000 — which never arrives. The run hangs **silently, with no output at
-    all**, to `MAX_SECONDS`, and reads exactly like a slow wire. ⚠ Compounding it: Godot's stdout is
-    BLOCK-BUFFERED into a file or a pipe, so per-arm progress is invisible until ~4 KB accumulates.
-    **When a verifier looks slow, MEASURE before waiting** — timing the core alone (`tick!` in a
-    loop, no server) and a minimal-client frame-rate probe separates physics from emit path from
-    client in two cheap runs.
-    ⚠ **Anything the verdict computes inside `_draw` has NO headless proof** — extract it to a pure
-    helper the UI test can call (slice 31's aim-point comparison shipped wrong and only the SHOT
-    caught it).
-
-15. **Batches own their OWN seeded stream** (never `w.rng`) so a sweep can't desync the live trace
-    — the *distribution* path (no byte-identity assert; the Threads/GPU seam). Determinism is CPU.
+1. **A slice = 3 gates** — pure primitives → wired subsystem → scenario + Godot view + verifier.
+2. **Byte-identity is the master check; slices are ADDITIVE** — and the ABSOLUTE golden catches what
+   `test_determinism` structurally cannot (a draw-ORDER regression).
+3. **Draw-topology hazard** — the per-look RNG draw COUNT must be invariant to rung, slider AND target.
+   Gate the detection/telemetry, **never the draw**.
+4. **Three fidelity classes — don't conflate them** — (a) draw-invariant RNG rungs, (b) draw-topology-
+   flipping (`:cfar`), (c) physics-changing with no RNG (`:integrator`, `:autopilot`), where the
+   "toggle-bit-identical" language is a **FALSE CLAIM**.
+5. **A live knob can never crash a tick** — validate-at-LOAD for authored inputs, clamp-at-CONSUMER for live
+   sliders; a throw inside a tick silently drops the connection.
+6. **No Inf/NaN to JSON** — floors and finite-clamps; huge-but-finite ships, never ±Inf.
+7. **One-list-no-drift for mode tuples** — defined ONCE in the pure lib, referenced everywhere else.
+8. **Telemetry-phase gotcha** — `tick!` calls `empty!(w.env)` immediately after phase-1 `integrate!`, wiping
+   any phase-1 telemetry.
+9. **One lesson per scenario** — don't stack fidelities that muddy a lesson. ⚠ This governs the SHOWCASE; it
+   does NOT govern what the core is allowed to model (2026-08-18 reframe).
+10. **Probe empirically, THEN pin against the live wire oracle** — never against a hand-recompute.
+11. **Test teeth, not tautologies** — explicit `atol`, an EXTERNAL anchor, an INDEPENDENT recompute.
+12. **§9 shared libs are pure, measurement-agnostic and cross-domain** — no `w.rng`, no LinearAlgebra.
+13. **The Godot client is pure — ZERO physics.** Core outputs are DRAWN from telemetry, never recomputed
+    in GDScript.
+14. **Every gate-3 ships FOUR proofs** — verifier, UI test, headless smoke-load, windowed shot. ⚠⚠ `STEPS`
+    must be a multiple of `emit_every`; ⚠ anything computed inside `_draw` has NO headless proof.
+15. **Batches own their OWN seeded stream** — never `w.rng`. Determinism is CPU.
 
 ## Running a showcase (the per-slice pattern)
 
