@@ -940,3 +940,59 @@ then re-run the four-column ladder of §III.9 at that pair and compare **curves*
 spans, **the actuator is a reparameterization and slice 41 dies here** — the same death as slice 39,
 and this file becomes the kill record.
 
+
+---
+
+# §IV — P5: THE REPARAMETERIZATION GATE (2026-08-18)
+
+The risk that killed slice 39. Run to the design pre-registered in §III.13: design point `R = −0.09`,
+verdict over the `R_crit` **curve**, falsifier named in advance.
+
+## ⭐⭐ §IV.1 STEP 1 — THE POINT QUESTION ANSWERS **YES**, AND §III.13 SAID IT WOULD
+
+Sweeping each gain alone on `:instant` at `R = −0.09`. Targets are the three shipped actuator arms:
+**0.029866** (60 Hz), **0.045256** (30 Hz), **0.104459** (20 Hz), all at ζ_a = 0.7.
+
+| `k_α` (`k_q` = 0.3) | rms_r | aero | | `k_q` (`k_α` = 1.0) | rms_r | aero |
+|---|---|---|---|---|---|---|
+| 0.80 | 0.018209 | 0 | | 0.300 (authored) | 0.023486 | 0 |
+| 0.90 | 0.017314 | 0 | | 0.298 | 0.028374 | 0 |
+| **1.00 (authored)** | **0.023486** | 0 | | **0.295** | **0.041501** | 0 |
+| **1.01** | **0.030154** | 0 | | 0.292 | 0.039413 | 0 |
+| **1.02** | **0.044106** | 0 | | 0.290 | 0.245977 | 0 |
+| 1.025 | 0.056114 | 0 | | 0.285 | 0.820441 | 1895 |
+| 1.030 | 0.076123 | 0 | | 0.280 | 0.831473 | 2472 |
+| **1.035** | **0.120895** | 0 | | 0.270 | 0.877347 | 2423 |
+| 1.04 | 0.244206 | 42 | | 0.250 | 0.926583 | 2655 |
+| 1.06 | 0.743607 | 1509 | | 0.200 | 1.197956 | 3145 |
+
+⚠⚠ **A GAIN RETUNE REPRODUCES AN ACTUATOR ARM'S rms AT THE DESIGN POINT.** `k_α = 1.01` matches the
+60 Hz arm to **0.9 %** (0.030154 vs 0.029866); `k_α = 1.02` matches the 30 Hz arm to **2.6 %**
+(0.044106 vs 0.045256); `k_α ≈ 1.033` brackets the 20 Hz arm (0.076 at 1.030, 0.121 at 1.035 against
+0.104459). **And it does so on BOTH gain axes** — `k_q = 0.295` reaches the 30 Hz arm to 8 %.
+
+⭐ **THIS IS EXACTLY THE OUTCOME §III.13 PRE-REGISTERED, AND IT IS WHY THE VERDICT IS NOT A POINT
+FIT.** Had P5 been run as §0.4 originally worded it — *"can ANY `(k_α, k_q)` reproduce a
+`:first_order` arm?"* — the answer would have been an unambiguous yes and **slice 41 would have died
+here, wrongly.** The gains reach the number because `k_q` is *part of the radome loop*, supplying
+~98 % of its damping (§III.12); moving it moves `R_crit` directly. That is the confounded lever, not
+a reproduction of an actuator pole.
+
+⚠ **AND THE GAIN AXIS IS ITSELF NON-MONOTONE AND VIOLENTLY STEEP**, which is worth recording whatever
+the verdict: `k_α` = 0.9 reads *below* 0.8 and *below* 1.0; `k_q` = 0.292 reads below 0.295. And a
+**2 % change in `k_α`** (1.02 → 1.04) moves the ring **5.5×**, while a **5 % change** (1.00 → 1.06)
+crosses the whole boundary. ⇒ neither gain could ever be a slider on this wire — which is why slice 26
+already marks both *"NEVER a knob"* at `scenario.jl:801–802`, a decision this probe independently
+re-derives.
+
+## §IV.2 STEP 2 — THE CURVE TEST (running)
+
+Two gain pairs, each fitted at `R = −0.09` and each on a DIFFERENT axis so the bound covers the
+`(k_α, k_q)` **space** rather than one line through it — `k_α = 1.02` (`k_q` authored) and
+`k_q = 0.295` (`k_α` authored) — re-flown across the full eight-slope ladder of §III.9 and compared
+against the 30 Hz actuator column they were fitted to.
+
+**The falsifier, restated unchanged from §III.13:** if a fitted pair tracks the actuator's `R_crit`
+across the ladder to within the 2.7–3.2 % the whole effect spans, **the actuator is a
+reparameterization and slice 41 dies here.**
+
