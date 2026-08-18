@@ -119,8 +119,14 @@ over the rate axis. **(2b) ⭐⭐⭐ A FLOOR ON SWEEP RATE (1.0–1.5 °/s), AND
 were proposed and BOTH measured and refuted (an LOS-rate race; a missing reversal — at ρ = 1 the arm fails at
 EVERY coverage 2–20°, identical digits). **At ρ = 1 the head closed the SWEPT axis to 9.7519° — INSIDE a 10°
 window — and still never acquired, held out by 2.4934° of drift on the UNSWEPT axis making the RADIAL off-axis
-angle 10.0656°.** The deficit is a RADIAL quantity ⇒ **a slow one-axis search inflates its own deficit through
-the ORTHOGONAL channel while it works** (25 % of the window radius spent on an axis it never moves). ⚠ Does not
+angle 10.0656°.** ⭐⭐ **A DEADLINE, NOT A FEEDBACK:** the search branch never assigns `head_el`, so the unswept drift is
+EXOGENOUS — byte-identical at matched times across ρ = 0, 1, 1.5, 4. It spends the window's radius on a
+schedule the search does not control; the rate only decides whether the SWEPT axis closes first (25 % of the
+radius is what it COSTS, not what the search CAUSED). ⭐⭐⭐ **SO THE FLOOR DERIVES, from the NO-SEARCH arm
+alone:** `Δaz(t,ρ) = Δaz₀(t) − ρ(t−τ)` (0.001°) plus the radial gate give
+`ρ* = min_t [Δaz₀(t) − √(fov² − Δel(t)²)]/(t−τ)` = **1.0174 °/s at t = 4.00 s** — flown, 1.01 NEVER locks and
+1.02 locks at t = 3.809 s. ⭐ The required-rate curve is **U-shaped** (2.399 / 1.017 / 2.019 at t = 1 / 4 / 7):
+**a search has a BEST MOMENT and one that misses it cannot recover by continuing.** ⚠ Does not
 move with `dt` (10.0647 / 10.0656 / 10.0661 at 2e−3 / 1e−3 / 5e−4). ⚠ The LOS rate DOES rise 318× across the
 flight (0.271 → 86.05 °/s) — that is why a LATE acquisition is worthless, not why this arm fails. **(3) GUESS RIGHT AND COVERAGE IS NOT FREE — IT IS NEVER REACHED:** the head locks
 **2.07° into a pattern authored 3–30° wide**, which is why ρ_min looked flat. **(4) GUESS WRONG AND COVERAGE COSTS
@@ -231,7 +237,7 @@ first-order lag cannot exceed gain 1 or lag more than 90°, so it can only ever 
 head.** Also: **a RECTANGULAR / PER-AXIS FOV — ⭐⭐ **SLICE 43's GATE 0 SUPPLIES THE FLYING ARM THIS DEFERRAL WAS MISSING:** on the
 ρ = 1 search arm a per-axis window of the same 10° half-width would LOCK (Δaz = 9.75 < 10 AND Δel = 2.49 < 10)
 while the shipped RADIAL `hypot` gate holds it out at 10.0656° — **the first arm in this family where the
-window's SHAPE, not its size, decides acquisition** (⚠ the verdict flip rests on 0.066° and is quoted as narrow,
+window's SHAPE, not its size, decides acquisition** (⚠ precisely: 34 gate 2 §2.5 bound the STOP; this binds the WINDOW) (⚠ the verdict flip rests on 0.066° and is quoted as narrow,
 though it is step-independent and 100× the per-tick LOS motion; the non-marginal number is the 25 % of window
 radius spent on the unswept axis). — and slice 34 SHARPENS it (it ships one circular
 window AND one circular stop, and gate 1 wrote down that the circular shape rests on a SPECIES argument because no

@@ -703,6 +703,11 @@ so the pattern gets no second pass. Walk the coverage down, ρ fixed:
 
 ## ⭐⭐⭐ §IV.2 P9b/P10 — **A ONE-DIMENSIONAL SEARCH LOSES ITS MARGIN TO THE AXIS IT DOES NOT SWEEP**
 
+> ⚠⚠ **THE NUMBERS STAND; ONE CAUSAL CLAUSE BELOW IS REFUTED BY §V — annotated, not deleted.** *"a slow
+> one-axis search INFLATES its own deficit through the orthogonal channel while it works"* is false as
+> causation: the search branch never assigns `head_el`, so the unswept drift is EXOGENOUS (measured
+> byte-identical across arms, §V.1). It is a **DEADLINE**, not a feedback — and §V.2 then DERIVES the floor.
+
 Closest angular approach on each arm, with the off-axis angle split into the swept channel and the
 unswept one. The window is **10.0°**, and the shipped gate is `off_axis_angle ≤ fov` — **RADIAL**:
 
@@ -755,7 +760,9 @@ unswept axis; the rectangular-vs-circular verdict flip is the narrow one.**
 
 ## ⭐ §IV.4 THE CORRECTED FLOOR — replacing §III.5 item 3
 
-> **3. THERE IS A FLOOR ON SWEEP RATE (1.0–1.5 °/s here), AND IT IS NEITHER A RACE AGAINST THE LOS RATE
+> **3.** ⚠ **SUPERSEDED BY §V.3** — the axis reading is right, the CAUSAL clause is not, and the floor is
+>    now DERIVED (ρ* = 1.0174 °/s against a flown bracket of (1.01, 1.02]). Original text follows.
+>    **THERE IS A FLOOR ON SWEEP RATE (1.0–1.5 °/s here), AND IT IS NEITHER A RACE AGAINST THE LOS RATE
 >    NOR A MISSING REVERSAL — both were measured and both are refuted.** ⭐⭐ **A one-dimensional search
 >    inside a two-dimensional window loses its margin to the axis it does not sweep:** at ρ = 1 the
 >    swept axis closed to 9.75° inside a 10° window and the arm still failed, held out by 2.49° of
@@ -771,3 +778,101 @@ fitting a constant along one axis — **and then explained a floor with a table 
 that failed.** *A hedge is not a measurement.* Writing *"quoted as measured, not derived"* under a
 sentence that still names a cause does not make the cause measured. **If a claim names a mechanism,
 either measure that mechanism on an arm that is not the failure itself, or name no mechanism at all.**
+
+---
+
+# ⭐⭐⭐ §V — PROBES **P11/P12**: **THE UNSWEPT AXIS IS EXOGENOUS — IT IS A DEADLINE, NOT A FEEDBACK — AND THE FLOOR DERIVES**
+
+**A third advisor catch, and this one was readable from the patch rather than needing a probe.** The
+search branch is `head_az, head_el = head_clamp(_s_cmd, head_el, stop_h)` — **elevation passes
+through untouched**, and `head_el` is seeded once at birth. So `Δel(t)` cannot depend on ρ, on S, or
+on whether a search runs at all. ⚠ **§IV.2's sentence — *"a slow one-axis search INFLATES its own
+deficit through the orthogonal channel while it works"* — is therefore FALSE AS CAUSATION**, and it is
+the third instance of the pattern §IV.4 had just banked into `docs/LESSONS.md`.
+
+## ⭐⭐ §V.1 P11 — **MEASURED, NOT INFERRED FROM THE CODE: THE COLUMN IS BYTE-IDENTICAL**
+
+`Δaz` and `Δel` at matched times, four arms:
+
+| t s | **Δel, no search** | **Δel, ρ = 1** | **Δel, ρ = 1.5** | **Δel, ρ = 4** | Δaz no search | Δaz ρ = 1 |
+|---|---|---|---|---|---|---|
+| 1 | **0.4093** | **0.4093** | **0.4093** | 0.3812 | 12.270 | 11.319 |
+| 2 | **0.9827** | **0.9827** | 0.6459 † | 0.0229 † | 12.614 | 10.663 |
+| 3 | **1.6591** | **1.6591** | −0.0104 † | −0.0101 † | 13.068 | 10.117 |
+| 4 | **2.4991** | **2.4991** | −0.0156 † | −0.0154 † | 13.701 | 9.750 |
+| 5 | **3.6243** | **3.6243** | −0.0212 † | −0.0211 † | 14.649 | 9.698 |
+
+† = that arm has already LOCKED, after which the tracker drives elevation to zero. **On every tick
+before lock the columns agree to the last digit printed.**
+
+> ⭐⭐ **THE UNSWEPT AXIS IS EXOGENOUS. It spends the window's radius on a schedule the search does not
+> control, and the sweep rate only decides whether the SWEPT axis closes before that budget is gone.**
+> **A DEADLINE, NOT A FEEDBACK** — same numbers, same floor, same rectangular-window consequence, and
+> a different mechanism sentence.
+
+⭐ **AND THE SWEPT CHANNEL HAS ITS OWN EXACT FORM, verified on the same five samples:**
+`Δaz(t, ρ) = Δaz₀(t) − ρ·(t − τ)` — check at ρ = 1: 12.270 − 1·0.95 = 11.320 against a measured
+11.319, and so on down the column to 0.001°. **The `τ` is §III.3's servo lag, appearing here a second
+time and in a different quantity.**
+
+## ⭐⭐⭐ §V.2 P12 — **THE FLOOR IS NOW DERIVED, AND IT WAS DERIVED FROM AN ARM THAT NEVER LOCKS**
+
+Put the two together against the **radial** gate. The arm acquires iff, at some instant inside the
+flight, azimuth has fallen inside the budget the unswept axis leaves it:
+
+> **`|Δaz₀(t) − ρ·(t − τ)| ≤ √(fov² − Δel(t)²)`**
+> ⇒ **`ρ_req(t) = [Δaz₀(t) − √(fov² − Δel(t)²)] / (t − τ)`**, and the floor is **`min over t`**.
+
+Both curves come from the **no-search arm alone** — the one that never acquires anything:
+
+| t s | 1.0 | 2.0 | 3.0 | 3.5 | **4.0** | 4.5 | 5.0 | 6.0 | 7.0 |
+|---|---|---|---|---|---|---|---|---|---|
+| Δel ° (budget eaten) | 0.409 | 0.983 | 1.659 | 2.053 | 2.499 | 3.014 | 3.624 | 5.319 | 8.425 |
+| azimuth budget ° | 9.992 | 9.952 | 9.861 | 9.787 | 9.683 | 9.535 | 9.320 | 8.468 | 5.387 |
+| **ρ required °/s** | 2.399 | 1.365 | 1.087 | 1.035 | **1.017** | 1.031 | 1.077 | 1.305 | 2.019 |
+
+> ⭐⭐ **THE REQUIRED RATE IS U-SHAPED IN TIME — THERE IS A WINDOW OF OPPORTUNITY.** Too early and the
+> swept axis has not closed yet; too late and the unswept axis has eaten the budget. **The floor is
+> the bottom of that U: ρ\* = 1.0174 °/s, at t = 4.00 s.**
+
+**AND THEN IT WAS FLOWN — a prediction, not a fit:**
+
+| ρ °/s | 0.95 | 1.00 | **1.01** | **1.02** | 1.03 | 1.05 | 1.10 | 1.25 | 1.50 |
+|---|---|---|---|---|---|---|---|---|---|
+| **t_lock s** | never | never | **never** | **3.809** | 3.570 | 3.307 | 2.915 | 2.289 | 1.753 |
+| miss (m) | 305.112 | 305.112 | 305.112 | 0.295 | 0.087 | 0.284 | 0.167 | 0.006 | 0.276 |
+
+> ⭐⭐⭐ **THE MEASURED FLOOR IS THE BRACKET (1.01, 1.02], AND THE DERIVED VALUE 1.0174 LIES INSIDE IT —
+> BETTER THAN 1 %.** And the derivation predicts the acquisition TIME as well: it says the opportunity
+> is at t = 4.00 s and the first surviving arm locks at **t = 3.809 s**.
+>
+> ⇒ **§III.4's *"quoted as MEASURED, not derived"* and §IV.4's declining to attempt it are both
+> discharged. The floor is derived, and it is derived from the failing arm's own two curves.**
+
+## ⭐⭐ §V.3 THE CORRECTED FLOOR — replacing §IV.4, which replaced §III.5 item 3
+
+> **3. THERE IS A FLOOR ON SWEEP RATE, AND IT IS THE **DEADLINE** SET BY THE AXIS THE SEARCH DOES NOT
+>    SWEEP.** The unswept channel's drift is **exogenous** — byte-identical whether a search runs or
+>    not — and it eats the *radial* window's radius on its own schedule. The sweep rate only decides
+>    whether the swept axis closes first. ⚠ **NOT** a race against the LOS rate (§III.4, refuted),
+>    **NOT** a missing reversal (§IV.1, refuted), and **NOT** the search inflating its own deficit
+>    (§IV.2, refuted here — the code cannot do it and the measurement says it does not).
+>    ⭐ **`ρ* = min over t of [Δaz₀(t) − √(fov² − Δel(t)²)] / (t − τ)` = 1.0174 °/s, against a flown
+>    bracket of (1.01, 1.02].** The curve is U-shaped: **a search has a best moment, and one that
+>    misses it cannot recover by continuing.**
+
+⚠ **THE 25 % FIGURE SURVIVES AND ITS SENTENCE CHANGES.** At the opportunity the unswept axis holds
+2.4991° of a 10° radius — a quarter of it — spent on a channel the search never moves. **That is what
+it COSTS; it is not something the search CAUSED.**
+
+⚠ **PRECISION ON THE SLICE-34 CITATION** (§IV.3): slice 34's gate 2 §2.5 *did* bind the **stop** for
+the first time. **This arm binds the WINDOW**, which is the other half of the same species argument
+and is what the rectangular/per-axis deferral is actually about. The claim is *"first flying arm where
+the window's SHAPE decides acquisition"* — not *"first time anything in the family was bound"*.
+
+⚠⚠ **THE METHOD LESSON, and it is the THIRD correction in this one gate:** all three had the same
+shape — *the measurement was right and the causal clause on top of it was wider than the measurement*.
+§II.1 fitted along one axis; §III.4 drew a mechanism from the failing arm; §IV.2 attributed to the
+search an effect the search's own code cannot produce. ⭐ **The cheapest guard is the one that caught
+the third: READ THE BRANCH AND ASK WHICH STATE IT WRITES. If the quantity in your causal sentence is
+never assigned by the mechanism you are crediting, the sentence is wrong before any probe runs.**

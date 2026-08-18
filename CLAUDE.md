@@ -116,20 +116,21 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
   control loop a lag DEstabilizes, the opposite of its sign on 34–40's feed-forward path — and it did
   not matter.)
 - **A SEEKER SEARCH PATTERN** (42 gate 0; **re-measured and LAWED at slice 43 gate 0**) — DEFERRED, not dead,
-  **blocked on its precondition**: a wider window is FREE here, and slice 43 makes that objection SHARPER —
+  **blocked on its precondition**: a wider window is FREE here, and 43 makes that objection SHARPER —
   ⭐⭐ **the cost of acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error** (err −14/fov 12
-  ≡ err −12/fov 10 to every digit), so widening glass and travelling further are THE SAME ACT. Law:
-  `travel = deficit/(1−ω/ρ)`, `t_lock = travel/ρ + τ` **for ρ ≤ rate_max** (ω = LOS rate, anchored to telemetry;
-  ⚠ a ρ-only form was an advisor catch — count AXES, not cells). ⭐⭐ **Sweep floor 1.0–1.5 °/s = THE AXIS
-  THE SEARCH DOES NOT SWEEP** (an LOS-rate race and a missing reversal were both measured and REFUTED): at
-  ρ = 1 the swept axis closed to 9.75° INSIDE a 10° window and still failed, held out by 2.49° of UNSWEPT-axis
-  drift on the RADIAL gate — 25 % of the window radius; ⭐ **first flying arm where a PER-AXIS FOV would flip
-  the verdict** (slice 34's deferral). Guess right and coverage is **never REACHED** (lock 2.07° into a
-  3–30° pattern — 42's "free" was a flat row misread); guess wrong it costs `2S` at an **accelerating** price
-  (5→39 % over `2/ρ`, never-locks by S = 25). ⚠ 42 §V.4's ρ_min table is VOID (servo bypassed; `none ≤ 16`
-  was its own grid edge — 18 and 22 °/s; +side rows are stop contamination). ⚠ **An open-loop sweep WINDS UP
-  against `rate_max` — what saturates is the AMPLITUDE** (20° commanded at 64 °/s → 4.4° swept, arm FAILS);
-  cure `ρ ← min(ρ, rate_max)`, and anti-windup is a CAUTION not an architecture (moves no verdict in 16 cells).
+  ≡ err −12/fov 10 to every digit) ⇒ widening glass and travelling further are THE SAME ACT. Law:
+  `travel = deficit/(1−ω/ρ)`, `t_lock = travel/ρ + τ`, **domain ρ ≤ rate_max** (ω = LOS rate; ⚠ a ρ-only
+  form was an advisor catch — **count AXES, not cells**). Guess right and coverage is **never REACHED**
+  (lock 2.07° into a 3–30° pattern — 42's "free" was a flat row misread); guess wrong it costs `2S` at an
+  **accelerating** price (5→39 % over `2/ρ`). ⭐⭐ **Sweep floor = THE AXIS THE SEARCH DOES NOT SWEEP, and it
+  is a DEADLINE not a feedback** (an LOS-rate race, a missing reversal, and "the search inflates its own
+  deficit" were ALL measured and REFUTED — the search never assigns `head_el`, so that drift is EXOGENOUS).
+  It DERIVES: `ρ* = min_t [Δaz₀−√(fov²−Δel²)]/(t−τ)` = 1.0174 °/s vs a flown bracket (1.01, 1.02], **U-shaped
+  in t ⇒ a search has a BEST MOMENT.** ⭐ **First flying arm where a PER-AXIS FOV flips the verdict** (34's
+  deferral — its gate 2 bound the STOP; this binds the WINDOW). ⚠ 42 §V.4's ρ_min table is VOID (servo bypassed;
+  `none ≤ 16` was its own grid edge — 18/22 °/s; +side is stop contamination). ⚠ **An open-loop sweep WINDS
+  UP against `rate_max` — what saturates is the AMPLITUDE** (20° at 64 °/s → 4.4° swept, arm FAILS); cure
+  `ρ ← min(ρ, rate_max)`, anti-windup is a CAUTION (no verdict moves in 16 cells).
 - **AN "ACQUISITION KNIFE-EDGE" / "a lock at the rim is worth nothing"** (slice 42, gate 1) — DEAD. ⭐⭐ **The
   band is `ω_LOS · dt` — ONE INTEGRATION STEP: halve `dt` and it halves** (0.0036° against a 10° window).
   The gate-0 table already said so — the "worthless lock" cell's miss was BYTE-IDENTICAL to the never-locks

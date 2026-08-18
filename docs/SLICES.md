@@ -619,10 +619,19 @@ the slow arm out is that **a search that moves in one direction is looking throu
 in two.** At the slowest rate the head closed the axis it was sweeping to 9.75° — comfortably inside a 10°
 window on that axis — and never acquired anyway, because two and a half degrees of drift had accumulated
 on the axis it never touches, and the gate measures the two together. A quarter of the window's radius was
-spent on a channel the search does not move. ⭐⭐ That is the same finding as the deficit seen from the other
-side: **a slow one-axis search does not merely take longer to close its own axis, it inflates its own
-target while it works** — and it hands an older deferral the flying arm it had been missing, because a
-square window of the same size would have locked this one and a round one does not. Guess the direction wrong and you pay twice the coverage in travel, at a
+spent on a channel the search does not move. ⚠ And the first sentence written about that was
+wrong in the way this gate kept being wrong: it said the slow search *inflates its own target while it
+works*, which the code cannot do — the sweep never touches the second axis at all. That drift is on a
+clock of its own, identical whether anything is searching or not. **It is a deadline, not a feedback:** the
+unswept channel spends the window down on its own schedule, and all the sweep rate decides is whether the
+axis it does move closes before the budget runs out. ⭐⭐⭐ Said that way the floor stops being a measurement
+and becomes a derivation — take the two curves off the arm that never acquires anything, ask at each instant
+what rate would be needed, and the answer has a clean minimum: **1.0174 degrees per second, at four seconds
+in.** Flown afterwards, 1.01 never acquires and 1.02 does, locking at 3.8 s. ⭐⭐ And the shape of that curve
+is the lesson: it is a U, so **a search has a best moment — too early and the swept axis has not closed,
+too late and the other one has eaten the window — and a search that misses the moment cannot recover by
+continuing.** It also hands an older deferral the flying arm it had been missing, because a square window of
+the same size would have locked this one and a round one does not. Guess the direction wrong and you pay twice the coverage in travel, at a
 price that **accelerates** rather than scaling: 5 % over the geometric bound at small coverage, 39 % at
 large, and past a point no lock at all — because the target keeps moving while you look the wrong way,
 and that excess is the whole finding. ⚠ The last piece is a trap rather than a lesson: an open-loop

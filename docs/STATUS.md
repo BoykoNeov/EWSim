@@ -6004,14 +6004,23 @@ never lock and miss an identical 305.112 m at both errors; the + arms DO lock, l
    ρ = 1 the arm fails at EVERY coverage 2–20°, identical digits). ⭐⭐ **What it IS: at ρ = 1 the head closed
    the SWEPT axis to 9.7519° — INSIDE a 10° window — and still never acquired, because 2.4934° of drift on
    the UNSWEPT axis made the RADIAL off-axis angle 10.0656°.** It misses by 0.066°, identically at S = 5,
-   8 and 20. ⭐ **The deficit is a RADIAL quantity, so a slow one-axis search inflates its own deficit
-   through the ORTHOGONAL channel while it works** — 25 % of the window radius spent on an axis the
-   search never moves. ⚠ F6 applied here too: off-axis reads 10.0647 / 10.0656 / 10.0661 at
+   8 and 20. ⭐⭐ **AND IT IS A DEADLINE, NOT A FEEDBACK** (a third advisor catch): the search branch
+   never assigns `head_el`, so the unswept drift is EXOGENOUS — measured BYTE-IDENTICAL at matched times
+   across ρ = 0, 1, 1.5, 4 (0.4093 / 0.9827 / 1.6591 / 2.4991 / 3.6243° at t = 1–5). **It spends the
+   window's radius on a schedule the search does not control; the sweep rate only decides whether the
+   SWEPT axis closes first.** 25 % of the radius is what the unswept axis COSTS, not something the
+   search CAUSED. ⭐⭐⭐ **AND THE FLOOR IS THEREFORE DERIVED, FROM THE NO-SEARCH ARM ALONE:** with
+   `Δaz(t,ρ) = Δaz₀(t) − ρ(t−τ)` (verified to 0.001°) and the radial gate,
+   `ρ* = min_t [Δaz₀(t) − √(fov² − Δel(t)²)] / (t − τ)` = **1.0174 °/s at t = 4.00 s** — flown, ρ = 1.01
+   NEVER locks and ρ = 1.02 locks at t = 3.809 s, so **the prediction lies inside a sub-1 % bracket and
+   calls the acquisition TIME too.** ⭐ The required-rate curve is **U-shaped** (2.399 / 1.017 / 2.019 °/s
+   at t = 1 / 4 / 7): too early the swept axis has not closed, too late the unswept one has eaten the
+   budget — **a search has a best moment, and one that misses it cannot recover by continuing.** ⚠ F6 applied here too: off-axis reads 10.0647 / 10.0656 / 10.0661 at
    `dt` = 2e−3 / 1e−3 / 5e−4 — **it does not halve, it does not move.** ⭐⭐ **AND IT LANDS ON SLICE 34's
    RECTANGULAR / PER-AXIS FOV DEFERRAL WITH THE ARM THAT DEFERRAL WAS MISSING:** a per-axis window of the
    same 10° half-width would LOCK this arm (9.75 < 10 AND 2.49 < 10) while the shipped radial `hypot`
    gate holds it out — **the first flying arm in this family where the window's SHAPE, not its size,
-   decides acquisition.** ⚠ The shape verdict rests on 0.066° and is quoted as narrow; the non-marginal
+   decides acquisition** (⚠ precisely: slice 34 gate 2 §2.5 bound the STOP; this binds the WINDOW). ⚠ The shape verdict rests on 0.066° and is quoted as narrow; the non-marginal
    claim is the 25 % of window radius. ⚠ The LOS rate DOES rise 318× across the flight (0.271 → 86.05 °/s,
    t = 1 → 9 s) and that is correctly measured — it is why a LATE acquisition is worthless, and it is NOT
    why the ρ = 1 arm fails.

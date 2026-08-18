@@ -153,6 +153,16 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
   the command-minus-actuator lag.** The lag is the tell — it should read `ρ·τ` (0.049–0.245° here, and
   it did); when it instead reads *the authored half-width to three digits*, the actuator is on a stop
   and is not flying the pattern at all.
+- **⭐⭐⭐ READ THE BRANCH AND ASK WHICH STATE IT WRITES — a causal sentence can be refuted before any probe
+  runs.** Slice 43 wrote *"a slow one-axis search INFLATES its own deficit through the orthogonal channel
+  while it works"*. Its own search branch is `head_clamp(cmd, head_el, stop)` — **`head_el` is never
+  assigned**, and it is seeded once at birth, so the orthogonal drift is a pure function of time and is
+  byte-identical whether a search runs or not (measured across four arms). **If the quantity in your causal
+  clause is never written by the mechanism you are crediting, the clause is wrong on inspection.** ⭐ The
+  correct sentence was a **DEADLINE, not a feedback** — and stating it that way turned a bracket into a
+  DERIVATION: the exogenous curve plus the swept-axis form gave the floor to better than 1 % from the arm
+  that never acquires. **Getting the mechanism right is not bookkeeping; it is what makes a number
+  predictable.**
 - **⭐⭐⭐ A HEDGE IS NOT A MEASUREMENT — AND DO NOT DRAW A MECHANISM FROM THE ARM THAT FAILED.** Slice 43
   correctly convicted its own earlier section of fitting a constant along one axis, and then, one section
   later, explained a sweep-rate floor with a line-of-sight table **measured on an arm that never locks,
