@@ -1,7 +1,8 @@
 # Slice 45 — **THE ENGAGEMENT IS ANISOTROPIC AND THE HARDWARE IS ROUND: A PER-AXIS STOP, AND THE WINDOW HALF’S PRECONDITION** (§11 Tier-A)
 
 **Status: GATE-0 SPLIT VERDICT (2026-08-18). No code shipped; suite unchanged at 7693.**
-**The STOP half is KILLED. The WINDOW half is ALIVE and RE-AIMED onto the search-pattern slice.**
+**The STOP half is KILLED (on BOTH regimes — PART IV). The WINDOW half is ALIVE and RE-AIMED onto
+the search-pattern slice.**
 ⚠ PART II was written as a kill of BOTH halves and **PART III overturns half of it** — an advisor
 catch: §0.2 sub-claim (a) named an arm that PART II never flew. PART II is kept UNEDITED so the
 correction is legible; read §XI for the verdict that stands.
@@ -525,7 +526,9 @@ box **does** hold at the break where the disc breaks, on every row.
   `stop-bound %`, `hold %`. They are what caught §I's runaway contamination and what makes the
   §III stop table readable (66.66 % bound and still inert).
 * **THE SUITE** — re-run after reverting both patches: **7693 / 7693**, unchanged.
-* ⚠ **P6 (half `dt`) DID NOT RUN, AND IT DOES NOT NEED TO.** It exists to test whether a *narrow*
+* ⚠⚠ **[VOID — SEE §XIII] P6 (half `dt`) DID NOT RUN, AND IT DOES NOT NEED TO.** *This justification
+  was true of PART II and FALSE once PART III added verdict flips. It RAN in PART IV; the brackets are
+  step-invariant. The original text follows, struck by this note rather than edited away.* It exists to test whether a *narrow*
   verdict flip is an artifact of the step. **No verdict flipped anywhere** — the headline is a set of
   byte-identical pairs, and byte-identity does not become non-identity at a finer step. ⚠ The one
   number that *is* narrow (the 0.31° floor) is a floor on a knob, not a box-vs-disc comparison, and
@@ -647,3 +650,81 @@ invariants, and then flown at the box's own budget:
 > stand — they are tracking-arm results and PART III does not touch them. **What is withdrawn is only
 > §VI.1's scope** (*"both halves"* → the stop half) and **§IV's generalisation** (*"a cost claim needs
 > a cost model"* → only where the verdicts agree).
+
+---
+
+# ⭐⭐ PART IV — P8: THE THREE CHECKS PART III OWED (advisor, second pass)
+
+All three land, none moves the verdict, and **the first one was a real hole in the same shape as the
+one PART III fixed** — a claim measured in ONE operating mode and stated without one.
+
+## ⚠⚠ §XII — THE STOP HALF WAS KILLED ON TRACKING ARMS ONLY. RE-RUN ON A SEARCH ARM, IT HOLDS.
+
+§III's *"inert over 750×"* was measured with `err_az = −6 / 0` and **no search** — and during P6/P7
+the `frames.jl` patch was **not applied at all**, so the stop was circular on every search arm PART
+III flew. **The demand is regime-dependent and the gap is 3–4×**: tracking measured 0.6643° of
+elevation demand, the box search arms show `Δel@best` **1.75–1.86°**, and slice 43's exogenous drift
+reaches **2.4934°**. ⚠ And slice 43's own instrument-bug list says the two interact (*"a sweep that
+steps the HEAD never reverses once the gimbal STOP binds"*). Re-flown with **all three** patches —
+search, per-axis window, per-axis stop — on the arm that rescues:
+
+| box stop `(30, a_el)` | 0.30 | 0.50 | 0.66 | 0.70 | 1.00 | 1.90 | 2.50 | 30.0 | disc stop 30 |
+|---|---|---|---|---|---|---|---|---|---|
+| miss | **0.2285** | **0.2285** | **0.2285** | **0.2285** | **0.2285** | **0.2285** | **0.2285** | **0.2285** | **0.2285** |
+| `t_lock` | 3.263 | 3.263 | 3.263 | 3.263 | 3.263 | 3.263 | 3.263 | 3.263 | 3.263 |
+| **trunnion bound %** | **68.01** | **50.76** | 0.87 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+
+> ⭐⭐ **THE TRUNNION IS INERT IN THE SEARCH REGIME TOO — AND NOW WITH THE CLAMP DEMONSTRABLY BINDING
+> (68.01 % of in-band ticks at `a_el` = 0.30°).** Miss, lock instant and peak demand are identical
+> across a **100× range** of elevation stop, on the arm where elevation is loaded hardest. **§XI.1
+> stands, and it now stands on BOTH regimes rather than on the one where PART III proved shapes are
+> invisible.**
+> ⚠ NULL control: on the **disc** window the same arm never locks at any stop shape (305.1118 at
+> 0.66 / 2.50 / 30) — the stop rescues nothing on its own, so this is not a gate that saves
+> everything.
+
+## ⭐ §XIII — HALF `dt` ON PART III's FLIPS: THE SAME BRACKETS AT TWICE THE RESOLUTION
+
+⚠ **PART II §VII justified skipping this with *"no verdict flipped anywhere"*, and PART III has
+flips. That justification is VOID and is corrected here** rather than left standing in a document
+five others cite. Slice 42's discipline, run properly:
+
+| | `dt` 2e−3 | `dt` 1e−3 | `dt` 5e−4 |
+|---|---|---|---|
+| ρ = 1.00 **DISC** | never locks, 305.1137 | never locks, 305.1118 | never locks, 305.1112 |
+| ρ = 1.00 **BOX** | locks t = 3.262, 0.2467 | locks t = 3.263, 0.2285 | locks t = 3.264, **0.1222** |
+| floor **DISC** | — | (1.01, **1.02**] | (1.01, **1.02**] |
+| floor **BOX** | — | (0.92, **0.93**] | (0.92, **0.93**] |
+
+> ⭐⭐ **BOTH FLOORS RE-BRACKET IDENTICALLY AT HALF THE STEP**, and the lock instants move by one
+> millisecond. This is emphatically **not** slice 42's `ω·dt` band, which halved when the step
+> halved. ⚠ The box's miss walks 0.2467 → 0.1222; those are HITS, and a hit samples coarsely (the
+> known asymmetry) — **the verdict is the quotable thing, and it is invariant.**
+
+## ⭐ §XIV — THE AUTHORITY COLUMN PART I PRE-REGISTERED AND PART III OMITTED
+
+Slice 44 §VII.1 is the reason this cannot be left out: there, a rescue read *free* in miss right up
+to **100.00 %** of `a_max`.
+
+| arm | peak `a_cmd` after lock | **% of `a_max`** |
+|---|---|---|
+| ρ = 1.00 **BOX** (the rescue) | 134.1 | **4.47** |
+| ρ = 1.02 **DISC** (its own floor) | 211.1 | 7.04 |
+| ρ = 0.93 **BOX** (its own floor) | 237.0 | 7.90 |
+
+> ⭐ **NO HIDDEN BUDGET IS BEING SPENT — AND THE SIGN IS THE ONE THE MECHANISM PREDICTS.** The box
+> locks EARLIER, so it has more time and needs less authority: 4.47 % against the disc's 7.04 % at
+> the disc's own floor. **Slice 44's trap is checked for and absent**, which is a different statement
+> from not having looked.
+
+## §XV — THE VERDICT AFTER P8: UNCHANGED, AND ONE MORE SENTENCE NARROWED
+
+Nothing in §XI moves. What P8 changes is that **§XI.1's kill of the stop half is now measured in the
+regime PART III showed matters**, instead of inherited from the regime PART III showed does not.
+
+> ⭐⭐ **AND THAT IS THE SAME ERROR TWICE IN ONE GATE, WHICH MAKES IT THE GATE'S REAL LESSON: a
+> property measured in one OPERATING MODE is not a property of the component.** PART III learned it
+> about the window (inert to a tracker, decisive to a searcher) and then **immediately re-made it
+> about the stop**, carrying a tracking-arm inertness into a verdict about a searching one. ⚠ The
+> guard is the same shape as §XI.5's: **when a regime distinction has just overturned one claim, walk
+> every OTHER claim in the document and ask which regime it was measured in.**

@@ -146,8 +146,9 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
   and **hit at 0.22/0.19/0.10 m at 30 °/s from IDENTICAL lock instants** (a lock at the rim hands the servo a
   FULL-WINDOW SLEW; threshold in (8, 30], not bracketed). ⚠ A **PARTIAL-RESCUE** mode exists inside the gap
   slice 43 called empty (7.80 m at hold 55 %, 85.8 m at hold 31 %).
-- **A RECTANGULAR / PER-AXIS WINDOW AND STOP** (slice 45 gate 0) — **SPLIT.** ⚠ **STOP half DEAD** — miss
-  0.1912 m at **every** el stop 0.04–30° (**750×**) with the clamp binding 66.66 % of ticks: the **7th
+- **A RECTANGULAR / PER-AXIS WINDOW AND STOP** (slice 45 gate 0) — **SPLIT.** ⚠ **STOP half DEAD, on BOTH regimes** — miss
+  0.1912 m at **every** el stop 0.04–30° (**750×**) tracking, and on a SEARCH arm miss/lock/demand are
+  identical over (30, 0.30)…(30, 30.0) with the trunnion binding **68 %** of ticks: the **7th
   false-fidelity knob**, and §0.2.0's species argument promoted exactly this half. ⭐⭐⭐ **WINDOW half ALIVE, and
   its precondition is not a geometry but a *SEARCHING HEAD*: a TRACKER holds both axes near zero so the window's
   CORNERS are never visited; a SEARCH drives one axis to the rim BY DESIGN, where the corners are.** Box ≡ disc

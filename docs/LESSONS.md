@@ -218,6 +218,13 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
   predictable from instrumentation: it is `max |the quantity B gates on|`. Predicted 0.3043° off a
   trace, flown flip at (0.30, 0.31]. **Cheaper than the grid it replaces, and anchored on a
   prediction, which makes it the sharp form of the test rather than a blind bracket.**
+- ⭐⭐⭐ **A PROPERTY MEASURED IN ONE OPERATING MODE IS NOT A PROPERTY OF THE COMPONENT — AND WHEN A
+  REGIME DISTINCTION OVERTURNS ONE CLAIM, WALK EVERY OTHER CLAIM IN THE DOCUMENT AND ASK WHICH
+  REGIME IT WAS MEASURED IN** (slice 45, advisor, and the gate made this error TWICE). Its PART III
+  established that a window's shape is invisible to a TRACKING head and decisive to a SEARCHING one
+  — then in the same breath carried a TRACKING-arm inertness into a verdict about the STOP, whose
+  elevation demand is 3–4× larger in the search regime. ⚠ It survived the re-run, which is luck, not
+  method. **The check is mechanical and costs one table.**
 - ⭐ **WHAT A LIMIT COSTS DEPENDS ON WHAT THE SUBSYSTEM IS DOING, NOT ONLY ON WHAT IT IS FLYING**
   (slice 45). A window's SHAPE is invisible to a TRACKING head (which holds the target near the
   middle, so the corners are never visited) and decisive for a SEARCHING one (which drives an axis

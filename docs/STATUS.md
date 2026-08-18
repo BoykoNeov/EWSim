@@ -6308,6 +6308,32 @@ instead of searching* — and a box does not make a wider window cost anything. 
 cheaper**, which is the wrong direction. ⇒ **the search-pattern slice has no named unblocker left on
 this wire except slice 44's MIDCOURSE-RANGE ENGAGEMENT.**
 
+
+### PART IV — the three checks the first write-up owed (advisor, second pass)
+
+⚠⚠ **The stop half had been killed on TRACKING arms only** — and during the search probes the
+`frames.jl` patch was not applied at all, so the stop was circular on every search arm flown. The
+elevation demand is regime-dependent by 3–4× (tracking 0.6643°, box search arms 1.75–1.86°, slice
+43's drift 2.4934°). Re-flown with all three patches on the arm that rescues: **miss 0.2285, lock
+3.263 and peak demand 134.1 are IDENTICAL across box stops (30, 0.30) through (30, 30.0)** — a 100×
+range — including at `a_el` = 0.30° where the trunnion binds **68.01 %** of in-band ticks. ⚠ Null
+control: on the disc window the same arm never locks at any stop shape. **The kill now stands on both
+regimes.**
+
+⭐ **Half `dt` on PART III's flips** (PART II's excuse for skipping it is void and is marked so in the
+plan): ρ = 1.00 disc never locks at 2e−3 / 1e−3 / 5e−4 and the box locks at all three, with **both
+floors re-bracketing identically at half the step** — disc (1.01, **1.02**], box (0.92, **0.93**].
+Not slice 42's `ω·dt` band, which halved when the step halved.
+
+⭐ **The authority column** (slice 44 §VII.1's trap, checked for rather than assumed absent): peak
+`a_cmd` after lock is **4.47 %** of `a_max` on the box rescue against **7.04 %** on the disc's own
+floor cell — the box locks earlier, so it needs *less* authority, which is the sign the mechanism
+predicts.
+
+⭐⭐ **THE GATE'S REAL LESSON, because it made the same error twice: a property measured in one
+OPERATING MODE is not a property of the component.** PART III learned it about the window (inert to a
+tracker, decisive to a searcher) and then immediately re-made it about the stop.
+
 ### Other measured physics worth carrying
 
 The break is on the azimuth axis at every half-width 1–12°; the stop's demand ratio is **27.3 : 1**
