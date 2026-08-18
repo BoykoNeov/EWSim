@@ -54,8 +54,8 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Where the project is (2026-08-18)
 
-**Slices 1–40 COMPLETE & green — 7693 tests.** (Slices 39, **41 and 42** are KILL RECORDS, not slices —
-none shipped code, so the count is unchanged.)
+**Slices 1–40 COMPLETE & green — 7693 tests.** (Slices 39, **41 and 42** are KILL RECORDS and **43 is a
+GATE-0 LAW RECORD** — none shipped code, so the count is unchanged.)
 HANDOFF §10 items 1–13 — the committed roadmap — are DONE; slices 15–40 are into the §11
 Tier-A horizon.
 
@@ -115,11 +115,16 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
   here, measure the SPECTRUM of the signal it will sit on.** (The physics was real — inside the main
   control loop a lag DEstabilizes, the opposite of its sign on 34–40's feed-forward path — and it did
   not matter.)
-- **A SEEKER SEARCH PATTERN** (slice 42, gate 0) — DEFERRED, not dead, **and blocked on a precondition**:
-  in this model a wider detector window is FREE (a single 15° window rescues every showcase cell), so
-  *"buy coverage with time instead of glass"* cannot be motivated until the window COSTS something. What
-  survives is a real 2-D law (**the wrong-guess frontier**: guess the sweep direction right and coverage is
-  free; guess wrong and every degree must be bought back in rate).
+- **A SEEKER SEARCH PATTERN** (42 gate 0; **re-measured and LAWED at slice 43 gate 0**) — DEFERRED, not dead,
+  **blocked on its precondition**: a wider window is FREE here, and slice 43 makes that objection SHARPER —
+  ⭐⭐ **the cost of acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error** (err −14/fov 12
+  ≡ err −12/fov 10 to every digit), so widening glass and travelling further are THE SAME ACT. Law:
+  `t_lock = 1.036·deficit/ρ + τ`; guess right and coverage is **never REACHED** (lock 2.07° into a 3–30°
+  pattern — 42's "free" was a flat row misread); guess wrong and it costs `2S` at an **accelerating** price
+  (5→39 % over `2/ρ`, never-locks by S = 25). ⚠ 42 §V.4's ρ_min table is VOID (servo bypassed; `none ≤ 16`
+  was its own grid edge — 18 and 22 °/s; +side rows are stop contamination). ⚠ **An open-loop sweep WINDS UP
+  against `rate_max` — what saturates is the AMPLITUDE** (20° commanded at 64 °/s → 4.4° swept, arm FAILS);
+  cure `ρ ← min(ρ, rate_max)`, and anti-windup is a CAUTION not an architecture (moves no verdict in 16 cells).
 - **AN "ACQUISITION KNIFE-EDGE" / "a lock at the rim is worth nothing"** (slice 42, gate 1) — DEAD. ⭐⭐ **The
   band is `ω_LOS · dt` — ONE INTEGRATION STEP: halve `dt` and it halves** (0.0036° against a 10° window).
   The gate-0 table already said so — the "worthless lock" cell's miss was BYTE-IDENTICAL to the never-locks

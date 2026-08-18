@@ -130,6 +130,37 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
   on the other side of the rim did not fail at all — there the LOS walked INTO the window and minted its
   own margin. **Fly the mirror-image arm before naming a boundary effect.**
 
+- **⭐⭐ A GRID EDGE IS NOT A CEILING — AND THE SLICE THAT WROTE THE LESSON ABOVE BROKE IT IN THE SAME
+  GATE.** Slice 42 §V.4 reported `none ≤ 16` for two cells and wrote the sentence *"past S ≈ 20° there
+  is no rate that buys it back"*; its own legend read *"`--` = no rate in **1..16** deg/s rescues"*.
+  Walked to 64, the answers are **18 and 22 °/s**. That is the *"a reported quantity that equals an
+  authored threshold IS the threshold"* lesson, one section earlier in this same file, applied to a
+  sweep's BOUND rather than to a gate's constant. **A `--` in a swept table must print the sweep's
+  bound in the same cell, and any sentence built on one must say "not within the grid", never "not
+  at any".**
+- **⭐⭐⭐ A FLAT ROW IS EVIDENCE OF NOTHING UNTIL YOU KNOW WHERE THE MECHANISM STOPPED.** Slice 42 read a
+  ρ_min row that was flat across a 6× range of coverage as *"coverage is FREE"*. Slice 43 measured what
+  the head actually swept: it **locked 2.07° into a pattern authored 3–30° wide**, so coverage was
+  never REACHED. *"Free"* and *"never used"* produce the identical flat row and license opposite
+  designs — one says buy more, the other says you are measuring the wrong knob. **When a knob reads
+  inert, instrument how far the mechanism got before it stopped, and check that against the knob.**
+- **⭐⭐ DRIVE THE COMMAND, THEN PROVE THE ACTUATOR FOLLOWED IT — THREE BUGS IN ONE FAMILY ARE ALL THIS
+  BUG.** (i) A sweep rebuilt from the head's own angle crawls at `dt/τ` of the commanded rate; (ii) a
+  sweep that steps the HEAD never reverses once the stop binds; (iii) a sweep that steps a COMMAND and
+  never checks the head silently **teleports** it — slice 42's whole frontier was flown through
+  `head_clamp` with `τ`, `rate_max` and `head_slew_full` all bypassed, at rates the shipped servo
+  cannot produce. **Every actuated probe carries two columns: the actuator's REALIZED excursion, and
+  the command-minus-actuator lag.** The lag is the tell — it should read `ρ·τ` (0.049–0.245° here, and
+  it did); when it instead reads *the authored half-width to three digits*, the actuator is on a stop
+  and is not flying the pattern at all.
+- **⚠⚠ AN OPEN-LOOP COMMAND GENERATOR WINDS UP AGAINST A RATE LIMIT, AND WHAT SATURATES IS THE
+  AMPLITUDE, NOT THE RATE.** Commanding a 20° triangle at 64 °/s to an 8 °/s head does not sweep it
+  faster or even merely less — the head realizes **4.4° of 20° and the arm fails outright** at a
+  coverage that rescues comfortably when commanded at 8. ⚠ **But price the cure before naming it an
+  architecture:** anti-windup (bound the command's lead over the actuator) and simply clamping the
+  authored rate to `rate_max` gave the SAME rescue verdict in all 16 cells, 5–18 % apart in lock time.
+  **A cure that moves no verdict is a caution.**
+
 ## While testing: teeth that actually bite
 
 - **Two wrong oracles can both look like a tolerance problem.** `acos` of a dot product is

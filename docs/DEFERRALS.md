@@ -99,13 +99,40 @@ its own margin). ⇒ the transferable rule, in `docs/LESSONS.md`: **a finding wh
 integrator's step cannot be a lesson about hardware — re-fly a narrow threshold effect at half `dt`.** ⚠ Also measured there and load-bearing for the search half: on the geometry that
 would ship a single 15° window rescues every showcase cell with NO search, so *"buy coverage with time instead
 of glass"* is not demonstrable while a wider window is FREE in this model — a search-pattern slice must first
-make the window COST something (detector sensitivity / resolution). ⭐ What a search DOES own, measured on the
-fixed instrument: **THE WRONG-GUESS FRONTIER** — the minimum sweep rate is FLAT across a 6× range of coverage
-when the direction guess is right and RISES MONOTONICALLY with coverage when it is wrong (4/5/7/8/10/11 °/s over
-S = 5→30°, and past S ≈ 20° on one side no rate buys it back). ⚠ TWO INSTRUMENT BUGS in that gate produced
-tables that read exactly like physics (a sweep command rebuilt from the head's own position crawls at 1/50 rate;
-a sweep that steps the HEAD rather than a COMMAND never reverses once the gimbal STOP binds) — **a search probe
-must be checked where the CLAMPS bind.** ⚠ Reviving the memory track needs a TRACKER that maintains a usable
+make the window COST something (detector sensitivity / resolution). ⭐⭐⭐ **WHAT A SEARCH OWNS IS NOW MEASURED AND WRITTEN DOWN — SLICE 43's GATE 0**
+(2026-08-18, `docs/plans/slice43.md`, no code shipped, suite unchanged at 7693). ⚠⚠ **AND IT SUPERSEDES SLICE 42
+§V.4's ρ_min TABLE ENTIRELY, WHICH WAS FLOWN ON A THIRD INSTRUMENT BUG:** `p7b_frontier.jl` never set
+`:probe_search_drive`, so every cell TELEPORTED the head to the search command — no `τ`, no `rate_max`, no
+`head_slew_full` — at rates the shipped 8 °/s servo cannot produce. ⚠ Its `none ≤ 16` cells were **the 1..16
+grid's own edge**: walked to 64 they are **18 and 22 °/s**, so *"past S ≈ 20° no rate buys it back"* is WITHDRAWN.
+⚠ Its +side rows are STOP CONTAMINATION and are withdrawn too (command-minus-head lag ≡ the authored half-width
+to three digits across seven rates; the do-nothing arm sits on the 30° stop 57 % of in-band ticks). **THE FIVE
+FINDINGS THAT REPLACE IT, all −side, all on the real servo:**
+**(1) THE COST OF ACQUISITION IS THE OVERLAP DEFICIT `|err| − fov`, NOT THE POINTING ERROR** — err −14 behind a
+12° window and err −12 behind a 10° window return the SAME travel (2.073°), the SAME lock time (0.309 s) and the
+SAME miss (0.186 m) to every digit; the error and the window are not separately visible, only their difference is.
+**(2) `t_lock = 1.036 · deficit / ρ + τ`** — three digits, eight cells, two windows (`τ` measured as the servo's
+own `ρ·τ` lag, 0.049–0.245°). **(3) GUESS RIGHT AND COVERAGE IS NOT FREE — IT IS NEVER REACHED:** the head locks
+**2.07° into a pattern authored 3–30° wide**, which is why ρ_min looked flat. **(4) GUESS WRONG AND COVERAGE COSTS
+`2S` OF TRAVEL AT AN ACCELERATING PRICE** — measured 0.262 → 0.347 s per degree against a geometric bound of
+`2/ρ` = 0.250 (5 % → 39 % over), diverging to never-locks by S = 25 at ρ = 8: **the target moves while you look
+the wrong way, and that excess IS the finding.** **(5) THE HEAD, NOT THE COMMAND, IS WHAT SEARCHES** — an
+open-loop generator commanded above `rate_max` converts excess rate into LOST COVERAGE and then into outright
+failure (realized sweep −19.73° → −4.39° as ρ goes 8 → 64, and at 64 the arm never locks). ⚠ **Cure it with
+`ρ ← min(ρ, rate_max)` at authoring time: anti-windup is 5–18 % better in lock time and moves NO rescue verdict in
+16 cells, so it is a CAUTION, not an architecture** (slice 43 ran that reparameterization gate against its own
+finding before writing it down). ⭐ Cleared: half `dt` moves the headline cells by 0.0000 / +0.16 % / −0.02 %, and
+the rescue verdict is BIMODAL (largest rescue 0.3398 m, smallest failure 305.1118 m, nothing between — the gate
+could sit anywhere in that band).
+⚠⚠⚠ **AND THE PRECONDITION IS UNCHANGED AND IS NOW SHARPER, NOT WEAKER: finding (1) says a wider `fov` reduces
+the deficit ONE-FOR-ONE, and the deficit is the ENTIRE cost — so widening the glass by 2° and travelling 2°
+further are THE SAME ACT, and only one of them costs time.** A search-pattern SLICE still must not be planned
+until the detector window COSTS something (`SEEKER RANGE / SNR ACQUISITION LIMITS` is the natural carrier).
+**Slice 43's gate 0 ships a LAW to this deferral, not a slice.**
+⚠ THREE INSTRUMENT BUGS in this family are all ONE bug — a sweep command rebuilt from the head's own position
+crawls at 1/50 rate; a sweep that steps the HEAD never reverses once the gimbal STOP binds; a sweep that steps a
+COMMAND and never checks the head silently teleports it. **A search probe must be checked where the CLAMPS bind,
+and must carry the actuator's REALIZED excursion and the command-minus-actuator lag as columns.** ⚠ Reviving the memory track needs a TRACKER that maintains a usable
 rate through a gap, not a head change — a larger slice, of which a coast is the corollary; THE CAGE vs THE AIM AS ITS OWN A/B (§0.8, built and measured, shipped only as a tooth — including a
 mechanism neither slice has named: the WRONG-WAY CHASE, where a head born BELOW the LOS slews UP toward +18.1°
 before the LOS reverses, and at 8 °/s that climb is unaffordable); THE ELEVATION HALF (the error is authored in

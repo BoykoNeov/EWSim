@@ -592,6 +592,34 @@ half of 42 and its acquisition half — **the probe was right, the table was rig
 top of the table was wrong**, and every one of the four was caught by a criterion written down before
 the measurement existed.
 
+⭐⭐⭐ **Slice 43's gate 0 then went back for the one thing slice 42 left standing — and found that the
+table it was standing on had been flown with the servo switched off.** The frontier probe never set its
+drive mode, so every cell TELEPORTED the head to the search command: no lag, no rate limit, at sweep
+rates the shipped 8 °/s head cannot produce. Re-flown through the real servo, most of slice 42's numbers
+survive — but the two sentences on top of them do not. Its *"past 20° of coverage no rate buys it back"*
+was **its own 1..16 grid edge**; the answers are 18 and 22 °/s. And its *"guess right and coverage is
+FREE"* is inside out: **the head locks 2.07° into a pattern authored 3–30° wide, so coverage is not free,
+it is NEVER REACHED** — which is why the row was flat, and why a flat row is evidence of nothing until you
+know where the mechanism stopped. ⭐⭐ What replaces both is a cleaner thing that neither slice had written
+down: **the cost of acquiring is the OVERLAP DEFICIT — how far the target sits OUTSIDE the window edge —
+and not the pointing error at all.** A head 14° off behind a 12° window and a head 12° off behind a 10°
+window are the same problem, and they return the same travel, the same lock time and the same miss to
+every digit printed. It closes to a formula — lock time is the deficit over the sweep rate, plus the
+servo's own lag, plus 3.6 % for the target running away while you travel — good to three digits over
+eight cells and two windows. Guess the direction wrong and you pay twice the coverage in travel, at a
+price that **accelerates** rather than scaling: 5 % over the geometric bound at small coverage, 39 % at
+large, and past a point no lock at all — because the target keeps moving while you look the wrong way,
+and that excess is the whole finding. ⚠ The last piece is a trap rather than a lesson: an open-loop
+sweep generator **winds up** against the head's rate limit, and what saturates is not the rate but the
+AMPLITUDE — command a 20° pattern at 64 °/s to an 8 °/s head and it sweeps 4.4° and fails outright, at a
+coverage that rescues comfortably when commanded at 8. Anti-windup fixes it, and then the
+reparameterization gate — run against the finding before it was written down, which is the habit this
+arc has finally learned — shows simply refusing to author a rate above the servo's limit gives the same
+verdict in all sixteen cells. So it ships as a caution, not an architecture. ⚠⚠ And the slice stays
+BLOCKED for the reason slice 42 gave it, which the new law makes **sharper**: a wider window reduces the
+deficit one-for-one, so widening the glass and travelling further are the same act — and only one of
+them costs time. Nothing here can be motivated until the window costs something.
+
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)
 lives in **`docs/STATUS.md`**; pre-implementation plans in `docs/plans/sliceN.md`.

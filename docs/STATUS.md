@@ -5951,6 +5951,82 @@ arc has now repeated four times** (39, 41, the search half of 42, its acquisitio
 right, the table was right, and the SENTENCE on top of the table was wrong* — every one caught by a
 criterion written down BEFORE the measurement existed.
 
+## Slice 43 — THE SEARCH LAW: THE OVERLAP DEFICIT — GATE-0 LAW RECORD (2026-08-18)
+
+**Not a slice — a GATE-0 LAW RECORD. No code shipped; the suite stayed at 7693 (re-run green after
+revert).** Full record, probes P0–P5: `docs/plans/slice43.md`; raw probe output in
+`M:\claud_projects\temp\slice43\`. `core/src/missile.jl` carried the slice-42 probe patch plus a
+one-line anti-windup extension during the run and was reverted with `git checkout` before write-up.
+
+**WHY IT WAS RE-OPENED.** Slice 42 left exactly one surviving finding — the wrong-guess frontier — and
+deferred it. Two things made it worth one more gate. ⚠⚠ **First, the table was flown on a THIRD
+instrument bug in this family:** `p7b_frontier.jl`'s `arm()` never set `:probe_search_drive`, so every
+cell fell through the probe patch's `:direct` branch and **TELEPORTED the head to the search command —
+no `τ`, no `rate_max`, no `head_slew_full`.** The wire ships `gimbal_rate_dps = 8`, so its ρ_min = 10,
+11 and 14 °/s cells — the entire expensive half of the frontier — are rates the shipped servo cannot
+produce. Second, the frontier does not spend GLASS; it spends SLEW RATE, which has been priced since
+slice 35. That second thought produced a candidate law (*"the search's rate ceiling IS the servo"*)
+which **the probes refuted before its own falsifier ran** — recorded in `slice43.md` §I.3, not smoothed.
+
+⭐ **F0 — A REAL SERVO FLIES A SEARCH FINE, and its lag is `ρ·τ` to three digits** (0.049 / 0.098 /
+0.196 / 0.245° at ρ = 1 / 2 / 4 / 5 against τ = 0.05). So most of slice 42's numbers survive the
+bypass — but not its sentences.
+
+⚠⚠ **F1 FIRES — `none ≤ 16` WAS THE 1..16 GRID'S OWN EDGE.** Walked to 64 °/s the four `--` cells read
+**18, 22, 18, 22 °/s**, so §V.4's *"past S ≈ 20° no rate buys it back"* is WITHDRAWN. This is the lesson
+slice 42 itself banked (*a reported quantity that equals an authored threshold IS the threshold*),
+applied to a sweep's BOUND instead of a gate's constant.
+
+⚠⚠ **F3 CONFIRMED — THE +SIDE IS THE 30° STOP AND IS EXCLUDED FROM EVERY TABLE.** Its command-minus-head
+lag reads the authored half-width to three digits across seven rates (14.990–14.996 at S = 15;
+24.977 at S = 25; 29.979 at S = 30), and its DO-NOTHING arm sits on the stop 56.5 % of in-band ticks.
+The head is not flying the pattern there. ⚠ The two signs are also not the same failure: the − arms
+never lock and miss an identical 305.112 m at both errors; the + arms DO lock, late, and still miss.
+
+**THE FIVE FINDINGS (−side, real servo, lead-clamped where noted):**
+1. ⭐⭐⭐ **THE COST OF ACQUISITION IS THE OVERLAP DEFICIT `|err| − fov`, NOT THE POINTING ERROR.** Head
+   travel at lock over eight cells: 2.073 / 4.144 / 6.224 / 8.304 / 10.392° at deficits 2/4/6/8/10, and
+   3.104 / 5.176° at deficits 3/5 behind a 15° window — ratio 1.035–1.039 throughout. **The natural
+   experiment: `err −14 / fov 12` and `err −12 / fov 10` return travel 2.073°, t_lock 0.309 s and miss
+   0.186 m — identical to every digit printed.** Error and window are not separately visible.
+2. ⭐⭐ **`t_lock = 1.036 · deficit / ρ + τ`** — three digits, eight cells, two windows. (deficit 10:
+   1.036·10/8 + 0.05 = 1.345 against a measured 1.349.) The 3.6 % is the LOS running away during travel.
+3. ⭐⭐ **GUESS RIGHT AND COVERAGE IS NOT FREE — IT IS NEVER REACHED.** `t_lock` = **0.309 s, the same
+   digit**, at S = 3, 5, 8, 12, 16, 20, 25, 30 (a 10× range): the head locks 2.07° into a pattern
+   authored 3–30° wide. Slice 42's *"the width is FREE"* is a flat row misread.
+4. ⭐⭐ **GUESS WRONG AND COVERAGE COSTS `2S` OF TRAVEL AT AN ACCELERATING PRICE.** `t_lock` 1.088 /
+   1.612 / 2.407 / 3.495 / 4.648 / 6.035 s at S = 3→20, then **never-locks at S = 25 and 30**. Measured
+   d`t_lock`/dS = 0.262 → 0.347 s/° against the geometric bound `2/ρ` = 0.250 — **5 % over, then 39 %
+   over.** The naive travel-over-rate law is a LOWER bound, loose exactly where the decision is hard.
+5. ⚠ **THE HEAD, NOT THE COMMAND, IS WHAT SEARCHES — an open-loop generator WINDS UP against the rate
+   limit and what saturates is the AMPLITUDE.** At an authored S = 20, realized head excursion falls
+   −19.73 / −17.58 / −15.82 / −13.20 / −7.92 / **−4.39°** as ρ goes 8 → 64, and **at ρ = 64 the arm FAILS
+   OUTRIGHT (305.112 m, never locks)** at a coverage that rescues comfortably at ρ = 8. A one-line
+   anti-windup lead clamp removes it (excursion flat −19.73 → −19.03), and below `rate_max` the clamp is
+   **provably inert** (identical digits at ρ = 2, 4, 8 for every lead ∈ {∞, 8, 4, 2, 1}).
+
+⚠⚠⚠ **AND THE REPARAMETERIZATION GATE WAS RUN AGAINST FINDING 5 BEFORE IT WAS WRITTEN DOWN — it bites.**
+Anti-windup at the authored ρ versus the open-loop generator at `min(ρ, 8)`: **the same rescue verdict
+in ALL 16 CELLS** (including S = 30, where both fail at a byte-identical 305.112 m), 5–18 % apart in lock
+time only. ⇒ **finding 5 ships as a design CAUTION with a measured size, not an architecture**, and its
+cure is the cheaper `ρ ← min(ρ, rate_max)` at authoring time.
+
+⭐ **F6 CLEARED — THE RULE SLICE 42 DIED TO DOES NOT BITE HERE.** At `dt` = 5e−4 the headline cells move
+by **0.0000°** (head travel at lock), **+0.0005 s / +0.16 %** and **−0.0010 s / −0.02 %** (t_lock).
+**F4 CLEARED — the verdict is BIMODAL:** 40 −side arms give 30 rescues (largest 0.3398 m) and 10 failures
+(smallest 305.1118 m) with **nothing in between**, so the 1 m gate could sit anywhere in a 0.34–305 m band.
+
+⚠⚠ **THE SLICE STAYS BLOCKED, AND FINDING 1 SHARPENS THE BLOCK RATHER THAN LIFTING IT.** A wider `fov`
+reduces the deficit ONE-FOR-ONE and the deficit is the entire cost ⇒ **widening the glass by 2° and
+travelling 2° further are the SAME ACT, and only one of them costs time.** A search-pattern slice still
+needs `SEEKER RANGE / SNR ACQUISITION LIMITS` first. **This gate ships a LAW to that deferral.**
+
+**THE METHOD LESSONS** (all now in `docs/LESSONS.md`): a grid edge is not a ceiling — print the sweep's
+bound beside any `--`; a FLAT ROW is evidence of nothing until you know where the mechanism stopped
+(*free* and *never reached* look identical and license opposite designs); **drive the COMMAND, then
+prove the ACTUATOR followed it** — three instrument bugs in this family are all that one bug, and the
+tell is a command-minus-actuator lag that reads the authored half-width instead of `ρ·τ`.
+
 ## Slice 1 — radar to detection to ROC (the first slice; block sits at EOF)
 
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
