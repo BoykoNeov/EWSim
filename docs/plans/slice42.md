@@ -244,3 +244,170 @@ the next probe may contain a cue: the head sweeps blind, at an authored rate, in
 direction, reversing at an authored half-width, and the honest coast runs after lock. If a blind
 symmetric search cannot rescue a single cell that a wide window does not already rescue, the slice
 dies at P2 and P1 is never reached.
+
+---
+
+# §II — PROBE **P2** (2026-08-18): THE BLIND SEARCH ON THE SHIPPED (RECEDING) WIRE
+
+No oracle in any arm. The head sweeps azimuth at rate ρ in direction d, reversing at half-width S
+about its BIRTH angle, and stops for good on the first lock. Grid: d ∈ {+1, −1} × S ∈ {5, 10, 20, 30}°
+× ρ ∈ {2, 4, 8} °/s, on err ∈ {−12, −14, −18}. `d = +1` is the lucky guess here (the target is above
+the birth angle); a missile with a two-sided handover error cannot know which it has.
+
+| err ° | CONTROL | d **+1**, ρ 2 / 4 | d **+1**, ρ **8** | d **−1**, ANY S, ρ 2 / 4 / 8 |
+|---|---|---|---|---|
+| −12 | 3620.675 | 3620.675 | **0.007** | 3620.675 — every one of 12 cells |
+| −14 | 3620.675 | 3620.675 | **0.240** | 3620.675 — every one of 12 cells |
+| −18 | 3620.675 | 3620.675 | 2348.358 (still a miss) | 3620.675 — every one of 12 cells |
+
+⭐ **THE LUCKY GUESS AT THE FULL SERVO RATE RESCUES, AND IT BEATS THE PERFECT CUE** — 0.007 m against
+the oracle's 0.110 m at err = −12 (§I.1), from a head that knows nothing. Below the rate limit
+(ρ = 2, 4) nothing is ever rescued: the sweep is slower than the LOS's own ≈7.4 °/s and never closes.
+
+⭐⭐ **AND THE WRONG GUESS IS FATAL — 24 of 24 cells, at every width and every rate.** `sweep_s` reads
+7.358 s on every one of them: the head sweeps for the WHOLE FLIGHT and never finds the target,
+because on a receding LOS the ground given up going the wrong way is never recovered.
+
+⚠ **THE COVERAGE KNOB IS COMPLETELY INERT HERE** — S = 5, 10, 20, 30 give BIT-IDENTICAL results in
+every one of the 24 cells. It is the slice-19 dead-knob class, in the instrument: at ρ = 8 the target
+is caught before the first reversal, and at ρ < 8 the reversal cannot help because the target is gone.
+**On this wire a search has exactly one design question and it is not the one §0.2 predicted.**
+
+## ⚠⚠ §II.1 THE COMPLEMENTARITY CLAIM OF §I.1 IS **REFUTED FOR A SEARCH** (P2b, the control)
+
+§I.1 read the cue and the coast as complements. That reading is **correct for a CUE and false for a
+SEARCH**, and the control says so bit-exactly — the same arms flown with the honest memory coast ON
+and OFF:
+
+| wire | err ° | arm | coast **OFF** | coast **ON** |
+|---|---|---|---|---|
+| receding | −12 | d+1 S20 ρ8 | **0.007** | **0.007** — identical |
+| receding | −14 | d+1 S20 ρ8 | **0.240** | **0.240** — identical |
+| static | −12/−14, +12/+14 | every arm, ρ 2/4/8 | rescues | **bit-identical** |
+
+⇒ **once a SEARCH is running, the memory coast is worth exactly zero on both geometries.** The 3.6 km
+the coast was worth in §I.1 was a patch for the CUE's own failure mode, not a property of acquisition.
+The prediction is left standing above and refuted here, per this file's opening rule.
+
+## ⭐⭐⭐ §II.2 WHY A BLIND SEARCH BEATS A PERFECT CUE — **THE APPROACH, NOT THE INFORMATION**
+
+The two arrive at the target differently, and that is the whole mechanism:
+
+* **A CUE is a servo command ONTO the target.** As the head closes, the error shrinks, the commanded
+  rate shrinks with it, and the head **decelerates onto the rim of its own window** — `off@lock`
+  9.997–9.999° against a 10.0° window on every cued arm (§I.1). One tick of relative motion then puts
+  the target back outside, and the shipped slew gate cannot be re-entered ⇒ `hold_max` = 0.001 s.
+* **A SEARCH is a constant-rate sweep.** It does not know the target is there, so it does not slow
+  down: it **overshoots THROUGH** the target and deposits it well inside the window ⇒ `hold_max`
+  10.2–10.6 s, `in%` 90–97, with no coast anywhere.
+
+> **THE RESULT, IN ONE SENTENCE. A blind search outperforms a perfect cue — not because it knows more,
+> but because of HOW it arrives: knowing where the target is makes a servo stop ON it, and stopping on
+> it means stopping at the edge of the window. The information was never the binding constraint. The
+> approach was.**
+
+## ⚠⚠ §II.3 THE INSTRUMENT CHECK THAT NEARLY SHIPPED A BUG AS A CLAIM (P4)
+
+The first form of the probe wrote the head angle DIRECTLY, bypassing `gimbal_tau_s` and the rate cap —
+so the headline above rested on an unfair servo. Re-flown with the sweep as a COMMAND the shipped
+servo chases through `head_slew_full`:
+
+| wire | err ° | ρ | `:direct` | `:servo` |
+|---|---|---|---|---|
+| receding | −12 | 8 | 0.007 (lock 0.475) | **0.064** (lock 0.574) |
+| receding | −14 | 8 | 0.240 (lock 1.000) | **0.010** (lock 1.110) |
+| static | −12 | 4 | 0.036 (lock 0.535) | **0.061** (lock 0.588) |
+| static | −14 | 8 | 0.030 (lock 0.517) | **0.045** (lock 0.568) |
+
+⇒ **every verdict agrees; the servo costs ≈0.05 s of acquisition time and nothing else.** The
+advantage is not an instrument artifact.
+
+⚠⚠ **AND THE FIRST RUN OF THIS CHECK WAS WRONG IN A WAY THAT READ EXACTLY LIKE PHYSICS.** It rebuilt
+the sweep command from the head's OWN position each tick, making the commanded step one tick wide, so
+a τ = 0.05 servo closed dt/τ of it and the sweep crawled at **1/50** the authored rate — and the table
+came back with `:servo` rescuing NOTHING on any wire, which reads precisely like *"a real servo cannot
+fly a search."* **The command must be its own integrator.** Recorded because the wrong version was
+plausible, self-consistent, and one commit from being written down as a finding.
+
+---
+
+# §III — PROBE **P3**: THE REVERSED CROSSING, WHERE THE TARGET DOES NOT RUN AWAY
+
+Slice 36's own shipped control geometry (`vy = −200`, the body-frame LOS nearly static — a 2.2° swing
+against the shipped wire's 33.2°). This is F2's named candidate and it answers F2's blocker.
+
+## §III.1 F2's BLOCKER — **ANSWERED: THE FAILING SET IS TWO-SIDED HERE**
+
+| err ° | −18 … −11 | −10 | −8 … +10 | +11 | +12 … +18 |
+|---|---|---|---|---|---|
+| verdict | **never locks**, 305.112 | locks, 305.112 | 0.224 (hit) | 0.124 | locks LATE (t ≈ 4.8 s), 423–483 |
+
+The head is born BELOW the LOS on the left arm and ABOVE it on the right, and both arms fail. ⇒ **a
+single authored sweep direction cannot serve both**, which is what makes a blind, reversing search a
+real design here rather than a rigged one. (The wire's attractors are ≈0.22 m and ≈305–483 m, so §0.3's
+verdict language holds with room to spare.)
+
+## ⭐⭐ §III.2 **F1's SURVIVAL CRITERION IS MET — BOTH AXES ARE LIVE, WITH OPPOSITE VERDICTS**
+
+Wrong-guess arms (d = −1 at err = −14 / −12, d = +1 at err = +12), coast off; controls 305.112 / 423.494:
+
+| cell | ρ 2 | ρ 4 | ρ 8 |
+|---|---|---|---|
+| err −14, d−1, **S = 5** | MISS 305.112 | MISS 305.112 | **0.315** |
+| err −14, d−1, **S = 20** | MISS 305.112 | MISS 305.112 | **0.100** |
+| err −14, d−1, **S = 30** | MISS 305.112 | MISS 305.112 | **MISS 305.112** |
+| err −12, d−1, **S = 5** | MISS 305.112 | **0.349** | **0.109** |
+| err −12, d−1, **S = 10** | MISS 305.112 | MISS 305.112 | **0.194** |
+| err +12, d+1, **S = 20** | **0.286** | **MISS 405.638** | **0.141** |
+
+> **SAME COVERAGE, DIFFERENT RATE, OPPOSITE VERDICTS** — S = 5 at err = −12: ρ = 2 misses, ρ = 4
+> rescues. **SAME RATE, DIFFERENT COVERAGE, OPPOSITE VERDICTS** — ρ = 8 at err = −14: S = 20 rescues
+> (0.100 m), S = 30 misses (305.112 m). **F1 PASSES on both axes**, on a wire whose CONTROL genuinely
+> misses, which is the degeneracy check slice 41 §IV.8b failed.
+
+⭐ **AND THE S = 20 → S = 30 FLIP IS THE MECHANISM IN ONE CELL:** a search that sweeps too WIDE the
+wrong way spends its budget looking where the target is not, and arrives too late. Coverage is not
+free — it is bought with the only currency a search has.
+
+⚠ **ρ IS NOT MONOTONE ON THE WRONG-GUESS ARMS** (err +12, d+1: rescue at ρ 2, MISS at ρ 4, rescue at
+ρ 8), and `docs/DEFERRALS.md` disqualifies knobs on exactly that (`k` 28, `ω_n` 40, σ_seek 25). Here it
+is a real coincidence — whether the sweep happens to be pointing the right way when the LOS crosses it
+— **but it is a hazard for any slider built on ρ and it is written down before a scenario exists.**
+
+## §III.3 THE CONTRAST THAT MAKES THE PAIR
+
+| | receding LOS (`vy = +200`) | static LOS (`vy = −200`) |
+|---|---|---|
+| wrong guess | **fatal — 24/24 cells lost** | **survivable** — rescued at 8 of 12 cells |
+| coverage S | **DEAD** (bit-identical over 5→30°) | **LIVE**, and non-monotone (S 20 rescues, S 30 does not) |
+| rate ρ | one bracket: ≥ the LOS rate or nothing | **LIVE** across 2 / 4 / 8 |
+| contamination | `sat%` 29–75, `aero%` up to 31 | `sat%` 9–21, `aero%` ≤ 4.8 — **clean** |
+
+> **THE SECOND SENTENCE. A search pattern is a race against the target's own motion. Against a line of
+> sight that is running away, the only thing that matters is whether you guessed the direction — width
+> and rate buy nothing and a wrong guess is unrecoverable. Against one that stays put, a wrong guess is
+> survivable, and only THEN does a search have a design: sweep fast enough, but not so WIDE that the
+> budget goes on looking where the target isn't.**
+
+---
+
+# §IV — GATE 0 STANDING (2026-08-18): **ALIVE**, and what it must answer next
+
+* **F0** fired by the letter and its interpretation did not survive its own measurement (§I.3): what it
+  priced was a STANDING delay, and a search does not stand still. Superseded by §II/§III, which measure
+  the search directly. **The F0 number is kept, its verdict is withdrawn, and both are visible.**
+* **F2** — ANSWERED (§III.1). A two-sided failing set exists on the reversed crossing, so a sign-blind
+  reversing search is testable rather than rigged.
+* **F1** — **PASSES** (§III.2), on both axes, with a control that misses.
+
+⚠ **WHAT IS NOT YET ANSWERED, AND MUST BE BEFORE A KERNEL:**
+1. **Which wire ships, and can one scenario carry this?** The lesson is a PAIR (receding vs static) and
+   convention 9 says one lesson per scenario — slice 36's own answer was two files differing by one
+   number, and that precedent fits exactly.
+2. **Is the search a reparameterization of a WIDER WINDOW on the static wire specifically?** §III.2
+   answers it structurally (a window has no rate and no direction) but the window ladder has not been
+   re-flown on THIS geometry with the search off, and it must be, cell for cell.
+3. **The ρ non-monotonicity (§III.2)** — a slider hazard, not yet a disqualification, and it decides
+   whether ρ or S is the live knob.
+4. **The −18 cells and every arm above `sat%` ≈ 50 are NOT quotable** — they are statements about the
+   rate limit and the α ceiling. The shipping domain must be drawn inside the clean region.
