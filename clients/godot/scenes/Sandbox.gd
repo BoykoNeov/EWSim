@@ -260,6 +260,37 @@ var _gimbal_gyro_view := false     # handshake gimbal_gyro_view — 8th marker; 
 #       "servo FREE", and the INERTIA that is ringing the missile never mentioned — slice 35's own
 #       invisible-slice failure mode, pointed back at slice 35's own HUD (~11th occurrence).
 var _gimbal_servo_view := false    # handshake gimbal_servo_view — 9th marker; button AND HUD
+# Slice-46 THE DETECTION HORIZON — the 10th marker, and the THIRD that exists to UN-DROP the
+# shared button (37's and 40's were the first two). Both jobs are load-bearing and both were
+# checked rather than assumed:
+#   THE BUTTON — this wire authors NO GLASS (a radome would put slice 26's parasitic loop beside a
+#       lesson about detection), so `_radome_view` is absent, and the loader refuses
+#       `seeker_fov_deg` beside a head so `_seeker_fov_view` is absent too. BOTH drop branches
+#       fail, the dispatch falls through to slice 25's `seeker_axes` cycler, and the button comes
+#       back as the WRONG rung — whose other position leaves the horizon live beside slice 25's
+#       unrelated 2000 m blind miss. Slice 36's failure exactly, and its 5th occurrence.
+#   THE HUD — `_gimbal_rate_view` IS raised here (the head has a servo), so without this branch
+#       slice 35's block draws a DEMAND-vs-CAP pair against a servo authored at 30 °/s PRECISELY
+#       so it never binds. Every number true, the verdict "servo FREE", and the slice invisible.
+var _seeker_detect_view := false   # handshake seeker_detect_view — 10th marker; button AND HUD
+# Slice-46 DISPLAY-ONLY PEAK-HOLD on the AUTHORITY the core ships (`a_cmd_frac`, the post-clamp
+# command as a fraction of `a_max`). ⭐⭐ THIS INSTRUMENT IS THE SLICE. Slice 44 read MISS across
+# the whole free interval (0.2237 / 0.3491 / 0.3267 / 0.2514 m — flat), concluded a delayed
+# acquisition was free, and killed the component; the authority it was spending over those same
+# four rows went 19.10 → 14.54 → 34.66 → 100.00 %. A PEAK and not an EMA (slice 35's duty) and
+# not a latch (slice 34's): the question a budget raises is "how much of it did this engagement
+# ever need at once?", and the answer is a maximum. ⚠ Instrument, not physics — the core owns the
+# ratio (convention 13); the client only remembers the largest one it has seen.
+var _authority_peak := 0.0
+# Slice-46 LATCH on the RANGE half of the availability verdict. ⚠ A SECOND LATCH BESIDE
+# `_gimbal_lost` AND NOT A REPLACEMENT FOR IT, because they answer different questions: the head
+# can lose the target by ANGLE (out of the window) or by RANGE (under the threshold), and a HUD
+# that could not separate them would show a blind seeker with no way to say which limit ran out.
+# ⚠ It latches the PRE-lock blindness too — on this wire the seeker opens the flight outside its
+# own horizon, which is the state the whole lesson is about, so this is NOT range-gated the way
+# `_gimbal_lost` is (that gate exists because every held arm leaves its WINDOW at r → 0; a horizon
+# only ever opens as the range falls, so it has no endgame artefact to suppress).
+var _detect_blind := false
 # Slice-36 DISPLAY-ONLY FREEZE on the shipped requirement (see `_handover_peak_hold`): `head_off_peak_deg`
 # is a running maximum, so it runs to 179.4998° at CPA on EVERY arm, hit or miss, and a peak cannot
 # forget. This holds the last sample taken while r > 200 m — the same gate the core's own requirement
@@ -445,6 +476,16 @@ const SEEKER_HEAD_RUNGS := ["body_referenced", "space_stabilized"]
 # 2ζω_n θ̇`, which leaves BOTH of those bounds). ⚠ The `:head_servo` fidelity, NOT `:seeker_head` —
 # the servo's ORDER, not its FRAME, and no shipped wire authors both.
 const HEAD_SERVO_RUNGS := ["first_order", "second_order"]
+# Slice-46 THE DETECTION HORIZON: the SEEKER-DETECT cycler on the held :six_dof plant, the held
+# body-referenced head and the held 10° window. none (slices 11–45's angle-only seeker — inside
+# the window there is a measurement AT ANY RANGE) ↔ snr (the echo must also clear the receiver's
+# threshold, so there is a horizon past which there is no measurement at whatever angle).
+# ⚠⚠ THE ORDER IS THE CORE'S `SEEKER_DETECT_MODES` and NOT the showcase's opening rung, which is
+# the OPPOSITE of slice 37/40's ring and is deliberate: this wire opens on `snr` (the disease), so
+# the ring is entered at index 1 and the FIRST press lands on `none` — the cure. A ring reordered
+# to "open where the wire opens" would drift from the core's tuple, which is convention 7's
+# one-list-no-drift, and the press order is a property of the WIRE rather than of the list.
+const SEEKER_DETECT_RUNGS := ["none", "snr"]
 const MISSILE_TRAIL_MAX := 2500   # cap the breadcrumb list (a full flight is ~1800 frames)
 
 # --- terrain 3-D view (slice 18): the client's FIRST true 3-D view. Populated only when the
@@ -667,6 +708,11 @@ func _on_scenario(obj: Dictionary) -> void:
 	# because what distinguishes this wire is the rung: its comp keys `gimbal_omega_hz`/`gimbal_zeta`
 	# are permitted beside `:first_order` too, deliberately, so the button's other side is reachable.
 	_gimbal_servo_view = bool(obj.get("gimbal_servo_view", false))
+	# Slice 46 — the detection horizon. Raised on the COMP KEY (`detect_pt_w`), slice 38's choice
+	# rather than 37/40's: what distinguishes this wire is the BUDGET, the rung is refused at load
+	# without one, and a value guard on `snr` would hide the button on the arm a student presses it
+	# FROM. It does BOTH jobs (button and HUD) — see `_seeker_detect_view`'s own comment.
+	_seeker_detect_view = bool(obj.get("seeker_detect_view", false))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -1372,6 +1418,22 @@ func _enter_airframe3d_mode(obj: Dictionary) -> void:
 	# wire that authored both would have to choose. The slice-40 scenarios deliberately do NOT author
 	# `seeker_head`, so its marker stays down and this branch owns the button unambiguously
 	# (convention 9: one button, one lesson).
+	# SLICE 46 — THE DETECTION HORIZON, checked FIRST ("check the NEW key first", 13th occurrence).
+	# ⚠⚠ IT MUST BE FIRST OR IT IS UNREACHABLE: this wire raises `gimbal_view` AND `gimbal_rate_view`,
+	# both of which drop the button below. ⭐ AND THE PRESS IS THE LESSON IN ONE NUMBER — at the wire's
+	# default target (0.005 m²) the gated seeker locks at 5.95 s of an 8.9 s flight and flies the rest
+	# of it at 100.00 % of `a_max`; one press makes the same missile lock on tick 1 and cruise at
+	# 19.10 %. ⚠ AND IT MISSES BY *MORE* WITH THE HORIZON OFF (0.2237 m against 0.1167 m), which is
+	# why the miss is not on this HUD's headline: the metric that looks like the answer moves the
+	# WRONG WAY across the button.
+	if _seeker_detect_view:
+		_fid_kind = "seeker_detect"
+		if not _prop_btn.pressed.is_connected(_on_seeker_detect_pressed):
+			_prop_btn.pressed.connect(_on_seeker_detect_pressed)  # guarded for the headless UI test
+		_prop_btn.tooltip_text = "Cycle seeker detection (set_fidelity): none ↔ snr (a link budget, hence a HORIZON)"
+		_prop_btn.visible = true
+		_build_airframe3d_scene()
+		return
 	if _gimbal_servo_view:
 		_fid_kind = "head_servo"
 		if not _prop_btn.pressed.is_connected(_on_head_servo_pressed):
@@ -1591,6 +1653,15 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 	if _telemetry.has(_af3d_missile + ".head_rate_sat"):
 		var st := 1.0 if float(_telemetry[_af3d_missile + ".head_rate_sat"]) >= 0.5 else 0.0
 		_servo_duty = _servo_duty * 0.97 + st * 0.03
+	# SLICE 46 — the AUTHORITY peak and the BLIND latch. ⚠ TWO INDEPENDENT `if`s, chained onto
+	# nothing, for slice 33's reason: on this wire all four keys co-occur on every frame, so an `elif`
+	# would freeze one outright. ⚠ Each gates on its OWN key, so a wire with no link budget (every
+	# scenario 11–45) leaves both instruments at their reset values and every earlier HUD is untouched.
+	if _telemetry.has(_af3d_missile + ".a_cmd_frac"):
+		_authority_peak = max(_authority_peak, float(_telemetry[_af3d_missile + ".a_cmd_frac"]))
+	if _telemetry.has(_af3d_missile + ".seeker_detect"):
+		if float(_telemetry[_af3d_missile + ".seeker_detect"]) < 0.5:
+			_detect_blind = true
 	# SLICE 36 — the REQUIREMENT's display freeze and the BIRTH angle's latch. ⚠ TWO INDEPENDENT `if`s,
 	# NOT AN `elif` AND NOT CHAINED ONTO THE BLOCK ABOVE — slice 33's finding, and here the keys DO
 	# co-occur on every shipped frame (this wire carries `head_rate_sat` AND both keys below), so a
@@ -2393,6 +2464,111 @@ func _head_gyro_walk_text() -> String:
 # rate limit is authored wide on both slice-40 wires precisely so it never binds, and drawing a
 # "servo FREE" verdict beside a missile shaking itself is the invisible-slice failure this branch
 # exists to prevent.
+func _horizon_mech_text(gated: bool, fov: float, ap: float, racq: float) -> String:
+	# THE MECHANISM, and on the `none` rung the fact that the whole gauge below is idle. ⚠ The three
+	# numbers are one CHAIN and are drawn as one — window ⇒ aperture ⇒ horizon — because a student who
+	# reads them separately learns three facts and not the identity that binds them.
+	# ⚠⚠ EVERY LINE IN THIS BLOCK IS CUT TO THE FAMILY'S MEASURED BUDGET (≤ 430 px at 15 px ≈ 55 chars
+	# from `vp.x − 430`), NOT to a budget this slice invented. The first slice-46 shots ran all five
+	# lines AND all four headlines off the right edge at 1152 px AND at 1920 px — the origin is anchored
+	# to the RIGHT edge, so a too-long line clips at every window size — while a 100/96-char tooth passed.
+	# That is slice 38's failure verbatim, one slice after it was written down. The tooth now measures
+	# PIXELS (see `slice46_ui_test.gd` tooth 6): `⇒ ° ← |` are one `length()` each and many pixels each.
+	if not gated:
+		return "detection OFF — angle-only: it sees at ANY range"
+	return "window %.1f° = beam ⇒ %.3f m dish ⇒ horizon %.0f m" % [fov, ap, racq]
+
+func _horizon_range_text(r: float, racq: float, margin: float, gated: bool) -> String:
+	# ⚠ THE SIGN IS THE VERDICT (slice 18's `terrain_clearance_m` / slice 33's margin precedent), and
+	# the core forms it from the same two numbers the predicate tested — the client never subtracts.
+	# ⚠⚠ AND ON THE UNGATED RUNG THERE IS NO COMPARISON TO DRAW, which the second slice-46 shot caught
+	# one line below this one: the core emits NONE of the five detect keys on `none`, so `.get(…, 0.0)`
+	# handed this line a horizon of 0 m and a margin of +0 m and it printed "range 2858 m vs horizon
+	# 0 m ⇒ +0 m" IN GREEN — a defaulted zero rendered as a passed test. A horizon of zero is not a
+	# horizon. ⇒ `gated` is a parameter here too, and the ungated form makes no comparison at all.
+	if not gated:
+		return "range %.0f m — no horizon on this rung" % r
+	return "range %.0f m vs horizon %.0f m ⇒ %+.0f m%s" % [r, racq, margin,
+			"  ← BLIND" if margin < 0.0 else ""]
+
+func _horizon_authority_text(now: float, peak: float) -> String:
+	# ⭐⭐ THE LINE THE WHOLE SLICE EXISTS FOR. Slice 44 read MISS across this component's entire free
+	# interval, found it flat, and killed the physics; the authority it was spending over those same
+	# rows rose steeply. A LATE LOCK IS PAID FOR HERE, and nowhere else on screen.
+	var tail := ""
+	if peak >= 0.999:
+		tail = "  ← SPENT"
+	elif peak >= 0.60:
+		tail = "  ← being paid"
+	return "authority: %.0f%% of a_max, peak %.0f%%%s" % [100.0 * now, 100.0 * peak, tail]
+
+func _horizon_lamps_text(marg_deg: float, blind_now: bool, ever_blind: bool, gated: bool) -> String:
+	# ⭐ TWO WAYS TO LOSE A TARGET, TWO LAMPS. `gimbal_valid` is the CONJUNCTION and could never say
+	# which limit ran out; a seeker that has run out of ANGLE needs a wider window or a faster servo,
+	# one that has run out of RANGE needs aperture, power, integration or a bigger target. Different
+	# diagnoses, different cures, and the HUD must not merge them.
+	# ⚠⚠ THE RANGE LAMP MUST READ `—`, NOT `sees`, ON THE UNGATED RUNG, and the first slice-46 shot is
+	# what caught it: `RANGE sees` there reports a test that WAS NEVER RUN as having PASSED. That is the
+	# stale-readout class this family's HUD comments exist for, in the one line whose whole job is to
+	# say WHICH limit ran out — so `gated` is a parameter and not an inference from the numbers.
+	var lamp := ("BLIND" if blind_now else "sees") if gated else "— (off)"
+	return "ANGLE %+.1f°%s | RANGE %s%s" % [marg_deg,
+			" out" if marg_deg < 0.0 else "",
+			lamp,
+			"  (was blind)" if (gated and ever_blind and not blind_now) else ""]
+
+func _horizon_cure_text(gated: bool) -> String:
+	# THE TRADE, stated as the thing a student would otherwise get wrong. Slices 32–36 taught "a wider
+	# window is free"; with a link budget it is exactly not, and the fourth-root is why the obvious
+	# lever is the weak one.
+	if not gated:
+		return "press the button ⇒ the target has to be FOUND"
+	return "wider window ⇒ shorter reach; 16× power ⇒ 2× range"
+
+func _horizon_verdict_label(blind: bool, gated: bool, peak: float) -> String:
+	# ⚠⚠ THE HEADLINE IS NEVER THE MISS ON THIS WIRE, and that is the correction slice 44's death paid
+	# for: across the button the miss moves the WRONG WAY, so a headline built on it would tell a
+	# student the horizon HELPED.
+	# ⚠ HEADLINES GET A SEPARATE, MUCH TIGHTER BUDGET (~30 chars): they are drawn at 20 px from the
+	# same right-anchored origin. The explanatory clause belongs in the body line below, not here —
+	# these four were 78–82 chars and every one of them ran off the edge.
+	if not gated:
+		return "SEEKER: no horizon at all"
+	if peak >= 0.999:
+		return "LATE LOCK: PAID IN FULL"
+	if blind:
+		return "SEEKER BLIND: no echo yet"
+	return "SEEKER SEES IT — budget left"
+
+func _draw_horizon_hud_lines(vp: Vector2) -> void:
+	var gated := str(_fidelity.get("seeker_detect", "none")) == "snr"
+	var fov := float(_telemetry.get(_af3d_missile + ".gimbal_fov_deg", 0.0))
+	var ap := float(_telemetry.get(_af3d_missile + ".seeker_aperture_m", 0.0))
+	var racq := float(_telemetry.get(_af3d_missile + ".seeker_r_acq_m", 0.0))
+	var r := float(_telemetry.get(_af3d_missile + ".los_range", 0.0))
+	var marg_m := float(_telemetry.get(_af3d_missile + ".seeker_range_margin_m", 0.0))
+	var marg_d := float(_telemetry.get(_af3d_missile + ".gimbal_fov_margin_deg", 0.0))
+	var acmd := float(_telemetry.get(_af3d_missile + ".a_cmd_frac", 0.0))
+	var blind := float(_telemetry.get(_af3d_missile + ".seeker_detect", 1.0)) < 0.5
+	# THE MECHANISM — the window/aperture/horizon chain, greyed on the rung where it is idle.
+	draw_string(_font, Vector2(vp.x - 430, 110), _horizon_mech_text(gated, fov, ap, racq),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.45, 0.90, 1.00) if gated else Color(0.70, 0.70, 0.75))
+	# THE HORIZON against the RANGE — the signed margin, and the sign is the verdict.
+	# ⚠ GREY ON THE UNGATED RUNG — the same rule as the mechanism line above it. Green is this HUD's
+	# "the test passed" colour, and on `none` no range test was run to pass.
+	draw_string(_font, Vector2(vp.x - 430, 132), _horizon_range_text(r, racq, marg_m, gated),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			Color(0.70, 0.70, 0.75) if not gated else (Color(1.00, 0.62, 0.30) if blind else Color(0.55, 1.00, 0.65)))
+	# ⭐⭐ THE AUTHORITY GAUGE — the number the miss cannot show, and the reason this HUD exists.
+	draw_string(_font, Vector2(vp.x - 430, 154), _horizon_authority_text(acmd, _authority_peak),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if _authority_peak >= 0.999 else Color(1.00, 0.85, 0.45))
+	# THE TWO LAMPS — which of the two limits is the one that ran out.
+	draw_string(_font, Vector2(vp.x - 430, 176), _horizon_lamps_text(marg_d, blind, _detect_blind, gated),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.62, 0.30) if (blind or marg_d < 0.0) else COL_TICK)
+	# THE TRADE — what a student should do about it, and why the obvious lever is the weak one.
+	draw_string(_font, Vector2(vp.x - 430, 198), _horizon_cure_text(gated),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+
 func _draw_head_servo_hud_lines(vp: Vector2) -> void:
 	var second := str(_fidelity.get("head_servo", "first_order")) == "second_order"
 	var chan := _ring_channel_key()
@@ -2597,7 +2773,18 @@ func _draw_airframe3d_hud() -> void:
 	# same defect one level up. ⚠ The colour rule is inherited unchanged (the latch, not the
 	# peak-hold): every arm in this slider's domain HITS on both rungs, so a ring-coloured headline
 	# would paint every intercept.
-	if _gimbal_servo_view:
+	# SLICE 46 — THE DETECTION HORIZON, checked FIRST here as at the other two sites, because all
+	# three dispatch chains must agree: a headline naming the servo's ORDER above body lines about the
+	# link budget is the same defect one level up. ⚠⚠ AND THE COLOUR RIDES THE **AUTHORITY PEAK**,
+	# not `_gimbal_lost` and not the blind lamp — the first time in this family that the latch is not
+	# the colour. Its reason is the slice: on this wire every arm above 0.001 m² HITS, and the arm
+	# that is in the deepest trouble is the one flying at 100 % of `a_max` while still hitting. A
+	# latch-coloured headline would paint that cell calm, which is exactly the mistake slice 44 made.
+	if _seeker_detect_view:
+		lbl = _horizon_verdict_label(_detect_blind,
+				str(_fidelity.get("seeker_detect", "none")) == "snr", _authority_peak)
+		col = Color(1.00, 0.62, 0.30) if _authority_peak >= 0.999 else Color(0.45, 0.90, 1.00)
+	elif _gimbal_servo_view:
 		lbl = _head_servo_verdict_label(_gimbal_lost, _radome_qpeak > 0.5,
 				str(_fidelity.get("head_servo", "first_order")) == "second_order")
 		col = Color(1.00, 0.62, 0.30) if _gimbal_lost else Color(0.45, 0.90, 1.00)
@@ -2823,7 +3010,15 @@ func _draw_airframe3d_hud() -> void:
 	# DEMAND-vs-CAP pair reads against a rate limit AUTHORED WIDE HERE PRECISELY SO IT NEVER BINDS —
 	# every number true, the verdict "servo FREE", and the INERTIA that is ringing the missile never
 	# mentioned. Slice 35's own invisible-slice failure mode, pointed back at slice 35's own HUD.
-	if _gimbal_servo_view:
+	# SLICE 46 — THE DETECTION HORIZON, checked FIRST here too and for the reason the two chains must
+	# ALWAYS agree. `gimbal_rate_view` is the block that would otherwise take this wire, and its
+	# DEMAND-vs-CAP pair reads against a servo AUTHORED WIDE AT 240 °/s PRECISELY SO IT NEVER BINDS
+	# (at the shipped 30 °/s it binds for 205 frames of the acquisition slew; gate 2 measured
+	# 60/120/240 °/s to give identical misses, locks and authority to four decimals) — every number true, the verdict "servo FREE", and the
+	# LINK BUDGET that is holding the seeker blind for the first 6 s never mentioned.
+	if _seeker_detect_view:
+		_draw_horizon_hud_lines(vp)
+	elif _gimbal_servo_view:
 		_draw_head_servo_hud_lines(vp)
 	elif _gimbal_gyro_view:
 		_draw_head_gyro_hud_lines(vp)
@@ -3118,6 +3313,14 @@ func _update_fid_btn() -> void:
 			# steering/atmosphere — the rung IS the lesson, so no visibility branch.
 			_prop_btn.visible = true
 			_prop_btn.text = "seeker: %s" % str(_fidelity.get("seeker_axes", "?"))
+		"seeker_detect":
+			# Slice-46: the button IS the detection cycler (none ↔ snr). The label says DETECT and not
+			# `seeker`, because slice 25's arm above already owns that word on the same button and a
+			# student cycling one would read the other's name. A NEW `_fid_kind` value, which is free
+			# here for slice 37's reason: no drawing gate keys off `_fid_kind` (the 3-D view keys off
+			# `_mode`), so a new kind needs a label arm and nothing else.
+			_prop_btn.visible = true
+			_prop_btn.text = "detect: %s" % str(_fidelity.get("seeker_detect", "?"))
 		"head_servo":
 			# ⭐⭐ SLICE 40: the button IS the servo-ORDER cycler (first_order ↔ second_order), and this
 			# is the SECOND SITE of the button's restoration — the same shape as the `"seeker_head"`
@@ -3428,6 +3631,33 @@ func _on_seeker_axes_pressed() -> void:
 	var next: String = SEEKER_AXES_RUNGS[(i + 1) % SEEKER_AXES_RUNGS.size()] if i >= 0 else "pitch_plane"
 	_fidelity["seeker_axes"] = next
 	_client.send({"type": "set_fidelity", "key": "seeker_axes", "value": next})
+	_render_badge()
+	_update_fid_btn()
+
+func _on_seeker_detect_pressed() -> void:
+	# ⭐⭐ SLICE 46 — THE SEEKER'S DETECTION HORIZON, the third rung on the shared button in this family
+	# (37's frame and 40's order were the first two). Both rungs fly the SAME head, the SAME window,
+	# the SAME 30 °/s servo, the SAME seed and the SAME target; the ONLY variable is whether the
+	# availability verdict also consults the LINK BUDGET. Under `snr` (the default on this wire — the
+	# showcase OPENS on the disease) a 0.005 m² target is under the receiver's threshold until 2148 m,
+	# so the tracker cannot initialise until 5.95 s of an 8.9 s flight and the airframe then spends
+	# 100.00 % of `a_max` making up the difference. Press once → `none` is slices 11–45's angle-only
+	# seeker, which sees the target from tick 1 and cruises at 19.10 %.
+	# ⚠⚠ IT STILL HITS ON BOTH RUNGS — AND THE GATED ARM HITS *CLOSER* (0.1167 m against 0.2237 m).
+	# That is not a curiosity, it is the slice: the miss is the metric slice 44 read when it killed
+	# this physics, and across this button it moves the WRONG WAY. The number that moves is the
+	# AUTHORITY gauge, which is why that is the headline.
+	# ⚠ Class 4c — PHYSICS-CHANGING, NO RNG (the threshold is deterministic, there is no Pd draw), so
+	# there is no draw topology to flip and it is LIVE-SETTABLE with NO set_fidelity guard, unlike
+	# :cfar/:scan. The tracker's STATE carries across the press: a lock already made is not undone by
+	# turning the horizon off, and turning it on mid-flight cannot un-lock a tracker that has
+	# initialised — `seek_init` is one-way, which the core owns and the client must not model.
+	# The client owns the displayed rung (badge + button locally; the server applies it next tick).
+	var cur := str(_fidelity.get("seeker_detect", "none"))
+	var i := SEEKER_DETECT_RUNGS.find(cur)
+	var next: String = SEEKER_DETECT_RUNGS[(i + 1) % SEEKER_DETECT_RUNGS.size()] if i >= 0 else "none"
+	_fidelity["seeker_detect"] = next
+	_client.send({"type": "set_fidelity", "key": "seeker_detect", "value": next})
 	_render_badge()
 	_update_fid_btn()
 
@@ -3774,6 +4004,8 @@ func _on_reset_pressed() -> void:
 	# into a re-launch that opens on the LAUNCH TURN, which is itself the largest slew demand in the
 	# engagement (gate 0 §0.4). A stale reading there would be indistinguishable from a real one.
 	_servo_duty = 0.0
+	_authority_peak = 0.0               # slice-46: the budget gauge, for the same reason
+	_detect_blind = false               # slice-46: the RANGE half of the availability latch
 	# Slice-36: BOTH of this slice's instruments are cleared, and each for its own reason — this is the
 	# THIRD time the family has had to fix a stale-instrument-across-reset defect, so it is done at the
 	# same time as the code that creates it rather than found later.

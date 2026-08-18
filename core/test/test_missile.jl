@@ -8167,9 +8167,17 @@ end
             # they author it WIDE (120 °/s) as an ISOLATION, because at slice 37's 40 the limit binds
             # 20–53 % of band ticks on the lightly damped arms AND ATTENUATES THE RING. The servo is
             # AUTHORED there, not a slider (their ONE knob is the gimbal's damping ratio).
+            # ⚠ SLICE 46 WIDENED IT A FIFTH TIME AND THE ASSERT CAUGHT IT AGAIN — and this one is
+            # the cleanest illustration yet of why the list is a SET and not a count. Slice 46's wire
+            # is a slice-36-shaped head (a window, no glass) plus the SEVEN detect keys, and it
+            # authors the servo WIDE (240 °/s) for exactly slice 40's reason: at the shipped 30 °/s
+            # the rate limit binds for 205 frames of the ACQUISITION SLEW at the lock instant, which
+            # is slice 34/32's narrow-window failure re-run — and gate 2 measured 60/120/240 °/s to
+            # give identical misses, locks and authority to four decimals, so the isolation is FREE.
             @test carriers == ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml",
                                "slice37_frame.yaml", "slice38_head_gyro.yaml",
-                               "slice40_heavy.yaml", "slice40_resonance.yaml"]
+                               "slice40_heavy.yaml", "slice40_resonance.yaml",
+                               "slice46_horizon.yaml"]
         end
     end
 
@@ -8237,7 +8245,12 @@ end
                              "slice38_head_gyro.yaml",
                              # ⚠ SLICE 40: two wires, each a slice-37 wire plus a rung, each carrying
                              # slice 35's authored servo — WIDE, as an isolation.
-                             "slice40_heavy.yaml", "slice40_resonance.yaml"]
+                             "slice40_heavy.yaml", "slice40_resonance.yaml",
+                             # ⚠ SLICE 46: a head with a window and no glass, plus the detect keys,
+                             # carrying the servo AUTHORED WIDE as an isolation. Same remedy, same
+                             # ordering proof — `seeker_detect_view` is checked FIRST in the client
+                             # and `slice46_ui_test.gd`'s own mirror is what proves it.
+                             "slice46_horizon.yaml"]
             for f in readdir(base)
                 endswith(f, ".yaml") || continue
                 f in expected_rate && continue

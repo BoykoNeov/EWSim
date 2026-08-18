@@ -1,0 +1,267 @@
+# slice46_horizon — THE SEEKER'S DETECTION HORIZON: A LATE LOCK IS PAID FOR IN MANOEUVRE AUTHORITY,
+# AND THE MISS CANNOT SHOW IT (HANDOFF §11 Tier-A, slice 46 gate 3). The first COMPONENT-FIDELITY
+# slice of the project — the hardware ships with the regime where it bites AND the measured regime
+# where it does not, and the null result is part of the documentation rather than a reason not to
+# build (`docs/DEFERRALS.md` §"THE 2026-08-18 RE-VERDICT").
+#
+# ⭐⭐ WHAT IS NEW. Slices 32/34 modelled "can the seeker see it?" as an ANGLE question alone: inside
+# the detector window there is a measurement, outside it there is none, at any range. This wire gives
+# the seeker a LINK BUDGET, so there is a RANGE past which the echo is under the receiver's threshold
+# and there is no measurement AT WHATEVER ANGLE. Two physical ways to lose a target, one availability
+# verdict — and the HUD carries two lamps so a student can see WHICH one ran out.
+#
+# ⭐⭐⭐ AND THE TWO HALVES ARE ONE DESIGN VARIABLE PULLING OPPOSITE WAYS. The detector window IS the
+# beamwidth; the beamwidth implies the aperture; the aperture is the gain; the gain is the reach. So
+#
+#     R_acq · fov = CONSTANT   (80789.2051 m·deg on this seeker, to every digit over a 4× window)
+#
+# — buy 2° more coverage and you have sold that much range, exactly. Slice 32's "widen the window,
+# it's free" stops being free the moment the seeker has to DETECT rather than merely LOOK.
+#
+# > THE LESSON, IN ONE SENTENCE. A seeker that detects its target later still hits — right up until
+# > the airframe runs out of the manoeuvre authority that made "still hits" true, and the MISS COLUMN
+# > SHOWS NEITHER THE SPENDING NOR THE LIMIT.
+#
+# ⚠⚠ WHICH IS WHY THIS SCENARIO'S HEADLINE NUMBER IS NOT THE MISS, AND THAT IS A CORRECTION PAID FOR
+# IN A DEAD SLICE. Slice 44 built this exact physics at gate 0, read MISS across the whole free
+# interval — 0.2237 / 0.3491 / 0.3267 / 0.2514 m — concluded "a delayed acquisition costs nothing",
+# and killed the component. Its own pre-registered authority column, run afterwards, showed the
+# airframe's spending rising steeply across those same rows while the miss did not move. ⇒ THE HUD's
+# headline and the verifier's assertions are **peak `a_cmd` after lock as a percentage of `a_max`,
+# read OUTSIDE the endgame** and **hold %**. A verifier reading miss would report a component that
+# does nothing, which is how this physics got killed once already. ⚠ The exact figures slice 44
+# quoted are corrected below — they were read through the r → 0 endgame — and the effect survives
+# the correction.
+#
+# ⭐ THE SLIDER IS THE **TARGET's RCS**, and that is the honest lever rather than a convenience: the
+# horizon goes as σ^¼ (16× the target buys 2× the reach), the seeker is FIXED hardware, and what a
+# student is actually asking is *"how small a target can this missile's seeker still find in time?"*
+# MEASURED on this wire (launch range 6436.7 m, window 10°, servo 240 °/s), with the authority read
+# **GATED AT r > 200 m** — see the correction below, which is this slice's own catch on slice 44:
+#
+#     rcs        R_acq    lock (s)   peak a_cmd / a_max     hold %     miss (m)
+#     (rung off)     —      0.0010          3.10 %          100.00       0.2237
+#     1.00000    8078.9     0.0010          3.10 %          100.00       0.2237   <- INERT: identical
+#     0.10000    4543.1     2.6140          3.71 %          100.00       0.2783
+#     0.01000    2554.8     5.3800          8.31 %          100.00       0.0858
+#     0.00500    2148.3     5.9500         10.45 %          100.00       0.1167
+#     0.00200    1708.5     6.5700         16.41 %          100.00       0.0453
+#     0.00100    1436.7     6.9560         23.55 %          100.00       0.9874   <- DEFAULT
+#     0.00070    1314.1     7.1310         59.20 %          100.00       7.6535
+#     0.00050    1208.1     7.2830        100.00 %          100.00      56.7497
+#     0.00030    1063.2     7.4930        100.00 %          100.00     118.6999
+#     0.00020     960.8     7.6430        100.00 %           89.83     158.4912
+#     0.00010     807.9     7.8700        100.00 %           62.85     210.7094
+#
+# ⭐⭐ READ THE MISS COLUMN ALONE AND NOTHING HAPPENS OVER A **10 000×** RANGE OF TARGET SIZE — and
+# it is worse than flat, it is **NON-MONOTONE**: 0.2237 -> 0.2783 -> 0.0858 -> 0.1167 -> 0.0453 ->
+# 0.9874, up and down by 20× with no relation to a lock instant that is rising strictly the whole
+# way. A slider judged on the headline metric would look like NOISE. Read the authority column and
+# the engagement is legible: 3.10 -> 23.55 % (7.6×) while every one of those arms HITS, then 59 %,
+# then PINNED — and only after it has been pinned for half a decade of RCS does the track finally
+# start to go (hold 100 -> 62.85 %) and the miss open. **The limit that ends the free interval is
+# not the seeker's, it is the AIRFRAME's, and the seeker is what spends it.**
+#
+# ⚠⚠ A CORRECTION TO SLICE 44 §VII.1, FOUND BY THIS SLICE's OWN VERIFIER AND WORTH MORE THAN THE
+# TABLE: **its "the last free cell spends exactly 100.00 % of `a_max`" IS AN r -> 0 ENDGAME READ.**
+# Ungated, the 0.005 m² cell peaks at 100.00 %; gated at r > 200 m the same cell spends **10.45 %**,
+# and the rung-off arm reads 19.10 % ungated against 3.10 % gated. The endgame spikes every guidance
+# quantity ([[ewsim-missile-verifier-sampling]] — the same hazard in a NEW quantity), so the figure
+# must be the gated one. ⭐ **THE EFFECT SURVIVES AND IS CLEANER FOR IT**: gated, the authority is
+# strictly monotone over the whole ladder and reaches the ceiling at 0.0005 m² for a reason that is
+# not the endgame. ⚠ Never quote the ungated 100.00 %.
+#
+# ⚠ THE DEFAULT OPENS ON THE DISEASE (slice 35/36's precedent): 0.001 m² is the LAST cell that
+# still hits cleanly (0.99 m) and it is already spending **7.6×** the authority of a seeker with no
+# horizon at all — one notch above the cliff, so the slider teaches in BOTH directions. Nothing on
+# screen looks wrong until you read the gauge.
+# ⚠ AND THE **TOP** OF THE SLIDER IS WHERE THE COMPONENT STOPS EXISTING, which is the honest way to
+# ship a null: at 1.0 m² the horizon is 8078.9 m against a 6436.7 m launch (ratio 1.255), so the
+# missile is launched INSIDE its own seeker's horizon and the gate is byte-identically inert. That
+# is slice 44's kill, preserved as the right-hand end of a slider instead of as a reason not to build:
+# ⭐⭐ A DETECTION GATE CAN ONLY PRICE A DESIGN VARIABLE IF THE ENGAGEMENT IS LAUNCHED OUTSIDE THE
+# SENSOR'S HORIZON — a property of the WIRE, not of the seeker. This wire reaches "outside" by
+# SHRINKING THE TARGET, because it cannot reach it by moving the launch: an unpowered missile with
+# zero drag area at 3000 m needs ≥ 28 s to fly 20 km and gravity alone drops it 3845 m into the
+# ground first (slice 44 §V). A MIDCOURSE PHASE is its own slice, and it is the search-pattern
+# family's last remaining unblocker.
+#
+# ⚠⚠ THE SERVO IS AUTHORED AT 240 °/s AND THAT IS AN ISOLATION, MEASURED TWICE AND NOT PREFERRED.
+# Slice 44 §VII.2 found the narrow-window acquisition failures of 32/34 to be SLICE 35's slew rate,
+# not the window. Re-flown here on the RCS axis: at the arc's shipped 8 °/s the rows below 0.003 m²
+# break for the SERVO's reason (hold collapses to 15.4 % at 0.002 m² and the miss opens to 201.6 m)
+# while at 30 the identical arms hold and hit — from IDENTICAL lock instants, because the servo
+# changes nothing about ACQUIRING and everything about KEEPING.
+# ⚠ AND 30 °/s WAS NOT ENOUGH, WHICH THE VERIFIER CAUGHT AND NOT THE AUTHOR: the rate limit still
+# binds 205 frames there, all of them in a 1948–2094 m window — the ACQUISITION SLEW at the moment
+# of lock. It goes to zero at 60 and stays zero at 120 and 240. ⭐ **THE ISOLATION IS FREE, AND THAT
+# IS THE MEASUREMENT THAT LICENSES IT**: at 60 / 120 / 240 °/s every miss, every lock instant and
+# every authority figure in the table above is IDENTICAL TO FOUR DECIMALS — the fast servo removes
+# slice 35's limit from the answer and changes nothing else. 240 is authored so that `head_rate_sat`
+# is 0 on EVERY arm including the broken ones, which is what lets the floor arm's track loss be
+# attributed to the range gate rather than to a head chasing a runaway LOS.
+# ⚠ The 8-vs-30 pair ships as a TOOTH in `test_missile.jl`, never as a second slider (convention 9,
+# and slice 36's `cross_speed_mps` precedent for exactly this).
+#
+# ⚠ THE HANDOVER IS PERFECT (no `gimbal_handover_err_deg`), also an isolation: with the head cued onto
+# the LOS the angle gate never breaks anywhere in the domain, so every verdict on this wire belongs to
+# the RANGE half. Slice 36's basket is a different lesson and is not stacked here.
+#
+# ⚠ NO GLASS ON THIS WIRE (the slice-36 posture, and its consequence for the client is the same): a
+# radome would put slice 26's parasitic loop beside a lesson about detection, and `radome_view` would
+# select the wrong HUD. The `seeker_detect_view` marker raised by `detect_pt_w` is what selects this
+# slice's own branch and keeps the button on `seeker_detect` rather than falling through to slice 25's
+# `seeker_axes` cycler (whose other position leaves the horizon live beside an unrelated 2000 m miss).
+#
+# ⚠ THE FIDELITY BUTTON IS THE A/B AND IT IS THE POINT OF THE RUNG: `seeker_detect` cycles
+# `none ↔ snr`. Pressed at the default the same missile stops needing a horizon at all — it locks on
+# tick 1 and cruises at 19.10 % of `a_max`. One press, one number, and the number is not the miss.
+# Class 4c (physics-changing, NO RNG — the threshold is deterministic, there is no `Pd` draw), so it
+# is live-settable with no `set_fidelity` guard and the draw topology is untouched.
+#
+# NAMED APPROXIMATIONS (§1): a FREE-SPACE link budget (no two-ray, no atmosphere, no clutter — the
+# `propagation` ladder exists but the SEEKER does not read it, a named deferral); a DETERMINISTIC
+# threshold (no `Pd`/`Pfa` draw and no fluctuating target — a Swerling model is a named deferral, and
+# it would be the first thing on this wire to need slice 13's draw-topology shape); a MONOSTATIC
+# active seeker (no semi-active illuminator, no home-on-jam); the aperture IMPLIED BY THE WINDOW with
+# a uniform-illumination η (a real radome/antenna has a taper that varies across the scan); ONE
+# scalar RCS with no aspect dependence (`rcs_m2` is the target's own key, shared with the radar path);
+# the gate on AVAILABILITY and NOT on the head's SLEW (before the horizon opens the head is CUED
+# rather than tracking — modelling the cue and the search that follows a bad one is the next slice);
+# plus everything 23–36 named, unchanged, EXCEPT the radome family, absent from this wire entirely.
+#
+# UNITS (§1 trifecta): pos/vel SI; angles rad INSIDE the core; `gimbal_*_deg` in DEGREES and
+# `gimbal_rate_dps` in DEGREES PER SECOND at the wire boundary; `detect_pt_w` WATTS, `detect_freq_hz`
+# HERTZ, `detect_tint_s` SECONDS, `detect_nf_db` / `detect_loss_db` / `detect_snr_min_db` DECIBELS,
+# `detect_eta` DIMENSIONLESS in (0,1]; `rcs_m2` in SQUARE METRES; `seeker_r_acq_m` /
+# `seeker_range_margin_m` / `seeker_aperture_m` in METRES and the margin SIGNED (the sign is the
+# verdict); `seeker_snr_db` in dB, FLOORED at −120 (convention 6 — `lin2db(0)` is −Inf). σ_seek in
+# RADIANS; `cross_speed_mps` in m/s and SIGNED. dt = 1e-3 / emit_every = 16.
+name: slice46_horizon
+seed: 32
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # SIX keys, ONE of them the button. Held to slice 36/44's wire to the digit — `airframe` at
+  # :six_dof (the head and the horizon are both gated on the LIVE rung, never on key presence — the
+  # slice-21 `_atm_on` latent-bug class), `seeker_axes` at :az_el (a two-angle seeker is what has a
+  # look angle at all, and the loader REFUSES the gimbal and detect keys without it), `seeker` at
+  # :filtered, `autopilot` :alpha, `guidance` :pn. `steering` is OMITTED (the loader default IS
+  # :skid_to_turn).
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+  # ⭐ THE RUNG, AND THE SHOWCASE OPENS WITH IT **ON** — the disease first (slice 35/36's precedent).
+  # Pressing the button is the cure, and the cure is a seeker that can see forever.
+  seeker_detect: snr
+
+entities:
+  # The interceptor — slices 23–36's plant and launch condition, UNCHANGED to the digit, so that
+  # anything that moves between this wire and slice 36's is the link budget and the missing glass and
+  # nothing else. n_pn = 8 is slice 27's, AUTHORED and NEVER A KNOB (26–36 all disqualified it).
+  #
+  # THE SEEKER's SEVEN NEW NUMBERS — a Ku-band active seeker of the small air-to-air class, authored
+  # from that class and NOT tuned to place a crossover (slice 44 §0.7 wrote them down BEFORE any
+  # flight, and they are unchanged here):
+  #   detect_pt_w  = 200 W        peak transmit power. The ANCHOR key: the whole budget is
+  #                               presence-gated on it, and the loader refuses the other six without.
+  #   detect_freq_hz = 16 GHz     Ku band ⇒ λ = 18.74 mm ⇒ the 10° window implies a 5.48 cm aperture,
+  #                               which is a dish that fits in this airframe (`seeker_aperture_m`
+  #                               ships it so a student can check that their authored seeker is not
+  #                               physically absurd — at 2° it would be 54 cm).
+  #   detect_tint_s = 10 ms       coherent integration ⇒ B = 100 Hz. ⚠ REACH IS BOUGHT HERE AND IN
+  #                               THE APERTURE, not with the transmitter: the range goes as the ¼
+  #                               power, so 16× the power is only 2× the range.
+  #   detect_nf_db = 4, detect_loss_db = 5, detect_eta = 0.6, detect_snr_min_db = 10.
+  # ⚠ EVERY ONE OF THE SEVEN IS READ EVERY TICK THE RUNG IS LIVE, and `test_radar_eq.jl` carries the
+  # slice-19 tripwire asserting each MOVES the horizon. None of them is a knob here — convention 9,
+  # and the slider that IS live is the one a student is actually asking about.
+  #
+  # THE HEAD (slices 34–36, unchanged): τ = 0.05 AUTHORED; stop 30° AUTHORED and never binding;
+  # window 10° AUTHORED — ⚠⚠ AND IT IS NOW A **TWO-SIDED** NUMBER FOR THE FIRST TIME IN THIS ARC.
+  # Slices 32–36 authored a window against the tracking error alone and "wider is safer" was free.
+  # Here widening it SHRINKS THE HORIZON one-for-one (`R_acq · fov` is constant), so 10° is a
+  # BALANCE: wide enough that the perfect handover never loses the angle gate anywhere in the RCS
+  # domain (hold ≥ 99.9 % on every cell above 0.001 m²), narrow enough that the horizon is 8078.9 m
+  # and the whole lesson fits inside a 6436.7 m engagement.
+  #   gimbal_rate_dps = 240.0 — ⚠ THE ISOLATION, measured TWICE (see the header): at the arc's 8 °/s
+  #     the bottom of the RCS slider breaks for SLICE 35's reason, and even at 30 the limit still
+  #     binds 205 frames on the ACQUISITION SLEW. At 60/120/240 it never binds and NOTHING ELSE
+  #     MOVES — identical misses, locks and authority to four decimals — so the isolation costs
+  #     this wire nothing and buys it the right to attribute every verdict to the range gate.
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               gimbal_tau_s: 0.05, gimbal_stop_deg: 30.0, gimbal_fov_deg: 10.0,
+               gimbal_rate_dps: 240.0,
+               detect_pt_w: 200.0, detect_freq_hz: 16.0e9, detect_tint_s: 0.010,
+               detect_nf_db: 4.0, detect_loss_db: 5.0, detect_eta: 0.6,
+               detect_snr_min_db: 10.0}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # THE TARGET, AND ITS RCS IS THE SLIDER. Same start point as 23–36 (cross-range +Y = 2000 m off the
+  # x–z plane) at the REVERSED crossing slice 43/44 fly (vy = −200), which holds the body-frame LOS
+  # nearly static — a 2.2° swing against the +200 wire's 33.2° excursion — so the head sits quietly on
+  # its cue and the angle gate is provably not what any verdict here rests on.
+  # ⚠ `cross_speed_mps` IS AUTHORED AND IS NOT A KNOB (slice 34/35/36's posture): it moves the LEAD,
+  # i.e. slice 32's whole axis, which is what convention 9 forbids beside this lesson.
+  # ⚠⚠ AND THE RCS IS **THE TARGET's OWN KEY**, shared with the radar path since slice 1 — the seeker
+  # READS it rather than mirroring it. One target with two RCS numbers that can silently disagree is
+  # convention 7's exact failure, and this is the first time the two paths have had to share one.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 2000.0, 4200.0]
+    vel: [0.0, -200.0, 0.0]
+    target: {rcs_m2: 0.001, cross_speed_mps: -200.0}
+
+knobs:
+  # EXACTLY ONE LIVE KNOB beside ONE fidelity button (the 32/34/37/40 shape). BOTH ENDPOINTS ARE
+  # MEASURED ON THIS WIRE AND BOTH HAVE REASONS (slice 26's post-commit discipline):
+  #   CEILING 1.0 m²: where the COMPONENT STOPS EXISTING — R_acq 8078.9 m against a 6436.7 m launch,
+  #     so the gate never binds and the arm is byte-identical to pressing the button. There is
+  #     nothing above it to reach, and the fact that the top of the slider is a null is the slice's
+  #     own honesty rather than a gap.
+  #   FLOOR 0.0001 m²: R_acq 807.9 m, hold 62.85 %, miss 210.7 m — deep in the broken region, and
+  #     the ONLY part of the domain where the track is actually lost. ⚠ The failure region's
+  #     METRES are not quoted as a claim anywhere: slice 44 §VII.3 measured failure magnitudes walking
+  #     320 → 627 m across a 4× range of `dt` while the VERDICT held, so once the track is gone the
+  #     miss is sampling a divergence rather than measuring one. The verifier asserts verdicts there.
+  #   LOG, because the horizon goes as σ^¼ and the interesting structure spans four decades — a
+  #     linear slider would spend 99 % of its travel in the inert region (the slice-1/18 `rcs_m2`
+  #     precedent, same key, same reason).
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED AND THE VERIFIER ASSERTS THEIR ABSENCE: the seven
+  # `detect_*` keys (they are the SEEKER, and a student who can rebuild the seeker mid-flight is
+  # dragging two lessons at once — the honest A/B for hardware is a second scenario); `gimbal_fov_deg`
+  # (⚠⚠ it is now TWO-SIDED — it moves the window AND the horizon in opposite directions, so a slider
+  # on it would show a NON-MONOTONE composite and reverse the lesson, which is this project's
+  # standing disqualifier); `gimbal_rate_dps` (the measured ISOLATION above — a slider on it would put
+  # slice 35's limit back inside this lesson); `gimbal_tau_s` (CONFOUNDED, slice 34); the whole
+  # `radome_*` family (there is NO GLASS on this wire — dead knobs); `cross_speed_mps` (slice 32's
+  # axis); `n_pn`, `rho`, `af_alpha_max`, `sigma_seek`; `elevation_deg` (the slice-19 DEAD-knob class).
+  #
+  # ⚠ THE LABEL IS LENGTH-BUDGETED (~110 characters — slice 32's shots paid for this): knob labels are
+  # drawn full-width in the UI CanvasLayer and paint OVER the `_draw` HUD column at `vp.x − 430`.
+  - {target: tgt1, key: rcs_m2, min: 0.0001, max: 1.0, log: true,
+     label: "TARGET RCS (m²) — drag DOWN and watch the AUTHORITY gauge, not the miss"}

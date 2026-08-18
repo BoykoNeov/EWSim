@@ -904,6 +904,29 @@ function _airframe_view_info(w::World)
     # never be raised on a wire with no servo to talk about; slices 1–39 author no such key ⇒ they
     # are byte-identical and their markers are untouched.
     haskey(w.fidelity, :head_servo) && (info[:gimbal_servo_view] = true)
+    # ⭐⭐ SLICE 46 — THE DETECTION HORIZON, the 10th marker of this family, and it is the THIRD that
+    # exists to **UN-DROP** the shared button (37's and 40's were the first two). `:seeker_detect` is a
+    # genuine two-rung fidelity and on this wire the button IS half the lesson — press it and the same
+    # missile stops needing a horizon: it locks on tick 1 and cruises at 19.10 % of `a_max` where the
+    # gated arm is pinned at 100.00 %.
+    #
+    # ⚠⚠ AND THE MARKER-HOLE CHECK COMES BACK **POSITIVE ON BOTH HALVES**, which is slice 36's
+    # answer rather than slice 35's. (1) THE BUTTON: this wire authors NO GLASS (a radome would put
+    # slice 26's parasitic loop beside a lesson about detection), so `radome_view` is absent, and
+    # `scenario.jl` refuses `seeker_fov_deg` beside a head so `seeker_fov_view` is absent too — both
+    # of the client's drop branches fail, its dispatch falls through to slice 25's `seeker_axes`
+    # cycler, and the button returns as the WRONG rung (whose other position leaves the horizon live
+    # beside slice 25's unrelated 2000 m blind miss). (2) THE HUD: `gimbal_rate_view` IS raised here,
+    # so without this branch slice 35's block would draw a DEMAND-vs-CAP pair against a servo AUTHORED
+    # AT 30 °/s PRECISELY SO IT NEVER BINDS — every number true, the verdict "servo free", and the
+    # slice invisible. The ~12th occurrence of the stale-readout class, in its worst form again.
+    #
+    # ⚠ GATED ON THE **COMP KEY**, not on the fidelity — slice 38's choice rather than 37/40's, and
+    # for slice 38's reason: what distinguishes a slice-46 wire is the BUDGET (seven comp keys), and
+    # the rung is refused at load without one anyway, so the key is the earlier and stronger gate. A
+    # value guard on `:snr` would additionally hide the button on the arm a student presses it FROM.
+    any(haskey(w.entities[m].comp, :detect_pt_w) for m in missiles) &&
+        (info[:seeker_detect_view] = true)
     return info
 end
 
@@ -1445,6 +1468,26 @@ function decide!(a::Autopilot, w::World)
     tel["$sid.range_rate"]    = _finite_coord(range_rate(rel_pos, rel_vel))  # signed (neg = closing)
     tel["$sid.a_demand"]      = _finite(a_demand)              # PRE-clamp demand (the saturation tell)
     tel["$sid.saturated"]     = a_demand > a_max ? 1.0 : 0.0  # g-limit binding? (the Lesson-2 flag)
+    # ⭐⭐ SLICE 46 — THE AUTHORITY GAUGE, AND IT IS THE ONE READOUT THAT SLICE'S LESSON CANNOT BE
+    # SEEN WITHOUT. `saturated` above is a BINARY on the PRE-clamp demand; this is the CONTINUOUS
+    # fraction of the airframe's lateral budget the POST-clamp command is spending. Slice 44 measured
+    # a delayed acquisition costing 19.10 → 14.54 → 34.66 → **100.00 %** of `a_max` across four rows
+    # whose MISS was flat at 0.22–0.35 m, and concluded from the miss that the delay was free —
+    # a component killed by the absence of this number. ⭐ A ratio and not the two numbers, because
+    # `a_max` is a comp key that is nowhere on the wire and the CLIENT MAY NOT FORM PHYSICS
+    # (convention 13): the quantity the lesson is about is the FRACTION, so the core owns it.
+    # ⚠⚠ GATED ON THE **BUDGET** AND **NOT** ON THE RUNG, which is the opposite of every other
+    # slice-46 readout and is a decision with a reason rather than an oversight. The seeker's own keys
+    # describe a HORIZON, which does not exist on `:none`, so they are rung-gated (the never-stale
+    # discipline of 34/38). This one describes what the AIRFRAME IS SPENDING, which exists on both
+    # rungs — and the whole showcase is a comparison ACROSS the button, so a rung-gated gauge would
+    # go blank on exactly the arm the comparison needs (slice 40's reason for shipping `gimbal_zeta`
+    # on both rungs, in a new currency). Every slice-9..45 frame is still byte-identical: no wire
+    # before this one authors a link budget.
+    # ⚠ `a_max > 0` guard — `a_max` is authored and validated positive at load, but the division is
+    # on the JSON path (convention 6) and a programmatic world can build anything.
+    haskey(c, :detect_pt_w) &&
+        (tel["$sid.a_cmd_frac"] = _finite(a_max > 0 ? _norm3(a_cmd) / a_max : 0.0))
     tel["$sid.los_rate"]      = _finite(_norm3(los_rate(rel_pos, rel_vel)))  # ‖ω‖ (the PN driver)
     tel["$sid.closing_speed"] = _finite_coord(-range_rate(rel_pos, rel_vel))  # Vc (POSITIVE closing)
     # Slice-14 salvo diagnostics — SHIPPED WHENEVER A COORDINATOR IS PRESENT (`salvo_t_d` published),
