@@ -778,6 +778,11 @@ fast path from body rate to deflection. **Where that peak lands, a second and mu
 through it.** Two effects of one parameter, opposite in sign, in different frequency bands — which is
 what a non-monotone knob always turns out to be.
 
+⚠⚠ **THE TWO HALVES OF THAT SENTENCE DO NOT HAVE THE SAME STANDING, AND §0.2's OWN DISCIPLINE SAYS
+SO** (advisor). The phase half is **MEASURED** (§I.5's table, taken before any of this was flown). The
+`k_q` fast-path half was **INFERRED** — a hypothesis wearing a measurement's clothes. It is put to a
+probe in §III.12 rather than left standing.
+
 ⚠ **AND `ζ_a = 0.1` IS AT THE EDGE OF HONEST FOR A FIN ACTUATOR ANYWAY** (real fin servos run
 ζ ≈ 0.5–0.7). The divergence is real, but it is not a design a wire should be authored at, and the
 shipped domain must exclude it rather than showcase it.
@@ -852,4 +857,86 @@ The threshold moves only **~3 %**. At a fixed design the same actuator changes t
 ⇒ The sentence the slice can carry: *an actuator's phase lag is free while you have margin and
 ruinous when you do not* — and the shipped wire must be authored in the narrow window where that is
 visible (§III.7: dead at −0.085, dead at −0.10, live between).
+
+
+## §III.11 THE 60 Hz COLUMN COMPLETED — AND AN APPARENT COINCIDENCE THAT IS NOT ONE
+
+⚠ **THE 60 Hz LADDER WAS TWO CELLS SHORTER THAN THE CONTROL'S**, so its 9.33× step ratio was computed
+over a different ladder from `:instant`'s 4.28× (advisor). Filled: `R = −0.085` → 0.0174495,
+`R = −0.088` → 0.0191260. **Every column now spans the same nine slopes, and nothing in §III.9 moves**
+— the step-ratio cells, the three crossing levels and the ordering are all unchanged.
+
+⚠ **AND A SIX-FIGURE COINCIDENCE WAS CHASED RATHER THAN QUOTED.** At `R = −0.085` the 60 Hz and 20 Hz
+cells printed *the same six figures* (0.0174495), which for two different actuators is either luck or
+a probe reading the same thing twice. Re-run at twelve:
+
+| arm @ R = −0.085 | rms_r (12 sig. figs.) |
+|---|---|
+| `:instant` | 0.0174387438258 |
+| 60 Hz, ζ 0.7 | 0.0174494566785 |
+| 20 Hz, ζ 0.7 | 0.0174494**824393** |
+
+⭐ **They part at the EIGHTH figure — luck, not a bug — and the check turns the §III.7 claim UP, not
+down: off the shoulder a 20 Hz and a 60 Hz actuator are indistinguishable from each other to seven
+figures, and both sit 0.06 % from an ideal one.** "Free" is not a rounding.
+
+## ⭐⭐ §III.12 THE `k_q` FAST PATH — THE INFERRED HALF OF §III.8, PUT TO A PROBE
+
+§III.8 explained the ζ_a = 0.1 divergence by the actuator's `Q = 1/(2ζ_a) = 5` resonant peak closing a
+second loop through the α autopilot's body-rate feedback `k_q`. **That half was inferred.** Probe:
+hold the diverging arm (30 Hz, ζ_a 0.1, `R = −0.09`, `delta_max = 10` so the stop cannot bound
+anything) and walk `k_q` down from its authored 0.3.
+
+| `k_q` | rms_r | miss | **actuator's own clamp (all)** | band | aero |
+|---|---|---|---|---|---|
+| **0.30 (authored)** | **NaN — band empty** | **3552.6** | **169 / 183** | 0 | 0 |
+| 0.15 | 1.45385 | 6.776 | **0 / 0** | 3706 | 3579 |
+| 0.05 | 3.21072 | 269.3 | **0 / 0** | 4030 | 3973 |
+| 0.00 | 1.55694 | **0.278** | **0 / 0** | 3708 | 2734 |
+
+⭐ **THE FAST-PATH CLAIM IS SUPPORTED, AND THE TELL IS THE CLAMP COLUMN, NOT THE rms.** At the
+authored `k_q` the actuator drives itself into its own stop 169/183 times and the missile is lost by
+3.5 km; **at `k_q` ≤ 0.15 the actuator stops hitting its stop entirely** and the flight is recovered
+(6.8 m, and 0.28 m at `k_q` = 0). ⇒ what turns a lightly-damped actuator from *ringing* into *lost*
+is the rate-feedback path, exactly as §III.8 guessed.
+
+⚠⚠ **BUT IT IS SUPPORT, NOT AN ISOLATION, AND THE FILE SAYS SO RATHER THAN ROUNDING IT UP.** `k_q` is
+not a spare parameter here: `slice26_radome.yaml`'s own header records that **`k_q` supplies ~98 % of
+the loop's damping** (slice-20 FINDING 3, same airframe). So lowering it necessarily changes the
+radome loop too — which is visible in the same table, where the **rms stays enormous and is
+NON-MONOTONE in `k_q`** (1.45 → 3.21 → 1.56). Two things move when one number does. ⇒ **the sentence
+that may be written is *the divergence travels with the `k_q` path*, not *the divergence is caused by
+the `k_q` path alone*.**
+
+## ⭐⭐ §III.13 P5 PRE-REGISTERED — THE DESIGN POINT, AND WHY A POINT FIT WOULD ANSWER THE WRONG QUESTION
+
+Written before any gain is swept, because P5 is the risk that killed slice 39 and a free choice made
+after the fact would manufacture its own answer.
+
+**1. THE DESIGN POINT IS `R = −0.09`, FIXED HERE.** §III.7 made the old wording ambiguous: at
+`R = −0.085` there is nothing to reproduce (every actuator is free to seven figures, §III.11), and at
+the authored `R = −0.10` everything is on the clamped plateau (§III.1). **The shoulder is the only
+place P5 is a real question**, and `R = −0.09` is slice 26's own published quiet cell — not a value
+chosen after seeing a result.
+
+**2. ⚠⚠ A POINT FIT WOULD ANSWER *YES* FOR A REASON THAT HAS NOTHING TO DO WITH AN ACTUATOR POLE**
+(advisor, and this is the finding of §III.13). `k_q` is body-rate feedback — it is **part of the
+radome loop itself**, supplying ~98 % of its damping (§III.12). So retuning `(k_α, k_q)` **moves
+`R_crit` directly**, and "can some gain pair reproduce the arm's rms at `R = −0.09`?" will almost
+certainly answer yes — by moving the effective margin, which is precisely the confounded-lever
+objection that disqualifies `n_pn` and `rho` as knobs on slice 26's own wire.
+
+**3. ⇒ THE BOUND IS STATED OVER THE `R_crit` **CURVE**, NOT OVER A POINT.** The question P5 must ask
+is: *can any `(k_α, k_q)` on `:instant` reproduce BOTH the arm's rms at `R = −0.09` AND its whole
+threshold ladder?* — because **a gain retune SHIFTS the threshold curve; an added actuator pole TILTS
+it.** A pole changes how the loop's phase varies WITH frequency, and the ladder samples exactly that.
+
+⭐ This is slice 38's *"`s` adds PHASE and scaling a slope cannot"* in the form this slice's own data
+can carry, and the instrument for it already exists: fit the gain pair to the arm at `R = −0.09`,
+then re-run the four-column ladder of §III.9 at that pair and compare **curves**.
+
+**4. THE FALSIFIER, NAMED IN ADVANCE.** If a fitted `(k_α, k_q)` reproduces the arm's rms at
+`R = −0.09` *and* tracks its `R_crit` across the ladder to within the 2.7–3.2 % the whole effect
+spans, **the actuator is a reparameterization and slice 41 dies here** — the same death as slice 39,
+and this file becomes the kill record.
 
