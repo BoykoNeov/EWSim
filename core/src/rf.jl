@@ -60,6 +60,104 @@ end
 snr_db_freespace(rp::RadarParams, rcs_m2::Real, range_m::Real) =
     lin2db(snr_freespace(rp, rcs_m2, range_m))
 
+# --- slice 46: THE APERTURE AND THE HORIZON (a sensor's REACH, and what it costs) -------------
+#
+# Slices 32/34 gave the missile seeker a WINDOW and stopped there: "can the seeker see it?" was
+# modelled as an ANGLE question alone. The other half is the link budget — past some range the
+# echo is under the receiver's threshold and there is no measurement at whatever angle. ⭐ AND THE
+# TWO HALVES ARE THE SAME DESIGN VARIABLE PULLING OPPOSITE WAYS: the window IS the beamwidth, the
+# beamwidth sets the aperture, the aperture sets the gain, and the gain sets the reach —
+# `R_acq · fov = constant` (MEASURED to 0.0000 % on the flying wire, `docs/plans/slice44.md`).
+# A wider window buys coverage and pays for it in range, and neither is free.
+#
+# ⚠ NOTHING HERE IS SEEKER-SPECIFIC (convention 12): any antenna has an aperture and any receiver
+# has a threshold. The SEEKER's coupling — that its detector window is the beamwidth that implies
+# its gain — is built in `missile.jl`, where the entities and the window live.
+
+"""
+    aperture_gain(beamwidth_rad; eta = 0.6) -> Float64   (linear power gain)
+
+**THE APERTURE IDENTITY.** An antenna that concentrates its power into a solid angle `Ω` has gain
+`G = η · 4π / Ω` over an isotropic radiator — the whole content of "gain" as the radar equation
+uses it. For a beam of full width `θ` on each of two axes, `Ω ≈ θ²`.
+
+`beamwidth_rad` is the **FULL** beamwidth, not the half-angle: a detector window quoted as
+"`fov` degrees off the axis" (the `seeker_in_fov` / `gimbal_fov_deg` posture) is a HALF-angle and
+enters here as `2·fov`. Getting that factor wrong is a 4× error in gain, i.e. 6 dB, i.e. 41 % in
+range — so the unit is in the argument name and the conversion is the caller's, once.
+
+`eta` is aperture efficiency (illumination taper, spillover, blockage); 0.5–0.7 is the usual range
+for a real dish and 0.6 is the conventional book value.
+
+⚠ Non-positive `beamwidth_rad` throws: a zero-width beam is an infinite gain, and convention 6
+(no Inf/NaN to JSON) is a floor downstream of a DomainError here, not a substitute for it.
+"""
+function aperture_gain(beamwidth_rad::Real; eta::Real = 0.6)
+    beamwidth_rad > 0 || throw(DomainError(beamwidth_rad, "beamwidth must be > 0"))
+    eta > 0 || throw(DomainError(eta, "aperture efficiency must be > 0"))
+    θ = Float64(beamwidth_rad)
+    return Float64(eta) * 4π / (θ * θ)
+end
+
+"""
+    aperture_diameter(freq_hz, beamwidth_rad) -> Float64   (m)
+
+The circular aperture that produces that beamwidth, from the standard uniform-illumination
+relation `θ_3dB ≈ 1.02 λ / D`. **A READOUT, not a model input** — nothing in the link budget reads
+it — but it is the number that tells a student whether the seeker they just authored would fit in
+the missile they are flying (an 18.7 mm λ at a 20° full beamwidth is a 5.4 cm dish; at 2° it is
+54 cm, which is not going in a small air-to-air airframe).
+"""
+function aperture_diameter(freq_hz::Real, beamwidth_rad::Real)
+    beamwidth_rad > 0 || throw(DomainError(beamwidth_rad, "beamwidth must be > 0"))
+    return 1.02 * wavelength(freq_hz) / Float64(beamwidth_rad)
+end
+
+"""
+    detection_range(rp::RadarParams, rcs_m2; snr_min_db = 10.0) -> Float64   (m)
+
+**THE HORIZON.** The range at which [`snr_freespace`](@ref) falls to `snr_min_db` — inside it the
+echo clears the threshold, outside it there is no detection at any angle.
+
+Because the free-space SNR is exactly `K / R⁴`, the inverse is closed-form:
+
+    K = SNR·R⁴ = snr_freespace(rp, σ, 1.0)   ⇒   R_acq = (K / snr_min)^(1/4)
+
+⭐ `K` is READ FROM `snr_freespace` AT UNIT RANGE, never re-derived (the [`burnthrough_range`](@ref)
+posture): any slip in the link budget moves the horizon in LOCKSTEP with the SNR the detector
+actually sees, instead of drifting from it. The ¼ power is the R⁴ law's revenge — **16× the
+transmit power buys 2× the range**, which is why reach is bought with aperture and integration
+rather than with a bigger transmitter.
+
+⚠ DETERMINISTIC — a hard threshold, no `Pd` draw and no RNG. That is what keeps a detection gate
+built on it in convention 4's class (c): physics-changing, draw-topology-invariant.
+"""
+function detection_range(rp::RadarParams, rcs_m2::Real; snr_min_db::Real = 10.0)
+    rcs_m2 > 0 || throw(DomainError(rcs_m2, "RCS must be > 0"))
+    K = snr_freespace(rp, rcs_m2, 1.0)          # = SNR·R⁴, the link budget's own constant
+    return (K / db2lin(snr_min_db)) ^ 0.25
+end
+
+"""
+    SEEKER_DETECT_MODES
+
+The `:seeker_detect` fidelity's rungs — **whether the seeker's availability verdict consults the
+LINK BUDGET at all** (slice 46):
+
+* `:none` — an ANGLE-ONLY seeker (slices 11–45). If the target is inside the detector window it is
+  measured, at any range. The DEFAULT, and every scenario predating this slice is bit-for-bit
+  unchanged under it — the seam's conjunct is the literal `true`.
+* `:snr`  — the echo must also clear the receiver's threshold: no measurement past
+  [`detection_range`](@ref), at whatever angle.
+
+⚠ The rung lives HERE, beside the budget it selects, for convention 7's reason (defined once,
+referenced everywhere) — `radar.jl`'s `LIVE_FIDELITY_MODES` and `scenario.jl`'s loader both name this
+tuple rather than re-spelling the pair. ⚠ Both rungs are DETERMINISTIC (a hard threshold, no `Pd`
+draw), so this is convention 4's class (c): physics-changing with NO RNG, draw-topology invariant,
+and therefore live-settable with no `set_fidelity` guard.
+"""
+const SEEKER_DETECT_MODES = (:none, :snr)
+
 # --- two_ray: flat-earth multipath + 4/3-Earth horizon (HANDOFF §10, slice 2) ---
 #
 # The second rung of the `propagation` fidelity ladder. `free_space` ignores the

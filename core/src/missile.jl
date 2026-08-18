@@ -2307,6 +2307,72 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         in_fov  = true
     end
 
+    # ⭐⭐ SLICE 46 — THE DETECTION HORIZON. Slices 32/34 modelled "can the seeker see it?" as an
+    # ANGLE question alone; the other half is the LINK BUDGET. Past the range at which the echo falls
+    # under the receiver's threshold there is NO MEASUREMENT AT WHATEVER ANGLE, and the tracker
+    # coasts for exactly the reason a broken window makes it coast — one availability verdict, two
+    # physical ways to lose it. ⭐ AND THE TWO HALVES ARE ONE DESIGN VARIABLE PULLING OPPOSITE WAYS:
+    # the detector window IS the beamwidth, the beamwidth implies the aperture (rf.jl
+    # `aperture_gain`), the aperture is the gain, and the gain is the reach — `R_acq · fov` is
+    # CONSTANT (MEASURED to 0.0000 % over a 4× window range on this very wire, log-log slope
+    # −1.000000, `docs/plans/slice44.md`). A wider window buys coverage and sells range.
+    #
+    # ⚠⚠ THE GATE IS **AND-ED INTO `in_fov`, TEXTUALLY UNBRANCHED**, and that is the form slices
+    # 34/35/36's byte-identity claim takes rather than a style preference: under the default rung
+    # `_detectable` is the literal `true` and `x && true === x` for `Bool`, so every slice-11..45
+    # replay is bit-for-bit unchanged BY CONSTRUCTION. An `if` around the availability verdict would
+    # make that a measurement instead.
+    #
+    # ⚠⚠ A NAMED MODEL CAVEAT — THIS GATES AVAILABILITY, NOT THE SLEW. The head's slew gate above
+    # stays angle-only, so before the horizon opens the head still follows its target: it is being
+    # CUED, not tracking, which is the state a midcourse missile actually flies in. Modelling the cue
+    # (its error, and the SEARCH that follows a bad one) is the next slice's component, not this
+    # one's — and keeping the seam where slice 44 measured it is what lets gate 2 reproduce that
+    # gate-0 record cell for cell. Written down so it is not read as an oversight.
+    #
+    # ⚠ RUNG-GATED ON THE LIVE `:seeker_detect` **AND** ON A WINDOW BEING PRESENT, never on the key
+    # alone (the `_atm_on` latent-bug class this arc has caught eight times). With no window there is
+    # no beamwidth, hence no aperture, hence no horizon — the loader refuses that combination, and
+    # this conjunct is what makes a PROGRAMMATIC world take the inert arm instead of throwing.
+    # ⚠ DETERMINISTIC — a hard threshold, NO `Pd` draw. Convention 4 class (c): physics-changing with
+    # no RNG, so the draw topology (convention 3) is untouched on every rung and every slider.
+    _det_on = get(w.fidelity, :seeker_detect, :none) === :snr &&
+              haskey(c, :detect_pt_w) && (_gim || _fov_on)
+    r_los_det = 0.0; r_acq_det = 0.0; snr_det = 0.0
+    if _det_on
+        # ⚠ EVERY DEGENERATE IS CLAMPED **AT THE CONSUMER** (convention 5 — a live knob can never
+        # crash a tick), because `aperture_gain` / `detection_range` throw DomainErrors by design and
+        # a throw inside `observe!` silently drops the client's connection. A non-positive window,
+        # efficiency, integration time or RCS is a degenerate a slider can reach in one drag; each
+        # floors to a tiny positive, which ships a huge-but-FINITE horizon (convention 6) on an arm
+        # whose angle gate has already refused the lock anyway.
+        fov_det = _gim ? fov_h : fov_rad
+        bw_det  = max(2 * fov_det, 1.0e-9)                     # HALF-angle window → FULL beamwidth
+        rp_det  = RadarParams(Float64(c[:detect_pt_w]),
+                              lin2db(aperture_gain(bw_det;
+                                     eta = max(Float64(get(c, :detect_eta, 0.6)), 1.0e-9))),
+                              Float64(get(c, :detect_freq_hz, 16.0e9)),
+                              1 / max(Float64(get(c, :detect_tint_s, 0.010)), 1.0e-12),
+                              Float64(get(c, :detect_nf_db, 4.0)),
+                              Float64(get(c, :detect_loss_db, 5.0)))
+        # ⚠ THE RCS IS THE **TARGET'S** — `scenario.jl` has loaded `:rcs_m2` on every target entity
+        # since slice 1, and minting a seeker-side copy would give one target two RCS numbers that
+        # can silently disagree (convention 7's exact failure).
+        rcs_det = max(Float64(get(tgt.comp, :rcs_m2, 1.0)), 1.0e-12)
+        snr_min = Float64(get(c, :detect_snr_min_db, 10.0))
+        r_los_det = los_range(e.pos, tgt.pos)
+        r_acq_det = detection_range(rp_det, rcs_det; snr_min_db = snr_min)
+        # ⚠ THE SNR READOUT FLOORS THE RANGE, AND IT IS NOT DEFENSIVE PADDING: `snr_freespace` is
+        # R⁻⁴ and this endgame closes to ~0.2 m, so an unfloored readout ships ±Inf to JSON at CPA
+        # (convention 6). The floor is far inside any range the GATE reads — the verdict below uses
+        # the TRUE range, never this one.
+        snr_det = snr_freespace(rp_det, rcs_det, max(r_los_det, 1.0))
+        _detectable = r_los_det ≤ r_acq_det
+    else
+        _detectable = true
+    end
+    in_fov = in_fov && _detectable
+
     # SEAM DISCIPLINE 2 — the servo's target for the NEXT tick: the MEASURED LOS rotated into the
     # body frame, i.e. what this tick's detector actually reported, BEND AND NOISE INCLUDED. It must
     # be stored HERE, after `az_m`/`el_m` are formed, and the head must have slewed on the PREVIOUS
@@ -3026,6 +3092,34 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # this is the only writer on a gimbal wire): the collision triangle's own demand, per tick.
         tel["$sid.lead_angle_deg"] = _finite(rad2deg(
             collision_lead_angle(_norm3(e.vel), tgt.vel, û_tru)))
+    end
+    # ⭐⭐ SLICE 46 — THE HORIZON's OWN READOUTS, shipped ONLY while the rung is live and a budget is
+    # authored (the never-stale discipline of 34/38: every slice-11..45 wire carries not one of these
+    # keys, and a cross-toggle back to `:none` REMOVES them rather than freezing a plausible set).
+    if _det_on
+        # THE HORIZON ITSELF, and the range it is read against. Both in metres, both `_finite`.
+        tel["$sid.seeker_r_acq_m"] = _finite(r_acq_det)
+        # ⭐ HOW MUCH REACH IS LEFT, SIGNED — the `gimbal_fov_margin_deg` / `terrain_clearance_m`
+        # posture: THE SIGN IS THE VERDICT, and it is built from the SAME two numbers the predicate
+        # tested, so the shipped sign and the flying verdict are the same bits and not two opinions.
+        tel["$sid.seeker_range_margin_m"] = _finite_coord(r_acq_det - r_los_det)
+        # ⚠ dB, FLOORED — `_snr_db_wire`'s hazard one subsystem over: `lin2db(0)` is −Inf and would
+        # poison the JSON frame (convention 6). The range inside it is floored at 1 m for the same
+        # reason at the other end (R⁻⁴ at CPA), so this readout SATURATES in the last metres and is
+        # not a measurement there — the VERDICT keys above are.
+        tel["$sid.seeker_snr_db"] = _finite_coord(snr_det > 0 ? max(lin2db(snr_det), -120.0) : -120.0)
+        # ⚠⚠ `seeker_detect` IS THE **RANGE** VERDICT ALONE, DELIBERATELY NOT THE AVAILABILITY ONE.
+        # `gimbal_valid` already ships `in_fov`, which is the CONJUNCTION — and a HUD that could not
+        # separate them would show a seeker "blind" with no way to say whether it ran out of angle or
+        # ran out of range. Two ways to lose the target, two lamps.
+        tel["$sid.seeker_detect"] = (r_los_det ≤ r_acq_det) ? 1.0 : 0.0
+        # THE APERTURE THE WINDOW IMPLIES, in metres — the reality check on an authored seeker (a 2°
+        # window at Ku band is a 54 cm dish, which is not going in a small air-to-air airframe). A
+        # READOUT with no consumer in the physics, which is exactly why it belongs on the wire and
+        # not in the loop.
+        tel["$sid.seeker_aperture_m"] = _finite(
+            aperture_diameter(Float64(get(c, :detect_freq_hz, 16.0e9)),
+                              max(2 * (_gim ? fov_h : fov_rad), 1.0e-9)))
     end
     return nothing
 end

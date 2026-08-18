@@ -10429,3 +10429,292 @@ end
         end
     end
 end
+
+@testset "THE SEEKER'S DETECTION HORIZON wired (slice 46 — the window is also the aperture)" begin
+    dt = 1.0e-3
+
+    # Slice 36/44's wire TO THE DIGIT (no glass, window 10°, servo 8 °/s, stop 30°, τ = 0.05,
+    # seed 32, vy = −200, n_pn = 8) — the engagement slice 44's gate 0 measured this physics on, so
+    # every number below is comparable to `docs/plans/slice44.md` rather than to a fresh wire.
+    function det_world(; vy = -200.0, seed = 32, stop = 30.0, fov = 12.0, rate = 8.0,
+                         rung = nothing, budget = false, snr_min = 10.0, eta = 0.6, pt = 200.0)
+        fid = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn, :autopilot => :alpha,
+                                  :airframe => :six_dof, :seeker => :filtered,
+                                  :seeker_axes => :az_el)
+        rung === nothing || (fid[:seeker_detect] = rung)
+        w = World(seed = seed, fidelity = fid)
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.0,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => 0.3, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => 8.0, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => 5.0e-5, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true, :gimbal_tau_s => 0.05,
+                                :gimbal_stop_deg => stop, :gimbal_fov_deg => fov,
+                                :gimbal_rate_dps => rate)
+        # ⚠ ABSENT unless asked for — the key-absent arm is the byte-identity reference.
+        if budget
+            comp[:detect_pt_w] = pt;      comp[:detect_freq_hz]    = 16.0e9
+            comp[:detect_tint_s] = 0.010; comp[:detect_nf_db]      = 4.0
+            comp[:detect_loss_db] = 5.0;  comp[:detect_eta]        = eta
+            comp[:detect_snr_min_db] = snr_min
+        end
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 2000.0, 4200.0),
+                                 vel = Vec3(0.0, vy, 0.0),
+                                 comp = Dict{Symbol,Any}(:cross_speed_mps => vy, :rcs_m2 => 1.0))
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1),
+                            ConstantVelocity(:t1)]
+    end
+
+    # Slice 44's own handover: the head is born 10° off the truth body-frame LOS azimuth, which is
+    # what makes the lock instant a thing the range gate can move at all. ⚠ READ FROM THE COMP DICT
+    # AFTER ONE TICK, never recomputed from the initial attitude (convention 10).
+    href46 = let (w, sub) = det_world()
+        tick!(w, sub, dt); empty!(w.events)
+        c = w.entities[:m1].comp
+        (Float64(c[:head_az]), Float64(c[:head_el]))
+    end
+
+    # ⚠⚠ THE COLUMNS ARE **AUTHORITY AND HOLD**, NOT MISS, AND THAT IS SLICE 44 §VII.1's CORRECTION
+    # RATHER THAN A PREFERENCE: across the whole free interval miss stays flat (0.2237 → 0.3491 →
+    # 0.3267 → 0.2514 m) while peak `a_cmd` after lock walks 19.10 % → 100.00 % of `a_max`. A
+    # verifier reading miss sees a component that does nothing, which is exactly how this physics
+    # got killed once already.
+    function darm(; err_az = 10.0, n = 22000, kw...)
+        w, sub = det_world(; kw...)
+        c0 = w.entities[:m1].comp
+        haz, hel = head_clamp(href46[1] + deg2rad(err_az), href46[2],
+                              deg2rad(Float64(c0[:gimbal_stop_deg])))
+        c0[:head_az] = haz; c0[:head_el] = hel
+        c0[:head_tgt_az] = haz; c0[:head_tgt_el] = hel
+        miss = Inf; r_prev = Inf; locked = false; t_lock = NaN
+        n_valid = 0; n_after = 0; acmd_post = 0.0
+        racq = NaN; margin0 = NaN; det0 = NaN; snr0 = NaN; ap = NaN; keys0 = String[]
+        for k in 1:n
+            tick!(w, sub, dt); empty!(w.events)
+            m = w.entities[:m1]; t = w.entities[:t1]; c = m.comp
+            tel = get(w.env, :telemetry, Dict{String,Any}())
+            r = los_range(m.pos, t.pos)
+            if k == 1
+                racq = get(tel, "m1.seeker_r_acq_m", NaN)
+                margin0 = get(tel, "m1.seeker_range_margin_m", NaN)
+                det0 = get(tel, "m1.seeker_detect", NaN)
+                snr0 = get(tel, "m1.seeker_snr_db", NaN)
+                ap   = get(tel, "m1.seeker_aperture_m", NaN)
+                keys0 = sort!([kk for kk in keys(tel) if occursin("seeker_", kk)])
+            end
+            !locked && get(c, :seek_init, false) === true && (locked = true; t_lock = k * dt)
+            if locked
+                n_after += 1
+                get(tel, "m1.gimbal_valid", 1.0) == 1.0 && (n_valid += 1)
+                acmd_post = max(acmd_post, abs(get(tel, "m1.a_cmd", 0.0)))
+            end
+            r > r_prev && miss == Inf && (miss = r_prev)
+            r_prev = r
+            miss < Inf && k > 200 && break
+        end
+        return (miss = miss, locked = locked, t_lock = t_lock, acmd = acmd_post,
+                hold = n_after > 0 ? 100 * n_valid / n_after : NaN,
+                racq = racq, margin0 = margin0, det0 = det0, snr0 = snr0, ap = ap, keys0 = keys0)
+    end
+
+    # the threshold in dB that puts the horizon at exactly `R` metres, at that window
+    snrmin_for(fov_deg, R; rcs = 1.0) =
+        lin2db(snr_freespace(RadarParams(200.0,
+                                         lin2db(aperture_gain(2 * deg2rad(fov_deg); eta = 0.6)),
+                                         16.0e9, 1 / 0.010, 4.0, 5.0), rcs, R))
+
+    @testset "THE NULL CELLS — three ways of not having a horizon, all byte-identical" begin
+        # ⭐ The seam's conjunct is the literal `true` on all three, so this is byte-identity BY
+        # CONSTRUCTION and the test is the PROOF of the construction, not the source of the claim.
+        for fov in (9.0, 10.0, 12.0)
+            base = darm(; fov = fov)                                   # slices 11..45: no rung, no keys
+            @test darm(; fov = fov, rung = :none, budget = true).miss === base.miss   # keys, rung OFF
+            @test darm(; fov = fov, rung = :snr,  budget = false).miss === base.miss  # rung ON, no keys
+            # …and a horizon far beyond the engagement: present, evaluated every tick, never binding.
+            far = darm(; fov = fov, rung = :snr, budget = true, snr_min = -300.0)
+            @test far.miss === base.miss
+            @test far.t_lock === base.t_lock
+        end
+    end
+
+    @testset "the horizon is on the wire, and it is the APERTURE IDENTITY" begin
+        # ⚠ THE TELEMETRY IS CHECKED AGAINST AN INDEPENDENT RECOMPUTE THROUGH THE PURE KERNELS
+        # (convention 10/11), never against a hand-typed constant: the seam builds the chain from
+        # comp keys, this rebuilds it from the same authored numbers and must land on the same metre.
+        for fov in (3.0, 6.0, 10.0, 12.0)
+            a = darm(; fov = fov, rung = :snr, budget = true, n = 3)
+            rp = RadarParams(200.0, lin2db(aperture_gain(2 * deg2rad(fov); eta = 0.6)),
+                             16.0e9, 1 / 0.010, 4.0, 5.0)
+            @test a.racq ≈ detection_range(rp, 1.0; snr_min_db = 10.0) rtol = 1e-12
+            @test a.ap   ≈ aperture_diameter(16.0e9, 2 * deg2rad(fov)) rtol = 1e-12
+        end
+        # ⭐⭐ `R_acq · fov` IS CONSTANT ON THE FLYING WIRE — 80789.2 m·deg over a 4× window range,
+        # which is slice 44's flown 0.0000 % reproduced through the shipped keys. Buy 2× the window
+        # and you have sold half the range: coverage and reach are ONE design variable.
+        prods = [darm(; fov = f, rung = :snr, budget = true, n = 3).racq * f
+                 for f in (3.0, 6.0, 10.0, 12.0)]
+        @test all(p -> isapprox(p, prods[1]; rtol = 1e-12), prods)
+        @test prods[1] ≈ 80789.2 rtol = 1e-5
+        # The window this arc flies: 8078.92 m of reach against a 6437 m launch range ⇒ the missile
+        # starts INSIDE its own seeker's horizon and the gate is inert here. THE NULL RESULT IS PART
+        # OF THE SHIPPED DOCUMENTATION (the 2026-08-18 re-verdict), so it is pinned, not omitted.
+        @test darm(; fov = 10.0, rung = :snr, budget = true, n = 3).racq ≈ 8078.92 rtol = 1e-6
+        @test darm(; fov = 10.0, rung = :snr, budget = true).miss === darm(; fov = 10.0).miss
+    end
+
+    @testset "⭐ THE GATE BITES — and MISS CANNOT SHOW IT (slice 44 §VII.1, reproduced)" begin
+        a_max = 3000.0
+        free = darm(; fov = 12.0)                                    # no gate at all
+        @test free.t_lock ≈ 0.001 atol = 1e-9                        # locks on tick 1
+        # Dial the threshold so the horizon lands on slice 44's own rows. ⚠ The gate is authored in
+        # dB, not in metres — the metres are what the physics DERIVES, which is the point.
+        r2000 = darm(; fov = 12.0, rung = :snr, budget = true,
+                       snr_min = snrmin_for(12.0, 2000.0))
+        @test r2000.racq ≈ 2000.0 rtol = 1e-9
+        @test r2000.t_lock ≈ 6.158 atol = 2e-3        # a lock at 6.158 s of an 8.9 s flight…
+        @test r2000.hold > 99.0                       # …that is then HELD to the end
+        # ⭐⭐ AND HERE IS THE WHOLE POINT: the miss is INDISTINGUISHABLE from the free arm, while
+        # the airframe is spending EXACTLY 100 % of its available lateral acceleration to make that
+        # true. The delay is not free; it is paid in manoeuvre authority, in a currency the headline
+        # metric does not carry.
+        @test abs(r2000.miss - free.miss) < 0.05      # miss says "nothing happened"
+        @test free.acmd / a_max < 0.20                # …the free arm cruises at 19.1 % of a_max…
+        @test r2000.acmd ≈ a_max rtol = 1e-6          # …and this one is pinned at the ceiling.
+        # One step further and the track is gone. ⚠ ASSERTED AS A VERDICT, NEVER IN METRES: slice 44
+        # §VII.3 measured the failure magnitude walking 320 → 627 m across 4× `dt` while the verdict
+        # held — once the track is lost the miss samples a divergence rather than measuring one.
+        broke = darm(; fov = 12.0, rung = :snr, budget = true,
+                       snr_min = snrmin_for(12.0, 1500.0))
+        @test broke.locked                            # it DOES acquire…
+        @test broke.hold < 50.0                       # …and then cannot hold it
+        @test broke.miss > 10.0                       # a verdict, not a number
+    end
+
+    @testset "the readouts: two lamps, a signed margin, and no ±Inf at CPA" begin
+        a = darm(; fov = 12.0, rung = :snr, budget = true, snr_min = snrmin_for(12.0, 2000.0), n = 3)
+        # ⭐ THE SIGN IS THE VERDICT, and it is built from the same two numbers the predicate tested.
+        @test a.det0 == 0.0                          # tick 1 is at 6437 m, outside a 2000 m horizon
+        @test a.margin0 < 0.0
+        @test a.margin0 ≈ 2000.0 - 6437.0 atol = 5.0
+        # ⚠ `seeker_detect` IS THE RANGE VERDICT ALONE — `gimbal_valid` already ships the conjunction.
+        # Two ways to lose a target, two lamps, so a HUD can say WHICH one ran out.
+        b = darm(; fov = 12.0, rung = :snr, budget = true, snr_min = -300.0, n = 3)
+        @test b.det0 == 1.0 && b.margin0 > 0.0
+        # …and NOTHING is shipped when the rung is off (the never-stale discipline of 34/38): a
+        # cross-toggle back to `:none` REMOVES the keys rather than freezing a plausible set.
+        @test isempty(darm(; fov = 12.0, n = 3).keys0)
+        @test darm(; fov = 12.0, rung = :none, budget = true, n = 3).keys0 == String[]
+        @test length(a.keys0) == 5
+        # ⚠ FINITE AT CPA (convention 6): `snr_freespace` is R⁻⁴ and this endgame closes to ~0.2 m,
+        # so the readout's range is floored at 1 m. Flown to impact, every value must still be JSON.
+        w, sub = det_world(; fov = 12.0, rung = :snr, budget = true)
+        allfinite = true
+        for k in 1:9000
+            tick!(w, sub, dt); empty!(w.events)
+            tel = get(w.env, :telemetry, Dict{String,Any}())
+            for kk in ("m1.seeker_snr_db", "m1.seeker_r_acq_m", "m1.seeker_range_margin_m",
+                       "m1.seeker_aperture_m")
+                allfinite &= isfinite(get(tel, kk, 0.0))
+            end
+        end
+        @test allfinite
+    end
+
+    @testset "a live knob can never crash a tick (convention 5 — clamp at the CONSUMER)" begin
+        # Every one of these is a degenerate a slider can reach in ONE drag, and every one of them
+        # would throw a DomainError inside `observe!` if the kernels were called raw — which lands in
+        # the session's IO-only catch and SILENTLY drops the client. The loader refuses the authored
+        # forms; these are the reachable ones, and they must fly.
+        for kw in ((fov = 0.0,), (fov = -5.0,), (eta = 1.0e-300,), (pt = 1.0e-300,))
+            w, sub = det_world(; rung = :snr, budget = true, kw...)
+            for k in 1:50
+                tick!(w, sub, dt); empty!(w.events)
+            end
+            tel = get(w.env, :telemetry, Dict{String,Any}())
+            @test isfinite(get(tel, "m1.seeker_r_acq_m", 0.0))
+            @test isfinite(get(tel, "m1.seeker_snr_db", 0.0))
+        end
+        # …and the rung is LIVE — toggled mid-flight it must neither throw nor leave stale keys.
+        w, sub = det_world(; fov = 12.0, rung = :none, budget = true)
+        for k in 1:200; tick!(w, sub, dt); empty!(w.events); end
+        @test !haskey(get(w.env, :telemetry, Dict{String,Any}()), "m1.seeker_r_acq_m")
+        w.fidelity[:seeker_detect] = :snr
+        for k in 1:200; tick!(w, sub, dt); empty!(w.events); end
+        @test haskey(get(w.env, :telemetry, Dict{String,Any}()), "m1.seeker_r_acq_m")
+        w.fidelity[:seeker_detect] = :none
+        for k in 1:200; tick!(w, sub, dt); empty!(w.events); end
+        @test !haskey(get(w.env, :telemetry, Dict{String,Any}()), "m1.seeker_r_acq_m")
+    end
+
+    @testset "the loader: the budget needs a host and a WINDOW, and its values are bounded" begin
+        mk(seek, fid = "") = string("name: t\nseed: 1\ndt_physics: 1.0e-3\n", fid,
+                          "entities:\n",
+                          "  - id: m1\n    kind: missile\n    pos: [0.0, 0.0, 3000.0]\n",
+                          "    missile:\n      mass_kg: 140.0\n      speed: 700.0\n",
+                          "      elevation_deg: 12.0\n",
+                          "      seeker: {two_angle: true, ", seek, "}\n",
+                          "      guidance: {n_pn: 4.0, a_max: 3000.0}\n",
+                          "  - id: t1\n    kind: target\n    pos: [6000.0, 2000.0, 4200.0]\n",
+                          "    vel: [0.0, 200.0, 0.0]\n    target: {rcs_m2: 1.0}\n")
+        mk1(seek, fid = "") = string("name: t\nseed: 1\ndt_physics: 1.0e-3\n", fid,
+                          "entities:\n",
+                          "  - id: m1\n    kind: missile\n    pos: [0.0, 0.0, 3000.0]\n",
+                          "    missile:\n      mass_kg: 140.0\n      speed: 700.0\n",
+                          "      elevation_deg: 12.0\n",
+                          "      seeker: {", seek, "}\n",
+                          "      guidance: {n_pn: 4.0, a_max: 3000.0}\n",
+                          "  - id: t1\n    kind: target\n    pos: [6000.0, 2000.0, 4200.0]\n",
+                          "    vel: [0.0, 200.0, 0.0]\n    target: {rcs_m2: 1.0}\n")
+        mktempdir() do d
+            wr(txt) = (p = joinpath(d, "s.yaml"); write(p, txt); p)
+            # ⚠ DEAD WITHOUT THE TWO-ANGLE HOST — the gate lives in `_observe_point3d!` (32/34's
+            # refusal, and the slice-19 `speed` class it descends from).
+            @test_throws ErrorException load_scenario(
+                wr(mk1("sigma: 5.0e-5, detect_pt_w: 200.0")))
+            # ⚠⚠ AND DEAD WITHOUT A WINDOW, WHICH IS PHYSICS AND NOT HYGIENE: the window IS the
+            # beamwidth that implies the aperture, so with no window there is no gain and no
+            # horizon to compute. Refusing it is what stops the seam inventing one.
+            @test_throws ErrorException load_scenario(wr(mk("detect_pt_w: 200.0")))
+            # …and each of the other six is dead without the anchor it is gated on.
+            for k in ("detect_freq_hz: 16.0e9", "detect_tint_s: 0.01", "detect_nf_db: 4.0",
+                      "detect_loss_db: 5.0", "detect_eta: 0.6", "detect_snr_min_db: 10.0")
+                @test_throws ErrorException load_scenario(
+                    wr(mk("gimbal_tau_s: 0.05, gimbal_fov_deg: 10.0, " * k)))
+            end
+            # THE VALUE BOUNDS: strictly positive where a kernel would throw, η ≤ 1 because an
+            # aperture cannot radiate more than it is illuminated with.
+            base = "gimbal_tau_s: 0.05, gimbal_fov_deg: 10.0, detect_pt_w: 200.0"
+            @test_throws ErrorException load_scenario(wr(mk(base * ", detect_eta: 0.0")))
+            @test_throws ErrorException load_scenario(wr(mk(base * ", detect_eta: 1.5")))
+            @test_throws ErrorException load_scenario(wr(mk(base * ", detect_tint_s: 0.0")))
+            @test_throws ErrorException load_scenario(wr(mk(base * ", detect_freq_hz: -1.0")))
+            @test_throws ErrorException load_scenario(
+                wr(mk("gimbal_tau_s: 0.05, gimbal_fov_deg: 10.0, detect_pt_w: 0.0")))
+            # ⚠ THE RUNG IS DEAD WITHOUT A BUDGET ANYWHERE — slice 37/40's refusal, for EITHER rung
+            # (authoring `:none` by name is exactly as dead as authoring `:snr`).
+            @test_throws ErrorException load_scenario(
+                wr(mk("gimbal_tau_s: 0.05, gimbal_fov_deg: 10.0",
+                      "fidelity: {seeker_detect: snr}\n")))
+            @test_throws ErrorException load_scenario(
+                wr(mk("gimbal_tau_s: 0.05, gimbal_fov_deg: 10.0",
+                      "fidelity: {seeker_detect: none}\n")))
+            # …and a complete authoring LOADS, on either rung and on the strapdown host too.
+            sc = load_scenario(wr(mk(base * ", detect_eta: 0.55, detect_snr_min_db: 12.0",
+                                     "fidelity: {seeker_detect: snr}\n")))
+            @test sc.world.entities[:m1].comp[:detect_pt_w] == 200.0
+            @test sc.world.entities[:m1].comp[:detect_eta] == 0.55
+            @test sc.world.entities[:m1].comp[:detect_snr_min_db] == 12.0
+            @test sc.world.fidelity[:seeker_detect] === :snr
+            sc2 = load_scenario(wr(mk("seeker_fov_deg: 10.0, detect_pt_w: 150.0")))
+            @test sc2.world.entities[:m1].comp[:detect_pt_w] == 150.0
+        end
+    end
+end

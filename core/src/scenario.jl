@@ -684,6 +684,76 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                 isfinite(comp[Symbol(hk)]) ||
                     error("missile '$id': seeker.$hk must be finite (got $(comp[Symbol(hk)]))")
             end
+            # ⭐⭐ SLICE 46 — THE SEEKER's LINK BUDGET, i.e. HOW FAR IT CAN SEE. Slices 32/34 gave
+            # the seeker a WINDOW and left "can it see the target?" as an ANGLE question alone; these
+            # seven numbers are the other half, and the coupling between the two is the lesson: the
+            # detector window IS the beamwidth, so the aperture — hence the gain, hence the reach —
+            # is IMPLIED BY THE WINDOW and is deliberately NOT authorable on its own. `R_acq · fov` is
+            # a constant of the design (MEASURED to 0.0000 % over a 4× window range,
+            # `docs/plans/slice44.md`), so a student who widens the glass to acquire sooner has sold
+            # range to buy it and the wire shows both ends of the trade.
+            #
+            # ⚠⚠ SEVEN KEYS AND EVERY ONE OF THEM IS READ EVERY TICK THE RUNG IS LIVE — that is the
+            # slice-19 discipline applied where this family keeps failing it (`speed` 19, launch
+            # altitude 21, the handover bias key 36, `ζ` 40, `k_δ` 15, `(R̂,s)` 31 were all knobs
+            # consumed at LOAD and read by NOTHING). `test_radar_eq.jl` carries the tripwire: each of
+            # them MOVES `detection_range`, asserted, so a future refactor that quietly stops
+            # threading one fails a test rather than shipping a dead slider.
+            # ⚠ PRESENCE-GATED ON THE ANCHOR `detect_pt_w` (the `gimbal_tau_s` posture, and for
+            # convention 2's reason: every slice-11..45 scenario HAS a `seeker:` block, so gating on
+            # the BLOCK would grow them all a link budget and kill byte-identity). The other six
+            # carry DEFAULTS at the consumer — a Ku-band seeker of the small air-to-air class — so a
+            # minimal authoring is one line, and each default is stated once, here, in the error-free
+            # path of `_observe_point3d!`.
+            # ⚠⚠ REFUSED WITHOUT `two_angle: true` AND WITHOUT A WINDOW, rather than silently ignored
+            # (the slice-21/28/29/31/32/34 "refused, not branch-ordered" precedent). The window one is
+            # PHYSICS and not hygiene: with no window there is no beamwidth, with no beamwidth there
+            # is no aperture, and a seeker with no aperture has no horizon to compute — the loader
+            # refuses the combination so the seam never has to invent a gain.
+            # ⚠ The RCS is the TARGET's (`:rcs_m2`, loaded on every `target:` entity since slice 1)
+            # and is deliberately NOT mirrored here: one target with two RCS numbers that can
+            # silently disagree is convention 7's exact failure.
+            if haskey(sb, "detect_pt_w")
+                comp[:seek_two_angle] ||
+                    error("missile '$id': seeker.detect_pt_w authored without seeker.two_angle: " *
+                          "true — the detection horizon is applied in the two-angle seeker " *
+                          "(`_observe_point3d!`), so without that host the keys are read by " *
+                          "NOTHING and the budget is DEAD (slice 46)")
+                (haskey(sb, "gimbal_fov_deg") || haskey(sb, "seeker_fov_deg")) ||
+                    error("missile '$id': seeker.detect_pt_w authored with NO detector window — " *
+                          "the window IS the beamwidth that implies the aperture, so without " *
+                          "seeker.gimbal_fov_deg (gimballed) or seeker.seeker_fov_deg (strapdown) " *
+                          "the seeker has no gain and no detection range at all (slice 46)")
+            end
+            # ⚠ VALUE BOUNDS ARE **STRICTLY POSITIVE** ON FIVE OF THE SEVEN, and that is not taste:
+            # `aperture_gain` and `detection_range` THROW DomainErrors on a non-positive efficiency,
+            # RCS or beamwidth, and a zero integration time is an infinite bandwidth. The seam clamps
+            # each one at the CONSUMER too (convention 5 — a live slider can never crash a tick), so
+            # this is the validate-at-LOAD half of the same split slices 34/35 wrote for τ: the
+            # AUTHORED input is refused here, the reachable degenerate is owned there.
+            # ⚠ Noise figure and losses are validated FINITE ONLY — they are dB and a NEGATIVE loss
+            # is merely a suspiciously good receiver, not a degenerate. η is bounded ABOVE by 1 as
+            # well: an aperture cannot radiate more than it is illuminated with, and an η > 1 is an
+            # authoring slip that would otherwise ship as a quietly better seeker.
+            for (dk, kind) in (("detect_pt_w", :pos), ("detect_freq_hz", :pos),
+                               ("detect_tint_s", :pos), ("detect_eta", :eta),
+                               ("detect_nf_db", :fin), ("detect_loss_db", :fin),
+                               ("detect_snr_min_db", :fin))
+                haskey(sb, dk) || continue
+                haskey(sb, "detect_pt_w") ||
+                    error("missile '$id': seeker.$dk authored without seeker.detect_pt_w — the " *
+                          "budget is presence-gated on the transmit power, so without it this " *
+                          "knob is DEAD (slice 46)")
+                v = _f64(sb[dk])
+                isfinite(v) ||
+                    error("missile '$id': seeker.$dk must be finite (got $v)")
+                kind === :pos && !(v > 0) &&
+                    error("missile '$id': seeker.$dk must be > 0 (got $v)")
+                kind === :eta && !(0 < v ≤ 1) &&
+                    error("missile '$id': seeker.detect_eta is an aperture EFFICIENCY and must be " *
+                          "in (0, 1] (got $v)")
+                comp[Symbol(dk)] = v
+            end
             # Slice 13: the `:scan` seeker (fidelity `seeker: scan`) forms a NOISY angular-power
             # PROFILE over a FIXED grid (the slice-3 CFAR sandbox on the LOS-ANGLE axis) instead of
             # ONE noisy truth bearing. The grid/beam/CFAR/gate config lands here (STATIC — draw-count/
@@ -1383,6 +1453,17 @@ function _validate_missile(world::World)
                       "second-order servo IS its natural frequency and its damping, and without " *
                       "one the head has no bandwidth at all and simply FREEZES (slice 40)")
         end
+    end
+    # SLICE 46 — `:seeker_detect` NAMES WHETHER THE AVAILABILITY VERDICT CONSULTS THE LINK BUDGET,
+    # so it is meaningless without a budget to consult, and it is refused for slice 37/40's reason
+    # and in their place. ⚠ Refused for EITHER rung: authoring `:none` by name is exactly as dead as
+    # authoring `:snr`, and refusing only the interesting one would teach that the other is live.
+    if haskey(world.fidelity, :seeker_detect)
+        any(haskey(e.comp, :detect_pt_w) for (_, e) in world.entities) ||
+            error("fidelity seeker_detect: '$(world.fidelity[:seeker_detect])' authored with no " *
+                  "seeker link budget anywhere — the rung selects whether the seeker's " *
+                  "availability verdict consults the RANGE equation, and it is read only where a " *
+                  "seeker.detect_pt_w exists, so without one it is a DEAD fidelity (slice 46)")
     end
     # ⚠ AND THE SERVO'S OWN TWO NUMBERS ARE VALIDATED WHERE THEY ARE AUTHORED (convention 5's
     # validate-at-LOAD for immutable inputs; `gimbal_zeta` is ALSO clamped at the consumer because

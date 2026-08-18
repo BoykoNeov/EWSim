@@ -47,6 +47,9 @@ export Subsystem, integrate!, build_env!, observe!, decide!, tick!
 export write_frame, read_frame, state_frame
 # RF / link budget
 export RadarParams, snr_freespace, snr_db_freespace, wavelength, db2lin, lin2db
+# RF / aperture + detection horizon (slice 46) — the window IS the beamwidth, so a sensor's
+# COVERAGE and its REACH are one design variable pulling opposite ways (`R_acq · fov` = const).
+export aperture_gain, aperture_diameter, detection_range, SEEKER_DETECT_MODES
 # RF / two-ray propagation (slice 2)
 export snr_two_ray, snr_db_two_ray, two_ray_phase, two_ray_factor4, horizon_range
 # RF / jamming + burn-through (slice 4)
