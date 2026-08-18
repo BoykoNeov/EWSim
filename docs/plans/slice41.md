@@ -32,8 +32,16 @@ A new `:fin_servo` fidelity key (`FIN_SERVO_MODES`, defined ONCE in `airframe.jl
 
 * `:instant` — today. Gain exactly 1, phase exactly 0 at every frequency. **Bit-identical to the
   rung not existing.** This is what makes the three-rung ordering claim threshold-free.
-* `:first_order` — `τ_a·δ̇ = δ_cmd − δ`. One number (`fin_tau_s`).
-* `:second_order` — `δ̈ = ω_a²(δ_cmd − δ) − 2ζ_a·ω_a·δ̇`, authored as `fin_omega_hz` / `fin_zeta`.
+* `:first_order` — `τ_a·δ̇ = δ_cmd − δ`. One number (`fin_tau_s`). ⚠⚠ **STEPPED BY THE EXACT
+  EXPONENTIAL FORM, NOT EULER**: `δ′ = δ_cmd + (δ − δ_cmd)·exp(−dt/τ_a)`. Explicit Euler
+  (`δ′ = δ + (δ_cmd − δ)·dt/τ_a`) is stable only for `τ_a ≥ dt/2 = 5e-4`, lands EXACTLY on `δ_cmd`
+  at `τ_a = dt`, and oscillates and diverges below — and decision 3 ships NO rate limit, which is
+  precisely what caps that blowup in slice 15's `fin_autopilot_step`. The exponential form is
+  unconditionally stable, exact for a command held across the tick, and makes `τ_a → 0` a GENUINE
+  limit to `δ_cmd`. This deletes an entire artifact class from the rung that carries P4.
+* `:second_order` — `δ̈ = ω_a²(δ_cmd − δ) − 2ζ_a·ω_a·δ̇`, authored as `fin_omega_hz` / `fin_zeta`,
+  stepped by SEMI-IMPLICIT EULER (slice 40's precedent — its bench and its "ratio 10.02 for a 10× dt"
+  check are already written). Unstable around `ω_a·dt ≳ 2`, tighter at low `ζ_a` ⇒ P0 bounds it.
 
 **Five decisions, written down before any probe, because a free choice inside a new actuator can
 manufacture the claim** (slice 39 §0.1's discipline, slice 40 §0.1's form):
@@ -58,6 +66,15 @@ manufacture the claim** (slice 39 §0.1's discipline, slice 40 §0.1's form):
    must never touch it anyway.
 5. **THE ROLL CHANNEL IS UNTOUCHED.** `φ_cmd` already carries `τ_roll` (slice 24). The actuator sees
    `δp`/`δy` only, so no channel gets two lags stacked. Structural, not a promise.
+6. **INITIALIZATION AND RUNG RE-ENTRY, STATED BEFORE THE PATCH.** `(δp, δ̇p, δy, δ̇y)` are ZERO at
+   launch, and **the rate state is ZEROED ON ENTERING THE RUNG, NOT CARRIED** across a live fidelity
+   toggle (slice 40 shouts this at `missile.jl:1870` — a carried rate makes a mid-flight toggle a
+   transient injector, which fakes exactly the effect this slice claims). ⚠ Tick 1 still flies
+   `af_delta` because `integrate!` precedes the first `decide!` (`missile.jl:1343`) — the scenarios
+   author `af_delta: 0` so tick 1 injects no transient, and that stays true here.
+7. **THE NEW TELEMETRY KEYS ARE GATED ON THE RUNG'S PRESENCE** — `if haskey(c, :fin_tau_s) ||
+   haskey(c, :fin_omega_hz) || haskey(c, :fin_zeta)`, slice 40's `missile.jl:2939` pattern.
+   Unconditional new keys change the wire payload for EVERY prior slice's verifier.
 
 ## §0.2 ⚠⚠ THE INHERITED FRAMING THAT MUST NOT BE CARRIED IN (advisor, pre-probe)
 
@@ -91,13 +108,29 @@ end of it. P2 and P3 measure both and let the numbers pick the mechanism.
 | # | Probe | What it decides |
 |---|---|---|
 | **P0** | **THE BENCH.** Open-loop step + frequency response of both rungs against the closed-form second-order response, on a frozen bench (slice 37's precedent). Walk `ω_a` up until semi-implicit Euler at `dt = 1e-3` starts manufacturing oscillation. | **BOUNDS THE AUTHORED DOMAIN.** A stiff actuator at a 1 ms step fakes a resonance — the same class as slice 40's stop-driven artifact. No resonance may be claimed above this bound. |
-| **P1** | **THE ISOLATION PROBE — the kill risk, flown FIRST.** `τ_a → 0` and `ω_a → ∞` must be **BIT-EXACT** against the shipped tree over a full flight. | If it is not exact, the placement is wrong. Flown before anything is built on top. |
+| **P1a** | **THE ISOLATION PROBE — the kill risk, flown FIRST.** `:instant` must be **BIT-EXACT** against the shipped tree over a full flight. | The byte-identity proof, and it holds **BY CONSTRUCTION** (the rung returns the command untouched) — INDEPENDENT of any `τ_a`. If it is not exact, the placement is wrong. |
+| **P1b** | **THE CONVERGENCE RESULT — a DOMAIN result, belonging to P0, NOT an isolation proof.** How closely `τ_a → 0` / large `ω_a` approach `:instant` inside the stable domain. | ⚠⚠ **DO NOT WORD THIS AS AN ISOLATION PROOF.** A failure here is a DISCRETIZATION failure, not a placement failure, and conflating them costs a pointless seam re-audit. The exponential first-order form (§0.1) makes `τ_a → 0` a genuine limit; `ω_a → ∞` is OUTSIDE the domain P0 exists to find and is not claimed. |
 | **P2** | **THE INERT LADDER.** Sweep `ω_a` from 60 Hz down on the shipped slice-40/26 wire; read the limit-cycle rms *and* the miss. Print the WHOLE ladder. | Whether the effect exists at a physically honest actuator, or only at an absurd one. A flat ladder down to 5 Hz is a KILL. |
-| **P3** | **THE SHORT-PERIOD COLLISION.** Measure `ω_sp` on the shipped wire, then place `ω_a/ω_sp ∈ {10, 5, 2, 1, 0.5}`; read overshoot, the `ω_sp` sentinel, departure. | The candidate mechanism (§0.3). |
+| **P3** | **THE SHORT-PERIOD COLLISION.** ⚠ **MEASURE `ω_sp` ON THE SHIPPED WIRE FIRST, THEN choose the ratios** — `ω_a/ω_sp ∈ {10, 5, 2, 1, 0.5}` is only physically honest if `ω_sp` lands at the HIGH end of `[9.7, 68.7] rad/s`; at `ω_sp ≈ 10` the 0.5 ratio is a 0.8 Hz actuator, which is absurd territory and is exactly what P2 exists to reject. Read overshoot, the `ω_sp` sentinel, departure. | The candidate mechanism (§0.3), and which ratios a claim may be shipped from. |
 | **P4** | **THE DIRECTION PROBE.** Does `:first_order` DAMP or DESTABILIZE relative to `:instant`, at the same design? | §0.2's open question. The potential headline. |
 | **P5** | **THE REPARAMETERIZATION GATE — ANSWERED BY A BOUND, NOT A TOLERANCE** (slice 39's kill, pre-empted). Can ANY `(k_α, k_q)` on `:instant` reproduce a `:first_order` arm? | The argument is **order/phase, not gain** — an added actuator pole is unreachable by retuning two gains on the existing plant (slice 38's *"`s` adds PHASE and scaling a slope cannot"*, verbatim). Must be stated as a bound over the whole `(k_α, k_q)` space, not a fitted tolerance. |
 | **P6** | **MONOTONICITY OF WHATEVER SHIPS AS THE SLIDER.** Full ladder across the full range. | Slice 40 disqualified `ω_n` on the gimbal for non-monotonicity; that does not carry over, but it must be SHOWN, not assumed. `ζ_a` is the expected slider (slice 40's shipped choice). |
 | **P7** | **THE SLICE-20 SHADOW TOOTH.** Assert `defl_sat == 0` on EVERY claimed arm of BOTH new rungs. | A lagging actuator transiently demands a LARGER deflection and could newly peg `δ_max` — which resurrects slice 20's shadowing and contaminates the claim. |
+
+### ⚠⚠ THE VERDICT RULE, FIXED BEFORE ANY NUMBER EXISTS
+
+P2 and P4 both read "the limit-cycle rms", and **what counts as DAMPED vs DESTABILIZED is fixed
+here, in advance.** Slice 37's onset line was a threshold chosen *post hoc* and it turned out to be
+load-bearing (the shipped head read 13 % below it); the rule that replaced it is the one adopted
+here:
+
+- the verdict is the **LARGEST SINGLE-STEP RATIO** along the ladder — no absolute rms threshold is
+  chosen by me, at any point;
+- **the WHOLE ladder is printed** in the plan and in `docs/STATUS.md`, so a reader can redraw the
+  line themselves;
+- if any claim's magnitude moves under a different defensible rule, **the sensitivity is quoted**
+  (slice 37's "≈40–45 %" form), and only the ORDER of the rungs and the SIGN of the effect may be
+  stated threshold-free.
 
 ## §0.5 THE NAMED KILL RISKS, IN THE ORDER THEY WOULD FIRE
 
