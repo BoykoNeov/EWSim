@@ -54,8 +54,8 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Where the project is (2026-08-18)
 
-**Slices 1–40 COMPLETE & green — 7693 tests.** (Slices 39 **and 41** are KILL RECORDS, not slices —
-neither shipped code, so the count is unchanged.)
+**Slices 1–40 COMPLETE & green — 7693 tests.** (Slices 39, **41 and 42** are KILL RECORDS, not slices —
+none shipped code, so the count is unchanged.)
 HANDOFF §10 items 1–13 — the committed roadmap — are DONE; slices 15–40 are into the §11
 Tier-A horizon.
 
@@ -79,7 +79,7 @@ this split exists to fix).
 
 | Before you… | Read |
 |---|---|
-| plan slice 41 / pick the next slice | `docs/DEFERRALS.md` — the backlog **and the kill list** |
+| plan slice 43 / pick the next slice | `docs/DEFERRALS.md` — the backlog **and the kill list** |
 | change architecture, frames, the wire protocol, the tick contract | `HANDOFF.md` |
 | quote slice N's numbers, test names, or gate detail | `docs/STATUS.md` — grep `## Slice N` |
 | recall what slice N's *lesson* was | `docs/SLICES.md` |
@@ -115,6 +115,18 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
   here, measure the SPECTRUM of the signal it will sit on.** (The physics was real — inside the main
   control loop a lag DEstabilizes, the opposite of its sign on 34–40's feed-forward path — and it did
   not matter.)
+- **A SEEKER SEARCH PATTERN** (slice 42, gate 0) — DEFERRED, not dead, **and blocked on a precondition**:
+  in this model a wider detector window is FREE (a single 15° window rescues every showcase cell), so
+  *"buy coverage with time instead of glass"* cannot be motivated until the window COSTS something. What
+  survives is a real 2-D law (**the wrong-guess frontier**: guess the sweep direction right and coverage is
+  free; guess wrong and every degree must be bought back in rate).
+- **AN "ACQUISITION KNIFE-EDGE" / "a lock at the rim is worth nothing"** (slice 42, gate 1) — DEAD. ⭐⭐ **The
+  band is `ω_LOS · dt` — ONE INTEGRATION STEP: halve `dt` and it halves** (0.0036° against a 10° window).
+  The gate-0 table already said so — the "worthless lock" cell's miss was BYTE-IDENTICAL to the never-locks
+  cell's, i.e. the null case relabelled, and `off@lock == fov` to four decimals was the inclusive `off ≤ fov`
+  gate echoing its own constant. The servo-vs-LOS *race* reading is refuted too (same digits at 8 and
+  60 °/s), and the mirror-image sign does not fail at all. ⇒ **before shipping a narrow threshold effect,
+  RE-FLY IT AT HALF `dt`; and read a claimed STEP against the NULL cell first.**
 - **Seeker noise × the BTT roll loop** — DEAD. A ~1000:1 low-pass (std 1.07 vs 1.6e−5).
 - **A cubic radome curve** — killed at gate 0: unbounded slope, the bend diverges, no domain.
 - **An angle-domain radome corrector** — built and measured, does NOT ship: it needs the look

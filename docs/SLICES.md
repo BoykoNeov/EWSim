@@ -21,7 +21,7 @@ three-level ledger; read the level you actually need:
 
 ## 1. The current head of the arc (slices 1–40 as one running narrative)
 
-**Slices 1–40 COMPLETE & green — 7222 tests at slice 36 gate 3; slice 37 took it to 7496, slice 38 to 7564, and slice 40 is DONE at 7693.** (⚠ SLICES 39 AND 41 ARE KILL RECORDS, NOT SLICES — the nulling-loop head servo died at gate 0 (`docs/plans/slice39.md`), and the second-order FIN actuator died at gate 0 on reparameterization (`docs/plans/slice41.md`). Neither shipped code; the suite is unchanged at 7693.)
+**Slices 1–40 COMPLETE & green — 7222 tests at slice 36 gate 3; slice 37 took it to 7496, slice 38 to 7564, and slice 40 is DONE at 7693.** (⚠ SLICES 39, 41 AND 42 ARE KILL RECORDS, NOT SLICES — the nulling-loop head servo died at gate 0 (`docs/plans/slice39.md`), the second-order FIN actuator died at gate 0 on reparameterization (`docs/plans/slice41.md`), and the search pattern / acquisition margin died at gate 0 and gate 1 respectively (`docs/plans/slice42.md`). None shipped code; the suite is unchanged at 7693.)
 (⚠ the count FELL *at slice 35 gate 3* — 6892 → 6876 — and that direction is accounted for: ~87 new asserts in,
 ~103 out, because a per-entity scenario sweep collapsed into ONE strictly-stronger exact-set assert. The 6876 →
 6988 → 7057 → 7067 → 7222 walk since then is slice 36's four gates.) **The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–36
@@ -554,6 +554,39 @@ worded as a POINT fit answers *yes* (`k_α = 1.01` matches the 60 Hz arm to 0.9 
 the slice at the right time for the wrong reason; and the pre-registered confirmation leg returned a
 PASS in which every arm also sat within 0.9 % of the CONTROL — a test whose control passes is not a
 test. **The pre-registration is what saved it from a wrong death and then delivered the right one.**
+
+**⚠⚠ SLICE 42 IS A KILL RECORD, NOT A SLICE — a search pattern died at gate 0, the acquisition
+margin that replaced it died at gate 1, and the suite stayed at 7693 (`docs/plans/slice42.md`).** The
+slice opened on a genuinely appealing trade: a seeker that SWEEPS can find a target it never
+acquired, so buy coverage with TIME instead of with GLASS. Gate 0 measured it fairly and then said
+the honest thing — **in this simulator a wider window is FREE.** A single 15° window rescues every
+showcase cell on the geometry that would ship, and nothing in the model charges for sensitivity,
+resolution or range as the window opens, so the trade cannot be motivated from inside the model at
+all. That is not a defect of the search; it is a named approximation of the detector, and it is the
+reason the surviving law is deferred rather than dead. What DID survive is a clean two-parameter one:
+**guess the search direction right and coverage is free — the minimum sweep rate is flat across a 6×
+range of it — guess wrong and every extra degree must be bought back in rate**, monotonically, until
+past a point no rate buys it at all. ⭐ Gate 0 also produced two instrument bugs that each read
+exactly like physics (a sweep rebuilt from the head's own position crawls at 1/50 rate; a sweep that
+steps the HEAD rather than a COMMAND never reverses once the gimbal stop binds), which is where the
+discipline **check a probe where the CLAMPS bind** comes from. ⚠⚠ Then the slice pivoted onto what
+looked like a sharper finding — an ACQUISITION KNIFE-EDGE: with the detector window walked onto the
+handover offset exactly, the seeker locks, and the lock is worth nothing. It reads beautifully and it
+was the null case wearing a label. **The tell was in its own table: the "worthless lock" cell's miss
+was byte-identical to the never-locks cell's**, so the lock moved no number that any verdict depends
+on, and the `off@lock` column that read the window to four decimals was the inclusive `off ≤ fov`
+gate echoing back its own authored constant. ⭐⭐⭐ Gate 1 then made the kill structural rather than a
+matter of magnitude: re-fly the rim at three integration steps and **the dead band halves when the
+step halves — it is `ω_LOS · dt`, one tick of line-of-sight motion, 0.0036° against a 10° window.**
+The one non-degenerate rescue (that the required margin is set by the RACE between the LOS rate and
+the servo) is refuted in the same probe, because a 7.5× faster servo returns the same miss to the
+digit, and the same offset on the OTHER SIGN does not die at all — there the LOS walks INTO the
+window and mints its own margin. ⭐ **A finding whose SIZE is set by the integrator's step cannot be
+a lesson about hardware**, and the discipline that falls out is cheap and general: before shipping a
+narrow threshold effect, re-fly it at half `dt`. ⚠ Four times now in this arc — 39, 41, the search
+half of 42 and its acquisition half — **the probe was right, the table was right, and the SENTENCE on
+top of the table was wrong**, and every one of the four was caught by a criterion written down before
+the measurement existed.
 
 Full gate-by-gate
 as-built detail (exact numbers, test names, watch-items, advisor-catches, per-slice run commands)

@@ -464,6 +464,11 @@ between 3620.675 m and 0.110 m. Which leads to the finding that replaces it:
 
 ## ⭐⭐⭐ §V.2 WHAT IS ACTUALLY THERE: **THE ACQUISITION KNIFE-EDGE — A LOCK AT THE RIM IS WORTH NOTHING**
 
+> ⚠⚠⚠ **REFUTED AT GATE 1 — SEE §VI.** The measurements below are correct; the SENTENCE on top of
+> them is not. The `fov 12.00` cell misses by 305.112 m, which is the `fov 11.95` NEVER-LOCKS cell's
+> miss to the digit — so the "worthless lock" is the NULL CASE RELABELLED. The dead band is
+> `ω_LOS·dt`, ONE INTEGRATION STEP, and halving `dt` halves it (§VI.3).
+
 The window walked in 0.05° steps across the bracket, static wire, no search, no cue, no coast:
 
 | err ° | fov 11.95 | **fov 12.00** | **fov 12.05** | fov 12.10 … 25.0 |
@@ -539,6 +544,9 @@ the static wire is the one that would ship.
 
 ## §V.5 GATE 0 STANDING AFTER THE RE-MEASUREMENT
 
+> ⚠⚠ **SUPERSEDED BY §VI.** Finding 1 (the knife-edge) is DEAD. Finding 2 (the wrong-guess frontier)
+> and finding 3 (the two-sided failing set) stand.
+
 **The slice is ALIVE but its headline is not the one §II proposed.** What is measured and survives:
 
 1. ⭐ **The acquisition knife-edge** (§V.2) — a lock exactly at the rim is worth exactly nothing, and
@@ -559,6 +567,10 @@ already ships; finding 2 needs a new subsystem and lands on a model where the al
 window) is free. That choice is not made in this file yet.
 
 ## ⭐⭐ §V.6 THE SCOPING CALL — **MADE HERE, NOT LEFT OPEN** (2026-08-18)
+
+> ⚠⚠⚠ **VOID — SEE §VI.4.** This call picked the knife-edge over the frontier because the knife-edge
+> was "threshold-free" and "the strongest result in the gate". It was NEITHER. The frontier was the
+> stronger of the two all along — and the deferral written below is unaffected and still correct.
 
 §V.5 left the choice between the two findings open. It is answered now, so that a future session
 inherits a decision rather than re-deriving one:
@@ -603,3 +615,149 @@ find the shipping wire where the margin is the binding term, and show the step t
 the window to sit on it. ⚠ If the step only exists when the window is placed on the birth offset by
 hand, the finding is a curiosity about a measure-zero coincidence and the slice dies at gate 1 — that
 is the falsifier to pre-register before writing any code.
+
+---
+
+# ⚠⚠⚠ §VI — GATE 1 (2026-08-18): **THE PRE-REGISTERED FALSIFIER FIRES. SLICE 42 IS DEAD.**
+
+§V.7 pre-registered the kill in writing: *"if the step only exists when the window is placed on the
+birth offset by hand, the finding is a curiosity about a measure-zero coincidence and the slice dies
+at gate 1."* **It does — and it is worse than measure-zero in the loose sense: the dead band is
+EXACTLY ONE INTEGRATION STEP WIDE, and halving `dt` halves it.**
+
+## ⚠⚠ §VI.0 THE TELL WAS ALREADY IN §V.2's OWN TABLE, AND IT WAS NOT READ
+
+Before any new measurement, the advisor's catch, which needs no probe at all:
+
+| `fov` | verdict |
+|---|---|
+| 11.95 | never locks — **305.112 m** |
+| **12.00** | locks, `off@lock` 12.0000, hold 1 tick — **305.112 m** |
+| 12.05 | 0.224 m |
+
+⇒ **THE "WORTHLESS LOCK" CELL'S MISS IS BYTE-IDENTICAL TO THE NEVER-LOCKED CELL'S.** A lock that
+changes no number in the verdict column is not a lock that is *worth nothing* — it is the **null case
+wearing a different label**. And `off@lock` reading `12.0000` to four decimals is not a measurement:
+the gate fires on `off ≤ fov` and the head sits at the rim BY CONSTRUCTION, so that column is the
+authored threshold echoed back. ⭐ **RULE: WHEN A "STEP" CELL'S VERDICT NUMBER EQUALS THE DO-NOTHING
+CELL'S, CHECK IT AGAINST THE NULL BEFORE CALLING IT A STEP.**
+
+## §VI.1 PROBE **P8** — THE RACE SWEEP: WALK THE BIRTH OFFSET, NOT THE WINDOW
+
+The right instrument for the one surviving hypothesis (*the required margin is set by the race
+between the LOS rate and the servo rate*). Shipped `slice36_handover` geometry to the digit, shipped
+10° window, servo at **both ends of the shipped slider** (8 and 60 °/s), `err_az` walked ±10° in 1°
+steps. `M:\claud_projects\temp\slice42\p8_race.jl`. Coarse first, on purpose — a fine sweep run
+before a gap is visible only resolves an artifact more precisely.
+
+| err ° | miss m @ 8 °/s | `hold_max` s | miss m @ 60 °/s | `hold_max` s |
+|---|---|---|---|---|
+| **−10** | **3620.675** | **0.001** | **3620.675** | **0.001** |
+| −9 … −4 | 0.191 | 10.929 | 0.191 | 10.929 |
+| −3 | 3125.932 | 0.924 | 0.191 | 10.929 |
+| 0 | 3290.078 | 0.433 | 0.191 | 10.929 |
+| +9 | 3548.614 | 0.043 | 0.191 | 10.929 |
+| **+10** | 3398.255 | 0.016 | **0.206** | **10.928** |
+
+⭐ **THREE THINGS, AND THE FIRST TWO KILL THE RACE HYPOTHESIS OUTRIGHT:**
+
+1. **A 7.5× SERVO BUYS NOTHING AT THE RIM.** `err −10` misses by **3620.675 m at both 8 and 60 °/s —
+   the same digits** — and holds for exactly one tick on both. If the rim failure were a race, the
+   ceiling servo would win it. The trajectory is identical because the head never moves: the gate
+   opens for one tick on a command still equal to the head's own angle, and shuts before the servo
+   has anything to chase.
+2. **THE SAME |err| ON THE OTHER SIGN DOES NOT DIE.** `err +10` at 60 °/s HOLDS (0.206 m, `off@lock`
+   **9.9364**, at tick **2**) — there the LOS walks INTO the window and mints its own margin. A
+   "finding" that needs exact equality *and* a particular direction of LOS travel is a coincidence,
+   not a mechanism.
+3. At 60 °/s the failing set over the whole 21-cell sweep is **exactly one cell: {−10}**.
+
+⚠ **INSTRUMENT-HONESTY CHECK, AND IT PASSES:** at 8 °/s this probe returns `err 0 → 3290.078 m` and
+`err −6 → 0.191 m`, which are `slice36_handover`'s and `slice36_biased`'s SHIPPED numbers to the
+digit (both files' headers quote them). The holding basket `err ∈ [−9, −4]` is slice 36's own basket.
+**The instrument reproduces the shipping wire exactly — unlike §II/§III, this kill is not an
+instrument failure.**
+
+## ⚠⚠ §VI.2 PROBE **P9** — THE BAND IS ONE CELL WIDE AT §V.2's OWN RESOLUTION
+
+`p9_rim.jl`, the rim walked in **0.05° steps** — the SAME step §V.2's ladder used, so the two tables
+are directly comparable:
+
+| err ° | miss @ 8 °/s | miss @ 60 °/s |
+|---|---|---|
+| **−10.000** | **3620.675** | **3620.675** |
+| −9.950 … −9.500 | 0.191, flat | 0.191, flat |
+| +9.500 … +9.950 (sign control) | — | 0.191, flat |
+
+> ⇒ **FIFTY MILLIDEGREES INSIDE THE RIM THE TRACK HOLDS COMPLETELY, AT BOTH ENDS OF THE SHIPPED
+> SLIDER.** The dead band at §V.2's own resolution is the **bit-equality cell and nothing else**.
+
+## ⭐⭐⭐ §VI.3 PROBE **P10** — THE BAND'S WIDTH IS `ω_LOS · dt`. IT IS THE INTEGRATION STEP.
+
+`p10_dt.jl`. Same wire, same window, same servo; only the step changes. The LOS body-azimuth rate at
+birth is measured on each step (~3.63 °/s, essentially step-invariant) and `ω·dt` is the prediction
+written down BEFORE the run:
+
+| `dt` s | ω_LOS °/s | **ω·dt** ° | last **DYING** err ° | first **HOLDING** err ° | `hold_max` |
+|---|---|---|---|---|---|
+| 2e−3 | +3.6300 | **0.00726** | −9.9940 | −9.9900 | 0.0020 s |
+| 1e−3 | +3.6290 | **0.00363** | −9.9980 | −9.9960 | 0.0010 s |
+| 5e−4 | +3.6285 | **0.00181** | −9.9990 | −9.9980 | 0.0005 s |
+
+> ⭐⭐⭐ **THE BAND HALVES WHEN THE STEP HALVES, AND `ω·dt` FALLS INSIDE ITS MEASURED BRACKET AT ALL
+> THREE STEPS.** `hold_max` is EXACTLY ONE TICK on every row. The "acquisition margin" is the distance
+> the line of sight travels between two evaluations of a once-per-tick gate — **a discretization
+> artifact, not a property of a seeker.** At the shipped `dt = 1e-3` it is 0.0036° against a 10°
+> window: **0.036 %.**
+
+⭐ **AND THAT IS THE STRONGEST FORM THIS KILL COULD TAKE.** A magnitude argument (*"the band is
+small"*) invites the reply *"small on this wire"*. A scaling argument does not: **a finding whose SIZE
+is set by the integrator's step cannot be a lesson about hardware.** ⇒ the new discipline, carried to
+`docs/LESSONS.md`: **before shipping a narrow threshold effect, RE-FLY IT AT HALF `dt` — if it halves,
+it IS the step.**
+
+## §VI.4 WHAT §V.2 SHOULD HAVE SAID
+
+Not deleted — annotated, per this file's opening rule. §V.2's measurements are all correct. Its
+*sentence* is not:
+
+* **Written:** *"When the window exactly equals the birth offset, the seeker locks — and the lock is
+  worthless. Acquisition needs margin, not coverage."*
+* **True:** *"The slew gate is inclusive (`off ≤ fov`), so at bit-exact equality it mints a lock that
+  survives exactly one tick and moves no verdict number. Any margin at all — down to one tick of LOS
+  motion, 0.0036° here — is fully sufficient, at every servo rate on the shipped slider."*
+
+⚠ **AND §V.6's SCOPING CALL IS THEREBY VOID.** It chose the acquisition-margin lesson over the
+search-pattern frontier because the knife-edge was *"threshold-free and contamination-free"* and *"the
+strongest result in the gate."* It was neither — it was the null case. **The frontier (§V.4) was the
+stronger of the two all along**, and it stays deferred for the reason §V.6 gave it, which §VI does not
+touch: in this model a wider window is free.
+
+## §VI.5 WHAT SLICE 42 LEAVES BEHIND
+
+**No code shipped. The suite stays at 7693.** Nothing under `core/` was touched in this gate — the
+probes author the birth offset by pre-seeding `:head_az`, which is exactly how the shipped
+`gimbal_handover_err_deg` is consumed, so every number above is the shipping mechanism.
+
+**SURVIVING, AND CARRIED TO `docs/DEFERRALS.md`:**
+1. ⭐ **THE WRONG-GUESS FRONTIER (§V.4)** — untouched by §VI (it involves no rim and no equality).
+   Deferred with its precondition intact: **not until the detector window COSTS something.**
+2. The two-sided failing set on the static wire (§III.1).
+
+**DEAD, AND ON THE KILL LIST:**
+* **The acquisition knife-edge / "a lock at the rim is worth nothing"** — the null case relabelled;
+  band width = `ω_LOS·dt`.
+* **"the required margin is set by the servo-vs-LOS race"** — refuted by P8: 8 °/s and 60 °/s return
+  the same digits at the rim.
+
+**THE THREE METHOD LESSONS (all to `docs/LESSONS.md`):**
+1. **Check the step against the NULL.** A cell whose verdict equals the do-nothing cell's verdict IS
+   the do-nothing cell.
+2. **A reported quantity that equals an authored threshold to full precision is the threshold, not a
+   measurement.** `off@lock == fov` to four decimals was the gate echoing its own constant.
+3. **RE-FLY A NARROW THRESHOLD EFFECT AT HALF `dt`.** If it halves, it is the step.
+
+⚠ **AND THE PATTERN THIS ARC HAS NOW REPEATED FOUR TIMES** (39, 41, the search half of 42, and now
+its acquisition half): **the probe was right, the table was right, and the SENTENCE on top of the
+table was wrong.** All four were caught by a criterion written down BEFORE the measurement existed.
+Pre-registration is the only thing that has ever killed a slice in this project on time.

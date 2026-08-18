@@ -83,12 +83,20 @@ ceiling and its floor both already measured. ⚠⚠ **THAT CEILING IS NOT AN ACQ
 42's GATE 0 (2026-08-18, `docs/plans/slice42.md` §I.1) AND THE SENTENCE ABOVE MUST NOT BE QUOTED WITHOUT THIS
 ONE.** A cue that STOPS at the first lock (what a search can actually do) reaches NONE of the 0.110 m: it locks
 at the same instant as the oracle and misses the full 3620.675 m. The oracle's rescue is a PERMANENT feed that
-also covers everything after the lock. ⭐ And gate 0 then found something sharper than the candidate it was
-probing: **THE ACQUISITION KNIFE-EDGE** — with the window EXACTLY equal to the birth offset the seeker locks,
-`off@lock` == fov to four decimals, the lock survives ONE TICK and the arm misses as if it had never locked;
-**0.05° more window turns the same lock into 8.854 s of track and a 0.224 m hit**, flat to the digit on both
-sides. The mechanism is `missile.jl:2086` — the slew gate can be ENTERED but never RE-ENTERED ⇒ **ACQUISITION
-NEEDS MARGIN, NOT COVERAGE.** ⚠ Also measured there and load-bearing for the search half: on the geometry that
+also covers everything after the lock. ⚠⚠⚠ **AND THE "ACQUISITION KNIFE-EDGE" GATE 0 FOUND IN ITS PLACE IS **DEAD**, KILLED AT
+GATE 1 (2026-08-18, `docs/plans/slice42.md` §VI) — DO NOT REBUILD IT.** The claim was that with the window
+EXACTLY equal to the birth offset the seeker locks, the lock survives ONE TICK, and the arm misses as if it had
+never locked, so *acquisition needs MARGIN, not coverage*. **It is the NULL CASE RELABELLED, and its own gate-0
+table said so: the "worthless lock" cell's miss is BYTE-IDENTICAL to the never-locks cell's**, so the lock moves
+no number any verdict depends on — and the `off@lock == fov` column is the inclusive `off ≤ fov` gate echoing
+back its own authored constant, not a measurement. ⭐⭐⭐ **THE DEAD BAND IS `ω_LOS · dt` — ONE INTEGRATION
+STEP:** re-flown at `dt` = 2e−3 / 1e−3 / 5e−4 the band HALVES when the step halves, `ω·dt` lands inside its
+bracket at all three, and `hold_max` is exactly one tick on every row — 0.0036° against a 10° window at the
+shipped step, i.e. 0.036 %. ⚠ The one non-degenerate rescue (*the required margin is set by the RACE between
+the LOS rate and the servo*) is REFUTED in the same probe: `err −10` misses by 3620.675 m at BOTH 8 and 60 °/s,
+the same digits, and the same |err| on the OTHER SIGN holds fine (the LOS walks INTO the window there and mints
+its own margin). ⇒ the transferable rule, in `docs/LESSONS.md`: **a finding whose SIZE is set by the
+integrator's step cannot be a lesson about hardware — re-fly a narrow threshold effect at half `dt`.** ⚠ Also measured there and load-bearing for the search half: on the geometry that
 would ship a single 15° window rescues every showcase cell with NO search, so *"buy coverage with time instead
 of glass"* is not demonstrable while a wider window is FREE in this model — a search-pattern slice must first
 make the window COST something (detector sensitivity / resolution). ⭐ What a search DOES own, measured on the

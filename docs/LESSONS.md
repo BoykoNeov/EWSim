@@ -100,6 +100,28 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
   where numerical damping can masquerade as physics — show first-order convergence and bound the
   discrete effective damping against a domain cell.
 
+- **⭐⭐⭐ CHECK A CLAIMED *STEP* AGAINST THE *NULL* CELL BEFORE BELIEVING IT.** Slice 42's headline
+  finding was *"the seeker locks at the rim and the lock is WORTHLESS"* — and the worthless-lock cell's
+  miss was **byte-identical to the never-locked cell's** (305.112 m both). A cell whose verdict number
+  equals the do-nothing cell's verdict number **is** the do-nothing case wearing a label. The null row
+  was already in the table; nobody compared the two. **Put the do-nothing arm in the same table as the
+  result arms, in the same column, and read them against each other first.**
+- **⭐⭐ A REPORTED QUANTITY THAT EQUALS AN AUTHORED THRESHOLD TO FULL PRECISION IS THE THRESHOLD, NOT A
+  MEASUREMENT.** `off@lock` reading `12.0000` against a `fov` of `12.00` looked like a four-decimal
+  confirmation of a mechanism; it is an inclusive `off ≤ fov` gate echoing back its own constant with
+  the head placed on the rim BY CONSTRUCTION. **When a measured column agrees with an authored number
+  to the last digit, ask what would have to be true for it to disagree** — if nothing could, it is
+  not data.
+- **⭐⭐⭐ RE-FLY A NARROW THRESHOLD EFFECT AT HALF `dt`. IF IT HALVES, IT IS THE STEP.** Slice 42's
+  acquisition "margin" is `ω_LOS · dt` — the distance the line of sight travels between two evaluations
+  of a once-per-tick gate. Measured at `dt` = 2e−3 / 1e−3 / 5e−4 the band brackets halve each time and
+  `ω·dt` lands inside all three; `hold_max` is exactly ONE TICK on every row. **A finding whose SIZE is
+  set by the integrator's step cannot be a lesson about hardware** — and this is a much stronger kill
+  than *"the effect is small"*, which only ever invites *"small on this wire"*. Two extra runs.
+- **⚠ AND A DEAD BAND THAT DEPENDS ON A *SIGN* IS A COINCIDENCE, NOT A MECHANISM.** The same |offset|
+  on the other side of the rim did not fail at all — there the LOS walked INTO the window and minted its
+  own margin. **Fly the mirror-image arm before naming a boundary effect.**
+
 ## While testing: teeth that actually bite
 
 - **Two wrong oracles can both look like a tolerance problem.** `acos` of a dot product is

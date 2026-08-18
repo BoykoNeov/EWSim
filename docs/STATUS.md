@@ -5873,6 +5873,76 @@ own *"the threshold is the guidance loop's, not the airframe's"*), and there the
 2.6 % **over-shoots by 27 %** — the sign a phase lag predicts. ⚠ CONFOUNDED by the plant change, so it
 is a measured hook and NOT a claim.
 
+## Slice 42 — A SEARCH PATTERN, THEN AN ACQUISITION MARGIN — KILLED AT GATE 1 (2026-08-18)
+
+**Not a slice — a KILL RECORD. No code shipped; the suite stayed at 7693.** Full record, all ten
+probes: `docs/plans/slice42.md`; raw probe output in `M:\claud_projects\temp\slice42\`. Nothing under
+`core/` was touched at any point (the one gate-0 probe patch was reverted in `78c98da`).
+
+**WHAT WAS PROPOSED, AND WHAT IT BECAME.** The slice opened as *"buy coverage with TIME instead of
+with GLASS"* — a seeker that SWEEPS to find a target it never acquired, against a wider detector
+window. Gate 0 measured that honestly and **demoted it**: §V.3 found that on the geometry that would
+ship, **a single 15° window rescues every showcase cell, and nothing in this model charges for the
+window**, so the trade cannot be motivated from inside the simulator. What survived gate 0 in its
+place was a second finding — the **acquisition knife-edge** — and §V.6 made the scoping call onto it.
+**Gate 1 killed that too, and the frontier the slice walked away from turns out to have been the
+stronger of the two all along.**
+
+⚠⚠ **THE KNIFE-EDGE WAS THE NULL CASE WEARING A LABEL, AND ITS OWN GATE-0 TABLE SAID SO.** §V.2 read
+the window ladder as *"when the window exactly equals the birth offset the seeker LOCKS — and the lock
+is WORTHLESS"*: at `fov 12.00` the head locks, `off@lock` reads 12.0000, the lock survives one tick,
+and the arm misses by 305.112 m. **But 305.112 m is the `fov 11.95` NEVER-LOCKS cell's miss, to the
+digit.** A lock that moves no number in the verdict column is not a lock that is worth nothing — it is
+the do-nothing case relabelled. And `off@lock == fov` to four decimals was never a measurement: the
+gate fires on `off ≤ fov` with the head at the rim BY CONSTRUCTION, so the column echoes its own
+authored constant.
+
+⭐⭐⭐ **AND THE KILL IS STRUCTURAL, NOT A MAGNITUDE ARGUMENT: THE DEAD BAND IS `ω_LOS · dt` — ONE
+INTEGRATION STEP.** Gate 1 walked the BIRTH OFFSET (not the window) on `slice36_handover`'s shipped
+wire, shipped 10° window, and re-flew the rim at three integration steps:
+
+| `dt` s | ω_LOS °/s | **ω·dt** ° | last **DYING** err ° | first **HOLDING** err ° | `hold_max` |
+|---|---|---|---|---|---|
+| 2e−3 | +3.6300 | **0.00726** | −9.9940 | −9.9900 | 0.0020 s |
+| 1e−3 | +3.6290 | **0.00363** | −9.9980 | −9.9960 | 0.0010 s |
+| 5e−4 | +3.6285 | **0.00181** | −9.9990 | −9.9980 | 0.0005 s |
+
+**The band halves when the step halves; `ω·dt` falls inside its measured bracket at all three steps;
+`hold_max` is EXACTLY ONE TICK on every row.** The "acquisition margin" is the distance the line of
+sight travels between two evaluations of a once-per-tick gate. At the shipped `dt = 1e-3` it is
+0.0036° against a 10° window — **0.036 %**. ⇒ **A FINDING WHOSE SIZE IS SET BY THE INTEGRATOR'S STEP
+CANNOT BE A LESSON ABOUT HARDWARE** (now `docs/LESSONS.md`).
+
+**THE RESCUE HYPOTHESIS WAS TESTED AND REFUTED TOO (P8, §VI.1).** The one non-degenerate reading —
+*the required margin is set by the RACE between the LOS rate and the servo rate* — predicts the dead
+band shrinks as the servo speeds up. It does not move at all: `err −10` misses by **3620.675 m at both
+8 and 60 °/s, the same digits**, holding one tick on both. A 7.5× servo buys nothing, because the head
+never moves — the gate opens for one tick on a command still equal to the head's own angle and shuts
+before the servo has anything to chase. ⚠ And **the same |err| on the OTHER SIGN does not die**:
+`err +10` at 60 °/s holds (0.206 m, `off@lock` 9.9364 at tick 2), because there the LOS walks INTO the
+window and mints its own margin. Exact equality AND a direction of travel is a coincidence, not a
+mechanism.
+
+⚠ **THE INSTRUMENT PASSED ITS HONESTY CHECK THIS TIME, WHICH IS WHY THE KILL STANDS.** Gate 0 had two
+instrument bugs (§II.3's 1/50-rate crawl, §V.0's search parked on the gimbal stop). The gate-1 probe
+reproduces the shipping wire's own published numbers: at 8 °/s, `err 0 → 3290.078 m` and
+`err −6 → 0.191 m` — `slice36_handover`'s and `slice36_biased`'s headline numbers to the digit — and
+the holding basket `err ∈ [−9, −4]` is slice 36's own basket.
+
+**WHAT SURVIVES, AND IT IS DEFERRED, NOT DEAD** (`docs/DEFERRALS.md`): ⭐ **the WRONG-GUESS FRONTIER**
+(§V.4) — the minimum sweep rate that rescues, against coverage, is FLAT across a 6× range of coverage
+when the search guesses the right direction and rises monotonically on every wrong-guess arm (past
+S ≈ 20° on the + side no rate buys it back). Clean 2-D law, passes the reparameterization gate, `sat%`
+6–19 / `aero%` ≈ 0 on every quoted cell. ⚠ **It must NOT be planned until the DETECTOR WINDOW COSTS
+SOMETHING** — until then a wider window dominates it for free.
+
+**THE METHOD LESSONS** (all now in `docs/LESSONS.md`): check a claimed STEP against the NULL cell
+before believing it; a reported quantity that equals an authored threshold to full precision is the
+threshold, not a measurement; re-fly a narrow threshold effect at half `dt`. ⚠ **And the pattern this
+arc has now repeated four times** (39, 41, the search half of 42, its acquisition half): *the probe was
+right, the table was right, and the SENTENCE on top of the table was wrong* — every one caught by a
+criterion written down BEFORE the measurement existed.
+
 ## Slice 1 — radar to detection to ROC (the first slice; block sits at EOF)
 
 Slice 1 (radar → detection → ROC) — **COMPLETE. Steps 1–7 done & green** (227 tests): world +
