@@ -411,3 +411,149 @@ is a real coincidence — whether the sweep happens to be pointing the right way
    whether ρ or S is the live knob.
 4. **The −18 cells and every arm above `sat%` ≈ 50 are NOT quotable** — they are statements about the
    rate limit and the α ceiling. The shipping domain must be drawn inside the clean region.
+
+---
+
+# ⚠⚠ §V — THE FIXED-INSTRUMENT RE-MEASUREMENT (P5–P7): WHAT SURVIVES §II/§III AND WHAT DOES NOT
+
+Three checks were run before any kernel. **Two of them refuted claims made above, and one of them
+refuted the instrument the claims were measured with.** The refutations are recorded here and the
+original claims are left standing where they were written, per this file's opening rule.
+
+## ⚠⚠⚠ §V.0 THE INSTRUMENT BUG THAT INVALIDATES EVERY **+SIDE** ROW OF §III
+
+§II/§III's grids were flown with the FIRST form of the search, which stepped the **head angle** itself
+(`head_az + d·ρ·dt`) rather than an independent COMMAND. **Where the gimbal STOP binds, the head stops
+advancing, so the step stops advancing, so the REVERSAL NEVER TRIGGERS** — the search silently parks on
+the stop for the whole flight. The static wire's `err ≥ +12` cells are born ON the 30° stop (slice 36's
+own domain note: `+11.9` births the head on the stop), so **every +side row of §III is instrument, not
+physics, and is withdrawn.**
+
+⚠ **WHAT SAYS THE −SIDE TRANSFERS** (rather than being assumed to): the −side never touches the stop,
+and the fixed instrument reproduces §III's −side cells **to the digit** — `err −14, d−1, ρ8, S20` =
+0.100 m and `err −12, d−1, ρ8, S20` = 0.129 m, both unchanged. That agreement is the licence to keep
+the −side and only the −side.
+
+⚠ **AND THIS IS THE SECOND INSTRUMENT BUG IN THIS GATE** (§II.3 was the first, the 1/50-rate crawl).
+Both were plausible, self-consistent, and produced tables that read exactly like physics. **A search
+probe has to be checked where the CLAMPS bind — the stop and the rate limit — because that is where a
+kinematic shortcut stops being equivalent to the thing it stands in for.**
+
+## ⚠⚠ §V.1 §II.2's HEADLINE IS **REFUTED**: THE CUE AND THE SEARCH ARRIVE THE SAME WAY
+
+The discriminating test — the same oracle cue in two approach shapes, same target, same trajectory,
+one variable (`:servo` = `err/τ` capped, which decelerates; `:const` = pure constant rate, no τ):
+
+| wire | err ° | arm | miss m | `off@lock` ° | `hold_max` s | `in%` |
+|---|---|---|---|---|---|---|
+| receding | −12 | cue `:servo` | 0.110 | **9.991** | **10.580** | 95.6 |
+| receding | −12 | cue `:const` | 0.110 | **9.991** | **10.580** | 95.6 |
+| receding | −12 | **SEARCH** | 0.007 | **9.991** | **10.581** | 95.6 |
+| static | −14 | cue `:servo` / `:const` | 0.001 | 9.990 | 8.337 | 94.0 |
+| static | −14 | **SEARCH** | 0.030 | 9.989 | 8.339 | 94.0 |
+
+⇒ **all three acquire at the SAME rim and hold for the SAME duration.** There is no approach-shape
+effect. **"A blind search beats a perfect cue" is withdrawn**, and so is §II.2's mechanism sentence.
+The 0.007-vs-0.110 gap that suggested it is a 16× ratio **between two hits a tenth of a metre apart**,
+which carries no mechanism (advisor's catch, and the reason the verdict column here is `hold_max`).
+
+⚠ **AND §I.1's `a cue that stops at lock rescues nothing` (hold_max 0.001 s) IS AN ARTIFACT OF THE SAME
+CLASS.** P0b opened the existing slew gate; P5 moved the head *before* the gate and let the normal slew
+run too — **one extra servo step on the acquisition tick**, and that one step is the whole difference
+between 3620.675 m and 0.110 m. Which leads to the finding that replaces it:
+
+## ⭐⭐⭐ §V.2 WHAT IS ACTUALLY THERE: **THE ACQUISITION KNIFE-EDGE — A LOCK AT THE RIM IS WORTH NOTHING**
+
+The window walked in 0.05° steps across the bracket, static wire, no search, no cue, no coast:
+
+| err ° | fov 11.95 | **fov 12.00** | **fov 12.05** | fov 12.10 … 25.0 |
+|---|---|---|---|---|
+| −12 | never locks, 305.112 | **locks — `off@lock` 12.0000, `hold_max` 0.001 s, MISS 305.112** | **0.224 m, `hold_max` 8.854 s, `in%` 100** | 0.224, flat to the digit |
+
+| err ° | fov 13.95 | **fov 14.00** | **fov 14.05** | fov 14.10 … 25.0 |
+|---|---|---|---|---|
+| −14 | never locks, 305.112 | **locks — `off@lock` 14.0000, `hold_max` 0.001 s, MISS 305.112** | **0.224 m, `hold_max` 8.854 s, `in%` 100** | 0.224, flat to the digit |
+
+> ⭐⭐ **WHEN THE WINDOW EXACTLY EQUALS THE BIRTH OFFSET, THE SEEKER LOCKS — AND THE LOCK IS WORTHLESS.**
+> `off@lock` is the window, to four decimals; the lock survives ONE TICK; the arm misses by the full
+> 305.112 m of a head that never locked at all. **Fifty millidegrees of extra window turns that same
+> lock into 8.854 s of continuous track and a 0.224 m hit.** Both sides of the step are FLAT to the
+> digit over their whole range, so the finding is threshold-free: it is a step, not a slope.
+
+⭐ **THE MECHANISM IS THE SHIPPED SLEW GATE (`missile.jl:2086`), AND IT IS AN ARCHITECTURE PROPERTY:**
+the head only slews when the target is ALREADY inside the window, so **the gate can be entered but
+never re-entered.** A lock with no margin is one tick of relative motion from being lost for the rest
+of the flight — which is slice 37's *"a break is not an episode, it is the rest of the flight"*, now
+located at the moment of BIRTH rather than at a break.
+
+⇒ **ACQUISITION NEEDS MARGIN, NOT COVERAGE** — and margin is exactly what slice 33 built
+`seeker_fov_margin` to talk about, on a wire where nothing was ever acquired at the rim.
+
+## §V.3 THE WINDOW LADDER ON THE GEOMETRY THAT WOULD SHIP — the reader's first question, answered
+
+Slice 37 §0.2's 12.5 / 15 / 20° are from the RECEDING wire and do not transfer. On the static wire,
+with no search at all: **err −12 needs 12.05°, err −14 needs 14.05°, err +12 needs 11°, err +14 needs
+12°** ⇒ **a single 15° window rescues all four showcase cells.**
+
+⚠⚠ **SO THE SLICE'S ORIGINAL VALUE PROPOSITION (§0.2, *"buy coverage with time instead of with
+glass"*) IS NOT DEMONSTRABLE ON THIS MODEL, AND THAT MUST BE SAID PLAINLY: in this simulator a wider
+window is FREE.** A search buys the same rescue behind a 10° window at a cost in TIME (`t_lock` 0.15–
+6.5 s against instant) — the exchange rate is now measured — but nothing in the model charges for the
+window, so the trade cannot be *motivated* from inside it. That is a named approximation of the
+detector, not a finding, and any slice built here must carry it as one.
+
+## ⭐⭐ §V.4 WHAT DOES SURVIVE, AND IT IS A CLEAN TWO-PARAMETER LAW — **THE WRONG-GUESS FRONTIER**
+
+Full (dir × S × ρ) grid re-flown on the fixed instrument, static wire, coast OFF. The table is the
+MINIMUM sweep rate ρ_min (°/s) that rescues, against coverage S (°):
+
+| err ° | dir | S 5 | S 10 | S 15 | S 20 | S 25 | S 30 |
+|---|---|---|---|---|---|---|---|
+| −12 | **+1 (right)** | 2 | 2 | 2 | 2 | 2 | 2 |
+| −14 | **+1 (right)** | 2 | 2 | 2 | 2 | 2 | 2 |
+| +12 | **−1 (right)** | 1 | 1 | 1 | 1 | 1 | 1 |
+| +14 | **−1 (right)** | 1 | 1 | 1 | 1 | 1 | 1 |
+| −12 | **−1 (WRONG)** | 4 | **5** | **7** | **8** | **10** | **11** |
+| −14 | **−1 (WRONG)** | 6 | **5** | **7** | **8** | **10** | **11** |
+| +12 | **+1 (WRONG)** | 4 | **8** | **10** | **14** | **none ≤ 16** | **none ≤ 16** |
+| +14 | **+1 (WRONG)** | 4 | **8** | **10** | **14** | **none ≤ 16** | **none ≤ 16** |
+
+> ⭐⭐ **GUESS RIGHT AND THE WIDTH IS FREE — ρ_min IS FLAT ACROSS A 6× RANGE OF COVERAGE, ON ALL FOUR
+> ARMS. GUESS WRONG AND EVERY EXTRA DEGREE OF COVERAGE MUST BE PAID FOR IN SWEEP RATE**, monotonically,
+> on all four wrong-guess arms — and past S ≈ 20° on the +side there is no rate that buys it back.
+
+⇒ **F1's survival criterion is met on the FIXED instrument and not only on the broken one:** the rescue
+set is a genuine 2-D surface in (S, ρ) whose shape depends on a third binary variable (the guess), and
+a window has neither a rate nor a direction. **The `S = 20 → S = 30` flip quoted in §III.2 survives**
+(ρ8: S20 rescues 0.100 m, S30 does not) — it is one cell of this frontier.
+
+⚠ **AND THE ρ NON-MONOTONICITY OF §III.2 IS WITHDRAWN WITH THE +SIDE ROWS THAT PRODUCED IT.** On the
+fixed instrument the fine grid (1 → 16 °/s, 1 °/s steps) is a clean **BRACKET on every arm** — rescue
+above ρ_min, miss below, no comb. **ρ is NOT disqualified**, which is what slice 40's `ω_n` was.
+⚠ One wrinkle kept rather than smoothed: `err −14, d−1` reads ρ_min = 6 at S = 5 and 5 at S = 10, a
+single non-monotone step at the smallest coverage. It is one cell and it is quoted, not averaged away.
+
+⚠ **CONTAMINATION on the surviving grid: `sat%` 6–19, `aero%` 0.0 on every quoted cell but one
+(4.8 %).** Clean — unlike the receding wire (`sat%` 29–75, `aero%` to 31), which is the second reason
+the static wire is the one that would ship.
+
+## §V.5 GATE 0 STANDING AFTER THE RE-MEASUREMENT
+
+**The slice is ALIVE but its headline is not the one §II proposed.** What is measured and survives:
+
+1. ⭐ **The acquisition knife-edge** (§V.2) — a lock exactly at the rim is worth exactly nothing, and
+   0.05° of margin is worth 305 m. Threshold-free, flat on both sides, and it explains this whole
+   family. **This is the strongest result in the gate and it is not about searching at all.**
+2. ⭐ **The wrong-guess frontier** (§V.4) — coverage is free when the guess is right and must be bought
+   with rate when it is wrong. A clean 2-D law with a binary third variable.
+3. The two-sided failing set on the static wire (§III.1) — unaffected by the instrument bug, since it
+   involves no search.
+
+**WITHDRAWN:** §II.2's *"a blind search beats a perfect cue"*; §I.1's *"a cue that stops at lock
+rescues nothing"*; every +side row of §III; §III.2's ρ non-monotonicity.
+
+⚠ **THE OPEN QUESTION IS NOW A SCOPING ONE, AND IT IS THE HONEST ONE:** finding 1 is an *acquisition
+margin* lesson and finding 2 is a *search pattern* lesson, and **convention 9 says they are two
+slices, not one.** Finding 1 is cheaper, sharper, threshold-free, and it is a property of code that
+already ships; finding 2 needs a new subsystem and lands on a model where the alternative (a wider
+window) is free. That choice is not made in this file yet.
