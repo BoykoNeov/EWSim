@@ -21,7 +21,7 @@ three-level ledger; read the level you actually need:
 
 ## 1. The current head of the arc (slices 1–40 as one running narrative)
 
-**Slices 1–40 COMPLETE & green — 7222 tests at slice 36 gate 3; slice 37 took it to 7496, slice 38 to 7564, and slice 40 is DONE at 7693.** (⚠ SLICES 39, 41 AND 42 ARE KILL RECORDS, NOT SLICES — the nulling-loop head servo died at gate 0 (`docs/plans/slice39.md`), the second-order FIN actuator died at gate 0 on reparameterization (`docs/plans/slice41.md`), and the search pattern / acquisition margin died at gate 0 and gate 1 respectively (`docs/plans/slice42.md`). None shipped code; the suite is unchanged at 7693.)
+**Slices 1–40 COMPLETE & green — 7222 tests at slice 36 gate 3; slice 37 took it to 7496, slice 38 to 7564, and slice 40 is DONE at 7693.** (⚠ SLICES 39, 41, 42 AND **44** ARE KILL RECORDS, NOT SLICES, and **43 IS A GATE-0 LAW RECORD** — the nulling-loop head servo died at gate 0 (`docs/plans/slice39.md`), the second-order FIN actuator died at gate 0 on reparameterization (`docs/plans/slice41.md`), and the search pattern / acquisition margin died at gate 0 and gate 1 respectively (`docs/plans/slice42.md`). None shipped code; the suite is unchanged at 7693.)
 (⚠ the count FELL *at slice 35 gate 3* — 6892 → 6876 — and that direction is accounted for: ~87 new asserts in,
 ~103 out, because a per-entity scenario sweep collapsed into ONE strictly-stronger exact-set assert. The 6876 →
 6988 → 7057 → 7067 → 7222 walk since then is slice 36's four gates.) **The committed roadmap (HANDOFF §10 items 1–13) is DONE; slices 15–36
@@ -1392,3 +1392,33 @@ rings 84× harder. The classical reason gimbals exist inverts here — and the o
 per servo frame, so it is a mechanism and not a cell. What you can still do is aim the belief at the
 glass's worst-case slope, where slice 30's rule pays for the fourth time and the button simply stops
 doing anything at all.**
+
+⭐⭐⭐ **Slice 44 then went and built the thing three slices had been waiting for — and found there was
+nothing for it to do.** Since slice 42 the whole family had been blocked on one sentence: a wider seeker
+window is FREE in this model, so nobody would ever pay for a search when they could just widen the glass.
+The named cure was to give the window a price by asking whether the seeker can actually SEE the target,
+not merely point at it — because one aperture serves both, and a wider window is a smaller antenna. That
+part is exactly true and it flew exactly: double the window, halve the range, to six decimal places. The
+part that failed was the engagement. **This missile is launched 6.4 km from its target and its seeker can
+see 8 km, so it begins the flight already able to see — the gate has nothing to gate**, and the whole
+apparatus is inert on the shipped wire. Bending the wire until it bites takes a target four hundred times
+smaller than the one authored. ⇒ **A limit can only price a design if the design is on the wrong side of
+it to begin with**, and where the engagement starts is a property of the SCENARIO, not of the sensor. So
+the precondition is renamed rather than removed: a search-pattern slice needs a missile launched BEYOND
+its seeker's reach — a midcourse phase — and that is its own slice, because this one is unpowered and a
+launch that far out simply falls out of the sky before it arrives.
+
+⭐⭐ **Two things it measured on the way are worth more than the law it went looking for.** The first is
+that a late lock is not free after all — it is just not paid in the currency anyone was watching. The
+last arm that still hits flies at **exactly 100 % of the airframe's available turn**, having spent every
+bit of it undoing what the delay cost, while the miss column sits flat at a quarter of a metre and shows
+nothing. One step further and the demand FALLS, because by then the track is gone and there is nothing
+left to command: two different limits end the free interval within 500 m of each other, and the headline
+number reveals neither. The second is that the narrow-window failures this arc has been reading as a
+WINDOW problem are a SERVO problem. A lock right at the rim hands the head a full-window slew to close,
+and at the shipped 8 °/s it cannot close it before the line of sight runs away — triple the slew rate and
+every one of those 400-metre misses becomes a hit, from the identical instant of lock. ⚠ And the first
+write-up of this gate said the opposite of both, in sentences wider than their own measurements; what
+caught them was the contamination columns the plan had registered before any number existed. **Five times
+now in this arc the probe was right, the table was right, and the sentence on top of the table was
+wrong.**

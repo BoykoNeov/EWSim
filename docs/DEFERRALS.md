@@ -135,7 +135,9 @@ the measured locks. ⚠ The ladder is anchored on the prediction, so it is the S
 ⭐⭐ **AND THIS GIVES THE BLOCKED DEFERRAL A SECOND, CHEAPER ROUTE TO BEING MOTIVATABLE:** the window's SHAPE, not
 just its sensitivity. A per-axis gate of the same half-width LOCKS the arm the radial gate rejects ⇒ **the
 RECTANGULAR / PER-AXIS FOV deferral would unblock a search-pattern slice just as `SEEKER RANGE / SNR ACQUISITION
-LIMITS` would, and it is the cheaper of the two.** ⚠ Does not
+LIMITS` would, and it is the cheaper of the two.** ⚠⚠⚠ **HALF OF THAT SENTENCE IS NOW REFUTED — SLICE 44's GATE 0
+MEASURED `SEEKER RANGE / SNR ACQUISITION LIMITS` AND IT DOES **NOT** UNBLOCK ANYTHING** (2026-08-18,
+`docs/plans/slice44.md`; see the rewritten entry below). The per-axis half is untouched and stands on its own. ⚠ Does not
 move with `dt` (10.0647 / 10.0656 / 10.0661 at 2e−3 / 1e−3 / 5e−4). ⚠ The LOS rate DOES rise 318× across the
 flight (0.271 → 86.05 °/s) — that is why a LATE acquisition is worthless, not why this arm fails. **(3) GUESS RIGHT AND COVERAGE IS NOT FREE — IT IS NEVER REACHED:** the head locks
 **2.07° into a pattern authored 3–30° wide**, which is why ρ_min looked flat. **(4) GUESS WRONG AND COVERAGE COSTS
@@ -152,8 +154,41 @@ could sit anywhere in that band).
 ⚠⚠⚠ **AND THE PRECONDITION IS UNCHANGED AND IS NOW SHARPER, NOT WEAKER: finding (1) says a wider `fov` reduces
 the deficit ONE-FOR-ONE, and the deficit is the ENTIRE cost — so widening the glass by 2° and travelling 2°
 further are THE SAME ACT, and only one of them costs time.** A search-pattern SLICE still must not be planned
-until the detector window COSTS something (`SEEKER RANGE / SNR ACQUISITION LIMITS` is the natural carrier).
-**Slice 43's gate 0 ships a LAW to this deferral, not a slice.**
+until the detector window COSTS something. ⚠⚠⚠ **THE CARRIER THIS LINE NAMED — `SEEKER RANGE / SNR ACQUISITION
+LIMITS` — WAS BUILT AND MEASURED AT SLICE 44's GATE 0 AND IT IS NOT THE CARRIER** (2026-08-18,
+`docs/plans/slice44.md`, no code shipped, suite unchanged at 7693). The aperture identity is EXACT on the flying
+wire (`R_acq · fov` constant to **0.0000 %** over a 4× fov range, log-log slope **−1.000000**, `r_acq` checked
+against `snr_freespace` at +10.0000 dB) — **the physics is not what failed.** ⚠⚠ What failed is the WIRE:
+a Ku-band seeker authored from a real class BEFORE any flight (200 W, 16 GHz, 10 ms integration, NF 4, L 5,
+η 0.6, 10 dB threshold, `rcs_m2 = 1.0`) reaches **8079 m at the shipped 10° window against a 6437 m launch
+range — ratio 1.255**, so **the missile is launched INSIDE its own seeker's horizon** and the gate is *exactly
+inert* (`t_lock` 0.0010 s, miss 0.2237 m, byte-identical to no gate). Isolated, a delayed lock is FREE:
+miss 0.2237 / 0.3491 / 0.3267 / **0.2514** at `R_acq` = none / 4000 / 3000 / **2000 m**, i.e. **a lock at
+6.158 s of an 8.9 s flight is indistinguishable from a lock on tick 1**; with the coupling on, a hit stays
+available to **−26 dB** and the gate first costs something at **−28 dB** (`R_acq/R_launch` = 0.250 — a
+**0.0025 m²** target, or 1/400 of the power, or 1/400 of the integration time), and restricting fov to the
+family's 1–12° domain does not move it. ⭐⭐⭐ **THE RULE: A DETECTION GATE CAN ONLY PRICE A DESIGN VARIABLE IF THE
+ENGAGEMENT IS LAUNCHED OUTSIDE THE SENSOR'S HORIZON — a property of the WIRE, not of the seeker** (26–43 fly a
+6.4 km / 8.9 s TERMINAL engagement, chosen for the radome loop). ⇒ **THE PRECONDITION IS RENAMED: what a
+search-pattern slice needs is AN ENGAGEMENT LAUNCHED BEYOND THE SEEKER'S HORIZON — A MIDCOURSE PHASE — and that
+is its own slice, not a scenario edit**, because this wire's missile is unpowered with zero drag area at 3000 m,
+so a 20 km engagement takes ≥ 28 s over which gravity alone drops it **3845 m, into the ground.**
+⭐⭐ **TWO MEASURED THINGS SURVIVE AND ARE WORTH MORE THAN THE LAW WAS.** (a) **A LATE LOCK IS PAID FOR IN
+MANOEUVRE AUTHORITY, AND MISS CANNOT SHOW IT:** peak `a_cmd` after lock runs 573 → 436 → 1040 → **3000.0**
+against `a_max` = 3000 as `R_acq` falls none → 4000 → 3000 → **2000** — **the last FREE cell spends exactly
+100.00 %** where the no-gate arm spends 19.10 %, and past it the demand FALLS BACK to 20.91 % because the track
+is gone. **Two limits end the free interval within 500 m of each other and the headline metric showed neither.**
+(b) ⚠⚠ **THE NARROW-WINDOW FAILURE IS THE SERVO'S, NOT THE WINDOW'S:** at fov 8.0/8.6/8.8 the shipped 8 °/s head
+misses 361.97/438.89/402.17 m holding 1.24/0.71/0.63 % of ticks, and at **30 °/s the same arms hit at
+0.2209/0.1931/0.1036 m with hold ≥ 99.97 % from IDENTICAL lock instants** ⇒ **a lock at the window's EDGE hands
+the servo a FULL-WINDOW SLEW** (slice 35's axis alone; ⚠ 30 and 60 °/s are byte-identical, so it is a THRESHOLD
+in (8, 30] and is NOT bracketed). ⚠ And a **PARTIAL-RESCUE MODE** exists that slice 43's grid could not produce
+— 7.7996 m at hold 55.04 %, 85.84 m at hold 31.20 % — both inside the gap slice 43 recorded as EMPTY
+(*"largest rescue 0.3398 m, smallest failure 305.1118 m, nothing between"*). ⭐ P6 cleared the boundary the
+−28 dB figure hangs off (step-independent to 2 % across 2e−3/1e−3/5e−4) ⚠ but failure MAGNITUDES walk hard with
+`dt` (320 → 439 → 627 m) ⇒ **quote the VERDICT, never the metres, once a track is lost.**
+**Slice 43's gate 0 ships a LAW to this deferral, not a slice; slice 44's gate 0 ships a KILL to its
+PRECONDITION and a rename.**
 ⚠ THREE INSTRUMENT BUGS in this family are all ONE bug — a sweep command rebuilt from the head's own position
 crawls at 1/50 rate; a sweep that steps the HEAD never reverses once the gimbal STOP binds; a sweep that steps a
 COMMAND and never checks the head silently teleports it. **A search probe must be checked where the CLAMPS bind,
@@ -250,8 +285,12 @@ window's SHAPE, not its size, decides acquisition** (⚠ precisely: 34 gate 2 §
 though it is step-independent and 100× the per-tick LOS motion; the non-marginal number is the 25 % of window
 radius spent on the unswept axis). — and slice 34 SHARPENS it (it ships one circular
 window AND one circular stop, and gate 1 wrote down that the circular shape rests on a SPECIES argument because no
-flying arm had ever bound the stop; gate 2's §2.5 bound it for the first time); SEEKER RANGE / SNR ACQUISITION
-LIMITS (32/33/34 model only the ANGLE half of "can the seeker see it");**
+flying arm had ever bound the stop; gate 2's §2.5 bound it for the first time); ⚠⚠ **SEEKER RANGE / SNR ACQUISITION LIMITS IS NO LONGER ON THIS
+LIST AS AN UNBLOCKER — MEASURED AND KILLED AT SLICE 44's GATE 0** (2026-08-18, `docs/plans/slice44.md`); what
+replaces it is **AN ENGAGEMENT LAUNCHED BEYOND THE SEEKER'S HORIZON (a MIDCOURSE phase)**, see the rewritten
+block above. ⚠ The RF half itself (32/33/34 model only the ANGLE half of "can the seeker see it") remains
+un-modelled and could still ship as physics — but it must NOT be planned as the thing that motivates a
+search, and on a terminal wire it is a DEAD KNOB by measurement;**
 a SINGLE IMU (slice 31 corrupts the COMPENSATOR's gyro only; feeding the same reading to the α/β autopilot was
 MEASURED at its gate 0 and moves the onset by a DIFFERENT mechanism — plant DAMPING, `k_q` supplying ~98% of it —
 which is why it is a separate slice and not a footnote); GYRO NOISE (⚠ deferred on DRAW-TOPOLOGY grounds, not

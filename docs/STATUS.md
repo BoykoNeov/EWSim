@@ -6152,3 +6152,85 @@ Next: **slice 2 — propagation fidelity** (`two_ray` behind the `propagation` k
 `test_propagation.jl` → `radar.jl` propagation dispatch + `set_fidelity` command → Godot fidelity
 toggle, Pluto coverage diagram a stretch). The seam is pre-built: `radar.jl` already guards on the
 `:propagation` knob and the server handshake already ships `world.fidelity` (the §12 badge).
+
+## Slice 44 — CAN THE SEEKER SEE IT: RANGE / SNR ACQUISITION LIMITS — GATE-0 KILL RECORD (2026-08-18)
+
+**Not a slice — a GATE-0 KILL RECORD. No code shipped; the suite stayed at 7693 (re-run green on a
+`git status`-clean tree after revert).** Full record, probes P1/P0a/P7/P0b/P10/P11/P12:
+`docs/plans/slice44.md`; raw probe output in `M:\claud_projects\temp\slice44\`. `core/src/missile.jl`
+carried a one-line `:probe_r_acq` conjunct twice during the run and was restored from a pre-patch copy
+both times (`git status --short` empty, `git diff --stat` empty).
+
+**WHY IT WAS OPENED.** `docs/DEFERRALS.md` named `SEEKER RANGE / SNR ACQUISITION LIMITS` as **the
+precondition that would unblock the search-pattern family** — slices 42 and 43 both ended blocked on
+*"a wider window is FREE in this model"*, and slice 43's finding 1 sharpened it to *"widening the glass
+by 2° and travelling 2° further are THE SAME ACT."* The candidate law was that one aperture serves
+both window and reach (`G ∝ θ⁻²` ⇒ `SNR ∝ θ⁻⁴` ⇒ `R_acq ∝ 1/fov`), so widening buys angle and spends
+range, giving a V in acquisition time with an interior optimum.
+
+⭐ **THE APERTURE IDENTITY IS EXACT ON THE FLYING WIRE** — `R_acq · fov` constant to **0.0000 %** over a
+4× fov range, log-log slope **−1.000000**, and `r_acq` verified against `snr_freespace` (SNR at `R_acq`
+= +10.0000 dB at fov 3/6/12) rather than hand-recomputed. **The physics is not what failed.**
+
+⚠⚠⚠ **P1 FIRED AT THE SHIPPED CONFIGURATION AND EVERYTHING AFTER IT IS AN AUTOPSY.** A Ku-band seeker
+authored from a real class *before any flight* (200 W, 16 GHz, 10 ms coherent integration, NF 4 dB,
+L 5 dB, η 0.6, 10 dB threshold, against the scenario's own `rcs_m2 = 1.0`) gives `R_acq` = **8079 m at
+the shipped 10° window against a 6437 m launch range — a ratio of 1.255.** **The missile is launched
+INSIDE its own seeker's horizon**, and the gate is not weak but *exactly inert*: `t_lock` 0.0010 s and
+miss 0.2237 m, byte-identical to no gate at all.
+
+⭐⭐ **THE COMPOSED V IS REAL AND PRICES NOTHING.** One never-locking flight carries both curves (the
+pre-lock trajectory is fov-independent — PN has no rate to act on — so `head_off_deg(t)` and
+`los_range(t)` give `t_angle(fov)` and `t_range(fov)` for every fov at once; slice 43 §V.2's method).
+The V is INTERIOR at every budget from −12 to +6 dB with the left arm binding on ANGLE and the right on
+RANGE, and `fov*` moves ≈1° per 6 dB. **Flown, miss does not follow it:** fov 8.0 angle-limited locks at
+t 5.442 / r 2510 and misses by **361.97 m**, while fov 20 range-limited locks at t 5.777 / r 2271 and
+**hits at 0.058 m** — the same lock time, the same lock range, opposite verdicts.
+
+⭐⭐⭐ **ISOLATED, THE RANGE GATE IS FREE ACROSS THE WHOLE PLAUSIBLE DOMAIN.** Holding the window wide and
+sweeping `R_acq` alone: miss 0.2237 / 0.3491 / 0.3267 / **0.2514** at `R_acq` = none / 4000 / 3000 /
+**2000 m** — a lock at **6.158 s of an 8.9 s flight** is indistinguishable from a lock on tick 1. With
+the coupling on, sweeping fov at each budget, **a hit remains available down to −26 dB** and the gate
+first costs something at **−28 dB** (`R_acq/R_launch` = 0.250) — **a 0.0025 m² target instead of 1.0 m²,
+or 1/400 of the transmit power, or 1/400 of the integration time.** Restricting fov to the family's own
+1–12° domain does not move that boundary.
+
+**⚠⚠ THE THREE PRE-REGISTERED CHECKS (P12) — TWO OF THEM REFUTED THE FIRST WRITE-UP'S SENTENCES:**
+1. ⭐⭐ **THE AUTHORITY COLUMN (P7, unrun on the deciding tables).** *"A delayed acquisition costs
+   nothing"* is **too wide**. Peak `a_cmd` after lock runs 573 → 436 → 1040 → **3000.0** at `R_acq` =
+   none / 4000 / 3000 / **2000**, against `a_max` = 3000 — **the last free cell spends exactly 100.00 %
+   of the airframe's authority** where the no-gate arm spends 19.10 %. ⭐ **The delay is not free; it is
+   paid in manoeuvre authority, and MISS cannot show that until the authority runs out.** Past it the
+   failure is *not* an authority failure — at `R_acq` 1500 the demand falls back to 20.91 % precisely
+   because the track is gone (hold 31.20 %). **Two different limits end the free interval within 500 m
+   of each other and miss alone showed neither.** (Slice 41's kill inverted: there a clamp BOUND and
+   hid a real effect; here a limit is spent to the last percent under a flat headline metric.)
+2. ⚠⚠⚠ **THE NARROW-WINDOW FAILURE IS THE SERVO'S, NOT THE WINDOW'S — and the first write-up's
+   *"a late lock with WRONG POINTING is fatal"* is REFUTED.** At fov 8.0 / 8.6 / 8.8 the shipped 8 °/s
+   head misses by 361.97 / 438.89 / 402.17 m holding the track 1.24 / 0.71 / 0.63 % of the time; at
+   **30 °/s the same arms hit at 0.2209 / 0.1931 / 0.1036 m with hold ≥ 99.97 %, from IDENTICAL lock
+   instants** (5.4420 / 4.1470 / 3.6980). ⭐⭐ **A lock at the window's edge hands the servo a
+   full-window slew, and at 8 °/s it cannot close 8.6° before the LOS runs away** — slice 35's axis
+   alone, not 32/34's. ⚠ 30 and 60 °/s are byte-identical on every row, so this is a THRESHOLD
+   somewhere in (8, 30] and is NOT bracketed.
+3. ⭐ **HALF `dt` (P6).** The free/broken boundary the −28 dB figure hangs off is **step-independent**
+   (the broken cell reproduces to 2 % and its hold % to 0.2 points across 2e−3 / 1e−3 / 5e−4). ⚠ But
+   **failure MAGNITUDES walk hard with `dt`** (320 → 439 → 627 m on the servo arm) ⇒ **quote the
+   VERDICT, never the metres, on any arm that has lost the track.**
+
+⚠ **AN INHERITED CLAIM CONTRADICTED IN PASSING, FLAGGED NOT BURIED:** slice 43 recorded this wire's
+verdict as **BIMODAL** (*"largest rescue 0.3398 m, smallest failure 305.1118 m, nothing between"*).
+Two cells here land inside that gap — **7.7996 m at hold 55.04 %** and **85.84 m at hold 31.20 %**.
+**There is a PARTIAL-RESCUE mode** (acquire, hold part of the endgame, lose it) that slice 43's grid
+could not produce. Recorded so a later slice does not meet it as a surprise.
+
+> ⭐⭐⭐ **THE VERDICT, AND IT IS THE OPPOSITE OF WHAT THE DEFERRAL PROMISED.** `SEEKER RANGE / SNR
+> ACQUISITION LIMITS` **does not unblock the search-pattern family**. A wider window still costs
+> nothing at any plausible budget, and where it finally does, the cost belongs to slices already
+> shipped. ⭐⭐ **THE REASON IS THE TRANSFERABLE RULE: A DETECTION GATE CAN ONLY PRICE A DESIGN
+> VARIABLE IF THE ENGAGEMENT IS LAUNCHED OUTSIDE THE SENSOR'S HORIZON** — and that is a property of
+> the WIRE, not of the seeker. Slices 26–43 fly a 6.4 km / 8.9 s TERMINAL engagement chosen for the
+> radome loop. ⇒ **The precondition is RENAMED: what a search-pattern slice needs is an engagement
+> launched beyond the seeker's horizon — a MIDCOURSE phase — and that is its own slice**, because
+> this wire's missile is unpowered with zero drag area at 3000 m, so a 20 km engagement takes ≥28 s
+> over which gravity alone drops it **3845 m, into the ground.**

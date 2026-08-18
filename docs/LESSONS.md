@@ -225,3 +225,24 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
 - **Anything the verdict computes inside `_draw` has no headless proof.** Extract it to a pure
   helper the UI test can call.
 
+- **A gate can only price a design variable if the design is on the wrong side of it to begin
+  with.** Slice 44 built an exact detection-range gate and it moved nothing, because the
+  engagement starts INSIDE the sensor's horizon (`R_acq/R_launch` = 1.255). Before building a
+  limit, measure where the shipped wire sits relative to it — one line of arithmetic, and it
+  is the whole slice.
+- **Before composing a trade out of two times, check the two seconds are interchangeable.**
+  Slice 44's V in acquisition TIME was real and priced nothing: a second spent unable to SEE cost
+  nothing, a second spent with the servo unable to CATCH UP was unrecoverable. Same axis, same
+  units, incommensurable.
+- **A flat headline metric can hide a budget being spent to the last percent.** The "free"
+  arm of slice 44 flew at **100.00 %** of `a_max` while its miss stayed at 0.25 m; one cell
+  further the demand FELL because the track was gone. Carry the authority/contamination column
+  even when the headline looks flat — flatness is not slack. (Slice 41's kill inverted: there a
+  clamp BOUND and hid a real effect.)
+- **A threshold effect at a window EDGE is usually the actuator's, not the window's.** A lock at
+  the rim hands the servo a full-window slew. Slice 44's narrow-window misses (362–439 m) all
+  became hits at 0.10–0.22 m by tripling the head's slew rate alone, from identical lock instants.
+  Re-fly any edge effect at a faster actuator before attributing it to the geometry.
+- **Quote the VERDICT, never the metres, once a track is lost.** Post-loss trajectories diverge,
+  so the miss samples a divergence rather than measuring one — slice 44's failure magnitudes
+  walked 320 → 439 → 627 m across a 4× range of `dt` while every verdict held.

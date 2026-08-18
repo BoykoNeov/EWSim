@@ -54,7 +54,7 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Where the project is (2026-08-18)
 
-**Slices 1–40 COMPLETE & green — 7693 tests.** (Slices 39, **41 and 42** are KILL RECORDS and **43 is a
+**Slices 1–40 COMPLETE & green — 7693 tests.** (Slices 39, **41, 42 and 44** are KILL RECORDS and **43 is a
 GATE-0 LAW RECORD** — none shipped code, so the count is unchanged.)
 HANDOFF §10 items 1–13 — the committed roadmap — are DONE; slices 15–40 are into the §11
 Tier-A horizon.
@@ -79,7 +79,7 @@ this split exists to fix).
 
 | Before you… | Read |
 |---|---|
-| plan slice 43 / pick the next slice | `docs/DEFERRALS.md` — the backlog **and the kill list** |
+| plan slice 45 / pick the next slice | `docs/DEFERRALS.md` — the backlog **and the kill list** |
 | change architecture, frames, the wire protocol, the tick contract | `HANDOFF.md` |
 | quote slice N's numbers, test names, or gate detail | `docs/STATUS.md` — grep `## Slice N` |
 | recall what slice N's *lesson* was | `docs/SLICES.md` |
@@ -131,6 +131,20 @@ something already killed**. One line each; the reasoning is in `docs/DEFERRALS.m
   `none ≤ 16` was its own grid edge — 18/22 °/s; +side is stop contamination). ⚠ **An open-loop sweep WINDS
   UP against `rate_max` — what saturates is the AMPLITUDE** (20° at 64 °/s → 4.4° swept, arm FAILS); cure
   `ρ ← min(ρ, rate_max)`, anti-windup is a CAUTION (no verdict moves in 16 cells).
+- **`SEEKER RANGE / SNR ACQUISITION LIMITS` AS THE UNBLOCKER FOR THE SEARCH** (slice 44 gate 0) — **DEAD.** The
+  aperture identity is EXACT on the flying wire (`R_acq · fov` constant to 0.0000 %, slope −1.000000) and changes
+  NOTHING: the authored Ku seeker reaches **8079 m against a 6437 m launch** ⇒ the missile starts already able to
+  see, and the gate is byte-identical to no gate. A hit survives to −26 dB; the gate first bites at **−28 dB**
+  (a 0.0025 m² target). ⭐⭐ **A detection gate can only price a design variable if the ENGAGEMENT is launched
+  OUTSIDE the sensor's horizon — a property of the WIRE, not the sensor** (26–43 fly a 6.4 km / 8.9 s TERMINAL
+  shot). ⇒ precondition **RENAMED to a MIDCOURSE-RANGE ENGAGEMENT**, its own slice (unpowered, zero drag ⇒ a
+  20 km shot drops 3845 m into the ground). ⭐⭐ **Two survivors, both bigger than the law:** a late lock is paid
+  in **MANOEUVRE AUTHORITY and MISS cannot show it** (last FREE cell flies at **100.00 % of `a_max`** at miss
+  0.2514 m; one step further the demand FALLS to 20.91 % because the track is gone — **flatness is not slack**);
+  and ⚠⚠ **the narrow-window failures of 32/34 are the SERVO's** — fov 8.0/8.6/8.8 miss 362/439/402 m at 8 °/s
+  and **hit at 0.22/0.19/0.10 m at 30 °/s from IDENTICAL lock instants** (a lock at the rim hands the servo a
+  FULL-WINDOW SLEW; threshold in (8, 30], not bracketed). ⚠ A **PARTIAL-RESCUE** mode exists inside the gap
+  slice 43 called empty (7.80 m at hold 55 %, 85.8 m at hold 31 %).
 - **AN "ACQUISITION KNIFE-EDGE" / "a lock at the rim is worth nothing"** (slice 42, gate 1) — DEAD. ⭐⭐ **The
   band is `ω_LOS · dt` — ONE INTEGRATION STEP: halve `dt` and it halves** (0.0036° against a 10° window).
   The gate-0 table already said so — the "worthless lock" cell's miss was BYTE-IDENTICAL to the never-locks
