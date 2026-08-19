@@ -1043,6 +1043,54 @@ function integrate!(a::Autopilot, w::World, dt::Float64)
     return nothing
 end
 
+# ── SLICE 47 — THE MIDCOURSE BELIEF, AND IT IS ONE SNAPSHOT AND A STRAIGHT LINE ───────────────────
+#
+# The blind phase's ENTIRE picture of the target: the truth at the moment of launch, plus an
+# AUTHORED error, dead-reckoned forward at constant velocity. That is what a real midcourse flies
+# on — a datalink update or a launch-time handoff, never a live measurement — and its being WRONG
+# is the only thing in this slice a student can be asked to judge.
+#
+# ⭐ THE MINT IS LAZY AND ONCE (`:att_q`'s shape at `_integrate_6dof!`), so it survives reset via
+# reload and needs no launch hook. `w.t` is the tick's time in BOTH phases, so whichever caller
+# arrives first mints the same three numbers.
+#
+# ⭐⭐ AND THAT IS WHY THIS IS A FUNCTION AND NOT A CROSS-PHASE KEY. Two consumers need the belief
+# on the same tick — the HEAD's cue direction in phase 3 (`_observe_point3d!`) and the GUIDANCE
+# command in phase 4 (`decide!`) — and a pure dead-reckon of three stored numbers is computable in
+# place, in whichever phase asks, with NO ordering dependency between them. Convention 8's
+# telemetry-phase gotcha (`empty!(w.env)` after phase 1) cannot bite a value that never travels
+# through `w.env`, and neither can a phase-3-writes / phase-4-reads seam that would have to be
+# re-argued every time this block is edited.
+#
+# ⚠ THE RETURNED VELOCITY IS THE TARGET'S **ABSOLUTE** BELIEVED VELOCITY, and the caller must pass
+# it to `intercept_time`/`predicted_intercept_point` as such. The guidance chain has a hoisted
+# `rel_vel = tgt.vel - e.vel` a few lines above the arm, and passing THAT returns a plausible
+# positive time instead of an error (`test_midcourse.jl` pins the difference). The local is named
+# `belief_v` at every call site for exactly that reason.
+#
+# ⚠ PRESENCE-GATED BY ITS CALLERS, never by itself: every arm that calls this is already inside a
+# `haskey(c, :midcourse)` test, so a slice-1..46 wire never mints a key here and stays byte-identical.
+#
+# ⚠⚠ THE CLOCK IS OFFSET BY ONE `dt` FROM THE TRUTH IT SNAPSHOTS, AND IT CANCELS EXACTLY — say it
+# rather than discover it twice. `tick!` advances `w.t` AFTER all four phases (`subsystem.jl`), so
+# during tick n every phase reads `w.t = (n−1)·dt` while phase 1 has ALREADY moved the entities to
+# time `n·dt`. The mint therefore stamps `t0 = 0.0` beside a target position that is one step old in
+# the world clock's terms — and because every later dead-reckon reads the SAME clock, the offset
+# appears on both sides and divides out: `p0 + v0·((n−1)·dt − 0)` is the target's true position at
+# tick n, exactly, for a constant-velocity target. ⚠ Anything that ever compares `:midcourse_t0` to
+# a wall-clock or to `w.t` sampled OUTSIDE a tick is comparing two different clocks (a gate-2 test
+# asserted `t0 == w.t` after the tick and failed on precisely this).
+function _midcourse_belief!(c::AbstractDict, tgt::Entity, w::World)
+    if !haskey(c, :midcourse_p0)
+        c[:midcourse_p0] = tgt.pos + get(c, :midcourse_pos_err_m, zero(Vec3))::Vec3
+        c[:midcourse_v0] = tgt.vel + get(c, :midcourse_vel_err_mps, zero(Vec3))::Vec3
+        c[:midcourse_t0] = w.t
+    end
+    belief_v = c[:midcourse_v0]::Vec3
+    belief_p = c[:midcourse_p0]::Vec3 + belief_v * (w.t - Float64(c[:midcourse_t0]))
+    return (belief_p, belief_v)
+end
+
 # Phase 4: the closed guidance loop. Reads the missile + its nearest `:target` (`_nearest_target`,
 # reused from radar.jl — truth-fed, no seeker), computes the OUTER pursuit command, runs the INNER
 # PID (dispatch on `:autopilot`), clamps to `a_max`, and writes `comp[:a_ctrl]` (next tick) + the
@@ -1095,6 +1143,17 @@ function decide!(a::Autopilot, w::World)
             tel["$sid.t_go"]            = 0.0
             tel["$sid.impact_time_err"] = 0.0
         end
+        # Slice-47 midcourse keys — never stale (gated on the AUTHORED anchor, so a slice-1..46
+        # scenario ships NONE → byte-identical). Zeroed post-impact / no-target, and honestly so:
+        # the engagement is over, there is nothing left to predict.
+        if haskey(c, :midcourse)
+            tel["$sid.midcourse_active"]    = 0.0
+            tel["$sid.midcourse_tgo"]       = 0.0
+            tel["$sid.midcourse_pip_x"]     = 0.0
+            tel["$sid.midcourse_pip_y"]     = 0.0
+            tel["$sid.midcourse_pip_z"]     = 0.0
+            tel["$sid.midcourse_pip_err_m"] = 0.0
+        end
         # Slice-15 fin keys — never stale (gated on `:autopilot === :fin`, so a slice-1..14 / non-fin
         # scenario ships NONE → byte-identical). Zeroed post-impact / no-target (the missile is frozen).
         if get(w.fidelity, :autopilot, :ideal) === :fin
@@ -1146,6 +1205,14 @@ function decide!(a::Autopilot, w::World)
     rel_pos = tgt.pos - e.pos
     rel_vel = tgt.vel - e.vel
 
+    # SLICE-47 MIDCOURSE readouts, declared HERE so the arm below publishes THE PIP IT ACTUALLY FLEW
+    # rather than a second evaluation of the same formula (convention 11 — a re-derived quantity can
+    # disagree with the branch it claims to report, and here it would disagree exactly on the
+    # handover tick, where the disagreement is least visible).
+    mid_pip    = zero(Vec3)
+    mid_tgo    = 0.0
+    mid_active = false
+
     # OUTER law → commanded lateral accel (§3 seam, slice 10 — the INNER PID below is UNCHANGED).
     # Select on `:guidance` (default `:pursuit` = the exact slice-9 path → byte-identical): PN leads
     # (nulls λ̇), pursuit tail-chases. The §2 terminal cutoff coasts the missile through the r→0
@@ -1184,6 +1251,48 @@ function decide!(a::Autopilot, w::World)
     a_dem = if guid === :pn && coop === :salvo && haskey(w.env, :salvo_t_d)
                 impact_time_control_accel(e.pos, e.vel, tgt.pos, tgt.vel,
                                           Float64(w.env[:salvo_t_d]); N = n_pn, K_it = k_it)
+            elseif guid === :pn && haskey(c, :midcourse) && !get(c, :seek_init, false)
+                # ⭐⭐ SLICE 47 — THE MIDCOURSE ARM. Between launch and the tracker's first
+                # measurement this missile used to command EXACTLY NOTHING for thousands of
+                # consecutive ticks (gate-0 P0: 0.000000 m/s² over 6955 of them, then a 2.998 m
+                # arrival), because the arm below is taken on EVERY tick of EVERY seeker wire —
+                # `:seeker_omega` is written unconditionally — and a never-locked tracker's ω is the
+                # zero vector. A blind missile in this arc was not guided badly; it was BALLISTIC,
+                # and it arrived only because the engagement was authored so that doing nothing was
+                # right. This arm gives the blind phase a law: fly at where the target WILL be,
+                # according to the only picture the missile has.
+                #
+                # ⚠⚠ THE ORDER IN THIS CHAIN IS THE WHOLE EDIT. It must sit ABOVE the
+                # `:seeker_omega` arm for the reason just given — placed below it, it would be
+                # unreachable on every wire that has a seeker, i.e. on every wire this slice is
+                # about. Gated on `!seek_init` so the switch to PN is a HANDOVER: midcourse until
+                # the tracker initialises, PN from that tick on, one switch, one tick (pinned in
+                # `test_midcourse.jl` — an off-by-one here is a whole tick of the wrong law at the
+                # exact moment the slice is about).
+                #
+                # ⚠⚠ THE GATE IS THE AUTHORED ANCHOR `:midcourse`, NOT A COMPUTED KEY. A PIP is
+                # something the missile WORKS OUT, so gating on e.g. `haskey(c, :midcourse_pip)`
+                # would be true on every wire the moment this arm exists — a tautology, and the
+                # exact failure `:seeker_omega` demonstrates one line below. A presence gate must
+                # test a key A SCENARIO AUTHOR WROTE and a slice-11..46 wire did not.
+                #
+                # ⚠ THE PIP IS RECOMPUTED EVERY TICK, never stored-and-reused: the missile is moving,
+                # so the intercept solution moves with it. `V_m` is the INSTANTANEOUS speed
+                # `‖e.vel‖` — not an authored launch speed — which is what gate 1's P9 calibrated
+                # `midcourse_k = 1.0` against.
+                #
+                # ⚠ `a_max` is REUSED, never a second ceiling (the slice-19 FINDING-14 shape): a
+                # midcourse that can pull more than the airframe is a lie the airframe pays for at
+                # handover. `midcourse_accel` clamps at it internally (it IS `clamp_accel ∘
+                # pursuit_accel`, pinned bit-for-bit at gate 1), so the chain's own
+                # `clamp_accel(a_dem, a_max)` below is idempotent here rather than a second limiter
+                # with a second value.
+                belief_p, belief_v = _midcourse_belief!(c, tgt, w)
+                mid_pip, mid_tgo   = predicted_intercept_point(e.pos, belief_p, belief_v,
+                                                               _norm3(e.vel))
+                mid_active = true
+                midcourse_accel(e.pos, e.vel, mid_pip;
+                                k = max(Float64(get(c, :midcourse_k, 1.0)), 0.0), a_max = a_max)
             elseif guid === :pn && haskey(c, :seeker_omega)
                 pn_accel_from_omega(c[:seeker_los]::Vec3, c[:seeker_omega]::Vec3,
                                     -range_rate(rel_pos, rel_vel); N = n_pn)
@@ -1488,6 +1597,26 @@ function decide!(a::Autopilot, w::World)
     # on the JSON path (convention 6) and a programmatic world can build anything.
     haskey(c, :detect_pt_w) &&
         (tel["$sid.a_cmd_frac"] = _finite(a_max > 0 ? _norm3(a_cmd) / a_max : 0.0))
+    # ⭐ SLICE 47 — THE MIDCOURSE READOUT, AND THE QUALITY FIGURE IS `pip_err_m`. The PIP itself is
+    # what the CLIENT draws (convention 13 — GDScript may not form physics, so the core ships the
+    # point rather than the ingredients); the ERROR is the lesson: the metres between where the
+    # missile is flying and where an omniscient midcourse would have sent it, which grows from 0 at
+    # launch as the believed target and the real one diverge (gate-0 P1: 0 → 280 → 676 m).
+    # ⚠ THE TRUTH PIP IS BUILT FROM THE SAME PRIMITIVE AND THE SAME `V_m`, so the difference is the
+    # BELIEF's error and nothing else — not a second formula's disagreement with the first.
+    # ⚠ `midcourse_active` is the FLOWN branch's own flag, never a re-test of the gate: after
+    # handover the arm is not taken and this reads 0 while the PIP freezes at its last blind value,
+    # which is the honest picture (the midcourse has stopped predicting).
+    # ⚠ ANCHOR-GATED, so slices 1–46 are byte-identical on the wire as well as in the trajectory.
+    if haskey(c, :midcourse)
+        tel["$sid.midcourse_active"] = mid_active ? 1.0 : 0.0
+        tel["$sid.midcourse_tgo"]    = _finite(mid_tgo)
+        tel["$sid.midcourse_pip_x"]  = _finite_coord(mid_pip[1])
+        tel["$sid.midcourse_pip_y"]  = _finite_coord(mid_pip[2])
+        tel["$sid.midcourse_pip_z"]  = _finite_coord(mid_pip[3])
+        pip_tru, _ = predicted_intercept_point(e.pos, tgt.pos, tgt.vel, _norm3(e.vel))
+        tel["$sid.midcourse_pip_err_m"] = _finite(mid_active ? _norm3(mid_pip - pip_tru) : 0.0)
+    end
     tel["$sid.los_rate"]      = _finite(_norm3(los_rate(rel_pos, rel_vel)))  # ‖ω‖ (the PN driver)
     tel["$sid.closing_speed"] = _finite_coord(-range_rate(rel_pos, rel_vel))  # Vc (POSITIVE closing)
     # Slice-14 salvo diagnostics — SHIPPED WHENEVER A COORDINATOR IS PRESENT (`salvo_t_d` published),
@@ -1859,6 +1988,11 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     look_az_b = 0.0; look_el_b = 0.0     # the LOS in the BODY frame — what a STRAPDOWN seeker indexes
     head_az   = 0.0; head_el   = 0.0     # the HEAD's pointing angles, in the body frame
     off_head  = 0.0; fov_h     = 0.0     # the detector's off-head-axis error, and its window
+    # SLICE 47 — the cue mode decided at the END of this function, and the angle it is wrong by.
+    # ⚠ DECLARED AT FUNCTION SCOPE, not left to leak out of the `if _gim` block that sets them: a
+    # strapdown wire never enters that block, and a telemetry read of a never-assigned local is an
+    # `UndefVarError` inside a tick — which convention 5 exists to make impossible.
+    mid_cued  = false; mid_cue_err = 0.0
     # SLICE 35 — the SERVO's own two numbers: the STEP it was asked for this tick (radians,
     # post-gain, pre-limit, pre-stop) and whether `rate_max` actually bound. ⚠ THEIR ZERO INITIALISER
     # IS LOAD-BEARING ON TWO PATHS AND IS NOT DEFENSIVE PADDING. (1) THE HANDOVER tick calls
@@ -2100,7 +2234,15 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             # body head moves 0.00000° EXACTLY across 5229 held ticks and this one travels 46.80°.
             # discipline 3, first evaluation (the body arm's, verbatim in meaning): the error the
             # detector HAS, now that the body has carried the head and the stop has been taken.
-            if off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h
+            # ⭐ SLICE 47 — THE CUE BYPASSES THE WINDOW, and that is the definition of a cue rather
+            # than a licence: an open-loop COMMAND to look somewhere needs no error signal, whereas
+            # this gate exists because a TRACKER cannot slew on an error its detector never had.
+            # `:head_cued` was decided at the END of the previous tick's `observe!` (see the cue
+            # block ~350 lines below) — the one-tick seam discipline 2 already imposes on the
+            # servo's stored target, applied to the servo's MODE. `get(…, false)` is the literal
+            # `false` on every wire without the anchor ⇒ the predicate is the pre-slice-47 one.
+            if get(c, :head_cued, false) ||
+               off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h
                 if _so
                     # SLICE 40 on slice 37's rung — the SAME kernel with the frame changed, exactly
                     # as `head_slew_inertial` is `head_slew_full`. ⚠⚠ THIS ARM WAS PREDICTED TO BE
@@ -2126,7 +2268,11 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         else
             head_az = Float64(c[:head_az]); head_el = Float64(c[:head_el])
             # discipline 3, first evaluation: the error the detector HAD, before this tick's slew.
-            if off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h
+            # ⭐ SLICE 47 — the cue bypasses the window on THIS rung too, and for the same reason
+            # (see the space-stabilized arm above). Both arms, because the cue is a property of what
+            # the HEAD is being told to do, not of which frame it holds its pointing in.
+            if get(c, :head_cued, false) ||
+               off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h
                 # ⚠ `head_slew_full`, NOT `head_slew` — the SHIPPED kernel returning the two
                 # quantities the servo knows and its pointing does not. The plan FORBIDS
                 # reconstructing them as a post-hoc difference of `:head_az`, and forbids the seam
@@ -2433,10 +2579,75 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # their byte-identity claim takes. The alternative (each rung storing only its own frame's
     # target) makes the FIRST tick after a toggle-back consume a target stale by however long the
     # other rung ran, which is a real wrong-number rather than a bookkeeping cost.
+    # ⭐⭐ SLICE 47 — CUE MODE, AND IT IS THE RISKIEST EDIT IN THE SLICE BECAUSE IT GATES A WRITE
+    # THAT WAS UNCONDITIONAL AND THAT SLICE 46's WHOLE DETECTION HORIZON READS THROUGH.
+    #
+    # THE FREEBIE IT REMOVES (gate-0 P2, and it is sharper than "the head sees truth"): the slew
+    # above is gated on the ANGULAR window alone, off `look_az_b`/`look_el_b`, which come from
+    # `û_tru`. But `_detectable` (slice 46's link budget) gates only the MEASUREMENT. ⇒ the head was
+    # slewing on an error signal for which there is no detection — TRACKING AN ECHO THE RECEIVER
+    # CANNOT HEAR. That is not a missing feature; it is the cue and the track being one code path.
+    #
+    # | while…                       | the head is…                                  | its slew target is…            |
+    # |------------------------------|-----------------------------------------------|--------------------------------|
+    # | NOT detectable, never locked | **CUED** — open-loop, NO window gate, because  | the **BELIEF** LOS, in body    |
+    # |                              | a cue is a COMMAND and not an error signal    | angles via the shipped         |
+    # |                              |                                               | `look_angles`                  |
+    # | detectable (or locked)       | **TRACKING** — discipline 3's two-evaluation  | the measurement, VERBATIM      |
+    # |                              | gate, unchanged                               |                                |
+    #
+    # ⚠⚠ `!seek_init` IS IN THE CONJUNCT ON PURPOSE (advisor). Reverting a LOCKED head to a stale
+    # launch-time dead-reckon because the range momentarily re-opened would re-introduce exactly the
+    # mis-location slices 37–39 spent three slices finding: a break after lock belongs to the
+    # ESTIMATOR's frozen rate, not to the head. On the flown wire range only shrinks after lock, so
+    # the conjunct is free insurance closing an unreachable-but-wrong branch. ⚠ AND THE ORDER IS
+    # LOAD-BEARING: `:seek_init` is set ~50 lines BELOW this, so on the lock tick it is still false
+    # here and `_detectable` — computed 20 lines above, current — is what flips. `test_midcourse.jl`
+    # pins that the lock tick tracks rather than cues.
+    #
+    # ⭐ BYTE-IDENTITY IS STRUCTURAL, AND IT IS THE GOOD KIND: with `detect_pt_w` absent
+    # `_detectable ≡ true` (the literal, 20 lines up), and without the authored `:midcourse` anchor
+    # there is no belief to cue on — so this arm is UNREACHABLE on every slice-11..46 wire by
+    # CONSTRUCTION, not by a zero that happens to cancel.
+    #
+    # ⚠⚠ THE ORDERING CONSTRAINT IS REAL AND IS NOT PAPERED OVER. `_detectable` is computed HERE;
+    # the slew runs ~450 lines above, in the same `observe!`. ⇒ the MODE is stored beside
+    # `:head_tgt_*` and consumed by the NEXT tick's slew — the SAME one-tick seam the servo already
+    # lives under (discipline 2: the servo tracks the one-tick-delayed stored pair). Recomputing
+    # detectability up at the slew would be a SECOND IMPLEMENTATION of the gate, the exact trap this
+    # file already names for `off_axis_angle`.
     if _gim
-        head_tgt_az, head_tgt_el = look_angles(c[:att_q]::Quat, los_unit_from_angles(az_m, el_m))
-        c[:head_tgt_az] = head_tgt_az; c[:head_tgt_el] = head_tgt_el
-        c[:head_tgt_i_az] = az_m; c[:head_tgt_i_el] = el_m
+        # ⚠ The cue direction is the belief LOS **from the missile's present position**, not the
+        # stored snapshot: the missile has flown since launch, so the angle to a fixed believed
+        # point changes every tick even with a perfect picture.
+        _cue = haskey(c, :midcourse) && !_detectable && !get(c, :seek_init, false)
+        if _cue
+            belief_p, _ = _midcourse_belief!(c, tgt, w)
+            û_bel = los_unit(e.pos, belief_p)
+            cue_i_az, cue_i_el = az_el(û_bel)
+            # ⭐ THE HEADLINE QUANTITY, FORMED FROM THE VECTORS THAT WERE ACTUALLY USED: the angle
+            # between where the head is being TOLD to look and where the target really is. Gate-0 P1
+            # measured this reaching the 10° detector window at ~0.50 °/% of target-velocity error,
+            # and its value AT THE LOCK INSTANT is the handover error the whole slice is about.
+            # ⚠ THROUGH THE SHIPPED `off_axis_angle` AND NOT AN `acos` OF THE DOT PRODUCT, even
+            # though P1's probe used the latter: this number's ONLY use is comparison against the
+            # detector window `fov_h`, which is measured by that kernel — so the two must be the same
+            # currency, not two opinions differing by the kernel's own documented 0.36 % at 47°. An
+            # inline `acos` here would also be a SECOND angle implementation, the trap this file
+            # names for `off_axis_angle` in three other places.
+            mid_cued    = true
+            mid_cue_err = off_axis_angle(az_tru, el_tru, cue_i_az, cue_i_el)
+            head_tgt_az, head_tgt_el = look_angles(c[:att_q]::Quat, û_bel)
+            c[:head_tgt_az] = head_tgt_az; c[:head_tgt_el] = head_tgt_el
+            c[:head_tgt_i_az] = cue_i_az; c[:head_tgt_i_el] = cue_i_el
+        else
+            head_tgt_az, head_tgt_el = look_angles(c[:att_q]::Quat, los_unit_from_angles(az_m, el_m))
+            c[:head_tgt_az] = head_tgt_az; c[:head_tgt_el] = head_tgt_el
+            c[:head_tgt_i_az] = az_m; c[:head_tgt_i_el] = el_m
+        end
+        # ⚠ MINTED ONLY UNDER THE ANCHOR, so `get(c, :head_cued, false)` at the slew is the literal
+        # `false` on every prior wire and the predicate there short-circuits to the pre-slice-47 one.
+        haskey(c, :midcourse) && (c[:head_cued] = _cue)
     end
 
     # Lazy first-tick init (the `_observe_point!` shape): seed every memory, all rates 0.
@@ -2968,6 +3179,21 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # predicate returning in the quantity a gimbal actually has.
         tel["$sid.gimbal_fov_margin_deg"] = _finite_coord(rad2deg(fov_h - off_head))
         tel["$sid.gimbal_valid"] = in_fov ? 1.0 : 0.0
+        # ⭐⭐ SLICE 47 — WHAT THE HEAD IS DOING, AND HOW WRONG THE THING TELLING IT IS. `head_cued`
+        # is the MODE (1 = open-loop on the midcourse belief, 0 = tracking a measurement it can
+        # actually hear); `head_cue_err_deg` is the angle between the cue and the truth, in the SAME
+        # degrees as `gimbal_fov_deg` beside it, because the question the wire has to answer is
+        # whether the target will be INSIDE the window when the receiver finally hears it.
+        # ⚠ 0.0 WHILE TRACKING IS NOT A DEFAULTED ZERO STANDING IN FOR "unknown" — a tracking head
+        # has no cue and therefore no cue error, and the mode key beside it says which state the
+        # zero belongs to. (The trap being avoided is `docs/CONVENTIONS.md` §14's: a rung that stops
+        # emitting makes a client's `.get(k, 0.0)` print a defaulted zero as a passed test.)
+        # ⚠ ANCHOR-GATED like every other slice-47 key ⇒ slices 34–46 ship neither and stay
+        # byte-identical on the wire.
+        if haskey(c, :midcourse)
+            tel["$sid.head_cued"]         = mid_cued ? 1.0 : 0.0
+            tel["$sid.head_cue_err_deg"]  = _finite(rad2deg(mid_cue_err))
+        end
         # ⭐⭐ SLICE 36 — THE REQUIREMENT, AND THE MARGIN AGAINST IT. `head_off_deg` is what the
         # detector must cover THIS TICK; `head_off_peak_deg` is what it had to cover to get here,
         # which is the number a handover basket is designed against. The running max is formed at

@@ -55,10 +55,12 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 
 ## Where the project is (2026-08-18)
 
-**Slices 1–40 + 46 COMPLETE & green — 9191 tests** (7808 before slice 47's gate 1). **Slice 47 (THE MIDCOURSE
-PHASE) is IN PROGRESS: gates 0 and 1 CLOSED** — `intercept_time` / `predicted_intercept_point` /
-`midcourse_accel` in `guidance.jl` + `test_midcourse.jl`; `midcourse_k = 1.0` MEASURED; gate 2 next
-(`docs/plans/slice47.md` §5). 39 and 41–45 are GATE-0 RECORDS (no code). ⚠⚠ **FIVE
+**Slices 1–40 + 46 COMPLETE & green — 9254 tests** (7808 before slice 47). **Slice 47 (THE MIDCOURSE
+PHASE) is IN PROGRESS: gates 0–2 CLOSED** — primitives in `guidance.jl`; then the WIRE (a midcourse arm
+ABOVE the `:seeker_omega` one + a head CUED ON THE BELIEF while undetectable, `missile.jl`). ⭐ **THE
+CLIFF IS THE WINDOW**: handover error grows 0.52 °/% of belief-velocity error and crosses the 10°
+window between 19.0 % (2.5 m arrival) and 19.5 % (NEVER ACQUIRES, 316 m). Gate 3 next — **read
+`docs/plans/slice47.md` §6.8 first** (five verifier traps). 39 and 41–45 are GATE-0 RECORDS (no code). ⚠⚠ **FIVE
 CONSECUTIVE gate-0 records shipped nothing, and on 2026-08-18 the kill CRITERION itself was ruled at fault**
 (the two-test rule below): 41, 44 and 45 are **ALIVE AS A MODEL**, probe code in `M:\claud_projects\temp\slice4N`;
 only 42 is dead outright; 43 is BLOCKED. ⭐ **Slice 46 DISCHARGED 44's re-verdict** — it shipped 44's exact

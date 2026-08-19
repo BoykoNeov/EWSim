@@ -1,6 +1,7 @@
 # Slice 47 — THE MIDCOURSE PHASE (what a blind missile flies on, and what a wrong picture costs)
 
-**Status: GATE 0 — RUN AND CLOSED (2026-08-19). §§1–3 WRITTEN. NO CORE CODE YET.**
+**Status: GATES 0, 1 AND 2 — RUN AND CLOSED (2026-08-19). GATE 3 (the showcase) IS NEXT — its
+inherited constraints are §6.8. Suite green at 9254 tests.**
 
 ⭐ **The design fork is decided — THE SEEKER HEAD IS CUED ON THE MISSILE'S BELIEF, not on truth**
 (user, 2026-08-19: *“we are attempting to be closer to reality”*). Seven probes ran; **P1 (blocking)
@@ -1055,3 +1056,181 @@ monotonicity would fire this project's standing disqualifier on an artefact of t
    error checked against `fov` **before** `slice47_midcourse.yaml` is authored.
 4. **The P4 re-run must be read in `|Δv|`, not signed `Δv`** — the response is V-shaped (§5.2, P9.3).
 
+
+## §6 — GATE 2: THE LOG
+
+**Status: GATE 2 — RUN AND CLOSED (2026-08-19). Suite green at 9254 tests (9191 before).**
+
+### §6.0 WHAT SHIPPED
+
+Five edits, and the order below is the order they matter in.
+
+1. **`_midcourse_belief!` (`missile.jl`, above `decide!(::Autopilot, …)`)** — the lazy-once mint of
+   `:midcourse_p0` / `:midcourse_v0` / `:midcourse_t0` (truth + the authored error, at `w.t`) and the
+   pure dead-reckon of it. ⭐ **A FUNCTION AND NOT A CROSS-PHASE KEY**, which is what §2.1 said and
+   what makes the two consumers independent: the head's cue in phase 3 and the guidance command in
+   phase 4 read the same three stored numbers, never each other, so there is no ordering hazard and
+   no repeat of convention 8's telemetry-phase gotcha.
+2. **The guidance arm** — a new `elseif` **above** the `:seeker_omega` arm, gated
+   `guid === :pn && haskey(c, :midcourse) && !get(c, :seek_init, false)`.
+3. **The cue arm** — the previously UNCONDITIONAL `head_tgt_*` write is now a two-arm branch:
+   `haskey(c, :midcourse) && !_detectable && !seek_init` ⇒ the belief LOS, else the measurement
+   **verbatim**. The mode is stored as `:head_cued` and consumed by the **next** tick's slew, which
+   bypasses the `off_axis_angle ≤ fov_h` window when cued (both servo frames).
+4. **The loader** — `midcourse` (the anchor), `midcourse_k`, `midcourse_pos_err_m`,
+   `midcourse_vel_err_mps`; the last three **refused** without the anchor, `midcourse: false`
+   refused rather than treated as off, `k > 0` and the errors finite.
+5. **Telemetry** — `midcourse_active` / `midcourse_tgo` / `midcourse_pip_{x,y,z}` /
+   `midcourse_pip_err_m` from the guidance side, `head_cued` / `head_cue_err_deg` from the seeker's.
+   All anchor-gated, all never-stale.
+
+⚠ **`midcourse_k` IS NOT IN `_DEAD_KNOB_KEYS`, AND THAT IS A DECISION** (advisor). That list is for
+keys whose deadness is **STRUCTURAL** (consumed once at load); this one is read inside the arm on
+every blind tick, so the list's error text — *"consumed ONCE at tick 1 … dead in the hand"* — would
+be a **false statement about the wire**, and its own comment forbids it becoming a registry. §2.4's
+"NEVER a knob" is a SHOWCASE policy and is enforced by not declaring it in `knobs:`.
+
+### §6.1 THE PREMISE, DISCHARGED — AND THE DEFAULT CELL IS WHY
+
+Gate-0 P0's finding is not merely reproduced, it is **made load-bearing**. On slice 46's own
+geometry the authored launch heading *is* the midcourse solution, so a perfect midcourse would have
+nothing to do. Moved **+1000 m in cross-range** (§5.3's inherited default cell):
+
+```
+             blind peak |a_cmd|      lock            CPA
+  BALLISTIC       0.000000 m/s²      NEVER      1203.7137 m
+  MIDCOURSE     137.158272 m/s²    7.1330 s         0.1349 m     (4.57 % of a_max)
+  switch: overlap 0 ticks, gap 0 ticks
+```
+
+⭐ **The ballistic arm never acquires at all.** That is stronger than P0's "it arrives anyway": off
+the launch plane, commanding nothing does not merely cost accuracy, it costs the **acquisition**.
+
+### §6.2 P4 RE-RUN ON THE COMMANDED TRAJECTORY — §2.5 CHECK 4
+
+⚠⚠ **The first read of this table was WRONG and the way it was wrong is worth keeping.** Sampling
+`head_cue_err_deg` **at the lock tick** returns the honest `0.0` of a head that is already TRACKING
+(`_detectable` flips *before* `seek_init` is set — see §6.3). The quantity is **the last BLIND
+tick's** value: what the head was being told when the receiver finally heard something.
+
+```
+   err%   cue@handover   pip err m   pre-lock pk%   lock t      CPA m   post-lock pk%   hold%
+    0.0        0.0000         0.0         4.57      7.1330      0.135        4.27      100.00
+    5.0        2.5647        84.0         4.27      7.1580      0.124        8.46      100.00
+   10.0        5.1647       166.8         3.96      7.1890      0.273       14.28      100.00
+   14.0        7.2707       232.2         3.71      7.2160      0.314       20.21      100.00
+   17.0        8.8738         —           3.53      7.2390      1.333       24.33      100.00
+   18.0        9.4122       296.9         3.47      7.2470      0.692       25.99      100.00
+   19.0        9.9580         —           3.40      7.2560      2.542       27.97      100.00
+   19.5       10.2282         —           3.37      NEVER     316.549        0.00         —
+   20.0       10.4986       415.4         3.34      NEVER     324.870        0.00         —
+   25.0       13.2689       512.5         3.03      NEVER     408.654        0.00         —
+```
+
+**THE NUMBER GATE 3 QUOTES: 0.5116 → 0.5308 °/%**, walking gently with the error (0.5116 at 2 %,
+0.5165 at 10 %, 0.5229 at 18 %). ⭐ P1's provisional **0.4970 °/% measured BALLISTIC is CONFIRMED
+and corrected UPWARD by ~4 %** — the commanded trajectory diverges slightly more than the free one,
+which is the direction that makes the axis *easier* to reach, not harder. The axis is **live,
+linear, monotone and defensible**.
+
+### ⭐⭐⭐ §6.3 THE CLIFF IS THE WINDOW, AND IT IS THE SLICE
+
+The handover error crosses the authored **10° detector window between 19.0 % and 19.5 %** of
+belief-velocity error, and **the engagement flips exactly there**: 9.9580° → acquires at 7.2560 s →
+arrives at **2.542 m**; 10.2282° → **NEVER ACQUIRES** → **316.549 m**. A quarter of a degree.
+
+⇒ **THE LESSON, IN ONE SENTENCE.** *A midcourse is not judged by how far off its picture is, but by
+whether the target is still inside the detector window at the instant the receiver first hears it —
+and everything before that instant looks fine.*
+
+**AND THE INTERMEDIATE STORY IS SLICE 46's SHAPE, REPRODUCED IN A NEW CURRENCY.** Across the whole
+surviving domain the **miss says nothing** (0.124 → 0.273 → 0.314 → 0.692 → 2.542 m, up and down)
+while **post-lock authority walks 4.27 → 27.97 % monotonically**. A verifier reading miss would
+again report a component that does nothing.
+
+### §6.4 §2.5 CHECK 4's OTHER HALF — P7's BRACKET, AND THE READ THAT SEPARATES CAUSE FROM CONSEQUENCE
+
+P7 forbade *"a slider whose top end PINS THE AIRFRAME BEFORE LOCK"* — that is a different slice. A
+whole-flight read makes it look as if this one does: the broken arms show **22.77 %** of `a_max` and
+**441 ticks of aero saturation**. ⚠⚠ **THAT READ IS AN ARTIFACT OF THE FAILURE, NOT ITS CAUSE.** A
+missile that never acquires keeps flying midcourse all the way to CPA, so the saturation happens
+**long after** the handover would have been. Read **before the handover range (r > 1437 m)**:
+
+```
+  blind peak |a_cmd| / a_max, r > 1437 m :  4.57 % (0 %) … 3.03 % (25 %)   — DECREASING
+  aero_sat ticks, r > 1437 m             :  0 on EVERY arm in the domain, broken ones included
+```
+
+⭐ **AND THE SIGN IS THE INTERESTING PART: a wronger picture makes the midcourse work LESS hard.**
+It believes the target needs less lead, flies a lazier correction, and pays the whole bill at
+handover. P7's constraint is satisfied with margin, and `pre` vs `all` is the pair that proves it.
+
+### §6.5 P9.3 RE-RUN WITH THE BELIEF-CUED HEAD — §5.3 INHERITANCE ITEM 3, DISCHARGED
+
+P9.3's 4.27 % → 21 % authority spread was measured with the shipped **TRUTH**-cued head. Re-run on
+the **BELIEF**-cued one, signed `Δv` (m/s on the crossing axis):
+
+```
+   Δv     cue@handover   pre-lock pk%   lock t      CPA m   post-lock pk%
+  −50        13.2689         3.03        NEVER    408.654        0.00
+  −40        10.4986         3.34        NEVER    324.870        0.00
+  −30         7.8056         3.65       7.2240      0.287       21.62
+  −10         2.5647         4.27       7.1580      0.124        8.46
+    0         0.0000         4.57       7.1330      0.135        4.27
+  +10         2.5427         4.87       7.1120      0.146        8.43
+  +30         7.6013         5.48       7.0840      0.389       20.87
+  +40        10.1327         5.77       7.0760      1.281       28.18
+  +50        12.6762         6.07        NEVER    388.806        0.00
+```
+
+⭐ **P9.3's SPREAD SURVIVES THE CUE CHANGE ALMOST EXACTLY** (4.27 → ~21 % at |Δv| = 30, against its
+4.27 → 21 %), so the number carried into §3.3 is sound. §5.3 item 4's instruction to read `|Δv|`
+is **confirmed**: the response is V-shaped in the cue error. ⚠ **BUT IT IS NOT SYMMETRIC**, and the
+asymmetry is real rather than noise — the **−** side breaks between −30 and −40 while the **+** side
+survives to +40, because a belief that the target crosses *faster* leads further and buys time. Gate
+3's slider should therefore be authored on the **−** side, where the cliff is inside a defensible
+error magnitude (19.5 % of the crossing speed).
+
+### §6.6 THE FIVE GATE-2 CHECKS, EACH WITH ITS TOOTH
+
+| §2.5 | check | where it lives | verdict |
+|---|---|---|---|
+| 1 | **ABSOLUTE GOLDEN, both directions** | `test_missile.jl`, "BYTE-IDENTITY, BOTH DIRECTIONS" | ✓ `max|Δpos| == 0` over 4000 ticks with the ANCHOR PRESENT and both arms structurally unreachable (rcs 1 m² ⇒ lock on tick 1); and `head_cued == 0` for the whole flight at three belief errors with `detect_pt_w` absent |
+| 2 | **the zero-error null is METRES, not bits** | same file, "THE ZERO-ERROR NULL" | ✓ CPA 0.1349 m **integrated through the turn-round**, blind command < 10 % of `a_max`, hold 100 %. ⚠ §5.3 item 2's tautology is closed: nothing stops until the range has been rising for 200 ticks |
+| 3 | **the switch tick** | same file, "THE SWITCH IS ONE TICK" | ✓ overlap 0, gap 0, `act_n == lock_i − 1`, and the lock tick itself TRACKS |
+| 4 | **P4 re-run + P7's bracket** | §6.2 / §6.4 above | ✓ 0.512–0.531 °/%; pre-handover peak 3.0–4.6 %, aero saturation 0 everywhere |
+| 5 | **the slice-19 tripwire** | same file, "THE SLICE-19 TRIPWIRE" | ✓ all four authored keys move `max|Δpos|`, plus the mint pinned against truth-plus-error |
+
+### ⚠⚠ §6.7 THE ONE-TICK CLOCK OFFSET, AND IT COST TWO FAILED ASSERTIONS
+
+`tick!` advances `w.t` **after all four phases**, so during tick *n* every phase reads
+`w.t = (n−1)·dt` while phase 1 has **already** moved the entities to `n·dt`. The mint therefore
+stamps `t0 = 0.0` beside a target position that is one step old *in the world clock's terms* — and
+because every later dead-reckon reads the **same** lagging clock, the offset appears on both sides
+and **divides out exactly**: `p0 + v0·((n−1)·dt − 0)` is the target's true position at tick *n*, to
+the last bit, for a constant-velocity target.
+
+⚠ Both failures were in the TEST, not the wire, and both looked like tolerance problems:
+`t0 == w.t` (0.0 vs 0.001), and a recompute using the **post**-tick `w.t` landing **0.2 m** ahead —
+which is exactly `200 m/s × dt`, one step of target motion. **A wrong-number of precisely the size
+that reads like a rounding issue and is not one.** Both clocks are now pinned in the same testset,
+the correct one to `< 1e-9` and the wrong one to `200·dt`, so the cancellation is a MEASUREMENT.
+
+### §6.8 WHAT GATE 3 INHERITS
+
+1. **The default cell**: target at `y = 3000` (`Δy₀ = +1000 m`), `midcourse_k = 1.0`, rcs 0.001,
+   window 10°, servo 240 °/s — the wire every number above was measured on.
+2. **The slider is the belief VELOCITY error on the crossing axis, on the MINUS side**, domain
+   0 → ~25 % of the crossing speed, with the cliff at **19.0 / 19.5 %**. ⚠ Author the cliff INSIDE
+   the domain — it is the lesson — but the HUD headline must be **`head_cue_err_deg` against
+   `gimbal_fov_deg`** and **post-lock `a_cmd_frac`**, never the miss (§3.2's forbidden gauges, and
+   §6.3's table is the reason).
+3. ⚠⚠ **The verifier must read `head_cue_err_deg` on the LAST BLIND TICK**, never at the lock tick,
+   where it is 0.0 by construction. §6.2's first table was wrong this way. The same applies to
+   `midcourse_pip_err_m`, which the guidance arm stops publishing the moment PN takes over.
+4. ⚠ **Read the authority GATED AT r > 200 m** ([[ewsim-missile-verifier-sampling]]): ungated, the
+   hold reads 90 % on arms that never break and the endgame spikes every guidance quantity.
+5. **The broken arms never lock, so they run midcourse to CPA** — a verifier that assumes a lock
+   instant exists will read `NaN`/`-1` on exactly the cells that carry the lesson.
+
+---

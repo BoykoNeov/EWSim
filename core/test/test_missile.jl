@@ -10731,3 +10731,362 @@ end
         end
     end
 end
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 47 — THE MIDCOURSE PHASE, ON THE WIRE (gate 2, plan §2.5)
+#
+# Gate 1's teeth are in `test_midcourse.jl` and are PURE (no World, no Entity, no telemetry — that
+# file's own scope claim). These are the WIRE's, and they live here with slices 34–46's for the same
+# reason: everything they touch is the seeker/gimbal/guidance seam those slices built.
+#
+# WHAT THIS SLICE ADDED, IN ONE SENTENCE: between launch and the moment the seeker's receiver can
+# hear the target, the missile used to command EXACTLY NOTHING (gate-0 P0 measured 0.000000 m/s²
+# over 6955 consecutive ticks, and it arrived anyway because the engagement was authored so that
+# doing nothing was right) and its head was cued off the TRUTH. Now it flies at the predicted
+# intercept point of a BELIEVED target, and it points its head where that belief says.
+#
+# THE FIVE CHECKS, AND WHY EACH IS THE SHAPE IT IS:
+#   1. BYTE-IDENTITY, BOTH DIRECTIONS, as `max|Δpos| == 0` over the whole run and NOT as a single
+#      scalar (advisor): the cue edit gates a write that was UNCONDITIONAL and that slice 46's whole
+#      detection horizon reads through, and one float can agree while the trajectory differs.
+#   2. THE ZERO-ERROR NULL IS **NOT** BYTE-IDENTITY AND MUST NOT BE ASSERTED AS SUCH. With a perfect
+#      picture the midcourse still COMMANDS (it corrects the launch heading), so the agreement with
+#      the ballistic arrival is METRES, not bits.
+#   3. THE SWITCH TICK — no overlap, no gap, and the lock tick itself is a TRACKING tick. `seek_init`
+#      is set ~50 lines BELOW the cue block, so on the lock tick it is still false there and
+#      `_detectable` is what flips: an off-by-one here is a whole tick of the wrong law at the exact
+#      moment the slice is about.
+#   4. THE CLIFF IS THE WINDOW, and it is the slice's whole lesson in one pair of arms: the handover
+#      error crosses the authored detector window between 19.0 % and 19.5 % of belief-velocity error,
+#      and the outcome flips from a 2.5 m arrival to a 316 m miss THERE.
+#   5. THE SLICE-19 TRIPWIRE — each authored key MOVES a measured quantity. ⚠ This is the MODEL test
+#      of the 2026-08-18 two-test rule, and it is the only outright kill available: a knob consumed
+#      at load and read by nothing is a BUG, and five consecutive gate-0 records shipped without it.
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+@testset "THE MIDCOURSE PHASE wired (slice 47 — what a blind missile flies on)" begin
+    dt = 1.0e-3
+
+    # Slice 46's shipped wire TO THE DIGIT (window 10°, servo 240 °/s, stop 30°, τ = 0.05, seed 32,
+    # vy = −200, n_pn = 8, rcs 0.001 ⇒ a 1437 m horizon) with ONE change: the target is +1000 m
+    # further in CROSS-RANGE. ⚠⚠ THAT CHANGE IS THE WHOLE PREMISE AND NOT A CONVENIENCE. On slice
+    # 46's own geometry the AUTHORED LAUNCH HEADING *IS* the midcourse solution (gate-0 P0: the
+    # target is flown into the missile's ballistic plane), so a perfect midcourse would have nothing
+    # to do and a wrong one nothing to be wrong about. Moved off that plane, a blind missile that
+    # commands nothing misses by 1203.7 m and never acquires at all.
+    function mid_world(; dy0 = 1000.0, midcourse = true, k = 1.0,
+                         dv = Vec3(0.0, 0.0, 0.0), dp = Vec3(0.0, 0.0, 0.0),
+                         rcs = 0.001, budget = true, seed = 32)
+        fid = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn, :autopilot => :alpha,
+                                  :airframe => :six_dof, :seeker => :filtered,
+                                  :seeker_axes => :az_el)
+        budget && (fid[:seeker_detect] = :snr)
+        w = World(seed = seed, fidelity = fid)
+        el = deg2rad(12.0); V0 = 700.0
+        comp = Dict{Symbol,Any}(:mass_kg => 140.0, :cd_area_m2 => 0.0, :rho => 1.0,
+                                :af_S => π * 0.1^2, :af_d => 0.2, :af_I => 20.0,
+                                :af_cma => -1.0, :af_cmd => 3.0, :af_cmq => -150.0,
+                                :af_alpha0 => 0.0, :af_delta => 0.0, :af_cla => 20.0,
+                                :af_alpha_max => 0.3, :af_cy_beta => 20.0,
+                                :af_I_roll => 2.0, :af_I_zz => 20.0, :af_c_roll => 50.0,
+                                :n_pn => 8.0, :a_max => 3000.0, :delta_max => 0.5,
+                                :k_alpha => 1.0, :k_q => 0.3,
+                                :kp => 2.0, :ki => 0.0, :kd => 0.0, :tau => 0.3, :dt_s => dt,
+                                :sigma_seek => 5.0e-5, :alpha => 0.30, :beta => 0.05,
+                                :seek_two_angle => true, :gimbal_tau_s => 0.05,
+                                :gimbal_stop_deg => 30.0, :gimbal_fov_deg => 10.0,
+                                :gimbal_rate_dps => 240.0)
+        # ⚠ ABSENT unless asked for — the key-absent arm is the byte-identity reference (the
+        # slice-34..46 posture, unchanged).
+        if budget
+            comp[:detect_pt_w] = 200.0;    comp[:detect_freq_hz]    = 16.0e9
+            comp[:detect_tint_s] = 0.010;  comp[:detect_nf_db]      = 4.0
+            comp[:detect_loss_db] = 5.0;   comp[:detect_eta]        = 0.6
+            comp[:detect_snr_min_db] = 10.0
+        end
+        if midcourse
+            comp[:midcourse] = :pip;  comp[:midcourse_k] = k
+            comp[:midcourse_vel_err_mps] = dv;  comp[:midcourse_pos_err_m] = dp
+        end
+        w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
+                                 vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
+        w.entities[:t1] = Entity(:t1, :target; pos = Vec3(6000.0, 2000.0 + dy0, 4200.0),
+                                 vel = Vec3(0.0, -200.0, 0.0),
+                                 comp = Dict{Symbol,Any}(:cross_speed_mps => -200.0,
+                                                         :rcs_m2 => rcs))
+        return w, Subsystem[BallisticMissile(:m1), Seeker(:m1), Autopilot(:m1),
+                            ConstantVelocity(:t1)]
+    end
+
+    # ⚠⚠ THE CPA IS INTEGRATED **THROUGH THE TURN-ROUND**, and that is a correction gate 1 wrote
+    # down for gate 2 to obey (`docs/plans/slice47.md` §5.3 item 2): a harness that STOPS at
+    # `r < 3 m` makes "cpa < 3 m" a TAUTOLOGY — it asserts the stopping rule, not the flight.
+    # Nothing here stops until the range has been RISING for 200 consecutive ticks, so the minimum
+    # is the real one. ⚠ The post-lock authority and the hold are read GATED AT r > 200 m: the r→0
+    # endgame spikes every guidance quantity and swings the LOS past the head
+    # ([[ewsim-missile-verifier-sampling]] — ungated, the hold reads 90 % on arms that never break).
+    function fly(; n = 16000, rgate = 200.0, kw...)
+        w, sub = mid_world(; kw...)
+        pos = Vec3[]; cpa = Inf; r_prev = Inf; rising = 0
+        lock_i = -1; act_n = 0; cued_n = 0; overlap = 0; gap = 0
+        pk_blind = 0.0; pk_post = 0.0; pk_pre = 0.0
+        cue_last = NaN; cue_at_lock = NaN; hold_n = 0; post_n = 0; aero_pre = 0
+        for i in 1:n
+            tick!(w, sub, dt); empty!(w.events)
+            e = w.entities[:m1]; t = w.entities[:t1]
+            tel = get(w.env, :telemetry, Dict{String,Any}())
+            push!(pos, e.pos)
+            r = los_range(e.pos, t.pos)
+            acmd = get(tel, "m1.a_cmd", 0.0)
+            locked = get(e.comp, :seek_init, false) === true
+            if get(tel, "m1.head_cued", 0.0) > 0.5
+                cued_n += 1
+                cue_last = get(tel, "m1.head_cue_err_deg", 0.0)
+            end
+            if get(tel, "m1.midcourse_active", 0.0) > 0.5
+                act_n += 1
+                pk_blind = max(pk_blind, acmd)
+                # BEFORE the range at which a locking arm hands over — this is what separates "the
+                # midcourse flew itself into saturation" (a different slice, P7's bracket) from
+                # "it kept flying midcourse because it never acquired" (this slice's failure mode).
+                if r > 1437.0
+                    pk_pre = max(pk_pre, acmd)
+                    get(tel, "m1.aero_sat", 0.0) > 0.5 && (aero_pre += 1)
+                end
+                locked && (overlap += 1)          # both laws on one tick — impossible by construction
+            elseif !locked && haskey(e.comp, :midcourse)
+                gap += 1                          # NEITHER law, while still blind — the off-by-one
+            end
+            if lock_i < 0 && locked
+                lock_i = i
+                cue_at_lock = get(tel, "m1.head_cued", 0.0)
+            end
+            if lock_i > 0 && r > rgate
+                post_n += 1
+                get(tel, "m1.gimbal_valid", 1.0) == 1.0 && (hold_n += 1)
+                pk_post = max(pk_post, acmd)
+            end
+            r < cpa && (cpa = r)
+            rising = r > r_prev ? rising + 1 : 0
+            r_prev = r
+            rising > 200 && break
+        end
+        return (pos = pos, cpa = cpa, lock_i = lock_i, act_n = act_n, cued_n = cued_n,
+                overlap = overlap, gap = gap, pk_blind = pk_blind, pk_pre = pk_pre,
+                pk_post = pk_post, aero_pre = aero_pre, cue_last = cue_last,
+                cue_at_lock = cue_at_lock, hold = post_n > 0 ? 100 * hold_n / post_n : NaN)
+    end
+
+    # slices 34/37/46's isolation quantity: the largest positional divergence between two arms.
+    maxdpos(a, b) = (@assert length(a) == length(b);
+                     maximum(los_range(a[i], b[i]) for i in eachindex(a)))
+
+    @testset "⭐ BYTE-IDENTITY, BOTH DIRECTIONS, as max|Δpos| and not as one scalar" begin
+        # DIRECTION 1 — THE ANCHOR IS PRESENT AND BOTH NEW ARMS ARE STRUCTURALLY UNREACHABLE. At
+        # rcs 1 m² the horizon is 8078.9 m against a 7401 m launch, so the seeker locks on tick 1:
+        # `seek_init` is true from then on, which turns both arms off by their own conjuncts. This
+        # is the STRONG form of the claim — not "the keys are absent" but "the keys are there,
+        # evaluated every tick, and change nothing" — and it is the one that would catch a
+        # mis-ordered guidance chain.
+        a = fly(; midcourse = false, rcs = 1.0, n = 4000)
+        b = fly(; midcourse = true,  rcs = 1.0, n = 4000)
+        @test b.lock_i == 1                       # locked on tick 1 ⇒ never blind
+        @test b.act_n == 0                        # …so the guidance arm never ran
+        @test b.cued_n == 0                       # …and the head was never cued
+        @test maxdpos(a.pos, b.pos) == 0.0        # ⇐ BIT-FOR-BIT, over 4000 ticks
+        @test a.cpa === b.cpa
+
+        # DIRECTION 2 — NO LINK BUDGET ⇒ CUE MODE IS UNREACHABLE BY CONSTRUCTION. With `detect_pt_w`
+        # absent `_detectable` is the LITERAL `true` (the `else` arm of the horizon block), so the
+        # cue conjunct can never be satisfied at ANY belief error. ⚠ The GUIDANCE arm is a different
+        # question and is not claimed here.
+        for p in (0.0, 20.0, 60.0)
+            c = fly(; budget = false, dv = Vec3(0.0, -200.0 * p / 100, 0.0), n = 2000)
+            @test c.cued_n == 0
+        end
+    end
+
+    @testset "⭐⭐ THE PREMISE — a blind missile in this arc was BALLISTIC, and now it is not" begin
+        # Gate-0 P0's measurement, reproduced on the shipped seam and then discharged. ⚠ THE
+        # BALLISTIC ARM's MISS IS THE POINT: 1203.7 m, and it never acquires at all, because with
+        # the target off the launch plane "command nothing" stops being the right answer.
+        bal = fly(; midcourse = false)
+        @test bal.pk_blind == 0.0                 # EXACTLY zero — not "small" (gate-0 P0)
+        @test bal.lock_i == -1                    # never acquires
+        @test bal.cpa ≈ 1203.7137 atol = 1e-3
+
+        mid = fly()
+        @test mid.act_n > 7000                    # thousands of ticks of a law that is now flying…
+        @test mid.pk_blind > 100.0                # …and commanding (137.16 m/s², 4.57 % of a_max)…
+        @test mid.lock_i > 0                      # …which is what makes the acquisition happen
+    end
+
+    @testset "⭐ THE ZERO-ERROR NULL — metres, NEVER bits (§2.5 check 2)" begin
+        # ⚠⚠ THIS MUST NOT BE ASSERTED AS BYTE-IDENTITY. With a PERFECT picture the midcourse still
+        # commands — it corrects the authored launch heading onto the collision course — so the
+        # agreement is a tenth of a metre at CPA, not a bit-level one. Asserting `dtraj == 0` here
+        # would be a FALSE CLAIM about what this law does.
+        a = fly()
+        @test a.cpa < 3.0                         # …through the TURN-ROUND, not at a stopping rule
+        @test a.cpa ≈ 0.1349 atol = 1e-3
+        @test a.pk_blind / 3000.0 < 0.10          # the blind command is a CORRECTION, not a manoeuvre
+        @test a.hold == 100.0                     # the handover is clean end to end
+    end
+
+    @testset "⭐⭐ THE SWITCH IS ONE TICK — no overlap, no gap, and the lock tick TRACKS" begin
+        a = fly()
+        @test a.overlap == 0                      # never both laws on one tick
+        @test a.gap == 0                          # …and never NEITHER law while still blind
+        @test a.act_n == a.lock_i - 1             # midcourse owns every tick BEFORE the lock tick…
+        @test a.cue_at_lock == 0.0                # …and the lock tick itself is a TRACKING tick
+        @test a.cued_n == a.lock_i - 1
+        # ⚠ THE ORDERING THAT MAKES THE LAST TWO LINES TRUE: `seek_init` is set ~50 lines BELOW the
+        # cue block, so on the lock tick it is still false there and `_detectable` — computed 20
+        # lines above, current — is the discriminator that flips first. If the two ever swapped
+        # order the head would spend the lock tick cued at a stale belief while the tracker
+        # initialised on a measurement, and NOTHING else in this file would see it.
+    end
+
+    @testset "⭐⭐⭐ THE CLIFF IS THE WINDOW — 19.0 % arrives, 19.5 % never acquires" begin
+        # THE WHOLE SLICE, IN TWO ARMS. The handover error grows at ~0.52° per % of belief-velocity
+        # error (measured on the COMMANDED trajectory — gate-0 P1's 0.4970 was measured BALLISTIC
+        # and is corrected here). It crosses the authored 10° detector window between these two, and
+        # the engagement flips with it: the seeker never sees a target that is outside its window at
+        # the instant the receiver first hears one, and a missile that never acquires flies its
+        # stale picture past the target.
+        lo = fly(; dv = Vec3(0.0, -200.0 * 0.190, 0.0))
+        hi = fly(; dv = Vec3(0.0, -200.0 * 0.195, 0.0))
+        @test lo.cue_last < 10.0                  # inside the window at the handover instant…
+        @test lo.cue_last ≈ 9.9580 atol = 1e-3
+        @test lo.lock_i > 0                       # …so it acquires…
+        @test lo.cpa < 5.0                        # …and arrives (2.542 m)
+        @test hi.cue_last > 10.0                  # OUTSIDE by a quarter of a degree…
+        @test hi.cue_last ≈ 10.2282 atol = 1e-3
+        @test hi.lock_i == -1                     # …and it NEVER acquires…
+        @test hi.cpa ≈ 316.549 atol = 1e-2        # …and misses by 316.5 m
+
+        # ⚠⚠ AND THE AIRFRAME IS NOT PINNED BEFORE LOCK ANYWHERE IN THE DOMAIN — the constraint
+        # gate-0 P7 wrote down and §2.5 check 4 made a gate condition: *a slider whose top end pins
+        # the airframe BEFORE lock is a different slice; the lesson is a bad handover, not a
+        # midcourse that flew itself into saturation.* Read BEFORE the handover range, the blind
+        # command is 3.0–4.6 % of `a_max` on every arm INCLUDING the broken ones and the aero never
+        # saturates. The 22.77 % a whole-flight read shows on a broken arm is the LAW'S OWN
+        # GEOMETRIC CEILING `k·V`, reached long AFTER the handover would have happened — a
+        # CONSEQUENCE of never acquiring, not its cause, and the two reads are what tell them apart.
+        for a in (lo, hi)
+            @test a.pk_pre / 3000.0 < 0.05
+            @test a.aero_pre == 0
+        end
+        @test hi.pk_blind / 3000.0 > 0.20         # …while the WHOLE-FLIGHT read on the broken arm does
+    end
+
+    @testset "⭐ THE SLICE-19 TRIPWIRE — every authored key MOVES something (the MODEL test)" begin
+        # ⚠⚠ THIS IS THE ONLY OUTRIGHT KILL AVAILABLE UNDER THE 2026-08-18 TWO-TEST RULE: a
+        # parameter consumed at LOAD and read by NOTHING per tick is a BUG, not a design choice, and
+        # this project has shipped six of them (`speed`, launch altitude, the handover bias key, `ζ`,
+        # `k_δ`, `(R̂,s)`). `max|Δpos| ≠ 0` is the sufficient bar — deliberately NOT the headline
+        # metric, which can agree by accident.
+        base = fly(; n = 3000)
+        for kw in ((; midcourse = false), (; dp = Vec3(0.0, 200.0, 0.0)),
+                   (; dv = Vec3(0.0, 20.0, 0.0)), (; k = 2.0))
+            @test maxdpos(base.pos, fly(; n = 3000, kw...).pos) > 0.0
+        end
+        # …and the belief itself is MINTED FROM TRUTH PLUS THE AUTHORED ERROR, once, at launch (the
+        # `:att_q` lazy-init shape). Read off the comp dict AFTER a tick, never recomputed from the
+        # initial condition (convention 10).
+        let (w, sub) = mid_world(; dp = Vec3(10.0, -20.0, 30.0), dv = Vec3(1.0, -2.0, 3.0))
+            t0 = w.entities[:t1].pos; v0 = w.entities[:t1].vel
+            tick!(w, sub, dt); empty!(w.events)
+            c = w.entities[:m1].comp
+            # ⚠ phase 1 moves the target BEFORE phase 3/4 mint the belief, so the snapshot is the
+            # POST-integrate truth of tick 1 — which is the truth the missile could have been told.
+            @test c[:midcourse_p0] == w.entities[:t1].pos + Vec3(10.0, -20.0, 30.0)
+            @test c[:midcourse_v0] == w.entities[:t1].vel + Vec3(1.0, -2.0, 3.0)
+            @test c[:midcourse_p0] != t0 + Vec3(10.0, -20.0, 30.0)   # …and NOT the pre-tick position
+            @test c[:midcourse_v0] == v0 + Vec3(1.0, -2.0, 3.0)      # (a CV target's velocity is fixed)
+            # ⚠⚠ THE STAMP IS 0.0, NOT `w.t` — and the difference is a REAL one-tick clock offset
+            # that CANCELS rather than a rounding artifact. `tick!` advances `w.t` AFTER all four
+            # phases, so during tick 1 every phase reads 0.0 while phase 1 has already moved the
+            # entities to 0.001. Every later dead-reckon reads that same lagging clock, so
+            # `p0 + v0·(w.t − t0)` lands on the target's true position at every tick, exactly. This
+            # line is the pin that says which of the two clocks the snapshot belongs to.
+            @test c[:midcourse_t0] == 0.0
+            @test w.t == dt                                          # …and the world's is one step on
+            # THE CONSEQUENCE, ASSERTED RATHER THAN ARGUED: with a PERFECT picture the dead-reckoned
+            # belief IS the truth, at an arbitrary later tick and not merely at the mint.
+            # ⚠⚠ AND THE RECOMPUTE MUST USE THE **IN-TICK** CLOCK `w.t − dt`, because after the loop
+            # `w2.t` has already been advanced past the phase that would have read it. Using the
+            # post-tick value lands the belief exactly ONE STEP OF TARGET MOTION ahead — 0.2 m at
+            # 200 m/s — which is a wrong-number of precisely the size that reads like a tolerance
+            # problem and is not one. This assertion failed that way once; the line is the pin.
+            let (w2, sub2) = mid_world()
+                for _ in 1:1500; tick!(w2, sub2, dt); empty!(w2.events); end
+                c2 = w2.entities[:m1].comp
+                bel = c2[:midcourse_p0] + c2[:midcourse_v0] * ((w2.t - dt) - c2[:midcourse_t0])
+                @test los_range(bel, w2.entities[:t1].pos) < 1e-9
+                # …and the OTHER clock is wrong by exactly one step of target motion, pinned so the
+                # cancellation is a measurement rather than a comment.
+                bad = c2[:midcourse_p0] + c2[:midcourse_v0] * (w2.t - c2[:midcourse_t0])
+                @test los_range(bad, w2.entities[:t1].pos) ≈ 200.0 * dt atol = 1e-9
+            end
+        end
+    end
+
+    @testset "the loader — the anchor gates, and the error keys are REFUSED without it" begin
+        mk(gd) = """
+        name: mc
+        seed: 1
+        dt_physics: 1.0e-3
+        emit_every: 16
+        fidelity: {guidance: pn}
+        entities:
+          - id: m1
+            kind: missile
+            pos: [0.0, 0.0, 3000.0]
+            missile:
+              mass_kg: 140.0
+              speed: 700.0
+              elevation_deg: 12.0
+              guidance: {$gd}
+          - id: t1
+            kind: target
+            pos: [6000.0, 3000.0, 4200.0]
+            vel: [0.0, -200.0, 0.0]
+            target: {rcs_m2: 0.001}
+        """
+        wr(s) = (p = tempname() * ".yaml"; write(p, s); p)
+        # the ANCHOR mints the law and its MEASURED default gain…
+        sc = load_scenario(wr(mk("midcourse: true")))
+        @test sc.world.entities[:m1].comp[:midcourse] === :pip
+        @test sc.world.entities[:m1].comp[:midcourse_k] == 1.0     # gate 1's measured value (P9)
+        sc2 = load_scenario(wr(mk("midcourse: pip, midcourse_k: 2.5, " *
+                                  "midcourse_vel_err_mps: [0.0, 20.0, 0.0], " *
+                                  "midcourse_pos_err_m: [0.0, -50.0, 0.0]")))
+        @test sc2.world.entities[:m1].comp[:midcourse_k] == 2.5
+        @test sc2.world.entities[:m1].comp[:midcourse_vel_err_mps] == Vec3(0.0, 20.0, 0.0)
+        @test sc2.world.entities[:m1].comp[:midcourse_pos_err_m] == Vec3(0.0, -50.0, 0.0)
+        # …and WITHOUT it, every one of the three is REFUSED rather than silently ignored (the
+        # slice-21/28/29/31/32/34/46 "refused, not branch-ordered" precedent — an authored belief
+        # error with no midcourse to read it is precisely the dead-knob class this project keeps
+        # catching after the fact).
+        @test_throws ErrorException load_scenario(wr(mk("midcourse_k: 2.0")))
+        @test_throws ErrorException load_scenario(wr(mk("midcourse_vel_err_mps: [0.0, 20.0, 0.0]")))
+        @test_throws ErrorException load_scenario(wr(mk("midcourse_pos_err_m: [0.0, 20.0, 0.0]")))
+        # `false` is REFUSED, not treated as off: the PRESENCE is the gate, so a `false` would leave
+        # the error keys authored and unread — the exact failure the refusals above exist to stop.
+        @test_throws ErrorException load_scenario(wr(mk("midcourse: false")))
+        # …an unknown law name, and the value bounds on the gain.
+        @test_throws ErrorException load_scenario(wr(mk("midcourse: apn")))
+        @test_throws ErrorException load_scenario(wr(mk("midcourse: true, midcourse_k: 0.0")))
+        @test_throws ErrorException load_scenario(wr(mk("midcourse: true, midcourse_k: -1.0")))
+        # …and a non-finite belief error, in any one of the three components.
+        @test_throws ErrorException load_scenario(
+            wr(mk("midcourse: true, midcourse_vel_err_mps: [0.0, .nan, 0.0]")))
+        @test_throws ErrorException load_scenario(
+            wr(mk("midcourse: true, midcourse_pos_err_m: [0.0, 0.0, .inf]")))
+        # ⚠ THE PIP IS NEVER AN AUTHORED KEY — it is something the missile WORKS OUT, which is why
+        # the presence gate is `:midcourse` and not `:midcourse_pip`: a gate on a computed key would
+        # be true on every wire the moment the arm exists, the exact tautology `:seeker_omega`
+        # demonstrates one line from where the arm lives.
+        @test !haskey(sc2.world.entities[:m1].comp, :midcourse_pip)
+    end
+end

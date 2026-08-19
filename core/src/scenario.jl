@@ -835,6 +835,64 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # coordinator + `coop === :salvo`).
             comp[:k_it] = _f64(get(gb, "k_it", 0.45))
             comp[:k_it]   > 0 || error("missile '$id': guidance.k_it must be > 0 (got $(comp[:k_it]))")
+            # ── SLICE 47 — THE MIDCOURSE, AND ITS ANCHOR IS A KEY AN AUTHOR WROTE ────────────────
+            #
+            # `midcourse: true` is the presence gate for the blind-phase guidance law AND for the
+            # belief-cued head. ⚠⚠ IT MUST BE AN AUTHORED KEY AND NOT SOMETHING THE MISSILE COMPUTES
+            # (advisor): a gate on a derived quantity like a PIP would be true on every wire the
+            # moment the arm exists, which is the tautology `:seeker_omega` already demonstrates one
+            # line from where this arm lives (gate-0 P0 — a `haskey` guard on an unconditional write
+            # gates nothing). Absent ⇒ NO ARM AT ALL ⇒ slices 1–46 byte-identical.
+            #
+            # ⚠ THE THREE ERROR/GAIN KEYS ARE REFUSED WITHOUT THE ANCHOR rather than silently
+            # ignored (the slice-21/28/29/31/32/34/46 "refused, not branch-ordered" precedent): a
+            # scenario that authors a belief error and no midcourse has authored a knob that nothing
+            # reads, which is the exact dead-knob class this project keeps catching after the fact.
+            #
+            # ⚠⚠ `midcourse_k` IS AUTHORED AND MUST NEVER BE DECLARED AS A SLIDER. It is NOT in
+            # `_DEAD_KNOB_KEYS` and deliberately so — that list is for keys whose deadness is
+            # STRUCTURAL (consumed once at load), and this one is read inside the arm on EVERY blind
+            # tick, so its error text would be a false statement about the wire. Gate 1 MEASURED
+            # `k = 1.0` (P9: the null closes, and the window is bounded at both ends); it is a tuning
+            # constant with a measured justification, in the `k_alpha`/`k_q` class, and the showcase
+            # keeps exactly one live knob for slice-19 FINDING-14's reason.
+            #
+            # ⚠ THE ERRORS ARE INERTIAL `Vec3`s IN SI (metres, m/s) and are SIGNED — a belief that
+            # is wrong in the OTHER direction flies the mirror engagement, which the loader declines
+            # to forbid for the same reason it declines to forbid a negative `cross_speed_mps`.
+            # Validated FINITE ONLY: there is no such thing as a too-large picture error, and the
+            # slice's whole point is that a big one is survivable in a way the headline metric hides.
+            if haskey(gb, "midcourse")
+                mc = gb["midcourse"]
+                law = mc isa Bool ? (mc ? :pip :
+                          error("missile '$id': guidance.midcourse: false is not a way to turn the " *
+                                "midcourse OFF — OMIT the key. Its PRESENCE is the gate, so a " *
+                                "`false` here would leave the error keys authored and unread " *
+                                "(slice 47)")) :
+                      Symbol(String(mc))
+                law === :pip ||
+                    error("missile '$id': guidance.midcourse must be `true` (≡ the :pip law — fly " *
+                          "at the predicted intercept point of the believed target) or the name " *
+                          "`pip`; got :$law and no other midcourse law exists (slice 47)")
+                comp[:midcourse]   = law
+                comp[:midcourse_k] = _f64(get(gb, "midcourse_k", 1.0))
+                isfinite(comp[:midcourse_k]) && comp[:midcourse_k] > 0 ||
+                    error("missile '$id': guidance.midcourse_k must be finite and > 0 " *
+                          "(got $(comp[:midcourse_k])); gate 1 measured 1.0")
+            end
+            for mk in ("midcourse_k", "midcourse_pos_err_m", "midcourse_vel_err_mps")
+                haskey(gb, mk) || continue
+                haskey(comp, :midcourse) ||
+                    error("missile '$id': guidance.$mk authored without guidance.midcourse: true " *
+                          "— the law is presence-gated on that anchor, so without it this key is " *
+                          "read by NOTHING and is DEAD (slice 47)")
+                mk == "midcourse_k" && continue                # value-checked above, with its default
+                v = _vec3(gb[mk])
+                all(isfinite, v) ||
+                    error("missile '$id': guidance.$mk must be finite in all three components " *
+                          "(got $v)")
+                comp[Symbol(mk)] = v
+            end
             # Slice 15: the rate-limited fin servo params (the `:fin` autopilot rung). KNOB-ADDRESSABLE
             # (δ̇_max is the lesson slider) and read with DEFAULTS at the consumer (Autopilot.decide!),
             # so a bare guidance block / a live slider can't KeyError a tick. LOAD-validated > 0 for the
