@@ -1,7 +1,7 @@
 # Slice 47 — THE MIDCOURSE PHASE (what a blind missile flies on, and what a wrong picture costs)
 
-**Status: GATES 0, 1 AND 2 — RUN AND CLOSED (2026-08-19). GATE 3 (the showcase) IS NEXT — its
-inherited constraints are §6.8. Suite green at 9254 tests.**
+**Status: GATES 0, 1 AND 2 — RUN AND CLOSED (2026-08-19), advisor-reviewed (§6.9). GATE 3 IS NEXT — its
+inherited constraints are §6.8. Suite green at 9263 tests.**
 
 ⭐ **The design fork is decided — THE SEEKER HEAD IS CUED ON THE MISSILE'S BELIEF, not on truth**
 (user, 2026-08-19: *“we are attempting to be closer to reality”*). Seven probes ran; **P1 (blocking)
@@ -1059,7 +1059,7 @@ monotonicity would fire this project's standing disqualifier on an artefact of t
 
 ## §6 — GATE 2: THE LOG
 
-**Status: GATE 2 — RUN AND CLOSED (2026-08-19). Suite green at 9254 tests (9191 before).**
+**Status: GATE 2 — RUN AND CLOSED (2026-08-19). Suite green at 9263 tests (9191 before).**
 
 ### §6.0 WHAT SHIPPED
 
@@ -1116,28 +1116,40 @@ tick's** value: what the head was being told when the receiver finally heard som
 ```
    err%   cue@handover   pip err m   pre-lock pk%   lock t      CPA m   post-lock pk%   hold%
     0.0        0.0000         0.0         4.57      7.1330      0.135        4.27      100.00
-    5.0        2.5647        84.0         4.27      7.1580      0.124        8.46      100.00
-   10.0        5.1647       166.8         3.96      7.1890      0.273       14.28      100.00
-   14.0        7.2707       232.2         3.71      7.2160      0.314       20.21      100.00
-   17.0        8.8738         —           3.53      7.2390      1.333       24.33      100.00
-   18.0        9.4122       296.9         3.47      7.2470      0.692       25.99      100.00
-   19.0        9.9580         —           3.40      7.2560      2.542       27.97      100.00
-   19.5       10.2282         —           3.37      NEVER     316.549        0.00         —
-   20.0       10.4986       415.4         3.34      NEVER     324.870        0.00         —
-   25.0       13.2689       512.5         3.03      NEVER     408.654        0.00         —
+    5.0        2.5174        84.0         4.27      7.1580      0.124        8.46      100.00
+   10.0        5.0713       166.8         3.96      7.1890      0.273       14.28      100.00
+   14.0        7.1413       232.2         3.71      7.2160      0.314       20.21      100.00
+   17.0        8.7178         —           3.53      7.2390      1.333       24.33      100.00
+   18.0        9.2475       296.9         3.47      7.2470      0.692       25.99      100.00
+   19.0        9.7846         —           3.40      7.2560      2.542       27.97      100.00
+   19.5       10.0505         —           3.37      NEVER     316.549        0.00         —
+   20.0       10.3166       415.4         3.34      NEVER     324.870        0.00         —
+   25.0       13.0441       512.5         3.03      NEVER     408.654        0.00         —
 ```
 
-**THE NUMBER GATE 3 QUOTES: 0.5116 → 0.5308 °/%**, walking gently with the error (0.5116 at 2 %,
-0.5165 at 10 %, 0.5229 at 18 %). ⭐ P1's provisional **0.4970 °/% measured BALLISTIC is CONFIRMED
-and corrected UPWARD by ~4 %** — the commanded trajectory diverges slightly more than the free one,
+**THE NUMBER GATE 3 QUOTES: 0.503 → 0.522 °/%**, walking gently with the error (0.5035 at 5 %,
+0.5071 at 10 %, 0.5138 at 18 %). ⭐ P1's provisional **0.4970 °/% measured BALLISTIC is CONFIRMED
+and corrected UPWARD by ~2 %** — the commanded trajectory diverges slightly more than the free one,
 which is the direction that makes the axis *easier* to reach, not harder. The axis is **live,
 linear, monotone and defensible**.
+
+⚠⚠ **THE HANDOVER ERROR IS THE *BODY*-FRAME SEPARATION, AND THAT IS A CORRECTION MADE AFTER THE
+FIRST TABLE WAS WRITTEN** (advisor). `off_axis_angle` is a hypot of two angle DIFFERENCES and is
+**not frame-invariant**, so an INERTIAL-frame separation compared against a body-frame window
+`gimbal_fov_deg` is two currencies wearing one kernel's name — the "same kernel, same currency"
+argument only holds if the FRAME matches too. The inertial read gave 9.9580 / 10.2282 at the cliff:
+1.8 % larger, the same cliff in the same place, wrong units of comparison. ⭐ The trajectories are
+**bit-identical** between the two reads (the cue error is telemetry; the head slews to the same body
+angles either way), so this is a choice of GAUGE and not a change of physics — which is exactly why
+it had to be settled BEFORE a HUD was authored around the number.
 
 ### ⭐⭐⭐ §6.3 THE CLIFF IS THE WINDOW, AND IT IS THE SLICE
 
 The handover error crosses the authored **10° detector window between 19.0 % and 19.5 %** of
-belief-velocity error, and **the engagement flips exactly there**: 9.9580° → acquires at 7.2560 s →
-arrives at **2.542 m**; 10.2282° → **NEVER ACQUIRES** → **316.549 m**. A quarter of a degree.
+belief-velocity error, and **the engagement flips exactly there**: 9.7846° → acquires at 7.2560 s →
+arrives at **2.542 m**; 10.0505° → **NEVER ACQUIRES** → **316.549 m**. ⭐⭐ **The two rows STRADDLE
+the authored 10.0° window by five hundredths of a degree**, and the failure is on the `> fov` side —
+the crossing and the flip are the same event, measured in the window's own frame.
 
 ⇒ **THE LESSON, IN ONE SENTENCE.** *A midcourse is not judged by how far off its picture is, but by
 whether the target is still inside the detector window at the instant the receiver first hears it —
@@ -1172,22 +1184,24 @@ the **BELIEF**-cued one, signed `Δv` (m/s on the crossing axis):
 
 ```
    Δv     cue@handover   pre-lock pk%   lock t      CPA m   post-lock pk%
-  −50        13.2689         3.03        NEVER    408.654        0.00
-  −40        10.4986         3.34        NEVER    324.870        0.00
-  −30         7.8056         3.65       7.2240      0.287       21.62
-  −10         2.5647         4.27       7.1580      0.124        8.46
+  −50        13.0441         3.03        NEVER    408.654        0.00
+  −40        10.3166         3.34        NEVER    324.870        0.00
+  −30         7.6673         3.65       7.2240      0.287       21.62
+  −10         2.5174         4.27       7.1580      0.124        8.46
     0         0.0000         4.57       7.1330      0.135        4.27
-  +10         2.5427         4.87       7.1120      0.146        8.43
-  +30         7.6013         5.48       7.0840      0.389       20.87
-  +40        10.1327         5.77       7.0760      1.281       28.18
-  +50        12.6762         6.07        NEVER    388.806        0.00
+  +10         2.4941         4.87       7.1120      0.146        8.43
+  +30         7.4517         5.48       7.0840      0.389       20.87
+  +40         9.9305         5.77       7.0760      1.281       28.18
+  +50        12.4200         6.07        NEVER    388.806        0.00
 ```
 
 ⭐ **P9.3's SPREAD SURVIVES THE CUE CHANGE ALMOST EXACTLY** (4.27 → ~21 % at |Δv| = 30, against its
 4.27 → 21 %), so the number carried into §3.3 is sound. §5.3 item 4's instruction to read `|Δv|`
 is **confirmed**: the response is V-shaped in the cue error. ⚠ **BUT IT IS NOT SYMMETRIC**, and the
 asymmetry is real rather than noise — the **−** side breaks between −30 and −40 while the **+** side
-survives to +40, because a belief that the target crosses *faster* leads further and buys time. Gate
+survives to +40 (cue error 9.9305°, just inside the window) and breaks by +50. **The cliff is at the
+WINDOW on both sides**; the two sides simply reach it at different `|Δv|`, because a belief that the
+target crosses *faster* leads further and buys time. Gate
 3's slider should therefore be authored on the **−** side, where the cliff is inside a defensible
 error magnitude (19.5 % of the crossing speed).
 
@@ -1234,3 +1248,44 @@ the correct one to `< 1e-9` and the wrong one to `200·dt`, so the cancellation 
    instant exists will read `NaN`/`-1` on exactly the cells that carry the lesson.
 
 ---
+
+### §6.9 POST-GATE ADVISOR REVIEW — FOUR ITEMS, TWO OF THEM DEFECTS IN WHAT HAD SHIPPED
+
+Run against the committed gate-2 diff. All four are closed; the suite is green at **9263**.
+
+1. ⚠⚠ **THE PIP SNAPPED TO THE WORLD ORIGIN AT HANDOVER — a real defect, and the comment beside it
+   asserted the opposite.** `mid_pip` is a LOCAL, re-initialised to `zero(Vec3)` every tick, so once
+   the arm stops being taken the telemetry shipped `[0,0,0]` while the comment claimed the point
+   "freezes at its last blind value". Convention 13 has gate 3's client DRAWING this point, so the
+   marker would have teleported to the origin at exactly the moment the lesson happens. ⇒ the PIP,
+   its error and `t_go` are now **persisted in `comp`** and the telemetry reads those, so the freeze
+   is real. ⭐ **The lesson is not the bug, it is that a comment asserted a behaviour the code did
+   not have** — and nothing in the gate's five checks could have caught it, because none of them
+   looked at the PIP at all.
+2. ⚠⚠ **NOTHING PINNED THE CALL SITE, AND THE OBVIOUS TOOTH WOULD NOT HAVE DISCRIMINATED.** §5.3's
+   trifecta warning is about the **call**, not the primitive: gate 1's frame pin lives INSIDE
+   `intercept_time` and cannot see which local the arm handed it, while `rel_vel = tgt.vel - e.vel`
+   sits a few lines above the arm. ⭐⭐ **AND `‖pip − p_m‖ = V_m·t_go` HOLDS BY CONSTRUCTION OF THE
+   QUADRATIC ROOT FOR *ANY* VELOCITY ARGUMENT**, so the identity that looks like the natural check
+   would have passed on the slip. The tooth that bites is slice 46's own shape: rebuild the PIP
+   INDEPENDENTLY from the comp keys on a blind tick and assert the wire lands on the same metre —
+   which also pins that `V_m` is the INSTANTANEOUS speed (the thing P9's `k = 1.0` was calibrated
+   against) and not an authored 700. Both wrong answers are now asserted to be far outside tolerance.
+3. **The anchor is NOT refused without `fidelity: {guidance: pn}`, and that is a DECISION.** It looks
+   like the `detect_pt_w`-without-`two_angle` combination the loader refuses, but `:guidance` is
+   **LIVE-SETTABLE** — slice 10's button cycles `:pursuit ↔ :pn` through `set_fidelity` — so a wire
+   that opens on `:pursuit` and is toggled DOES reach the arm, and a refusal would make a legal
+   mid-run toggle un-authorable. That is the slice-38 precedent (keys accepted beside either rung
+   because the rung is a button). ⚠ The contrast worth keeping: `two_angle` is a STATIC seeker
+   property, so refusing on it can never strand a live toggle. Now stated in the loader.
+4. ⚠⚠ **THE CUE ERROR WAS AN INERTIAL-FRAME HYPOT COMPARED AGAINST A BODY-FRAME WINDOW.**
+   `off_axis_angle` is a hypot of two angle DIFFERENCES and is **not frame-invariant**, so "same
+   kernel ⇒ same currency" was only half the argument — the FRAME has to match too. Moved to the
+   body-frame pair (`head_tgt_az/el` against `look_az_b/el_b`, both off the same `:att_q`), which is
+   also the exact pair the next tick's slew gate tests. ⭐ Settled BEFORE gate 3, which is the whole
+   point: it re-pinned two `atol` assertions and two tables, and would have re-pinned a HUD as well.
+
+⭐ **AND THE CORRECTION MADE THE HEADLINE SHARPER RATHER THAN WEAKER.** In the window's own frame
+the two cliff rows straddle the authored 10.0° by **five hundredths of a degree** (9.7846 arrives,
+10.0505 never acquires) where the inertial read straddled it by a quarter. The physics did not move
+— the trajectories are bit-identical between the two reads — only the gauge did.

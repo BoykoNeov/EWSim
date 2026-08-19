@@ -857,6 +857,18 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # constant with a measured justification, in the `k_alpha`/`k_q` class, and the showcase
             # keeps exactly one live knob for slice-19 FINDING-14's reason.
             #
+            # ⚠⚠ AND THE ANCHOR IS **NOT** REFUSED WITHOUT `fidelity: {guidance: pn}`, WHICH IS A
+            # DECISION AND NOT AN OVERSIGHT (advisor asked; this is the answer). The arm is gated on
+            # `guid === :pn`, so on a `:pursuit` or `:apn` wire it is inert — which looks exactly
+            # like the `detect_pt_w`-without-`two_angle` combination refused a few hundred lines
+            # above. The difference is that `:guidance` is **LIVE-SETTABLE**: slice 10's fidelity
+            # button cycles `:pursuit ↔ :pn` through `set_fidelity` at runtime, so a wire that opens
+            # on `:pursuit` and is toggled DOES reach this arm. That is the slice-38 precedent
+            # exactly (gyro keys accepted beside either head-servo rung because the rung is a
+            # button), and refusing here would make a legal mid-run toggle un-authorable. ⚠ The
+            # contrast is worth keeping straight: `two_angle` is a STATIC seeker property, so its
+            # refusal can never strand a live toggle.
+            #
             # ⚠ THE ERRORS ARE INERTIAL `Vec3`s IN SI (metres, m/s) and are SIGNED — a belief that
             # is wrong in the OTHER direction flies the mirror engagement, which the loader declines
             # to forbid for the same reason it declines to forbid a negative `cross_speed_mps`.

@@ -1609,13 +1609,26 @@ function decide!(a::Autopilot, w::World)
     # which is the honest picture (the midcourse has stopped predicting).
     # ⚠ ANCHOR-GATED, so slices 1–46 are byte-identical on the wire as well as in the trajectory.
     if haskey(c, :midcourse)
-        tel["$sid.midcourse_active"] = mid_active ? 1.0 : 0.0
-        tel["$sid.midcourse_tgo"]    = _finite(mid_tgo)
-        tel["$sid.midcourse_pip_x"]  = _finite_coord(mid_pip[1])
-        tel["$sid.midcourse_pip_y"]  = _finite_coord(mid_pip[2])
-        tel["$sid.midcourse_pip_z"]  = _finite_coord(mid_pip[3])
-        pip_tru, _ = predicted_intercept_point(e.pos, tgt.pos, tgt.vel, _norm3(e.vel))
-        tel["$sid.midcourse_pip_err_m"] = _finite(mid_active ? _norm3(mid_pip - pip_tru) : 0.0)
+        # ⚠⚠ THE FROZEN VALUES ARE **PERSISTED IN `comp`**, NOT LEFT IN THE LOCALS (advisor). The
+        # locals are re-initialised to zero every tick, so a telemetry read of them post-handover
+        # would ship the WORLD ORIGIN — and the client draws this point (convention 13), so a marker
+        # would TELEPORT to [0,0,0] at exactly the moment the lesson happens. Frozen, they say the
+        # true thing: *this is where the midcourse thought the intercept was when it handed over*,
+        # which is the number gate 3's HUD wants on screen after the switch. `midcourse_active` is
+        # the flag that distinguishes a live prediction from a frozen one.
+        if mid_active
+            pip_tru, _ = predicted_intercept_point(e.pos, tgt.pos, tgt.vel, _norm3(e.vel))
+            c[:midcourse_pip]     = mid_pip
+            c[:midcourse_pip_err] = _norm3(mid_pip - pip_tru)
+            c[:midcourse_tgo]     = mid_tgo
+        end
+        pip_o = get(c, :midcourse_pip, zero(Vec3))::Vec3
+        tel["$sid.midcourse_active"]    = mid_active ? 1.0 : 0.0
+        tel["$sid.midcourse_tgo"]       = _finite(Float64(get(c, :midcourse_tgo, 0.0)))
+        tel["$sid.midcourse_pip_x"]     = _finite_coord(pip_o[1])
+        tel["$sid.midcourse_pip_y"]     = _finite_coord(pip_o[2])
+        tel["$sid.midcourse_pip_z"]     = _finite_coord(pip_o[3])
+        tel["$sid.midcourse_pip_err_m"] = _finite(Float64(get(c, :midcourse_pip_err, 0.0)))
     end
     tel["$sid.los_rate"]      = _finite(_norm3(los_rate(rel_pos, rel_vel)))  # ‖ω‖ (the PN driver)
     tel["$sid.closing_speed"] = _finite_coord(-range_rate(rel_pos, rel_vel))  # Vc (POSITIVE closing)
@@ -2625,6 +2638,7 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             belief_p, _ = _midcourse_belief!(c, tgt, w)
             û_bel = los_unit(e.pos, belief_p)
             cue_i_az, cue_i_el = az_el(û_bel)
+            head_tgt_az, head_tgt_el = look_angles(c[:att_q]::Quat, û_bel)
             # ⭐ THE HEADLINE QUANTITY, FORMED FROM THE VECTORS THAT WERE ACTUALLY USED: the angle
             # between where the head is being TOLD to look and where the target really is. Gate-0 P1
             # measured this reaching the 10° detector window at ~0.50 °/% of target-velocity error,
@@ -2635,9 +2649,16 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             # currency, not two opinions differing by the kernel's own documented 0.36 % at 47°. An
             # inline `acos` here would also be a SECOND angle implementation, the trap this file
             # names for `off_axis_angle` in three other places.
+            # ⚠⚠ AND IT IS THE **BODY**-FRAME PAIR, NOT THE INERTIAL ONE (advisor). `off_axis_angle`
+            # is a hypot of two angle DIFFERENCES and is NOT frame-invariant, so an inertial-frame
+            # separation compared against a body-frame window would be two currencies wearing one
+            # kernel's name — the same-kernel argument above only holds if the FRAME matches too.
+            # `head_tgt_az/el` is the cue in body angles (formed one line up) and `look_az_b/el_b` is
+            # the TRUTH LOS in body angles (formed at the top of this gimbal block, off the same
+            # `:att_q`), so this is the separation in exactly the frame `fov_h` is measured in and
+            # exactly the pair the next tick's slew gate will test.
             mid_cued    = true
-            mid_cue_err = off_axis_angle(az_tru, el_tru, cue_i_az, cue_i_el)
-            head_tgt_az, head_tgt_el = look_angles(c[:att_q]::Quat, û_bel)
+            mid_cue_err = off_axis_angle(head_tgt_az, head_tgt_el, look_az_b, look_el_b)
             c[:head_tgt_az] = head_tgt_az; c[:head_tgt_el] = head_tgt_el
             c[:head_tgt_i_az] = cue_i_az; c[:head_tgt_i_el] = cue_i_el
         else

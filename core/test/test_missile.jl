@@ -10955,12 +10955,18 @@ end
         # stale picture past the target.
         lo = fly(; dv = Vec3(0.0, -200.0 * 0.190, 0.0))
         hi = fly(; dv = Vec3(0.0, -200.0 * 0.195, 0.0))
+        # ⚠ THE ERROR IS THE **BODY**-FRAME SEPARATION — the frame `gimbal_fov_deg` is measured in.
+        # An inertial-frame read of the same kernel gives 9.9580 / 10.2282 here: 1.8 % larger, the
+        # same cliff in the same place, and the wrong currency to compare against a body-frame
+        # window. The trajectories are bit-identical between the two reads (the cue error is
+        # telemetry; the head slews to the same body angles either way), which is what makes this a
+        # choice of GAUGE rather than a change of physics.
         @test lo.cue_last < 10.0                  # inside the window at the handover instant…
-        @test lo.cue_last ≈ 9.9580 atol = 1e-3
+        @test lo.cue_last ≈ 9.7846 atol = 1e-3
         @test lo.lock_i > 0                       # …so it acquires…
         @test lo.cpa < 5.0                        # …and arrives (2.542 m)
-        @test hi.cue_last > 10.0                  # OUTSIDE by a quarter of a degree…
-        @test hi.cue_last ≈ 10.2282 atol = 1e-3
+        @test hi.cue_last > 10.0                  # OUTSIDE by five hundredths of a degree…
+        @test hi.cue_last ≈ 10.0505 atol = 1e-3
         @test hi.lock_i == -1                     # …and it NEVER acquires…
         @test hi.cpa ≈ 316.549 atol = 1e-2        # …and misses by 316.5 m
 
@@ -11029,6 +11035,60 @@ end
                 @test los_range(bad, w2.entities[:t1].pos) ≈ 200.0 * dt atol = 1e-9
             end
         end
+    end
+
+    @testset "⭐⭐ THE CALL SITE — the arm passes the target's ABSOLUTE velocity, and the PIP proves it" begin
+        # ⚠⚠ GATE 1 PINNED THE PRIMITIVE; THIS PINS THE **CALL** (advisor). `test_midcourse.jl`
+        # asserts that `intercept_time` gives a different answer for `v_t` than for `v_t − v_m` —
+        # but that test lives INSIDE the function and cannot see which local the arm handed it, and
+        # the guidance chain has a hoisted `rel_vel = tgt.vel - e.vel` a few lines above the arm.
+        #
+        # ⚠ AND THE OBVIOUS TOOTH DOES NOT DISCRIMINATE: `‖pip − p_m‖ = V_m·t_go` holds BY
+        # CONSTRUCTION of the quadratic root for ANY velocity argument, so it would pass on a
+        # `rel_vel` slip just as happily. The check that bites is slice 46's own shape — rebuild the
+        # PIP INDEPENDENTLY from the comp keys and assert the wire lands on the same metre. That
+        # also pins that `V_m` is the INSTANTANEOUS speed `‖e.vel‖`, which is what gate 1's P9
+        # calibrated `midcourse_k = 1.0` against, and not an authored launch speed.
+        w, sub = mid_world(; dv = Vec3(0.0, 20.0, 0.0), dp = Vec3(0.0, -50.0, 0.0))
+        for _ in 1:2500; tick!(w, sub, dt); empty!(w.events); end
+        e = w.entities[:m1]; c = e.comp
+        tel = get(w.env, :telemetry, Dict{String,Any}())
+        @test tel["m1.midcourse_active"] == 1.0                  # still blind — the arm IS the source
+        bel_p = c[:midcourse_p0]::Vec3 +
+                c[:midcourse_v0]::Vec3 * ((w.t - dt) - Float64(c[:midcourse_t0]))
+        pip_ref, tgo_ref = predicted_intercept_point(e.pos, bel_p, c[:midcourse_v0]::Vec3,
+                                                     sqrt(sum(abs2, e.vel)))
+        pip_wire = Vec3(tel["m1.midcourse_pip_x"], tel["m1.midcourse_pip_y"],
+                        tel["m1.midcourse_pip_z"])
+        @test los_range(pip_wire, pip_ref) < 1e-6
+        @test tel["m1.midcourse_tgo"] ≈ tgo_ref atol = 1e-9
+        # …and the mix-up is NOT within tolerance — the discriminator, asserted rather than assumed.
+        pip_bad, _ = predicted_intercept_point(e.pos, bel_p,
+                                               c[:midcourse_v0]::Vec3 - e.vel,
+                                               sqrt(sum(abs2, e.vel)))
+        @test los_range(pip_wire, pip_bad) > 1000.0
+        # …nor is an authored-launch-speed `V_m` (700 m/s against the instantaneous ~671 m/s here).
+        pip_v0, _ = predicted_intercept_point(e.pos, bel_p, c[:midcourse_v0]::Vec3, 700.0)
+        @test sqrt(sum(abs2, e.vel)) < 699.0
+        @test los_range(pip_wire, pip_v0) > 1.0
+
+        # ⭐ AND THE PIP **FREEZES** AT HANDOVER RATHER THAN SNAPPING TO THE WORLD ORIGIN. The
+        # locals that build it are re-initialised every tick, so a telemetry read of them after the
+        # switch would ship [0,0,0] — and gate 3's client DRAWS this point (convention 13), so the
+        # marker would teleport to the origin at exactly the moment the lesson happens.
+        a = fly()
+        w2, sub2 = mid_world()
+        pip_at_switch = Vec3(0.0, 0.0, 0.0); pip_after = Vec3(0.0, 0.0, 0.0)
+        for i in 1:(a.lock_i + 500)
+            tick!(w2, sub2, dt); empty!(w2.events)
+            t2 = get(w2.env, :telemetry, Dict{String,Any}())
+            p = Vec3(t2["m1.midcourse_pip_x"], t2["m1.midcourse_pip_y"], t2["m1.midcourse_pip_z"])
+            i == a.lock_i - 1 && (pip_at_switch = p)
+            i == a.lock_i + 500 && (pip_after = p;
+                                    @test t2["m1.midcourse_active"] == 0.0)   # PN owns it now…
+        end
+        @test pip_after == pip_at_switch                          # …and the belief point HELD
+        @test sqrt(sum(abs2, pip_after)) > 1000.0                 # …at a real point, not the origin
     end
 
     @testset "the loader — the anchor gates, and the error keys are REFUSED without it" begin
