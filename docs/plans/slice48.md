@@ -1,7 +1,8 @@
 # Slice 48 — THE SEEKER SEARCH PATTERN (what a missile does when the receiver opens and the target is not there)
 
-**Status: PLANNED (2026-08-25). GATE 0 NOT YET RUN. ⚠⚠ §3 IS BLOCKED ON PROBE P0 — the showcase arm
-cannot be chosen until P0's four numbers exist.** Suite green at 9333 tests (slice 47).
+**Status: GATE 0 IN PROGRESS (2026-08-25). ⭐ P0 HAS RUN — F0 DID NOT FIRE, the rate axis survives,
+and the showcase arm is chosen (§4.1). P1 IS NEXT and must FLY the cliff P0 only predicts.** Suite
+green at 9333 tests (slice 47); no code shipped yet.
 
 **What this slice is:** slice 47 leaves a missile whose receiver opens onto empty sky. The head is
 pointed where the launch-time picture said the target would be; the target is 0.05° further out than
@@ -384,15 +385,14 @@ the anchor-absent byte-identity, the seam smoke (P2 as a permanent test, not jus
 
 ---
 
-## §3 — GATE 3: THE SHOWCASE ⚠⚠ **BLOCKED ON P0**
+## §3 — GATE 3: THE SHOWCASE ⚠ **P0 HAS RUN — THE ARM IS CHOSEN (§4.1e); THE SLIDER RANGE STILL WAITS ON P1**
 
-**The arm cannot be chosen until P0 exists** (§0.6). What is decided now is everything that does not
-depend on it.
+**The arm is `midcourse_err_gain = 50.0`** (§4.1e). ⚠ The slider's DOMAIN and its linearity still
+wait on P1, because §4.1d item 1 makes P0's cliff a prediction rather than a measurement.
 
 - **Scenario:** `scenarios/slice48_search.yaml` — slice 47's wire to the digit, with
-  `midcourse_err_gain` **AUTHORED** at whatever P0a shows to be the arm with a workable deficit
-  (⚠ *not* 39.0 unless P0 says otherwise — a 0.05° deficit is not a search problem), the search
-  anchor on, and the coverage authored.
+  `midcourse_err_gain` **AUTHORED at 50.0** (§4.1e — ⚠ *not* 39.0; a 0.0505° deficit is not a search
+  problem), the search anchor on, and the coverage authored.
 - **ONE LIVE KNOB:** `m1.seeker_search_rate_dps`. Slice 47's picture-error slider is **retired to an
   authored key here** — convention 9, one lesson, one gauge. Its range and its linearity are P0/P1's
   to set; a log slider is legitimate only if the axis turns out not to be straight.
@@ -420,4 +420,114 @@ depend on it.
 
 ## §4 — THE LOG (what actually happened)
 
-*Empty. Gate 0 has not run.*
+## ⭐⭐⭐ §4.1 — GATE 0, PROBE **P0** (2026-08-25): **F0 DOES NOT FIRE, AND THE CLIFF IS NOT WHERE EITHER THIS PLAN OR SLICE 43 PUT IT**
+
+`M:\claud_projects\temp\slice48\p0_budget.jl`, log beside it. Flown off
+`scenarios/slice47_midcourse.yaml` **unmodified** except `midcourse_err_gain`, no core patch.
+⭐ **THE ANCHOR HOLDS**: the cue-at-handover column reproduces slice 47's shipped ledger to four
+decimals on every arm (9.7846 / 10.0505 / 10.3166 / 13.0441), so this probe is reading the same wire
+the showcase will (convention 10).
+
+### §4.1a — P0a AND P0b: THE DEFICIT IS SMALL AND THE BUDGET IS SHORTER THAN ESTIMATED
+
+```
+err m/s   lock?  t_hand s   t_cpa s  BUDGET s   cue@h °  DEFICIT°  r_hand m      CPA m
+   38.0    lock    7.2560    9.0990    1.8430    9.7846   -0.2154    1436.2      2.542
+   39.0   NEVER    7.2600    9.1330    1.8730   10.0505    0.0505    1436.4    316.549
+   40.0   NEVER    7.2640    9.1350    1.8710   10.3166    0.3166    1436.6    324.870
+   45.0   NEVER    7.2870    9.1450    1.8580   11.6723    1.6723    1436.2    366.633
+   50.0   NEVER    7.3110    9.1540    1.8430   13.0441    3.0441    1436.2    408.654
+```
+
+⚠ **THE BUDGET IS 1.843–1.873 s, NOT THE ~2.2 s §0.6 ESTIMATED** — the estimate came from the
+never-acquiring arm's *whole* flight, and the search's clock starts at handover, not at launch. The
+plan's own arithmetic was 18 % optimistic about the only resource this slice spends. ⚠ **The handover
+RANGE is 1436.2–1436.6 m on every arm** — the horizon is the target's RCS and the picture error does
+not move it, which is what makes these arms comparable at all.
+
+⭐ **AND THE ADVISOR's P0a WARNING IS CONFIRMED IN THE DIGITS: the 39 m/s arm's deficit is 0.0505°.**
+A 240 °/s head crosses that in 0.2 ms. **It is not a search problem and must not be the showcase arm.**
+
+### ⭐⭐⭐ §4.1b — P0c/P0d: **THE TARGET IS RUNNING AWAY FROM THE BELIEF, AND IT ACCELERATES**
+
+The quantity a sweep must close is the cue-vs-truth separation, and it does not sit still. Arm
+39.0 m/s, sampled from handover (full table for four arms in the log):
+
+```
+ t−t_h s    range m    |Δaz| °    |Δel| °    TOTAL ° growth °/s  ω_los °/s
+  0.0000     1436.4    10.0661     0.0814    10.0665        —       6.7408
+  0.3750     1164.9    13.1010     0.1348    13.1017     8.9360    10.2921
+  0.7490      899.7    17.9371     0.2544    17.9389    14.5981    17.3730
+  1.1240      645.5    26.7217     0.6290    26.7291    27.3080    34.1117
+  1.4980      425.1    45.7340     3.4744    45.8658    62.2834    79.6757
+```
+
+**THE SEPARATION GROWS 10.07° → 45.87° IN 1.5 s, AND ITS RATE GROWS 8.9 → 62.3 °/s DOING IT.** The
+mechanism is not subtle and is not a modelling artifact: a **fixed lateral picture error subtends a
+growing angle as the range closes** (283 m of cross-range error at 1436 m is 11°; the same 283 m at
+425 m is 34°). ⇒ ⭐⭐⭐ **A SEARCH ON THIS WIRE IS NOT A COVERAGE PROBLEM, IT IS A RACE.** The head
+must sweep faster than the target departs, and the departure rate is *rising*, so a search that has
+not won early cannot win late. This is slice 43's U-shaped "best moment" arriving on a different wire
+through a different mechanism — and slice 43's own floor mechanism (unswept-axis drift) is **NOT what
+binds here**: |Δel| is 0.08–0.25° for the first second, an order of magnitude inside the window.
+
+⭐ **⇒ P0d ANSWERS THE §0.8 SCOPE QUESTION: A SINGLE-AXIS AZIMUTH SWEEP IS VIABLE ON THIS WIRE.** The
+elevation half of the separation only reaches 3.47° at t+1.5 s, by which point the azimuth half is
+45.7° and the engagement is long over. A two-axis pattern would be modelling something this
+engagement does not do. ⚠ Scope it honestly: that is a property of a nearly co-planar crossing
+geometry, not of searching.
+
+⚠ **THE LAST TWO ROWS OF EVERY TABLE ARE GARBAGE AND ARE NOT QUOTED** (163°, 265°, 95°, and a
+NEGATIVE growth rate). Past ~1.7 s the missile has flown *past* the believed point and the bearing to
+it reverses. It is outside every window this slice reads, but it would be a wrong number in a HUD.
+
+### ⭐⭐ §4.1c — F0: **THE RATE AXIS SURVIVES, AND THE CLIFF IS ρ ≈ ω**
+
+Slice 43's law as a hypothesis, with **ω taken as the separation's growth rate** (the §0.8 live
+centre means that, not the raw LOS rate, is what the sweep is racing):
+
+```
+arm 50.0 m/s:  deficit 3.0441°   growth ω 11.16 °/s   budget 1.843 s   |Δel|@h 0.109°
+     ρ °/s     travel °     t_lock s   fits budget?
+    0.5–5.0     diverges        NEVER     no (ρ ≤ ω)
+     10.0       diverges        NEVER     no (ρ ≤ ω)
+     30.0         4.8783       0.2126            YES
+    120.0         3.3770       0.0781            YES
+    240.0         3.2122       0.0634            YES
+```
+
+**NEITHER F0(a) NOR F0(b) FIRES.** Below ~9–11 °/s nothing closes on any arm; above ~30 °/s
+everything closes in under a quarter of the budget. ⇒ **there is a real, narrow, authorable band
+(~5–30 °/s) with a sharp boundary in it**, and the slider's floor (ρ = 0) is still the genuine null.
+
+⭐⭐⭐ **AND THE PRE-REGISTERED KILL IS ANSWERED THE RIGHT WAY ROUND.** §0.1 feared the
+locks/never-locks boundary would live in the **deficit** — slice 47's cliff relabelled. **It does
+not.** The deficit runs 0.05 → 3.04° across the arms, a 60× range, while the cliff moves only
+8.77 → 11.16 °/s: **the boundary is set by ω and barely by the deficit at all.** The 0.05° arm fails
+for the *same reason* as the 3.04° arm, which is precisely the separation this slice needed from
+slice 47 and did not have a right to expect.
+
+### ⚠⚠ §4.1d — WHAT P0 DOES **NOT** ESTABLISH
+
+1. **The cliff's LOCATION IS PREDICTED, NOT FLOWN.** ω is not constant — it is 8.77 °/s averaged over
+   the first half-second and 62 °/s by t+1.5 s — so a static-ω law is optimistic and the flown cliff
+   will sit **above** these numbers. **P1 must fly it.** No number in §4.1c may reach a scenario
+   comment, a verifier or a HUD.
+2. **The SWEEP DIRECTION is now load-bearing and unmeasured.** With the separation growing at
+   ~10 °/s, a symmetric triangle that opens on the wrong side pays slice 43's `2S` in travel *while
+   the target departs* — at S = 15° and ρ = 10 °/s that is 3 s against a 1.84 s budget. ⇒ **the
+   coverage S and the sweep rate ρ are NOT independent here**, which §0.7's fallback axis assumed
+   they were. P1 must sweep both.
+3. **`ω` AS "THE SEPARATION's GROWTH RATE" IS A REASONED SUBSTITUTION, NOT A MEASUREMENT.** Slice 43's
+   ω was a raw LOS rate against a fixed reference. The substitution follows from the live-belief
+   centre (§0.8) and is *qualitatively* robust — a sweep must outrun the departure however the
+   departure is booked — but the formula's exact form is P1's to confirm or replace.
+
+### §4.1e — THE SHOWCASE ARM, NOW CHOOSABLE (unblocks §3)
+
+**`midcourse_err_gain = 50.0`**, authored. Reasons, in order: the largest deficit (3.0441°) so the
+travel is a real quantity rather than a rounding error; the highest ω (11.16 °/s) so the cliff sits
+furthest from zero and is easiest to author a slider around; **25 % of the crossing speed, which is
+slice 47's own authored slider ceiling** and therefore already argued as defensible; and it is the
+arm slice 47 ships as unambiguously past the cliff (408.654 m), so the null reads as a failure and
+not as a near miss. ⚠ **NOT 39.0** (§4.1a).
