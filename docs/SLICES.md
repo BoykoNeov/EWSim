@@ -1494,3 +1494,49 @@ the rung where the receiver is switched off the core sends none of the new numbe
 was filling in zeros and printing "range 2846 m versus horizon 0 m" in the green it uses for a passed
 check — a value that was never computed, displayed as a test that passed. Both lines now refuse to
 report a comparison that was never made.
+
+## Slice 47 â€” the midcourse phase (what a blind missile flies on)
+
+Every missile in this arc so far could see its target from the moment it launched. This one cannot:
+its seeker only hears an echo inside about 1.4 km, and the fight starts more than five times further
+out. So for most of the flight it steers on what it was **told** at launch â€” one snapshot of where
+the target was and how fast it was going, carried forward in a straight line. That snapshot is
+allowed to be wrong, and how wrong it is, is the slider.
+
+**The finding is that being told wrong costs nothing you can see, until it costs everything at
+once.** The trajectory looks fine. The airframe is barely working. The miss distance â€” the number
+everyone's eye goes to â€” wanders up and down by a factor of twenty and says nothing at all. What is
+quietly happening is that the missile's head is being pointed at where it *believes* the target is,
+and that belief and the truth drift apart. At the instant the receiver finally hears something, the
+target is either still inside the seeker's field of view or it is not, and that single instant
+decides the whole engagement. One extra metre per second of error in the launch-time picture â€” a
+quarter of a degree of pointing â€” turns a 2.5-metre arrival into a 316-metre miss, because the
+target crossed out of the window.
+
+**A second finding fell out of a test that failed.** The angle at handover is not a property of how
+wrong the picture is; it is how wrong the picture is *multiplied by how long you flew blind*. Belief
+and truth start together and separate steadily, so opening the receiver early is worth as much as
+having a better picture: pressing the button that removes the horizon at 3.2 seconds instead of 7.3
+gives the identical bad picture a seventh of the pointing error. **A midcourse accuracy requirement
+therefore cannot be written in metres per second alone â€” it only means something against a stated
+handover range.**
+
+âš âš  **The showcase also retracted one of its own plan's rules.** The plan had banned a particular
+gauge (how much field of view is left) on the grounds that it reads *better* while the engagement is
+being lost â€” a genuinely damning property, measured during an early probe. On the finished wire it
+does not do that at all; it turns out to be the same measurement as the headline gauge, just counted
+from the other end. The original evidence came from a sweep the plan itself had already flagged as
+muddled. It took two wrong assertions in the verifier, each replaced only after a fresh measurement,
+to land on the true statement. The gauge is still kept off the display â€” but for being redundant,
+not for being deceptive, and the difference matters because the old reason was being quoted.
+
+âš  **And a photograph caught two things that three passing test suites could not**, both in the part
+of the display that only exists when a real window is open. The heads-up display announced that the
+missile had handed over to its final guidance while it was in fact still flying its stale belief all
+the way to impact â€” on precisely the failing case that carries the lesson, in a picture where every
+other number was right. The plan had written down the exact trap (two different switches, thrown at
+two different moments) and it was walked into anyway. The second: this scenario reports about
+seventy live numbers instead of fifty, and the panel listing them silently ran off the bottom of the
+screen and sideways into the display it shares the window with. It is the same failure as the
+previous slice's â€” a size budget that looks satisfied and is not â€” one widget over.
+

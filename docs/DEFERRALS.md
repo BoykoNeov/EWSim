@@ -49,7 +49,7 @@ component* — is this same error one level down, and it was written the day bef
 |---|---|---|---|---|
 | 41 | second-order fin actuator | **PASS** — kernel clean, seam bit-exact across five `:delta_cmd` writers, physics real (a lag inside the MAIN loop DEstabilizes: 1.27–4.45× ring growth at 60→20 Hz, `R_crit` walks −0.0926 → −0.0901) | FAIL — two `(k_α,k_q)` retunes reproduce the whole curve to 0.00–1.01 % | **DEAD AS A LESSON, ALIVE AS A MODEL.** ⚠ Scope the equivalence honestly: it was MEASURED on a loop whose fin command is a single 1.6488 Hz line, and whether it survives a BROADBAND loop is UNPROVEN — the one available probe (halving `af_I` moves the ring to 2.7503 Hz and the matched gain pair over-shoots 27–47 %) is CONFOUNDED, because `af_I` moves the plant as well as the frequency. Ships as authorable actuator hardware; must NOT ship as "the fin architecture". |
 | 42 | acquisition knife-edge | **FAIL** — the effect's width is `ω_LOS·dt`, ONE integration step, and HALVES when `dt` halves | FAIL — the "worthless lock" cell's miss is BYTE-IDENTICAL to the never-locks cell | **DEAD UNDER BOTH AIMS — the only genuine kill of the five.** There is no component here, only a discretization artifact. Nothing to author, nothing to ship. |
-| 43 | seeker search pattern | **N/A** — never a physics kill; it shipped a LAW (`travel = deficit/(1−ω/ρ)`, `ρ* = min_t […]`, confirmed 4/4 on untuned geometries) | BLOCKED — a wider window is FREE on this wire | **NOT A KILL AT ALL — BLOCKED, and the law is banked.** ⚠ The block is a property of the ENGAGEMENT, not of searching: a search costs time, and time is worthless when you were launched already able to see. |
+| 43 | seeker search pattern | **N/A** — never a physics kill; it shipped a LAW (`travel = deficit/(1−ω/ρ)`, `ρ* = min_t […]`, confirmed 4/4 on untuned geometries) | ~~BLOCKED~~ **UNBLOCKED by slice 47 (2026-08-25)** | **NOT A KILL AT ALL — was BLOCKED, law banked, and 47 supplied both missing halves (a midcourse to search FROM, and a slider that authors the deficit).** ⚠ The block is a property of the ENGAGEMENT, not of searching: a search costs time, and time is worthless when you were launched already able to see. |
 | 44 | seeker detection range / SNR | **PASS, EXACTLY** — `R_acq·fov` constant to 0.0000 %, log-log slope −1.000000, `r_acq` vs `snr_freespace` at +10.0000 dB; the plan says it outright: *"the physics is not what failed, what failed is the WIRE"* | FAIL — an 8079 m seeker against a 6437 m launch ⇒ the gate is byte-identical to no gate | **DEAD AS THE UNBLOCKER, ALIVE AS A MODEL — and arguably the biggest miss of the five.** A seeker with a detection horizon is not optional equipment for a simulator meant to carry different seekers against different targets at different ranges. `lib44.jl` is written and measured correct. ⚠ Its two survivors stand regardless (a late lock is paid in MANOEUVRE AUTHORITY and miss cannot show it; the narrow-window failures of 32/34 are the SERVO's). |
 | 45 | rectangular / per-axis window and stop | **PASS, BOTH HALVES** — the elevation stop BINDS 66–68 % of in-band ticks (read, clamping, working hardware); the box changes ACQUISITION on a searching head (disc never locks 305.11 m, box hits 0.24/0.23/0.15) | FAIL (stop) / CONDITIONAL (window) — miss 0.1912 m at every el stop over a 750× range; box ≡ disc byte-identically on 8/9 TRACKING rows | **BOTH HALVES DEAD AS A LESSON, BOTH ALIVE AS A MODEL.** ⚠ "The 7th false-fidelity knob" is a MISNOMER and must not be quoted: the other six were never READ; this one is read and binds two-thirds of the ticks. An azimuth ring and an elevation trunnion are independent mechanisms with independent authorable travel — that is hardware variety, which is the simulator's whole point. |
 
@@ -572,3 +572,86 @@ it is blind. The horizon itself is no longer the missing piece.
 - **A self-declared HUD width budget — DEAD as a practice.** See `docs/LESSONS.md`; slice 46's tooth
   passed green at 100/96 chars while every line ran off the edge at two window sizes. Budgets are
   inherited from the family and asserted in PIXELS.
+
+---
+
+## â­â­â­ SLICE 47 SHIPPED â€” THE MIDCOURSE PHASE, AND THE SEARCH FAMILY'S BLOCK IS **GONE** (2026-08-25)
+
+**Slice 47 is COMPLETE (3 gates, suite 9333).** Detail: `docs/STATUS.md` Â§Slice 47, `docs/SLICES.md`,
+`docs/plans/slice47.md` Â§7. This section records only what it changes for the BACKLOG.
+
+### THE BLOCK ON 42/43/45 IS DISCHARGED
+
+Slice 46 supplied the precondition (an engagement launched OUTSIDE the seeker's horizon, authorable
+by shrinking the target) and explicitly did **not** unblock the search, because *"a scenario is not
+the same as a midcourse guidance phase, which is what a search actually needs to be searching FROM."*
+**Slice 47 is that phase, and it ships.** A blind missile now flies a real law â€” a lead-pursuit to
+the predicted intercept point of a believed target â€” for 7132 ticks of a 7256-tick engagement, with a
+head CUED on that belief, an authored and live-settable error in the picture, and a HUD that shows
+what the error costs.
+
+â‡’ **THE SEEKER SEARCH PATTERN (42/43/45) IS NO LONGER BLOCKED.** Every precondition it was waiting on
+is now shipped and authorable: an engagement outside the horizon (46), something to fly on while
+blind (47), and â€” new from 47 â€” **a measured, tunable way to arrive at handover with a KNOWN pointing
+error**, which is precisely the "overlap deficit" a search pattern exists to close. Slice 43's law
+(`travel = deficit/(1âˆ’Ï‰/Ï)`, the sweep floor, `t_lock`, the U-shaped best moment) is banked and was
+never refuted. â­ **The cost of acquiring is the OVERLAP DEFICIT `|err| âˆ’ fov`, and slice 47 authors
+`|err|` on a slider whose cliff sits at the window.** A search slice can now be authored to start
+exactly where 47's showcase ends: the arm at 39 m/s that hands over 0.05Â° outside the window and
+never acquires is a missile with something specific to search FOR.
+
+âš  **What a search slice must NOT re-litigate:** that a wider window is free (46 killed it â€” the
+window IS the beamwidth, so `R_acq Â· fov` is constant), and that the miss is the gauge (44/45/46/47).
+
+### â­â­ A NEW LAW THE SEARCH SLICE MUST BUILD ON â€” THE DEFICIT IS SET BY *TWO* THINGS
+
+**THE HANDOVER ERROR IS THE PICTURE ERROR TIMES THE TIME SPENT BLIND** (slice 47 Â§7.2, found by a
+verifier assertion FAILING). Belief and truth start together and separate at a rate the belief error
+sets, so the angle at handover is set as much by **when** the receiver opens as by **how wrong** the
+picture is: the identical slider value gives **1.3881Â° at a 3.2 s handover and 9.7846Â° at 7.264 s**.
+
+â‡’ **a midcourse error budget cannot be specified in metres per second alone â€” it has to be specified
+against a handover RANGE**, and a search slice's deficit therefore has TWO authorable axes rather
+than one. âš  This also means slice 47's tidy 0.503â€“0.522 Â°/% line is a property of *that* engagement's
+blind duration and must not be carried to a wire with a different horizon.
+
+### âš âš  A BAN THIS LEDGER HELPED CARRY IS **RETRACTED**
+
+`gimbal_fov_margin_deg` was recorded above (slice 46's "New candidates" entry, from slice 47 gate-0
+P6b) as disqualified because *"the angle margin improves monotonically"* over the interval where the
+engagement is lost. **MEASURED ON THE SHIPPED WIRE, IT DOES NOT.** It separates the ends of the
+slider cleanly in both samplings a HUD author would use â€” 9.9932Â° â†’ âˆ’2.9281Â° at handover, 9.5682Â° â†’
+1.6764Â° post-lock â€” and P6b's inversion was measured on the sweep that entry ITSELF flags as
+confounded ("a probe that perturbs the TRUTH to emulate a wrong BELIEF is clean only for quantities
+read at a single instant").
+
+â­â­ **The replacement is stronger than the ban was: at the handover instant `margin + cue = fov`**,
+asserted to a tenth of a degree on four arms, because a CUED head's pointing error against the truth
+LOS *is* the cue error. The two "rival" gauges are ONE measurement counted from opposite ends. â‡’ the
+margin stays off the HUD for **REDUNDANCY** (convention 9: one lesson, one gauge) and **NOT for
+deception**. **Do not quote the old reason.**
+
+### New candidates raised by slice 47
+
+- â­â­ **THE SEEKER SEARCH PATTERN (42/43/45) â€” now UNBLOCKED and the top of the backlog.** Its law is
+  banked, its precondition ships, and slice 47's slider hands it a tunable overlap deficit. Author it
+  on slice 47's wire with the picture error just past the cliff.
+- **A MID-FLIGHT DATALINK UPDATE.** Slice 47's belief is ONE snapshot for the whole blind phase
+  (named approximation). A real midcourse gets refreshed, and the lesson would be **how often**: the
+  handover error is the picture error times the time since the last update, so update RATE and
+  picture QUALITY trade against each other on one axis that Â§7.2 already measured the slope of.
+  âš  Check the model test first â€” the update must be READ every tick, not consumed at load.
+- **INS DRIFT.** Slice 47's missile knows its OWN state perfectly, which is half of what a real
+  midcourse error budget is made of. A drifting own-state estimate corrupts the cue in a way an
+  authored target-picture error cannot emulate (it moves the head's frame, not the point it aims at).
+  âš  Would need its own model test â€” and note slice 31's warning about compensating with a signal that
+  is itself corrupted by what you are compensating.
+- **A MANOEUVRING TARGET UNDER MIDCOURSE.** Slice 47's dead-reckon assumes constant velocity, which
+  is exactly the assumption a manoeuvre breaks. Slice 12's `ManeuveringTarget` already exists. âš  The
+  risk is that this is slice 47's lesson again in different clothes (a wrong picture is a wrong
+  picture) â€” it needs a gate-0 probe showing the failure MODE differs, not just the magnitude.
+- âš  **NOT a candidate: a `midcourse` FIDELITY RUNG.** Gate 3 considered one to make "no midcourse at
+  all" reachable from the client and rejected it â€” the anchor is deliberately an authored key (gate
+  2's decision, argued at length), the third arm is a claim about the WIRE rather than a slider
+  position, and it is pinned as a test. Adding a rung would reopen a settled decision for no gain.
+

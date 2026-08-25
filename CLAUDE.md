@@ -53,29 +53,33 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 + `decide!`."
 
 
-## Where the project is (2026-08-18)
+## Where the project is (2026-08-25)
 
-**Slices 1–40 + 46 COMPLETE & green — 9263 tests** (7808 before slice 47). **Slice 47 (THE MIDCOURSE
-PHASE) is IN PROGRESS: gates 0–2 CLOSED** — primitives in `guidance.jl`; then the WIRE (a midcourse arm
-ABOVE the `:seeker_omega` one + a head CUED ON THE BELIEF while undetectable, `missile.jl`). ⭐ **THE
-CLIFF IS THE WINDOW**: handover error grows 0.51 °/% of belief-velocity error and crosses the 10°
-window between 19.0 % (2.5 m arrival) and 19.5 % (NEVER ACQUIRES, 316 m). Gate 3 next — **read
-`docs/plans/slice47.md` §6.8 first** (five verifier traps). 39 and 41–45 are GATE-0 RECORDS (no code). ⚠⚠ **FIVE
-CONSECUTIVE gate-0 records shipped nothing, and on 2026-08-18 the kill CRITERION itself was ruled at fault**
-(the two-test rule below): 41, 44 and 45 are **ALIVE AS A MODEL**, probe code in `M:\claud_projects\temp\slice4N`;
-only 42 is dead outright; 43 is BLOCKED. ⭐ **Slice 46 DISCHARGED 44's re-verdict** — it shipped 44's exact
-physics as the seeker's DETECTION HORIZON, which is what the re-verdict is FOR.
-HANDOFF §10 items 1–13 are DONE; 15–40 are into the §11 Tier-A horizon.
+**Slices 1–40 + 46 + 47 COMPLETE & green — 9333 tests** (7808 before slice 47). 39 and 41–45 are GATE-0
+RECORDS (no code). ⚠⚠ **FIVE CONSECUTIVE gate-0 records shipped nothing, and on 2026-08-18 the kill
+CRITERION itself was ruled at fault** (the two-test rule below): 41, 44 and 45 are **ALIVE AS A MODEL**,
+probe code in `M:\claud_projects\temp\slice4N`; only 42 is dead outright. ⭐ **46 DISCHARGED 44's
+re-verdict** and **47 DISCHARGED 43's BLOCK** — the search family is UNBLOCKED and is the top of the
+backlog (`docs/DEFERRALS.md`). HANDOFF §10 items 1–13 are DONE; 15–40 are into the §11 Tier-A horizon.
 
-The live arc is the **missile seeker/radome family (26–40, 46)**: a seeker looks through a radome whose bend
+The live arc is the **missile seeker family (26–40, 46, 47)**: a seeker looks through a radome whose bend
 depends on the look angle, so the missile's own motion feeds back into the line-of-sight it reports and past
-a loop gain it shakes itself into a limit cycle. 27–31 built and priced the gyro feed-forward cure; 32–33
-made it a field-of-view budget; 34–38 put the seeker on a **gimbal** (index, servo bandwidth, handover,
-reference frame, gyro); 40 gave that gimbal **inertia**. Per-slice detail: `docs/SLICES.md`.
+a loop gain it shakes itself into a limit cycle. 27–33 built, priced and budgeted the gyro cure; 34–40 put
+the seeker on a **gimbal** with **inertia**. Per-slice detail: `docs/SLICES.md`.
 
 **46 gave the seeker a RECEIVER**: the window IS the beamwidth, so `R_acq · fov` is CONSTANT (80789 m·deg)
-— a wider window costs REACH, inverting 32–36 — and a late lock is paid in MANOEUVRE AUTHORITY (2.5 → 100 %
-of `a_max`), never in MISS, which reads non-monotone and backwards.
+— a wider window costs REACH, inverting 32–36 — and a late lock is paid in MANOEUVRE AUTHORITY, never in
+MISS, which reads non-monotone and backwards.
+
+**47 made the missile BLIND** for most of the flight, flying one launch snapshot dead-reckoned with an
+authored (live) error in it. ⭐⭐⭐ **THE CLIFF IS THE WINDOW**: the handover error crosses the authored
+10° detector window between 38 and 39 m/s of belief error — 9.7846° arrives at 2.5 m, 10.0505° NEVER
+ACQUIRES (316 m) — while the MISS again says nothing and the authority walks 4.27 → 27.97 %.
+⭐⭐ **AND THE HANDOVER ERROR IS THE PICTURE ERROR × THE TIME SPENT BLIND** (the same slider gives 1.39° at
+a 3.2 s handover and 9.78° at 7.26 s) ⇒ **a midcourse budget cannot be specified in m/s alone, only
+against a handover RANGE.** ⚠⚠ 47 also **RETRACTED its own plan's ban on `gimbal_fov_margin_deg`** — at
+handover `margin + cue = fov`, so it is the headline gauge in other units and is off the HUD only for
+REDUNDANCY; never quote the old "it improves while the engagement is lost" reason.
 
 **The rule that keeps paying** (33, 34, 35, 37, 38): *aim `R̂` at the glass's worst-case slope*
 (`radome_slope_worst`) and the cost — of FOV, detector window, servo bandwidth, servo frame — mostly
@@ -135,20 +139,17 @@ Evidence, numbers and the re-verdict table: `docs/DEFERRALS.md` §"THE 2026-08-1
   ⭐⭐ **The rule to carry: a pole differs from a gain ONLY in that its phase VARIES with frequency, and that
   loop's fin command is a single 1.6488 Hz line.** ⇒ **measure the SPECTRUM of the signal a new dynamic
   element will sit on BEFORE proposing it** (`p2_spectrum.jl`).
-- **A SEEKER SEARCH PATTERN** (42/43/45) — **BLOCKED, never killed**, on its precondition. ⭐⭐ **The cost of
-  acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error** ⇒ widening the glass and
-  travelling further are THE SAME ACT, and a wider window is FREE here. Its LAW (sweep floor, `t_lock`, the
-  U-shaped best moment) and its three instrument bugs are in DEFERRALS. **Slice 46 supplied the horizon but
-  does NOT unblock it** — what remains is a MIDCOURSE PHASE (something to fly on while blind), now the top
-  of the backlog and much cheaper than it was.
+- **A SEEKER SEARCH PATTERN** (42/43/45) — **UNBLOCKED as of slice 47; never killed.** ⭐⭐ **The cost of
+  acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error.** Its LAW (sweep floor, `t_lock`,
+  the U-shaped best moment) and its three instrument bugs are in DEFERRALS. 46 supplied the horizon, **47
+  supplied the midcourse AND a slider that authors the deficit** ⇒ build it on 47's wire just past the
+  cliff. ⚠ Do NOT re-litigate that a wider window is free (46 killed it) or that the miss is the gauge.
 - **Seeker range / SNR limits AS THE UNBLOCKER** (44) — **DEAD as the unblocker, ALIVE AS A MODEL — and
   SHIPPED by slice 46.** ⭐⭐ **A detection gate can only price a design variable if the ENGAGEMENT is
-  launched OUTSIDE the sensor's horizon — a property of the WIRE** (8079 m vs 6437 m, ratio 1.255, which
-  46's null cell reproduces). ⚠ Both survivors CONFIRMED on 46's shipped wire, one CORRECTED: **a late
-  lock is paid in MANOEUVRE AUTHORITY and MISS cannot show it**; and **the narrow-window failures of
-  32/34 are THE SERVO's** (46 binds the rate limit for 205 frames of the ACQUISITION SLEW at 30 °/s).
-  ⚠⚠ **DO NOT QUOTE 44 §VII.1's “100.00 % of `a_max`”** — an r → 0 ENDGAME read; gated at r > 200 m that
-  cell spends 10.45 % against 3.10 %, and the effect SURVIVES and becomes MONOTONE.
+  launched OUTSIDE the sensor's horizon — a property of the WIRE.** ⚠ Its two survivors are confirmed on
+  46's wire (**a late lock is paid in MANOEUVRE AUTHORITY, not MISS**; **32/34's narrow-window failures
+  are THE SERVO's**). ⚠⚠ **DO NOT QUOTE 44 §VII.1's “100.00 % of `a_max`”** — an r → 0 ENDGAME read;
+  gated at r > 200 m that cell spends 10.45 % against 3.10 %, and the effect SURVIVES and is MONOTONE.
 - **A rectangular / per-axis window and stop** (45) — **DEAD AS A LESSON, ALIVE AS A MODEL, both halves.**
   ⭐⭐⭐ **A TRACKER holds both axes near zero so a window's CORNERS are never visited; a SEARCH drives one
   axis to the rim BY DESIGN, which is where the corners are.** ⚠ Never quote the box's rescue without its
@@ -210,12 +211,8 @@ has the function names, the rungs and the measured numbers. Do NOT paraphrase a 
 Each slice `N` ships `scenarios/sliceN_*.yaml`, a `net/sliceN_verify.gd`, and a
 `net/sliceN_ui_test.gd`. Exact names + the lesson to look for are in `docs/STATUS.md`.
 
-- **Live:** `pwsh tools/julia.ps1 --project=core tools/server.jl scenarios/sliceN_*.yaml`, then
-  launch Godot on `clients/godot` (the main `Sandbox.tscn` auto-detects the view). Cycle the
-  fidelity button / drag the sliders to drive the lesson. The server serves **one** client then
-  exits — restart per session.
-- **Headless proof:** start that server, then `godot --headless --path clients/godot --script
-  res://net/sliceN_verify.gd` (exit 0 = pass). The UI test needs no server:
-  `… --script res://net/sliceN_ui_test.gd`.
-- **All tests:** `pwsh tools/test.ps1`. (On this machine, see [[ewsim-godot-headless]] for the
-  `_console.exe` / non-`pwsh` invocation caveats.)
+- **Live:** `pwsh tools/julia.ps1 --project=core tools/server.jl scenarios/sliceN_*.yaml`, then Godot on
+  `clients/godot` (`Sandbox.tscn` auto-detects the view). ⚠ The server serves **one** client then exits.
+- **Headless proof:** `godot --headless --path clients/godot --script res://net/sliceN_verify.gd`
+  (exit 0 = pass, needs that server); `… sliceN_ui_test.gd` needs none. **All tests:** `pwsh tools/test.ps1`.
+  ⚠ See [[ewsim-godot-headless]] for the `_console.exe` / non-`pwsh` caveats on this machine.

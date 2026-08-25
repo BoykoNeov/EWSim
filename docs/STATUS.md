@@ -6492,3 +6492,177 @@ pwsh tools/julia.ps1 --project=core tools/server.jl scenarios/slice46_horizon.ya
 godot --headless --path clients/godot --script res://net/slice46_verify.gd     # exit 0 = pass
 godot --headless --path clients/godot --script res://net/slice46_ui_test.gd    # no server needed
 ```
+
+---
+
+## Slice 47 â€” THE MIDCOURSE PHASE (2026-08-25)
+
+**SHIPPED â€” 3 gates, 7808 â†’ 9333 tests.** The unblocker the seeker-search family has been waiting
+for since slice 42, and the first slice in this arc where the missile spends most of its flight
+**unable to see the target at all**. What it flies on instead is one snapshot of the target's
+position and velocity, taken at launch and dead-reckoned forward â€” a datalink handoff, never a
+measurement â€” plus an authored error in that picture.
+
+> **THE LESSON, IN ONE SENTENCE.** *A midcourse is not judged by how far off its picture is, but by
+> whether the target is still inside the detector window at the instant the receiver first hears it
+> â€” and everything before that instant looks fine.*
+
+### â­â­â­ THE CLIFF IS THE WINDOW
+
+The handover error â€” the angle between where the head is being TOLD to look and where the target
+really is â€” grows **gently, linearly and monotonically** with the picture error (0.503 â†’ 0.522Â° per
+% of the target's crossing speed, as straight a line as this project has found), and **nothing
+happens** until it crosses the authored 10.0Â° detector window. Flown off the shipped YAML, with the
+authority read GATED AT `r > 200 m`:
+
+```
+   err m/s   err %   cue@hand   lock s      CPA m    auth %   hold %   blind ticks
+     0.0      0.0     0.0000    7.1330      0.135     4.27    100.0      7132
+    10.0      5.0     2.5174    7.1580      0.124     8.46    100.0      7157
+    20.0     10.0     5.0713    7.1890      0.273    14.28    100.0      7188
+    28.0     14.0     7.1413    7.2160      0.314    20.21    100.0      7215
+    34.0     17.0     8.7178    7.2390      1.333    24.33    100.0      7238
+    36.0     18.0     9.2475    7.2470      0.692    25.99    100.0      7246
+    38.0     19.0     9.7846    7.2560      2.542    27.97    100.0      7255   <- THE DEFAULT
+    39.0     19.5    10.0505     NEVER    316.549     0.00      â€”         9334
+    50.0     25.0    13.0441     NEVER    408.654     0.00      â€”         9355
+```
+
+**The two cliff rows straddle the authored 10.0Â° window by five hundredths of a degree, and the
+failure is on the `> fov` side.** 9.7846Â° acquires at 7.2560 s and arrives at 2.5 m; 10.0505Â° NEVER
+ACQUIRES and flies its stale picture 316 m past. **The crossing and the flip are the same event**,
+and the verifier asserts them as one.
+
+âš âš  **AND THE MISS SAYS NOTHING** across the whole surviving domain â€” 0.135 â†’ 0.124 â†’ 0.273 â†’ 0.314
+â†’ 1.333 â†’ 0.692 â†’ 2.542 m, up and down by 20Ã— â€” while the authority walks 4.27 â†’ 27.97 %
+MONOTONICALLY. Slice 46's shape, reproduced in a new currency. The verifier **ASSERTS** the
+non-monotonicity (2 up, 4 down) rather than merely avoiding the column: a verifier built on the
+headline metric here would not miss the lesson, it would read NOISE â€” which is how 44 and 45 died.
+
+### â­â­ THE SECOND FINDING, AND IT CAME OUT OF A FAILED ASSERTION
+
+**THE HANDOVER ERROR IS NOT A PROPERTY OF THE PICTURE ERROR ALONE â€” IT IS THE PICTURE ERROR TIMES
+THE TIME SPENT BLIND.** The slider's own tripwire (the measured Â°/% line) FAILED the mid-run-press
+arm at **0.0731 Â°/%**. The failure was right and the tripwire's SCOPE was wrong: a belief and the
+truth start together and separate at a rate the belief error sets, so the angle at handover is set
+as much by **when** the receiver opens as by **how wrong** the picture is. Press the button at 3.2 s
+instead of handing over at 7.264 s and the identical slider value gives **1.3881Â° instead of
+9.7846Â° â€” a seventh of the angle.** â‡’ **a midcourse error budget cannot be specified in metres per
+second alone; it has to be specified against a handover RANGE.**
+
+### Gate 1 â€” the primitives (see `docs/plans/slice47.md` Â§5)
+
+`intercept_time` / `predicted_intercept_point` / `midcourse_accel` in `guidance.jl` (`test_midcourse.jl`,
+1383 tests). P8 confirmed primitive 3 is **not** a reparameterized PN and is a shipped kernel;
+P9 measured the lead gain's null closing at `k = 1.0` with the useful window bounded at both ends.
+
+### Gate 2 â€” the wire (see Â§6)
+
+A midcourse guidance arm **above** the `:seeker_omega` one, gated on the authored `:midcourse`
+anchor and `!seek_init`; a head **CUED ON THE BELIEF** while undetectable, gated on `!_detectable`.
+âš  **THE TWO GATES ARE DIFFERENT AND THAT MATTERS DOWNSTREAM** â€” the head's cue stops when the
+RECEIVER OPENS, the guidance arm when the TRACKER INITIALISES, so on a broken arm the first has
+stopped and the second has not. Gate 3's HUD walked into exactly that (see below).
+
+### Gate 3 â€” the showcase, and three core edits it could not exist without
+
+1. â­â­â­ **THE PICTURE ERROR IS READ EVERY TICK, NOT FOLDED INTO THE MINT.** Gate 2 minted
+   truth-plus-error once â€” algebraically identical for a static error, and it made the error a key
+   consumed on the FIRST BLIND TICK, which is `_DEAD_KNOB_KEYS`'s own definition of a dead knob
+   (slice 36). The showcase is a slider on that error. â‡’ the snapshot stores **TRUTH** and the error
+   is added at every read. âš  **THE PARENTHESES ARE LOAD-BEARING**: `(p0 + e) + vÂ·Î”t` associates as
+   the shipped form did, so the absolute golden is byte-identical across the change.
+2. **`midcourse_err_gain`** â€” the one scalar, because `set_param` carries a Float64 and both error
+   keys are `Vec3`s. Two loader refusals, **both crash guards rather than tidiness**: `_parse_knobs`
+   refuses a **non-scalar comp key BY TYPE** (a slider on a `Vec3` overwrites it with a bare number
+   and the next `::Vec3` assertion throws INSIDE a tick â€” a DROPPED CONNECTION, not an error
+   message, convention 5), and refuses **this** knob unless exactly one error vector is authored and
+   it is **UNIT length**, which makes the label's "m/s" true by construction rather than by
+   coincidence. Pinned as an IDENTITY: `20 Ã— [0,âˆ’1,0]` is byte-identical to `[0,âˆ’20,0]`, gain 0 to
+   no error at all.
+3. âš âš  **`head_cue_err_handover_deg` â€” WITHOUT IT THE HEADLINE NUMBER IS UNREADABLE FROM A CLIENT**,
+   and gate 2 could not have caught it because gate 2 had no client. `mid_cue_err` is a per-tick
+   LOCAL; the moment the receiver opens, the cue stops and the wire ships the honest `0.0` of a
+   TRACKING head, so the handover value survives on **no** later frame. And a client sees one frame
+   in `emit_every` = 16, so it cannot sample the last blind tick even while still blind. **The
+   verifier's log is the proof: latched 9.7846Â° against a 16-tick-sampled peak of 9.7401Â° â€” a 0.045Â°
+   gap, against a cliff that straddles the window by 0.05Â°.** â­ It freezes on the BROKEN arms too,
+   because the cue is gated on the RECEIVER opening and not on a lock.
+
+### âš âš  Â§3.2's SECOND BAN WAS **RETRACTED**, AND THE RETRACTION IS MEASURED
+
+The plan forbade `gimbal_fov_margin_deg` as a gauge on gate-0 P6b's finding that it IMPROVES across
+the interval where the engagement is lost. **On the shipped wire it does the opposite in both
+samplings**: 9.9932Â° â†’ âˆ’2.9281Â° at handover, 9.5682Â° (4.1 % of `a_max`) â†’ 1.6764Â° (27.1 %)
+post-lock. P6b measured its inversion on the sweep Â§4.4 itself flagged as CONFOUNDED. â­â­ **AND THE
+REASON IT DOES NOT INVERT IS WORTH MORE THAN THE BAN WAS: at the handover instant `margin + cue =
+fov`** â€” asserted to a tenth of a degree on four arms â€” because while the head is CUED its pointing
+error against the truth LOS *is* the cue error. â‡’ the margin is **this slice's headline in the
+window's units**, and it stays off the HUD for **REDUNDANCY** (convention 9), **not for deception**.
+âš  It took two wrong assertions in `slice47_verify.gd` to arrive at the right one, each replaced only
+after a measurement. **Never quote Â§3.2's stated reason again.**
+
+### The client â€” a marker that takes the HUD and **NOT** the button
+
+The opposite shape from 37/40/46, each of which existed to **un-drop** the shared button. This wire
+**is** slice 46's wire with a blind phase in front, so `seeker_detect_view` is raised too, the button
+is already right, and **pressing it is slice 47's own A/B** â€” remove the horizon and the picture
+error is read by nothing. Asserted as a **byte-identity**: two arms at opposite ends of the slider,
+horizon off, `max|Î”pos| = 0.000000000000 m` over 700 frames.
+
+What the marker takes is the HUD, and the hazard is the worst kind this family has met: slice 46's
+block is not WRONG on a slice-47 wire â€” horizon, margin and authority gauge are all live and all
+correct. It simply never mentions the belief. **Every number true, and the slice invisible**, caught
+by ORDERING rather than by a hole.
+
+### âš âš  TWO DEFECTS THE **WINDOWED SHOT** CAUGHT AND NOTHING ELSE COULD
+
+Convention 14's fourth proof earning its place twice in one slice, with verifier, UI test and
+smoke-load all green. Both live in `_draw`.
+
+1. **THE HUD SAID "PN OWNS IT NOW" OVER A MISSILE STILL FLYING ITS MIDCOURSE.** The ownership line
+   was keyed off `head_cued`; it has to be `midcourse_active`. **This is the plan's own Â§6.8 item 5
+   warning, walked into anyway.** On an arm that hears the target but never acquires it, the head's
+   cue has stopped and the guidance arm has not â€” so the line announced a handover that had not
+   happened, on exactly the arm that carries the lesson, in a photograph where every other number
+   was correct.
+2. **THE TELEMETRY READOUT RAN OFF THE BOTTOM OF THE WINDOW AND INTO THE HUD.** Three columns of 18
+   hold ~54 keys; this wire ships ~72. The third column clipped at 648 px â€” silently losing ~15
+   scalars â€” while the columns grew right until they touched the HUD's origin at `vp.x âˆ’ 430`.
+   â­ **A FOURTH COLUMN CANNOT BE THE ANSWER**: three at their natural width already reach that
+   origin, so growing sideways collides with the HUD by construction. The type shrinks instead,
+   which buys height and width at once. **Same failure class as slice 46's shots â€” a budget that
+   looks satisfied and is not â€” one widget over: there the lines were too wide, here too many.**
+
+### The scenario
+
+`scenarios/slice47_midcourse.yaml` â€” slice 46's wire to the digit (seed 32, window 10Â°, servo
+240 Â°/s, the seven detect keys, rcs 0.001 â‡’ a 1436.7 m horizon) with **one** change: the target is
+**+1000 m further in cross-range**. âš âš  **THAT ONE NUMBER IS THE WHOLE PREMISE.** On slice 46's own
+geometry the authored launch heading *is* the midcourse solution, so a perfect midcourse would have
+nothing to do and a wrong one nothing to be wrong about â€” the showcase would measure nothing, which
+is how 44 and 45 died. Moved off that plane, a blind missile that commands nothing misses by
+**1203.7137 m and never acquires at all**.
+
+âš  **ONE LIVE KNOB**, `m1.midcourse_err_gain`, 0 â†’ 50 m/s, **LINEAR** (the axis is straight). The
+floor is the PERFECT picture and **is not a null** â€” the midcourse still flies, correcting the launch
+heading onto the collision course. The arm that IS a null is not reachable from a client and is
+pinned as a test ("THE PREMISE"), because it is a claim about the WIRE and not a slider position.
+
+### The four proofs
+
+| proof | result |
+|---|---|
+| **verifier** `net/slice47_verify.gd` | **PASS, 13 arms** |
+| **UI test** `net/slice47_ui_test.gd` | **PASS, 12 teeth** |
+| **headless smoke-load** | **OK** â€” no `SCRIPT ERROR` / `Parse Error` |
+| **windowed shots** | **three** (`blind` / `lost` / `ok`), in `M:\claud_projects\temp\slice47\` |
+
+### Re-run
+
+```
+& tools/julia.ps1 --project=core tools/server.jl scenarios/slice47_midcourse.yaml
+godot --headless --path clients/godot --script res://net/slice47_verify.gd     # exit 0 = pass
+godot --headless --path clients/godot --script res://net/slice47_ui_test.gd    # no server needed
+```
+

@@ -332,3 +332,89 @@ enough to always carry live in `CLAUDE.md` §Conventions and §Dead ends.
   authored engagement** — slice 45's own *"a property measured in one operating mode is not a
   property of the component"*, one level up. Detail: `docs/DEFERRALS.md` §"THE 2026-08-18
   RE-VERDICT".
+
+---
+
+## A quantity that only exists for one tick needs a LATCH, or no client can ever read it (slice 47)
+
+â­â­â­ **A number formed inside one branch of one tick lives on NO later frame â€” and a client sees one
+frame in `emit_every` anyway, so it cannot sample that tick even while it is happening.** Slice 47's
+whole lesson is one angle at one instant: the pointing error at the moment the receiver first hears
+the target. The wire shipped it as an instantaneous key, which is `0.0` the moment the head starts
+TRACKING â€” honest (a tracking head has no cue) and useless. Two compounding reasons it is
+unreadable, and the second is the one that surprises:
+
+1. **It does not survive the transition.** Any frame after the event carries the post-event value.
+2. **The 16-tick emit grid never lands on the event.** Even sampled *during* the blind phase, the
+   last emitted frame is up to 15 ticks stale â€” **0.045Â° against a cliff that straddles its
+   threshold by 0.05Â°**. The verifier's own log prints both numbers side by side.
+
+â‡’ **LATCH IT INTO STATE AND EMIT THE LATCH AS ITS OWN NEVER-STALE KEY.** âš  And latch it on the
+condition that DEFINES the event, not on the outcome: slice 47's cue stops when the RECEIVER OPENS,
+not when a lock succeeds, so the latched value is defined on the arms that never acquire â€” which are
+exactly the arms that carry the lesson. This is the same defect class as slice 47 gate 2's PIP
+(a per-tick local read as telemetry, shipping `[0,0,0]` after handover), caught twice in one slice.
+
+## Two flags that are ALMOST the same flag will be conflated, and the conflation shows up on the ONE arm that matters (slice 47)
+
+âš âš  **`head_cued` and `midcourse_active` are gated on different conditions one line apart** â€” the
+head's cue stops when the RECEIVER OPENS, the guidance arm stops when the TRACKER INITIALISES. On
+every arm that works, the two flip within a tick of each other and either would do. On an arm that
+hears the target and never acquires it, the first has stopped and the second has not â€” **and that is
+the arm the slice exists to show**. A HUD line keyed off the wrong one announced a handover that had
+not happened, over a missile still flying its stale belief to impact.
+
+â­ **The plan had written the trap down** (Â§6.8 item 5, "two different gates, deliberately, and a
+reader that conflates them reports the wrong instant") **and it was walked into anyway.** â‡’ when two
+flags differ only on the failing arm, the test has to BE the failing arm â€” asserting the two strings
+differ in that state, not merely that each state has a string.
+
+## The windowed shot is not a formality: it caught two defects with three suites green (slice 47)
+
+Convention 14's fourth proof, earning its place twice in one slice, with the verifier (13 arms), the
+UI test (12 teeth) and the headless smoke-load all passing. **Both defects live in `_draw`, which
+`--headless` never runs**, so no amount of extra assertions in the other three could have reached
+them. One was the flag conflation above. The other was a **size budget in a different widget**: the
+generic telemetry readout, which had room for ~54 keys and was handed ~72, clipped off the bottom of
+the window and grew sideways into the HUD's column.
+
+â­ **AND THE FIX DIRECTION WAS DETERMINED BY A CONSTRAINT, NOT A PREFERENCE.** A fourth column was
+impossible â€” three at their natural width already reach the HUD's right-anchored origin, so growing
+sideways collides by construction. The only free direction was DOWN, and shrinking the type bought
+height and width at once. âš  **This is slice 46's finding one widget over**: there the lines were too
+WIDE, here there were too MANY of them. A layout budget is not a per-line property; it is a property
+of everything sharing the window.
+
+## Retract a rule you inherited if the wire refuses it â€” and say what replaced it (slice 47)
+
+âš âš  **A ban carried forward from a probe the plan itself flagged as CONFOUNDED did not survive contact
+with the shipped wire.** Â§3.2 forbade an angle-margin gauge because an early sweep showed it
+*improving* while the engagement was lost. Measured on the finished wire it does the opposite in
+both samplings a HUD author would use. â­â­ **And the reason it does not invert was worth more than
+the ban was: `margin + cue = fov` at the handover instant** â€” the two "rival" gauges are one
+measurement counted from opposite ends, asserted to a tenth of a degree on four arms.
+
+â‡’ **the gauge stays off the display, but for REDUNDANCY and not for DECEPTION** â€” a distinction that
+matters because the old reason was being quoted as a finding. âš  It took **two wrong assertions**, each
+replaced only after a measurement, to arrive at the true one; a verifier that asserts a belief is
+worth more than one that avoids the subject, precisely because it fails when the belief is wrong.
+
+## An error a scenario AUTHORS must be read every tick, or the showcase's slider is dead in the hand (slice 47)
+
+âš âš  **Folding an authored perturbation into a one-time snapshot is algebraically free and kills the
+slider.** Gate 2 minted "truth plus the authored error" once, at launch â€” identical arithmetic to
+adding the error at every read, and it made the error a key **consumed on the first blind tick**,
+which is this project's own definition of a dead knob (slice 36's `_DEAD_KNOB_KEYS`: *"consumed once
+â€¦ a slider on it is dead in the hand"*). Gate 3's entire showcase was a slider on that error.
+
+â‡’ **snapshot the TRUTH; apply the authored error at every READ.** âš  And preserve the association
+when you move it: `(p0 + e) + vÂ·Î”t` is byte-identical to the folded form, `p0 + (e + vÂ·Î”t)` is not â€”
+the absolute golden would fail and read as a physics change.
+
+â­ **The scalar that carries it needs two loader refusals, and both are CRASH guards.** `set_param`
+carries one Float64, so a slider on a `Vec3` comp key overwrites the vector with a bare number and
+the next type assertion throws INSIDE a tick â€” a dropped connection, not an error message
+(convention 5). And a dimensionless multiplier only reads in honest SI if the vector it scales is
+UNIT length, so the loader refuses the knob otherwise: **the label's units become true by
+construction instead of by coincidence.**
+
