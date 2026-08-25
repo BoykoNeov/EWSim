@@ -1,9 +1,10 @@
 # Slice 48 — THE SEEKER SEARCH PATTERN (what a missile does when the receiver opens and the target is not there)
 
-**Status: GATE 0 IN PROGRESS (2026-08-25). ⭐ P0 AND P0b HAVE RUN — F0 DID NOT FIRE under either
-pattern, the rate axis survives, and the arm is chosen (§4.2e). ⚠ P0b RETRACTS one sentence of §4.1c
-and one reason in §4.1e. ⚠⚠ ONE DESIGN FORK IS OPEN (§4.2e — which way the pattern opens) and P1
-must FLY what P0b only overlays.** Suite green at 9333 tests (slice 47); no code shipped yet.
+**Status: ⚠⚠⚠ GATE 0 — THE SLICE IS BLOCKED ON THE WIRE, NOT KILLED (2026-08-25). P0/P0b/P1/P2/P2b
+have run. The search WORKS and obeys a legible law; what fails is that slice 47's wire cannot PRICE
+it, because the pointing error and the intercept error are the same quantity (§4.3c). The named
+unblocker is INS DRIFT (§4.3d), already in the backlog. ⚠ §§1–3 are NOT to be built as written until
+that is settled.** Suite green at 9333 tests (slice 47); no code shipped yet.
 
 **What this slice is:** slice 47 leaves a missile whose receiver opens onto empty sky. The head is
 pointed where the launch-time picture said the target would be; the target is 0.05° further out than
@@ -661,4 +662,133 @@ a measurement:
   model test.
 
 **Recommendation: (a) for the showcase with (c) measured as a probe**, so the slice ships the
-honest cost and knows what a smarter rule would have bought. **Not decided here.**
+honest cost and knows what a smarter rule would have bought.
+
+⭐ **DECIDED (user, 2026-08-25): (a) — THE SHOWCASE OPENS THE WRONG WAY, AND (c) IS PROBED BESIDE
+IT.** The slider therefore teaches §4.2b's headline (the cost of not knowing which side), and what a
+smarter opening rule would have bought is a measured number rather than an untested assertion.
+⚠ **THE AUTHORING OBLIGATION THAT COMES WITH (a):** the scenario must say IN ITS HEADER that the
+opening direction is authored against the missile, and why — a reader who discovers that for
+themselves will (rightly) call the showcase rigged. The honest framing is that a real missile's
+opening guess is a COIN FLIP, and this wire authors the losing half so the cost is visible; the
+winning half is `p1`'s BEST column and is pinned as a test.
+
+---
+
+## ⚠⚠⚠ §4.3 — GATE 0, PROBES **P1 / P2 / P2b** (2026-08-25): **THE SEARCH WORKS. THE WIRE CANNOT PRICE IT.**
+
+`p1_fly.jl`, `p1b_arm.jl`, `p2_wire.jl`, `p2b_cov.jl`, logs beside them.
+
+⭐ **P1 FLIES THE REAL BRANCH WITH NO CORE PATCH, AND THAT IS NOT A SHORTCUT — IT IS THE SEAM GATE 2
+WOULD USE.** `observe!` slews the head near its TOP off `:head_tgt_*` / `:head_cued` and writes those
+keys near its BOTTOM (the one-tick seam, discipline 2). ⇒ overwriting them after `tick!` returns is
+consumed by the NEXT tick's slew. Everything downstream is the shipped article: the 240 °/s limit,
+the 30° stop, τ = 0.05, the radome bend, `σ_seek`, the window gate, the tracker's `seek_init`, PN,
+the airframe. **It also enforces §0 fact 2's discipline from outside** — the core writes `head_tgt`
+from TRUTH every tick and this probe overwrites it afterwards.
+
+### §4.3a — THE SEARCH ACQUIRES, AND P0b's OVERLAY WAS ~2× OPTIMISTIC
+
+Arm 50.0 m/s, S = 10°, wrong-way opening:
+
+```
+   ρ °/s  acquires   t_lock s   search s      CPA m   auth pk%   hold %
+     0–80    NEVER          —          —    408.654       0.00     0.00
+    100.0     lock     7.6260     0.3150    183.662     100.00    72.27
+    120.0     lock     7.5770     0.2660    168.840     100.00    77.47
+```
+
+P0b put this cliff at 50 → 55 °/s; **flown it is 80 → 100 °/s.** The overlay was optimistic by
+construction (no servo lag, no bend, no noise, lock granted the instant geometry allowed) and it was
+optimistic by about a factor of two. ⭐ **The direction of the error is the useful part: a kinematic
+overlay is a LOWER BOUND ON THE RATE, never an estimate of it.**
+
+### ⚠⚠⚠ §4.3b — **AND THE MISSILE STILL MISSES BY 51–408 m ON EVERY ARM**
+
+The arm re-derived on flown data (S = 10°, wrong-way opening; each cell `t_search / CPA / peak
+authority`):
+
+```
+  gain |    ρ = 0   |     ρ = 50      |     ρ = 70      |    ρ = 100      |    ρ = 160
+  39.0 | NEVER 317m | 0.552s 158.1m   | 0.380s 315.7m 0%| 0.268s  79.7m   | 0.175s  51.1m
+  40.0 | NEVER 325m | 0.562s 323.8m 0%| 0.386s 121.8m   | 0.272s  88.7m   | 0.177s  59.4m
+  42.0 | NEVER 342m | 0.585s 191.0m   | 0.398s 141.6m   | 0.280s 107.3m   | 0.182s  77.1m
+  45.0 | NEVER 367m | NEVER           | 0.417s 171.7m   | 0.291s 135.1m   | 0.189s 103.6m
+  50.0 | NEVER 409m | NEVER           | NEVER           | 0.315s 183.7m   | NEVER
+```
+
+**NO CELL RECOVERS THE ENGAGEMENT.** The best result anywhere is 51.1 m, against slice 47's
+surviving arms which arrive at 0.1–2.5 m. ⚠ **AND THE AUTHORITY GAUGE IS PINNED AT 100 % OF `a_max`
+ON EVERY LOCKING CELL** — which is `CLAUDE.md`'s own named harness trap (*an rms measured where a
+CLAMP binds cannot move and reads as a KILL*). **Slice 46/47's gauge cannot grade this slider at
+all.** ⚠ Two cells lock and then report 0 % authority with a ~320 m miss (39.0/ρ 70, 40.0/ρ 50), and
+the bottom-right cell **fails at ρ = 160 where ρ = 100 and 120 succeed** — the pattern has PHASE
+LUCK, and a non-monotone showcase slider is disqualified by this project's own rule.
+
+### ⭐⭐⭐ §4.3c — P2/P2b: **THE POINTING ERROR AND THE INTERCEPT ERROR ARE THE SAME QUANTITY**
+
+The hypothesis P2 tested was slice 44's rule one level up — *a search can only price a sweep rate if
+the engagement is still WINNABLE when the receiver opens* — with the target's RCS (slice 46's own
+slider) as the knob that buys time. **Every reachable cell falls into one of two states, and there is
+nothing in between:**
+
+```
+rcs 0.005 gain  50 : r_hand 2148 m  cue@h  7.51°  NULL ALREADY LOCKS (0.32 m) — no deficit
+rcs 0.020 gain  90 : r_hand 3038 m  cue@h  7.93°  NULL ALREADY LOCKS (0.30 m) — no deficit
+rcs 0.080 gain 140 : r_hand 4296 m  cue@h  5.97°  NULL ALREADY LOCKS (0.35 m) — no deficit
+rcs 0.005 gain  90 : cue@h 14.04°  NULL 753.0 m  | best search: 69.6 m  (S=15, ρ=240)
+rcs 0.005 gain 140 : cue@h 23.50°  NULL 1200.2 m | never acquires at ANY (S, ρ) tried
+rcs 0.020 gain 200 : cue@h 20.01°  NULL 1757.1 m | never acquires at ANY (S, ρ) tried
+```
+
+⭐⭐⭐ **AND THE REASON IS STRUCTURAL, NOT A FAILURE TO FIND THE RIGHT CELL. On this wire the angular
+gap the search must close and the lateral error the missile must fly out are THE SAME NUMBER DIVIDED
+BY THE RANGE.** Both are `picture error × time spent blind`; the search sees it as an angle and the
+airframe sees it as metres. ⇒ **no knob can make one large and the other small.** Raising the picture
+error raises both; opening the receiver earlier (bigger RCS) lowers both. The two states above are
+the two ends of one axis with no habitable middle:
+
+- **a deficit small enough to be recoverable is small enough that there is no deficit** (the null
+  locks unaided, and there is nothing to search for — slice 42's original blocker, returned); and
+- **a deficit large enough to need a search comes with a lateral error large enough to lose the
+  shot** (753 → 1757 m nulls, best-case searches at 69–250 m).
+
+⇒ ⚠⚠⚠ **A SEARCH PATTERN CANNOT BE PRICED WHERE THE ONLY SOURCE OF POINTING ERROR IS THE
+MIDCOURSE's OWN PICTURE ERROR.** It needs a deficit source **ORTHOGONAL to the intercept solution** —
+a pointing error that costs TIME and nothing else.
+
+### ⭐⭐ §4.3d — THE UNBLOCKER IS NAMED, AND IT IS ALREADY IN THE BACKLOG
+
+**INS DRIFT** (`docs/DEFERRALS.md`, "New candidates raised by slice 47"). If the missile's estimate
+of **its own attitude** is wrong, the head is commanded to the wrong **body** angles while the
+**inertial** intercept solution stays exactly as good as the datalink made it. ⭐ **That is a pointing
+error whose entire cost is the time taken to find the target again — which is precisely what a search
+pattern exists to spend, and precisely what this wire cannot produce.** DEFERRALS already flags it as
+needing its own model test and warns (via slice 31) about compensating with a signal corrupted by
+what you are compensating.
+
+⚠ **THE SHAPE OF THIS RESULT IS SLICE 44's, VERBATIM.** Slice 44: *"the physics is not what failed,
+what failed is the WIRE"*, and its rule — *a detection gate can only price a design variable if the
+engagement is launched OUTSIDE the sensor's horizon* — is this one's parent. **The generalisation
+worth carrying: a component that spends a RESOURCE can only be priced on a wire where that resource
+is the thing in short supply.** A search spends TIME; slice 47's wire is short of ANGLE-INDEPENDENT
+MANOEUVRE, and time is not what it lacks.
+
+### §4.3e — WHAT SURVIVES, AND WHAT IS NOT CLAIMED
+
+**SURVIVES, and is banked whatever happens to the slice:**
+- The one-tick-seam technique (§4.3's opening) — a search branch is flyable end-to-end with **no core
+  patch**, which makes gate 2 a transcription rather than an experiment.
+- §4.2b's headline (**opening the wrong way costs 3–4× in sweep rate**) and §4.2c's coverage **V**,
+  both measured, neither refuted — they are properties of searching, not of this wire.
+- §4.3a's rule: **a kinematic overlay bounds the rate from below and must never be quoted as an
+  estimate** (measured 2× here).
+- §4.1b's mechanism: the target's angular departure from a stale belief **accelerates** as the range
+  closes, so a search wins early or not at all.
+
+**NOT CLAIMED:**
+- That a search pattern is dead. **It is not** — it acquires, it obeys a legible law, and every
+  finding above is about the WIRE.
+- That INS drift will work. It is a **named hypothesis** with a gate-0 of its own to run.
+- Any miss figure in §4.3b/§4.3c as an accuracy claim. Once the missile is saturated for the whole
+  endgame these are divergence magnitudes (DEFERRALS: *quote the VERDICT, never the metres*).
