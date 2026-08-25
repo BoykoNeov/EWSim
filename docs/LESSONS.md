@@ -420,3 +420,46 @@ the next type assertion throws INSIDE a tick â€” a dropped connection, not 
 UNIT length, so the loader refuses the knob otherwise: **the label's units become true by
 construction instead of by coincidence.**
 
+
+## ⭐⭐⭐ When a head-pointing probe reports "never", LOG THE HEAD'S ACTUAL ANGLE AGAINST THE COMMANDED ONE **BEFORE** BELIEVING IT (slice 48 gate 0, and it is the FOURTH occurrence)
+
+A clamp is **invisible in every downstream number.** `head_clamp` absorbs a commanded angle past the
+mechanical stop silently and by design — the head simply sits at the stop — so a probe that drives
+the head through `:head_tgt_*` and reads only the outcome sees a clean "never acquires" with no tell
+at all. Slice 48's gate 0 wrote a whole section (§4.3c) blaming the WIRE, complete with algebra, for
+a result that was **the 30° trunnion eating the sweep on 27–37 % of ticks** while the probe commanded
+48–53°.
+
+**THE TELLS, ALL VISIBLE IN THE FAILING TABLE ITSELF** (an advisor read them out of it before any new
+measurement was taken):
+
+- **A SMALLER demand failing where a LARGER one succeeds.** A 2.93° gap never acquired while a 4.04°
+  gap did. Monotonicity broken in the *wrong direction* is a clamp, not a physics boundary.
+- **A demand INSIDE the authored window that still does not produce a lock** (8.94° against a 10.0°
+  window). *If the requirement is met and the outcome does not follow, something other than the
+  requirement is refusing it.*
+- **A lock followed by 0 % of `a_max` and a full-magnitude miss**, and **intermittent hold** (72–77 %)
+  on the cells that do lock. Both are continuity signatures, not budget signatures.
+
+⚠⚠ **THE ANGLE THE PROBE READS IS USUALLY NOT THE ANGLE THE STOP ACTS ON.**
+`head_cue_err_handover_deg` is cue-vs-**truth**; the stop acts on the **body angle**. On a wire whose
+truth LOS body angle swings +18° → −15° over the approach, a cue 13° off truth sits at 25–31° of body
+angle — past a 30° stop — so the two readings disagree by the whole excursion. **Log the quantity the
+CLAMP sees, not the quantity the lesson is about.**
+
+⭐ **THE PRIOR THREE, so the pattern is not read as bad luck:** slice 43's `p7b_frontier.jl`
+TELEPORTED the head in every cell (no τ, no `rate_max`, no `head_slew_full`) and its whole ρ_min
+table had to be withdrawn; slice 45's box rescue needed a matched-half-width control before it meant
+anything; slice 42's `off@lock == fov` column was the inclusive gate echoing its own authored
+constant back. **Every one of them was an instrument reporting on a head it was not actually
+driving.**
+
+⇒ **THE CHEAP GUARD, and it is three lines:** count the ticks where `|head_az|` sits within a hair of
+`gimbal_stop_deg`, and print it beside every verdict. A probe that reports `TICKS ON THE STOP: 28.3 %`
+cannot publish a wire conclusion by accident.
+
+⭐⭐ **AND THE CLAMP WAS ALSO A FINDING**, which is why this is not merely a hygiene note: **mechanical
+travel is a HARD CEILING ON SEARCHABLE VOLUME** — a search can only look where the trunnion points,
+and the cue itself already spends most of the travel. That is slice 45's elevation stop (*read,
+clamping, working hardware*, binding 66–68 % of in-band ticks) arriving on the azimuth ring. **An
+artifact that survives being understood is a component.**
