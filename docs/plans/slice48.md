@@ -1,8 +1,9 @@
 # Slice 48 — THE SEEKER SEARCH PATTERN (what a missile does when the receiver opens and the target is not there)
 
-**Status: GATE 0 IN PROGRESS (2026-08-25). ⭐ P0 HAS RUN — F0 DID NOT FIRE, the rate axis survives,
-and the showcase arm is chosen (§4.1). P1 IS NEXT and must FLY the cliff P0 only predicts.** Suite
-green at 9333 tests (slice 47); no code shipped yet.
+**Status: GATE 0 IN PROGRESS (2026-08-25). ⭐ P0 AND P0b HAVE RUN — F0 DID NOT FIRE under either
+pattern, the rate axis survives, and the arm is chosen (§4.2e). ⚠ P0b RETRACTS one sentence of §4.1c
+and one reason in §4.1e. ⚠⚠ ONE DESIGN FORK IS OPEN (§4.2e — which way the pattern opens) and P1
+must FLY what P0b only overlays.** Suite green at 9333 tests (slice 47); no code shipped yet.
 
 **What this slice is:** slice 47 leaves a missile whose receiver opens onto empty sky. The head is
 pointed where the launch-time picture said the target would be; the target is 0.05° further out than
@@ -500,19 +501,30 @@ arm 50.0 m/s:  deficit 3.0441°   growth ω 11.16 °/s   budget 1.843 s   |Δel|
 everything closes in under a quarter of the budget. ⇒ **there is a real, narrow, authorable band
 (~5–30 °/s) with a sharp boundary in it**, and the slider's floor (ρ = 0) is still the genuine null.
 
-⭐⭐⭐ **AND THE PRE-REGISTERED KILL IS ANSWERED THE RIGHT WAY ROUND.** §0.1 feared the
-locks/never-locks boundary would live in the **deficit** — slice 47's cliff relabelled. **It does
-not.** The deficit runs 0.05 → 3.04° across the arms, a 60× range, while the cliff moves only
-8.77 → 11.16 °/s: **the boundary is set by ω and barely by the deficit at all.** The 0.05° arm fails
-for the *same reason* as the 3.04° arm, which is precisely the separation this slice needed from
-slice 47 and did not have a right to expect.
+⭐⭐ **AND THE PRE-REGISTERED KILL IS ANSWERED THE RIGHT WAY ROUND.** §0.1 feared the
+locks/never-locks boundary would be **slice 47's deficit cliff relabelled** — a new component whose
+only content is last slice's number. **It is not.** Across a 60× range of deficit (0.05 → 3.04°) the
+0.05° arm fails for the *same reason* as the 3.04° arm: the target departs faster than a slow sweep
+closes. **The failure MODE is shared**, which is the separation from slice 47 this slice needed and
+did not have a right to expect.
+
+⚠⚠ **WHAT THIS PARAGRAPH ORIGINALLY SAID IS RETRACTED, AND P0b REFUTED IT** (advisor caught the
+reasoning, §4.2 measured it). It read *"the boundary is set by ω and barely by the deficit at all"*,
+on the grounds that the cliff moved only 8.77 → 11.16 °/s over that 60× deficit range. **Two things
+are wrong with that.** (1) ω and the deficit are **not independent variables here** — both are read
+off the same authored knob, so a small spread in one beside a large spread in the other licenses
+nothing. (2) **P0b flew the intersection properly and the cliff DOES move with the deficit**:
+5–8 → 15–20 °/s as the deficit goes 0.067 → 3.063°. **Never quote the retracted sentence.**
 
 ### ⚠⚠ §4.1d — WHAT P0 DOES **NOT** ESTABLISH
 
-1. **The cliff's LOCATION IS PREDICTED, NOT FLOWN.** ω is not constant — it is 8.77 °/s averaged over
-   the first half-second and 62 °/s by t+1.5 s — so a static-ω law is optimistic and the flown cliff
-   will sit **above** these numbers. **P1 must fly it.** No number in §4.1c may reach a scenario
-   comment, a verifier or a HUD.
+1. ⚠⚠ **THE CLIFF's LOCATION IS PREDICTED FROM A STATIC-ω LAW, AND ω IS NOT STATIC — SO THE LAW MAY
+   HAVE NO FIXED POINT AT ALL** (advisor). ω is 8.77 °/s averaged over the first half-second and
+   62 °/s by t+1.5 s, so **a sweep at 12 °/s does not lose the race at t = 0 — it wins briefly and
+   then loses**, because ω crosses it a few hundred ms in. The real question is not a threshold but a
+   **time-varying INTERSECTION**: is the target ever inside the window at a moment the head is
+   pointed there? **§4.2 answers that properly and supersedes §4.1c's table.** No number in §4.1c
+   may reach a scenario comment, a verifier or a HUD.
 2. **The SWEEP DIRECTION is now load-bearing and unmeasured.** With the separation growing at
    ~10 °/s, a symmetric triangle that opens on the wrong side pays slice 43's `2S` in travel *while
    the target departs* — at S = 15° and ρ = 10 °/s that is 3 s against a 1.84 s budget. ⇒ **the
@@ -523,11 +535,130 @@ slice 47 and did not have a right to expect.
    centre (§0.8) and is *qualitatively* robust — a sweep must outrun the departure however the
    departure is booked — but the formula's exact form is P1's to confirm or replace.
 
-### §4.1e — THE SHOWCASE ARM, NOW CHOOSABLE (unblocks §3)
+### §4.1e — THE SHOWCASE ARM ⚠ **SUPERSEDED BY §4.2e — DO NOT READ THIS PARAGRAPH ALONE**
 
-**`midcourse_err_gain = 50.0`**, authored. Reasons, in order: the largest deficit (3.0441°) so the
-travel is a real quantity rather than a rounding error; the highest ω (11.16 °/s) so the cliff sits
-furthest from zero and is easiest to author a slider around; **25 % of the crossing speed, which is
-slice 47's own authored slider ceiling** and therefore already argued as defensible; and it is the
-arm slice 47 ships as unambiguously past the cliff (408.654 m), so the null reads as a failure and
-not as a near miss. ⚠ **NOT 39.0** (§4.1a).
+The arm is still **`midcourse_err_gain = 50.0`**, but ⚠⚠ **one of the three reasons written here was
+BACKWARDS and is retracted**: *"the highest ω so the cliff sits furthest from zero"*. **A higher ω
+makes the search HARDER, not better-instrumented** (advisor). The surviving reasons — the largest
+deficit (3.0441°) so the travel is a real quantity rather than a rounding error; 25 % of the crossing
+speed, which is **slice 47's own authored slider ceiling** and therefore already argued as
+defensible; and an unambiguous 408.654 m null rather than a near miss — are joined in §4.2e by the
+one that actually decides it. ⚠ **NOT 39.0** (§4.1a).
+
+---
+
+## ⭐⭐⭐ §4.2 — GATE 0, PROBE **P0b** (2026-08-25): **THE INTERSECTION, AND THE PRICE OF NOT KNOWING WHICH WAY TO LOOK**
+
+`M:\claud_projects\temp\slice48\p0b_intersect.jl`, logs `p0b.log` / `p0b_fine.log`. Same flights,
+no core patch. Instead of a static-ω threshold it integrates the head's offset forward and asks the
+only question that matters: **`hypot(Δaz(t) + offset(t), Δel(t)) ≤ fov` for ANY t in the budget?**
+
+Two patterns, because §4.1d item 2 made the direction load-bearing:
+
+- **BEST** — the sweep opens **toward** the target. The luckiest a symmetric pattern can ever be,
+  i.e. an **upper bound on what any search can do**.
+- **TRI** — the shipped symmetric triangle opening on the **wrong** side first (+S, down to −S, …),
+  i.e. slice 43's `2S` penalty paid *while the target departs*.
+
+⚠ **THIS IS A KINEMATIC OVERLAY, NOT A FLOWN BRANCH.** No servo lag, no 240 °/s limit, no radome
+bend, no seeker noise, and it grants the lock the instant the geometry allows one. **All of that
+makes it OPTIMISTIC**, which is the safe direction for a falsifier and the wrong direction for a
+number. **P1 must fly the real branch.**
+
+### ⭐⭐ §4.2a — F0 DOES NOT FIRE UNDER **EITHER** PATTERN
+
+**BEST case** — the cliff, in °/s, and **it moves with the deficit**:
+
+```
+   arm      deficit      cliff (last never → first LOCK)      lock time at first LOCK
+  39.0      0.0665°            5 → 8                                 0.053 s
+  40.0      0.3328°            8 → 10                                0.117 s
+  45.0      1.6898°           12 → 15                                0.271 s
+  50.0      3.0628°           15 → 20                                0.304 s
+```
+
+⭐ **COVERAGE IS IRRELEVANT IN THE BEST CASE** — every S column (5 / 10 / 15 / 25°) is identical to
+the millisecond, because a sweep that opens the right way needs only a few degrees. The one exception
+is the deepest arm at the narrowest coverage (50.0 at S = 5°, ρ = 20), which fails because **5° of
+travel cannot reach a 3.06° deficit that is growing while you cross it.**
+
+### ⭐⭐⭐ §4.2b — THE HEADLINE: **NOT KNOWING WHICH WAY TO LOOK COSTS 4–8× IN SWEEP RATE**
+
+The shipped symmetric triangle, opening on the wrong side (fine grid, S = 10°):
+
+```
+   arm      deficit    BEST cliff    WRONG-SIDE cliff    ratio
+  39.0      0.0665°       5 → 8          30 → 35          ~4.4×
+  40.0      0.3328°       8 → 10         35 → 40          ~4.0×
+  45.0      1.6898°      12 → 15         40 → 45          ~3.0×
+  50.0      3.0628°      15 → 20         50 → 55          ~2.8×
+```
+
+**A search that opens away from the target needs three to four times the sweep rate to survive** —
+and the multiple is *largest where the deficit is smallest*, because a small deficit is closed
+almost instantly if you guess right and is otherwise a full `2S` excursion away. ⇒ ⭐⭐⭐ **THE
+DOMINANT COST OF SEARCHING IS NOT COVERING THE GAP, IT IS NOT KNOWING WHICH SIDE THE GAP IS ON.**
+That is slice 43's Finding 3 (`2S`, "and the price accelerates") confirmed on a wire it was not
+measured on, in a currency slice 43 did not have: **the price is paid in RATE, because the clock is
+the binding resource.**
+
+### ⭐⭐⭐ §4.2c — COVERAGE IS A **V**, AND ITS TWO SIDES ARE DIFFERENT MECHANISMS
+
+The wrong-side cliff against coverage (°/s required, fine grid):
+
+```
+   arm       S = 5°    S = 10°    S = 15°    S = 25°
+  39.0         30         35         45         60
+  40.0         30         40         45         60
+  45.0         45         45         50         70
+  50.0         80         55         55         70
+```
+
+- **THE CEILING (every arm): a WIDER search is a WORSE search.** Each extra degree of coverage is an
+  extra degree that might have to be *wasted* on the wrong side, and it is paid out of a 1.84 s
+  clock. Monotone, clean, and **the mirror image of slice 46's finding** — there a wider window sold
+  reach, here a wider sweep sells time.
+- **THE FLOOR (the deepest arm only): a search too NARROW cannot reach.** At 50.0 m/s, S = 5° needs
+  **80 °/s** where S = 10° needs **55** — because 5° of travel does not reach a 3.06° deficit that is
+  *growing while you cross it*, so the head sweeps back and forth inside the gap.
+- ⇒ ⭐⭐ **COVERAGE IS A V WHOSE FLOOR ARM ONLY APPEARS ONCE THE DEFICIT IS LARGE**, and the two arms
+  are different physics. **This is the same SHAPE as slice 36's handover basket** (its left arm the
+  error itself, its right arm the chase cost) arriving in a second place in this arc — which is worth
+  more than either number.
+
+### §4.2d — WHAT P0b DOES **NOT** ESTABLISH
+
+1. **It is kinematic** (see the warning above). Every cliff here will move when the servo, the bend
+   and the noise are in the loop. **P1.**
+2. **"THE WRONG SIDE" IS DETERMINISTIC ON THIS WIRE AND WOULD NOT BE ON A REAL ONE.** The picture
+   error is authored as a single direction (`[0, −1, 0]`), so the target is always on the same side
+   of the belief. ⚠ **A shipped pattern must therefore not be allowed to be accidentally right** —
+   §4.2e names the fork.
+3. **The BEST-case column is not achievable by any honest search** and exists only as the bound. It
+   must never appear on a HUD as though a missile could reach it.
+
+### ⭐ §4.2e — THE ARM, RE-DERIVED — AND ONE **DESIGN FORK** THIS PLAN CANNOT SETTLE BY MEASUREMENT
+
+**THE ARM STAYS `midcourse_err_gain = 50.0`, on the reason §4.1e did not have:** with the shipped
+wrong-side pattern at S = 10°, its cliff sits at **50 → 55 °/s**, which places a slider domain of
+**0 → 120 °/s** with the cliff near the middle and a **2× clearance** below the head's authored
+240 °/s servo limit — so slice 35's rate limit stays out of this lesson, which is exactly the
+isolation slice 46 measured and slice 47 kept. ⚠ The narrower arms' cliffs (30–45 °/s) sit low enough
+that a slider would spend most of its travel in the "locks" region.
+
+⚠⚠ **THE FORK — WHICH WAY DOES THE PATTERN OPEN?** Three options, and it is a MODELLING decision, not
+a measurement:
+
+- **(a) AUTHORED DIRECTION, opening the WRONG way on the showcase.** Honest about the missile's
+  ignorance, and puts §4.2b's headline on the slider. ⚠ But it authors the missile's bad luck, which
+  a reader can fairly call rigged.
+- **(b) AUTHORED DIRECTION, opening the RIGHT way.** Reads as a much better search than any real one
+  and hides the slice's best finding. **Rejected** unless (a) proves unauthorable.
+- **(c) A DIRECTION RULE THE MISSILE COULD ACTUALLY HAVE** — e.g. sweep first toward the side the
+  target's own believed motion is carrying it. ⭐ This is the physically honest one and it may be
+  *systematically right on a closing crossing engagement*, which would make the wrong-side cost a
+  pinned TEST rather than the showcase. ⚠ It is also a second component and would need its own
+  model test.
+
+**Recommendation: (a) for the showcase with (c) measured as a probe**, so the slice ships the
+honest cost and knows what a smarter rule would have bought. **Not decided here.**
