@@ -223,6 +223,13 @@ that is read every tick and physically correct ships as physics + tests + author
    toward zero. Whether a sweet spot exists is a real question with a U-shape behind it — but it
    moves the horizon, the blind duration and the handover range at once, which is why it is second.
 
+⚠ **THE FALLBACK INHERITS A §0.8 DECISION, AND P0d SETTLES IT** (advisor). The live-belief sweep
+centre means the deficit GROWS while the search runs — so a FIXED coverage S may never bracket a
+target that is walking away from the centre, however wide S is, which would kill fallback axis 1
+before it is tried. **Whether the coverage axis is measured against the live centre or a frozen one
+is therefore NOT decided in §0.8** — it is decided by P0d's growth-rate number, which is already
+being collected.
+
 ## §0.8 — SCOPE, AND THE NAMED APPROXIMATIONS
 
 - **The pattern is a single-axis symmetric triangle sweep in body azimuth.** Not a raster, not a
@@ -307,16 +314,24 @@ In the cue block (`missile.jl:2671`), between the cue arm and the tracking arm:
 
 ```
 _cue    = haskey(c, :midcourse) && !_detectable && !get(c, :seek_init, false)
-_search = haskey(c, :seeker_search) && !_cue && !in_fov && !get(c, :seek_init, false)
+_search = haskey(c, :seeker_search) && _detectable && !in_fov && !get(c, :seek_init, false)
 ```
 
 ⚠ **`!in_fov`, NOT a fresh angle test** (§0.4). `in_fov` at `:2611` already IS the availability
-verdict — angle AND range, `in_fov && _detectable` — so `!in_fov` covers "outside the window" and
-"out of range" with one verdict, and the two can never disagree at the boundary tick.
+verdict — angle AND range, `in_fov && _detectable` — so it can never disagree with the branch that
+reports it at the boundary tick.
 
-⚠ **`!_cue` FIRST.** While a midcourse is running and the receiver is shut, the head is CUED and
-there is nothing to search for — you cannot hunt for an echo that does not exist yet. The search
-starts when the receiver opens, which is exactly where the cue stops.
+⚠⚠ **`_detectable` IS IN THE CONJUNCT EXPLICITLY, AND IT IS NOT REDUNDANT WITH `!in_fov`** (advisor).
+`in_fov` folds TWO failures into one verdict — outside the window, and out of range — and here that
+conflation cuts the wrong way: on a wire with the anchor and a horizon but **no midcourse** (which
+§2.1's refusals deliberately permit), `!in_fov` is true from tick 1 for the RANGE reason alone, and a
+search would start before the receiver has opened at all. That is a head hunting for an echo that does
+not exist yet — the very thing this branch exists to avoid.
+
+⚠ **AND `_detectable` IS WHY `!_cue` IS NOT NEEDED**, rather than branch order being trusted to do
+it: the cue requires `!_detectable`, so the two arms are mutually exclusive **by predicate**. The
+search starts when the receiver opens, which is exactly where the cue stops — one instant, two
+branches, no gap and no overlap.
 
 On the search arm:
 
