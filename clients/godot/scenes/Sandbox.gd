@@ -1699,7 +1699,16 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 		# (22.77 % of a_max) — long after the handover would have been, and a CONSEQUENCE of never
 		# acquiring rather than its cause. A whole-flight gauge would paint that arm as one that had
 		# spent its budget, which is the exact confusion gate-2 §6.4 had to measure its way out of.
-		elif _mid_was_cued:
+		# ⚠⚠ AND IT IS RANGE-GATED AT r > 200 m, THE SAME GATE THE VERIFIER USES — MEASURED, NOT
+		# INHERITED AS HYGIENE. Ungated on this wire the gauge is not merely noisy, it reads
+		# BACKWARDS: every one of the seven arms that acquires pins at 100.00 % (the r → 0 endgame
+		# spikes every guidance quantity) while the two arms that NEVER ACQUIRE read 22.77 %, because
+		# a missile that never handed over never flies an endgame at all. The 4.27 → 27.97 % walk that
+		# is this slice's whole gauge would be a flat ceiling with the FAILURES sitting below it.
+		# ⭐ This is CLAUDE.md's own standing warning — *"DO NOT QUOTE 44 §VII.1's 100.00 % of a_max"*
+		# — arriving in a new widget, and the windowed shots looked correct only because they were
+		# taken at 1050–1200 m. [[ewsim-missile-verifier-sampling]]
+		elif _mid_was_cued and float(_telemetry.get(_af3d_missile + ".los_range", 0.0)) > 200.0:
 			_mid_auth_peak = max(_mid_auth_peak, float(_telemetry.get(_af3d_missile + ".a_cmd_frac", 0.0)))
 	# ⚠ THE ACQUISITION LATCH IS `gimbal_valid`, THE CONJUNCTION OF BOTH GATES — while the missile is
 	# blind the range half holds it at 0, so a rising edge here is a real handover and not a window
@@ -4237,6 +4246,18 @@ func _on_reset_pressed() -> void:
 	_servo_duty = 0.0
 	_authority_peak = 0.0               # slice-46: the budget gauge, for the same reason
 	_detect_blind = false               # slice-46: the RANGE half of the availability latch
+	# ⚠⚠ SLICE 47's THREE, AND `_mid_acquired` IS THE SHARPEST STALE-INSTRUMENT THIS HUD CAN CARRY —
+	# the FIFTH time this family has had to fix the class (26's ring, 35's duty, 36's two, 46's two).
+	# It is a ONE-WAY latch, so without this line pressing Reset after an arm that acquired and then
+	# re-flying a BROKEN one leaves the headline reading "HANDED OVER: x° INSIDE" over a missile that
+	# never acquired at all — the single most misleading thing this HUD can display, and it is the
+	# exact verdict the slice exists to show going the other way.
+	# ⚠ `_mid_was_cued` gates the authority gauge's accumulate, so a stale one would let a re-launch
+	# start metering from tick 1; `_mid_auth_peak` is a frozen MAXIMUM and would carry the previous
+	# run's spend straight through a fresh flight.
+	_mid_was_cued = false
+	_mid_acquired = false
+	_mid_auth_peak = 0.0
 	# Slice-36: BOTH of this slice's instruments are cleared, and each for its own reason — this is the
 	# THIRD time the family has had to fix a stale-instrument-across-reset defect, so it is done at the
 	# same time as the code that creates it rather than found later.

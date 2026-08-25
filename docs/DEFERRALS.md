@@ -631,6 +631,8 @@ LOS *is* the cue error. The two "rival" gauges are ONE measurement counted from 
 margin stays off the HUD for **REDUNDANCY** (convention 9: one lesson, one gauge) and **NOT for
 deception**. **Do not quote the old reason.**
 
+⚠⚠ **THE IDENTITY IS SERVO-CONTINGENT, NOT DEFINITIONAL** (advisor, added after the first write-up read as unconditional). `off_head` is BORESIGHT-vs-truth while the cue error is COMMAND-vs-truth, so the two coincide only while the head has **SETTLED** on its cue — true on this wire because the servo is authored at 240 °/s as slice 46's measured isolation, and the 0.12° residual in the verifier's 0.5° tolerance IS that lag. On slice 35's 8 °/s wire they would separate. ⭐ The general form is the transferable half: **two gauges that agree on the shipped wire may be agreeing THROUGH an isolation the wire authors** — write the isolation into the claim, or it gets quoted on a wire that does not have it, which is exactly how the ban it replaced went wrong (slice 45's rule: a property measured in one operating mode is not a property of the component).
+
 ### New candidates raised by slice 47
 
 - â­â­ **THE SEEKER SEARCH PATTERN (42/43/45) â€” now UNBLOCKED and the top of the backlog.** Its law is

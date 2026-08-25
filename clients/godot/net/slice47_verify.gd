@@ -487,9 +487,14 @@ func _verdict() -> bool:
 	# with the wire it was written about.
 	#
 	# ⭐⭐ AND THE REASON IT DOES NOT INVERT IS WORTH MORE THAN THE BAN WAS: **AT THE HANDOVER
-	# INSTANT THE MARGIN AND THE CUE ERROR ARE THE SAME MEASUREMENT.** While the head is CUED its
-	# pointing error against the truth LOS *is* the cue error, so `margin = fov − cue` — asserted
-	# below to a tenth of a degree on both ends of the domain. The margin is therefore not a rival
+	# INSTANT THE MARGIN AND THE CUE ERROR ARE THE SAME MEASUREMENT.** While the head is CUED **and has
+	# SETTLED on its cue**, its BORESIGHT error against the truth LOS *is* the cue error, so
+	# `margin = fov − cue` — asserted below to half a degree on both ends of the domain.
+	# ⚠⚠ SERVO-CONTINGENT, NOT DEFINITIONAL: `off_head` is boresight-vs-truth and the cue error is
+	# COMMAND-vs-truth, so they coincide only once the servo has caught up. True here because it is
+	# authored at 240 °/s as slice 46's measured isolation — and the ~0.12° that sits inside the 0.5°
+	# tolerance below IS that lag, not slack. On slice 35's 8 °/s wire the two would separate, and the
+	# tolerance is the only thing standing between this claim and a wire that does not hold it. The margin is therefore not a rival
 	# gauge to be banned but this slice's own headline in the window's units. ⇒ IT STAYS OFF THE HUD
 	# FOR A DIFFERENT REASON — REDUNDANCY, NOT DECEPTION (convention 9: one lesson, one gauge) — and
 	# §3.2's stated reason must not be quoted again.

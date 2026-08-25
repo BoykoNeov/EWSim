@@ -212,6 +212,39 @@ func _initialize() -> void:
 	sb_blind.free()
 	print("S47UI_INSTR  post-handover authority = %.4f (blind frames excluded); slice 46's whole-flight peak stays a separate gauge" % sb._mid_auth_peak)
 
+	# ⭐⭐⭐ TOOTH 5b — THE GAUGE IS RANGE-GATED AT r > 200 m, AND UNGATED IT READS **BACKWARDS**.
+	# Measured on the shipped wire: ungated, all SEVEN arms that acquire pin at 100.00 % of `a_max`
+	# (the r → 0 endgame spikes every guidance quantity) while the two arms that NEVER ACQUIRE read
+	# 22.77 %, because a missile that never handed over never flies an endgame. The 4.27 → 27.97 %
+	# walk that IS this slice's gauge would be a flat ceiling with the FAILURES sitting below it.
+	# ⚠ The windowed shots looked correct only because they were taken at 1050–1200 m.
+	var endgame := _mid_tel(false, 9.7846, true, 1.0)
+	endgame["m1.los_range"] = 150.0                     # inside the endgame
+	sb._telemetry = endgame
+	sb._airframe3d_on_state(st)
+	if absf(sb._mid_auth_peak - 0.2705) > 1.0e-9:
+		return _fail("⭐⭐⭐ the authority gauge must IGNORE frames inside r < 200 m (peak moved to %.6f on a 100 %% endgame frame) — ungated, every arm that acquires pins at 100 %% while the arms that NEVER acquire read 22.77 %%, so the gauge reads BACKWARDS. This is CLAUDE.md's standing 'DO NOT QUOTE 44 §VII.1's 100.00 %%' warning in a new widget" % sb._mid_auth_peak)
+	print("S47UI_GATE   a 100 %% frame at r = 150 m leaves the peak at %.4f — the HUD and the verifier read the same gate" % sb._mid_auth_peak)
+
+	# ⭐⭐⭐ TOOTH 5c — RESET CLEARS ALL THREE LATCHES, AND `_mid_acquired` IS THE SHARP ONE. It is a
+	# ONE-WAY latch, so without the clear, pressing Reset after an arm that acquired and re-flying a
+	# BROKEN one leaves the headline reading "HANDED OVER" over a missile that never acquired — the
+	# single most misleading thing this HUD can display, and the exact verdict the slice exists to
+	# show going the other way. ⚠ THE FIFTH TIME THIS FAMILY HAS SHIPPED THE STALE-INSTRUMENT-ACROSS-
+	# RESET CLASS (26's ring, 35's duty, 36's two, 46's two), and the first four of the slice's own
+	# proofs could not see it: the verifier never instantiates Sandbox, and the shot harness resets
+	# BEFORE its first flight, when there is nothing stale yet.
+	if not (sb._mid_was_cued and sb._mid_acquired and sb._mid_auth_peak > 0.0):
+		return _fail("the fixture must have all three latches SET before the reset tooth, or it proves nothing")
+	sb._on_reset_pressed()
+	if sb._mid_was_cued or sb._mid_acquired or sb._mid_auth_peak != 0.0:
+		return _fail("⭐⭐⭐ Reset must clear all three midcourse latches (got was_cued=%s acquired=%s peak=%.4f) — a stale `_mid_acquired` paints a re-launched BROKEN arm as HANDED OVER" % [sb._mid_was_cued, sb._mid_acquired, sb._mid_auth_peak])
+	var v_after: String = sb._midcourse_verdict_label(sb._mid_cued_now(), sb._mid_was_cued,
+			sb._mid_acquired, 0.0, 10.0)
+	if not str(v_after).contains("NO BLIND PHASE"):
+		return _fail("…and the headline must fall back to its no-history state after a reset, got '%s'" % v_after)
+	print("S47UI_RESET  all three latches clear and the headline falls back to '%s'" % v_after)
+
 	# ══ TOOTH 6 — ⭐ THE VERDICT IN ALL FOUR STATES ═══════════════════════════════════════════════
 	var v_none: String = sb._midcourse_verdict_label(false, false, true, 0.0, 10.0)
 	var v_blind: String = sb._midcourse_verdict_label(true, true, false, 6.2, 10.0)

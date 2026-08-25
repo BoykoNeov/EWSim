@@ -394,6 +394,8 @@ both samplings a HUD author would use. â­â­ **And the reason it does not
 the ban was: `margin + cue = fov` at the handover instant** â€” the two "rival" gauges are one
 measurement counted from opposite ends, asserted to a tenth of a degree on four arms.
 
+⚠⚠ **THE IDENTITY IS SERVO-CONTINGENT, NOT DEFINITIONAL** (advisor, added after the first write-up read as unconditional). `off_head` is BORESIGHT-vs-truth while the cue error is COMMAND-vs-truth, so the two coincide only while the head has **SETTLED** on its cue — true on this wire because the servo is authored at 240 °/s as slice 46's measured isolation, and the 0.12° residual in the verifier's 0.5° tolerance IS that lag. On slice 35's 8 °/s wire they would separate. ⭐ The general form is the transferable half: **two gauges that agree on the shipped wire may be agreeing THROUGH an isolation the wire authors** — write the isolation into the claim, or it gets quoted on a wire that does not have it, which is exactly how the ban it replaced went wrong (slice 45's rule: a property measured in one operating mode is not a property of the component).
+
 â‡’ **the gauge stays off the display, but for REDUNDANCY and not for DECEPTION** â€” a distinction that
 matters because the old reason was being quoted as a finding. âš  It took **two wrong assertions**, each
 replaced only after a measurement, to arrive at the true one; a verifier that asserts a belief is

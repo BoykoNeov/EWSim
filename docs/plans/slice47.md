@@ -1392,6 +1392,8 @@ units**. â‡’ it stays off the HUD for **REDUNDANCY** (convention 9: one les
 deception**, and Â§3.2's stated reason must never be quoted again. âš  It took two wrong assertions in
 `slice47_verify.gd` to arrive at the right one â€” each replaced only after a measurement.
 
+⚠⚠ **THE IDENTITY IS SERVO-CONTINGENT, NOT DEFINITIONAL** (advisor, added after the first write-up read as unconditional). `off_head` is BORESIGHT-vs-truth while the cue error is COMMAND-vs-truth, so the two coincide only while the head has **SETTLED** on its cue — true on this wire because the servo is authored at 240 °/s as slice 46's measured isolation, and the 0.12° residual in the verifier's 0.5° tolerance IS that lag. On slice 35's 8 °/s wire they would separate. ⭐ The general form is the transferable half: **two gauges that agree on the shipped wire may be agreeing THROUGH an isolation the wire authors** — write the isolation into the claim, or it gets quoted on a wire that does not have it, which is exactly how the ban it replaced went wrong (slice 45's rule: a property measured in one operating mode is not a property of the component).
+
 âš  **THE MISS's BAN SURVIVES UNTOUCHED AND IS ASSERTED, not merely avoided**: 2 up and 4 down along
 an axis whose cue error and authority both rise strictly (`S47V_NOISE`).
 

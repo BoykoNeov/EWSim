@@ -78,8 +78,8 @@ ACQUIRES (316 m) — while the MISS again says nothing and the authority walks 4
 ⭐⭐ **AND THE HANDOVER ERROR IS THE PICTURE ERROR × THE TIME SPENT BLIND** (the same slider gives 1.39° at
 a 3.2 s handover and 9.78° at 7.26 s) ⇒ **a midcourse budget cannot be specified in m/s alone, only
 against a handover RANGE.** ⚠⚠ 47 also **RETRACTED its own plan's ban on `gimbal_fov_margin_deg`** — at
-handover `margin + cue = fov`, so it is the headline gauge in other units and is off the HUD only for
-REDUNDANCY; never quote the old "it improves while the engagement is lost" reason.
+handover `margin + cue = fov` (⚠ SERVO-CONTINGENT — boresight vs command; it holds only while the head
+has SETTLED, 240 °/s here), so it is the headline gauge in other units and is off the HUD for REDUNDANCY; never quote the old "it improves while the engagement is lost" reason.
 
 **The rule that keeps paying** (33, 34, 35, 37, 38): *aim `R̂` at the glass's worst-case slope*
 (`radome_slope_worst`) and the cost — of FOV, detector window, servo bandwidth, servo frame — mostly
