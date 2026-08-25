@@ -891,14 +891,34 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                 isfinite(comp[:midcourse_k]) && comp[:midcourse_k] > 0 ||
                     error("missile '$id': guidance.midcourse_k must be finite and > 0 " *
                           "(got $(comp[:midcourse_k])); gate 1 measured 1.0")
+                # ⭐⭐ SLICE 47 GATE 3 — THE ONE SCALAR IN THIS FAMILY, AND IT IS THE SLIDER.
+                # `set_param` carries a Float64; the two error keys are `Vec3`s and can therefore
+                # never be knobs (`_parse_knobs` refuses them BY TYPE — writing a bare Float64 into
+                # one would throw at the next `::Vec3` inside a tick, which is convention 5's exact
+                # failure). This dimensionless multiplier scales BOTH of them, is read on EVERY
+                # blind tick by `_midcourse_belief!`, and defaults to 1.0 so a wire that authors an
+                # error and no gain flies precisely what it authored.
+                # ⚠ `≥ 0`, NOT `> 0`: **0.0 is the perfect-picture arm** and is the left end of the
+                # showcase slider, not a degenerate. Negative is refused because it would MIRROR the
+                # authored error's sign silently — an author who wants the other side writes the
+                # other side into the vector, where the sign is visible (the loader's own posture on
+                # `cross_speed_mps` one arc over).
+                comp[:midcourse_err_gain] = _f64(get(gb, "midcourse_err_gain", 1.0))
+                isfinite(comp[:midcourse_err_gain]) && comp[:midcourse_err_gain] >= 0 ||
+                    error("missile '$id': guidance.midcourse_err_gain must be finite and ≥ 0 " *
+                          "(got $(comp[:midcourse_err_gain])); 0 is the PERFECT-picture arm, and " *
+                          "a mirrored error is authored by flipping the error VECTOR's sign, not " *
+                          "the gain's (slice 47)")
             end
-            for mk in ("midcourse_k", "midcourse_pos_err_m", "midcourse_vel_err_mps")
+            for mk in ("midcourse_k", "midcourse_err_gain",
+                       "midcourse_pos_err_m", "midcourse_vel_err_mps")
                 haskey(gb, mk) || continue
                 haskey(comp, :midcourse) ||
                     error("missile '$id': guidance.$mk authored without guidance.midcourse: true " *
                           "— the law is presence-gated on that anchor, so without it this key is " *
                           "read by NOTHING and is DEAD (slice 47)")
-                mk == "midcourse_k" && continue                # value-checked above, with its default
+                # both scalars are value-checked above, each with its own default
+                (mk == "midcourse_k" || mk == "midcourse_err_gain") && continue
                 v = _vec3(gb[mk])
                 all(isfinite, v) ||
                     error("missile '$id': guidance.$mk must be finite in all three components " *
@@ -1292,6 +1312,17 @@ const _DEAD_KNOB_KEYS = Dict{Symbol,String}(
         "it is consumed ONCE at tick 1 by the head's handover branch and never read again, so a " *
         "slider on it is dead in the hand — author it and reload (slice 36)")
 
+# ⚠⚠ SLICE 47 — A KNOB MUST NAME A **SCALAR**, AND THIS IS A CRASH GUARD RATHER THAN A TIDINESS ONE.
+# `set_param` stores `_coerce_like(get(comp, key, nothing), Float64(value))`, whose `::Any` fallback
+# returns the Float64 UNCHANGED — so a slider on a `Vec3` comp key silently replaces the vector with
+# a scalar, and the next `::Vec3` type assertion inside a tick throws. A throw inside `tick!` is not
+# an error message, it is a DROPPED CONNECTION (the session's outer catch swallows IO/EOF only) —
+# convention 5's "a live knob can never crash a tick", in the one shape the existence check above
+# cannot see. Slice 47 is the first slice to author non-scalar comp keys that a plausible showcase
+# would want to drag (`midcourse_pos_err_m`, `midcourse_vel_err_mps`), so the guard lands here and
+# is written for the TYPE rather than for those two names — every future vector key is covered.
+_knob_scalar_ok(v) = v isa Real
+
 function _parse_knobs(data::AbstractDict, world::World)
     knobs = Knob[]
     haskey(data, "knobs") || return knobs
@@ -1302,11 +1333,44 @@ function _parse_knobs(data::AbstractDict, world::World)
         haskey(world.entities, target) || error("knob target '$target' is not an entity")
         haskey(_DEAD_KNOB_KEYS, key) &&
             error("knob '$target.$key' is AUTHORED, not live-settable: $(_DEAD_KNOB_KEYS[key])")
-        haskey(world.entities[target].comp, key) ||
-            error("knob '$target.$key' has no matching comp parameter")
+        comp = world.entities[target].comp
+        haskey(comp, key) || error("knob '$target.$key' has no matching comp parameter")
+        _knob_scalar_ok(comp[key]) ||
+            error("knob '$target.$key' is a $(typeof(comp[key])), not a scalar — `set_param` " *
+                  "carries one Float64, so a slider here would overwrite the value with a bare " *
+                  "number and the next type assertion inside `tick!` would throw, dropping the " *
+                  "client's connection. Author it in the YAML, or add a scalar the physics " *
+                  "multiplies it by (slice 47's `midcourse_err_gain` is that shape)")
+        key === :midcourse_err_gain && _check_err_gain_knob(target, comp)
         push!(knobs, Knob(target, key, k["min"], k["max"], k["label"]; log = get(k, "log", false)))
     end
     return knobs
+end
+
+# ⭐⭐ AND IF THE GAIN IS THE SLIDER, THE AUTHORED ERROR MUST BE A **UNIT** VECTOR — which is what
+# turns the slider's number into honest SI and not a multiple of whatever the YAML happened to write.
+# `midcourse_err_gain` is dimensionless, so the number under the slider means metres per second ONLY
+# when `‖midcourse_vel_err_mps‖ = 1` (or metres, for the position error). Without this check the HUD
+# label "picture error (m/s)" would be true by coincidence and would quietly become a LIE the first
+# time someone edited the vector — the `_fmt` class of defect (a control that misreports the value it
+# is sending), one level up. ⚠ EXACTLY ONE of the two errors may be authored: with both live the
+# gain drives metres and metres-per-second at once and there is no unit to put on the slider at all.
+function _check_err_gain_knob(target::Symbol, comp::AbstractDict)
+    ev = get(comp, :midcourse_vel_err_mps, zero(Vec3))::Vec3
+    ep = get(comp, :midcourse_pos_err_m,   zero(Vec3))::Vec3
+    nv = sqrt(sum(abs2, ev)); np = sqrt(sum(abs2, ep))
+    (nv > 0) ⊻ (np > 0) ||
+        error("knob '$target.midcourse_err_gain': author EXACTLY ONE of " *
+              "guidance.midcourse_vel_err_mps / guidance.midcourse_pos_err_m (got norms " *
+              "$nv and $np) — the gain is dimensionless and scales BOTH, so with two live " *
+              "(or none) the slider has no unit to be quoted in (slice 47)")
+    n = max(nv, np)
+    isapprox(n, 1.0; atol = 1e-9) ||
+        error("knob '$target.midcourse_err_gain': the authored error vector must be UNIT length " *
+              "(got ‖·‖ = $n) — the gain is dimensionless, so the slider reads honest " *
+              "$(nv > 0 ? "m/s" : "m") only when the vector it multiplies is a pure DIRECTION. " *
+              "Write the direction in the vector and the magnitude on the slider (slice 47)")
+    return nothing
 end
 
 """

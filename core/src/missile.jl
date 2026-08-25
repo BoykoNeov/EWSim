@@ -927,6 +927,19 @@ function _airframe_view_info(w::World)
     # value guard on `:snr` would additionally hide the button on the arm a student presses it FROM.
     any(haskey(w.entities[m].comp, :detect_pt_w) for m in missiles) &&
         (info[:seeker_detect_view] = true)
+    # ⭐⭐ SLICE 47 — THE MIDCOURSE, the 11th marker of this family, and it is raised BESIDE slice
+    # 46's rather than instead of it: this wire IS slice 46's wire (the same seven-key link budget,
+    # the same 10° window, the same 240 °/s servo) with a blind phase in front of it, and the
+    # `seeker_detect` button is still the sharpest A/B it has — press it and the horizon goes away,
+    # the missile locks on tick 1, and the picture error stops mattering at all. ⇒ the client must
+    # keep 46's button and ADD 47's HUD, which is what two markers buy and one would not.
+    #
+    # ⚠ GATED ON THE **COMP KEY** `:midcourse` — the authored anchor, slice 38/46's choice. There is
+    # no `midcourse` fidelity rung to gate on (gate 2's decision, and gate 3 deliberately did not
+    # reopen it): the anchor is what an author writes, it is refused as a live knob, and the arm is
+    # presence-gated on it, so the key is both the earliest and the only gate there is.
+    any(haskey(w.entities[m].comp, :midcourse) for m in missiles) &&
+        (info[:midcourse_view] = true)
     return info
 end
 
@@ -1080,14 +1093,36 @@ end
 # tick n, exactly, for a constant-velocity target. ⚠ Anything that ever compares `:midcourse_t0` to
 # a wall-clock or to `w.t` sampled OUTSIDE a tick is comparing two different clocks (a gate-2 test
 # asserted `t0 == w.t` after the tick and failed on precisely this).
+#
+# ⭐⭐⭐ SLICE 47 GATE 3 — THE SNAPSHOT IS **TRUTH** AND THE ERROR IS ADDED AT EVERY READ, WHICH IS
+# WHAT MAKES THE PICTURE ERROR A LIVE KNOB AT ALL. Gate 2 folded the authored error INTO the mint,
+# which is algebraically the same thing for a static error — `(p_true + e) + (v_true + ė)·Δt` is
+# exactly what is computed below — but it made the error a quantity read ONCE, on the first blind
+# tick. That is `_DEAD_KNOB_KEYS`'s own definition of a dead knob (slice 36: "consumed once … a
+# slider on it is dead in the hand"), and gate 3's whole showcase is a slider on the picture error.
+# Reading the error HERE, every tick, is the difference between a lesson a student can drag and a
+# scenario they have to edit and reload. ⚠ THE PARENTHESES ARE LOAD-BEARING: `(p0 + e) + v·Δt`
+# associates exactly as the shipped form did, so the absolute golden (convention 2) is byte-
+# identical across this change; `p0 + (e + v·Δt)` would not be, and would read as a physics change.
+#
+# ⚠ `midcourse_err_gain` IS A DIMENSIONLESS MULTIPLIER ON BOTH AUTHORED ERROR VECTORS, defaulting
+# to 1.0 (so a wire that authors errors and no gain flies exactly what it authored). It exists
+# because `set_param` can only carry a SCALAR — the two error keys are `Vec3`s, and writing a bare
+# Float64 into one would make the next `::Vec3` assertion throw INSIDE a tick, killing the session
+# (convention 5). `_parse_knobs` refuses non-scalar comp keys by name for that reason, and refuses
+# THIS knob unless the authored error vector is UNIT length — which is what makes the slider's
+# number honest metres (or metres per second) instead of a multiple of whatever the YAML happened
+# to write. Clamped at 0 here, the consumer, for convention 5's other half.
 function _midcourse_belief!(c::AbstractDict, tgt::Entity, w::World)
     if !haskey(c, :midcourse_p0)
-        c[:midcourse_p0] = tgt.pos + get(c, :midcourse_pos_err_m, zero(Vec3))::Vec3
-        c[:midcourse_v0] = tgt.vel + get(c, :midcourse_vel_err_mps, zero(Vec3))::Vec3
+        c[:midcourse_p0] = tgt.pos          # ⚠ TRUTH, not truth-plus-error — see the gate-3 note
+        c[:midcourse_v0] = tgt.vel
         c[:midcourse_t0] = w.t
     end
-    belief_v = c[:midcourse_v0]::Vec3
-    belief_p = c[:midcourse_p0]::Vec3 + belief_v * (w.t - Float64(c[:midcourse_t0]))
+    err_g = max(Float64(get(c, :midcourse_err_gain, 1.0)), 0.0)
+    belief_v = c[:midcourse_v0]::Vec3 + get(c, :midcourse_vel_err_mps, zero(Vec3))::Vec3 * err_g
+    belief_p = (c[:midcourse_p0]::Vec3 + get(c, :midcourse_pos_err_m, zero(Vec3))::Vec3 * err_g) +
+               belief_v * (w.t - Float64(c[:midcourse_t0]))
     return (belief_p, belief_v)
 end
 
@@ -2659,6 +2694,24 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             # exactly the pair the next tick's slew gate will test.
             mid_cued    = true
             mid_cue_err = off_axis_angle(head_tgt_az, head_tgt_el, look_az_b, look_el_b)
+            # ⭐⭐⭐ GATE 3's LATCH, AND WITHOUT IT THE SLICE'S HEADLINE NUMBER IS UNREADABLE FROM A
+            # CLIENT. `mid_cue_err` is a per-tick LOCAL and the line above is the only tick it is
+            # ever formed on: the moment the receiver hears the target the cue stops, the else-branch
+            # runs, and the wire ships the honest 0.0 of a head that is TRACKING (§6.2's first table
+            # was misread exactly this way). ⇒ the handover value survives on NO later frame. And the
+            # client sees one frame in `emit_every` = 16 ticks, so even DURING the blind phase it
+            # cannot sample the last blind tick — 15 ticks of staleness is ~0.02° against a cliff
+            # that straddles the window by 0.05°. Latching here and emitting the latch as its own
+            # never-stale key is §6.9 item 1's fix (the PIP, same file, same defect class) applied to
+            # the one quantity gate 3 asserts in degrees.
+            # ⚠ IT FREEZES ON **EVERY** ARM, INCLUDING THE BROKEN ONES, and that is the point: the
+            # cue is gated on `!_detectable`, so it stops when the RECEIVER OPENS whether or not a
+            # lock follows. The latch is therefore "the cue error at the instant the receiver first
+            # heard something" — which is the slice's own definition of the handover moment, and it
+            # is defined on an arm that never acquires. (`midcourse_active`, the GUIDANCE flag, is
+            # gated on `!seek_init` instead and stays 1 to CPA on those arms — two different gates,
+            # deliberately, and a reader that conflates them reports the wrong instant.)
+            c[:head_cue_err_last] = mid_cue_err
             c[:head_tgt_az] = head_tgt_az; c[:head_tgt_el] = head_tgt_el
             c[:head_tgt_i_az] = cue_i_az; c[:head_tgt_i_el] = cue_i_el
         else
@@ -3211,9 +3264,18 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # emitting makes a client's `.get(k, 0.0)` print a defaulted zero as a passed test.)
         # ⚠ ANCHOR-GATED like every other slice-47 key ⇒ slices 34–46 ship neither and stay
         # byte-identical on the wire.
+        # ⭐⭐ AND `head_cue_err_handover_deg` IS THE ONE GATE 3 ASSERTS AGAINST `gimbal_fov_deg`:
+        # the LATCHED last-blind-tick value (see the latch, ~600 lines up), which tracks live while
+        # the head is cued and then FREEZES at the instant the receiver opened. `head_cue_err_deg`
+        # beside it is the instantaneous one and is 0.0 the moment the head tracks — true, and
+        # useless to a client sampling one frame in 16. ⚠ 0.0 before the first cued tick is again a
+        # REAL state (this missile has had no blind phase — press the `seeker_detect` button and it
+        # never does), and `head_cued` is the key that says which.
         if haskey(c, :midcourse)
             tel["$sid.head_cued"]         = mid_cued ? 1.0 : 0.0
             tel["$sid.head_cue_err_deg"]  = _finite(rad2deg(mid_cue_err))
+            tel["$sid.head_cue_err_handover_deg"] =
+                _finite(rad2deg(Float64(get(c, :head_cue_err_last, 0.0))))
         end
         # ⭐⭐ SLICE 36 — THE REQUIREMENT, AND THE MARGIN AGAINST IT. `head_off_deg` is what the
         # detector must cover THIS TICK; `head_off_peak_deg` is what it had to cover to get here,

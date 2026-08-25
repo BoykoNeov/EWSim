@@ -1,0 +1,213 @@
+# slice47_midcourse — THE MIDCOURSE PHASE: WHAT A BLIND MISSILE FLIES ON, AND WHAT A WRONG PICTURE
+# COSTS (HANDOFF §11 Tier-A, slice 47 gate 3). This is slice 46's wire — the same seven-key link
+# budget, the same 10° window, the same 240 °/s servo, the same seed — with a BLIND PHASE in front
+# of it and a target moved off the launch plane so that flying blind actually matters.
+#
+# ⭐⭐ WHAT IS NEW. Slices 26–46 all launched a missile that could see its target from tick 1 (or, in
+# 46, from a range the wire guaranteed it would reach). Here the seeker's horizon is 1436.7 m against
+# a 7401 m launch, so the missile is BLIND for 6955 ticks — and it has to fly on something. What it
+# flies on is ONE SNAPSHOT AND A STRAIGHT LINE: the target's position and velocity as it was told
+# them at launch, dead-reckoned forward, plus an AUTHORED ERROR in that picture. That is what a real
+# midcourse has (a datalink handoff, never a live measurement), and its being WRONG is the only
+# thing in this slice a student is asked to judge.
+#
+# > THE LESSON, IN ONE SENTENCE. A midcourse is not judged by how far off its picture is, but by
+# > whether the target is still inside the detector window at the instant the receiver first hears
+# > it — and everything before that instant looks fine.
+#
+# ⭐⭐⭐ THE CLIFF IS THE WINDOW, AND IT IS THE WHOLE SLICE. The handover error — the angle between
+# where the head is being TOLD to look and where the target really is — grows at ~0.52° per per cent
+# of belief-velocity error, gently, linearly, monotonically. It crosses the authored 10.0° detector
+# window between 19.0 % and 19.5 % of the target's crossing speed, and THE ENGAGEMENT FLIPS EXACTLY
+# THERE. Measured on this wire, with the authority read GATED AT r > 200 m:
+#
+#     err (m/s)   err %   cue @ handover   lock (s)      CPA m   post-lock a_cmd/a_max   hold %
+#        0.0        0.0        0.0000       7.1330       0.135            4.27           100.00
+#       10.0        5.0        2.5174       7.1580       0.124            8.46           100.00
+#       20.0       10.0        5.0713       7.1890       0.273           14.28           100.00
+#       28.0       14.0        7.1413       7.2160       0.314           20.21           100.00
+#       34.0       17.0        8.7178       7.2390       1.333           24.33           100.00
+#       36.0       18.0        9.2475       7.2470       0.692           25.99           100.00
+#       38.0       19.0        9.7846       7.2560       2.542           27.97           100.00   <- DEFAULT
+#       39.0       19.5       10.0505        NEVER     316.549            0.00              —
+#       40.0       20.0       10.3166        NEVER     324.870            0.00              —
+#       50.0       25.0       13.0441        NEVER     408.654            0.00              —
+#
+# ⭐⭐ THE TWO CLIFF ROWS STRADDLE THE AUTHORED 10.0° BY FIVE HUNDREDTHS OF A DEGREE, and the failure
+# is on the `> fov` side. 9.7846° acquires at 7.2560 s and arrives at 2.5 m; 10.0505° NEVER ACQUIRES
+# and flies its stale picture 316 m past the target. The crossing and the flip are THE SAME EVENT.
+#
+# ⚠⚠ WHICH IS WHY THE HEADLINE IS THE CUE ERROR AGAINST THE WINDOW AND **NOT THE MISS** — and that
+# is slice 46's correction arriving in a new currency rather than a fresh opinion. Across the whole
+# surviving domain the miss says NOTHING (0.135 → 0.124 → 0.273 → 0.314 → 1.333 → 0.692 → 2.542 m,
+# up and down by 20×) while the post-lock authority walks 4.27 → 27.97 % MONOTONICALLY. A verifier
+# reading miss would report a component that does nothing — which is how slices 44 and 45 died.
+# ⚠⚠ AND `gimbal_fov_margin_deg` IS FORBIDDEN AS THE GAUGE TOO, which is the sharper of the two
+# bans: over the exact interval where the engagement is lost, the angle margin IMPROVES
+# monotonically. A gauge that reads "better" while the engagement is being lost is not a gauge.
+#
+# ⭐ THE SLIDER IS THE LAUNCH-TIME PICTURE ERROR, IN METRES PER SECOND, and it is the honest lever:
+# what a student is actually asking is *"how good does the picture have to be?"*, which is the
+# question a midcourse datalink is specified against. It is authored on the MINUS side (a belief
+# that the target crosses SLOWER than it does) because that is where the cliff sits inside a
+# defensible error magnitude — the response is V-shaped in |Δv| but NOT symmetric: a belief that the
+# target crosses FASTER leads further and buys time, so the + side survives to +40 m/s and breaks
+# only by +50.
+#
+# ⚠ THE DEFAULT OPENS ON THE DISEASE (slice 35/36/46's precedent): 38.0 m/s is the LAST cell that
+# still arrives, one notch below the cliff, already spending 6.5× the authority of a perfect
+# picture. Nothing on screen looks wrong until you read the gauge — and the slider teaches in BOTH
+# directions from there.
+# ⚠ AND THE **BOTTOM** OF THE SLIDER IS NOT A NULL, WHICH IS THIS SLICE'S DIFFERENCE FROM 46. At 0.0
+# the picture is PERFECT and the midcourse still flies — it corrects the authored launch heading
+# onto the collision course and arrives at 0.135 m. The control that proves that is not a slider
+# position at all: with the midcourse REMOVED the same missile commands EXACTLY nothing, never
+# acquires, and misses by 1203.7 m. That arm is pinned in `test_missile.jl` ("THE PREMISE"), because
+# it is a claim about the WIRE — that the null arm hits because the midcourse flies, not because the
+# launch heading happened to be the answer — and not a thing a student visits.
+#
+# ⚠⚠ THE BLIND PHASE IS REACHED BY SHRINKING THE TARGET, NEVER BY LENGTHENING THE LAUNCH RANGE, and
+# that is a measured constraint rather than a preference: an unpowered missile with zero drag area
+# launched at 3000 m needs ≥ 28 s to fly 20 km, and gravity alone drops it 3845 m into the ground
+# first (slice 44 §V). `rcs_m2 = 0.001` is slice 46's own default and gives a 1436.7 m horizon.
+#
+# ⚠ ONE LIVE KNOB BESIDE ONE FIDELITY BUTTON (the 32/34/37/40/46 shape, convention 9), and the
+# button is slice 46's `seeker_detect: none ↔ snr` UNCHANGED — which is the sharpest A/B this slice
+# has. Press it and the horizon goes away: the same missile locks on tick 1, is never blind, and the
+# picture error stops mattering at all. *The picture only matters because you are blind.*
+#
+# NAMED APPROXIMATIONS (§1): the belief is ONE SNAPSHOT dead-reckoned at CONSTANT VELOCITY — there
+# is no datalink UPDATE mid-flight, no manoeuvring target to invalidate it, and no estimator on the
+# missile that could improve it (all three are named deferrals, and a mid-flight update is the
+# obvious next slice); the error is AUTHORED and DETERMINISTIC, not drawn (a distribution over
+# handoff errors is a batch question, not a tick one); the missile knows its own state PERFECTLY
+# (no INS drift — the thing a real midcourse's error budget is half made of); the guidance law is a
+# lead-pursuit-to-the-predicted-point with a scalar gain, not an energy-optimal midcourse; plus
+# everything slice 46 named, unchanged, and its whole link budget.
+#
+# UNITS (§1 trifecta): the two belief-error keys are INERTIAL `Vec3`s in SI and are SIGNED
+# (`midcourse_pos_err_m` metres, `midcourse_vel_err_mps` m/s); `midcourse_err_gain` is
+# DIMENSIONLESS and multiplies both, so the slider reads honest m/s ONLY because the vector beside
+# it is UNIT length — which the loader ENFORCES rather than assumes (`_check_err_gain_knob`).
+# `midcourse_tgo` SECONDS, `midcourse_pip_*` METRES inertial, `midcourse_pip_err_m` METRES;
+# `head_cue_err_deg` and `head_cue_err_handover_deg` in DEGREES, in the BODY frame, which is the
+# frame `gimbal_fov_deg` beside them is measured in. dt = 1e-3 / emit_every = 16.
+name: slice47_midcourse
+seed: 32
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # SLICE 46's SIX KEYS, UNCHANGED TO THE DIGIT — the midcourse is NOT a fidelity rung (it is an
+  # authored comp key, `guidance.midcourse`), deliberately: gate 2 chose the anchor to be a key an
+  # AUTHOR writes rather than a rung, and gate 3 did not reopen it. ⚠ `guidance: pn` is what the
+  # midcourse arm is gated on — it sits ABOVE the PN arm and hands over to it — but the loader does
+  # NOT refuse the anchor without it, because `:guidance` is LIVE-SETTABLE (slice 10's button cycles
+  # `:pursuit ↔ :pn`) and a refusal would strand a legal mid-run toggle.
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+  # ⭐ THE BUTTON, AND THE SHOWCASE OPENS WITH IT **ON** — the disease first. Pressing it removes
+  # the horizon, which removes the blind phase, which removes the slice.
+  seeker_detect: snr
+
+entities:
+  # The interceptor — slice 46's plant, launch condition and seven-key seeker budget, UNCHANGED, so
+  # that anything that moves between this wire and 46's is the midcourse and nothing else.
+  # n_pn = 8 is slice 27's, AUTHORED and NEVER A KNOB. The head: τ = 0.05, stop 30°, window 10°,
+  # servo 240 °/s — the last of those is slice 46's measured ISOLATION (at the arc's 8 °/s the
+  # broken arms break for SLICE 35's reason instead; at 60/120/240 every number is identical to
+  # four decimals, so the fast servo removes the rate limit from the answer and changes nothing).
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               gimbal_tau_s: 0.05, gimbal_stop_deg: 30.0, gimbal_fov_deg: 10.0,
+               gimbal_rate_dps: 240.0,
+               detect_pt_w: 200.0, detect_freq_hz: 16.0e9, detect_tint_s: 0.010,
+               detect_nf_db: 4.0, detect_loss_db: 5.0, detect_eta: 0.6,
+               detect_snr_min_db: 10.0}
+      # ⭐⭐ THE MIDCOURSE. `midcourse: true` is the ANCHOR — its PRESENCE is the gate for both the
+      # blind-phase guidance law and the belief-cued head, and the three keys below are REFUSED
+      # without it (an authored belief error that nothing reads is the dead-knob class this project
+      # keeps catching after the fact).
+      #   midcourse_k = 1.0 — the law's lead gain, AUTHORED and NEVER A SLIDER. Gate 1 MEASURED it
+      #     (P9: the null closes at 1.0, and the useful window is bounded at BOTH ends), which puts
+      #     it in the `k_alpha`/`k_q` class: a tuning constant with a measurement behind it.
+      #   midcourse_vel_err_mps = [0, −1, 0] — the DIRECTION of the picture error, UNIT LENGTH. The
+      #     magnitude lives on the slider. ⚠⚠ THE UNIT LENGTH IS NOT A CONVENTION, IT IS ENFORCED:
+      #     the loader refuses `midcourse_err_gain` as a knob unless exactly one error vector is
+      #     authored and it is unit, because the gain is dimensionless and the slider's "m/s" label
+      #     is only true when the thing it multiplies is a pure direction.
+      #   midcourse_pos_err_m — OMITTED. A position error is a different lesson (it moves the
+      #     believed point without changing how it MOVES, so it decays in importance as the missile
+      #     closes, where a velocity error grows); one axis at a time, convention 9.
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3,
+                 midcourse: true, midcourse_k: 1.0,
+                 midcourse_vel_err_mps: [0.0, -1.0, 0.0],
+                 midcourse_err_gain: 38.0}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # ⚠⚠ THE TARGET IS +1000 m FURTHER IN CROSS-RANGE THAN SLICE 46's, AND THAT ONE NUMBER IS THE
+  # WHOLE PREMISE RATHER THAN A CONVENIENCE. Slice 46 authors its target INTO the missile's
+  # ballistic plane, so on that geometry the AUTHORED LAUNCH HEADING *IS* the midcourse solution:
+  # a perfect midcourse would have nothing to do and a wrong one nothing to be wrong about, and the
+  # showcase would measure nothing (which is how slices 44 and 45 died). Moved off that plane, a
+  # blind missile that commands nothing misses by 1203.7 m AND NEVER ACQUIRES AT ALL — off the
+  # launch plane, doing nothing costs the acquisition and not merely the accuracy.
+  # ⚠ `rcs_m2` IS AUTHORED HERE, NOT A KNOB — it is slice 46's slider, and dragging it beside this
+  # lesson would move the horizon, the blind duration and the handover range at once.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 3000.0, 4200.0]
+    vel: [0.0, -200.0, 0.0]
+    target: {rcs_m2: 0.001, cross_speed_mps: -200.0}
+
+knobs:
+  # EXACTLY ONE LIVE KNOB. BOTH ENDPOINTS ARE MEASURED AND BOTH HAVE REASONS:
+  #   FLOOR 0.0: the PERFECT picture — and it is NOT a null. The midcourse still flies (it corrects
+  #     the launch heading onto the collision course), commands 4.57 % of `a_max` while blind, hands
+  #     over at 0.0000° and arrives at 0.135 m. The arm that IS a null — no midcourse at all — is
+  #     not reachable from here and is pinned as a test instead.
+  #   CEILING 50.0 m/s: 25 % of the crossing speed, a full 11 m/s past the cliff, so the broken
+  #     region is visible as a REGION and not as a single unlucky cell. ⚠ Its METRES are not quoted
+  #     as a claim anywhere — once the track is gone the miss is sampling a divergence rather than
+  #     measuring one (slice 44 §VII.3 watched failure magnitudes walk 320 → 627 m across a 4× range
+  #     of `dt` while the VERDICT held). The verifier asserts VERDICTS there, and degrees.
+  #   LINEAR, because the axis is: gate-0 P1 measured the handover error growing 0.503 → 0.522° per
+  #     % across the whole domain — as straight a line as this project has found — so every part of
+  #     the travel is worth the same, which is exactly when a log slider would be wrong.
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED: `midcourse_k` (AUTHORED — gate 1 measured it, and a
+  # second slider beside this one is convention 9's exact prohibition); `rcs_m2` (slice 46's axis —
+  # it would move the horizon and the blind duration underneath this lesson); `gimbal_fov_deg` (⚠⚠
+  # TWO-SIDED since slice 46 — it moves the window AND the horizon in opposite directions, so the
+  # composite is non-monotone and the lesson would reverse); `gimbal_rate_dps` (slice 46's measured
+  # isolation — a slider on it puts slice 35's rate limit back inside this lesson); the two belief-
+  # error VECTORS (⚠ refused at load BY TYPE — `set_param` carries one Float64, so a slider on a
+  # `Vec3` would overwrite it with a bare number and the next type assertion inside a tick would
+  # throw, dropping the connection); the seven `detect_*` keys, `n_pn`, `rho`, `sigma_seek`,
+  # `af_alpha_max`, `elevation_deg` (the slice-19 dead-knob class).
+  #
+  # ⚠ THE LABEL IS LENGTH-BUDGETED (~110 characters — slice 32's shots paid for this): knob labels
+  # are drawn full-width in the UI CanvasLayer and paint OVER the `_draw` HUD column at `vp.x − 430`.
+  - {target: m1, key: midcourse_err_gain, min: 0.0, max: 50.0,
+     label: "LAUNCH PICTURE ERROR (m/s too slow) — watch the CUE vs the WINDOW, not the miss"}

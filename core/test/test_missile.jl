@@ -10773,7 +10773,7 @@ end
     # target is flown into the missile's ballistic plane), so a perfect midcourse would have nothing
     # to do and a wrong one nothing to be wrong about. Moved off that plane, a blind missile that
     # commands nothing misses by 1203.7 m and never acquires at all.
-    function mid_world(; dy0 = 1000.0, midcourse = true, k = 1.0,
+    function mid_world(; dy0 = 1000.0, midcourse = true, k = 1.0, gain = 1.0,
                          dv = Vec3(0.0, 0.0, 0.0), dp = Vec3(0.0, 0.0, 0.0),
                          rcs = 0.001, budget = true, seed = 32)
         fid = Dict{Symbol,Symbol}(:integrator => :rk4, :guidance => :pn, :autopilot => :alpha,
@@ -10806,6 +10806,7 @@ end
         if midcourse
             comp[:midcourse] = :pip;  comp[:midcourse_k] = k
             comp[:midcourse_vel_err_mps] = dv;  comp[:midcourse_pos_err_m] = dp
+            comp[:midcourse_err_gain] = gain
         end
         w.entities[:m1] = Entity(:m1, :missile; pos = Vec3(0.0, 0.0, 3000.0),
                                  vel = Vec3(V0 * cos(el), 0.0, V0 * sin(el)), comp = comp)
@@ -10830,6 +10831,11 @@ end
         lock_i = -1; act_n = 0; cued_n = 0; overlap = 0; gap = 0
         pk_blind = 0.0; pk_post = 0.0; pk_pre = 0.0
         cue_last = NaN; cue_at_lock = NaN; hold_n = 0; post_n = 0; aero_pre = 0
+        # ⚠ THE WIRE'S LATCH, SAMPLED THE WAY A CLIENT SAMPLES IT — every 16th tick (`emit_every` on
+        # the shipped scenario) and NEVER on the last blind tick, which is the frame no client ever
+        # gets. `cue_last` beside it is the harness's own per-tick scan; the two must agree, and
+        # that agreement is what licenses the verifier to assert cliff degrees at all.
+        cue_wire = NaN; cue_wire_16 = NaN
         for i in 1:n
             tick!(w, sub, dt); empty!(w.events)
             e = w.entities[:m1]; t = w.entities[:t1]
@@ -10838,6 +10844,8 @@ end
             r = los_range(e.pos, t.pos)
             acmd = get(tel, "m1.a_cmd", 0.0)
             locked = get(e.comp, :seek_init, false) === true
+            cue_wire = get(tel, "m1.head_cue_err_handover_deg", NaN)
+            i % 16 == 0 && (cue_wire_16 = cue_wire)
             if get(tel, "m1.head_cued", 0.0) > 0.5
                 cued_n += 1
                 cue_last = get(tel, "m1.head_cue_err_deg", 0.0)
@@ -10873,6 +10881,7 @@ end
         return (pos = pos, cpa = cpa, lock_i = lock_i, act_n = act_n, cued_n = cued_n,
                 overlap = overlap, gap = gap, pk_blind = pk_blind, pk_pre = pk_pre,
                 pk_post = pk_post, aero_pre = aero_pre, cue_last = cue_last,
+                cue_wire = cue_wire, cue_wire_16 = cue_wire_16,
                 cue_at_lock = cue_at_lock, hold = post_n > 0 ? 100 * hold_n / post_n : NaN)
     end
 
@@ -10983,6 +10992,30 @@ end
             @test a.aero_pre == 0
         end
         @test hi.pk_blind / 3000.0 > 0.20         # …while the WHOLE-FLIGHT read on the broken arm does
+
+        # ⭐⭐⭐ AND THE NUMBER SURVIVES TO A CLIENT, WHICH IS A SEPARATE CLAIM FROM ITS BEING TRUE.
+        # Every degree asserted above comes from a per-tick scan; the Godot verifier sees one frame
+        # in `emit_every` = 16 and cannot sample the last blind tick at all. `head_cue_err_deg` is
+        # useless to it — the instant the receiver opens, the cue stops and the wire ships the honest
+        # 0.0 of a TRACKING head, so the handover value survives on no later frame. The LATCHED key
+        # is the fix (§6.9 item 1's shape, applied to the one quantity gate 3 asserts in degrees):
+        # it holds the last blind tick's value for the rest of the flight, and a 16-tick-sampled
+        # read of it lands on the same number as the per-tick scan.
+        for a in (lo, hi)
+            @test a.cue_wire ≈ a.cue_last atol = 1e-9      # …at the END of the flight, exactly…
+            @test a.cue_wire_16 ≈ a.cue_last atol = 1e-9   # …and on a client's 16-tick grid
+        end
+        # ⚠ IT FREEZES ON THE BROKEN ARM TOO, and that is the half a reader gets wrong: the cue is
+        # gated on the RECEIVER opening (`!_detectable`), not on a lock, so it stops at the horizon
+        # whether or not an acquisition follows. `hi` never locks and flies midcourse to CPA — its
+        # guidance flag is still 1 at the end — yet its handover error is a frozen, finite 10.0505°.
+        @test hi.lock_i == -1 && hi.cued_n > 0
+        @test isfinite(hi.cue_wire) && hi.cue_wire > 10.0
+        # …and a missile with NO blind phase reports 0.0 rather than a stale or missing number: the
+        # `seeker_detect` button's other side, which is this scenario's fidelity A/B.
+        let z = fly(; rcs = 1.0, n = 2000)
+            @test z.cued_n == 0 && z.cue_wire == 0.0
+        end
     end
 
     @testset "⭐ THE SLICE-19 TRIPWIRE — every authored key MOVES something (the MODEL test)" begin
@@ -10996,8 +11029,24 @@ end
                    (; dv = Vec3(0.0, 20.0, 0.0)), (; k = 2.0))
             @test maxdpos(base.pos, fly(; n = 3000, kw...).pos) > 0.0
         end
-        # …and the belief itself is MINTED FROM TRUTH PLUS THE AUTHORED ERROR, once, at launch (the
-        # `:att_q` lazy-init shape). Read off the comp dict AFTER a tick, never recomputed from the
+        # ⭐⭐ AND THE GATE-3 SCALAR IS PINNED AS AN **IDENTITY**, NOT MERELY AS A MOVER. A knob that
+        # multiplies an authored vector is a reparameterization, and slice 39's rule is that a
+        # reparameterization must be shown to BE one rather than asserted to be: 20 × a unit
+        # direction is byte-identical to the vector `[0, 20, 0]` written straight into the YAML, and
+        # a gain of 0 is byte-identical to authoring no error at all. Those two pins are what make
+        # the showcase slider's number mean m/s (`_check_err_gain_knob` is the other half — it
+        # refuses the knob unless the vector really is unit length).
+        ŷ = Vec3(0.0, 1.0, 0.0)
+        @test fly(; n = 3000, dv = ŷ, gain = 20.0).pos == fly(; n = 3000, dv = 20.0 * ŷ).pos
+        @test fly(; n = 3000, dv = 20.0 * ŷ, gain = 0.0).pos == base.pos
+        # …and it is READ EVERY TICK, not folded into the launch snapshot: same authored vector, two
+        # gains, two trajectories. (Gate 2 minted truth-plus-error ONCE, which made the error a key
+        # consumed on the first blind tick — `_DEAD_KNOB_KEYS`'s own definition of a dead knob, and
+        # the reason the mint below now stores TRUTH.)
+        @test maxdpos(fly(; n = 3000, dv = ŷ, gain = 20.0).pos,
+                      fly(; n = 3000, dv = ŷ, gain = 1.0).pos) > 0.0
+        # …and the belief is TRUTH at launch, once (the `:att_q` lazy-init shape), with the authored
+        # error added at every READ. Read off the comp dict AFTER a tick, never recomputed from the
         # initial condition (convention 10).
         let (w, sub) = mid_world(; dp = Vec3(10.0, -20.0, 30.0), dv = Vec3(1.0, -2.0, 3.0))
             t0 = w.entities[:t1].pos; v0 = w.entities[:t1].vel
@@ -11005,10 +11054,20 @@ end
             c = w.entities[:m1].comp
             # ⚠ phase 1 moves the target BEFORE phase 3/4 mint the belief, so the snapshot is the
             # POST-integrate truth of tick 1 — which is the truth the missile could have been told.
-            @test c[:midcourse_p0] == w.entities[:t1].pos + Vec3(10.0, -20.0, 30.0)
-            @test c[:midcourse_v0] == w.entities[:t1].vel + Vec3(1.0, -2.0, 3.0)
-            @test c[:midcourse_p0] != t0 + Vec3(10.0, -20.0, 30.0)   # …and NOT the pre-tick position
-            @test c[:midcourse_v0] == v0 + Vec3(1.0, -2.0, 3.0)      # (a CV target's velocity is fixed)
+            # ⚠⚠ AND IT IS THE TRUTH **UNMODIFIED**: the snapshot carries no error, so the two keys
+            # below are what the missile would have been told by a perfect datalink. The error lives
+            # at the READ (asserted next), which is what lets a slider move it mid-flight.
+            @test c[:midcourse_p0] == w.entities[:t1].pos
+            @test c[:midcourse_v0] == w.entities[:t1].vel
+            @test c[:midcourse_p0] != t0                             # …and NOT the pre-tick position
+            @test c[:midcourse_v0] == v0                             # (a CV target's velocity is fixed)
+            # THE OBSERVABLE, which is what the two consumers actually fly on — truth plus the
+            # authored error, formed by the shipped function rather than re-derived here.
+            let (bp, bv) = EWSim._midcourse_belief!(c, w.entities[:t1], w)
+                @test bv == w.entities[:t1].vel + Vec3(1.0, -2.0, 3.0)
+                @test bp == w.entities[:t1].pos + Vec3(10.0, -20.0, 30.0) +
+                            bv * (w.t - Float64(c[:midcourse_t0]))
+            end
             # ⚠⚠ THE STAMP IS 0.0, NOT `w.t` — and the difference is a REAL one-tick clock offset
             # that CANCELS rather than a rounding artifact. `tick!` advances `w.t` AFTER all four
             # phases, so during tick 1 every phase reads 0.0 while phase 1 has already moved the
@@ -11054,21 +11113,27 @@ end
         e = w.entities[:m1]; c = e.comp
         tel = get(w.env, :telemetry, Dict{String,Any}())
         @test tel["m1.midcourse_active"] == 1.0                  # still blind — the arm IS the source
-        bel_p = c[:midcourse_p0]::Vec3 +
-                c[:midcourse_v0]::Vec3 * ((w.t - dt) - Float64(c[:midcourse_t0]))
-        pip_ref, tgo_ref = predicted_intercept_point(e.pos, bel_p, c[:midcourse_v0]::Vec3,
+        # ⚠ THE REBUILD ADDS THE AUTHORED ERROR AT THE **READ**, because that is where the wire adds
+        # it (gate 3): the snapshot keys are pure truth, so a rebuild that used them raw would be
+        # rebuilding a PERFECT picture and would then "discover" a ~200 m disagreement with the wire
+        # that is the authored error itself. `g` is written out rather than defaulted so the
+        # multiplication is part of what this tooth pins.
+        g = Float64(c[:midcourse_err_gain])
+        bel_v = c[:midcourse_v0]::Vec3 + c[:midcourse_vel_err_mps]::Vec3 * g
+        bel_p = (c[:midcourse_p0]::Vec3 + c[:midcourse_pos_err_m]::Vec3 * g) +
+                bel_v * ((w.t - dt) - Float64(c[:midcourse_t0]))
+        pip_ref, tgo_ref = predicted_intercept_point(e.pos, bel_p, bel_v,
                                                      sqrt(sum(abs2, e.vel)))
         pip_wire = Vec3(tel["m1.midcourse_pip_x"], tel["m1.midcourse_pip_y"],
                         tel["m1.midcourse_pip_z"])
         @test los_range(pip_wire, pip_ref) < 1e-6
         @test tel["m1.midcourse_tgo"] ≈ tgo_ref atol = 1e-9
         # …and the mix-up is NOT within tolerance — the discriminator, asserted rather than assumed.
-        pip_bad, _ = predicted_intercept_point(e.pos, bel_p,
-                                               c[:midcourse_v0]::Vec3 - e.vel,
+        pip_bad, _ = predicted_intercept_point(e.pos, bel_p, bel_v - e.vel,
                                                sqrt(sum(abs2, e.vel)))
         @test los_range(pip_wire, pip_bad) > 1000.0
         # …nor is an authored-launch-speed `V_m` (700 m/s against the instantaneous ~671 m/s here).
-        pip_v0, _ = predicted_intercept_point(e.pos, bel_p, c[:midcourse_v0]::Vec3, 700.0)
+        pip_v0, _ = predicted_intercept_point(e.pos, bel_p, bel_v, 700.0)
         @test sqrt(sum(abs2, e.vel)) < 699.0
         @test los_range(pip_wire, pip_v0) > 1.0
 
@@ -11148,5 +11213,47 @@ end
         # be true on every wire the moment the arm exists, the exact tautology `:seeker_omega`
         # demonstrates one line from where the arm lives.
         @test !haskey(sc2.world.entities[:m1].comp, :midcourse_pip)
+
+        # ── GATE 3: THE SCALAR, AND THE TWO REFUSALS THAT MAKE ITS SLIDER HONEST ─────────────────
+        # The gain defaults to 1.0 (so a wire that authors an error and no gain flies exactly what
+        # it authored), is refused without the anchor like the other three, and admits 0 — which is
+        # the PERFECT-picture arm and the left end of the showcase slider, not a degenerate.
+        @test sc.world.entities[:m1].comp[:midcourse_err_gain] == 1.0
+        @test load_scenario(wr(mk("midcourse: true, midcourse_err_gain: 0.0"))
+                            ).world.entities[:m1].comp[:midcourse_err_gain] == 0.0
+        @test_throws ErrorException load_scenario(wr(mk("midcourse_err_gain: 2.0")))
+        @test_throws ErrorException load_scenario(wr(mk("midcourse: true, midcourse_err_gain: -1.0")))
+        @test_throws ErrorException load_scenario(
+            wr(mk("midcourse: true, midcourse_err_gain: .nan")))
+
+        # ⚠⚠ AND A SLIDER ON A `Vec3` IS REFUSED AT LOAD — A CRASH GUARD, NOT A TIDINESS RULE.
+        # `set_param` writes `_coerce_like`'s `::Any` fallback straight through, so a slider on
+        # either error vector replaces it with a bare Float64 and the next `::Vec3` assertion throws
+        # INSIDE `tick!` — which the session's IO/EOF-only catch turns into a DROPPED CONNECTION,
+        # not an error message (convention 5). These are the first non-scalar comp keys in the
+        # project that a plausible showcase would want to drag, and the guard is written for the
+        # TYPE so every future vector key is covered.
+        kn(k, extra = "") = mk("midcourse: true$extra") *
+            "knobs:\n  - {target: m1, key: $k, min: 0.0, max: 50.0, label: \"x\"}\n"
+        @test_throws ErrorException load_scenario(wr(kn("midcourse_vel_err_mps",
+                                                        ", midcourse_vel_err_mps: [0.0, 1.0, 0.0]")))
+        @test_throws ErrorException load_scenario(wr(kn("midcourse_pos_err_m",
+                                                        ", midcourse_pos_err_m: [0.0, 1.0, 0.0]")))
+        # ⭐⭐ AND THE GAIN IS ONLY A LEGAL KNOB BESIDE A **UNIT** ERROR VECTOR, which is what makes
+        # the slider's number honest m/s instead of a multiple of whatever the YAML happened to
+        # write. Without this the HUD label "picture error (m/s)" would be true by coincidence and
+        # would quietly become a lie the first time someone edited the vector — `_fmt`'s own defect
+        # class (a control that misreports the value it is sending), one level up.
+        @test load_scenario(wr(kn("midcourse_err_gain",
+                                  ", midcourse_vel_err_mps: [0.0, -1.0, 0.0]"))) isa Scenario
+        @test load_scenario(wr(kn("midcourse_err_gain",
+                                  ", midcourse_pos_err_m: [0.0, 0.0, 1.0]"))) isa Scenario
+        @test_throws ErrorException load_scenario(          # not unit — 40 m/s of hidden scale
+            wr(kn("midcourse_err_gain", ", midcourse_vel_err_mps: [0.0, -40.0, 0.0]")))
+        @test_throws ErrorException load_scenario(          # nothing to scale ⇒ a dead slider
+            wr(kn("midcourse_err_gain")))
+        @test_throws ErrorException load_scenario(          # BOTH live ⇒ no unit to quote it in
+            wr(kn("midcourse_err_gain", ", midcourse_vel_err_mps: [0.0, -1.0, 0.0]" *
+                                        ", midcourse_pos_err_m: [1.0, 0.0, 0.0]")))
     end
 end
