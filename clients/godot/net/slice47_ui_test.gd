@@ -233,6 +233,26 @@ func _initialize() -> void:
 	# what the wire does: 9.7846° arrives, 10.0505° never acquires.
 	if v_ok == v_lost:
 		return _fail("⭐⭐⭐ the two cliff arms differ by 0.27° and one of them never acquires — the headline must say so")
+	# ⭐⭐⭐ AND THE OWNERSHIP LINE READS `midcourse_active`, **NOT** `head_cued` — A DEFECT THE
+	# WINDOWED SHOT CAUGHT AND NOTHING ELSE WOULD HAVE. The two flags are gated on DIFFERENT things
+	# (§6.8 item 5): the head's cue stops when the RECEIVER OPENS, the guidance arm stops when the
+	# TRACKER INITIALISES. On a broken arm — the receiver hears the target, the angle gate refuses it,
+	# no lock — the first has stopped and the second has not, so a line keyed off `cued` announced
+	# "PN owns it now" over a missile still flying its stale belief to CPA. On the arm that carries
+	# the lesson. Every other number in that photograph was correct.
+	var own_blind: String = sb._midcourse_belief_text(true, true, 296.9, 2.4)
+	var own_broken: String = sb._midcourse_belief_text(true, false, 318.7, 1.2)
+	var own_done: String = sb._midcourse_belief_text(false, false, 296.9, 0.0)
+	if own_broken == own_done:
+		return _fail("⭐⭐⭐ a missile whose receiver has opened but which NEVER ACQUIRED is still flying its midcourse (`midcourse_active` = 1) — the ownership line must NOT say PN owns it. Got '%s' for both states" % own_broken)
+	if str(own_broken).to_lower().contains("pn owns"):
+		return _fail("⚠⚠ the broken arm's line claims PN ownership over a missile still flying its belief: '%s'" % own_broken)
+	if not str(own_done).to_lower().contains("pn owns"):
+		return _fail("…and the genuinely handed-over state must say so: '%s'" % own_done)
+	if own_blind == own_broken:
+		return _fail("blind and broken are different states and must read differently: '%s'" % own_blind)
+	print("S47UI_OWNER  the ownership line reads `midcourse_active`, not `head_cued`: '%s' / '%s' / '%s'" % [own_blind, own_broken, own_done])
+
 	print("S47UI_VERDICT four distinct states, none naming the miss; the cliff's two sides read '%s' vs '%s'" % [v_ok, v_lost])
 
 	# ══ TOOTH 7 — ⚠ THE WIDTH BUDGETS, IN PIXELS ═════════════════════════════════════════════════
@@ -241,8 +261,9 @@ func _initialize() -> void:
 	# off the right edge at 1152 px and again at 1920 px. The origin is `vp.x − 430` — ANCHORED TO
 	# THE RIGHT EDGE — so there is no window size at which an over-wide line fits, and `° ⇒ — ⭐` are
 	# one `length()` each and many pixels each.
-	var body := [sb._midcourse_belief_text(true, 296.9, 2.4),
-				 sb._midcourse_belief_text(false, 296.9, 0.0),
+	var body := [sb._midcourse_belief_text(true, true, 296.9, 2.4),
+				 sb._midcourse_belief_text(true, false, 296.9, 2.4),
+				 sb._midcourse_belief_text(false, false, 296.9, 0.0),
 				 sb._midcourse_window_text(true, false, 6.2, 10.0),
 				 sb._midcourse_window_text(false, true, 9.7846, 10.0),
 				 sb._midcourse_window_text(false, false, 10.0505, 10.0),
@@ -274,6 +295,44 @@ func _initialize() -> void:
 	print("S47UI_WIDTH  body ≤ %d chars / %.0f px, headline ≤ %d chars / %.0f px, against 430 px of room" % [
 			_maxlen(body), _maxpx(fnt, body, 15),
 			_maxlen([v_none, v_blind, v_ok, v_lost]), _maxpx(fnt, [v_none, v_blind, v_ok, v_lost], 20)])
+
+	# ══ TOOTH 7b — ⚠⚠ THE **OTHER** WIDGET's BUDGET, AND A WINDOWED SHOT IS WHAT FOUND IT ═════
+	# Slice 46's finding was that HUD lines can be too WIDE; this wire found the same failure class in
+	# the generic telemetry readout, where there are simply too MANY of them. Three columns of 18 hold
+	# ~54 keys and a slice-47 wire ships ~72 (46's set plus nine midcourse keys): the third column ran
+	# off the BOTTOM of a 1152×648 window, silently losing ~15 scalars, while the columns grew right
+	# until they touched the `_draw` HUD's origin at `vp.x − 430`. A fourth column cannot be the
+	# answer — three at their natural width already reach that origin — so the type shrinks instead,
+	# which buys height AND width at once.
+	var many := {}
+	for i in range(72):
+		many["m1.k%02d" % i] = float(i)
+	sb._telemetry = many
+	sb._update_readout()
+	var cols := [sb._readout, sb._readout2, sb._readout3]
+	var used := 0
+	var fs := 0
+	for c in cols:
+		if c == null:
+			continue
+		if str(c.text) != "":
+			used += 1
+		fs = maxi(fs, c.get_theme_font_size("font_size"))
+	if used != 3:
+		return _fail("72 keys must fill all THREE columns (got %d) — the split is what keeps the panel off the HUD's origin" % used)
+	if fs > 11:
+		return _fail("⚠⚠ 72 keys at font %d overflow a 648 px window — the readout must shrink its type past three full columns, because there is no fourth column available (three already reach `vp.x − 430`)" % fs)
+	# …and a SHORT list must NOT be shrunk: the fix is for the overflow case only, and a client-wide
+	# font drop would make every earlier slice's readout smaller for no reason.
+	var few := {}
+	for i in range(20):
+		few["m1.k%02d" % i] = float(i)
+	sb._telemetry = few
+	sb._update_readout()
+	var fs_few: int = sb._readout.get_theme_font_size("font_size")
+	if fs_few != 14:
+		return _fail("a SHORT key list must keep the family's font 14 (got %d) — the shrink is for the overflow case alone" % fs_few)
+	print("S47UI_READOUT 72 keys -> 3 columns at font %d (fits 648 px); 20 keys -> font %d, unchanged" % [fs, fs_few])
 
 	# ══ TOOTH 8 — every key the HUD reads is present and scalar ═══════════════════════════════════
 	var need := ["m1.head_cued", "m1.head_cue_err_handover_deg", "m1.gimbal_fov_deg",

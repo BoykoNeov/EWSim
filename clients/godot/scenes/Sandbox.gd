@@ -2636,11 +2636,22 @@ func _midcourse_verdict_label(cued: bool, was_cued: bool, acquired: bool,
 		return "HANDED OVER: %.1f° INSIDE" % cue
 	return "MISSED THE WINDOW: %.1f°" % cue
 
-func _midcourse_belief_text(cued: bool, pip_err: float, tgo: float) -> String:
+func _midcourse_belief_text(active: bool, cued: bool, pip_err: float, tgo: float) -> String:
 	# THE MECHANISM — what the missile is actually flying on, in one line. Greyed by the caller once
 	# PN owns the missile, because the belief is then history rather than the thing being flown.
-	if not cued:
+	#
+	# ⚠⚠ THE OWNERSHIP QUESTION IS `midcourse_active`, **NOT** `head_cued`, AND THE FIRST VERSION OF
+	# THIS LINE GOT IT WRONG — caught by the windowed shot (convention 14's 4th proof) and by nothing
+	# else. The two flags are gated on DIFFERENT things and gate 3's own plan (§6.8 item 5) says so:
+	# the head's cue stops when the RECEIVER OPENS (`!_detectable`), while the guidance arm stops
+	# when the TRACKER INITIALISES (`!seek_init`). On an arm that hears the target but never acquires
+	# it, the first has stopped and the second has not — so a line keyed off `cued` announced "PN
+	# owns it now" over a missile that was still flying its stale belief all the way to CPA, on
+	# exactly the arm that carries the lesson.
+	if not active:
 		return "belief: handed over — PN owns it now"
+	if not cued:
+		return "belief: STILL flying it — nothing ever acquired"
 	return "belief: 1 snapshot + a line, off by %.0f m   t_go %.1f s" % [pip_err, tgo]
 
 func _midcourse_window_text(cued: bool, acquired: bool, cue: float, fov: float) -> String:
@@ -2678,10 +2689,13 @@ func _draw_midcourse_hud_lines(vp: Vector2) -> void:
 	var acmd := float(_telemetry.get(_af3d_missile + ".a_cmd_frac", 0.0))
 	var lost := _mid_was_cued and not _mid_acquired
 	var inside := cue <= fov
+	# ⚠ `midcourse_active` IS THE GUIDANCE ARM's OWN FLAG and is NOT `head_cued` — see the belief
+	# text's comment: on a broken arm the head's cue has stopped and the guidance arm has not.
+	var active := float(_telemetry.get(_af3d_missile + ".midcourse_active", 0.0)) >= 0.5
 	# THE MECHANISM — greyed once the belief is history.
-	draw_string(_font, Vector2(vp.x - 430, 110), _midcourse_belief_text(cued, pip_err, tgo),
+	draw_string(_font, Vector2(vp.x - 430, 110), _midcourse_belief_text(active, cued, pip_err, tgo),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
-			Color(0.45, 0.90, 1.00) if cued else Color(0.70, 0.70, 0.75))
+			Color(0.45, 0.90, 1.00) if cued else (Color(1.00, 0.62, 0.30) if active else Color(0.70, 0.70, 0.75)))
 	# ⭐⭐⭐ THE GAUGE — orange the moment the cue error is outside the window, which on this wire is
 	# the same instant the engagement is decided.
 	draw_string(_font, Vector2(vp.x - 430, 132), _midcourse_window_text(cued, _mid_acquired, cue, fov),
@@ -4099,6 +4113,26 @@ func _update_readout() -> void:
 			cols.append(extra)
 	var ncols := clampi(int(ceil(lines.size() / 18.0)), 1, cols.size())
 	var rows := int(ceil(float(lines.size()) / float(ncols)))
+	# ⚠⚠ SLICE 47 — THE FONT SHRINKS WHEN THREE COLUMNS ARE NO LONGER ENOUGH, AND THIS IS A FIX FOR A
+	# REAL CLIPPING DEFECT RATHER THAN A TIDY-UP. The `18` above is a design row count, so three
+	# columns hold ~54 keys; a slice-47 wire ships ~72 (slice 46's set plus nine midcourse keys) and
+	# the third column ran off the BOTTOM of a 1152×648 window, silently losing ~15 scalars, while
+	# the columns simultaneously grew right until they touched the `_draw` HUD's origin at
+	# `vp.x − 430`. ⭐ A FOURTH COLUMN CANNOT BE THE ANSWER: three at their natural width already
+	# reach that origin, so growing sideways collides with the HUD by construction. The only
+	# direction left is DOWN, and shrinking the type buys both — fewer pixels per row AND narrower
+	# columns. ⚠ This is the same failure class as slice 46's shots (a budget that looks satisfied
+	# and is not), one widget over: there the lines were too wide, here there are too many of them.
+	var vp_h := 648.0
+	if is_inside_tree() and get_viewport() != null:
+		vp_h = maxf(get_viewport_rect().size.y, 240.0)
+	# The panel above this row (title, buttons, knob label + slider) plus the §12 badge below it.
+	var avail := vp_h - 260.0
+	var fsize := 14
+	if float(rows) * 19.0 > avail:
+		fsize = 11                        # ~15 px per row, and ~21 % narrower columns with it
+	for c in cols:
+		c.add_theme_font_size_override("font_size", fsize)
 	for ci in cols.size():
 		if ci < ncols:
 			cols[ci].text = "\n".join(lines.slice(ci * rows, mini((ci + 1) * rows, lines.size())))
