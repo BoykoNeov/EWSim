@@ -273,6 +273,26 @@ var _gimbal_servo_view := false    # handshake gimbal_servo_view — 9th marker;
 #       slice 35's block draws a DEMAND-vs-CAP pair against a servo authored at 30 °/s PRECISELY
 #       so it never binds. Every number true, the verdict "servo FREE", and the slice invisible.
 var _seeker_detect_view := false   # handshake seeker_detect_view — 10th marker; button AND HUD
+# ⭐⭐ SLICE 47 — THE MIDCOURSE, the 11th marker, and it is raised BESIDE slice 46's rather than
+# instead of it. This wire IS 46's wire (the same link budget, window and servo) with a BLIND PHASE
+# in front of it, so `_seeker_detect_view` keeps the BUTTON — press it and the horizon goes away,
+# the missile locks on tick 1, and the picture error stops mattering at all, which is the sharpest
+# A/B this slice has. What this marker takes over is the HUD: without it slice 46's block would draw
+# a link-budget verdict over a missile whose whole first six seconds are spent flying a BELIEF the
+# HUD never mentions, and the one number that carries the lesson would never reach the screen.
+var _midcourse_view := false       # handshake midcourse_view — 11th marker; HUD only (46 keeps the button)
+# Slice-47 DISPLAY-ONLY latches. ⚠ ALL THREE ARE CLEARED ON RESET, and this family has shipped the
+# stale-instrument-across-reset defect FOUR times (26's ring, 35's duty, 36's two, 46's two) — it is
+# done here at the same time as the code that creates it rather than found later.
+var _mid_was_cued := false         # …the missile HAS flown blind at some point (a real blind phase)
+var _mid_acquired := false         # …and the seeker DID eventually get it (false ⇒ handover FAILED)
+var _mid_auth_peak := 0.0          # ⭐ POST-HANDOVER authority peak — deliberately NOT slice 46's
+                                   # `_authority_peak`, which is whole-flight: on a BROKEN arm the
+                                   # midcourse keeps flying to CPA and reaches its own geometric
+                                   # ceiling (22.77 % of a_max) long AFTER the handover would have
+                                   # been, so a whole-flight gauge would paint an arm that never
+                                   # acquired as one that spent its budget (gate-2 §6.4's own
+                                   # correction, which is about telling a cause from a consequence).
 # Slice-46 DISPLAY-ONLY PEAK-HOLD on the AUTHORITY the core ships (`a_cmd_frac`, the post-clamp
 # command as a fraction of `a_max`). ⭐⭐ THIS INSTRUMENT IS THE SLICE. Slice 44 read MISS across
 # the whole free interval (0.2237 / 0.3491 / 0.3267 / 0.2514 m — flat), concluded a delayed
@@ -713,6 +733,11 @@ func _on_scenario(obj: Dictionary) -> void:
 	# without one, and a value guard on `snr` would hide the button on the arm a student presses it
 	# FROM. It does BOTH jobs (button and HUD) — see `_seeker_detect_view`'s own comment.
 	_seeker_detect_view = bool(obj.get("seeker_detect_view", false))
+	# Slice 47 — the midcourse. Raised on the COMP KEY (`midcourse`, the authored anchor), because
+	# there is no midcourse fidelity RUNG to raise it on: gate 2 chose the anchor to be a key an
+	# author writes, and the arm is presence-gated on it. ⚠ HUD ONLY — the button stays slice 46's,
+	# which is this slice's own A/B (no horizon ⇒ no blind phase ⇒ the picture stops mattering).
+	_midcourse_view = bool(obj.get("midcourse_view", false))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -1662,6 +1687,25 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 	if _telemetry.has(_af3d_missile + ".seeker_detect"):
 		if float(_telemetry[_af3d_missile + ".seeker_detect"]) < 0.5:
 			_detect_blind = true
+	# SLICE 47 — the three midcourse latches. ⚠ INDEPENDENT `if`s again, and gated on the ANCHOR's own
+	# key, so every scenario 1–46 leaves them at their reset values.
+	if _telemetry.has(_af3d_missile + ".head_cued"):
+		var cued := float(_telemetry[_af3d_missile + ".head_cued"]) >= 0.5
+		if cued:
+			_mid_was_cued = true
+		# ⭐⭐ THE AUTHORITY IS ACCUMULATED **ONLY AFTER THE BLIND PHASE ENDS**, and that is the
+		# difference from slice 46's whole-flight peak one line up. A missile that never acquires
+		# keeps flying its midcourse all the way to CPA and reaches the law's own geometric ceiling
+		# (22.77 % of a_max) — long after the handover would have been, and a CONSEQUENCE of never
+		# acquiring rather than its cause. A whole-flight gauge would paint that arm as one that had
+		# spent its budget, which is the exact confusion gate-2 §6.4 had to measure its way out of.
+		elif _mid_was_cued:
+			_mid_auth_peak = max(_mid_auth_peak, float(_telemetry.get(_af3d_missile + ".a_cmd_frac", 0.0)))
+	# ⚠ THE ACQUISITION LATCH IS `gimbal_valid`, THE CONJUNCTION OF BOTH GATES — while the missile is
+	# blind the range half holds it at 0, so a rising edge here is a real handover and not a window
+	# test that happened to pass on a target the receiver cannot hear.
+	if float(_telemetry.get(_af3d_missile + ".gimbal_valid", 0.0)) >= 0.5:
+		_mid_acquired = true
 	# SLICE 36 — the REQUIREMENT's display freeze and the BIRTH angle's latch. ⚠ TWO INDEPENDENT `if`s,
 	# NOT AN `elif` AND NOT CHAINED ONTO THE BLOCK ABOVE — slice 33's finding, and here the keys DO
 	# co-occur on every shipped frame (this wire carries `head_rate_sat` AND both keys below), so a
@@ -1698,6 +1742,28 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 	_t3d_los_mesh.surface_add_vertex(m3)
 	_t3d_los_mesh.surface_set_color(Color(1.00, 0.62, 0.20, 0.55))
 	_t3d_los_mesh.surface_add_vertex(t3)
+	# ⭐⭐⭐ SLICE 47 — WHERE THE MISSILE THINKS IT IS GOING, beside where the target actually is.
+	# A second segment in the same mesh, missile → the believed intercept point, in MAGENTA. The gap
+	# between its far end and the orange LOS's far end IS the picture error, drawn: it opens as the
+	# slider comes up, and it FREEZES at handover (the core persists the point in `comp` rather than
+	# recomputing it, which is what stops the marker teleporting to the world origin the moment the
+	# lesson happens — the defect gate 2's advisor review found).
+	# ⚠⚠ DRAWN FROM TELEMETRY, NEVER DEAD-RECKONED HERE (convention 13 — the client is PURE). The
+	# core ships the point it actually flew at; a GDScript re-derivation would be a second
+	# implementation of the belief, and the two would disagree the first time either changed.
+	if _midcourse_view and _telemetry.has(_af3d_missile + ".midcourse_pip_x"):
+		var pip3 := _sim_to_3d([float(_telemetry[_af3d_missile + ".midcourse_pip_x"]),
+								float(_telemetry[_af3d_missile + ".midcourse_pip_y"]),
+								float(_telemetry[_af3d_missile + ".midcourse_pip_z"])])
+		var live := float(_telemetry.get(_af3d_missile + ".midcourse_active", 0.0)) >= 0.5
+		# ⚠ DIMMED ONCE PN OWNS THE MISSILE — the point is still true (it is where the midcourse
+		# thought the intercept was when it handed over) but it is no longer being flown at, and a
+		# full-brightness line would say it was.
+		var a: float = 0.75 if live else 0.30
+		_t3d_los_mesh.surface_set_color(Color(1.00, 0.45, 0.85, a))
+		_t3d_los_mesh.surface_add_vertex(m3)
+		_t3d_los_mesh.surface_set_color(Color(1.00, 0.45, 0.85, a))
+		_t3d_los_mesh.surface_add_vertex(pip3)
 	_t3d_los_mesh.surface_end()
 	# the fading cyan trail — FLAT in x–z under :pitch_coupled, CURVING out toward +Y under :six_dof
 	_t3d_trail_mesh.clear_surfaces()
@@ -2525,6 +2591,118 @@ func _horizon_cure_text(gated: bool) -> String:
 		return "press the button ⇒ the target has to be FOUND"
 	return "wider window ⇒ shorter reach; 16× power ⇒ 2× range"
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 47 — THE MIDCOURSE HUD.
+#
+# ⚠⚠ EVERY LINE BELOW IS A **FUNCTION**, AND THAT IS THE WHOLE REASON THEY ARE FUNCTIONS: the
+# `draw_string` calls live in `_draw`, which never runs under `--headless`, so a string built inline
+# there has NO headless proof at all (convention 14, and slice 31's own bug — a comparison that
+# shipped with only a windowed shot as evidence, and the shot caught it). `slice47_ui_test.gd`
+# calls these directly, including the width budget.
+#
+# ⚠ THE WIDTH BUDGET IS INHERITED AND IT IS ASSERTED IN **PIXELS**, NOT CHARACTERS. Slice 46 shipped
+# a 100/96-CHARACTER tooth that passed GREEN while every line clipped at 1152 px AND at 1920 px —
+# the budget is ~55 characters of body and ~30 of headline at font 15, and the only honest check is
+# `_font.get_string_size(...).x` against the column width. These are written to fit.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+# The three live reads the headline needs, each defaulting to a state that is TRUE rather than to a
+# zero standing in for "unknown" (`docs/CONVENTIONS.md` §14: a key that stops emitting makes a
+# `.get(k, 0.0)` print a defaulted zero as a passed test — here the mode key says which).
+func _mid_cued_now() -> bool:
+	return float(_telemetry.get(_af3d_missile + ".head_cued", 0.0)) >= 0.5
+
+func _mid_cue_deg() -> float:
+	# ⚠⚠ THE **LATCHED** KEY, NEVER `head_cue_err_deg`. The instantaneous one is 0.0 the moment the
+	# head tracks (a tracking head has no cue — true, and useless), so a HUD built on it would show
+	# the number rising all through the blind phase and then SNAP TO ZERO at exactly the instant the
+	# lesson happens. The latch holds the last blind tick's value for the rest of the flight.
+	return float(_telemetry.get(_af3d_missile + ".head_cue_err_handover_deg", 0.0))
+
+func _mid_fov_deg() -> float:
+	return float(_telemetry.get(_af3d_missile + ".gimbal_fov_deg", 0.0))
+
+func _midcourse_verdict_label(cued: bool, was_cued: bool, acquired: bool,
+							  cue: float, fov: float) -> String:
+	# ⚠ HEADLINES GET A MUCH TIGHTER BUDGET (~30 chars) — they are drawn at 20 px from the same
+	# right-anchored origin, and slice 46's four were 78–82 chars and every one ran off the edge.
+	if not was_cued:
+		return "NO BLIND PHASE: it sees it"
+	if cued:
+		# THE LIVE STATE, and it is a PREDICTION rather than a verdict: this is the number that will
+		# decide the engagement, shown while there is still nothing else to look at.
+		return "BLIND: %.1f° into a %.0f° window" % [cue, fov]
+	if acquired:
+		return "HANDED OVER: %.1f° INSIDE" % cue
+	return "MISSED THE WINDOW: %.1f°" % cue
+
+func _midcourse_belief_text(cued: bool, pip_err: float, tgo: float) -> String:
+	# THE MECHANISM — what the missile is actually flying on, in one line. Greyed by the caller once
+	# PN owns the missile, because the belief is then history rather than the thing being flown.
+	if not cued:
+		return "belief: handed over — PN owns it now"
+	return "belief: 1 snapshot + a line, off by %.0f m   t_go %.1f s" % [pip_err, tgo]
+
+func _midcourse_window_text(cued: bool, acquired: bool, cue: float, fov: float) -> String:
+	# ⭐⭐⭐ THE GAUGE THIS HUD EXISTS FOR. The cue error against the window, in the window's own
+	# frame and units, with the SIGNED margin — slice 18's `terrain_clearance_m` / slice 33's
+	# `seeker_fov_margin_deg` precedent: the sign is the verdict.
+	var verb := "will hand over at" if cued else ("handed over at" if acquired else "opened at")
+	return "%s %.2f° of %.0f°   margin %+.2f°" % [verb, cue, fov, fov - cue]
+
+func _midcourse_authority_text(cued: bool, acquired: bool, live: float, peak: float) -> String:
+	# ⭐⭐ THE PRICE, IN THE ONE CURRENCY THE MISS CANNOT SHOW — slice 46's column, in this slice's
+	# units. ⚠ NOT SHOWN AS A NUMBER WHILE STILL BLIND: before the handover there is nothing spent
+	# yet, and a running gauge there would invite a student to read the blind command (3–5 %) as the
+	# thing that matters. What matters is what is left AFTER.
+	if cued:
+		return "authority: nothing spent yet — the bill comes at handover"
+	if not acquired:
+		return "authority: NEVER SPENT — the seeker never got it"
+	return "authority after handover: %.0f%% of a_max (peak %.0f%%)" % [100.0 * live, 100.0 * peak]
+
+func _midcourse_cure_text(cued: bool, acquired: bool) -> String:
+	# THE TRADE — what a student should do about it, and it is the thing they would otherwise get
+	# wrong. The instinct after a failed handover is "the picture must be more accurate"; the
+	# measurement is that a better picture buys WINDOW, and the window is what is running out.
+	if not acquired and not cued:
+		return "a better picture, or a wider window — same failure"
+	return "the picture buys WINDOW at handover, not accuracy"
+
+func _draw_midcourse_hud_lines(vp: Vector2) -> void:
+	var cued := _mid_cued_now()
+	var cue := _mid_cue_deg()
+	var fov := _mid_fov_deg()
+	var pip_err := float(_telemetry.get(_af3d_missile + ".midcourse_pip_err_m", 0.0))
+	var tgo := float(_telemetry.get(_af3d_missile + ".midcourse_tgo", 0.0))
+	var acmd := float(_telemetry.get(_af3d_missile + ".a_cmd_frac", 0.0))
+	var lost := _mid_was_cued and not _mid_acquired
+	var inside := cue <= fov
+	# THE MECHANISM — greyed once the belief is history.
+	draw_string(_font, Vector2(vp.x - 430, 110), _midcourse_belief_text(cued, pip_err, tgo),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			Color(0.45, 0.90, 1.00) if cued else Color(0.70, 0.70, 0.75))
+	# ⭐⭐⭐ THE GAUGE — orange the moment the cue error is outside the window, which on this wire is
+	# the same instant the engagement is decided.
+	draw_string(_font, Vector2(vp.x - 430, 132), _midcourse_window_text(cued, _mid_acquired, cue, fov),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			Color(0.55, 1.00, 0.65) if inside else Color(1.00, 0.62, 0.30))
+	# THE PRICE — and it stays grey while blind, because nothing has been spent yet.
+	draw_string(_font, Vector2(vp.x - 430, 154), _midcourse_authority_text(cued, _mid_acquired, acmd, _mid_auth_peak),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			Color(0.70, 0.70, 0.75) if cued else (Color(1.00, 0.62, 0.30) if lost else Color(1.00, 0.85, 0.45)))
+	# ⚠ THE MISS, SHOWN AS A **DISCLAIMER** RATHER THAN AS A GAUGE. It is the number a student's eye
+	# goes to, and on this wire it carries no signal at all (0.135 → 0.124 → 0.273 → 0.314 → 1.333 →
+	# 0.692 → 2.542 m across an axis whose authority rises 6.6× monotonically). Saying so on the HUD
+	# is cheaper than letting them read it and conclude the slider does nothing — which is precisely
+	# what slices 44 and 45 concluded, and why they died.
+	draw_string(_font, Vector2(vp.x - 430, 176), "range %.0f m — the MISS says nothing here" %
+			float(_telemetry.get(_af3d_missile + ".los_range", 0.0)),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	# THE TRADE.
+	draw_string(_font, Vector2(vp.x - 430, 198), _midcourse_cure_text(cued, _mid_acquired),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+
 func _horizon_verdict_label(blind: bool, gated: bool, peak: float) -> String:
 	# ⚠⚠ THE HEADLINE IS NEVER THE MISS ON THIS WIRE, and that is the correction slice 44's death paid
 	# for: across the button the miss moves the WRONG WAY, so a headline built on it would tell a
@@ -2780,7 +2958,18 @@ func _draw_airframe3d_hud() -> void:
 	# the colour. Its reason is the slice: on this wire every arm above 0.001 m² HITS, and the arm
 	# that is in the deepest trouble is the one flying at 100 % of `a_max` while still hitting. A
 	# latch-coloured headline would paint that cell calm, which is exactly the mistake slice 44 made.
-	if _seeker_detect_view:
+	# SLICE 47 — THE MIDCOURSE, checked FIRST of all here and at the HUD-lines site, because all
+	# three dispatch chains must agree and this wire raises `seeker_detect_view` TOO (it IS slice
+	# 46's wire with a blind phase in front). Without this branch the headline would name the LINK
+	# BUDGET over a missile whose first six seconds are spent flying a belief — every word true, and
+	# the slice invisible. ⚠ THE COLOUR RIDES THE HANDOVER VERDICT, not the authority peak and not
+	# the blind lamp: on this wire the thing that goes wrong is BINARY and it happens in one tick,
+	# so the honest orange is "the target was outside the window when the receiver opened".
+	if _midcourse_view:
+		lbl = _midcourse_verdict_label(_mid_cued_now(), _mid_was_cued, _mid_acquired,
+				_mid_cue_deg(), _mid_fov_deg())
+		col = Color(1.00, 0.62, 0.30) if (_mid_was_cued and not _mid_acquired) else Color(0.45, 0.90, 1.00)
+	elif _seeker_detect_view:
 		lbl = _horizon_verdict_label(_detect_blind,
 				str(_fidelity.get("seeker_detect", "none")) == "snr", _authority_peak)
 		col = Color(1.00, 0.62, 0.30) if _authority_peak >= 0.999 else Color(0.45, 0.90, 1.00)
@@ -3016,7 +3205,15 @@ func _draw_airframe3d_hud() -> void:
 	# (at the shipped 30 °/s it binds for 205 frames of the acquisition slew; gate 2 measured
 	# 60/120/240 °/s to give identical misses, locks and authority to four decimals) — every number true, the verdict "servo FREE", and the
 	# LINK BUDGET that is holding the seeker blind for the first 6 s never mentioned.
-	if _seeker_detect_view:
+	# SLICE 47 — checked FIRST here too, and for the reason the two chains must ALWAYS agree.
+	# `seeker_detect_view` is the block that would otherwise take this wire, and its link-budget
+	# lines are all TRUE on it — the horizon is real, the margin is real, the authority gauge is
+	# real. What they cannot say is that the missile is flying a BELIEF, how wrong it is, or that
+	# the whole engagement turns on one angle at one instant. Every number right, and the slice
+	# invisible: this family's recurring failure, avoided by ordering.
+	if _midcourse_view:
+		_draw_midcourse_hud_lines(vp)
+	elif _seeker_detect_view:
 		_draw_horizon_hud_lines(vp)
 	elif _gimbal_servo_view:
 		_draw_head_servo_hud_lines(vp)

@@ -8174,10 +8174,16 @@ end
             # the rate limit binds for 205 frames of the ACQUISITION SLEW at the lock instant, which
             # is slice 34/32's narrow-window failure re-run — and gate 2 measured 60/120/240 °/s to
             # give identical misses, locks and authority to four decimals, so the isolation is FREE.
+            # ⚠ SLICE 47 WIDENED IT A SIXTH TIME AND THE ASSERT CAUGHT IT AGAIN — and this is the
+            # cheapest widening yet, because slice 47's wire IS slice 46's wire with a blind phase
+            # in front of it: the same head, the same window, the same 240 °/s servo authored for
+            # the same measured reason. It matters MORE there than it did in 46, because every
+            # failure on that wire is a failure of POINTING, which is the servo's own job
+            # description — a saturating servo would make the picture error unattributable.
             @test carriers == ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml",
                                "slice37_frame.yaml", "slice38_head_gyro.yaml",
                                "slice40_heavy.yaml", "slice40_resonance.yaml",
-                               "slice46_horizon.yaml"]
+                               "slice46_horizon.yaml", "slice47_midcourse.yaml"]
         end
     end
 
@@ -8250,7 +8256,13 @@ end
                              # carrying the servo AUTHORED WIDE as an isolation. Same remedy, same
                              # ordering proof — `seeker_detect_view` is checked FIRST in the client
                              # and `slice46_ui_test.gd`'s own mirror is what proves it.
-                             "slice46_horizon.yaml"]
+                             "slice46_horizon.yaml",
+                             # ⚠ SLICE 47: slice 46's wire with a blind phase in front, so it carries
+                             # the same authored servo. Same remedy, and the ordering proof is
+                             # `slice47_ui_test.gd`'s mirror — which is the OPPOSITE shape from the
+                             # five above it: slice 47's marker takes the HUD and deliberately NOT
+                             # the button, because pressing slice 46's button is slice 47's own A/B.
+                             "slice47_midcourse.yaml"]
             for f in readdir(base)
                 endswith(f, ".yaml") || continue
                 f in expected_rate && continue
@@ -11255,5 +11267,113 @@ end
         @test_throws ErrorException load_scenario(          # BOTH live ⇒ no unit to quote it in
             wr(kn("midcourse_err_gain", ", midcourse_vel_err_mps: [0.0, -1.0, 0.0]" *
                                         ", midcourse_pos_err_m: [1.0, 0.0, 0.0]")))
+    end
+
+    # ═══════════════════════════════════════════════════════════════════════════════════════
+    # GATE 3 — THE SHIPPED WIRE, AND THE CLIFF FLOWN OFF THE **YAML** RATHER THAN OFF A FIXTURE.
+    #
+    # ⚠ EVERY NUMBER ABOVE WAS MEASURED ON `mid_world`, A HAND-BUILT WORLD. That is the right shape
+    # for gates 1–2, and it is NOT a proof that the scenario a student actually loads is the same
+    # wire: a fixture and a YAML can drift for a whole slice before anyone notices (convention 10 —
+    # pin against the LIVE oracle, never against a second hand-recompute). These arms fly the file.
+    # ═══════════════════════════════════════════════════════════════════════════════════════
+    @testset "gate 3 — THE SHIPPED SCENARIO, and the cliff flown off the YAML" begin
+        base = joinpath(@__DIR__, "..", "..", "scenarios")
+        scn  = load_scenario(joinpath(base, "slice47_midcourse.yaml"))
+        mm   = scn.world.entities[:m1];  tt = scn.world.entities[:tgt1]
+
+        @test scn.name == "slice47_midcourse"
+        @test scn.world.seed == 32 && scn.dt_physics == 1.0e-3 && scn.emit_every == 16
+        # THE PREMISE, AS ONE NUMBER: the target is +1000 m off slice 46's cross-range, which is what
+        # makes doing nothing WRONG. On 46's own geometry the launch heading IS the answer.
+        @test tt.pos == Vec3(6000.0, 3000.0, 4200.0)
+        @test tt.comp[:rcs_m2] == 0.001             # slice 46's default => a 1436.7 m horizon
+        # THE MIDCOURSE, AS AUTHORED — and the error vector is UNIT, which is what makes the slider's
+        # number honest m/s rather than a multiple of whatever the YAML happened to write.
+        @test mm.comp[:midcourse] === :pip
+        @test mm.comp[:midcourse_k] == 1.0          # gate 1's MEASURED value (P9), never a knob
+        @test mm.comp[:midcourse_vel_err_mps] == Vec3(0.0, -1.0, 0.0)
+        @test sqrt(sum(abs2, mm.comp[:midcourse_vel_err_mps])) ≈ 1.0 atol = 1e-12
+        @test !haskey(mm.comp, :midcourse_pos_err_m)   # one axis at a time (convention 9)
+        @test mm.comp[:midcourse_err_gain] == 38.0     # THE DEFAULT OPENS ON THE DISEASE
+        # SLICE 46's WIRE, UNCHANGED TO THE DIGIT — anything that moves between the two is the
+        # midcourse and nothing else.
+        @test mm.comp[:gimbal_fov_deg] == 10.0 && mm.comp[:gimbal_stop_deg] == 30.0
+        @test mm.comp[:gimbal_rate_dps] == 240.0    # slice 46's MEASURED isolation
+        @test mm.comp[:detect_pt_w] == 200.0 && mm.comp[:n_pn] == 8.0
+        @test scn.world.fidelity[:seeker_detect] === :snr   # the button's DISEASE side
+        @test scn.world.fidelity[:guidance] === :pn         # what the arm is gated on
+
+        # CONVENTION 9 — EXACTLY ONE KNOB, and every disqualified candidate asserted ABSENT rather
+        # than merely left out.
+        @test length(scn.knobs) == 1
+        let k = scn.knobs[1]
+            @test k.target === :m1 && k.key === :midcourse_err_gain
+            @test k.min == 0.0 && k.max == 50.0   # 0 = the PERFECT picture; 50 = 11 m/s past the cliff
+            @test !k.log                          # LINEAR — P1 measured the axis straight (0.503->0.522)
+        end
+        for dead in (:midcourse_k, :rcs_m2, :gimbal_fov_deg, :gimbal_rate_dps,
+                     :midcourse_vel_err_mps, :midcourse_pos_err_m, :n_pn, :sigma_seek)
+            @test !any(kb -> kb.key === dead, scn.knobs)
+        end
+
+        # THE MARKER, AND IT IS RAISED **BESIDE** SLICE 46's RATHER THAN INSTEAD OF IT — the client
+        # keeps 46's BUTTON (pressing it is slice 47's own A/B) and takes 47's HUD.
+        let inf = EWSim._airframe_view_info(scn.world)
+            @test inf !== nothing
+            @test haskey(inf, :midcourse_view)
+            @test haskey(inf, :seeker_detect_view)       # STILL raised — the button stays 46's
+            @test haskey(inf, :gimbal_view) && haskey(inf, :gimbal_rate_view)
+            for absent in (:radome_view, :seeker_fov_view, :gimbal_servo_view, :gimbal_frame_view)
+                @test !haskey(inf, absent)
+            end
+        end
+        # ...and NO OTHER WIRE raises it. An enumerated carrier SET rather than an `isempty`, for the
+        # reason slices 36–46 each rediscovered: an `isempty` goes on passing forever while quietly
+        # ceasing to say anything the moment a second wire is added.
+        let carriers = String[]
+            for f in readdir(base)
+                endswith(f, ".yaml") || continue
+                inf = EWSim._airframe_view_info(load_scenario(joinpath(base, f)).world)
+                inf !== nothing && haskey(inf, :midcourse_view) && push!(carriers, f)
+            end
+            @test carriers == ["slice47_midcourse.yaml"]
+        end
+
+        # AND THE CLIFF, FLOWN OFF THE SHIPPED FILE. Two arms one metre per second apart, straddling
+        # the authored 10.0 deg window by five hundredths of a degree, with opposite verdicts.
+        # ⚠ THE GAIN IS SET THE WAY THE **CLIENT** SETS IT — written into `comp` after load, which is
+        # exactly what `set_param` does — so this also pins that the slider's path reaches the physics.
+        # ⚠ AND THE CUE IS READ FROM THE **LATCHED** KEY, never from `head_cue_err_deg`, which is 0.0
+        # the moment the head tracks. That is the same read the Godot verifier makes, and it is the
+        # only one a frame-sampled client could make at all.
+        function fly_yaml(gain; n = 16000)
+            sc = load_scenario(joinpath(base, "slice47_midcourse.yaml"))
+            w, sub = sc.world, sc.subs
+            w.entities[:m1].comp[:midcourse_err_gain] = gain
+            cpa = Inf; r_prev = Inf; rising = 0; lock_i = -1; cue = NaN
+            for i in 1:n
+                tick!(w, sub, dt); empty!(w.events)
+                tel = get(w.env, :telemetry, Dict{String,Any}())
+                r = los_range(w.entities[:m1].pos, w.entities[:tgt1].pos)
+                cue = get(tel, "m1.head_cue_err_handover_deg", NaN)
+                lock_i < 0 && get(w.entities[:m1].comp, :seek_init, false) === true && (lock_i = i)
+                r < cpa && (cpa = r)
+                rising = r > r_prev ? rising + 1 : 0
+                r_prev = r
+                rising > 200 && break
+            end
+            return (cpa = cpa, lock_i = lock_i, cue = cue)
+        end
+        let lo = fly_yaml(38.0), hi = fly_yaml(39.0)
+            @test lo.cue ≈ 9.7846 atol = 1e-3     # INSIDE the authored window...
+            @test lo.cue < 10.0
+            @test lo.lock_i > 0                    # ...so it acquires...
+            @test lo.cpa ≈ 2.542 atol = 1e-2       # ...and arrives
+            @test hi.cue ≈ 10.0505 atol = 1e-3     # OUTSIDE by five hundredths of a degree...
+            @test hi.cue > 10.0
+            @test hi.lock_i == -1                  # ...and it NEVER acquires...
+            @test hi.cpa ≈ 316.549 atol = 1e-2     # ...and misses by 316.5 m
+        end
     end
 end
