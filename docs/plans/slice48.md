@@ -1,10 +1,11 @@
 # Slice 48 — THE SEEKER SEARCH PATTERN (what a missile does when the receiver opens and the target is not there)
 
-**Status: ⚠⚠⚠ GATE 0 — THE SLICE IS BLOCKED ON THE WIRE, NOT KILLED (2026-08-25). P0/P0b/P1/P2/P2b
-have run. The search WORKS and obeys a legible law; what fails is that slice 47's wire cannot PRICE
-it, because the pointing error and the intercept error are the same quantity (§4.3c). The named
-unblocker is INS DRIFT (§4.3d), already in the backlog. ⚠ §§1–3 are NOT to be built as written until
-that is settled.** Suite green at 9333 tests (slice 47); no code shipped yet.
+**Status: ⭐⭐ GATE 0 — **THE SLICE LIVES**, and §4.3's re-block is **RETRACTED** (2026-08-25).
+P0/P0b/P1/P2/P2b/P3/P4/P5 have run. §4.3c blamed the WIRE; **it was measuring the 30° MECHANICAL
+STOP**, which was silently eating the sweep on 27–37 % of search ticks (§4.4). With the stop authored
+at a perfectly ordinary 45°, a cell exists where the null **never acquires and misses by 1200 m** and
+the sweep-rate slider walks it **monotonically to 0.19 m** (§4.5). ⚠ ONE OPEN QUESTION REMAINS and it
+is about AUTHORING, not physics (§4.5c).** Suite green at 9333 tests (slice 47); no code shipped yet.
 
 **What this slice is:** slice 47 leaves a missile whose receiver opens onto empty sky. The head is
 pointed where the launch-time picture said the target would be; the target is 0.05° further out than
@@ -725,7 +726,18 @@ all.** ⚠ Two cells lock and then report 0 % authority with a ~320 m miss (39.0
 the bottom-right cell **fails at ρ = 160 where ρ = 100 and 120 succeed** — the pattern has PHASE
 LUCK, and a non-monotone showcase slider is disqualified by this project's own rule.
 
-### ⭐⭐⭐ §4.3c — P2/P2b: **THE POINTING ERROR AND THE INTERCEPT ERROR ARE THE SAME QUANTITY**
+### ⚠⚠⚠ §4.3c — **RETRACTED IN FULL BY §4.4. DO NOT QUOTE THIS SECTION.** ~~P2/P2b: the pointing error and the intercept error are the same quantity~~
+
+> **This section's conclusion is WRONG and its cause is diagnosed in §4.4: every "never acquires"
+> cell below was a head PINNED ON ITS 30° MECHANICAL STOP, not a wire that cannot price a search.**
+> The measurements are reproduced unchanged because the retraction is only legible beside them, and
+> because §4.4's tell — *a SMALLER gap failing where a LARGER one succeeds* — is visible in this very
+> table to anyone who reads it after the fact. **Its algebra is wrong too** (advisor): recoverability
+> is set by the ACCELERATION needed, `≈ v·gap·v_close / r_hand`, which FALLS as the handover range
+> rises at fixed gap — so the two quantities are locked together only if `r_hand` is held fixed,
+> which every cell here did except one.
+
+#### ~~The retracted claim, kept for the record~~
 
 The hypothesis P2 tested was slice 44's rule one level up — *a search can only price a sweep rate if
 the engagement is still WINNABLE when the receiver opens* — with the target's RCS (slice 46's own
@@ -757,7 +769,7 @@ the two ends of one axis with no habitable middle:
 MIDCOURSE's OWN PICTURE ERROR.** It needs a deficit source **ORTHOGONAL to the intercept solution** —
 a pointing error that costs TIME and nothing else.
 
-### ⭐⭐ §4.3d — THE UNBLOCKER IS NAMED, AND IT IS ALREADY IN THE BACKLOG
+### ⚠⚠ §4.3d — **RETRACTED AS A CONCLUSION BY §4.4** (it survives only as a candidate for a LATER slice)
 
 **INS DRIFT** (`docs/DEFERRALS.md`, "New candidates raised by slice 47"). If the missile's estimate
 of **its own attitude** is wrong, the head is commanded to the wrong **body** angles while the
@@ -792,3 +804,108 @@ MANOEUVRE, and time is not what it lacks.
 - That INS drift will work. It is a **named hypothesis** with a gate-0 of its own to run.
 - Any miss figure in §4.3b/§4.3c as an accuracy claim. Once the missile is saturated for the whole
   endgame these are divergence magnitudes (DEFERRALS: *quote the VERDICT, never the metres*).
+
+---
+
+## ⭐⭐⭐ §4.4 — GATE 0, PROBE **P3** (2026-08-25): **§4.3 WAS MEASURING THE MECHANICAL STOP**
+
+`p3_stop.jl`, log `p3.log`. ⚠⚠ **Raised by the advisor from §4.3's OWN TABLES, before any new
+measurement:** a **smaller** gap was failing where a **larger** one succeeded (2.93° never acquires,
+4.04° does), and one cell had a cue error of **8.94° — INSIDE the 10° window — and still never
+locked.** *A cue error inside the window that does not produce a lock means something other than the
+gap is refusing it.*
+
+**IT WAS THE STOP, AND THE DIAGNOSTIC IS NOT SUBTLE.** `head_cue_err_handover_deg` is cue-vs-**truth**,
+not the cue's **body angle**; the truth LOS body angle on this wire runs +18° → −15° over the
+approach, so a cue 13° off truth sits at 25–31° of body angle — **on or past `gimbal_stop_deg = 30`.**
+Logging the commanded body azimuth against the head's actual one:
+
+```
+rcs 0.020 gain 140.0  cue@h 12.93°  NEVER LOCKS   TICKS ON THE STOP: 28.3 %
+    t−t_h   COMMANDED°  HEAD ACTUAL°   cue centre°   stop°
+    0.000       26.192        26.195        26.192    30.0
+    0.300       48.214        29.998        26.214    30.0   <-- ON THE STOP
+    0.400       30.221        29.998        26.221    30.0   <-- ON THE STOP
+    0.700       44.242        29.997        26.242    30.0   <-- ON THE STOP
+```
+
+**The probe commanded 48° and 53°; the head sat at 29.998°.** `head_clamp` absorbed the sweep
+silently, exactly as designed — a head cannot travel past its own trunnion. **27–37 % of every search
+tick, on all three failing cells.** ⇒ this also explains §4.3b's two anomalies (a lock followed by
+**0 % authority** and a ~320 m miss) and the 72–77 % intermittent hold: **that is a stop signature,
+not a manoeuvre-budget one.**
+
+⚠⚠ **THIS IS THE FOURTH TIME THIS PROBE FAMILY HAS BEEN BITTEN BY AN INSTRUMENT THAT DID NOT DRIVE
+THE HEAD IT THOUGHT IT WAS DRIVING** (slice 43's `p7b_frontier.jl` TELEPORTED the head in every cell;
+slice 45's box; slice 42's `off ≤ fov` echo). ⭐ **The transferable form, and it is stronger than the
+finding: when a head-pointing probe reports "never", LOG THE HEAD'S ACTUAL ANGLE AGAINST THE
+COMMANDED ONE BEFORE BELIEVING THE VERDICT.** A clamp is invisible in every downstream number.
+
+⭐⭐ **AND THE STOP IS A REAL FINDING IN ITS OWN RIGHT, NOT JUST AN ARTIFACT: THE MECHANICAL TRAVEL IS
+A HARD CEILING ON SEARCHABLE VOLUME.** A search can only look where the trunnion can point, and the
+cue itself already spends most of the travel. That is slice 45's elevation stop (*"read, clamping,
+working hardware"*, binding 66–68 % of in-band ticks) arriving on the azimuth ring with teeth.
+
+## ⭐⭐⭐ §4.5 — GATE 0, PROBES **P4 / P5**: **THE HABITABLE CELL EXISTS, AND THE SLIDER IS MONOTONE**
+
+`p4_control.jl` / `p5_fine.jl`, logs beside them. With `gimbal_stop_deg` authored at **45°** — an
+utterly ordinary seeker trunnion, and an AUTHORED hardware parameter rather than a knob — §4.3c's
+"two states with nothing between them" dissolves.
+
+### ⭐⭐⭐ §4.5a — THE SHOWCASE CELL
+
+`rcs_m2 = 0.020`, picture error **140 m/s**, stop 45°, S = 25°, wrong-way opening.
+Handover at **3038 m**, cue error **12.93°** against the 10° window ⇒ a **2.93° deficit**:
+
+```
+   ρ °/s   acquires   t_search s        CPA m   auth pk%
+       0      NEVER            —      1200.17        0.0     <- what ships today
+      20      NEVER            —      1200.17        0.0
+      40       lock       1.7350      1186.21        0.0     <- ⭐ A LOCK THAT ARRIVES TOO LATE
+      60       lock       1.0530       233.57      100.0
+      80       lock       0.7740        78.35      100.0
+     100       lock       0.6180         2.86      100.0
+     120       lock       0.5170         0.54      100.0
+     150       lock       0.4190         0.39      100.0
+     180       lock       0.3550         0.19      100.0
+     210       lock       0.3090         0.20      100.0
+     240       lock       0.2750         0.37      100.0
+```
+
+**MONOTONE FROM A 1200 m NULL TO 0.19 m**, with a knee at ρ ≈ 100 °/s, and — ⭐⭐ **the best cell in
+the table is ρ = 40: THE SEARCH FINDS THE TARGET AND IT CHANGES NOTHING.** It locks 1.735 s after
+handover, spends **0 %** of `a_max`, and misses by 1186.21 m against a null of 1200.17 m. **A lock
+that arrives too late is indistinguishable from no lock** — which is this slice's version of slice
+42's "worthless lock", except that here it is NOT a relabelled null (it differs by 14 m and by a real
+`t_lock`) and it sits inside a slider that also contains a 0.19 m arm. **This is the arm the showcase
+should open on.**
+
+### §4.5b — THE SECOND CELL, KEPT AS THE CONTROL
+
+`rcs 0.005`, error 90 m/s (45 % of the crossing speed), same stop: null **753.0 m**, and the slider
+walks **468.8 → 343.3 → 272.2 → 226.4 → 180.3 → 149.6 → 128.0 → 111.7 m** over ρ = 60 → 240.
+**Perfectly monotone and it NEVER recovers the shot.** ⇒ **the two cells together are the lesson**:
+whether a search can save an engagement is a property of the **wire**, and the slider looks
+qualitatively identical from inside either one. ⭐ That is slice 44's rule stated from the other
+side, and it is a better control than any synthetic null.
+
+### ⚠⚠ §4.5c — THE ONE OPEN QUESTION, AND IT IS ABOUT AUTHORING, NOT PHYSICS
+
+**140 m/s of velocity error against a 200 m/s crossing target is 70 %.** Slice 47 argued 25 % as the
+defensible ceiling for a *datalink quality* story, and 70 % is not a datalink quality story — it is
+"the target did something else". Three ways out, none yet measured:
+
+1. **Author it as a POSITION error instead** (`midcourse_pos_err_m`, deliberately omitted by slice 47
+   as "one axis at a time"). The geometry needs ~697 m of lateral offset at handover, which is a
+   large but arguable handoff error from a long-range ground radar. ⚠ Needs its own gate-0 — a
+   position error and a velocity error do NOT subtend the same angle history.
+2. **Reframe the scenario as a MANOEUVRING TARGET** — the honest physical story for a 70 %
+   discrepancy, and a named deferral (`docs/DEFERRALS.md`, slice 47's candidates). ⚠ DEFERRALS warns
+   this risks being slice 47's lesson in different clothes and wants a probe showing the failure MODE
+   differs.
+3. **Ship the 70 % and label it honestly** as a target that changed course, not as datalink noise.
+
+⚠ **AND THE STOP CHANGE MUST BE AUTHORED WITH ITS REASON IN THE HEADER** (§4.4): 45° is ordinary
+hardware, but a reader who finds the showcase quietly using different hardware from slice 47 will —
+rightly — ask what else moved. The reason is one sentence: **a search needs somewhere to look, and a
+30° trunnion is a search that cannot leave its cue.**
