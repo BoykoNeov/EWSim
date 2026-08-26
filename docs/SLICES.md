@@ -1598,3 +1598,79 @@ number it was reading is genuinely zero when no sweep is running. And the panel 
 seven entries longer than the previous slice's, ran off the bottom of the window again: the fix that
 slice shipped shrank the text by one fixed step sized to its own list, which guarantees the next slice
 re-opens it. It now solves for a size that fits.
+
+## Slice 49 — how visible you are depends on which way you are pointing
+
+Every target in this project so far has carried its radar echo around as a single number, the way a
+person carries a weight. That is not how it works. How much of a radar's signal comes back depends on
+the shape of the thing and on which way it happens to be facing — a long thin aircraft seen from the
+side is thousands of times easier to see than the same aircraft seen head-on. This slice puts that in,
+and then builds a scenario around the one thing it makes possible.
+
+**The scenario is a ground radar comfortably holding an aircraft at eighteen kilometres, which then
+turns its nose toward the radar and disappears — for most of a minute, and for nine kilometres of
+range, while getting steadily closer the whole time.** There is one slider: how slender the aircraft
+is, from a sphere at one end to a needle at the other.
+
+⭐ **The reason this cannot be faked by simply making the target dimmer is worth stating carefully,
+because it is the whole slice.** If the echo is a fixed number, then whether you can see something
+depends only on how far away it is — one threshold, one distance, and on an approach the distance
+only ever comes down. So a fixed target can be *acquired* while closing but never *lost*. Make it
+dimmer and it appears later, not intermittently. Only a shape can make a target that is getting closer
+get harder to see.
+
+**The control arm is a sphere, and the interesting thing is that it does flicker.** A sphere looks the
+same from every direction, so it is the honest "no shape at all" comparison — and it still drops out
+forty-one separate times over the run, because a real radar echo fluctuates. What it never does is
+*stay* gone: its longest disappearance is two-tenths of a second, against thirty-six seconds for the
+slender one. That is a hundred and forty times, on the same radar, the same flight path and the same
+side-on brightness. The only thing that differs is the shape. A control that could not fail at all
+would have made the comparison meaningless, so the fluctuating detector is load-bearing here and there
+is now a test that says so.
+
+⚠ **Choosing what to measure mattered more than usual.** The obvious number — how many times the
+target was lost — goes up and then back down as you drag the slider, because a middling shape hovers
+right at the edge and flickers constantly while a genuinely slender one drops out once and stays out.
+A number that does not move in one direction is useless as a lesson, and four earlier sliders in this
+project died for exactly that. What does move cleanly is the **longest single disappearance while the
+target is still closing**, together with how much ground it gave up during it.
+
+⭐⭐⭐ **That phrase "while still closing" turned out to be a piece of engineering, not a caption.** The
+aircraft is flying a circle, so it eventually passes its closest point and starts moving away — still
+nose-off, so still invisible. A clock that just measures "how long has it been gone" therefore never
+stops, and would quietly report a bigger number than the lesson's, on a display that looks perfectly
+reasonable. Getting that right meant sending the target's distance to the display, which this radar
+had never done, so that the picture and the tests measure the same thing from the same place.
+
+**The display had to answer two questions the existing one could not: which way is it pointing, and
+what is that costing?** It names the pair — an aspect angle belongs to a target *and* an observer, and
+the same aircraft is side-on to one radar and head-on to another at the same instant — then shows the
+current echo, how many decibels below its side-on best that is, the range and detection verdict, and
+the running disappearance clock. The cost in decibels is computed in the engine rather than the
+display, because the display has no way to know what the target's side-on brightness was supposed to
+be.
+
+⚠⚠ **A rule this project had been treating as universal turned out to be local to one view.** Every
+readout block since slice 34 has been written to a width budget of 430 pixels, measured against the
+missile view, whose right-hand edge is empty. This slice's block lives in the radar view, which prints
+altitude labels down that same edge — so the inherited budget would have run every line straight
+through them, at every window size, since both are pinned to the right edge. The budget is a property
+of the view, not of the family.
+
+⚠ **And two defects got past three passing test suites, each caught by a different check.** A
+photograph of the running program showed a detection probability printed as "0.00" when the real value
+was small but perfectly meaningful — the same rounding mistake an earlier slice made, committed one
+line after a comment about avoiding it. And a formatting instruction the language does not support was
+sitting inside an error message that had never once been executed, where it would have printed
+gibberish on the one day it mattered; only sweeping the whole file for it found that one.
+
+⚠⚠ **The last defect was found after everything was green, and it was the worst of them.** Nothing
+cleared the disappearance clock when the slider was dragged. So the intended demonstration — watch the
+needle vanish, then drag down to a sphere and watch it come back — would have left the needle's
+thirty-six-second disappearance on screen, labelled as the sphere's. That is precisely the comparison
+the slice exists to make, shown backwards. The interaction that does this is the *main* thing a
+student does, and it was the one path none of the four checks touched: they all restart the run
+instead. ⚠ The fix has a subtlety worth remembering: the clock belongs to the *shape* and must be
+cleared, but the "is it still closing" flag belongs to the *flight* and must not be — the aircraft is
+still on the same arc, and clearing that would briefly claim it was approaching when it was already
+leaving.

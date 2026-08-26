@@ -47,18 +47,19 @@ Fixed order each `tick!`: **phase 1** `integrate!` (movers/airframe) → `empty!
 
 ## Where the project is (2026-08-26)
 
-**Slices 1–40 + 46 + 47 + 48 COMPLETE & green — 16154 tests.** 39 and 41–45 are GATE-0 RECORDS (no code):
+**Slices 1–40 + 46–49 COMPLETE & green — 17280 tests.** 39 and 41–45 are GATE-0 RECORDS (no code):
 ⚠⚠ **five in a row shipped nothing and the kill CRITERION itself was ruled at fault on 2026-08-18** (the
 two-test rule below) — 41, 44, 45 are **ALIVE AS A MODEL** (probes in `M:\claud_projects\temp\slice4N`),
 only 42 is dead outright. ⭐ **46 DISCHARGED 44, 47 DISCHARGED 43's BLOCK, 48 SHIPPED the search family** —
-that thread is CLOSED; pick the next slice from `docs/DEFERRALS.md`. HANDOFF §10 items 1–13 DONE; 15–40 are
+that thread is CLOSED, and **49 LEFT THE MISSILE** for a ground radar; pick the next from `docs/DEFERRALS.md`. HANDOFF §10 items 1–13 DONE; 15–40 are
 into the §11 Tier-A horizon.
 
 The live arc is the **missile seeker family (26–40, 46–48)**: a seeker looks through a radome whose bend depends
 on the look angle, so the missile's own motion feeds back into the line-of-sight it reports, and past a loop gain
 it shakes itself into a limit cycle. 27–33 built, priced and budgeted the gyro cure; 34–40 put the seeker on a
-**gimbal** with **inertia**; 46–48 gave it a RECEIVER, BLINDED it, then let it SEARCH. Per-slice detail — and
-every number behind the three lines below — is in `docs/SLICES.md`.
+**gimbal** with **inertia**; 46–48 gave it a RECEIVER, BLINDED it, then let it SEARCH. **49 stepped OUT of that
+arc**: a ground radar, and an echo that is a SHAPE rather than a number. Per-slice detail — and every number
+behind the four lines below — is in `docs/SLICES.md`.
 
 - **46 — the window IS the beamwidth**, so `R_acq · fov` is CONSTANT: a wider window costs REACH
   (inverting 32–36), and a late lock is paid in MANOEUVRE AUTHORITY, never in MISS.
@@ -73,6 +74,11 @@ every number behind the three lines below — is in `docs/SLICES.md`.
   monotone in ρ (it saturates, then falls); the monotone gauge is `t_search`. ⭐⭐ **ACQUISITION IS NOT A
   LATCH** (a rim-graze lock is consumed and buys nothing), and ⚠ the sweep's OPENING SIDE is a SCENARIO property —
   48 flips 47's error direction so it opens AWAY; never "simplify" that back.
+- **49 — ⭐⭐⭐ A CONSTANT ECHO CAN BE GAINED WHILE CLOSING AND NEVER LOST** (one threshold, a falling
+  range) ⇒ **only a SHAPE can make a closing target harder to see; no smaller `rcs_m2` fakes it.** ⚠ The
+  gauge is the longest loss run WHILE CLOSING — the loss COUNT is NON-MONOTONE. ⭐⭐ **A GAUGE MUST CARRY
+  ITS OWN WINDOW** (49 shipped a range key so the client could express one), and ⚠⚠ **a live SLIDER DRAG
+  invalidates a latch as a Reset does — and reaches NONE of the four gate-3 proofs.**
 
 **The rule that keeps paying** (33, 34, 35, 37, 38): *aim `R̂` at the glass's worst-case slope*
 (`radome_slope_worst`) and the cost — of FOV, detector window, servo bandwidth, servo frame — mostly
@@ -97,8 +103,7 @@ Triggered by what you are about to do, not by topic. Reference them as paths; **
 `docs/STATUS.md` (a `## Slice N — TITLE (date)` heading), a paragraph into `docs/SLICES.md`, new/killed
 candidates into `docs/DEFERRALS.md`, any transferable method lesson into `docs/LESSONS.md`, and into
 `CLAUDE.md` **only** the state line + any new dead end **as ONE LINE** (name, VERDICT WORD, one clause of
-why, pointer). ⚠⚠ **`CLAUDE.md` is a REFERENCE / ROUTER — keep it under ~16 KB** (25.2 → 15.2 KB on
-2026-08-18, crept to 17.2, re-trimmed to 15.4 on 2026-08-26). It is loaded every single turn and grows by
+why, pointer). ⚠⚠ **`CLAUDE.md` is a REFERENCE / ROUTER — keep it under ~16 KB** (trimmed twice; 15.9 on 2026-08-26). It is loaded every single turn and grows by
 absorbing what belongs in the ledgers: **numbers, test names and evidence go DOWNSTREAM; verdict words and ⚠
 prohibitions stay HERE.**
 
@@ -131,7 +136,7 @@ shippable, only the headline died (the two-test rule above). **BLOCKED** = never
   (`p2_spectrum.jl`).
 - **A SEEKER SEARCH PATTERN** (42/43/45) — **SHIPPED BY SLICE 48; never killed.** ⭐⭐ **The cost of acquiring
   is the OVERLAP DEFICIT `|err| − fov`, not the pointing error.** ⚠ Do NOT re-litigate that a wider window is
-  free (46 killed it) or that the miss is the gauge. Its surviving candidates: `docs/DEFERRALS.md`.
+  free (46 killed it) or that the miss is the gauge.
 - **Seeker range / SNR limits AS THE UNBLOCKER** (44) — **DEAD as the unblocker, ALIVE AS A MODEL — SHIPPED
   by slice 46.** ⭐⭐ **A detection gate can only price a design variable if the ENGAGEMENT is launched OUTSIDE
   the sensor's horizon — a property of the WIRE.** ⚠ Both its survivors hold on 46's wire (46's
@@ -140,8 +145,8 @@ shippable, only the headline died (the two-test rule above). **BLOCKED** = never
   cell reads far lower, though the effect SURVIVES.
 - **A rectangular / per-axis window and stop** (45) — **DEAD AS A LESSON, ALIVE AS A MODEL, both halves.**
   ⭐⭐⭐ **A TRACKER holds both axes near zero so a window's CORNERS are never visited; a SEARCH drives one axis
-  to the rim BY DESIGN, which is where the corners are.** ⚠ Never quote the box's rescue without its control
-  — a disc a fraction of a percent wider rescues it too. ⚠ It does NOT unblock the search slice.
+  to the rim BY DESIGN.** ⚠ Never quote the box's rescue without its control — a disc a fraction of a percent
+  wider rescues it too. ⚠ It does NOT unblock the search slice.
 - **An "acquisition knife-edge"** (42 gate 1) — **DEAD**: the band is `ω_LOS·dt`, ONE integration step, and it
   HALVES when `dt` does ⇒ **re-fly any narrow threshold at half `dt`, and read a claimed STEP against NULL first.**
 - **Seeker noise × the BTT roll loop** — **DEAD as a COUPLING claim** (the roll loop low-passes it away); the
@@ -158,9 +163,9 @@ shippable, only the headline died (the two-test rule above). **BLOCKED** = never
 - **Harness traps that cost real hours** — a verifier's `STEPS` MUST be a multiple of `emit_every` (else a SILENT
   hang); `%g`/`%.2e` are not GDScript specifiers and one bad one kills the WHOLE `%` silently; frame-sampling error
   is ASYMMETRIC (a miss samples faithfully, a HIT coarsely); an rms measured where a CLAMP binds cannot move and
-  reads as a KILL; a HUD width budget is INHERITED and asserted in PIXELS, so 46's CHARACTER-count tooth passed
-  GREEN while every line clipped; and a rung that stops EMITTING makes the client's `.get(k, 0.0)` print a
-  DEFAULTED ZERO as a PASSED TEST. Teeth: `docs/CONVENTIONS.md` §14, `docs/LESSONS.md`.
+  reads as a KILL; a HUD width budget is asserted in PIXELS and is a property of the VIEW, not the family (46, 49); and a
+  rung that stops EMITTING makes the client's `.get(k, 0.0)` print a DEFAULTED ZERO as a PASSED TEST — ⚠ and
+  WHICH default you pick is itself a claim (49). Teeth: `docs/CONVENTIONS.md` §14, `docs/LESSONS.md`.
 
 ## Conventions / hard-won disciplines (ONE LINE EACH; the teeth are `docs/CONVENTIONS.md`)
 

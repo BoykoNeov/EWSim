@@ -4671,7 +4671,37 @@ func _build_knobs(knobs: Array) -> void:
 			func(v: float) -> void:
 				val_lbl.text = _fmt(v)
 				_client.send({"type": "set_param", "target": target, "key": key, "value": v})
+				_on_knob_dragged(key)
 		)
+
+func _on_knob_dragged(key: String) -> void:
+	# ⚠⚠ A LIVE DRAG INVALIDATES A DISPLAY INSTRUMENT JUST AS A RESET DOES, AND UNTIL SLICE 49
+	# NOTHING IN THIS CLIENT SAID SO. Every stale-instrument fix in this family (26's ring, 35's duty,
+	# 36's two, 46's two, 47's three, 48's one, 49's six) hung off `_on_reset_pressed` — but the drag
+	# is the SHOWCASE'S PRIMARY INTERACTION and it reaches none of the four gate-3 proofs: the
+	# verifier sends a `reset` between arms, the UI test presses the Reset BUTTON, and a windowed
+	# shot is one static frame.
+	#
+	# ⭐⭐⭐ SLICE 49's OWN CASE, WHICH IS THE WORST STATE THIS HUD CAN REACH. Open at the authored
+	# fineness of 8 with the target lost and the gauge running, then drag DOWN to 1. The sphere
+	# reappears and the HUD reads "BACK — it was gone 26.9 s" over "longest closing loss 26.99 s /
+	# 5.84 km" — the NEEDLE's number, displayed under a SPHERE, which is exactly the comparison this
+	# slice exists to show going the other way.
+	#
+	# ⚠⚠ AND THE SPLIT IS THE NON-OBVIOUS PART — ONLY **FOUR** OF THE SIX ARE CLEARED:
+	#   THE GAUGE BELONGS TO THE SHAPE (`_asp_loss_s`, `_asp_loss_km`, and the live run behind them).
+	#     A drag invalidates it outright: the measurement was made on a different body.
+	#   THE WINDOW BELONGS TO THE FLIGHT (`_asp_closing`, `_asp_prev_range`). A drag does NOT
+	#     invalidate it — the target is on the same arc at the same point of it — and clearing it
+	#     would REOPEN a closed window for exactly one frame: frame 1 re-seeds `_asp_prev_range` with
+	#     nothing to compare against, frame 2 re-detects the turn and closes it again. One frame of
+	#     "STILL CLOSING" painted over a target that is already opening.
+	# `_on_reset_pressed` clears all six, correctly, because a reset restarts the FLIGHT as well.
+	if key == "rcs_fineness":
+		_asp_run_t0 = NAN
+		_asp_run_r0 = 0.0
+		_asp_loss_s = 0.0
+		_asp_loss_km = 0.0
 
 func _fmt(v: float) -> String:
 	# GDScript's % formatter has no %g/%e. A small nonzero value (e.g. the Pfa knob at

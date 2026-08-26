@@ -836,3 +836,43 @@ altitude labels at the right edge in both.
 ⚠ Regression: all twelve spatial/3-D UI tests re-run green (3, 4, 13, 14, 17, 19, 21, 22, 46, 47, 48,
 49) after the `_setup_spatial_fid_btn` / `_update_fid_btn` / `_spatial_on_state` / `_draw_spatial` /
 `_on_reset_pressed` edits.
+
+## §18 — ⚠⚠ A FIFTH DEFECT, FOUND AFTER ALL FOUR PROOFS WERE GREEN (2026-08-26, advisor)
+
+**NOTHING CLEARED THE GAUGE ON A LIVE SLIDER DRAG — AND THE DRAG IS THE SHOWCASE'S PRIMARY
+INTERACTION.** Open at the authored fineness of 8 with the target lost and the gauge running, drag
+DOWN to a sphere: the target reappears and the HUD reads `BACK — it was gone 26.9 s` over
+`longest closing loss 26.99 s / 5.84 km` — **the needle's number displayed under a SPHERE**, which is
+verbatim the state this HUD's own `_on_reset_pressed` comment calls *"this HUD's single most
+misleading state… the exact comparison the slice exists to show going the other way"*, reachable
+without a reset.
+
+⭐⭐⭐ **AND IT IS INVISIBLE TO ALL FOUR OF CONVENTION 14's PROOFS, WHICH IS THE TRANSFERABLE PART.**
+The verifier sends a `reset` between arms (so it never drags); the UI test's Reset tooth presses the
+Reset BUTTON (the other doorway); the smoke-load touches no control; a windowed shot is one static
+frame. Every stale-instrument fix in this family — 26's ring, 35's duty, 36's two, 46's two, 47's
+three, 48's one, 49's six — hangs off `_on_reset_pressed`, and **all seven were guarding one doorway
+of two.**
+
+⚠⚠ **THE FIX HAS A SPLIT IN IT AND CLEARING ALL SIX WOULD ALSO BE WRONG.** Sort the instruments by
+what they belong to:
+
+- **THE GAUGE BELONGS TO THE SHAPE** — `_asp_loss_s`, `_asp_loss_km`, `_asp_run_t0`, `_asp_run_r0`.
+  A drag invalidates them outright: the measurement was made on a different body. **Cleared.**
+- **THE WINDOW BELONGS TO THE FLIGHT** — `_asp_closing`, `_asp_prev_range`. A drag does NOT
+  invalidate them; the target is on the same arc at the same point of it. Clearing them would REOPEN
+  a closed window for exactly one frame (frame 1 re-seeds `_asp_prev_range` with nothing to compare
+  against, frame 2 re-detects the turn) — one frame of "STILL CLOSING" painted over a target that is
+  already opening. **Kept.**
+
+`_on_reset_pressed` clears all six, correctly, because a reset restarts the FLIGHT as well.
+
+Shipped as `Sandbox.gd:_on_knob_dragged(key)`, called from `_build_knobs`'s slider callback so the
+generic builder stays generic and the reason lives in one named place. **TOOTH 10b** asserts both
+halves — including that a drag AFTER CPA does not re-open the closed window — and was confirmed to
+FAIL with the fix removed (`8.0000 s / 2.4000 km` carried across the drag) and pass with it restored.
+Convention 11: a tooth that passes either way is a tautology.
+
+⚠ The third headline colour (grey, past CPA) has neither a headless nor a pixel proof — the UI test
+checks that text, not that colour. It is a constant expression, so the risk is low and a third shot
+was not spent on it. Recorded rather than silently accepted.

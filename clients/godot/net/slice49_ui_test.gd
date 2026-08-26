@@ -350,6 +350,48 @@ func _initialize() -> void:
 		return _fail("dragging the slider must send set_param on the target's `rcs_fineness` — got %s" % str(mock.sent))
 	print("S49UI_WIRE   one slider → set_param(%s.rcs_fineness)" % TID)
 
+	# ══ TOOTH 10b — ⭐⭐⭐ THE DRAG CLEARS THE GAUGE, AND THE SPLIT IS ASSERTED ══════════════
+	# ⚠⚠ THE DRAG IS THE SHOWCASE'S PRIMARY INTERACTION AND IT REACHED NONE OF THE OTHER THREE
+	# PROOFS: the verifier sends a `reset` between arms, tooth 6 above presses the Reset BUTTON, and a
+	# windowed shot is one static frame. Open at the authored 8 with the target lost and the gauge
+	# running, drag DOWN to a sphere, and without this the HUD reads "BACK — it was gone 26.9 s" over
+	# "longest closing loss 26.99 s / 5.84 km" — the NEEDLE's number displayed under a SPHERE, which
+	# is the exact comparison this slice exists to show going the other way.
+	var d = _build_sandbox()
+	d._on_scenario(_asp_handshake(true))
+	_feed(d, 0.0, 18000.0, true, 88.0)
+	_feed(d, 1.0, 17700.0, false)
+	_feed(d, 9.0, 15300.0, false)
+	_feed(d, 10.0, 15000.0, true)
+	if absf(d._asp_loss_s - 8.0) > 1.0e-9:
+		return _fail("the drag fixture must have the gauge LOADED (%.4f s) or this tooth proves nothing" % d._asp_loss_s)
+	var d_sliders := _find_all_sliders(d._knob_box)
+	d_sliders[0].value_changed.emit(1.0)
+	if not (d._asp_loss_s == 0.0 and d._asp_loss_km == 0.0 and is_nan(d._asp_run_t0)):
+		return _fail("⭐⭐⭐ dragging the fineness must CLEAR the gauge (%.4f s / %.4f km) — it was measured on a different body, and carrying it across the drag paints the needle's drop-out onto the sphere" % [d._asp_loss_s, d._asp_loss_km])
+	# ⚠⚠ …AND IT MUST **NOT** CLEAR THE WINDOW, WHICH IS THE HALF THAT IS EASY TO GET WRONG. The
+	# window belongs to the FLIGHT, not to the shape: the target is on the same arc at the same point
+	# of it. Clearing `_asp_closing` / `_asp_prev_range` would REOPEN a closed window for exactly one
+	# frame — frame 1 re-seeds the previous range with nothing to compare against, frame 2 re-detects
+	# the turn — i.e. one frame of "STILL CLOSING" painted over a target that is already opening.
+	if not (d._asp_closing and d._asp_prev_range == 15000.0):
+		return _fail("⚠⚠ the drag must NOT clear the WINDOW (closing=%s prev=%.1f) — it belongs to the flight, and clearing it re-opens a closed window for one frame" % [d._asp_closing, d._asp_prev_range])
+	_feed(d, 11.0, 15100.0, false)                     # the arc turns
+	if d._asp_closing:
+		return _fail("…and the turn must still be detectable right after a drag — the window survived, so one opening frame closes it")
+	var d2 = _build_sandbox()
+	d2._on_scenario(_asp_handshake(true))
+	_feed(d2, 0.0, 18000.0, true, 88.0)
+	_feed(d2, 1.0, 17500.0, true)
+	_feed(d2, 2.0, 17600.0, true)                      # past CPA: the window is CLOSED
+	if d2._asp_closing:
+		return _fail("the post-CPA fixture must have its window closed before the drag, or the check below proves nothing")
+	_find_all_sliders(d2._knob_box)[0].value_changed.emit(12.0)
+	if d2._asp_closing:
+		return _fail("⚠⚠ a drag AFTER CPA re-opened the closed window — that is the one-frame 'STILL CLOSING' glitch over an opening target, and it is why only four of the six instruments are cleared here")
+	d.free(); d2.free()
+	print("S49UI_DRAG   a fineness drag clears the GAUGE (the shape's) and leaves the WINDOW (the flight's) — including after CPA")
+
 	# ══ TOOTH 11 — ⭐ THE MIRROR THE OTHER WAY: a slice-2 wire keeps its propagation button ══════
 	_sb2 = _build_sandbox()
 	_sb2._on_scenario({

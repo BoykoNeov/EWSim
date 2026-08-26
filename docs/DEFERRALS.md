@@ -718,3 +718,48 @@ window; this wire is 240 °/s over ~2 s).
 - ⚠ **NOT a candidate: making the sweep direction authorable.** It would be a knob whose only effect
   is to hand the missile information it cannot have, and the symmetric pattern already bounds the
   cost of the wrong guess at `2S` of travel.
+
+## New candidates raised by slice 49
+
+⚠ Read the two-test rule at the top of this file before proposing to kill any of these.
+
+**⭐⭐ A TAIL LOBE (fore/aft asymmetry).** `rcs_aspect` is fore/aft SYMMETRIC by construction —
+σ(θ) ≡ σ(π−θ), so a fleeing target looks exactly like an approaching one, and slice 49's HUD has to
+say "tail-on" rather than "nose-on" past 150° because the model genuinely cannot tell them apart.
+Real airframes have a distinct tail return (engine face, exhaust). ⚠ Named as an approximation in the
+docstring, so this is a DEFERRAL and not a defect. **The gate-0 question is whether it can carry a
+LESSON**: it needs a scenario where the same target is engaged from both ends, which slice 49's
+single-radar circle is not. Candidate wire: the two-observer geometry gate 2 already tests.
+
+**⭐ A TARGET ATTITUDE.** `aspect_angle` takes the nose to be the VELOCITY direction — zero sideslip,
+zero angle of attack on the target (named approximation). A target that carried its own attitude
+quaternion would use it, and the difference is exactly the sideslip a hard-turning aircraft flies at.
+⚠ Two-sided: it would make the aspect depend on the turn rate as well as the heading, which is a
+second mechanism inside slice 49's one-lesson scenario (convention 9). Probably belongs to whichever
+slice gives targets a 6-DOF airframe, not to a slice of its own.
+
+**⭐⭐⭐ THE SEEKER SIDE OF THE SAME PHYSICS — an ASPECT-DEPENDENT ENGAGEMENT.** `_effective_rcs` is
+the ONE site and `missile.jl`'s seeker horizon already calls it, so a missile's detection range
+against a manoeuvring target is ALREADY aspect-dependent as of slice 49, untested as a lesson. Slice
+46 proved a detection gate can only price a design variable if the engagement is launched OUTSIDE the
+sensor's horizon; the new question is what happens when the horizon MOVES because the target turned.
+⚠⚠ Read slice 44's verdict first (a detection gate needs the right wire) and 46's discharge of it.
+
+**⚠ AN RCS FLUCTUATION MODEL TIED TO THE SHAPE.** Swerling 1 is currently a scenario-level detector
+choice, independent of the target's geometry; physically the fluctuation statistics and the aspect
+curve are the same phenomenon at two timescales. ⚠⚠ **PRE-REGISTERED KILL:** slice 49's own control
+arm depends on `swerling: 1` being authorable INDEPENDENTLY of the shape — that is what makes a sphere
+a control that can fail. A model that couples them would remove the slice's own control. Propose it
+only with a replacement control.
+
+**⚠ A NON-MONOTONE-GAUGE NOTE, NOT A CANDIDATE.** The LOSS COUNT is measured non-monotone in fineness
+(41 → 133 → 53 → 42) because a middling body chatters at the threshold while a slender one drops out
+and stays out. It is a real and teachable effect — "the worst place to be is exactly at the
+threshold" — but it is NOT a slider axis, and any future slice that reaches for it must supply its own
+monotone gauge. Same class as `k` (28), `ω_n` (40) and `σ_seek` (25).
+
+**⚠ CLOSED BY SLICE 49, so nobody re-proposes them:** the elevation view's own picture for a
+horizontal-plane engagement (the target's cross-range is not on that axis at all — the HUD carries the
+lesson instead, and the plan says so); and the blip pile-up under a `step` (a harness artifact of
+aging on WALL time while firing on SIM events — pre-existing for every spatial slice, and NOT to be
+"fixed" in the client for a shot harness's sake).

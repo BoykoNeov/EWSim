@@ -105,6 +105,19 @@ paraphrase away the specifics.
     **When a verifier looks slow, MEASURE before waiting** — timing the core alone (`tick!` in a
     loop, no server) and a minimal-client frame-rate probe separates physics from emit path from
     client in two cheap runs.
+    ⚠⚠ **A HUD's WIDTH BUDGET IS A PROPERTY OF THE *VIEW*, NOT OF THE FAMILY** (slice 49). The
+    right-anchored block at `vp.x − 430` has 430 px in the 3-D airframe view, whose right edge is
+    empty — and only **390** in the SPATIAL view, which prints ALTITUDE TICK LABELS at `vp.x − 34`
+    (`_draw_spatial_backdrop`, "alt (km)" at `vp.x − 52`). Both origins are right-anchored, so **no
+    window size rescues an over-wide line**. Assert in PIXELS against the budget *this view* leaves,
+    require a MARGIN (≥12 px — slice 49's first run passed at exactly 390.0 of 390), and have the
+    tooth NAME the widest line so a pass on the limit is distinguishable from a fail.
+    ⚠⚠ **A LIVE SLIDER DRAG INVALIDATES A LATCH JUST AS A RESET DOES, AND IT REACHES NONE OF THESE
+    FOUR PROOFS** (slice 49): the verifier `reset`s between arms, the UI test presses the Reset
+    BUTTON, the smoke-load touches no control, and a shot is one static frame. Every slice that
+    latches or peak-holds needs a DRAG tooth as well as a RESET one — and only the instruments
+    belonging to the thing the slider changes are cleared; the ones belonging to the RUN are kept
+    (clearing those re-opens a closed window for one frame). `docs/LESSONS.md` has the split.
     ⚠ **Anything the verdict computes inside `_draw` has NO headless proof** — extract it to a pure
     helper the UI test can call (slice 31's aim-point comparison shipped wrong and only the SHOT
     caught it).

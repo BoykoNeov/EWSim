@@ -520,3 +520,113 @@ scenario must AUTHOR the hard case (slice 48 flipped the belief-error direction 
 away, and wrote the reason into the YAML), or the claim has to be restated as "on this geometry".
 ⚠ The tell is a gate-2 table that is uniformly EASIER than gate 0's — the direction of the surprise
 matters, and this one was in the direction that flatters the component.
+
+## ⭐⭐⭐ A GAUGE MUST CARRY ITS OWN WINDOW — AND IF THE WIRE CANNOT EXPRESS THE WINDOW, SHIP THE KEY THAT CAN (slice 49, 2026-08-26)
+
+Slice 49's headline number is *the longest loss run **while closing***. The qualifier is not a
+caption: the target flies a circle, passes CPA at ~7.8 km and opens again still nose-off, so it stays
+invisible for the rest of the run. A clock that merely measures "how long has it been gone" therefore
+**never stops**, and drifts above the ladder's own 36.50 s — printing a number that is not the
+slice's, under the slice's label, on a display that looks entirely reasonable.
+
+The radar had never shipped a RANGE. So the client *could not* have implemented the window at all,
+and the two honest exits were (a) label the readout as the whole-flight number it actually is, or
+(b) ship `target_range_m`. (b) was chosen because it also makes the HUD and the verifier read the
+SAME quantity from the SAME place (convention 7) and turns "range given up" into a subtraction of two
+wire values rather than a geometry recompute in GDScript (convention 13).
+
+⇒ **Before writing a display instrument, state its window out loud and check the wire can express it.
+A gauge whose window exists only in the prose is a gauge that will quietly outgrow its own label.**
+The same reasoning already produced slice 47's post-handover authority peak (gated *after* the blind
+phase, not whole-flight) and slice 48's range gate — this is the third occurrence, and the first
+where closing the window required a NEW KEY rather than a filter.
+
+## ⭐⭐⭐ A LIVE SLIDER DRAG INVALIDATES A DISPLAY INSTRUMENT JUST AS A RESET DOES — AND IT REACHES NONE OF THE FOUR PROOFS (slice 49, 2026-08-26)
+
+Every stale-instrument fix in this family hangs off `_on_reset_pressed` — 26's ring, 35's duty, 36's
+two, 46's two, 47's three, 48's one, 49's six. **All seven were fixing the wrong doorway alone.** The
+DRAG is the showcase's primary interaction and it is invisible to convention 14's whole battery:
+
+- the **verifier** sends a `reset` between arms (so it never drags),
+- the **UI test** presses the Reset BUTTON (so it tests the other doorway),
+- the **smoke-load** never touches a control,
+- the **windowed shot** is one static frame.
+
+Slice 49's case: open at the authored fineness with the target lost and the gauge running, drag down
+to a sphere. The target reappears and the HUD reads `BACK — it was gone 26.9 s` over `longest closing
+loss 26.99 s / 5.84 km` — **the needle's number displayed under a sphere**, i.e. the exact comparison
+the slice exists to show, shown backwards. Found by advisor review *after* all four proofs were green.
+
+⚠⚠ **AND THE FIX HAS A SPLIT IN IT; CLEARING EVERYTHING IS ALSO WRONG.** Sort the instruments by what
+they belong to:
+
+- **What belongs to the thing the slider changes** — clear it. The measurement was made on a
+  different object. (Here: the loss gauge and the live run behind it.)
+- **What belongs to the RUN** — keep it. The trajectory did not restart. (Here: the closing/opening
+  window. Clearing it re-seeds the previous range with nothing to compare against, so the turn is
+  re-detected one frame later — one frame of "STILL CLOSING" painted over a target that is already
+  opening.)
+
+`_on_reset_pressed` clears both groups, correctly, because a reset restarts the run as well.
+
+⇒ **Add a drag tooth to every slice that latches or peak-holds anything, and assert BOTH halves of
+the split.** Then confirm it bites by removing the fix and watching it fail (convention 11).
+
+## ⚠⚠ GREP THE WHOLE FILE FOR FORMAT SPECIFIERS — A `print` IS PROVED BY ITS OWN OUTPUT, A `_fail` MESSAGE IS PROVED BY NOTHING (slice 49, and the THIRD occurrence)
+
+GDScript's `%` supports a small set of specifiers; an unknown one makes the **whole** format fail
+SILENTLY and print the format string itself. Slice 21 shipped it, slice 25 reproduced it verbatim, and
+slice 49 committed it **twice in one file**:
+
+1. On a live `print` (`S49V_REPLAY max|Δpos| = %.12f m, max|Δsigma| = %.12e m²`) — caught only by
+   **reading the output of a run that exited 0**. Nothing failed; the line simply printed itself.
+2. Inside the sphere-null **`_fail` message**, a branch nothing had ever executed. No test reaches it,
+   no green run prints it, and it would have produced gibberish on the one day it mattered — when the
+   model's own null broke. Found by sweeping the file with a regex for any specifier outside
+   `f`/`d`/`s`/`%`.
+
+⇒ **The mechanical check is the only reliable one:** `re.findall(r'%[-+ 0-9.#]*[a-zA-Z]', src)` and
+read every hit, including the ones in strings you have never seen printed. ⚠ And note the second-order
+trap this exposes: a near-zero residual has no printable fixed-point form — `%.3f` of 1e-16 is
+`"0.000"`, which **reads as a PASS inside a FAILURE message**. Slice 49 ships a hand-rolled `_sci()`
+(the `Sandbox.gd:_fmt` construction) for exactly that. Same family: `%%` is an escape for the `%`
+OPERATOR, so a plain literal with no operator applied prints the doubled sign (slice 48 hit this, and
+so did 49).
+
+## ⚠ AN EXACT IDENTITY BELONGS WHERE IT CAN BE STATED EXACTLY — A FRAME-SAMPLED CLIENT CANNOT SEE `t = 0` (slice 49)
+
+`slice49_verify.gd`'s first draft asserted that the effective RCS on the opening frame IS the authored
+broadside value, exactly. It failed at 3.999867 against 4.0 — **correctly**. The first frame a client
+ever receives is `emit_every` (= 16) ticks AFTER launch, by which time the target's nose has come
+~0.09° off broadside and the model has legitimately moved σ.
+
+The identity is real and is worth pinning — it is what lets `rcs_m2` keep its authored meaning under a
+normalized aspect model. It is pinned **in the core**, where `test_rcs_aspect.jl` can evaluate θ = π/2
+directly, to 1e-12.
+
+⇒ **When a client-side tooth wants an exact identity, ask what the client can actually observe.** Two
+substitutes are usually available and both are better than a loosened tolerance:
+- **a near-equality with a MEASURED tolerance and the cause named in the comment** (here: 0.1 %,
+  because 16 ticks is ~0.09°, not because 1e-6 "felt tight"), and
+- **a ONE-SIDED anchor that IS exact** (here: no frame may ever be BRIGHTER than the broadside value,
+  because broadside is the peak of a prolate body's curve — true on every frame, at every fineness).
+
+⚠ Same root cause as the frame-sampling asymmetry in [[ewsim-missile-verifier-sampling]]: the client
+sees a grid, not the continuum, and a tooth written as though it sees the continuum is measuring the
+emit cadence.
+
+## ⚠ THE DEFAULT VALUE OF A MISSING TELEMETRY KEY IS A CLAIM — PICK THE ONE THAT ASSERTS THE LEAST (slice 49)
+
+`docs/CONVENTIONS.md` §14's standing warning is that `.get(k, 0.0)` prints a defaulted zero as a
+passed test. Slice 49 adds the sharper half: **which** default you pick is itself an assertion, and on
+an aspect HUD the conventional 0.0 is the loudest possible one — an aspect of 0° means **NOSE-ON**,
+the single state the whole lesson is about. A frame carrying no evidence would have asserted the
+slice's own conclusion.
+
+The shipped default is **90° (broadside)**, the state that claims nothing: it is where the curve peaks,
+where σ_eff equals the authored value at every fineness, and where the model is a no-op. Likewise
+`detected` defaults to TRUE (no evidence of a loss is not a loss) and `rcs_loss_db`'s absence is
+tested for rather than defaulted, since 0 dB would read as "a target at its BRIGHTEST".
+
+⇒ **For every `.get(k, default)` in a readout, ask what the default SAYS if the key never arrives. If
+the answer is the thing you are trying to demonstrate, the default is wrong.**
