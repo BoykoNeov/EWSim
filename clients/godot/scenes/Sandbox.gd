@@ -328,6 +328,45 @@ var _asp_run_r0 := 0.0             # …and the range it began at, so the run ca
 var _asp_loss_s := 0.0             # ⭐ THE HEADLINE: longest CLOSING loss run, seconds
 var _asp_loss_km := 0.0            # …and the closing range given up over THAT run
 var _asp_t := 0.0                  # the wire's own sim clock (frames carry `t`; the client has none)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# ⭐⭐⭐ SLICE 50 — THE ASPECT-DEPENDENT ENGAGEMENT: **THE LOCK BEING TAKEN BACK.**
+#
+# Slice 49's block above is the RADAR's side of the same physics and none of it is reusable here:
+# it keys every line off a radar observer, and its gauge (the longest loss run) is a function of the
+# 0/1 detection trace that a ground radar can quote word for word. This slice's gauge has to be one
+# a radar CANNOT say, and it is `ω_LOS · t_go` AT THE LOSS, in degrees — the heading error the
+# missile went blind holding. A radar has no collision course to be off, and no time-to-go to hold
+# it through, so every noun in that sentence loses its referent when the seeker is swapped for one.
+#
+# ⚠⚠ THE GAUGE IS A **LATCH ON AN INSTANT**, AND THAT IS WHY IT DISARMS RATHER THAN RE-ARMS ON A
+# DRAG. Slice 49 paid for the general lesson (*a live slider drag invalidates a latch as a Reset
+# does, and reaches NONE of the four gate-3 proofs*) and this slice inherits it — but NOT its
+# remedy. 49's gauge was a DURATION, so a run that restarts mid-flight is still an honest run and
+# its range window said where. **This gauge is a single INSTANT whose entire meaning is *when the
+# from-launch flight lost the picture*.** A shape dialled in at t = 5 s loses it somewhere its
+# from-launch flight never would ⇒ a re-armed latch is A DIFFERENT QUANTITY WEARING THE SAME LABEL.
+# ⇒ the latch shows a distinct "Reset to measure" state and NO NUMBER AT ALL, and a verdict-word
+# distinction would be a display patch over a semantic collision — the number would still be
+# mislabelled. ⭐ THE TRANSFERABLE FORM: a latched DURATION may restart mid-flight; a latched
+# INSTANT may not.
+#
+# ⚠⚠ AND THE DEFAULTED-ZERO TRAP IS SHARPER HERE THAN ANYWHERE THIS CLIENT HAS MET IT. The NULL
+# reads 0.000° (F ≤ 7 never loses the lock) and a MISSING `seeker_tgo_s` read through
+# `.get(k, 0.0)` also reads 0.000°. The legitimate value and the failure mode are THE SAME NUMBER,
+# so no value assertion can separate them — the client tracks key PRESENCE independently and the
+# HUD says which of the two zeros it is holding.
+var _s50_view := false             # handshake `seeker_aspect_view` — the marker
+var _s50_target := ""              # …the shaped target the lines name (the SUBJECT)
+var _s50_observer := ""            # …and the MISSILE they are measured from — the TELEMETRY KEY owner
+var _s50_keys := false             # ⚠ `seeker_tgo_s` actually present this frame (the trap above)
+var _s50_armed := true             # false after a live drag — re-arming needs a Reset, by design
+var _s50_prev_det := -1.0          # last frame's `seeker_detect` (-1 = no frame yet, so no edge)
+var _s50_latched := false          # the 1 → 0 edge has been seen and the instant sampled
+var _s50_deg := 0.0                # ⭐⭐⭐ THE GAUGE: ω_LOS · t_go at that instant, DEGREES
+var _s50_r_loss := 0.0             # …the range it happened at (part of the SAME latch — see §9.4)
+var _s50_t_loss := 0.0             # …and the sim time, for the same reason
+var _s50_regained := false         # a 0 → 1 edge after the latch: the lock was GIVEN BACK
+var _s50_t := 0.0                  # the wire's own sim clock (frames carry `t`; the client has none)
 # ⚠ ONE new latch, and ONLY one: slice 47's three below are all live on this wire (it authors the
 # midcourse anchor, so `head_cued` / `gimbal_valid` / `a_cmd_frac` all ship), and this HUD READS
 # THEM rather than minting twins. Two instruments measuring "did it ever acquire" is convention 7's
@@ -801,6 +840,18 @@ func _on_scenario(obj: Dictionary) -> void:
 	_aspect_view = bool(obj.get("aspect_view", false))
 	_aspect_target = str(obj.get("aspect_target", ""))
 	_aspect_observer = str(obj.get("aspect_observer", ""))
+	# ⭐⭐ SLICE 50 — THE SEEKER's side of the same shape, and it is a SEPARATE marker rather than a
+	# reuse of the pair above. The two blocks read DIFFERENT keys off DIFFERENT observers: slice 49's
+	# reads `detected` / `target_range_m` / `pd` / `rcs_loss_db` off a RADAR, none of which a missile
+	# publishes. ⚠ The core also had to be tightened for this: `_aspect_view_info` used to raise
+	# `aspect_view = true` with the observer key merely OMITTED when no radar was present, which on
+	# this wire would have rendered slice 49's whole block against an empty-string observer — six
+	# defaulted numbers, the loudest of them ("90° broadside", "SEEN") asserting the exact opposite
+	# of the lesson, with no test failing. It now returns `nothing` instead: half a pair is not a
+	# marker.
+	_s50_view = bool(obj.get("seeker_aspect_view", false))
+	_s50_target = str(obj.get("seeker_aspect_target", ""))
+	_s50_observer = str(obj.get("seeker_aspect_observer", ""))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -1738,6 +1789,61 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 		if float(_telemetry[_af3d_missile + ".seeker_valid"]) < 0.5 \
 		   and float(_telemetry.get(_af3d_missile + ".los_range", 0.0)) > 200.0:
 			_fov_lost = true
+	# ⭐⭐⭐ SLICE 50 — THE LATCH, AND IT IS DISPLAY ACCUMULATION RATHER THAN PHYSICS (the
+	# `_authority_peak` / slice-49 posture, convention 13). The core ships `seeker_detect`,
+	# `los_rate` and `seeker_tgo_s`; the client watches for the 1 → 0 EDGE and multiplies two of them
+	# AT THAT FRAME. Nothing is recomputed — `seeker_tgo_s` exists precisely so this and the verifier
+	# read the same `t_go` from the same place rather than each forming `r / V_c` its own way.
+	#
+	# ⚠⚠ IT LIVES IN THE **3-D AIRFRAME** HANDLER AND NOT BESIDE SLICE 49's, WHICH IS WHERE IT WAS
+	# FIRST PUT. Slice 49's block is in `_spatial_on_state` because a ground radar wire stays in the
+	# elevation view; a slice-50 wire authors `airframe: six_dof` and routes to `airframe3d` before
+	# `_spatial_on_state` is ever reached, so a latch parked there would never see a single frame —
+	# and its HUD would sit at its reset values printing "HOLDING IT — lock never broken" through
+	# the entire drop-out. ⚠ The two instruments look alike and live in different handlers; that is
+	# a property of the VIEW each wire routes to, not of the slice.
+	#
+	# ⚠⚠ KEY PRESENCE IS TRACKED SEPARATELY FROM VALUE, AND ON THIS GAUGE THAT IS NOT PEDANTRY: the
+	# lesson's NULL is 0.000° and a missing `seeker_tgo_s` through `.get(k, 0.0)` is also 0.000°. The
+	# legitimate value and the failure mode are the same number, so no value assertion can tell them
+	# apart — which is why `_s50_keys` exists and why the HUD prints a different sentence for each.
+	#
+	# ⚠⚠ `_s50_prev_det` STARTS AT −1 SO THE FIRST FRAME CANNOT BE AN EDGE. A 0.0 seed would make a
+	# wire that opens already-blind latch on frame one, sampling an "instant of loss" that is really
+	# just the start of the recording — slice 49's `_asp_prev_range` seeding argument, one instrument
+	# over, and the same class as `%.2f` printing a live 2.5e-4 as "0.00".
+	#
+	# ⚠ AND THE LATCH TAKES THE **FIRST** EDGE ONLY (`not _s50_latched`), which is the verifier's rule
+	# byte for byte. Arms in the teachable domain lose the lock once and get it back once; taking a
+	# later edge would sample an instant downstream of a blind coast, and everything downstream of a
+	# blind coast is a divergence being sampled rather than a measurement (measured: the same
+	# quantity read at RE-ACQUISITION moves 3.1× at half `dt`, and the CPA on that row moves 20×).
+	#
+	# ⚠ GATED ON THE MARKER **AND** ON THE LATCH BEING ARMED, so every scenario 1–49 leaves all seven
+	# of these at their reset values (slice 33's independent-`if` finding — this is a chain of
+	# nothing), and a drag stops the instrument dead rather than restarting it.
+	if _s50_view and _s50_observer != "" and _s50_armed:
+		_s50_t = float(obj.get("t", _s50_t))
+		_s50_keys = _telemetry.has(_s50_key("seeker_tgo_s"))
+		var d50 := 1.0 if _s50_det_now() else 0.0
+		if _s50_prev_det == 1.0 and d50 == 0.0 and not _s50_latched:
+			_s50_latched = true
+			# ⭐ THE GAUGE, SAMPLED AT THE EDGE. `los_rate` is ‖ω_LOS‖ in rad/s and `seeker_tgo_s` is
+			# seconds, so the product is RADIANS of heading error still owed — printed in degrees,
+			# because 0.02 rad is not a number a student can picture and 1.18° is.
+			_s50_deg = rad_to_deg(float(_telemetry.get(_s50_key("los_rate"), 0.0))
+					* float(_telemetry.get(_s50_key("seeker_tgo_s"), 0.0)))
+			# ⚠ THE RANGE AND THE TIME ARE PART OF THE **SAME LATCH**, not live readouts that happen
+			# to sit beside it. They are `r` and `t` SAMPLED AT THE LOSS INSTANT, so they go stale
+			# with it and are cleared with it on a drag.
+			_s50_r_loss = float(_telemetry.get(_s50_key("los_range"), 0.0))
+			_s50_t_loss = _s50_t
+		elif _s50_prev_det == 0.0 and d50 == 1.0 and _s50_latched:
+			# THE LOCK GIVEN BACK. Named because it is what separates the teachable domain from the
+			# region above it: below the ceiling the missile re-acquires and the price is a heading
+			# error it must now remove in less time; above it, it never does.
+			_s50_regained = true
+		_s50_prev_det = d50
 	# SLICE 34 — the HEAD's track-break latch. ⚠ AN INDEPENDENT `if`, NOT AN `elif` OR AN `or` ON THE
 	# LINE ABOVE, which is slice 33's own finding one slice later: a chained dispatch would freeze one
 	# instrument the moment the other's key appeared. The two keys never co-occur (the loader refuses
@@ -2968,6 +3074,204 @@ func _search_cure_text(searched: bool, acquired: bool) -> String:
 		return "sweep faster — the clock is the engagement, not the head"
 	return "found is not enough: it has to be found EARLY"
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# ⭐⭐⭐ SLICE 50 — THE ASPECT-DEPENDENT ENGAGEMENT HUD: **THE LOCK BEING TAKEN BACK.**
+#
+# ⚠⚠ EVERY LINE IS A **FUNCTION**, for slice 47/48/49's reason verbatim: `draw_string` lives in
+# `_draw`, which never runs under `--headless`, so a string built inline there has NO headless proof
+# at all (convention 14). `slice50_ui_test.gd` calls every one of these directly, including the
+# width budget.
+#
+# ⚠ THE WIDTH BUDGET IS THE 3-D AIRFRAME VIEW's FAMILY 430 px, **not** slice 49's 390. The 390 was
+# not a tightening for its own sake — it is a property of the SPATIAL view, whose altitude tick
+# labels sit up the right edge at `vp.x − 34`. This block draws into the 3-D airframe view, whose
+# right edge is empty, exactly as slices 34–48 do. ⚠⚠ AND IT IS ASSERTED IN PIXELS, NOT CHARACTERS:
+# slice 46 shipped a 100/96-CHARACTER tooth that passed green while every line clipped at 1152 px
+# AND at 1920 px. The only honest check is `_font.get_string_size(...).x`.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+func _s50_key(k: String) -> String:
+	# ONE site forms the telemetry key, so the observer/target confusion can only be made once —
+	# slice 49's `_asp_key` posture. ⚠ The keys are the MISSILE's (`_s50_observer`) while the prose
+	# names the TARGET (`_s50_target`); they are different ids and the wire is keyed on the first.
+	return _s50_observer + "." + k
+
+func _s50_det_now() -> bool:
+	# ⚠ THE DEFAULT IS **TRUE** — "the seeker has the target", the state that holds before the
+	# horizon ever bites. A missing key must never assert the LOUD state, and here the loud state is
+	# `false`: it is the drop-out the whole lesson is about, and a defaulted one would manufacture
+	# the very edge this HUD latches on.
+	return float(_telemetry.get(_s50_key("seeker_detect"), 1.0)) >= 0.5
+
+func _s50_aspect_deg() -> float:
+	# 0° = nose-on, 90° = broadside, 180° = tail-on (`aspect_angle`'s pinned convention).
+	# ⚠ DEFAULT 90 (BROADSIDE) AND NOT 0.0, slice 49's argument unchanged: 0.0 is the loudest claim
+	# this HUD can make — "nose-on", the state the whole lesson is about — and a missing key must
+	# never assert it.
+	return float(_telemetry.get(_s50_key("target_aspect_deg"), 90.0))
+
+func _s50_word(deg: float) -> String:
+	# The angle in words, because "76°" alone does not say what that costs.
+	#
+	# ⚠⚠⚠ THESE BANDS ARE **NOT** SLICE 49's, AND THE WINDOWED SHOT IS WHY. `_asp_word` bands on the
+	# ABSOLUTE aspect (70–110° → "broadside"), which is right for a radar watching a target swing
+	# through the whole 0–180° range over ninety seconds. **This wire never leaves one band.** Every
+	# loss on every arm of the slider happens between 71.9° and 81.5°, and the launch is 90° — so
+	# slice 49's vocabulary is CONSTANT across the entire teachable domain. That is the same
+	# objection that disqualified `min R_acq/r` as a gauge: resolution over no slider steps at all.
+	#
+	# ⚠⚠ AND IT IS WORSE THAN USELESS, IT IS WRONG ON THE ONE FRAME THAT CARRIES THE LESSON. At 71°
+	# with a fineness of 8 the echo is ~18 dB below broadside (the shot's own readout: `rcs_eff_m2`
+	# 0.02 against an authored `rcs_m2` of 1.0), and the line beside it says the horizon has
+	# collapsed INSIDE the range. Printing "broadside" — the word for BRIGHTEST — on a frame where
+	# the seeker is blind because the target is 58× dimmer is `_aspect_view_info`'s defect exactly,
+	# committed in the client with a COMPUTED value instead of a defaulted one.
+	#
+	# ⇒ BAND ON THE **DEPARTURE FROM BROADSIDE**, `|90 − θ|`, which is the quantity that actually
+	# moves on this wire and the one the horizon follows: `R_acq = R_broadside / sqrt(1 + F²δ²)`.
+	# ⚠ FORE/AFT SYMMETRIC BY CONSTRUCTION (`rcs_aspect`'s named approximation): 156° returns the
+	# same σ as 24°, so `|90 − θ|` is the honest variable and no band may name the NOSE or the TAIL.
+	# "Nose-on" over a fleeing target would be a lie the physics does not make — and here the
+	# symmetric phrasing is not merely safer, it is the correct one, because what the seeker cares
+	# about is how far from BRIGHTEST the target is, not which end it is showing.
+	var off := absf(90.0 - deg)
+	if off <= 3.0:
+		return "square on — its brightest"
+	if off <= 10.0:
+		return "just off broadside"
+	if off <= 30.0:
+		return "well round from broadside"
+	if off <= 60.0:
+		return "far round from broadside"
+	return "end-on — its dimmest"
+
+func _s50_verdict_label(armed: bool, keys: bool, latched: bool, det: bool,
+						regained: bool, deg_gauge: float) -> String:
+	# ⚠ HEADLINES GET A MUCH TIGHTER BUDGET (~30 chars — drawn at 20 px from the same right-anchored
+	# origin). Slice 46's four were 78–82 chars and every one ran off the edge.
+	#
+	# ⚠⚠ THE **DISARMED** STATE IS CHECKED FIRST AND PRINTS NO NUMBER. See the state block's header:
+	# this gauge is a latched INSTANT whose meaning is the whole from-launch history that led to it,
+	# and a live drag rewrites that history. Re-arming would put a DIFFERENT QUANTITY under the same
+	# label; a verdict WORD distinguishing them would be a display patch over a semantic collision.
+	if not armed:
+		return "SHAPE CHANGED — Reset to measure"
+	# ⚠⚠ AND THIS BRANCH IS THE DEFAULTED-ZERO TRAP, WHICH ON THIS GAUGE CANNOT BE CAUGHT BY A VALUE.
+	# The null reads 0.000° and a missing `seeker_tgo_s` read through `.get(k, 0.0)` reads 0.000°
+	# too — the legitimate value and the failure mode are THE SAME NUMBER. Key PRESENCE is the only
+	# thing that separates them, so it is tracked separately and said out loud here.
+	if not keys:
+		return "NO SEEKER ASPECT TELEMETRY"
+	if not latched:
+		# ⭐ THE NULL'S OWN SENTENCE. At a sphere the lock is never taken back, and "heading error
+		# owed 0.0°" would read as an instrument nothing has fed rather than as the result it is —
+		# the slice-48 defaulted-zero class, which this wire can reach two ways at once.
+		return "HOLDING IT — lock never broken" if det else "BLIND, no lock to lose yet"
+	if regained:
+		return "LOCK TAKEN BACK: owed %.2f" % deg_gauge + "°"
+	return "BLIND SINCE %.2f" % deg_gauge + "° WAS OWED"
+
+func _s50_aspect_text(tgt: String, obs: String, deg: float) -> String:
+	# THE MECHANISM, AND IT NAMES THE PAIR. An aspect is not a property of a target: it is the angle
+	# between that target's nose and ONE observer, and the same aircraft is broadside to one seat and
+	# nose-on to another in the same tick. ⚠ The MISSILE's aspect on this target is a different
+	# number from a ground radar's on the same target at the same instant — which is the whole
+	# content of slice 49's finding, here on the other consumer.
+	# ⚠ THE NUMBER IS THE ASPECT IN THE PINNED CONVENTION (0 = nose-on, 90 = broadside) and the WORD
+	# bands on the DEPARTURE from broadside — two different readings of the same angle, so the line
+	# carries no redundancy and the word still moves across the slider (see `_s50_word`).
+	return "%s→%s  nose off %.0f° — %s" % [tgt, obs, deg, _s50_word(deg)]
+
+func _s50_horizon_text(racq: float, r: float) -> String:
+	# THE MECHANISM'S TWO NUMBERS, LIVE AND NEVER LATCHED — this is the line a student watches while
+	# DRAGGING, and it is why the drag stays a teaching instrument even though the gauge above it
+	# goes blank. Dial the fineness up and watch the horizon collapse through the range in real time.
+	# ⭐⭐ THE HORIZON IS THE ONE THAT MOVES. A constant echo gives a FIXED `R_acq` against a falling
+	# range — one threshold, crossed once, in one direction — which is exactly why no smaller
+	# `rcs_m2` reproduces this wire.
+	return "horizon %.1f km vs range %.1f km" % [racq / 1000.0, r / 1000.0]
+
+func _s50_gauge_text(armed: bool, keys: bool, latched: bool, deg_gauge: float,
+					 r_loss: float, t_loss: float) -> String:
+	# ⭐⭐⭐ THE GAUGE THIS HUD EXISTS FOR, AND IT IS LABELLED WITH WHAT IT IS: not seconds blind, not
+	# a loss count, not a miss — the HEADING ERROR THE MISSILE WENT BLIND HOLDING. Under proportional
+	# navigation the loop drives the line-of-sight rate toward zero while it can still see; whatever
+	# rate is left at the last look is a heading error, and `t_go` says how much flying was left to
+	# hold it through. Both factors are shipped wire keys and the client only multiplies them.
+	if not armed:
+		# ⚠ NO NUMBER. That is the whole point of the disarm.
+		return "gauge cleared — the shape changed mid-flight"
+	if not keys:
+		return "gauge unavailable — seeker_tgo_s not on the wire"
+	if not latched:
+		return "no heading error owed — the shape is round"
+	return "owed %.2f" % deg_gauge + "° when it went blind at %.1f km / %.2f s" % [r_loss / 1000.0, t_loss]
+
+func _s50_cure_text(latched: bool, armed: bool) -> String:
+	# THE TRADE, stated as the thing a student would otherwise get wrong: the instinct is that this
+	# is just a dimmer target, i.e. that a smaller `rcs_m2` would do the same thing. It cannot, and
+	# the reason is structural rather than a matter of tuning — a fixed horizon has `dR_acq/dt = 0`,
+	# so it can be crossed once, inward, and never crossed back while the range is still falling.
+	# ⚠ THE MISS IS NOT OFFERED AS THE ALTERNATIVE HERE and that is deliberate: this arc has banned
+	# it three times, and above the slider's own ceiling it reverses four times.
+	if not armed:
+		# ⚠ SHORTENED AFTER MEASURING, and slice 49 paid for this rule twice over: the first draft
+		# ("drag moved the shape — the instant belongs to the old one") came to 429 px against 430 px
+		# of room. A pass sitting ON the limit is one glyph away from clipping and indistinguishable
+		# from a comfortable pass unless the margin itself is printed — which is why the width tooth
+		# now reports the margin and the widest line on a PASSING run.
+		return "the instant belonged to the shape you dragged off"
+	if not latched:
+		return "drag up: a slender body goes quiet nose-on"
+	return "no dimmer target does this — only a SHAPE can"
+
+func _draw_s50_hud_lines(vp: Vector2) -> void:
+	# ⚠ THE ORIGIN IS THE FAMILY'S `vp.x − 430`, and the room here IS 430 (the 3-D view's right edge
+	# is empty — slice 49's 390 was the SPATIAL view's altitude labels, not a general tightening).
+	#
+	# ⚠⚠ THE BLOCK STARTS AT **y = 110**, NOT AT 88, AND THE WINDOWED SHOT IS WHAT FOUND THAT TOO.
+	# This view draws a SHARED header before any slice's block: the verdict label at y 40 (which this
+	# slice supplies through the label chain, not from here), "range to target" at y 66, and
+	# "cross-range (out of plane)" at **y 88**. A block beginning at 88 lands straight on top of the
+	# cross-range line. 110/132/154/176/198 is the layout slices 46/47/48 all use, for this reason.
+	# ⚠ THE HEADLINE IS NOT DRAWN HERE. It is `lbl` in the chain above, so the two can never disagree
+	# about which slice owns the top line — which is exactly the failure that put it here.
+	var det := _s50_det_now()
+	var deg := _s50_aspect_deg()
+	var racq := float(_telemetry.get(_s50_key("seeker_r_acq_m"), 0.0))
+	var rng := float(_telemetry.get(_s50_key("los_range"), 0.0))
+	var lost_col := Color(1.00, 0.62, 0.30)
+	var grey := Color(0.70, 0.70, 0.75)
+	# THE MECHANISM — which way it is pointing, and to WHOM.
+	draw_string(_font, Vector2(vp.x - 430, 110),
+			_s50_aspect_text(_s50_target, _s50_observer, deg),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.45, 0.90, 1.00))
+	# THE MECHANISM'S TWO NUMBERS — LIVE, and the line the drag is for.
+	draw_string(_font, Vector2(vp.x - 430, 132), _s50_horizon_text(racq, rng),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			lost_col if racq < rng else Color(1.00, 0.85, 0.45))
+	# ⭐⭐⭐ THE GAUGE.
+	draw_string(_font, Vector2(vp.x - 430, 154),
+			_s50_gauge_text(_s50_armed, _s50_keys, _s50_latched, _s50_deg, _s50_r_loss, _s50_t_loss),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			grey if not (_s50_armed and _s50_keys) else (lost_col if _s50_latched else COL_TICK))
+	# ⚠ THE MISS, AS A **DISCLAIMER** RATHER THAN A GAUGE — slice 47/48's line verbatim in meaning
+	# and for a reason this slice re-earned: above the slider's ceiling the miss reverses four times
+	# across the remaining domain, because a blind coast is an open-loop integration whose closest
+	# approach is chaotic in the initial condition.
+	# ⚠ IT NAMES THE **CLOSING SPEED**, NOT THE RANGE, AND THAT IS NOT A COSMETIC SWAP. Slices 47/48
+	# print "range %.0f m — the MISS says nothing here", but this view already draws "range to
+	# target" in its shared header at y 66, so the range here would be the same number twice under
+	# two labels. The closing speed is the second half of the mechanism (the horizon retreats FASTER
+	# than this) and it appears nowhere else on screen.
+	draw_string(_font, Vector2(vp.x - 430, 176), "closing at %.0f m/s — the MISS says nothing here" %
+			float(_telemetry.get(_s50_key("closing_speed"), 0.0)),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	# THE TRADE.
+	draw_string(_font, Vector2(vp.x - 430, 198), _s50_cure_text(_s50_latched, _s50_armed),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+
+
 func _draw_search_hud_lines(vp: Vector2) -> void:
 	var searching := _srch_searching_now()
 	var deficit := _srch_deficit_deg()
@@ -3407,7 +3711,23 @@ func _draw_airframe3d_hud() -> void:
 	# late is the arm in the deepest trouble — but it is `_mid_acquired` that separates "it is still
 	# looking" from "it never found it", and the LATENESS is named in the label and metered by the
 	# authority line, where it belongs.
-	if _search_view:
+	# ⭐⭐ SLICE 50 — checked FIRST here too, and **THE WINDOWED SHOT IS WHAT FOUND THIS**. The HUD
+	# chain below was edited first and the block rendered correctly; this chain was missed, so slice
+	# 46's headline ("SEEKER BLIND: no echo yet") drew at y 40 with slice 50's own headline
+	# underneath it — two verdicts about the same instant, one of which never mentions the target.
+	# ⚠⚠ THE FILE'S OWN STANDING RULE IS "ALL DISPATCH CHAINS MUST AGREE", stated in five separate
+	# comments above, and it was still possible to edit one and not the other with every headless
+	# proof green. ⭐ THAT IS PRECISELY THE JOB OF THE FOURTH PROOF: headless never runs `_draw`, so
+	# a chain disagreement is INVISIBLE to the verifier and the UI test alike.
+	if _s50_view:
+		lbl = _s50_verdict_label(_s50_armed, _s50_keys, _s50_latched, _s50_det_now(),
+				_s50_regained, _s50_deg)
+		# The colour rides the LIVE state, not the latch: what a student watches here is a lock that
+		# is gone RIGHT NOW. Grey once a drag has disarmed the instrument — there is nothing to be
+		# alarmed about, only something that can no longer be measured on this flight.
+		col = Color(0.70, 0.70, 0.75) if not (_s50_armed and _s50_keys) \
+				else (Color(0.55, 1.00, 0.65) if _s50_det_now() else Color(1.00, 0.62, 0.30))
+	elif _search_view:
 		lbl = _search_verdict_label(_mid_was_cued, _srch_was_searching, _srch_searching_now(),
 				_mid_acquired, _srch_deficit_deg(), _srch_t_lock_s())
 		col = Color(1.00, 0.62, 0.30) if (_mid_was_cued and not _mid_acquired) else Color(0.45, 0.90, 1.00)
@@ -3662,7 +3982,16 @@ func _draw_airframe3d_hud() -> void:
 	# on it — the belief is real, the cue error is real, the window is real. What they cannot say is
 	# that the head is SWEEPING, how much gap is left to cover, or that the clock it is spending is
 	# the engagement's. Every number right, and the slice invisible.
-	if _search_view:
+	# ⭐⭐ SLICE 50 — checked FIRST here too, and for the reason all four chains must ALWAYS agree.
+	# `_seeker_detect_view` is the block that would otherwise take this wire (this missile carries
+	# slice 46's seven-key budget, and neither `search_view` nor `midcourse_view` is raised), and its
+	# lines are all TRUE on it — the horizon is real, the margin is real, the authority is real. What
+	# they cannot say is that the horizon is MOVING, that the TARGET is what moved it, or that a lock
+	# the missile already had was taken back. Every number right and the slice invisible: this
+	# family's recurring failure, avoided by ordering, for the fifth slice running.
+	if _s50_view:
+		_draw_s50_hud_lines(vp)
+	elif _search_view:
 		_draw_search_hud_lines(vp)
 	elif _midcourse_view:
 		_draw_midcourse_hud_lines(vp)
@@ -4702,6 +5031,37 @@ func _on_knob_dragged(key: String) -> void:
 		_asp_run_r0 = 0.0
 		_asp_loss_s = 0.0
 		_asp_loss_km = 0.0
+		# ⭐⭐⭐ SLICE 50 — THE SAME DRAG, THE SAME KEY, AND A **DIFFERENT REMEDY**, which is the one
+		# thing this slice must not copy from slice 49. 49's gauge is a DURATION: a run that restarts
+		# mid-flight is still an honest run, its range window says where, so clearing it and letting
+		# it re-accumulate is correct. **Slice 50's gauge is a single INSTANT whose entire meaning is
+		# *when the from-launch flight lost the picture*.** A shape dialled in at t = 5 s loses it
+		# somewhere its from-launch flight never would ⇒ a re-armed latch is A DIFFERENT QUANTITY
+		# WEARING THE SAME LABEL, which is the exact defect 49 caught, one instrument later.
+		# ⇒ CLEARED **AND DISARMED FOR THE REST OF THE FLIGHT**. Re-arming requires a Reset, which is
+		# the only thing that restarts the history the instant is measured against.
+		# ⚠ A VERDICT WORD WOULD NOT DO — "(mid-flight)" beside the number would be a display patch
+		# over a semantic collision, and the number itself would still be mislabelled. No number.
+		# ⭐ THE TRANSFERABLE FORM: a latched DURATION may restart mid-flight; a latched INSTANT may
+		# not.
+		#
+		# ⚠⚠ AND THE SPLIT IS THE NON-OBVIOUS PART — ONLY THE **LATCH** IS TOUCHED, NOT THE LIVE HUD:
+		#   THE LATCH BELONGS TO THE SHAPE (`_s50_deg`, `_s50_r_loss`, `_s50_t_loss`, `_s50_latched`,
+		#     `_s50_regained`, and the arming behind them). The measurement was made on a different
+		#     body, and no later measurement on this flight can be made honestly.
+		#   THE LIVE LINES BELONG TO THE TICK (the detect lamp, `R_acq`, the range, the aspect). They
+		#     are recomputed every frame from the NEW shape and are never latched, so a drag leaves
+		#     them alone — and that is deliberate: it is what keeps the drag a TEACHING INSTRUMENT.
+		#     Dial the fineness up and watch the horizon collapse through the range in real time,
+		#     with the gauge honestly saying it can no longer measure this flight.
+		# `_on_reset_pressed` clears these AND re-arms, correctly, because a reset restarts the
+		# FLIGHT — which is the history the instant is measured against.
+		_s50_latched = false
+		_s50_regained = false
+		_s50_deg = 0.0
+		_s50_r_loss = 0.0
+		_s50_t_loss = 0.0
+		_s50_armed = false
 
 func _fmt(v: float) -> String:
 	# GDScript's % formatter has no %g/%e. A small nonzero value (e.g. the Pfa knob at
@@ -4796,6 +5156,36 @@ func _on_reset_pressed() -> void:
 	_asp_loss_s = 0.0
 	_asp_loss_km = 0.0
 	_asp_t = 0.0
+	# ⚠⚠ SLICE 50's SEVEN, cleared for the same reason and at the same time as the code that creates
+	# them — the EIGHTH time this family has fixed the stale-instrument-across-reset class. ⭐ AND
+	# THIS RESET IS ALSO THE ONE THING THAT **RE-ARMS** THE LATCH, which is the whole difference
+	# between a drag and a reset here: a drag changes the shape underneath a flight already in
+	# progress and invalidates the instant for good; a reset restarts the FLIGHT, which is the very
+	# history the instant is measured against, so a from-launch measurement becomes possible again.
+	# Each of the seven lies in its own way if it survives:
+	#   `_s50_deg` / `_s50_r_loss` / `_s50_t_loss` are the LATCHED INSTANT, so a re-launch at the
+	#     slider's FLOOR — a sphere, the arm whose lock is never taken back — would open displaying
+	#     the previous arm's 5.77° owed at 4.5 km as though the round body had owed it. That is this
+	#     HUD's single most misleading state, and it is the exact comparison the slice exists to show
+	#     going the other way.
+	#   `_s50_latched` / `_s50_regained` are the SENTENCE SELECTORS: a stale pair prints "LOCK TAKEN
+	#     BACK" over a fresh launch that has not lost anything, which is the loud claim this HUD is
+	#     built to avoid asserting by default.
+	#   `_s50_prev_det` is the EDGE DETECTOR and must go back to −1, not to 0: a stale 1.0 against a
+	#     first frame that happens to read blind would latch on frame one and sample the start of the
+	#     recording as though it were an instant of loss.
+	#   `_s50_t` is the wire's own clock, and a stale value prints a loss time from the PREVIOUS
+	#     flight — a timestamp with no meaning rather than a wrong one.
+	# ⚠ `_s50_keys` is NOT in this list and that is deliberate: it is re-derived from
+	# `_telemetry.has(...)` on every single frame, so it has no stale state to carry.
+	_s50_armed = true
+	_s50_latched = false
+	_s50_regained = false
+	_s50_prev_det = -1.0
+	_s50_deg = 0.0
+	_s50_r_loss = 0.0
+	_s50_t_loss = 0.0
+	_s50_t = 0.0
 	# Slice-36: BOTH of this slice's instruments are cleared, and each for its own reason — this is the
 	# THIRD time the family has had to fix a stale-instrument-across-reset defect, so it is done at the
 	# same time as the code that creates it rather than found later.

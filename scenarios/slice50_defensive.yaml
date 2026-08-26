@@ -1,0 +1,194 @@
+# SLICE 50 — THE ASPECT-DEPENDENT ENGAGEMENT: **THE TARGET TAKES THE LOCK BACK.**
+#
+# Slices 26–49 all treat "can the seeker see it?" as a question about the MISSILE — the window, the
+# aperture, the transmit power, the sweep rate. This wire asks what happens when the horizon moves
+# because **the target did something**. The missile launches with a comfortable lock on a target
+# flying broadside — its brightest aspect — and the target turns its nose toward the missile. The
+# echo collapses, the horizon retreats back through the closing range, and the seeker loses a target
+# it ALREADY HAD, while the range is still falling.
+#
+# ⭐⭐⭐ **A CONSTANT ECHO CANNOT DO THIS AT ANY VALUE.** Slice 49 proved detection on a fixed
+# threshold with a falling range is one-way — gained and never lost. That proof is what makes this
+# wire's drop-out structural rather than tuned: a fixed horizon has `dR_acq/dt = 0`, so **no smaller
+# `rcs_m2` reproduces a lock being taken back mid-flight.** ⚠ That half of the sentence is SLICE
+# 49's, already discharged on a ground radar. Slice 50's half is the one a radar cannot say:
+#
+# > **the missile flies the rest of the engagement on a FROZEN ESTIMATE, holding a heading error it
+# > can no longer learn about.**
+#
+# ⭐⭐ THE GAUGE IS `ω_LOS · t_go` AT THE LOSS, IN DEGREES — "the heading error the missile went
+# blind holding". Under proportional navigation the loop drives the line-of-sight rate toward zero
+# while it can still see; whatever rate is left at the last look is a heading error, and `t_go` says
+# how much flying was left to hold it through. ⚠ NOT the miss: this arc has banned that gauge three
+# times (44 killed a component on it, 46 measured it non-monotone in both directions, 48 measured a
+# 100 %-authority acquisition that still missed), and slice 50 re-earned the ban — above F = 10 the
+# miss reverses FOUR times (1033 → 1039 → 618 → 1671 → 1505 → 1814 m) because a blind coast is an
+# open-loop integration whose CPA is chaotic in the initial condition.
+#
+# MEASURED ON THIS WIRE (`docs/plans/slice50.md` §7.1; the slider's own domain):
+#
+#     F      lost?   t_loss    r_loss   ‖ω_LOS‖ at loss   t_go      ⭐ ω·t_go
+#     1–7      no        —         —          0.000000       —          0.000°   <- A TRUE NULL
+#     7.5     yes     4.122 s   3204.6 m      0.004683    4.408 s       1.183°
+#     8.0     yes     3.276 s   3812.8 m      0.007782    5.357 s       2.389°   <- AUTHORED HERE
+#     9.0     yes     2.635 s   4266.5 m      0.012183    6.057 s       4.228°
+#    10.0     yes     2.257 s   4532.2 m      0.015604    6.455 s       5.771°
+#
+# ⚠⚠ THE NULL IS **MEASURED, NOT DEFINED**. On F ≤ 7 the gauge reads 0.000° not because the formula
+# has no value there but because `max|Δpos|` against a sphere flying the identical manoeuvre is
+# `0.000e+00 m` over the WHOLE flight: the engagement on those arms is byte-for-byte the one that
+# ships without this slice. That is the difference between an EXTENSION and an INTERPOLATION.
+#
+# ⚠⚠⚠ AND THE CONFOUND IS CLOSED BY MEASUREMENT RATHER THAN BY ARGUMENT. A turn moves the
+# trajectory as well as the aspect (slice 41's `af_I` failure verbatim), so every arm here is
+# compared against `rcs_fineness = 1.0` — a SPHERE FLYING THE BYTE-IDENTICAL MANOEUVRE, same
+# `a_lat_mps2`, same plane, same start. `rcs_aspect` touches the DETECTION and nothing else, it is
+# not in the dynamics, and `ManeuveringTarget` never reads the missile ⇒ every arm flies the same
+# engagement until its own loss (`max|Δpos| = 0` on every arm, every tick of the prefix). Any
+# difference is ASPECT and cannot be geometry.
+#
+# ⚠ WHY THE SLIDER STOPS AT 10 AND NOT AT SLICE 49's 12: at F ≥ 11 the missile never RE-ACQUIRES and
+# the wire changes mechanism — it flies blind through CPA, and re-acquisition itself goes
+# non-monotone (14 re-acquires while 12 and 16 do not). That region is a divergence being sampled,
+# not a lesson. The teachable domain is where the lock is taken back AND GIVEN BACK.
+#
+# ⚠ AND THIS WIRE IS NOT SLICE 48's WITH A SHAPE BOLTED ON, for two independent measured reasons:
+# (1) slice 48's target opens at 65° aspect and walks TOWARD broadside, so its horizon EXPANDS — the
+# geometry is aligned against this mechanism; (2) with a fineness present `rcs_m2` becomes the
+# BROADSIDE peak, so authoring a shape onto slice 48's `rcs_m2: 0.020` at 65° dims it ~180× and the
+# missile never sees the target at all. **An existing scenario cannot be given a shape without
+# re-authoring its RCS.**
+
+name: slice50_defensive
+seed: 32
+dt_physics: 1.0e-3        # the realtime floor (`ewsim-realtime-dt-floor`: a coarser dt stalls)
+emit_every: 16            # ⚠ CONVENTION 14: a verifier's STEPS must be a MULTIPLE of this
+
+fidelity:
+  # SLICE 46/47/48's SIX KEYS, UNCHANGED TO THE DIGIT. The aspect is NOT a fidelity rung and
+  # deliberately never becomes one (slice 49's decision, unreopened): "no aspect at all" is reachable
+  # from the SLIDER's own floor (F = 1, a sphere), so a rung would only duplicate a slider position.
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+  # ⭐ THE BUTTON, AND THE SHOWCASE OPENS WITH IT **ON** — the disease first. Pressing it removes the
+  # horizon entirely, which removes the drop-out, which removes the lesson: the same missile then
+  # holds the target through the turn and hits, and the target's shape stops mattering at all. That
+  # is the sharpest A/B this wire has and it is inherited from slice 46 unchanged.
+  seeker_detect: snr
+
+entities:
+  # THE INTERCEPTOR — slice 48's plant and its seven-key seeker budget, with TWO REMOVALS, both
+  # deliberate and both load-bearing:
+  #   • NO `seeker_search`. This missile is not looking for a target it never found; it HAS the lock
+  #     at launch and the question is whether the target can take it back. A search beside that would
+  #     be a second mechanism (convention 9) and would confuse "never acquired" with "lost".
+  #   • NO `midcourse`. Slice 46's law — a detection gate can only price a design variable if the
+  #     engagement is launched OUTSIDE the sensor's horizon — is a statement about a gate that never
+  #     closes on anything. THIS gate closes MID-FLIGHT, which is a different requirement and one a
+  #     launch INSIDE the horizon satisfies. ⚠ And the quantitative half runs the OTHER way from the
+  #     intuition: the crossing exists only if `F·ω > 4·V_c·R_b/r₀²`, so `r₀²` is in the DENOMINATOR
+  #     and launching DEEPER inside the horizon makes the drop-out HARDER, not easier.
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               gimbal_tau_s: 0.05, gimbal_stop_deg: 45.0, gimbal_fov_deg: 10.0,
+               gimbal_rate_dps: 240.0,
+               detect_pt_w: 200.0, detect_freq_hz: 16.0e9, detect_tint_s: 0.010,
+               detect_nf_db: 4.0, detect_loss_db: 5.0, detect_eta: 0.6,
+               detect_snr_min_db: 10.0}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+
+  # THE TARGET. ⭐ `pos` and `vel` put it at EXACTLY 90° aspect at t = 0: the line of sight from
+  # target to missile is (−6000, 0, −1200) and the velocity (0, −300, 0) is orthogonal to it. The
+  # target therefore opens the engagement at its BRIGHTEST, and since `rcs_aspect(σ, F, π/2) = σ`
+  # for EVERY fineness, **every arm of the slider starts on the same cross-section.** That is what
+  # makes the arms comparable at all, and it is why the geometry is prescribed rather than inherited.
+  # ⚠ `cross_speed_mps` is REFUSED at load beside a `maneuver:` block (`scenario.jl:170`), so the
+  # crossing is authored in `vel:` directly — the second reason this cannot be slice 48's wire.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 0.0, 4200.0]
+    vel: [0.0, -300.0, 0.0]
+    target:
+      # ⚠⚠ THE **BROADSIDE** CROSS-SECTION, NOT A CONSTANT ONE. With a fineness present `rcs_m2` is
+      # the PEAK of the aspect curve. 1.0 m² is an utterly ordinary aircraft and gives an 8079 m
+      # broadside horizon on this seeker budget, against a 6118 m launch range — comfortably inside.
+      # ⚠ AND IT IS AUTHORED, NEVER A KNOB: dragging it would move the horizon UNDER the lesson.
+      rcs_m2: 1.0
+      # THE SLIDER's authored position: mid-lesson, so the wire opens with the drop-out already
+      # visible (2.389° of heading error owed) and dragging in EITHER direction teaches — down to a
+      # sphere the loss vanishes entirely, up to 10 it more than doubles.
+      rcs_fineness: 8.0
+      maneuver:
+        # 3.06 g toward the missile at 300 m/s — an ORDINARY defensive turn, not a 9 g break. The
+        # margin matters: slice 42's kill was a threshold one integration step wide, and this
+        # drop-out survives a re-fly at half `dt` with every at-loss quantity agreeing to 3–4 digits.
+        a_lat_mps2: 30.0
+        # ⚠ `-1` brings the nose ROUND TOWARD the missile (aspect 90° → 0°, the echo collapsing).
+        # `+1` flies the mirror engagement, the aspect walks the wrong way and the horizon EXPANDS —
+        # which is slice 48's geometry and exactly the arm that shows nothing.
+        turn_sign: -1.0
+        # ⭐ SLICE 49's key, and it is not a default worth taking: `:vertical` turns in x–z and would
+        # barely move the aspect against a missile that is also in x–z. An aircraft turns in x–y, and
+        # that IS the mechanism.
+        turn_plane: horizontal
+
+knobs:
+  # EXACTLY ONE LIVE KNOB, beside slice 46's fidelity BUTTON (the shape of slices 46/47/48: one
+  # slider that spans a threshold, one rung that removes the mechanism). BOTH ENDPOINTS ARE MEASURED
+  # AND BOTH HAVE REASONS:
+  #   FLOOR 1.0: A SPHERE, and a TRUE null — aspect-independent by construction, and measured
+  #     byte-for-byte identical to what ships without this slice (`max|Δpos| = 0.000e+00 m` over the
+  #     whole flight). ⚠⚠ It is the LESSON's null and NOT the WIRE's null: the byte-identity path is
+  #     the key being ABSENT, because `sin²θ + cos²θ` is 1 in algebra and not always 1.0 in floating
+  #     point. Two different things that this project keeps apart on purpose.
+  #   CEILING 10.0: ⚠ SLICE 49 SHIPPED 12 ON THE SAME KNOB AND THIS ONE STOPS AT 10, DELIBERATELY.
+  #     At F ≥ 11 the missile never re-acquires: it flies blind through CPA, the miss reverses four
+  #     times across the remaining domain, and re-acquisition itself is non-monotone (F = 14
+  #     re-acquires while 12 and 16 do not). That is not more of the lesson, it is a different
+  #     mechanism whose outcome is a divergence being sampled — and putting it under this slider
+  #     would hand a student a region where dialling further makes things unpredictably better.
+  #   LINEAR, and the bottom two-thirds is FLAT ON PURPOSE: the gauge is 0.000° everywhere below 7
+  #     and then 1.18° → 5.77° in the top three units. That flat region reads as a REGION, which is
+  #     the point — slenderness buys nothing until it buys everything, and a log axis would stretch
+  #     exactly the stretch where nothing happens.
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED, each for a reason already on the record:
+  #   `a_lat_mps2` (⚠⚠ TWO-SIDED, and worse here than in slice 49 — the turn rate sets how fast the
+  #     nose comes round AND the whole intercept triangle, so it moves the confound this scenario's
+  #     control exists to close); the TURN ONSET TIME (⭐ the most interesting axis in the slice —
+  #     *how late can you turn and still deny the shot?* — and NOT AUTHORABLE: `ManeuveringTarget`
+  #     turns from t = 0, so it would be a new key on shipped physics with its own byte-identity
+  #     tooth, and gate 0 ruled the lesson does not need it); `rcs_m2` (slice 2's axis, and here it
+  #     would move the horizon underneath the lesson); `detect_pt_w` / `gimbal_fov_deg` (⚠ slice 46's
+  #     axis, and pairing the seeker's own window with the target's shape is two mechanisms in one
+  #     scenario — convention 9's exact prohibition); `turn_plane` (⚠ refused BY TYPE — `set_param`
+  #     carries one Float64, so a slider on a Symbol would overwrite it with a bare number and the
+  #     next branch inside a tick would take the wrong plane silently).
+  #
+  # ⚠ THE LABEL IS LENGTH-BUDGETED (~110 characters — slice 32's shots paid for this): knob labels
+  # are drawn full-width in the UI CanvasLayer and paint OVER the `_draw` HUD column.
+  - {target: tgt1, key: rcs_fineness, min: 1.0, max: 10.0,
+     label: "TARGET FINENESS L/r (1 = sphere) — watch the LOCK BE TAKEN BACK, not the miss"}

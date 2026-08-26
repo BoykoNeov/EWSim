@@ -954,6 +954,47 @@ function _airframe_view_info(w::World)
     # byte-identical and their markers are untouched.
     any(haskey(w.entities[m].comp, :seeker_search) for m in missiles) &&
         (info[:search_view] = true)
+    # ⭐⭐ SLICE 50 — THE ASPECT-DEPENDENT ENGAGEMENT, the 13th marker of this family, and it is the
+    # FIRST raised on a property of the **TARGET** rather than of the missile. Every marker above
+    # asks what the missile is built out of; this one asks what it is shooting at. That is the whole
+    # content of the slice — the horizon moves because the TARGET did something — so it is fitting
+    # that it is also the first marker whose gate reaches outside `missiles`.
+    #
+    # ⚠⚠ AND THE MARKER-HOLE CHECK COMES BACK POSITIVE, IN A FORM THIS FAMILY HAS NOT SEEN: the hole
+    # is not that the client draws NOTHING, it is that it draws **SLICE 49's block with no observer**.
+    # `_aspect_view_info` (radar.jl) raises on ANY shaped target, so a slice-50 wire trips it — and
+    # slice 49's HUD keys every line off `_aspect_observer`, which on a wire with no radar is the
+    # EMPTY STRING. Every `.get(key, default)` then returns its default and the block renders
+    # "HOLDING IT: 90° broadside / echo 0 m² — 0.0 dB below broadside / range 0.0 km Pd 0.00 SEEN"
+    # over a target that is turning nose-on at 3 g and about to be lost. Six fabricated numbers, no
+    # test failing, and the LOUDEST of them ("broadside", "SEEN") asserting the exact opposite of the
+    # lesson. ⇒ `_aspect_view_info` is tightened to REQUIRE its observer (see its own docstring) and
+    # this marker takes the missile-side wire.
+    #
+    # ⚠ GATED ON THE **PAIR**, and it is a conjunction of three things rather than 46/47/48's single
+    # comp key, because the wire this slice teaches on is the one where BOTH halves exist: a seeker
+    # with a link budget (`:detect_pt_w` — no budget, no horizon, nothing for a shape to move) AND a
+    # target carrying a shape (`:rcs_fineness` — no shape, and the horizon is the constant one slice
+    # 46 already teaches). The two sets are DISJOINT across every shipped scenario today (46/47/48
+    # have the budget and no shape; 49 has the shape and no missile) ⇒ every prior wire is
+    # byte-identical, which is the same construction `seeker_tgo_s` ships under one function down.
+    # ⚠ The fidelity is deliberately NOT in the gate — slice 38/46/47/48's choice: the rung is
+    # refused at load without a budget anyway, and a value guard on `:snr` would hide the HUD on the
+    # arm a student presses the button FROM (46's button is still live here and is still an A/B).
+    let shaped = sort!(Symbol[id for (id, e) in w.entities
+                              if e.kind === :target && haskey(e.comp, :rcs_fineness)])
+        if !isempty(shaped) && any(haskey(w.entities[m].comp, :detect_pt_w) for m in missiles)
+            info[:seeker_aspect_view]     = true
+            # ⚠ BOTH IDS, slice 49's lesson verbatim: an aspect belongs to a target–observer PAIR and
+            # is not a property of the target, so a HUD that said "nose off 24°" with no subject and
+            # no seat would be this family's ~14th stale readout. The observer duplicates
+            # `airframe_target` on every wire this can be raised on, and it is shipped anyway — the
+            # HUD forms its telemetry keys from THIS one, and an inferred owner is how a key ends up
+            # read off the wrong entity.
+            info[:seeker_aspect_target]   = String(shaped[1])
+            info[:seeker_aspect_observer] = String(missiles[1])
+        end
+    end
     return info
 end
 
@@ -3707,6 +3748,40 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             tel["$sid.target_aspect_deg"] = _finite_coord(
                 rad2deg(aspect_angle(tgt.pos, tgt.vel, e.pos)))
             tel["$sid.rcs_eff_m2"] = _finite(rcs_det)
+            # ⭐⭐ SLICE 50 — THE SECOND FACTOR OF THE GAUGE. The lesson's number is `ω_LOS · t_go`
+            # LATCHED AT THE 1 → 0 TRANSITION ("the heading error the missile went blind holding",
+            # 1.18° → 5.77° over the teachable domain), and the client composites it from shipped
+            # keys (convention 13). `los_rate` it already has; `t_go` it did NOT — `missile.jl`'s
+            # other `t_go` writer sits inside `if haskey(w.env, :salvo_t_d)`, a SALVO-COORDINATOR
+            # gate, and a slice 46–50 wire has no coordinator.
+            #
+            # ⚠⚠ AND UN-GATING THAT ONE WAS THE OBVIOUS MOVE AND IT IS WRONG (plan §9.2): the salvo
+            # block's own comment says why it is presence-gated — "ABSENT in a slice-9..13 scenario
+            # (no coordinator → no key) → those frames byte-identical". Un-gating grows `t_go` on
+            # EVERY coordinator-less wire from slice 9 to 50. A key that is PRESENCE-GATED is gated
+            # FOR A REASON, and "just emit it always" is a byte-identity change (convention 2, the
+            # master check) wearing the clothes of a one-line convenience.
+            #
+            # ⚠⚠ HOME CORRECTED FROM PLAN §9.3, WHICH SAID "beside `seeker_r_acq_m`" (i.e. under
+            # `_det_on`) AND CALLED THAT "byte-identical on every prior wire BY CONSTRUCTION". It is
+            # not: `_det_on` is TRUE on slices 46/47/48's wires, so they would all grow the key, and
+            # `test_missile`'s `length(a.keys0) == 5` tooth pins exactly that set. Inside the
+            # FINENESS block it lands on a wire that has BOTH an `:snr` seeker AND a shaped target —
+            # and those two sets are DISJOINT across every shipped scenario today (46/47/48 have the
+            # seeker and no shape; 49 has the shape and no missile). ⇒ byte-identity holds
+            # everywhere, for real this time. The gate is semantically right as well as tight: the
+            # loss this `t_go` is latched at is MANUFACTURED BY THE SHAPE, so on an unshaped wire
+            # there is no transition to latch it at and the key would be a readout with no lesson.
+            #
+            # ⚠ `time_to_go`, NOT an inline `r / V_c`: guidance.jl:308 is the one definition and a
+            # second site would be free to drift from it. Its `VC_FLOOR = 50.0` divisor floor is
+            # 14× below every closing speed at a loss instant on this wire (701–727 m/s), so it is
+            # not binding and this reduces to the probe's `r / V_c` exactly (plan §9.1) — while
+            # still being Inf/NaN-safe at CPA (convention 6) where `V_c` collapses.
+            # ⚠ THE TRUE range and the TRUE closing speed, matching the salvo writer and the
+            # autopilot's `closing_speed` — NOT the seeker's `r_los_det`-with-a-floor readout range.
+            tel["$sid.seeker_tgo_s"] = _finite(time_to_go(
+                los_range(e.pos, tgt.pos), -range_rate(tgt.pos - e.pos, tgt.vel - e.vel)))
         end
         tel["$sid.seeker_aperture_m"] = _finite(
             aperture_diameter(Float64(get(c, :detect_freq_hz, 16.0e9)),

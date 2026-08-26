@@ -369,7 +369,19 @@ reader that conflates them reports the wrong instant") **and it was walked into 
 flags differ only on the failing arm, the test has to BE the failing arm â€” asserting the two strings
 differ in that state, not merely that each state has a string.
 
-## The windowed shot is not a formality: it caught two defects with three suites green (slice 47)
+⭐⭐⭐ **SLICE 50, VERBATIM THE SAME SHAPE, AND THE FIRST DEFECT NAMES *WHY* `_draw` IS UNREACHABLE.**
+Verifier green, UI test green, smoke-load green — and the shot came back with **two headlines
+overlapping**. **There are TWO dispatch chains in `Sandbox.gd`**, one selecting the top-of-screen
+verdict LABEL and one selecting the HUD BLOCK, and only the second had been given the new slice's
+branch. The file's own standing rule, written out in FIVE separate comments, is *"all dispatch chains
+must agree"* — and it was still possible to edit one and not the other with every headless proof
+passing, because **`--headless` never runs `_draw`, so a chain disagreement is INVISIBLE to the
+verifier and the UI test alike.** ⇒ **after adding a view, grep for every dispatch on the view marker
+and count the sites.** The second defect was the vocabulary bug (its own heading below), and a third,
+smaller one: the disclaimer line printed a number the view already draws in its shared header — a
+redundancy no assertion can judge, because both copies are correct.
+
+## The windowed shot is not a formality: it caught two defects with three suites green (slice 47, and slice 50 is the SECOND occurrence — two defects again)
 
 Convention 14's fourth proof, earning its place twice in one slice, with the verifier (13 arms), the
 UI test (12 teeth) and the headless smoke-load all passing. **Both defects live in `_draw`, which
@@ -572,6 +584,19 @@ they belong to:
 ⇒ **Add a drag tooth to every slice that latches or peak-holds anything, and assert BOTH halves of
 the split.** Then confirm it bites by removing the fix and watching it fail (convention 11).
 
+⭐⭐⭐ **SLICE 50 SHARPENS THE SPLIT INTO A RULE ABOUT *WHAT KIND OF THING* IS LATCHED: A LATCHED
+DURATION MAY RESTART MID-FLIGHT; A LATCHED INSTANT MAY NOT.** Slice 49's instrument is a STOPWATCH —
+how long the target was gone — and a drag correctly CLEARS it and lets it run again, because a
+duration's meaning is local to the stretch of run it accumulates. Slice 50's instrument is a MOMENT:
+the instant the picture went away and how much heading was still owed at it. **An instant's meaning is
+the whole history that led to it, and a live knob rewrites that history**, so restarting the
+measurement would silently attribute one shape's flight to another. ⇒ slice 50's drag **DISARMS** the
+latch for the rest of the flight, shows `SHAPE CHANGED — Reset to measure` and **no number at all**,
+and only Reset re-arms it. ⚠ A verdict-WORD distinction would have been a display patch over a
+semantic collision — the number itself would still be mislabelled. ⚠ The LIVE lines (detect lamp,
+horizon, range, aspect) are untouched either way, which is what keeps the drag a teaching instrument
+rather than a switch that blanks the screen.
+
 ## ⚠⚠ GREP THE WHOLE FILE FOR FORMAT SPECIFIERS — A `print` IS PROVED BY ITS OWN OUTPUT, A `_fail` MESSAGE IS PROVED BY NOTHING (slice 49, and the THIRD occurrence)
 
 GDScript's `%` supports a small set of specifiers; an unknown one makes the **whole** format fail
@@ -631,6 +656,18 @@ tested for rather than defaulted, since 0 dB would read as "a target at its BRIG
 ⇒ **For every `.get(k, default)` in a readout, ask what the default SAYS if the key never arrives. If
 the answer is the thing you are trying to demonstrate, the default is wrong.**
 
+⚠⚠ **AND SLICE 50 FOUND THE CASE WHERE NO CHOICE OF DEFAULT CAN SAVE YOU: THE LESSON'S OWN NULL AND
+THE DEAD INSTRUMENT ARE THE SAME NUMBER.** Its gauge reads `0.000°` when the target is round and the
+lock is never lost — which is the lesson's null, a real and meaningful measurement — and a missing
+`seeker_tgo_s` read through `.get(k, 0.0)` also reads `0.000°`. **No value assertion anywhere can
+separate them**, and unlike slice 49's aspect there is no "quiet" default available: the quiet value
+*is* the null.
+
+⇒ **When a lesson's null collides with a dead instrument's default, PRESENCE is the only
+discriminator — track it independently of value, and make the HUD say WHICH of the two it is
+holding.** Slice 50 prints *"no heading error owed — the shape is round"* against *"gauge unavailable
+— `seeker_tgo_s` not on the wire"*, asserted in both directions (`slice50_ui_test.gd` tooth 9).
+
 ## ⭐⭐⭐ A RATE CANNOT PREDICT A LEVEL CROSSING WITHOUT THE HEADROOM (slice 50 gate 0, 2026-08-26)
 
 Slice 50 pre-registered a gauge and it failed, in the most instructive way available. The mechanism
@@ -679,3 +716,129 @@ no new machinery built, is what a reparameterization is *for*.
 
 ⭐ **THE TEST, and it is cheap:** take the NULL arm's series, look up its value at each live arm's
 event tick, and difference. Zero ⇒ your gauge is the event time wearing units.
+
+## ⭐⭐⭐ A VOCABULARY IS A GAUGE AND MUST BE SCORED LIKE ONE (slice 50, 2026-08-26)
+
+Every numeric gauge on this arc is scored for **resolution over its own slider's domain** — slice 28's
+`k`, 40's `ω_n`, 25's `σ_seek` and 20/22's miss were all disqualified for failing exactly that, and
+slice 50's gate 0 threw out its own pre-registered gauge partly on the same ground. **The WORDS printed
+beside those numbers have never once been scored.**
+
+Slice 50's HUD prints a plain-English word for the target's aspect, and `_s50_word` inherited slice
+49's bands, which are ABSOLUTE (70–110° → "broadside"). **This wire never leaves that one band:**
+launch is 90° and every loss on every arm is between 71.9° and 81.5°. The vocabulary was therefore
+CONSTANT across the entire teachable domain — zero resolution, the identical objection that killed the
+numeric candidates.
+
+⚠⚠ **AND IT WAS WRONG, NOT MERELY USELESS — WHICH IS THE PART TO CARRY.** The constant word was
+"broadside", i.e. *at its brightest*, and it was printed on the one frame that carries the lesson: the
+echo ~18 dB down and the line directly beneath it reporting that the horizon had collapsed inside the
+range. **Every number on screen was correct and the sentence they added up to was the reverse of the
+slice's own conclusion.**
+
+⇒ **Band a HUD's vocabulary on the quantity that MOVES on this wire, not on the one the previous
+slice's wire moved.** Slice 50 re-banded on the DEPARTURE from broadside, `|90 − θ|`, which is what the
+horizon actually follows (`R_acq = R_broadside / sqrt(1 + F²δ²)`).
+
+⚠ **The "keep it consistent with the previous slice" argument is usually not available on inspection.**
+`_s50_word` was ALREADY a separate function from `_asp_word`; only the numbers had been copied. The
+fork existed and re-calibrating created no drift with anything.
+
+⭐ **THE TOOTH, and no proof in this family had ever carried one** (`slice50_ui_test.gd`, tooth 9b):
+the word must CHANGE between two reachable states, must RESOLVE across the slider's extremes, must
+never read the word for the GOOD state at a value where the lesson says the state is bad, must still be
+reachable where it IS true, and must respect whatever symmetry the underlying model has as an IDENTITY.
+
+## ⭐⭐⭐ "BYTE-IDENTICAL BY CONSTRUCTION" IS A CLAIM ABOUT WHICH SHIPPED WIRES SATISFY THE GATE — CHECK THEM BY NAME (slice 50, 2026-08-26)
+
+Convention 2 makes byte-identity the master check, so every new telemetry key gets placed behind a
+presence gate and justified with some form of *"a key added there is byte-identical on every prior wire
+by construction."* Slice 50's plan wrote exactly that sentence at gate 0 about the `_det_on` block —
+**and it was false.** `_det_on` is TRUE on slices **46, 47 and 48's** wires, all three of which author
+`detect_pt_w` and run the `:snr` rung, and `test_missile.jl` pins `length(a.keys0) == 5`. All three
+would have grown the key and the suite would have gone red.
+
+⭐ **THE PLAN GOT THE PRINCIPLE RIGHT AND MIS-APPLIED IT ONE LINE LATER.** It correctly retracted *"just
+emit it always"* on the grounds that a presence-gated key is gated for a reason — and then proposed a
+home whose gate it had not checked against the wires that actually satisfy it.
+
+⇒ **THE PHRASE IS NOT A PROOF; IT IS THE THING THAT NEEDS ONE.** Grep the gate's condition across
+`scenarios/` and name the wires that satisfy it. Slice 50's key ships behind a conjunction (an `:snr`
+seeker **AND** a shaped target) whose two sets are **DISJOINT across every shipped scenario** — that is
+a checkable statement, and it is what "by construction" was pretending to be.
+
+⚠⚠ **AND VERIFYING THE FORMULA IS NOT VERIFYING THE SITE.** Slice 50 verified that its new key's
+*expression* reduced to the probe's, and never checked that a **phase-3** write agrees with the
+**phase-4** quantity the probe had actually read. Nothing moves between `observe!` and `decide!` —
+*should* being the word that precedes a pinned number nobody measured. Measured: `max|Δ| = 0.000e+00`
+over every tick of every arm, and only then did the gate-0 table stand on the shipped key. **A tick has
+phases; two keys that "obviously" agree are two measurements until one is differenced against the
+other.**
+
+⚠ **SAME FAMILY, THIRD FORM: a rule inherited from another slice must be re-checked against the
+QUANTITY it constrains, not the situation it was written for.** Slice 50 §0.6 required slice 48's
+rim-margin conjunct on its tick test. 48's rule is about the ANGULAR window; this loss is a RANGE-gate
+loss, and `missile.jl` ships the two verdicts as separate lamps on purpose. The conjunct would have
+been a no-op that looked like a safeguard. Record the N/A rather than dropping it silently.
+
+## ⭐⭐ `emit_every` IS PART OF ANY GAUGE LATCHED AT A TRANSITION — PIN THE **EMITTED** NUMBERS (slice 50, 2026-08-26)
+
+Gate-0 probes run in Julia at `dt` and see every tick. **The client never sees that grid.** With
+`emit_every: 16` the 1 → 0 transition a HUD can latch on lands up to one emission interval after the
+true event, so a gauge read AT that transition is systematically offset:
+
+| `F` | per-tick (the probe) | **emitted (what ships)** |
+|---|---|---|
+| 7.5 | 1.183° | 1.179° |
+| 8.0 | 2.389° | **2.380°** |
+| 10.0 | 5.771° | **5.702°** |
+
+The shift is DETERMINISTIC, not noise, so it pins perfectly well — but it must be pinned **from frames a
+client is actually handed**, or the verifier and the probe disagree by an amount nobody can explain.
+
+⇒ **This is slice 47's "the differencing window is part of the estimator" in a second currency: when a
+gauge is latched at a TRANSITION, the EMISSION INTERVAL is part of the estimator.**
+
+⚠ **AND IT RE-SITES THE BYTE-IDENTITY TOOTH BY ONE FRAME.** The "this arm is bit-identical to the null
+until it loses the lock" tooth must be measured at the last frame the arm still HELD the lock (`k − 1`),
+not at the frame it lost it on. At the loss FRAME the arm has already coasted a few milliseconds
+(7.4e-8 m at `F` = 8, 2.0e-5 m at `F` = 10) — that divergence is the coast, measured correctly, and a
+tooth sited one frame later reads it as a failure of the identity.
+
+## ⭐⭐ A NULL ARM AND A SUB-THRESHOLD ARM ARE DIFFERENT CONTROLS, AND A SLIDER NEEDS BOTH (slice 50, 2026-08-26)
+
+The obvious control for a mechanism is the arm with the mechanism switched OFF — slice 50's sphere,
+slice 49's sphere, slice 48's frozen head. **It proves the mechanism exists and nothing about where it
+bites.**
+
+Slice 50 ships a second control: `F` = 7, whose echo is **452.4× dimmer than the sphere's at the
+IDENTICAL geometry** (the two flights are bit-identical over all 500 frames) and whose lock is **still
+never lost**. That is what turns the result from *"more shape → worse"* into *"there is a THRESHOLD,
+and here is a target three orders of magnitude dimmer sitting below it."*
+
+⇒ **When a lesson claims a threshold, put an arm just under it.** A separation measured only against
+the null is a separation from zero, and it cannot distinguish a threshold from a slope. ⚠ It is also
+the arm that catches a mis-sited gate: a sub-threshold arm that DOES trip is a much sharper failure
+signal than a null arm that does not.
+
+## ⭐⭐⭐ HALF A PAIR IS NOT A MARKER — AN OPTIONAL FIELD IN A VIEW MARKER IS A LATENT STALE-READOUT BUG (slice 50, 2026-08-26)
+
+A relational readout names a PAIR: an aspect angle belongs to a target **and** an observer, and the
+same aircraft is side-on to one radar and head-on to another at the same instant. Slice 49 raised its
+marker on **ANY shaped target** and merely omitted the observer key when no radar was present — which
+looked like harmless defensive code for a whole slice, because **no slice-1..49 wire could reach it.**
+
+Slice 50's wire is the first with a shaped target and no radar. The block would have rendered:
+
+> `HOLDING IT: 90° broadside` / `echo 0 m² — 0.0 dB below broadside` / `range 0.0 km  Pd 0.00  SEEN`
+
+over a target turning nose-on at 3 g and seconds from being lost. **Six defaulted numbers, no failing
+test, and the two loudest of them ("broadside", "SEEN") asserting the exact opposite of the lesson.**
+
+⇒ **The fix belongs in the CORE, not the client: a marker that names a pair must REQUIRE both halves
+and return `nothing` without one.** A client cannot defend itself here — every value it read was a
+legal default of the right type.
+
+⚠ **This is the same defect as the vocabulary lesson above, in DEFAULTED form rather than COMPUTED
+form, and both shipped in the same slice.** ⇒ when a HUD block is keyed off a marker, the question is
+not only *"are the numbers right?"* but *"is this block entitled to draw at all on this wire?"*

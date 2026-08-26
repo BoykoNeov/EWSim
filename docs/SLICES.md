@@ -1674,3 +1674,84 @@ instead. ⚠ The fix has a subtlety worth remembering: the clock belongs to the 
 cleared, but the "is it still closing" flag belongs to the *flight* and must not be — the aircraft is
 still on the same arc, and clearing that would briefly claim it was approaching when it was already
 leaving.
+
+## Slice 50 — a target that takes the lock back by turning
+
+The previous slice gave a target a shape, so that how easy it is to see depends on which way it is
+pointing, and watched a ground radar lose an aircraft that was still coming toward it. The same piece
+of physics was already sitting underneath the missile's seeker — the seeker measures how far it can
+see using exactly the same calculation — but nobody had ever pointed a missile at a target that could
+turn away.
+
+**The scenario is a missile that starts the run already holding its lock, six kilometres from a
+target flying side-on. The target then turns its nose toward the missile at three g, its echo
+collapses, and the seeker loses a picture it already had — while the range is still coming down the
+whole time.** There is one slider: how slender the target is, from a ball at one end to a needle at
+the other.
+
+⭐⭐⭐ **The reason this is a different lesson from the previous slice, and not just the same lesson with
+a missile in it, is worth being strict about.** The rule the plan set for itself before any code was
+written was: *replace the seeker with a ground radar, and the sentence the slice teaches must stop
+making sense.* "It lost the target while getting closer" survives that swap — a radar can say it
+perfectly well. So that could not be this slice's sentence. What a radar cannot say is **how much
+turning the missile still had left to do when the picture went away.** A missile that loses sight of
+its target is not just blind; it is blind while still owing a correction it can no longer measure, and
+that debt is what the slider moves. It comes out as: nothing at all with a round target, a bit over
+two degrees of unpaid heading at the shape the scenario ships, and nearly six degrees at the far end
+of the slider.
+
+**Not the miss distance — and this time that was measured rather than assumed.** Past the top of the
+slider the miss goes up, then down, then up, then down again. Three earlier slices on this arc had
+already banned the miss as a way of scoring anything; this one re-earned the ban with its own numbers
+instead of quoting theirs.
+
+⚠ **One thing about this scenario is genuinely backwards from intuition, and it dictated where the
+missile starts.** You might think that starting closer to the target makes it easier to lose the
+lock — you are deeper inside the seeker's reach, so surely there is less margin. It is the other way
+around. The seeker's reach shrinks as the target turns, but it has to shrink all the way down past
+the current distance before anything is actually lost, and if you started close, that distance is
+already small, so the reach has *further* to fall. Starting closer makes losing the lock **harder**.
+The missile therefore launches near the outer edge of what it can see, not comfortably inside it.
+
+**The control arm is the sharpest thing in the slice.** A ball is the obvious comparison, but it only
+proves the mechanism is switched on. So there is a second control: a target slender enough that its
+echo is **four hundred and fifty times weaker** than the ball's, on an identical flight path — and the
+missile still never loses it, not for a single frame. That is what makes this a threshold rather than
+a slope. A null and a nearly-there are different controls, and a slider needs both.
+
+⚠⚠ **A bug from the previous slice was lying in wait, and this was the first scenario that could reach
+it.** The previous slice's readout block fires whenever a target has a shape, but every number in it
+is read from a *ground radar*. This scenario has a missile and no radar at all, so the block would
+have drawn six invented numbers — including the words "broadside" and "SEEN" — over a target that was
+seconds from vanishing. No test anywhere would have failed, because every one of those numbers was a
+legal default. The fix is in the engine: a readout that names a pair needs both halves of the pair
+before it may claim anything. **Half a pair is not a marker.**
+
+⚠⚠⚠ **And then a photograph of the running program found the same mistake a second time, in a form
+that no automated check could have caught.** The display prints a plain-English word for how the
+target is facing — "broadside", "nose-on", and so on — and those word boundaries were inherited from
+the previous slice, where the target swings through most of a half-circle. In *this* scenario the
+target never leaves a narrow band near side-on, so the same word came out no matter what the slider
+did: a word that carried no information at all. Worse, that word was "broadside", meaning *at its
+brightest*, printed on the very frame where the target had gone dim enough to disappear and the line
+directly beneath it said so. Every number on the screen was correct and the sentence they added up to
+was the opposite of the lesson. ⭐⭐ **The general form is the thing to carry away: a vocabulary is a
+gauge, and has to be scored like one.** Every number on this project is checked for whether it
+actually moves across its own slider. The words beside them never were. An inherited set of word
+boundaries is calibrated to the previous scenario's range, and reusing it quietly is how a display
+ends up asserting the reverse of what it is teaching.
+
+⭐ **A smaller point that had to be decided rather than defaulted: what a live drag should do to a
+measurement already taken.** The previous slice's display holds a stopwatch — how long the target was
+gone — and dragging the slider clears it and starts again. That is right for a stopwatch. This slice's
+display holds a *moment*: the instant the picture went away, and how much turning was still owed at
+that instant. A moment's meaning is the whole flight that led up to it, and dragging the slider
+rewrites that flight — so restarting the measurement would be dishonest in a way that restarting a
+stopwatch is not. The display therefore refuses to show a number at all after a drag, and says why.
+**A duration may restart mid-flight; an instant may not.**
+
+⚠ **A last trap, and it is peculiar to this slice: the lesson's own "nothing happened" reads as the
+same number as a broken instrument.** A round target owes zero degrees. A display that has lost the
+number it needs also shows zero degrees. No amount of checking the *value* can tell those apart, so
+the display tracks whether the number arrived at all, separately from what it says, and prints a
+different sentence for each case.

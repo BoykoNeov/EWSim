@@ -294,9 +294,26 @@ function _aspect_view_info(w::World)
                         if e.kind === :target && haskey(e.comp, :rcs_fineness)])
     isempty(tgts) && return nothing
     radars = sort!(Symbol[id for (id, e) in w.entities if e.kind === :radar])
-    info = Dict{Symbol,Any}(:aspect_view => true, :aspect_target => String(tgts[1]))
-    isempty(radars) || (info[:aspect_observer] = String(radars[1]))
-    return info
+    # ⚠⚠ SLICE 50 — THE OBSERVER IS **REQUIRED**, AND IT WAS OPTIONAL HERE UNTIL A WIRE EXISTED THAT
+    # COULD REACH THE GAP. As first written this returned `aspect_view = true` with the observer key
+    # simply omitted when no radar was present. On every slice-1..49 scenario that arm is
+    # unreachable (the only shaped target ships beside a radar), so it read as harmless defensive
+    # code — but slice 50 authors a shaped target with a MISSILE and no radar, and the client keys
+    # EVERY line of the aspect block off `_aspect_observer`. Empty-string observer ⇒ every
+    # `.get(key, default)` returns its default ⇒ the block renders "HOLDING IT: 90° broadside /
+    # echo 0 m² — 0.0 dB below broadside / range 0.0 km  Pd 0.00  SEEN" over a target turning
+    # nose-on at 3 g and seconds from being lost. Six fabricated numbers, no failing test, and the
+    # two loudest of them asserting the exact opposite of the lesson.
+    #
+    # ⭐ THE MARKER IS THE PAIR, SO HALF A PAIR IS NOT A MARKER. A radarless shaped target still has
+    # an aspect — it simply has none THIS view can quote, and the honest answer is to leave the
+    # handshake silent so the client keeps its own view. `missile.jl`'s `seeker_aspect_view` takes
+    # the missile-side wire, off the missile's own `target_aspect_deg` / `rcs_eff_m2`.
+    # ⚠ BYTE-IDENTICAL ON EVERY SHIPPED WIRE: `slice49_aspect.yaml` is the only scenario that raises
+    # this at all and it authors `radar1`, so the returned Dict is unchanged there, key for key.
+    isempty(radars) && return nothing
+    return Dict{Symbol,Any}(:aspect_view => true, :aspect_target => String(tgts[1]),
+                            :aspect_observer => String(radars[1]))
 end
 
 """

@@ -590,3 +590,270 @@ end
         end
     end
 end
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# --- slice 50: THE ASPECT-DEPENDENT ENGAGEMENT -------------------------------------------------
+#
+# Slice 49 gave a target a SHAPE and proved what it costs a GROUND RADAR. `_effective_rcs` is the
+# ONE site where a shape becomes a cross-section, and `missile.jl`'s seeker horizon already called
+# it — so the missile's detection horizon has been aspect-dependent since slice 49, untested and
+# unteaching. This block is the other consumer, and the claim is the half a radar cannot make:
+#
+# ⭐⭐⭐ THE SEEKER LOSES A TARGET IT ALREADY HAD, WHILE THE RANGE IS STILL FALLING — and the price
+# is `ω_LOS · t_go` AT THE LOSS: the heading error the missile goes blind holding. A fixed horizon
+# has `dR_acq/dt = 0`, so it is crossed once and inward and CANNOT take a lock back at any
+# `rcs_m2`. ⚠ Slice 49 owns "a shape can make a closing target harder to see"; this block must not
+# re-assert that as though it were new.
+#
+# ⚠⚠ THE MISS IS NOT A GAUGE HERE AND THE SLICE RE-EARNED THE BAN: above the shipped slider's
+# ceiling the CPA reverses FOUR times and re-acquisition itself goes non-monotone, because a blind
+# coast is an open-loop integration of a frozen estimate whose closest approach is chaotic in the
+# initial condition. Everything upstream of the blind run is orderly; everything downstream is not.
+
+const _SCEN50 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice50_defensive.yaml"))
+
+# Fly the shipped slice-50 wire. `F === nothing` DELETES the key (the WIRE's null — byte-identity),
+# `F === :authored` leaves the file's own 8.0 (the LESSON's authored position), any number sets it.
+# ⚠ Stops at 8.0 s deliberately, which is the verifier's own window: CPA is at ~8.21 s and no loop
+# state on this arc may be read inside the r → 0 endgame spike.
+function _fly50(F; tmax = 8.0)
+    sc = load_scenario(_SCEN50)
+    w, subs, dt = sc.world, sc.subs, sc.dt_physics
+    if F === nothing
+        delete!(w.entities[:tgt1].comp, :rcs_fineness)
+    elseif F !== :authored
+        w.entities[:tgt1].comp[:rcs_fineness] = Float64(F)
+    end
+    n = round(Int, tmax / dt)
+    ts = Float64[]; rs = Float64[]; ds = Float64[]; oms = Float64[]; tgos = Float64[]
+    racqs = Float64[]; pos = NTuple{3,Float64}[]; nkeys = 0
+    for _ in 1:n
+        tick!(w, subs, dt)
+        tel = w.env[:telemetry]
+        e = w.entities[:m1]
+        push!(ts, w.t); push!(pos, (e.pos[1], e.pos[2], e.pos[3]))
+        push!(ds,    Float64(get(tel, "m1.seeker_detect", -1.0)))
+        push!(oms,   Float64(get(tel, "m1.los_rate", NaN)))
+        push!(tgos,  Float64(get(tel, "m1.seeker_tgo_s", NaN)))
+        push!(rs,    Float64(get(tel, "m1.los_range", NaN)))
+        push!(racqs, Float64(get(tel, "m1.seeker_r_acq_m", NaN)))
+        nkeys += Int(haskey(tel, "m1.seeker_tgo_s"))
+    end
+    # ⭐ THE GAUGE: the FIRST 1 → 0 edge, and `ω · t_go` sampled there. The same rule the client and
+    # the verifier use, written a third time in different code (convention 11's independent
+    # recompute). ⚠ THE FIRST EDGE ONLY — a later one is downstream of a blind coast.
+    k = findfirst(j -> ds[j-1] == 1.0 && ds[j] == 0.0, 2:length(ds))
+    k === nothing && return (; lost = false, deg = 0.0, t = NaN, r = NaN, racq = NaN, k = 0,
+                              regained = false, det = count(==(1.0), ds) / length(ds),
+                              pos, nkeys, n, r0 = rs[1], racq0 = racqs[1])
+    k += 1
+    (; lost = true, deg = rad2deg(oms[k] * tgos[k]), t = ts[k], r = rs[k], racq = racqs[k], k,
+       regained = any(ds[j-1] == 0.0 && ds[j] == 1.0 for j in (k+1):length(ds)),
+       det = count(==(1.0), ds) / length(ds), pos, nkeys, n, r0 = rs[1], racq0 = racqs[1])
+end
+
+@testset "the aspect-dependent ENGAGEMENT — THE SHIPPED SCENARIO (slice 50 gate 3)" begin
+
+    @testset "the scenario loads, and it is the one lesson it claims to be" begin
+        sc = load_scenario(_SCEN50)
+        @test sc.world.seed == 32
+        @test sc.dt_physics == 1.0e-3          # the realtime floor (a coarser dt stalls the server)
+        # ⚠ CONVENTION 14: a verifier's STEPS must be a multiple of `emit_every` or it hangs
+        # SILENTLY. Pin the value the .gd scripts divide by, so an edit to one breaks here first.
+        @test sc.emit_every == 16
+        # SLICE 46/47/48's SIX KEYS, UNCHANGED TO THE DIGIT — nothing about the MISSILE moved, so
+        # any difference this scenario shows is the TARGET's.
+        for (k, v) in ((:airframe, :six_dof), (:autopilot, :alpha), (:guidance, :pn),
+                       (:seeker, :filtered), (:seeker_axes, :az_el), (:seeker_detect, :snr))
+            @test sc.world.fidelity[k] === v
+        end
+        # THE TARGET: a shape, a broadside RCS, and a turn that brings its nose round.
+        tc = sc.world.entities[:tgt1].comp
+        @test tc[:rcs_fineness] == 8.0
+        @test tc[:rcs_m2] == 1.0               # the BROADSIDE peak, not a constant (slice 49 §3)
+        # ⚠ AND THE MISSILE HAS NEITHER A SEARCH NOR A MIDCOURSE: it HOLDS the lock at launch, and
+        # the question is whether the target can take it back. Either would be a second mechanism
+        # (convention 9) and would confuse "never acquired" with "lost".
+        mc = sc.world.entities[:m1].comp
+        @test haskey(mc, :detect_pt_w)
+        @test !haskey(mc, :seeker_search)
+        @test !haskey(mc, :midcourse)
+        # CONVENTION 9 — EXACTLY ONE LIVE KNOB, and its CEILING is the measured one.
+        @test length(sc.knobs) == 1
+        k = sc.knobs[1]
+        @test k.target === :tgt1 && k.key === :rcs_fineness
+        @test k.min == 1.0
+        # ⚠⚠ 10, NOT SLICE 49's 12, AND IT IS A MEASUREMENT: at F ≥ 11 the missile never
+        # re-acquires, flies blind through CPA, and both the miss and re-acquisition go
+        # NON-MONOTONE (F = 14 re-acquires while 12 and 16 do not). That region is a divergence
+        # being sampled, and a slider whose top was there would hand a student a place where
+        # dialling further makes things unpredictably better.
+        @test k.max == 10.0
+    end
+
+    @testset "⭐⭐ `seeker_tgo_s` — the ONE new key, and where it is gated" begin
+        # ⭐ THE HOME IS THE **FINENESS** BLOCK, NOT `_det_on`, AND THAT IS A BYTE-IDENTITY
+        # DECISION. The plan chose "beside `seeker_r_acq_m`" and called it byte-identical on every
+        # prior wire by construction — it is not: `_det_on` is TRUE on slices 46/47/48's wires, so
+        # all three would grow the key. Inside the fineness block it lands only where a wire has
+        # BOTH an `:snr` seeker AND a shaped target, and those sets are DISJOINT across every
+        # shipped scenario (46/47/48 have the budget and no shape; 49 has the shape and no missile).
+        a = _fly50(:authored; tmax = 0.5)
+        @test a.nkeys == a.n                    # present on EVERY tick of a slice-50 wire
+        b = _fly50(nothing; tmax = 0.5)
+        @test b.nkeys == 0                      # …and on NO tick when the shape is absent
+        # ⭐⭐ AND THE `_det_on` KEY SET IS UNCHANGED, which is what keeps 46/47/48 byte-identical.
+        # (`test_missile.jl` pins that set at FIVE; this is the same claim from the other side.)
+        for f in ("slice46_horizon.yaml", "slice47_midcourse.yaml", "slice48_search.yaml")
+            sc = load_scenario(normpath(joinpath(@__DIR__, "..", "..", "scenarios", f)))
+            w, subs = sc.world, sc.subs
+            for _ in 1:50; tick!(w, subs, sc.dt_physics); end
+            @test !any(endswith(kk, ".seeker_tgo_s") for kk in keys(w.env[:telemetry]))
+        end
+        # ⭐ AND IT IS `time_to_go`, NOT AN INLINE `r / V_c` — one definition, so the two sites
+        # cannot drift. An INDEPENDENT recompute off two other shipped keys (convention 11).
+        # ⚠ `VC_FLOOR` = 50.0 is 14× below every closing speed on this wire, so it never binds and
+        # the shipped value reduces to `r / V_c` exactly — which is what the gate-0 probe measured.
+        # ⚠⚠ AND THE SITE IS CHECKED, NOT JUST THE FORMULA: `seeker_tgo_s` is written in PHASE 3
+        # (`observe!`) while `closing_speed` and `los_range` are written in PHASE 4 (`decide!`).
+        # Nothing moves between them, so they must agree EXACTLY — and "must" is the word that
+        # precedes a pinned number nobody measured.
+        sc = load_scenario(_SCEN50)
+        w, subs = sc.world, sc.subs
+        for _ in 1:400
+            tick!(w, subs, sc.dt_physics)
+            tel = w.env[:telemetry]
+            vc = Float64(tel["m1.closing_speed"])
+            @test vc > 5 * EWSim.VC_FLOOR       # the floor is not binding, so the reduction holds
+            @test isapprox(Float64(tel["m1.seeker_tgo_s"]),
+                           Float64(tel["m1.los_range"]) / vc; atol = 1.0e-12)
+        end
+    end
+
+    @testset "⭐⭐ the view marker — the missile's side, and slice 49's must stay SILENT" begin
+        sc = load_scenario(_SCEN50)
+        info = EWSim._airframe_view_info(sc.world)
+        @test info !== nothing
+        @test info[:seeker_aspect_view] === true
+        # An aspect belongs to a target–observer PAIR: the telemetry is keyed on the OBSERVER (the
+        # MISSILE) while the prose names the TARGET, and the missile's aspect on this target is a
+        # DIFFERENT number from a ground radar's at the same instant.
+        @test info[:seeker_aspect_target] == "tgt1"
+        @test info[:seeker_aspect_observer] == "m1"
+        # ⚠ …AND SLICE 46's BUTTON MARKER IS STILL RAISED. It is this slice's own A/B — press it and
+        # the horizon goes away, the lock is never taken back, and the shape stops mattering. A
+        # marker that stole the button would delete the comparison.
+        @test info[:seeker_detect_view] === true
+        # ⚠ …and NOT 47's or 48's: this missile does not search and flies no belief.
+        @test !haskey(info, :search_view)
+        @test !haskey(info, :midcourse_view)
+        # ⭐⭐⭐ AND SLICE 49's MARKER MUST BE ABSENT — A CORE FIX, NOT A CLIENT ONE.
+        # `_aspect_view_info` raises on ANY shaped target, so this wire tripped it, and slice 49's
+        # HUD keys EVERY line off a RADAR observer this wire does not have. The block would render
+        # against an empty-string observer: "HOLDING IT: 90° broadside / echo 0 m² — 0.0 dB below
+        # broadside / range 0.0 km  Pd 0.00  SEEN" over a target turning nose-on at 3 g and seconds
+        # from being lost. Six defaulted numbers, no failing test, and the two loudest asserting the
+        # exact OPPOSITE of the lesson. ⇒ the observer is now REQUIRED: half a pair is not a marker.
+        @test EWSim._aspect_view_info(sc.world) === nothing
+        # …and slice 49's own wire is untouched by that tightening, key for key.
+        i49 = EWSim._aspect_view_info(load_scenario(_SCEN49).world)
+        @test i49 !== nothing && i49[:aspect_view] === true &&
+              i49[:aspect_target] == "tgt1" && i49[:aspect_observer] == "radar1"
+        # ⚠ …and NO OTHER SHIPPED WIRE raises the slice-50 marker. An enumerated carrier SET rather
+        # than an `isempty`, for the reason slices 36–49 each rediscovered: an `isempty` goes on
+        # passing forever while quietly ceasing to say anything the moment a second wire is added.
+        base = normpath(joinpath(@__DIR__, "..", "..", "scenarios"))
+        carriers = String[]
+        for f in readdir(base)
+            endswith(f, ".yaml") || continue
+            inf = EWSim._airframe_view_info(load_scenario(joinpath(base, f)).world)
+            inf !== nothing && haskey(inf, :seeker_aspect_view) && push!(carriers, f)
+        end
+        @test carriers == ["slice50_defensive.yaml"]
+    end
+
+    @testset "⭐⭐⭐ THE SLICE — the lock is TAKEN BACK while the range is still FALLING" begin
+        auth = _fly50(:authored)
+        @test auth.lost
+        # ⭐⭐⭐ THE STRUCTURAL ASSERTION, AND NO CONSTANT `rcs_m2` CAN SATISFY IT. The range at the
+        # loss is SMALLER than the range at launch — the target was lost while getting CLOSER. A
+        # fixed horizon has `dR_acq/dt = 0`, so it is crossed exactly once and inward.
+        @test auth.r < auth.r0 - 100.0
+        # …and the HORIZON is what moved, rather than the range running out to meet a stationary
+        # one. That separates the mechanism from the outcome — without it this is slice 46's lesson.
+        @test auth.racq < auth.racq0 - 100.0
+        # ⭐⭐ …AND IT MUST BE GIVEN BACK. That is what makes F ≤ 10 the teachable domain: below the
+        # ceiling the missile re-acquires and the price is a heading error it now has less time to
+        # remove; at F ≥ 11 it never does and the outcome stops being a lesson.
+        @test auth.regained
+        # ⚠ THE LAUNCH IS **INSIDE** THE HORIZON, and the RATIO is the design variable rather than
+        # either number. The crossing exists only if `F·ω > 4·V_c·R_b/r₀²` — `r₀²` is in the
+        # DENOMINATOR, so launching DEEPER inside the horizon makes the drop-out HARDER, not easier.
+        # ⭐ THE TRANSFERABLE FORM: a design condition evaluated AT a crossing has not shown the
+        # crossing EXISTS.
+        @test auth.racq0 > auth.r0
+        @test isapprox(auth.racq0 / auth.r0, 1.321; atol = 0.01)
+    end
+
+    @testset "⭐⭐⭐ THE NULL IS **MEASURED**, NOT DEFINED — bit-identical to what ships today" begin
+        # `rcs_aspect` touches the DETECTION and nothing else — it is not in the dynamics — and
+        # `ManeuveringTarget` never reads the missile. So a shape that changes no VERDICT changes
+        # NOTHING, and a gauge reading 0 on F ≤ 7 is reporting a measured null. That is the
+        # difference between an EXTENSION and an INTERPOLATION, and it is also this slice's answer
+        # to the confound that killed slice 41: a turn moves the trajectory as well as the aspect,
+        # so every arm flies the IDENTICAL manoeuvre and any difference is ASPECT, not geometry.
+        sph = _fly50(1.0)
+        for F in (3.0, 5.0, 6.0, 6.5, 7.0)
+            a = _fly50(F)
+            @test !a.lost
+            @test a.deg == 0.0
+            @test a.det == 1.0                  # ⚠ EXACT: this gate is DETERMINISTIC, no `Pd` draw
+            @test maximum(maximum(abs.(a.pos[i] .- sph.pos[i])) for i in eachindex(sph.pos)) == 0.0
+        end
+        # ⭐⭐ AND F = 7 IS THE REAL CONTROL, NOT THE SPHERE. At F = 1 the mechanism is switched OFF,
+        # so a separation against it proves only that the mechanism exists. At F = 7 the echo is
+        # hundreds of times dimmer at the IDENTICAL geometry — the mechanism is fully ON — and the
+        # lock is STILL never lost. That is what makes the threshold a THRESHOLD and not a slope.
+        sc = load_scenario(_SCEN50)
+        tgt, mis = sc.world.entities[:tgt1], sc.world.entities[:m1]
+        best = 0.0
+        for a in range(deg2rad(20), deg2rad(90); length = 40)
+            tgt.vel = Vec3(cos(a) * -300.0, sin(a) * -300.0, 0.0)
+            tgt.comp[:rcs_fineness] = 1.0; s1 = EWSim._effective_rcs(tgt, mis.pos)
+            tgt.comp[:rcs_fineness] = 7.0; s7 = EWSim._effective_rcs(tgt, mis.pos)
+            best = max(best, s1 / s7)
+        end
+        @test best > 100.0
+    end
+
+    @testset "⭐⭐ THE GAUGE IS MONOTONE, AND IT IS NOT THE MISS" begin
+        # `k` (28), `ω_n` (40), `σ_seek` (25), the authority (48) and the loss COUNT (49) all died
+        # as gauges on non-monotonicity. This one is asserted, not assumed.
+        prev = -1.0
+        for F in (1.0, 7.0, 7.5, 8.0, 9.0, 10.0)
+            a = _fly50(F)
+            @test a.deg ≥ prev
+            prev = a.deg
+        end
+        @test prev > 4.0                        # the ceiling owes a real angle (measured 5.77°)
+        # ⭐ AND THE LOSS MOVES EARLIER AND FURTHER OUT AS THE BODY SLIMS — a second, independent
+        # reading of the same mechanism.
+        # ⚠⚠ BUT THE MECHANISM IS **NOT ISOLATED** BY THIS AND THE LEDGER MUST NOT SAY IT IS: the
+        # loss also moves to LONGER RANGE, and under PN on a collision course ω falls with range, so
+        # both effects push the same way and a monotone rise cannot discriminate between them. The
+        # SIGN is confirmed; the mechanism is consistent-but-not-isolated.
+        a8, a10 = _fly50(8.0), _fly50(10.0)
+        @test a10.t < a8.t
+        @test a10.r > a8.r
+        # ⭐⭐⭐ AND EVERY ARM FLIES THE SPHERE'S ENGAGEMENT EXACTLY UNTIL ITS OWN LOSS. That identity
+        # is what makes every at-loss quantity a function of THE LOSS INSTANT ALONE — so the choice
+        # among them (ω, r, t_go, their product) is a choice of UNITS, not of information, and it
+        # was made on which sentence survives swapping the seeker for a radar. `ω·t_go` is the only
+        # one that becomes EMPTY under that swap: a radar has no collision course to be off and no
+        # time-to-go to hold it through.
+        sph = _fly50(1.0)
+        for a in (a8, a10)
+            @test maximum(maximum(abs.(a.pos[i] .- sph.pos[i])) for i in 1:(a.k - 1)) == 0.0
+        end
+    end
+end

@@ -7035,3 +7035,223 @@ godot --headless --path clients/godot --script res://net/slice49_ui_test.gd    #
 
 Live: the server above, then Godot on `clients/godot` (`Sandbox.tscn` auto-detects the aspect view).
 One slider, no button. Drag from 8 down to 1 and the target comes back; drag up and it vanishes.
+
+## Slice 50 — THE ASPECT-DEPENDENT ENGAGEMENT (2026-08-26)
+
+**SHIPPED — gate 0 (a pre-registered kill that FIRED, then a second gauge that passed) + gate 1's
+scenario/HUD/four proofs, 17280 → 18153 tests.** Slice 49 gave the target a SHAPE and watched a
+GROUND RADAR lose it. `_effective_rcs` is the ONE site, and `missile.jl`'s seeker horizon already
+called it — so as of 49 a missile's detection range was ALREADY aspect-dependent, untested as a
+lesson. This slice is that test.
+
+> **THE LESSON, IN ONE SENTENCE.** *A missile launched already holding its lock can have that lock
+> TAKEN BACK by the target's own manoeuvre — the horizon retreats faster than the missile closes — and
+> the price is paid in **the heading error the missile goes blind holding**, never in the miss.*
+
+⭐ §8.3 predicted "almost nothing in the core, and the whole cost is the showcase." That is exactly
+how it came out: **ONE new telemetry key**, one marker, one core bug-fix, and a scenario + HUD +
+four proofs.
+
+### ⭐⭐⭐ WHY THIS IS NOT SLICE 49 WITH A MISSILE IN IT — THE §0.2 SUBSTITUTION TEST
+
+The gate-0 record's own admissibility rule: **swap the seeker for a ground radar and the slice's
+sentence must become EMPTY.** 49's sentence ("lost while closing") survives that swap — a radar says
+it fine. The gauge that ships here does not: **`ω_LOS · t_go` at the loss instant** is the heading
+error the missile still owed when the picture went away, and a ground radar has no `t_go` and owes no
+heading. ⇒ the two slices share a mechanism and do NOT share a lesson.
+
+### THE MEASURED COLUMN, ON THE GRID THE CLIENT ACTUALLY SEES (`emit_every: 16`)
+
+| `rcs_fineness` | 1.0 (sphere) | **7.0 (the sub-threshold control)** | **8.0 (authored)** | 10.0 (ceiling) |
+|---|---|---|---|---|
+| lock lost while closing? | no | **no** | yes | yes |
+| `t_loss` | — | — | 3.280 s | 2.272 s |
+| `r_loss` | — | — | 3809.9 m | 4521.7 m |
+| ⭐ **owed (deg)** | **0.000** | **0.000** | **2.380** | **5.702** |
+| lock given back | — | — | yes | yes |
+| frames held | **100.0 %** | **100.0 %** | 73.8 % | 37.2 % |
+
+Monotone, 2.40× separation between the two live arms. ⭐ The 1.0 and 7.0 arms are **bit-identical to
+each other over all 500 frames** (`max|Δpos|` = 0), and each shaped arm is bit-identical to the sphere
+over its own holding prefix — the shape reaches the SEEING and nothing about the FLYING (slice 49's
+byte-identity, same direction).
+
+⚠⚠ **THE PINS ARE THE EMITTED ONES, NOT THE PER-TICK ONES.** P1b measured at `dt` = 1e-3; the client
+is handed every 16th tick, so the 1 → 0 transition it latches on lands up to one interval after the
+true loss: **7.5 → 1.183°/1.179°, 8.0 → 2.389°/2.380°, 10.0 → 5.771°/5.702°** (per-tick / emitted).
+Deterministic, so it pins fine — but it must be pinned from frames a client is actually handed.
+
+### ⚠ THE `F` = 7 ARM IS THE ONE THAT MAKES THE THRESHOLD A THRESHOLD
+
+Its echo is **452.4× dimmer than the sphere's at the IDENTICAL geometry** and the lock is **still
+never lost.** A separation measured only against `F` = 1 — where the mechanism is switched OFF —
+proves the mechanism exists and nothing about where it bites. ⭐ **A null arm and a SUB-THRESHOLD arm
+are different controls and a slider needs BOTH.**
+
+### THE EXISTENCE CONDITION (gate 0 §4, and it is counter-intuitive)
+
+A drop-out requires `F·ω > 4·V_c·R_b/r₀²`. **`r₀²` is in the DENOMINATOR**, so launching DEEPER
+inside the sensor's horizon makes the drop-out HARDER, not easier — the horizon has further to
+retreat before it can pass through a range that is already small. ⇒ this scenario launches at
+6000 m against an 8079 m broadside horizon, close to the OUTER edge of the window rather than
+comfortably inside it.
+
+### ⭐⭐ THE MISS BAN, RE-EARNED RATHER THAN INHERITED (44/46/48 precedent)
+
+Above `F` = 10 the CPA **reverses direction four times** across the slider. The miss is not a gauge
+here, and this slice measured that rather than quoting it.
+
+### THE CORE — ONE KEY, ONE MARKER, ONE BUG FIX
+
+- **`<seeker>.seeker_tgo_s` — THE SECOND FACTOR OF THE GAUGE.** ⚠⚠⚠ **ITS HOME IS A CORRECTION TO THE
+  PLAN.** §9.3 put it in the `_det_on` block and called that "byte-identical on every prior wire by
+  construction." **False** — `_det_on` is TRUE on slices 46, 47 AND 48, all of which author
+  `detect_pt_w` and run the `:snr` rung, and `test_missile.jl` pins `length(a.keys0) == 5`. It ships
+  instead inside the `haskey(tgt.comp, :rcs_fineness)` block, which requires BOTH an `:snr` seeker AND
+  a shaped target — **two sets that are DISJOINT across every shipped scenario** (46/47/48 have the
+  budget and no shape; 49 has the shape and no missile). Byte-identity by MEASUREMENT this time.
+- ⚠⚠ **AND THE SITE WAS VERIFIED, NOT ONLY THE FORMULA.** The key is written in **phase 3**; P1b's
+  table was read off **phase-4** `closing_speed`. Nothing moves between `observe!` and `decide!` —
+  *should* being the word that precedes a pinned number nobody measured. Measured
+  (`p2_sitecheck.jl`): `max|Δ| = 0.000e+00 s` over every tick of every arm, so §7.1's table stands ON
+  THE SHIPPED KEY.
+- **`seeker_aspect_view` / `_target` / `_observer`** — the 13th view marker, gated on the CONJUNCTION
+  of a seeker budget and a shaped target.
+- ⭐⭐⭐ **A MARKER HOLE IN SLICE 49's CODE, AND IT IS THE WORST FORM THIS FAMILY HAS SEEN.**
+  `_aspect_view_info` (radar.jl) raised on **ANY** shaped target, and slice 49's HUD keys every line
+  off `_aspect_observer`, which on a wire with no radar is the EMPTY STRING. A slice-50 wire would
+  have rendered `HOLDING IT: 90° broadside / echo 0 m² — 0.0 dB below broadside / range 0.0 km
+  Pd 0.00 SEEN` over a target turning nose-on at 3 g and seconds from vanishing. **Six defaulted
+  numbers, no failing test, and the two loudest of them asserting the exact OPPOSITE of the lesson.**
+  ⇒ fixed in the CORE: **`_aspect_view_info` now REQUIRES its observer and returns `nothing` without
+  one. HALF A PAIR IS NOT A MARKER.** Byte-identical on every shipped wire (`slice49_aspect.yaml` is
+  the only raiser and it authors `radar1`). ⚠ The arm was unreachable on every slice-1..49 wire,
+  which is why it read as harmless defensive code for a whole slice.
+
+### THE SCENARIO — `scenarios/slice50_defensive.yaml`
+
+`seed: 32`, `dt_physics: 1.0e-3`, `emit_every: 16`. Fidelity is slice 46/47/48's six keys UNCHANGED.
+Missile `m1` at `[0, 0, 3000]` with slice 48's plant and 7-key seeker budget — **no `seeker_search`,
+no `midcourse`**: the missile starts the run already holding the lock, so the only thing that can take
+it away is the target. Target `tgt1` at `[6000, 0, 4200]`, velocity `[0, −300, 0]` (**exactly 90°
+aspect at `t` = 0**), `rcs_m2: 1.0` (⚠ the BROADSIDE PEAK once a fineness is present, not a mean),
+`rcs_fineness: 8.0`, `maneuver: {a_lat_mps2: 30.0, turn_sign: −1.0, turn_plane: horizontal}` (3.06 g).
+
+One slider, `rcs_fineness` 1 → 10, labelled *"watch the LOCK BE TAKEN BACK, not the miss"*.
+
+### THE CLIENT — A HEADLINE FROM THE **LABEL** CHAIN AND FIVE BODY LINES
+
+Headline `BLIND SINCE 2.38° WAS OWED`; body at y = 110/132/154/176/198 (46/47/48's layout). The latch
+lives in **`_airframe3d_on_state`**, not beside slice 49's in `_spatial_on_state` — a slice-50 wire
+authors `airframe: six_dof` and routes to the 3-D view, so the two instruments live in different
+handlers because of the VIEW each wire routes to. ⚠ Placed in 49's handler first, where it would have
+seen ZERO frames and printed "HOLDING IT — lock never broken" through the entire blind run.
+
+⚠⚠ **THE LESSON'S NULL AND THE DEAD INSTRUMENT ARE THE SAME NUMBER, WHICH NO PREVIOUS GAUGE HAD.**
+The null reads `0.000°` (`F` ≤ 7 never loses the lock) and a missing `seeker_tgo_s` read through
+`.get(k, 0.0)` also reads `0.000°`. **No value assertion anywhere can separate them.** ⇒ the client
+tracks key PRESENCE independently of value and prints a different sentence for each — *"no heading
+error owed — the shape is round"* vs *"gauge unavailable — `seeker_tgo_s` not on the wire"* — asserted
+in both directions.
+
+**THE DRAG DISARMS THE LATCH, it does not restart it** (decided at gate 0 §9.4, shipped unchanged).
+⭐ **A latched DURATION may restart mid-flight; a latched INSTANT may not** — the duration's meaning is
+local to the run it accumulates, the instant's meaning is the whole history that led to it, and a live
+knob rewrites that history. The HUD shows `SHAPE CHANGED — Reset to measure` and **no number at all**;
+the LIVE lines (detect lamp, `R_acq`, range, aspect) are untouched, which keeps the drag a teaching
+instrument.
+
+### THE VERIFIER — 5 ARMS × 8000 STEPS (`t` = 8.0 s, stopping short of CPA at ~8.21 s)
+
+Arms: sphere 1.0, **null 7.0 (the real control — same mechanism, sub-threshold)**, authored 8.0,
+ceiling 10.0, replay 8.0. Asserts the handshake (marker PAIR present, `aspect_view` **ABSENT**, six
+fidelity keys, one knob 1–10 linear), per-arm (all six keys on every frame, starts detected, starts
+broadside, σ ≤ broadside, **launch INSIDE the horizon**, the `R_acq` ratio 1.321), the lesson (lost
+while CLOSING, horizon RETREATED, lock GIVEN BACK), the monotone gauge, byte-identity, replay
+determinism, and — ⭐ — **the aim of the windowed shot, MEASURED rather than guessed** (step 4320 is
+inside the blind run and after the latch).
+
+### THE UI TEST — 13 TEETH, AND ONE OF THEM IS REACHED BY NO OTHER PROOF
+
+⭐⭐⭐ **TOOTH 6, THE DRAG DISARM** — the verifier sends `reset` between arms, the UI test's own Reset
+tooth presses the BUTTON, and a shot is one static frame, so the live drag is the one path the other
+three proofs structurally cannot touch (slice 49, verbatim). Both halves asserted, and confirmed to
+FAIL with the fix removed. ⚠ It is reached **through the slider's own signal path**
+(`value_changed.emit()`, slice 49's technique) rather than by calling the handler — a mock slider
+outside the SceneTree sends nothing on a bare assignment, and that is the difference between testing
+the WIRING and testing the assignment.
+
+Plus tooth 9 (**the two zeros**), tooth 9b (**the aspect WORD**, see below), routing, the marker pair,
+the HUD-not-the-button split (47/48's shape, not 49's), both mirrors, slice 49's block staying silent
+on a wire with no radar, the edge latch, Reset re-arming, the slider path, and a prior-wire tooth.
+
+**WIDTHS: 374 px bodies / 365 px headlines against 430 px of room, 6 verdict states, none naming the
+miss.** ⚠ The first run measured **429 px against 430** — one glyph from clipping and indistinguishable
+from a comfortable pass, so the tooth now PRINTS the margin and the WIDEST LINE on a passing run.
+
+### ⭐⭐⭐ THE WINDOWED SHOT CAUGHT TWO DEFECTS, NEITHER VISIBLE TO ANY HEADLESS PROOF
+
+1. **TWO HEADLINES OVERLAPPING.** Slice 46's `SEEKER BLIND: no echo yet` at y 40 and slice 50's
+   headline drawn over the shared cross-range line at y 88. **There are TWO dispatch chains in
+   `Sandbox.gd`** — one selects the top-of-screen VERDICT LABEL, one selects the HUD BLOCK — and only
+   the second had a slice-50 branch. The file's own standing rule, written out in FIVE separate
+   comments, is *"all dispatch chains must agree"*, and it was still possible to edit one and not the
+   other with every headless proof passing. ⇒ **`--headless` never runs `_draw`, so a chain
+   disagreement is INVISIBLE to the verifier and the UI test alike.** The shot also caught a
+   redundancy: the disclaimer printed the RANGE, already in the shared header at y 66; it now names
+   the CLOSING SPEED, the second half of the mechanism and a number that appears nowhere else.
+2. ⭐⭐ **THE ASPECT WORD WAS WRONG ON THE ONE FRAME THAT CARRIES THE LESSON.** `_s50_word` inherited
+   slice 49's ABSOLUTE bands (70–110° → "broadside"), and **this wire never leaves that one band** —
+   launch is 90°, every loss on every arm is 71.9°–81.5°. So the vocabulary was CONSTANT over the
+   entire teachable domain, the same objection §6.4 used to disqualify `min R_acq/r` as a gauge. ⚠⚠
+   **And it was WRONG, not merely useless:** it printed "broadside" — the word for BRIGHTEST — on a
+   frame where the echo is ~18 dB down and the line beneath said the horizon had collapsed inside the
+   range. **That is the §10.4 marker-hole defect exactly, except that one was a DEFAULTED value fixed
+   in the core and this one was a COMPUTED value shipped in the client.** ⇒ the word now bands on the
+   **DEPARTURE from broadside, `|90 − θ|`** — the quantity that actually moves here and the one the
+   horizon follows (`R_acq = R_broadside / sqrt(1 + F²δ²)`). Measured after the fix: `90°` = *square
+   on — its brightest* → `81.5°` = *just off broadside* → `76.4°/71.9°` = *well round from broadside*.
+   Tooth 9b now asserts it CHANGES, RESOLVES across the slider, never says "brightest" at a reachable
+   loss aspect, is still reachable at 90° where it is true, and is fore/aft symmetric as an IDENTITY.
+
+### ⚠ §0.6's RIM-MARGIN CONJUNCT IS **NOT APPLICABLE**, RECORDED RATHER THAN DROPPED
+
+§0.6 required the tick test to be `seeker_detect == 1` AND slice 48's rim-margin rule. **That rule is
+about the ANGULAR window; this loss is a RANGE-gate loss.** `missile.jl` ships the two verdicts as
+separate lamps on purpose — `gimbal_valid` carries the FOV conjunction, `seeker_detect` is the range
+verdict ALONE — and here the head tracks a target it holds with the angular margin never in question,
+while the RANGE margin passes through zero at kilometres per second. The conjunct would have been a
+no-op that looked like a safeguard.
+
+### THE JULIA SIDE
+
+`core/test/test_rcs_aspect.jl` 592 → 859 lines: `_SCEN50`, a `_fly50(F; tmax=8.0)` helper and six
+testsets under *"the aspect-dependent ENGAGEMENT — THE SHIPPED SCENARIO (slice 50 gate 3)"* —
+**871 tests standalone, 55.0 s.** ⚠ `test_missile.jl` needed the new scenario added to BOTH the
+enumerated `gimbal_rate_dps` carrier list AND `expected_rate` (the `gimbal_rate_view` mirror
+exemption), each with a recorded reason: the scenario authors `gimbal_rate_dps: 240.0`, so it joins
+that set, and the ISOLATION matters most here — **this is the first wire whose lock is lost for a
+reason that is NOT the missile's.**
+
+### THE FOUR PROOFS
+
+| proof | result |
+|---|---|
+| **verifier** (`slice50_verify.gd`, 5 arms × 8000 steps) | **PASS**, exit 0 |
+| **UI test** (`slice50_ui_test.gd`, 13 teeth) | **PASS**, exit 0 — 374 / 365 px against 430 |
+| **headless smoke-load** (`Sandbox.tscn`) | **PASS** — `EWSIM_SERVER_DONE` with **empty** stderr |
+| **windowed shot** (step 4320, `t` = 4.320 s) | **PASS after two fixes** — verified inside the blind run and after the latch |
+| **full Julia suite** | **PASS 18153 / 18153** |
+
+### RUN IT
+
+```
+& tools/julia.ps1 --project=core tools/server.jl scenarios/slice50_defensive.yaml
+godot --headless --path clients/godot --script res://net/slice50_verify.gd     # S50V PASS 5 arms
+godot --headless --path clients/godot --script res://net/slice50_ui_test.gd    # S50UI OK (no server)
+```
+
+Live: the server above, then Godot on `clients/godot` (`Sandbox.tscn` auto-detects the seeker-aspect
+view). One slider, no button. Drag to 10 and the lock is taken back sooner and costs more; drag to 7
+and a target 452× dimmer than a sphere is still never lost. ⚠ Dragging DISARMS the gauge — press Reset
+to measure the new shape.

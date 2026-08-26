@@ -8186,11 +8186,20 @@ end
             # servo, authored for the same measured reason. It matters MORE again, because a SEARCH
             # is pointing and nothing else — a saturating servo would make "the sweep did not cover
             # the gap in time" unattributable to the sweep RATE, which is the whole slider.
+            # ⚠ SLICE 50 WIDENED IT AN EIGHTH TIME AND THE ASSERT CAUGHT IT AGAIN — and this one is
+            # the first widening that comes from a change to the TARGET rather than to the missile.
+            # Slice 50's wire IS slice 48's missile with the search and the midcourse REMOVED (it
+            # holds the lock at launch; the question is whether the target can take it back), so it
+            # carries the same head, the same window and the same 240 °/s servo, authored for the
+            # same measured reason. ⭐ AND THE ISOLATION MATTERS MOST OF ALL HERE, because this is
+            # the first wire on which the thing being lost is lost for a reason that is NOT the
+            # missile's: a saturating servo would offer a second explanation for a dropped lock, on
+            # the one wire whose entire claim is that the TARGET caused it.
             @test carriers == ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml",
                                "slice37_frame.yaml", "slice38_head_gyro.yaml",
                                "slice40_heavy.yaml", "slice40_resonance.yaml",
                                "slice46_horizon.yaml", "slice47_midcourse.yaml",
-                               "slice48_search.yaml"]
+                               "slice48_search.yaml", "slice50_defensive.yaml"]
         end
     end
 
@@ -8275,7 +8284,15 @@ end
                              # Same remedy; its mirror is `slice48_ui_test.gd`, and its marker has
                              # slice 47's shape — the HUD, deliberately NOT the button, because
                              # slice 46's button is still this slice's own A/B.
-                             "slice48_search.yaml"]
+                             "slice48_search.yaml",
+                             # ⚠ SLICE 50: slice 48's missile with the search and the midcourse
+                             # REMOVED, so it carries the same authored-wide servo for the same
+                             # reason. Same remedy, and its mirror is `slice50_ui_test.gd` — whose
+                             # shape is 47/48's (the marker takes the HUD and deliberately NOT the
+                             # button, because slice 46's button is still this slice's own A/B:
+                             # press it and the horizon goes away, the lock is never taken back, and
+                             # the target's shape stops mattering at all).
+                             "slice50_defensive.yaml"]
             for f in readdir(base)
                 endswith(f, ".yaml") || continue
                 f in expected_rate && continue

@@ -763,3 +763,80 @@ horizontal-plane engagement (the target's cross-range is not on that axis at all
 lesson instead, and the plan says so); and the blip pile-up under a `step` (a harness artifact of
 aging on WALL time while firing on SIM events — pre-existing for every spatial slice, and NOT to be
 "fixed" in the client for a shot harness's sake).
+
+## ⭐⭐⭐ SLICE 50 DISCHARGED SLICE 49's OWN TOP CANDIDATE — "THE SEEKER SIDE OF THE SAME PHYSICS" IS **SHIPPED** (2026-08-26)
+
+Slice 49 raised **"⭐⭐⭐ THE SEEKER SIDE OF THE SAME PHYSICS — an ASPECT-DEPENDENT ENGAGEMENT"** and
+noted that `_effective_rcs` is the ONE site, that `missile.jl`'s seeker horizon already calls it, and
+that a missile's detection range was therefore ALREADY aspect-dependent as of 49, **untested as a
+lesson**. The candidate asked *"what happens when the horizon MOVES because the target turned?"*
+
+**It is now answered and shipped** (`scenarios/slice50_defensive.yaml`, `docs/STATUS.md` §Slice 50).
+⭐ The candidate's own framing was right on the cost: 49's physics needed **ONE new telemetry key** to
+carry a lesson, and everything else was the showcase. ⚠ Its caution — *"read slice 44's verdict first
+(a detection gate needs the right wire) and 46's discharge of it"* — was also right, and 46's rule
+came back in a stronger form: see the existence condition below.
+
+### ⚠⚠ WHAT SLICE 50 ADDS TO 44/46's RULE ABOUT WHERE AN ENGAGEMENT MUST BE LAUNCHED
+
+44/46: *a detection gate can only price a design variable if the engagement is launched OUTSIDE the
+sensor's horizon.* Slice 50's gate is a horizon that MOVES, and the condition it derived is
+`F·ω > 4·V_c·R_b/r₀²` — **with `r₀²` in the DENOMINATOR.** ⇒ **launching DEEPER inside the horizon
+makes the drop-out HARDER**, because the retreating horizon has further to fall before it passes
+through a range that is already small. Same direction as 44/46's rule and for a different reason: not
+"you must start outside it" but "you must start near its EDGE." A slice that wants a moving-horizon
+loss and launches comfortably inside will get nothing and will not know why.
+
+### ⭐⭐ AND THE MISS BAN IS RE-EARNED, NOT INHERITED
+
+Above `F` = 10 the CPA **reverses direction four times** across the slider. 44/46/48 each banned the
+miss on this arc; slice 50 measured its own reversal rather than quoting theirs. ⇒ **the ban now has
+four independent measurements behind it and should be treated as a property of the ARC, not of any one
+scenario.**
+
+## New candidates raised by slice 50
+
+⚠ Read the two-test rule at the top of this file before proposing to kill any of these.
+
+**⚠⚠ THE TAIL LOBE (slice 49's candidate) NOW HAS HIGHER STAKES — IT WOULD BREAK A SHIPPED TOOTH.**
+49 deferred fore/aft asymmetry as missing physics. Slice 50's `slice50_ui_test.gd` tooth 9b asserts
+the aspect vocabulary is fore/aft symmetric **as an IDENTITY** (`word(θ) == word(180 − θ)`), which is
+correct *because* `rcs_aspect` is symmetric by construction. ⇒ a tail lobe is no longer an additive
+change: it retires that identity, and whichever slice ships it must say what replaces the tooth. ⭐
+That is the tooth doing its job — it pins the approximation in place so the day it is removed is a
+visible day.
+
+**⭐⭐ A MIDCOURSE HANDOVER INTO A TURNING TARGET.** Slice 50 deliberately authors **no `midcourse` and
+no `seeker_search`** so that the ONLY thing that can take the lock away is the target. Slice 47's law
+(the handover error is the PICTURE error × the TIME SPENT BLIND) and slice 48's search both assume the
+horizon stands still while the head hunts. A target that turns during the blind phase moves the horizon
+underneath the search. ⚠ The gate-0 question is whether that is a NEW lesson or 47/48's arithmetic with
+one more term — and convention 9 is against stacking three mechanisms in one scenario, so it likely
+needs 47's or 48's scenario with the shape added, not a fourth one.
+
+**⭐ RE-ACQUISITION AS A LESSON IN ITS OWN RIGHT.** Both live arms **get the lock back** (the target's
+turn carries it past nose-on and the echo recovers), and slice 50 asserts that it happens but does
+NOT price it. What the second lock is worth — how much of the owed heading can still be paid, against
+`t_go` at the moment it returns — is a gauge nobody has measured. ⚠ Beware slice 48's finding that
+**acquisition is not a latch**: a lock re-gained too late is consumed and buys nothing, so this
+candidate must price the RECOVERY, not merely count it.
+
+**⚠ A TARGET THAT TURNS TO DEFEAT rather than one that happens to be turning.** `maneuver` is an
+authored constant here — the target turns because the scenario says so, not because it saw a missile.
+A target that pointed its nose at the THREAT would make the aspect a closed loop through the
+engagement geometry. ⚠⚠ **PRE-REGISTERED HAZARD:** slice 50's whole byte-identity argument (the shape
+reaches the SEEING and nothing about the FLYING) dies the moment the target's motion depends on the
+shape, and that identity is what makes the slider's comparison a clean frame-for-frame one. Propose it
+only with a replacement for that argument.
+
+**⚠ A NOTE, NOT A CANDIDATE — `rcs_m2` CHANGES MEANING WHEN A FINENESS IS PRESENT.** With a shape
+authored, `rcs_m2` is the **BROADSIDE PEAK**, not a mean or a typical value, so a target authored at
+1.0 m² is dimmer than 1.0 m² almost everywhere. Both shipped scenarios document it in place. ⚠ Any
+future scenario that reuses an RCS number lifted from a slice-1..48 wire and adds a fineness has
+silently made that target dimmer. Not a defect; a footgun with two occurrences and no third one yet.
+
+**⚠ CLOSED BY SLICE 50, so nobody re-proposes them:** the max-of-ratio gauge (`R_acq`-retreat ÷
+closing rate — killed at gate 0 by its own pre-registered predictive test, see `docs/LESSONS.md`); the
+loss RANGE as this slice's gauge (it carries identical information and a ground radar can say it, so
+it fails the substitution test); and slice 48's rim-margin conjunct on this wire (an ANGULAR rule
+applied to a RANGE-gate loss — a no-op that would have looked like a safeguard).
