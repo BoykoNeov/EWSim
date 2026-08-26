@@ -909,3 +909,56 @@ defensible ceiling for a *datalink quality* story, and 70 % is not a datalink qu
 hardware, but a reader who finds the showcase quietly using different hardware from slice 47 will —
 rightly — ask what else moved. The reason is one sentence: **a search needs somewhere to look, and a
 30° trunnion is a search that cannot leave its cue.**
+
+## ⭐⭐ §4.6 — GATE 0 **CLOSED** (2026-08-26): THE PICTURE ERROR IS A **FIXTURE**, SO IT IS AUTHORED AT 140 m/s AND LABELLED HONESTLY
+
+§4.5c's three ways out are decided in favour of **option 3 — ship the 70 % and name it for what it
+is** — and the reason is not tolerance for a big number. It is that **the picture error is not the
+same KIND of object in this slice as it was in slice 47.**
+
+- In slice 47 the picture error **WAS THE SLIDER**. The lesson was *how wrong a midcourse may be*,
+  the cliff was quoted in m/s, and a domain the reader is being taught to interpret has to be a
+  domain a real datalink could occupy. Hence the 25 % ceiling — **scoped to that narrative**, and
+  §6.8 item 2 says so in the sentence that defines it ("the slider is the belief VELOCITY error…
+  domain 0 → ~25 %").
+- In slice 48 it is **SCENERY**. The slider is ρ, the sweep rate; the picture error is a constant of
+  the fixture that sets the deficit and is never dialled, never plotted and never read as a
+  teaching quantity. Nobody is being taught the value 140, so it carries no defensibility bar of
+  its own — only an HONESTY bar, which is met by naming the physical story correctly.
+
+⇒ **the scenario header states the story as "the target did something other than what the midcourse
+was told", not as datalink noise.** A 70 % velocity discrepancy is not a quality-of-link number and
+must never be quoted as one. ⚠ This is a LABEL, not a model: nothing in the wire manoeuvres. The
+honest form is *"the belief is wrong by 140 m/s on the crossing axis, which is a target that changed
+course, not a noisy link"* — one sentence, in the header, beside the number.
+
+**WHY NOT THE OTHER TWO** (both were live options and both cost the measured table):
+
+1. **A POSITION error** (`midcourse_pos_err_m`) would need its own gate 0 for a reason worth naming:
+   a FIXED lateral offset subtends a **GROWING** angle as the range closes, so the deficit is not
+   static and part of the acquisition could come for free as the geometry rotates the target into
+   the window. That is a DIFFERENT lesson — "a stale position error solves itself; a stale velocity
+   error does not" — and it is a candidate for a later slice, not a re-authoring of this one.
+2. **A MANOEUVRING TARGET** changes the target's actual trajectory ⇒ the 1200.17 m null, the crossing
+   geometry and **every row of §4.5a** are invalidated and P4/P5 re-run. DEFERRALS already warns this
+   risks being slice 47's lesson in different clothes and wants a probe showing the failure MODE
+   differs. Neither is a price this slice should pay for a label.
+
+### §4.6a — THE TWO STRUCTURAL CHECKS RAISED WITH THE DECISION (advisor), BOTH RUN
+
+- ⭐ **THE STOP CHANGE IS ADDITIVE, AND IT WAS CHECKED RATHER THAN ASSUMED.** `gimbal_stop_deg` is an
+  AUTHORED per-scenario key (`scenario.jl`'s head-key loop) whose code-side default is
+  `get(c, :gimbal_stop_deg, 1.0e6)` — effectively no stop. ⇒ authoring 45.0 in
+  `scenarios/slice48_search.yaml` touches slice 47's wire not at all and cannot move a prior replay.
+  ⚠ **BUT THE WRITE-UP OWES THE READER ONE SENTENCE**: DEFERRALS says *"author it on slice 47's
+  wire"*, and slice 48's wire is slice 47's **with the trunnion widened**. Say so where the number
+  is authored (§4.4's reason: *a search needs somewhere to look, and a 30° trunnion is a search that
+  cannot leave its cue*), or the next reader finds the showcase quietly running different hardware
+  and rightly asks what else moved.
+- ⚠⚠ **DRAW TOPOLOGY vs THE SLIDER (convention 3) IS A GATE-2 TOOTH, NOT AN ASSUMPTION.** The search
+  moves the HEAD; the detector's per-look RNG draw must fire the same number of times per tick at
+  every ρ, with only the GATE moving. The seeker's noise draw is unconditional in `_observe_point3d!`
+  today and the search branch adds no draw — but "adds no draw" is exactly the claim that must be
+  PINNED, because a rate that changed the number of ticks spent in a branch that draws would flip
+  the topology silently. **`test_search.jl` asserts byte-identity of the RNG stream across two ρ**
+  (and the absolute golden remains the master check).
