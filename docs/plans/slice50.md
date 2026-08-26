@@ -896,8 +896,10 @@ byte-identity change wearing the clothes of a one-line convenience.**
 these keys."* **That block is the correct home**, and a key added there is byte-identical on every
 prior wire by construction.
 
-⇒ **gate 1 ships `seeker_tgo_s` (or equivalent) beside `seeker_r_acq_m` / `seeker_range_margin_m`,
-and the CLIENT latches `ω_LOS · t_go` at the 1 → 0 transition.** ⭐ That is the cleanest reading of
+⇒ **gate 1 ships `seeker_tgo_s` beside `seeker_r_acq_m` / `seeker_range_margin_m`, and the CLIENT
+latches `ω_LOS · t_go` at the 1 → 0 transition.** ⚠ **THE NAME IS DECIDED HERE, NOT "or equivalent"** —
+§9.4's UI-test tooth references it, and *"or equivalent"* is how one key ends up with two names in two
+files. ⭐ That is the cleanest reading of
 slice 49's own lesson — *a gauge must carry its own window; the core ships the INPUTS and the client
 expresses the gauge* — and of convention 13, since the client is compositing shipped keys rather than
 recomputing physics. §8.3's option 2 (a latched core key) is **not** needed and would cost core state.
@@ -915,12 +917,25 @@ the FLIGHT*):
 
 | on a live `rcs_fineness` drag | |
 |---|---|
-| the latched `ω·t_go` and its range-at-loss readout | ⭐ **CLEARED** — they belong to the SHAPE that produced them. Displaying 5.77° under a sphere is *the needle's number under the wrong shape*, which is slice 49's defect verbatim. |
-| the live detect lamp, `R_acq`, the margin, the aspect | **KEPT LIVE** — they are recomputed every tick from the new shape and were never latched. |
-| the latch's ARMING | ⭐ **RE-ARMS** on the next 1 → 0 transition, as 49's window re-accumulated. |
-| ⚠⚠ a re-armed reading | **MUST NOT be presented as a from-launch measurement.** A shape dialled in at t = 5 s loses the picture somewhere its from-launch flight never would, so the number is true about THIS flight and not comparable to the slider's own curve. ⇒ the verdict word carries a **post-drag** distinction, and §0.6's RANGE-AT-LOSS readout — already in the plan — is what makes it legible. |
+| the latched `ω·t_go` | ⭐ **CLEARED** — it belongs to the SHAPE that produced it. Displaying 5.77° under a sphere is *the needle's number under the wrong shape*, which is slice 49's defect verbatim. |
+| the latched RANGE-AT-LOSS | ⭐ **CLEARED TOO, and this is a SECOND decision with its own reason.** §0.6 calls it a *readout*, which could be misread as live telemetry that stays. It is not: it is `r` **sampled at the loss instant**, so it is part of the same latch and goes stale with it. |
+| the live detect lamp, `R_acq`, the range margin, the aspect | **KEPT LIVE** — recomputed every tick from the new shape, never latched. ⭐ **The drag stays a teaching instrument**: dial up and watch the horizon collapse through the range in real time. |
+| ⚠⚠⚠ the latch's ARMING | **DISARMED FOR THE REST OF THE FLIGHT. Re-arming requires a Reset.** |
+
+⚠⚠⚠ **WHY DISARM RATHER THAN RE-ARM — AND THIS IS WHERE SLICE 50 MUST *NOT* COPY SLICE 49.** 49's
+gauge was a **DURATION**, so a run that restarts mid-flight is still an honest run and its range
+window said where. **Slice 50's gauge is a single INSTANT whose entire meaning is *when the
+from-launch flight lost the picture*.** A shape dialled in at t = 5 s loses it somewhere its
+from-launch flight never would ⇒ **a re-armed latch is a DIFFERENT QUANTITY WEARING THE SAME LABEL**,
+which is the exact defect 49 caught. ⚠ A verdict-word distinction would be **a display patch over a
+semantic collision** — the number itself would still be mislabelled. ⇒ the latch shows a distinct
+**"shape changed in flight — Reset to measure"** state and no number at all.
+
+⭐ **THE TRANSFERABLE FORM: a latched DURATION may restart mid-flight; a latched INSTANT may not.**
+The duration's meaning is local to the run it accumulates; the instant's meaning is the whole history
+that led to it, and a live knob rewrites that history.
 
 ⚠⚠ **AND THE TOOTH GOES IN THE UI TEST**, because that is the only one of the four proofs a drag
-reaches (slice 49, verbatim). **Both halves asserted, and confirmed to FAIL with the fix removed** —
+reaches (slice 49, verbatim). **Every half asserted, and confirmed to FAIL with the fix removed** —
 49's own bar.
 
