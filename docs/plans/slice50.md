@@ -552,3 +552,68 @@ data that is read **at** the loss — and therefore survives both — is **the R
 to it, and P1 has to test it against the §0.6 bar properly, including whether it is a LESSON gauge or
 only a diagnostic. Recorded now because §0.6's own primary and §4.4's replacement are both dead, and
 P1 should not start from nothing.
+
+---
+
+## §5 — P1 PRE-REGISTERED (2026-08-26, advisor). ⚠ WRITTEN BEFORE THE PROBE RAN.
+
+§4.11 nominated the retreat ratio `|dR_acq/dt| / V_c` **at the loss instant**. That version has a
+defect §4.11 did not name: **it is UNDEFINED on F ≤ 7**, the region that ships today (§4.9's true
+null). A gauge with no value on the null cannot be a slider's axis. P1 therefore tests the
+**generalised** form.
+
+### §5.1 — THE CANDIDATE, RESTATED AS A SERIES
+
+`ratio(t) = |dR_acq/dt| / V_c`, evaluated **every tick over the closing phase**, and the gauge is its
+**MAXIMUM**. Defined on every arm including the sphere (where `R_acq` is constant, so it is 0).
+
+⭐⭐ **AND THAT TURNS A DESCRIPTION INTO A PREDICTION.** The at-the-loss version can only be read on
+arms that already lost; the max can be read on arms that did not, and then asked whether it crossed
+1.0 exactly where the losing starts. **That is the whole of P1.**
+
+### §5.2 — ⚠⚠ THE `dt` TRAP THAT IS SPECIFIC TO A MAX, AND THE ESTIMATOR THAT AVOIDS IT
+
+§4.5's re-fly showed at-the-loss quantities are `dt`-stable. **A MAX IS A DIFFERENT ESTIMATOR AND
+DOES NOT INHERIT THAT.** Halving `dt` doubles the sample count, and *a max over a noisier series is
+biased upward by construction* — so a naive per-tick difference would manufacture a `dt`-dependent
+number and could retire the best candidate in the slice for a reason that is the probe's, not the
+physics'.
+
+⇒ **`dR_acq/dt` IS TAKEN OVER A FIXED 10 ms CENTRED WINDOW, NOT PER TICK** (±5 ticks at `dt` = 1e-3,
+±10 at 5e-4). The estimator is fixed in TIME, so halving `dt` leaves it unchanged. ⭐ **THE
+TRANSFERABLE FORM: when a gauge is an EXTREMUM of a differenced series, the differencing window is
+part of the gauge and must be pinned in SECONDS, not in ticks.**
+
+### §5.3 — WHAT ELSE THE TABLE MUST CARRY (and why each earns its column)
+
+| column | why it is there |
+|---|---|
+| ⭐ **max `ratio`** | the candidate (§5.1). Reported over the pre-loss prefix AND over the whole closing phase, because everything after the loss is a blind coast whose geometry is contaminated (§4.5). |
+| **‖ω_LOS‖ AT THE LOSS INSTANT** | ⚠⚠ **§0.6's PRE-REGISTERED PRIMARY, RE-SITED.** §4.4 disqualified it *at the final valid measurement* (sampled post-re-gain, carries no aspect information) and never tested it at the LOSS — which is §4.5's `dt`-stable side. **A gauge picked after seeing the data is fitted to it; the defence is reporting the pre-registered one correctly sited, not replacing it silently.** |
+| **min `R_acq / r`** | ⚠ **THE TAUTOLOGICAL ALTERNATIVE, ON THE RECORD ON PURPOSE.** Defined everywhere and crosses 1.0 at the loss BY CONSTRUCTION. It loses to the retreat ratio on exactly ONE bar — §0.2's substitution test, since a ground radar has `R_acq/r` and no `V_c` worth measuring against. Omitting it would leave a reader asking why the obvious gauge was not used. |
+| **F = 6.5 and 7.0** | ⭐ **THE REAL CONTROL.** §0.5's control is `F = 1`, where max-ratio is identically 0 — a trivially large separation that proves nothing. 6.5/7.0 are the SAME mechanism, sub-threshold. |
+
+### §5.4 — ⚠⚠ A CORRECTION TO §4.3 BEFORE IT IS QUOTED AS A RULE
+
+§4.3 says *"the loss happens exactly where the retreat rate crosses the closing speed."* **That is
+false as written and §4.3's own table refutes it** — F = 12 loses at ratio 3.06, F = 7.5 at 1.08. The
+loss is a **LEVEL crossing** (`r` rises above `R_acq`), not a rate crossing.
+
+⭐⭐⭐ **WHAT IS TRUE IS ABOUT THE THRESHOLD IN `F`, AND IT IS THE BETTER FACT: THE ONSET IS A
+TANGENCY.** At the marginal arm the two curves just touch — so their derivatives match there and the
+ratio → 1. That is why F = 7.5 reads **1.08 with only 0.377 s blind**, and why the number is not
+fitted. ⚠ Quote the tangency, never the "every loss happens at ratio 1" form.
+
+### §5.5 — ⚠⚠⚠ THE VERDICT RULE, FIXED HERE, BEFORE THE OUTPUT IS READ
+
+| # | test | bar |
+|---|---|---|
+| 1 | **MONOTONE** in `F` over 1 – 12 | no reversal (28/40/25/48/49 precedent) |
+| 2 | **`dt`-STABLE** | moves **< 1 %** at half `dt` — §4.5's own bar, and §5.2's estimator is what makes it a fair test |
+| 3 | ⭐ **PREDICTIVE** | the `F` at which max-ratio first crosses **1.0** lands in **(7.0, 7.5]** — the same interval as the observed first loss |
+
+- **ALL THREE ⇒ HEADLINE GAUGE.**
+- **1 and 2 but NOT 3 ⇒ DIAGNOSTIC ONLY**, and the ledger says so in those words; the fallback is
+  §1's named one — guided time WITH §3 correction 1's admission written in.
+- **FAILS 1 or 2 ⇒ DEAD**, and the slice has no gauge, which by §0 is the whole remaining question.
+
