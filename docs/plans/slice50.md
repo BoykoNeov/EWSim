@@ -697,3 +697,101 @@ term is the HEADROOM the level started with.**
   WITH §3 correction 1's admission — is now the live option, and it is the weak one.**
 - ⚠ **STILL OPEN: the gauge, P2, P3.** §0 says the gauge IS the remaining question.
 
+
+---
+
+## §7 — P1b (2026-08-26, advisor). ⭐⭐⭐ **§0.6's PRE-REGISTERED PRIMARY PASSES ALL THREE TESTS — AND IT IS A REPARAMETERIZATION OF THE LOSS INSTANT, WHICH IS THE POINT.**
+
+**Probe:** `M:\claud_projects\temp\slice50\p1b_omega.jl`. ⚠ §6.2 scored §5.1's candidate ONLY; it did
+not score §0.6's own primary, which §4.4 disqualified **at the wrong site** and §5.3 re-sited.
+
+### §7.1 — THE TABLE (`dt` = 1e-3; half-`dt` in §7.2)
+
+| `F` | lost? | `t_loss` | `r_loss` | ⭐ ‖ω_LOS‖ AT LOSS | `V_c` | `t_go` | ⭐⭐ **ω·t_go** rad | **deg** | vs sphere |
+|---|---|---|---|---|---|---|---|---|---|
+| 1.0 – 7.0 | no | — | — | **0.000000** | — | — | **0.00000** | **0.000** | `max\|Δpos\|` = **0** |
+| 7.5 | yes | 4.122 | 3204.6 | 0.004683 | 727.1 | 4.408 | 0.02064 | **1.183°** | 0 |
+| 8.0 | yes | 3.276 | 3812.8 | 0.007782 | 711.7 | 5.357 | 0.04169 | **2.389°** | 0 |
+| 9.0 | yes | 2.635 | 4266.5 | 0.012183 | 704.4 | 6.057 | 0.07379 | **4.228°** | 0 |
+| 10.0 | yes | 2.257 | 4532.2 | 0.015604 | 702.2 | 6.455 | 0.10072 | **5.771°** | 0 |
+| 11.0 | yes | 1.989 | 4720.3 | 0.018471 | 701.5 | 6.729 | 0.12429 | 7.121° | 0 |
+| 12.0 | yes | 1.785 | 4863.4 | 0.020935 | 701.5 | 6.933 | 0.14515 | 8.316° | 0 |
+
+### §7.2 — §5.5 RE-SCORED, AND BOTH DEGREES PASS
+
+| | 1 monotone | 2 `dt`-stable (< 1 %) | defined on EVERY arm |
+|---|---|---|---|
+| **‖ω_LOS‖ at loss** | ✅ PASS | ✅ PASS — worst **0.421 %** | ✅ PASS |
+| ⭐⭐ **ω·t_go (rad)** | ✅ PASS | ✅ PASS — worst **0.810 %** | ✅ PASS |
+
+⚠ **0.810 % is inside the bar and not comfortably** — and it is on `F` = 7.5, the marginal arm, whose
+loss time itself moves 4.122 → 4.137 s at half `dt`. **Quote the bar as met, never as met widely**,
+and if gate 1's verifier pins this number, pin it with a tolerance that survives the marginal arm.
+
+### §7.3 — ⚠⚠ THE ZERO ON `F` ≤ 7 IS A **MEASURED** NULL, NOT A DEFINITIONAL ONE
+
+*"Zero because it never went blind"* is the weak framing and a reader would rightly hear it as a gap
+filled with a convenient constant. **The real argument is §4.6's, re-measured here on all six arms
+including 5, 6.5 and 7 which §4.6 did not cover: `max|Δpos|` vs the sphere is `0.000e+00` m over the
+whole flight.** The engagement on those arms is not merely un-lost, it is **byte-for-byte the one
+that ships today**. ⇒ a gauge reading 0 there is **reporting a measured null**, and that is the
+difference between an EXTENSION and an INTERPOLATION.
+
+### §7.4 — ⚠⚠⚠ THE DISCRIMINATOR, AND IT COMES BACK **EXACTLY ZERO**
+
+The advisor's question: is ω-at-loss anything more than the loss RANGE (already monotone, §4.9) in
+other units? **The test:** every arm is bit-identical to the sphere until its own loss, so look up the
+SPHERE's ω at this arm's loss tick and difference them.
+
+```
+max |om_arm(t_loss) − om_sphere(t_loss)|  over the losing arms  =  0.000e+00 rad/s
+```
+
+⭐⭐⭐ **EXACTLY EQUAL, ON EVERY ARM.** And there is a structural reason, which is the cleanest thing
+P1 found: **`rcs_aspect` touches the DETECTION and nothing else — it is not in the dynamics.** So
+every arm flies the identical engagement until the moment it loses the picture, and therefore
+**every quantity read AT the loss — ω, `r`, `V_c`, `t_go`, their product — is a function of the LOSS
+INSTANT ALONE.**
+
+⇒ ⭐⭐ **THE CHOICE AMONG AT-LOSS GAUGES IS A CHOICE OF UNITS, NOT OF INFORMATION**, and it must be
+made on §0.2's substitution test, which is the only thing that separates them:
+
+| candidate | the sentence it lets you say | radar-swap |
+|---|---|---|
+| `t_loss` / `r_loss` | *"the range at which the picture was lost"* | ❌ a ground radar says this fine |
+| ‖ω_LOS‖ at loss | *"how far off a collision course when the picture went stale"* | ✅ a radar has no collision course |
+| ⭐⭐ **ω·t_go** | *"the heading error the missile still OWED and went blind holding"* — **1.2° → 5.8° over the teachable domain** | ✅ needs both a collision course AND a time-to-go |
+
+⚠ **AND THIS IS NOT SLICE 39's REPARAMETERIZATION BAN.** That rule forbids a reparameterization
+shipping as an **ARCHITECTURE**. Here nothing new is built — §1 already records that the primitive,
+the seam and the telemetry all shipped with slice 49 — and the reparameterization is being used for
+exactly what it is good for: **converting a radar-sayable quantity into a missile-specific one.**
+⚠ The ledger must say so in those words; a reader who discovers the identity later and finds it
+unrecorded will read it as a gauge that was dressed up.
+
+### §7.5 — ⚠ ONE CLAIM P1 MUST **NOT** MAKE: THE PRE-REGISTERED SIGN IS CONFIRMED, THE MECHANISM IS NOT ISOLATED
+
+§1's P1 row pre-registered the sign — *slenderer ⇒ the horizon retreats sooner ⇒ less time for PN to
+null ω before the loss ⇒ **ω at the last look RISES with `F`***. **The sign is confirmed** (0.0047 →
+0.0209, no reversal). ⚠⚠ **But the mechanism is not thereby proven**: §4.9 shows the loss also moves
+to LONGER RANGE as `F` rises (4532 → 5657 m), and under PN on a collision course ω falls with range —
+so **both effects push the same way and a monotone rise cannot discriminate them.** ⇒ report the
+**sign as confirmed** and the **mechanism as consistent-but-not-isolated**. (§7.4's identity is the
+same fact from the other side: ω-at-loss is `ω_common(t_loss)`, so it inherits whatever ω was doing.)
+
+### §7.6 — WHERE THIS LEAVES THE GATE
+
+- ⭐ **THE GAUGE: `ω_LOS · t_go` AT THE LOSS, in degrees — "the heading error the missile went blind
+  holding."** Monotone, `dt`-stable, defined on every arm including the null, off two shipped keys
+  plus one derived from two more, not the miss (§0.6's ban), not slice 49's loss run, and it passes
+  the substitution test where every other at-loss quantity fails it. **Teachable domain `F` ≤ 10
+  (§4.9): 0.00° → 5.77°.**
+- **THE MECHANISM, DEMOTED BUT NOT BURIED: the retreat ratio** (§5.1/§6). ⚠ It stays in the ledger,
+  and §6.3's line — *a rate cannot predict a level crossing without the headroom* — goes to
+  `docs/LESSONS.md` **regardless of which gauge ships**.
+- **P2 IS ANSWERED FOR THE REGION THE GAUGE IS SCOPED TO, BY PROOF, NOT BY MEASUREMENT.** §4.10
+  correction 2: a fixed horizon has `dR_acq/dt = 0`, so **no constant `rcs_m2` can take a lock back
+  mid-flight at any value.** The gauge is scoped to arm B (`F` ≤ 10), which is exactly where that
+  proof holds. ⚠ It does NOT extend to `F` ≥ 11, and §4.10 correction 2 already says so.
+- **STILL OPEN: P3**, the prose test — and §7.4's table has already done most of it.
+
