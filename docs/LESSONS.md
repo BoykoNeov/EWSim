@@ -630,3 +630,52 @@ tested for rather than defaulted, since 0 dB would read as "a target at its BRIG
 
 ⇒ **For every `.get(k, default)` in a readout, ask what the default SAYS if the key never arrives. If
 the answer is the thing you are trying to demonstrate, the default is wrong.**
+
+## ⭐⭐⭐ A RATE CANNOT PREDICT A LEVEL CROSSING WITHOUT THE HEADROOM (slice 50 gate 0, 2026-08-26)
+
+Slice 50 pre-registered a gauge and it failed, in the most instructive way available. The mechanism
+was real: a manoeuvring target's detection horizon **retreats**, and on the losing arms it retreats up
+to **three times faster than the missile closes**. So the obvious gauge was the ratio of those two
+rates, and it looked perfect — strictly monotone across the whole slider, `dt`-stable to 0.064 %.
+
+**It crossed 1.0 five slider steps before anything was ever lost.** At a fineness of 3 the horizon
+retreats **1.10× faster than the missile closes and the lock never breaks, not for one tick**; at 5 it
+retreats 1.78× faster and still never breaks. The lock survives because the horizon **started 32 %
+above the range**, and a rate has to spend that headroom before it can produce the event.
+
+⇒ **A RATE gauge and a LEVEL event are not interchangeable.** A rate can exceed its comparator for an
+entire flight and never produce the crossing; the missing term is the headroom the level started with.
+The rate says *how hard the target is pushing*, a margin says *whether it worked*, and only the second
+has a threshold in it.
+
+⚠ **AND THE PRACTICAL RULE THAT FALLS OUT: pre-register the PREDICTIVE test, not just monotonicity and
+`dt`-stability.** Slice 50's §5.5 fixed all three before the probe ran — *monotone*, *< 1 % at half
+`dt`*, *and the 1.0 crossing lands in the same interval as the first observed loss*. The first two
+passed and would have shipped a gauge that describes the mechanism without predicting the event. **The
+third test is the one that earned its place, and it is the one easiest to leave out.**
+
+## ⭐⭐ WHEN A MODEL TOUCHES ONLY THE DETECTION AND NOT THE DYNAMICS, EVERY AT-EVENT GAUGE IS THE EVENT TIME IN OTHER UNITS (slice 50 gate 0, 2026-08-26)
+
+Slice 50's aspect model changes **when the target can be seen** and nothing else — it is not in the
+airframe, the guidance or the mover. Consequence, measured rather than argued: **every arm of the
+slider flies a bit-identical engagement (`max|Δpos|` = `0.000e+00` m) until its own first loss.**
+
+⇒ the sphere's LOS rate at arm *F*'s loss tick **equals arm *F*'s own, to machine precision, on every
+arm.** So ‖ω_LOS‖, the range, the closing speed, the time-to-go and every product of them, **read at
+the loss**, are functions of the **LOSS INSTANT ALONE**. They carry identical information.
+
+⇒ ⭐⭐ **THE CHOICE AMONG AT-EVENT GAUGES IS A CHOICE OF UNITS, NOT OF INFORMATION** — so it cannot be
+made on monotonicity or stability (they all inherit the event time's) and must be made on **what
+sentence each one lets you say**. Slice 50 chose `ω_LOS · t_go` ("the heading error the missile went
+blind holding") over the loss RANGE, which is the simpler quantity and carries exactly the same
+information — because a ground radar can say *"the range at which I lost it"* perfectly well, and the
+slice's whole job was to say something a ground radar cannot.
+
+⚠⚠ **RECORD THE IDENTITY IN THE LEDGER.** A reader who discovers later that the gauge is a
+reparameterization of a simpler quantity, and finds it unrecorded, will read it as a gauge dressed up.
+⚠ This is NOT slice 39's reparameterization kill — that rule forbids a reparameterization shipping as
+an **ARCHITECTURE**. Using one to convert a domain-generic quantity into a domain-specific one, with
+no new machinery built, is what a reparameterization is *for*.
+
+⭐ **THE TEST, and it is cheap:** take the NULL arm's series, look up its value at each live arm's
+event tick, and difference. Zero ⇒ your gauge is the event time wearing units.
