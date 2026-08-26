@@ -138,9 +138,18 @@ ground).
 ⇒ **THE SHOWCASE IS A NEW ENGAGEMENT, and the geometry is prescribed by the arithmetic rather than
 inherited:** the target starts NEAR BROADSIDE to the missile (bright, long horizon, comfortably
 inside it — slice 49 §5's *"start the leg inside the broadside horizon so the one drop-out is
-unambiguous"*), and turns its nose toward the missile during the flight. ⚠ 46's law still binds: the
-engagement must be launched OUTSIDE the sensor's horizon or the gate is deciding nothing — which
-means slice 47's midcourse phase is not optional staging here, it is the precondition.
+unambiguous"*), and turns its nose toward the missile during the flight.
+
+⚠⚠ **AND THE WIRE IS SETTLED HERE RATHER THAN LEFT IN TWO STATES (§3 correction 2): THE MISSILE IS
+LAUNCHED *INSIDE* THE BROADSIDE HORIZON, AND SLICE 47's MIDCOURSE IS *NOT* A PRECONDITION.** An
+earlier draft of this section invoked slice 46's law (*a detection gate can only price a design
+variable if the engagement is launched OUTSIDE the sensor's horizon*) and concluded a midcourse phase
+was required. **That law does not bind arm B.** 46's premise is that a gate which never closes on
+anything prices nothing — but arm B's gate closes MID-FLIGHT, in the direction no constant horizon
+can (§0.2), so it is deciding something from the first tick to the last. ⇒ the wire is: **lock early
+and comfortably (inside a ~12 km broadside horizon), turn, and let the horizon retreat back through a
+~4 km range.** ⭐ This also keeps the engagement at slice 48's scale (6.4 km / 8.9 s) instead of
+roughly doubling it, so no claim is made on airframe energy that this arc has not already flown.
 
 ---
 
@@ -202,8 +211,10 @@ Everything that is already banned or already spent, and why:
 | **MISS / CPA** | ⚠⚠ **BANNED, THREE TIMES NOW** — 44 killed a component on it, 46 measured it non-monotone along the ladder AND backwards across the button, 48 measured a 100 %-authority acquisition that still missed. Not a gauge on this arc. |
 | **manoeuvre authority (`a_cmd/a_max`)** | ⚠ 46/47's gauge, but slice 48 measured it **NON-MONOTONE in its slider** (it saturates, then falls). Report it; do not make it the axis. |
 | **longest loss run while closing** | ⚠ **SPENT — this is slice 49's shipped gauge.** Using it here is the §0.2 redux wearing a number. |
-| ⭐ **GUIDED TIME BEFORE CPA** (seconds with `seeker_detect == 1` and a valid measurement, pre-CPA) | **PRE-REGISTERED PRIMARY.** It is an ENGAGEMENT quantity a ground radar cannot have (§0.2's test), it is what arm B's sentence is actually about, and it should fall monotonically as the body gets slenderer. ⚠ P1 must MEASURE that monotonicity, not assume it — `k`(28), `ω_n`(40), `σ_seek`(25) and 49's own loss COUNT are the precedents. |
-| **RANGE AT FINAL LOCK** (the last time the gate closes before CPA) | **PRE-REGISTERED SECONDARY / READOUT.** Names *where* the engagement went blind, in metres, which is how the HUD will have to say it. |
+| **GUIDED TIME BEFORE CPA** (seconds with `seeker_detect == 1`, pre-CPA) | ⚠⚠ **DEMOTED TO A READOUT — IT FAILS §0.2's OWN SUBSTITUTION TEST, see §3 correction 1.** It and 49's loss run are two functions of the SAME 0/1 trace over the same closing window (the longest run of zeros vs the count of ones); neither reads the guidance loop, the airframe or the intercept. *"The seconds the radar had the target before closest approach"* is a sentence a ground radar can say. |
+| ⭐⭐ **‖ω_LOS‖ AT THE FINAL VALID MEASUREMENT** (deg/s — `los_rate`, `missile.jl:1707`, sampled on the last tick the gate is closed before CPA) | **PRE-REGISTERED PRIMARY.** *How far from a collision course was the missile when the picture went stale?* Under PN the loop drives ω toward zero while it can see; a nonzero ω at the last look is a heading error the missile **can no longer learn about**. ⚠ A radar has no collision course to correct — this is the quantity that passes the substitution test. |
+| **`t_go` AT THAT SAME INSTANT** (s — `missile.jl:1718`) and the product **‖ω_LOS‖·t_go** (rad) | **PRE-REGISTERED SECONDARY.** How much flying was left, and the angle the missile still OWED and went blind holding. |
+| **RANGE AT FINAL LOCK** (m) | **READOUT.** Names *where* the engagement went blind, which is how the HUD will have to say it. |
 
 ⚠ **AND THE 48 HAZARD THIS SLICE WILL MANUFACTURE: RIM-MARGIN LOCKS.** Slice 48 measured that a lock
 taken with less window margin than ONE TICK of LOS drift is consumed and buys nothing
@@ -242,7 +253,7 @@ Everything else is disqualified, and each for a reason already on the record:
 | # | question | kills what |
 |---|---|---|
 | **P0** | On a purpose-built wire (§0.3's geometry, slice 47's midcourse so the launch is outside the horizon): does `R_acq` retreat faster than `V_c` closes, and does the seeker's `seeker_detect` flip 1 → 0 at DECREASING range? Sweep `F ∈ {1, 3, 6, 8, 10}` with the §0.5 control. | **ARM B**, and it is the selector. ⚠ Read `seeker_detect` off the SHIPPED wire, never a recompute (convention 10). |
-| **P1** | Is GUIDED TIME BEFORE CPA monotone in `F`, and does it separate from the `F = 1` control flying the identical manoeuvre? | **THE GAUGE.** A non-monotone gauge is not a domain (28/40/25 precedent) — and this slice has no fallback gauge left (§0.6). |
+| **P1** | Is **‖ω_LOS‖ at the final valid measurement** monotone in `F`, and does it separate from the `F = 1` control flying the identical manoeuvre? Report `t_go` and the product alongside. | **THE GAUGE.** A non-monotone gauge is not a domain (28/40/25 precedent). ⚠ THE EXPECTED SIGN, PRE-REGISTERED: slenderer ⇒ the horizon retreats sooner ⇒ **less time for PN to null ω before the loss** ⇒ ω at the last look RISES with `F`. A curve that falls with `F` is a wrong-sign result and must be understood, not quoted. ⚠ If NO intercept-only quantity is monotone, the honest fallback is guided-time WITH §3's admission written into the ledger — weaker, but not a false positive. |
 | **P2** | ⚠⚠ **THE LOAD-BEARING ONE FOR ARM A:** can ONE constant `rcs_m2` reproduce the guided-time-vs-`F` curve to better than **3 %**? (Threshold fixed here, before measuring — slice 41's precedent: falsifier 2.7–3.2 %, achieved 0.00–1.01 %.) | **ARM A's headline.** ⚠ For ARM B this is answered by PROOF instead (a fixed horizon cannot retreat), which is the stronger form — but only if P0 shows the retreat actually happens. |
 | **P3** | The §0.2 SUBSTITUTION TEST, applied to whatever sentence survives P0–P2: swap "seeker" for "radar" — does it become false or empty? | **THE WHOLE SLICE.** ⚠ This is a prose test, not a number, and it is the one this plan exists to force. |
 
@@ -274,3 +285,47 @@ cost is the showcase.**
 - **A `Pd` DRAW ON THE SEEKER GATE.** ⚠ Slice 46 flagged it as a class-(b) draw-topology hazard
   (convention 3), and it would destroy the one property this slice's proof rests on (§0.2): a
   deterministic single threshold.
+
+---
+
+## §3 — TWO CORRECTIONS MADE BEFORE ANY PROBE FLEW (2026-08-26, advisor)
+
+Both were caught against the plan as first written, and both would have produced a gate-0 result that
+looked clean and meant nothing. Recorded rather than silently edited, because the second one is a
+design decision and the first is a method lesson worth carrying.
+
+**⚠⚠ CORRECTION 1 — THE SUBSTITUTION TEST APPLIES TO THE GAUGE, NOT ONLY TO THE SENTENCE.** §0.2
+invents a test (*swap "seeker" for "radar"; the claim must become false or empty*) and then §0.6
+pre-registered a gauge that FAILS it. **Guided time before CPA and slice 49's longest-loss-run are
+two functions of the same 0/1 detection trace over the same closing window** — the count of ones and
+the longest run of zeros. Neither reads the guidance loop, the airframe or the intercept, and *"the
+seconds the radar had the target before closest approach"* is a sentence a ground radar says without
+difficulty. ⇒ **P1 would have measured slice 49's trace re-denominated and closed gate 0 on a false
+positive** — the one failure §0 says this slice cannot afford, since there is no model to fall back
+on. ⭐ **The transferable form: a test you invent for the CLAIM must be run against the MEASUREMENT
+too, or the claim is new and the evidence is not.**
+
+⚠ **AND THE SQUEEZE THAT MAKES THIS HARD, NAMED SO IT IS NOT REDISCOVERED MID-PROBE:** miss is banned
+(§0.6), and most genuinely intercept-only quantities — cross-range error accumulated after the loss,
+error at CPA — **are the miss under another name**. The escape is to read a guidance-loop STATE at
+the instant of final loss rather than an OUTCOME after it, which is why the gauge is now ‖ω_LOS‖ (and
+`t_go`) at the last valid measurement: both are already on the shipped wire (`missile.jl:1707/1718`),
+both are states of the loop, and neither is a function of what happens afterwards.
+
+**⚠⚠ CORRECTION 2 — 46's LAW DOES NOT BIND ARM B, AND THE WIRE IS NOW SETTLED.** §0.3 originally
+concluded that slice 47's midcourse was *"not optional staging, it is the precondition"*, on 46's law
+that a detection gate can only price a design variable if the engagement launches outside the
+horizon. **Arm B does not need the launch outside the horizon — it needs the gate to CLOSE
+MID-FLIGHT, which is a different requirement**, and one a launch INSIDE the horizon satisfies just as
+well (46's premise is a gate that never decides anything; arm B's decides continuously). Keeping the
+midcourse would have meant launching beyond a 12 km broadside horizon — roughly DOUBLE slice 48's
+6.4 km / 8.9 s engagement — and an airframe-energy claim this arc has never flown. ⇒ §0.3 now states
+the launch is INSIDE the horizon and the midcourse is dropped. ⭐ The general form:
+**a law is a statement about a PREMISE, and a slice that inherits the law without re-checking the
+premise inherits a constraint it does not have.**
+
+⚠ **UNCHANGED BY BOTH CORRECTIONS**, and re-affirmed: the closed form
+`R_acq = R_b/sqrt(sin²θ + F²cos²θ)`, the 2 g margin it implies, slice 48's wire being ruled out
+twice over, the `F = 1`-flying-the-byte-identical-manoeuvre control (valid precisely because
+`ManeuveringTarget` does not react to the missile, so both arms fly the same trajectory), and §0.6's
+rim-margin tick test.
