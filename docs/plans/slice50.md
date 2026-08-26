@@ -857,3 +857,70 @@ P0/P1 say the lesson needs it."* **They did not** — the lesson lands on `rcs_f
 target turning from t = 0. ⇒ **it stays a deferral**, and that is recorded here so a later slice does
 not find it half-argued.
 
+
+---
+
+## §9 — TWO GATE-1 DECISIONS MADE **AT GATE 0** (2026-08-26, advisor), AND ONE RETRACTION
+
+### §9.1 — THE `t_go` FORMULA IS VERIFIED IDENTICAL TO THE PROBE'S
+
+⚠ §8.3 option 1 said "emit `t_go` unconditionally"; the probe derived `t_go = r / V_c`. **If the
+shipped line computed it differently, gate 1's verifier would pin a value P1b never measured.**
+Checked, and they agree:
+
+- `guidance.jl:308` — `time_to_go(r, V_c) = r / max(V_c, VC_FLOOR)`, **`VC_FLOOR = 50.0`**. At every
+  loss instant `V_c` ∈ [701.5, 727.1] m/s, **14× the floor**, so the floor is not binding and the
+  formula reduces to the probe's `r / V_c`.
+- `missile.jl:1718` feeds it `los_range(e.pos, tgt.pos)` and `−range_rate(rel_pos, rel_vel)` — the
+  **same true range** the probe read and the **same expression** that produces `closing_speed`
+  (`missile.jl:1708`). Not the seeker's range, on either side.
+- ⚠ The `closing_speed = 0.0` branch (`missile.jl:1213`) is the **no-target / already-impacted early
+  return**; it is unreachable at a loss instant and does not contaminate the measurement.
+
+### §9.2 — ⚠⚠⚠ RETRACTION: §4.7 ITEM 1's *"IT IS FREE"* IS WRONG, AND FOR THE PROJECT'S MASTER CHECK
+
+§4.7 called shipping `t_go` unconditionally "a real candidate, since it is free." **It is not free —
+it would break byte-identity on every prior wire** (convention 2, the master check). `missile.jl:1713`
+gates the salvo keys on `haskey(w.env, :salvo_t_d)`, and **the code's own comment says exactly why**:
+*"ABSENT in a slice-9..13 scenario (no coordinator → no key) → those frames byte-identical."*
+Un-gating it grows `t_go` on **every** coordinator-less wire from slice 9 to 50.
+
+⭐ **THE TRANSFERABLE FORM, and it is the same shape as slice 49's `cross_speed_mps` note eleven lines
+above it: a key that is PRESENCE-GATED is gated FOR A REASON, and "just emit it always" is a
+byte-identity change wearing the clothes of a one-line convenience.**
+
+### §9.3 — ⇒ THE DECISION: A **NEW KEY INSIDE THE `_det_on` BLOCK**, NOT THE SALVO ONE UN-GATED
+
+`missile.jl:3677` already ships the seeker readouts under `if _det_on` — gated on the live
+`:seeker_detect` rung **and** an authored window, so *"every slice-11..45 wire carries not one of
+these keys."* **That block is the correct home**, and a key added there is byte-identical on every
+prior wire by construction.
+
+⇒ **gate 1 ships `seeker_tgo_s` (or equivalent) beside `seeker_r_acq_m` / `seeker_range_margin_m`,
+and the CLIENT latches `ω_LOS · t_go` at the 1 → 0 transition.** ⭐ That is the cleanest reading of
+slice 49's own lesson — *a gauge must carry its own window; the core ships the INPUTS and the client
+expresses the gauge* — and of convention 13, since the client is compositing shipped keys rather than
+recomputing physics. §8.3's option 2 (a latched core key) is **not** needed and would cost core state.
+
+### §9.4 — ⚠⚠⚠ THE GAUGE IS A **LATCH**, AND SLICE 49 ALREADY PAID FOR THIS LESSON
+
+`ω·t_go` is captured at a 1 → 0 transition — **that is a latch**, and `rcs_fineness` is a LIVE slider.
+Slice 49's hardest-won finding applies without modification: *a live slider DRAG invalidates a latch
+as a Reset does — and reaches NONE of the four gate-3 proofs* (the verifier sends `reset` between
+arms, the UI test presses the Reset BUTTON, a windowed shot is one static frame). ⚠ Slice 49 found it
+by advisor review **after all four proofs were green**. Slice 50 has it for free and decides it here.
+
+**THE SPLIT, following slice 49's exactly** (*the gauge belongs to the SHAPE, the window belongs to
+the FLIGHT*):
+
+| on a live `rcs_fineness` drag | |
+|---|---|
+| the latched `ω·t_go` and its range-at-loss readout | ⭐ **CLEARED** — they belong to the SHAPE that produced them. Displaying 5.77° under a sphere is *the needle's number under the wrong shape*, which is slice 49's defect verbatim. |
+| the live detect lamp, `R_acq`, the margin, the aspect | **KEPT LIVE** — they are recomputed every tick from the new shape and were never latched. |
+| the latch's ARMING | ⭐ **RE-ARMS** on the next 1 → 0 transition, as 49's window re-accumulated. |
+| ⚠⚠ a re-armed reading | **MUST NOT be presented as a from-launch measurement.** A shape dialled in at t = 5 s loses the picture somewhere its from-launch flight never would, so the number is true about THIS flight and not comparable to the slider's own curve. ⇒ the verdict word carries a **post-drag** distinction, and §0.6's RANGE-AT-LOSS readout — already in the plan — is what makes it legible. |
+
+⚠⚠ **AND THE TOOTH GOES IN THE UI TEST**, because that is the only one of the four proofs a drag
+reaches (slice 49, verbatim). **Both halves asserted, and confirmed to FAIL with the fix removed** —
+49's own bar.
+
