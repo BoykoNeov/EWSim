@@ -420,7 +420,7 @@ Re-flown at `dt = 5e-4`. **The threshold does NOT move: it sits between F = 7.0 
 `dt`, and every quantity read AT THE LOSS INSTANT agrees to 3–4 digits** (F = 8: t 3.276 → 3.278,
 r 3812.8 → 3811.3, aspect 76.39 → 76.38, ratio 1.56 → 1.56). **This is not a discretization artifact.**
 
-⚠⚠ **BUT EVERYTHING READ AFTER THE BLIND RUN MOVES, AND SOME OF IT MOVES BY 3×:**
+⚠⚠ **BUT EVERYTHING READ AFTER THE BLIND RUN MOVES — ‖ω_LOS‖ at re-acquisition BY 3.1×, AND THE CPA ON THE SAME ROW BY 20×:**
 
 | `F` | ‖ω‖ at re-gain, dt = 1e-3 → 5e-4 | CPA, dt = 1e-3 → 5e-4 |
 |---|---|---|
@@ -469,11 +469,86 @@ remains the WIRE's null and `F = 1` the LESSON's null.
 
 ### §4.8 — THE STATE OF THE GATE
 
-- **P0: PASSED, and arm B is selected.** Arm A (denial — never a usable lock) is refuted on this wire:
-  every arm out to F = 10 acquires at launch and re-acquires before CPA. §0.2's secondary kill (a late
-  lock is reproducible by a constant) therefore never comes due — **the surviving claim is about a
-  lock that is TAKEN BACK, which a fixed horizon cannot do at any value.** P2 is answered by proof,
-  the stronger form, exactly as slice 49 §5 was.
+- **P0: PASSED, and arm B is selected — SCOPED TO F ≤ 10** (⚠ §4.9/§4.10 correct this paragraph as
+  first written, which claimed arm A was refuted outright). Over F = 7.5–10 every arm acquires at
+  launch, is LOST WHILE CLOSING, and re-acquires before CPA: **the surviving claim is about a lock
+  that is TAKEN BACK, which a fixed horizon cannot do at any value**, and P2 is answered by proof
+  there — the stronger form, exactly as slice 49 §5 was. ⚠⚠ **At F ≥ 11 the missile never re-acquires
+  and that IS arm A, where §0.2's secondary kill does come due.**
 - **STILL OPEN: P1 (the gauge) and P3 (the substitution test).** §4.5 has already disqualified the
   obvious candidate; §0.6's pre-registered primary is disqualified by §4.4. **The slice does not have
   a gauge yet, and §0 says that is the whole remaining question.**
+
+### §4.9 — ⚠⚠⚠ THE TOP OF THE SLIDER IS A **DIFFERENT MECHANISM**, AND IT IS NOT A PLATEAU (advisor; `p0d_armA.jl`)
+
+§4.8 as first written said arm A (denial — never a usable lock) is refuted. **It is not: F = 11 and
+F = 12 ARE arm A.** They go blind, NEVER re-acquire, fly the rest of the engagement on a frozen
+estimate and miss by ~1030–1040 m. §4.8's "every arm out to F = 10 re-acquires" is true and does not
+generalise. The pre-registered slider (§0.7: floor 1.0, ceiling ~12) therefore spans **three
+regions**, which is slice 48's own shape and has to be NAMED as three rather than described as arm B
+with a tail:
+
+| region | what happens |
+|---|---|
+| **F ≤ 7.0** | ⭐ **A TRUE NULL** — never loses the lock at all. CPA 0.40 m, and `max\|Δpos\| == 0` across every arm in it (§4.6). Exactly what ships without this slice. |
+| **F = 7.5 – 10** | ⭐⭐⭐ **ARM B** — the lock is TAKEN BACK while closing, and then GIVEN BACK. |
+| **F ≥ 11** | **ARM A** — taken back and never given back; blind through CPA. |
+
+**AND THE TOP REGION IS NOT A BIT-IDENTICAL PLATEAU** — this is where it differs from slice 48's
+floor, and the difference matters:
+
+| `F` | 10 | 11 | 12 | 14 | 16 | 20 | 30 |
+|---|---|---|---|---|---|---|---|
+| re-acquires? | YES | **no** | **no** | **YES** | **no** | **no** | **no** |
+| CPA m | 570.56 | 1032.88 | 1038.57 | **618.21** | 1670.86 | 1505.30 | 1814.44 |
+| `max\|Δpos\|` vs F = 11 | — | 0.0 | 17.8 m | 342.7 m | 454.7 m | 469.5 m | 706.5 m |
+
+⚠⚠ **RE-ACQUISITION IS NON-MONOTONE ABOVE F = 11 (F = 14 re-acquires while 12 and 16 do not) AND SO
+IS THE MISS (1033 → 1039 → 618 → 1671 → 1505 → 1814).** That is not a lesson, it is a divergence
+being sampled — the coast is an open-loop integration of a frozen estimate, and where it happens to
+put the missile at CPA is chaotic in the initial condition. ⇒ **§0.6's miss ban applies to the top of
+this slider with full force, and the slider's TEACHABLE domain is F ≤ ~10.**
+
+⭐⭐⭐ **AND THE SAME TABLE CARRIES THE OPPOSITE FINDING, WHICH IS THE USEFUL ONE: THE LOSS INSTANT
+IS PERFECTLY MONOTONE ALL THE WAY OUT.** t 2.257 → 1.989 → 1.785 → 1.490 → 1.283 → 1.007 → 0.657 s
+and r 4532 → 4720 → 4863 → 5070 → 5216 → 5410 → 5657 m, without a single reversal, over a domain on
+which the miss reverses four times. **Everything upstream of the blind run is orderly; everything
+downstream of it is noise.**
+
+### §4.10 — ⚠ THREE CORRECTIONS TO §4.4–§4.8 (advisor)
+
+1. **⚠ §4.5's "moves by 3×" UNDERSTATES IT, AND THE BIGGER NUMBER IS THE POINT.** Both are real and
+   they are different quantities: ‖ω_LOS‖ at re-acquisition moves **3.1×** (F = 9: 0.1033 → 0.3170),
+   while the **CPA on that same row moves 20×** (33.46 → 684.91 m). The 20× is the damning one and is
+   the miss ban's mechanism stated in this slice's units.
+2. **⚠⚠ §4.8's "arm A is refuted" IS RETRACTED, SCOPED TO F ≤ 10.** §0.2's secondary kill (*a
+   late-or-never lock is reproducible by a smaller constant `rcs_m2`*) **does come due at F ≥ 11**,
+   because a never-re-acquiring engagement is exactly what a constant horizon produces. ⇒ **P2 is
+   answered by proof ONLY for the retreat itself** (a fixed horizon has `dR_acq/dt = 0`, so it cannot
+   take a lock back mid-flight at any value). The surviving claim is scoped to the arm-B region, or
+   P2 must be run as a constant-`rcs_m2` comparison against the top of the slider.
+3. **⚠ THE RE-ACQUISITION GAUGE (§4.4) IS RETIRED, NOT DEFERRED.** It was the advisor's own
+   suggestion and §4.5 measured it `dt`-unstable; it does not go forward into P1 as a live candidate.
+
+### §4.11 — ⭐⭐ THE GAUGE P1 SHOULD TEST FIRST, AND IT IS ALREADY IN §4.3's TABLE
+
+Everything §4.4 and §4.5 disqualified was read AFTER the picture was lost. The one quantity in the
+data that is read **at** the loss — and therefore survives both — is **the RETREAT RATIO
+`|dR_acq/dt| / V_c` at the instant the lock is taken back**:
+
+- **monotone** over the whole domain: **1.08 → 1.56 → 2.06 → 2.44 → 2.76 → 3.06** (F = 7.5 → 12), no
+  reversal, unlike authority (48), the loss count (49), `k` (28), `ω_n` (40) or `σ_seek` (25);
+- **`dt`-stable to 3 digits** (F = 8: 1.56 → 1.56 at half `dt`) — §4.5's own bar;
+- **both terms are SHIPPED WIRE KEYS** (`seeker_r_acq_m`, `closing_speed`), so it is a difference of
+  telemetry, not a recompute (convention 10);
+- **it is a state of the engagement geometry, not a function of the 0/1 detection trace** — which is
+  §3 correction 1's exact bar, the one that disqualified guided-time and slice 49's loss run;
+- **and it passes §0.2's substitution test in a way the plan did not anticipate.** Swap "seeker" for
+  "radar": *a ground radar has no `V_c` that means anything* — it is not on a collision course, so
+  there is nothing for the retreat rate to be measured against. The ratio is only defined for a
+  sensor that is CLOSING ON WHAT IT IS LOOKING AT.
+
+⚠ **NOT PRE-REGISTERED AS THE PRIMARY HERE** — a gauge chosen after seeing the data is a gauge fitted
+to it, and P1 has to test it against the §0.6 bar properly, including whether it is a LESSON gauge or
+only a diagnostic. Recorded now because §0.6's own primary and §4.4's replacement are both dead, and
+P1 should not start from nothing.
