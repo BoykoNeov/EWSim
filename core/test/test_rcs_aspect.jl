@@ -339,6 +339,52 @@ end
         # turn rate, not read back off the trace.
         @test atan(e_horz.vel[2], e_horz.vel[1]) ≈ 30.0 / 250.0 * 20.0 rtol = 1e-6
     end
+
+    @testset "⚠ the `:cfar` rung — aspect REACHES it, and does NOT move the draw stream" begin
+        # §8 banked the draw-count clearance for the `:snr` path only, and `radar.jl:721` reads
+        # `pfa`/`swerling`/`n_pulses` in a SECOND place. `_observe_cfar!` calls the SAME
+        # `_target_snr`, so aspect reaches the range-power profile through the one site — but
+        # convention 3 asks a different question, and it is the one that kills slices: does aspect
+        # change the DRAW COUNT? `_draw_profile!` draws `2·N_p` randn per CELL over a cell count
+        # fixed by the scenario, so σ should move the profile VALUES and not the stream.
+        # ⚠ MEASURED, NOT ARGUED, and both halves are needed: a draw-invariance result whose arm is
+        # INERT proves nothing.
+        cfar = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice3_cfar.yaml"))
+        function _cfar_run(F; n = 400)
+            sc = load_scenario(cfar)
+            w, subs = sc.world, sc.subs
+            for (_, e) in w.entities
+                e.kind === :target || continue
+                # ⚠⚠ OFF BROADSIDE, DELIBERATELY. These targets are STATIONARY and sit on the +x
+                # axis, so a pure-y velocity puts them EXACTLY abeam — where an aspect model is
+                # CORRECTLY inert at every fineness. Two drafts of this probe did that and read the
+                # resulting "no difference" as a finding. An x component is what makes it a test.
+                e.vel = Vec3(-200.0, 120.0, 0.0)
+                # ⚠ ALL targets, not just the first: `snr_db` reports the STRONGEST, so shaping one
+                # of two is invisible on the readout (the other draft's second defect).
+                F === nothing || (e.comp[:rcs_fineness] = F)
+            end
+            snr = Float64[]
+            for _ in 1:n
+                tick!(w, subs, sc.dt_physics)
+                push!(snr, Float64(w.env[:telemetry]["radar1.snr_db"]))
+            end
+            (snr, w.rng)
+        end
+        sA, rA = _cfar_run(nothing)
+        sB, rB = _cfar_run(3.0)
+        sC, rC = _cfar_run(12.0)
+        # (1) IT REACHES — and it is not a rounding difference: ~17 dB and ~24 dB apart on tick 1.
+        @test sA != sB && sB != sC
+        @test sA[1] - sB[1] > 10.0                 # slender ⇒ dimmer off broadside
+        @test sB[1] - sC[1] > 10.0
+        # (2) THE DRAW COUNT IS INVARIANT — probed from the stream's POSITION, not from the code:
+        # two runs that consumed the same number of draws agree on the NEXT ones.
+        nA = [randn(rA) for _ in 1:8]
+        @test nA == [randn(rB) for _ in 1:8]
+        @test nA == [randn(rC) for _ in 1:8]
+    end
+
 end
 
 # --- slice 49 GATE 3: THE SHIPPED SCENARIO -----------------------------------------------------

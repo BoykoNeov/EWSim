@@ -12,8 +12,10 @@
 # approach. So a constant target can be GAINED while closing and never LOST. Measured on this wire
 # (docs/plans/slice49.md §9, §13): the sphere arm IS lost, 41 separate times — Swerling-1 fading is
 # real and a bright target still fades below threshold occasionally — but **never for more than
-# 0.20 s**, two ticks of the 10 Hz look cadence. The needle arm is lost for **40.20 s**. That 200×
-# separation, against a control that could and did flicker, is the slice.
+# 0.20 s**, two ticks of the 10 Hz look cadence. The wire as authored (fineness 8) is lost for
+# **36.50 s — 183×** the control; at fineness 10 it is 40.20 s, **201×**. ⚠ Quote the column you
+# mean: TWO ORDERS OF MAGNITUDE is the honest headline, and the authored arm is the one that ships.
+# That separation, against a control that could and did flicker, is the slice.
 #
 # THE GEOMETRY, and every number in it has a reason:
 #   • The target starts BROADSIDE at 18 km — perpendicular to the radar's line of sight, which is

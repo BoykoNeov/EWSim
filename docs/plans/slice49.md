@@ -602,10 +602,17 @@ in the scenario is LOAD-BEARING and must not be tidied to a non-fluctuating dete
 hand the sphere a perfect 100 % and turn the slice's central comparison into a tautology — a test
 whose control cannot fail.
 
-**THE VIEW MARKER'S HOLE CHECK COMES BACK POSITIVE.** Without `aspect_view`, a slice-49 wire is a
-slice-2 wire to the client: it would draw the two-ray propagation view and offer a
-`free_space ↔ two_ray` button — **a lesson about MULTIPATH LOBING on a scenario whose target
-vanishes for a completely different reason**, and the drop-out would read as a propagation null.
+**⚠⚠ THE VIEW MARKER IS A BRANCH SELECTOR AND A BUTTON-DROPPER — NOT A HOLE PLUG. THE FIRST DRAFT
+OF THIS SECTION GOT THAT BACKWARDS AND IS CORRECTED HERE** (slice 35's plan drew exactly this
+distinction, and wrote it down *because getting it backwards teaches the next slice the wrong rule*).
+Read off `clients/godot/scenes/Sandbox.gd:763`: the dispatch is `range_axis_m` → CFAR,
+`pri_axis_us` → ESM, `terrain_grid` → terrain, `airframe_6dof` → 3-D, `estimator` → geoloc,
+`raim` → GPS, **else `_mode = "spatial"`**. A slice-49 wire carries none of those, so it falls
+through to the SPATIAL RADAR VIEW — **which is the correct view**, and there is no hole. What is
+wrong without the marker is narrower and still real: (a) the aspect block is not drawn at all, and
+(b) `_setup_spatial_fid_btn()` offers the `free_space ↔ two_ray` toggle, so a student can press
+MULTIPATH LOBING on top of a scenario whose target vanishes for an unrelated reason — convention 9's
+exact prohibition, and the drop-out would then have two candidate explanations.
 The marker carries `aspect_target` and `aspect_observer` because an aspect belongs to a
 target–observer PAIR; a HUD reading "aspect 25°" with no subject is this family's ~13th stale
 readout. ⚠ Gated on the COMP KEY, not a fidelity — there is deliberately no `aspect` rung, because
@@ -616,3 +623,63 @@ slider position (slice 47/48's settled decision).
 the headless smoke-load and the windowed shot, plus the client's aspect HUD branch. ⚠ `STEPS` must
 be a multiple of `emit_every` = 16 (pinned as a test here so an edit to either breaks in the core
 first), and anything computed inside `_draw` has NO headless proof.
+
+## §14 — TWO CORRECTIONS AND ONE CLOSED GAP (2026-08-26, advisor)
+
+**1. THE `:cfar` CLEARANCE IS NOW MEASURED, NOT OPEN.** §8 banked the draw-count clearance for the
+`:snr` path only, and `radar.jl` reads `pfa`/`swerling`/`n_pulses` in a SECOND place. Measured:
+
+- **Aspect REACHES the CFAR profile** — `_observe_cfar!` calls the same `_target_snr`, so the one
+  site holds automatically. `snr_db` on tick 1 of `slice3_cfar.yaml` reads **31.62 dB** scalar,
+  **14.87 dB** at F = 3, **−8.90 dB** at F = 12.
+- **The DRAW COUNT is invariant** — probed from the stream's POSITION rather than from the code: the
+  next 8 draws after 400 ticks are identical across all three arms. `_draw_profile!` draws `2·N_p`
+  per CELL over a scenario-fixed cell count, so σ moves the profile VALUES and not the stream.
+  ⇒ **convention 3 is satisfied on the `:cfar` rung as well**, and aspect × CFAR is supported rather
+  than untested.
+
+⚠⚠ **AND THE PROBE THAT FIRST SAID "NO DIFFERENCE" HAD TWO DEFECTS, BOTH OF THEM THE SAME MISTAKE
+THIS SLICE HAS NOW MADE THREE TIMES.** (a) It gave the CFAR targets a PURE-Y velocity while they sit
+on the +x axis — **exactly abeam**, where an aspect model is CORRECTLY inert at every fineness.
+(b) It shaped only the FIRST target, while `snr_db` reports the STRONGEST. ⭐⭐⭐ **THE
+TRANSFERABLE RULE, and it belongs in `docs/LESSONS.md`: THE DEFAULT GEOMETRIES IN THIS PROJECT PUT
+THE TARGET ABEAM, WHICH IS THE ONE PLACE AN ASPECT MODEL IS EXACTLY A NO-OP. A "these differ" tooth
+needs its geometry chosen as deliberately as a "these agree" one** — three occurrences in one slice:
+the gate-2 paired arm (caught by the suite), and both halves of this probe (caught by disbelieving a
+null).
+
+**2. THE VIEW-MARKER FRAMING IN §13 WAS BACKWARDS AND IS CORRECTED IN PLACE.** It is a BRANCH
+SELECTOR and a BUTTON-DROPPER, not a hole plug — `Sandbox.gd:763`'s dispatch falls through to the
+correct spatial radar view without it. What the marker actually buys: the aspect block gets drawn,
+and the `free_space ↔ two_ray` button is dropped so a student cannot press MULTIPATH on top of this
+lesson. ⚠ Slice 35 drew this exact distinction and recorded it *because getting it backwards teaches
+the next slice the wrong rule*; this is that failure, caught before it shipped as a rule.
+
+**3. THE SEPARATION NUMBER IS QUOTED BY COLUMN.** The authored wire (fineness 8) is **36.50 s
+against 0.20 s — 183×**; fineness 10 is 40.20 s, **201×**. ⚠ "Two orders of magnitude" is the honest
+headline and the authored arm is the one that ships. (This slice has already mis-stated an
+arithmetic result twice, both times in the direction that flattered the answer.)
+
+## §15 — THE VERIFIER'S BUDGET, DECIDED BEFORE THE SCRIPT IS WRITTEN
+
+⚠ **THIS LESSON TAKES 36.5 SECONDS OF FLIGHT TO APPEAR, WHERE EVERY PRIOR VERIFIER IN THIS ARC FLEW
+A ~9 s TERMINAL ENGAGEMENT.** At `dt` = 1e−3 that is 36 500 ticks before a drop-out can be asserted.
+Decided here rather than discovered mid-script: **`STEPS = 40000`** (a multiple of `emit_every` = 16
+⇒ 2500 frames, convention 14), **three arms** — the sphere control, the authored 8.0, and the
+ceiling 12.0 — for 120 000 ticks total, against slice 48's ~90 000 across eight arms.
+
+**THE 40 s COLUMN, MEASURED, so the verifier asserts against numbers rather than hopes:**
+
+| `rcs_fineness` | 1.0 (control) | 4.0 | **8.0 (authored)** | 12.0 |
+|---|---|---|---|---|
+| longest closing loss | **0.20 s** | 0.80 s | **27.00 s** | 32.70 s |
+| range given up | 0.0 km | 0.2 km | **5.8 km** | 6.4 km |
+| detected | 98.2 % | 56.7 % | **20.2 %** | 12.2 % |
+
+Still monotone at 40 s, and every arm is detected on tick 1 (`t = 0.001 s`) — the target starts
+DETECTED, which is what makes a loss a loss.
+
+⚠ **THE VERIFIER CANNOT RECOMPUTE `rcs_aspect` TO CHECK `rcs_eff_m2`** — convention 13, the Godot
+client is pure and carries ZERO physics. Its teeth must be RELATIONS between telemetry keys (the
+drop-out exists, its duration ranks correctly across arms, the control is brief), never a
+recomputation of the model.
