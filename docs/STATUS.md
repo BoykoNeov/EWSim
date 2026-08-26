@@ -7186,8 +7186,12 @@ the HUD-not-the-button split (47/48's shape, not 49's), both mirrors, slice 49's
 on a wire with no radar, the edge latch, Reset re-arming, the slider path, and a prior-wire tooth.
 
 **WIDTHS: 374 px bodies / 365 px headlines against 430 px of room, 6 verdict states, none naming the
-miss.** ⚠ The first run measured **429 px against 430** — one glyph from clipping and indistinguishable
-from a comfortable pass, so the tooth now PRINTS the margin and the WIDEST LINE on a passing run.
+miss.** ⚠ **THE 374 IS THE END OF A TWO-STEP STORY, NOT A ONE-STEP ONE.** The first run measured
+**429 px against 430** — one glyph from clipping and indistinguishable from a comfortable pass — and
+shortening one line took it to **363**; the §10.10 vocabulary re-banding then RE-WIDENED it to the
+shipped **374** (the widest line is now `tgt1→m1  nose off 76° — well round from broadside`). ⇒ the
+transferable half is not the number but the rule: **the tooth PRINTS the margin and the WIDEST LINE on
+a PASSING run**, because a width budget is re-opened by any later change to the words.
 
 ### ⭐⭐⭐ THE WINDOWED SHOT CAUGHT TWO DEFECTS, NEITHER VISIBLE TO ANY HEADLESS PROOF
 
@@ -7203,7 +7207,8 @@ from a comfortable pass, so the tooth now PRINTS the margin and the WIDEST LINE 
 2. ⭐⭐ **THE ASPECT WORD WAS WRONG ON THE ONE FRAME THAT CARRIES THE LESSON.** `_s50_word` inherited
    slice 49's ABSOLUTE bands (70–110° → "broadside"), and **this wire never leaves that one band** —
    launch is 90°, every loss on every arm is 71.9°–81.5°. So the vocabulary was CONSTANT over the
-   entire teachable domain, the same objection §6.4 used to disqualify `min R_acq/r` as a gauge. ⚠⚠
+   entire teachable domain — the same objection that disqualified `min R_acq/r` as a gauge at gate 0
+   (`docs/plans/slice50.md` §6.4): resolution over no slider steps at all. ⚠⚠
    **And it was WRONG, not merely useless:** it printed "broadside" — the word for BRIGHTEST — on a
    frame where the echo is ~18 dB down and the line beneath said the horizon had collapsed inside the
    range. **That is the §10.4 marker-hole defect exactly, except that one was a DEFAULTED value fixed
