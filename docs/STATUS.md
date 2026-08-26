@@ -6668,3 +6668,219 @@ godot --headless --path clients/godot --script res://net/slice47_verify.gd     #
 godot --headless --path clients/godot --script res://net/slice47_ui_test.gd    # no server needed
 ```
 
+---
+
+## Slice 48 — THE SEEKER SEARCH PATTERN (2026-08-26)
+
+**SHIPPED — 3 gates, 9333 → 16154 tests.** The family slices 42/43/45 could not build and slice 47
+unblocked. Slice 47 leaves a missile whose receiver opens onto empty sky: the head is pointed where
+the launch-time picture said the target would be, the target is further out than the detector window
+is wide, and the head then does **nothing at all** for the rest of the engagement — correctly,
+because a tracker cannot slew on an error signal its detector never produced. This slice gives it the
+one thing it can still do: **look around**.
+
+> **THE LESSON, IN ONE SENTENCE.** *A search converts a pointing error you cannot fix into TIME — and
+> the time is bounded by the ENGAGEMENT, not by the head. Below a sweep rate the target is never found
+> at all; above it, what you paid is not the miss but the manoeuvre authority you had left when you
+> finally found it.*
+
+### ⭐⭐⭐ THE MIDDLE OF THE SLIDER IS THE LESSON
+
+Both ends are easy to read and everything worth knowing is in between, where the missile **finds the
+target every time, spends everything it has, and still misses.** Measured on the shipped wire, the
+authority read **gated at r > 200 m AND on the first descending band**:
+
+```
+   ρ °/s  acquires  t_search s     CPA m   auth pk%
+    ≤ 35     NEVER           —   1039.88        0.0    <- what ships today
+      36      lock      2.0400    677.27       71.2    <- ⭐ THE FLOOR: found, and far too late
+      38      lock      1.8500    572.88       78.5
+      40      lock      1.7050    487.17       87.3
+      45      lock      1.4450    322.37      100.0    <- PINNED at the airframe limit…
+      50      lock      1.2650    201.53      100.0
+      55      lock      1.1300    107.44      100.0
+      60      lock      1.0230     32.09      100.0    <- ⭐⭐ …and STILL missing
+      65      lock      0.9370      0.48       32.7    <- ⭐⭐ 0.086 s SOONER, a THIRD of the cost
+      70      lock      0.8650      0.20       31.3
+     120      lock      0.5030      0.27       25.6
+     240      lock      0.2670      0.31       22.7
+```
+
+⭐⭐⭐ **THE EDGE IS BETWEEN 60 AND 65 °/s AND NOTHING VISIBLE HAPPENS THERE.** The lock arrives
+**0.086 s** sooner and the engagement inverts. Both arms find the target, both take about a second to
+do it, and the SEARCH looks identical across the edge. What changed is how much flying time was left
+afterwards. ⇒ *a search does not spend head travel, it spends the engagement.*
+
+⚠⚠ **THE AUTHORITY IS NOT MONOTONE IN ρ, AND THAT IS THE PHYSICS.** It climbs 71 → 100 % as the lock
+gets late enough to demand everything, then FALLS to 23 % once the lock is early enough that little is
+demanded at all. ⇒ the slider's own monotone gauge is **`t_search`** (2.040 → 0.267 s, no reversals),
+and the authority is read as a **three-region verdict** (never / pinned / cheap), never as a line.
+`slice48_verify.gd` asserts it that way and says so.
+
+### ⭐⭐⭐ THE MISS IS FORBIDDEN AS THE GAUGE — AND HERE IT IS A **BIT-IDENTITY**
+
+Across the whole floor region (ρ = 0 … 35 °/s) the head sweeps for **6.26 s / 6265 ticks** and the
+missile flies the **identical trajectory to the last bit** — `max|Δpos| == 0` over 11 200 frames —
+because nothing the head does reaches the guidance until something is LOCKED. The HUD shows a servo
+working hard and the miss column shows nothing at all. This is the strongest form this ban has taken
+in the arc: slices 44/45 died reading a miss that carried no signal, 46 and 47 asserted
+non-monotonicity, and this one asserts **identity**.
+
+### GATE 1 — `search_sweep` (frames.jl), 1904 teeth
+
+A symmetric triangle wave, `offset(0) = 0`, rising at `+rate` to `+coverage`, reversing, period
+`4·coverage/rate`. Unit-agnostic, stateless, no RNG, no allocation.
+
+- **SYMMETRIC, opening at the cue centre**, and that is the modelling decision: a pattern that opened
+  toward the side the target is actually on hands every arm a freebie the missile cannot have. The
+  gate-0 probe forced the wrong half by reading TRUTH (`p5_fine.jl`'s `dir`); the shipped kernel
+  cannot and does not.
+- **THE PHASE IS RECOMPUTED FROM `t` ON EVERY CALL** — no accumulator. That is what keeps
+  `seeker_search_rate_dps` a live knob instead of a number baked at search onset (the slice-36
+  dead-knob trap), and it is pinned as the model test at kernel level.
+- ⚠ **NOT SHIPPED, deliberately: a predictor.** Slice 43's `travel = deficit/(1 − ω/ρ)` and `t_lock`
+  are verifier and probe arithmetic; in the core they would be a second implementation of what the
+  simulation exists to produce.
+- ⚠ **TWO PLAN TEETH CORRECTED AT MEASUREMENT.** (1) §1 asked for BIT-FOR-BIT periodicity;
+  `ρ·(t + 4S/ρ)` is not `ρ·t + 4S` in IEEE doubles for general `(ρ, S)`, so the general claim ships
+  at an explicit `1e-12·S` and the bit-identical form is pinned separately on binary-exact cells.
+  (2) `@allocated search_sweep(…)` written directly in a testset reads **16 bytes** — the BOX for the
+  returned `Float64` in the test's dynamic scope, not an allocation in the kernel. Measured through a
+  wrapper returning `nothing` over 1000 calls, where zero means zero.
+- The independent oracle is the same triangle through `asin∘sin` — a different algorithm, not a
+  recompute — pinned over a full period on four cells.
+
+### GATE 2 — THE WIRE, AND TWO PREDICATES MEASUREMENT DECIDED
+
+One branch in the cue block (`missile.jl`), one disjunct in each slew predicate, seven telemetry keys,
+three authored keys with their refusals, and a `search_view` handshake marker.
+
+**⚠⚠⚠ 1. `_search` HAS NO `!seek_init` CONJUNCT — THE PLAN'S §2.2 IS RETRACTED.** Drafted with it
+(copied from the `_cue` arm), the seam produced cells that **locked and then flew straight**: a
+`search_t_lock_s` on the wire saying the target was found, 0 % of `a_max` spent, and a ~1183 m miss
+against a 1200 m null. The mechanism, read off the seam:
+
+- **Acquisition LATCHES** (`seek_init` is set the first tick the target is inside the window and never
+  clears) while the **TRACK does not**.
+- At the lock tick the search stops and the head freezes. The next tick's slew gate is evaluated
+  against a truth LOS that has kept moving, so if the lock was taken with less margin than one tick of
+  LOS drift, **the gate closes before the head has ever slewed** and it holds for the rest of the
+  flight.
+- **The rule is sharp and was measured**: every failing cell locked with **0.0013–0.0046°** of window
+  margin, every surviving one with **≥ 0.0084°**, against a LOS drift of **~0.0055°/tick** ⇒ a lock
+  survives iff `margin@lock > ω_LOS·dt`. It swallowed **3 of 23 cells on one wire and 1 of 21 on the
+  other**, and NOTHING on the HUD could show why (0.005° against a 10° window).
+- **Without the conjunct: 0 pits in 44 cells**, every other cell unchanged to the last printed digit,
+  and the previously-pitted cells fall into line monotonically (1036.99 → 201.53 m).
+
+⭐⭐ **THE PRINCIPLE THE MEASUREMENT FORCED: ACQUISITION IS NOT A LATCH.** If the receiver can hear
+the target, the head is not pointed at it, and there is no live track, the head should still be
+LOOKING — which is the entire content of having a search pattern. ⚠ This does **not** resurrect slice
+37's coasting head (a head moving on a REMEMBERED RATE — still dead): the head re-enters the SAME
+open-loop pattern about the SAME belief centre, and `:search_t0` is NOT re-stamped, so the sweep
+resumes IN PHASE rather than jumping back to the centre.
+
+**⭐⭐ 2. `ρ > 0` IS IN THE PREDICATE, and it is NOT a second implementation of the kernel's own
+degenerate.** `search_sweep` returns a ZERO OFFSET at `ρ ≤ 0`; this gate returns NO SEARCH. They
+differ by exactly whether the head keeps being re-commanded onto the LIVE belief centre after
+handover — a cue that continues past the instant the receiver opened, which nothing in this project
+has measured. The showcase's null must be the SHIPPED wire, and it is that only if the branch stays
+shut. Pinned bit-for-bit (same position, same velocity, same head angles as a wire with no anchor at
+all, over 9000 ticks).
+
+**THE HAZARD THE BRANCH EXISTS TO AVOID.** `az_m`/`el_m` are formed from TRUTH every tick regardless
+of the window, and the tracking arm writes `head_tgt` from them **unconditionally**. On the shipped
+wire that write is inert (the window gate holds the head still); a SEARCHING head bypasses that gate,
+so falling through would hand the hunting head the very truth it is hunting for — DEFERRALS records
+slice 42's oracle probe going 3620.675 → 0.110 m the one time this seam was crossed. **The search arm
+writes `head_tgt` itself.**
+
+**THE OTHER GATE-2 DECISIONS.**
+
+- **The coverage is REQUIRED with the anchor; the rate DEFAULTS to 0.** ρ = 0 is a real arm (it is
+  what ships today, and the slider's floor); a zero coverage is a search with nowhere to look.
+- **Two staleness semantics, deliberately split and written down.** `search_offset_deg` and
+  `search_deficit_deg` are LIVE and zero when `head_searching` says the state does not exist (slice
+  47's `head_cue_err_deg` semantics); `search_elapsed_s` and `search_t_lock_s` are LATCHES, because
+  they answer questions about the PAST and a client sees one frame in 16 ticks. `search_t_lock_s`
+  ships **−1.0** while no lock has happened — 0.0 is a REAL value (a search that locked on its first
+  tick), and the arms that carry this slice's lesson never lock at all.
+- **The clock trap, pinned in both directions.** `tick!` advances `w.t` AFTER `observe!`, so a
+  recompute reading the post-tick `w.t` dead-reckons the belief one step of target motion too far.
+  `test_search.jl` pins the right clock to 1e-12 and the wrong one as a measured miss — slice 47
+  §6.7's defect, in the one place this slice could have repeated it.
+- **Draw topology (convention 3) is pinned against a FIXED TICK COUNT.** Two ρ fly two different
+  trajectories by construction, so a comparison at CPA would compare two different numbers of ticks.
+  After 8000 ticks the positions differ, the offsets differed, and the seeded stream is at the SAME
+  position in both.
+
+### GATE 3 — THE SHOWCASE, AND FOUR NUMBERS THAT DIFFER FROM SLICE 47's WIRE
+
+`scenarios/slice48_search.yaml` is slice 47's wire with four authored changes, each named in the
+header with the measurement that forced it:
+
+1. **`gimbal_stop_deg: 45.0`** (was 30). A search needs somewhere to look. The truth LOS body angle
+   runs +18° → −15° over this approach, so a cue 11–13° off truth already sits at 25–31° of BODY
+   angle — ON the 30° stop. Gate 0 measured the head clamped on **27–37 %** of every search tick with
+   the pattern absorbed SILENTLY (commanded 48°, head at 29.998°), which read as *"the search does not
+   work"*.
+2. **`midcourse_vel_err_mps: [0, +1, 0]`** (was `[0, −1, 0]`). ⭐⭐⭐ **THE DIRECTION THE SWEEP OPENS
+   INTO IS A PROPERTY OF THE SCENARIO, NOT OF THE KERNEL.** On slice 47's authored direction the
+   target sits at **+12.94°** of body azimuth from the cue, so the always-+ sweep opens STRAIGHT AT
+   IT: every cell locks inside 0.27 s and the slider teaches nothing. Flipped, the target is at
+   **−11.34°**, the sweep opens away, and the wrong half is paid for in full.
+3. **`rcs_m2: 0.020`** (was 0.001) — a longer horizon (3037 m against 1437 m), which is what buys the
+   search enough flight to be worth running.
+4. **`midcourse_err_gain: 140.0`**, AUTHORED rather than dragged (one slider, convention 9). 140 m/s
+   against a 200 m/s crossing target is **70 %** and is labelled as **a target that did something
+   else** — not as datalink noise. §4.6's decision: in slice 47 the picture error WAS the slider and
+   had to be defensible; here it is scenery that is never dialled and carries an honesty bar instead.
+
+**ONE LIVE KNOB** — `m1.seeker_search_rate_dps`, 0 → 240 °/s, LINEAR. The floor is a true NULL and the
+ceiling is the servo's own maximum slew rate, so the top of the slider is the hardware's limit rather
+than an arbitrary number. **The button is slice 46's `seeker_detect: none ↔ snr`, unchanged** — press
+it and the horizon goes away, the missile locks on tick 1, and there is nothing to search for.
+
+**THE CLIENT.** A 12th handshake marker (`search_view`, gated on the comp key) that takes the **HUD**
+from slice 47's marker and deliberately **not** the button and **not** the 3-D site: the magenta
+segment to the believed intercept point is exactly what the head sweeps ABOUT, so on this wire it
+becomes the CENTRE OF THE SEARCH rather than a leftover. Five HUD lines, all pure helpers so they have
+a headless proof, and ONE new client latch (`_srch_was_searching`) — slice 47's three are READ rather
+than twinned (convention 7: one source, no drift).
+
+### THE FOUR PROOFS, AND THE THREE DEFECTS THEY CAUGHT
+
+`net/slice48_verify.gd` (15 arms, PASS), `net/slice48_ui_test.gd` (green), a headless
+`Sandbox.tscn` smoke-load, and three windowed shots (`null` / `hunting` / `pinned`).
+
+1. ⚠⚠ **THE VERIFIER'S FIRST RUN CORRECTED THE GATE-0 NUMBERS.** The probes gated the authority on
+   RANGE alone, and the post-CPA re-crossing climbs back through 200 m **from the far side**: ρ = 36
+   reads **78.2 %** that way and **71.2 %** on the closing band. ⭐ **The r > 200 m gate is not enough
+   on its own — it must be paired with the closing-band gate.**
+2. ⚠⚠ **THE WINDOWED SHOT CAUGHT A DEFAULTED ZERO ON THE ARM THE SHOWCASE OPENS ON.** The live
+   deficit is honestly 0.0 off the search branch, so the HUD printed *"gap 0.00° beyond the window"*
+   over a frozen head sitting **1.34° outside** it and falling further behind every tick — a number
+   that reads as "exactly on the rim". The two non-sweeping states now show the LATCHED handover gap
+   and say so.
+3. ⚠⚠ **AND IT CAUGHT SLICE 47's READOUT FIX RE-OPENING.** That one-step 14 → 11 font shrink was
+   sized on its own ~72 keys (24 rows × 15 px = 360 of 388 px); this wire ships seven more (27 rows ×
+   15 = 405) and the last row of every column printed straight through the §12 badge. ⭐ **A
+   hard-coded step guarantees the next slice re-opens it** — the shrink now SOLVES for the size that
+   fits (27 rows at font 10 = 367 px of 388), and the tooth asserts the FIT rather than the step.
+4. ⚠ **The verifier's servo assertion had to be SPLIT AT THE LOCK, and the split is a measurement.**
+   Slice 47's flat `sat == 0` failed r36 on 9 frames; logging when showed every saturated tick at
+   t ≥ 9.22 s — 2.3 s AFTER the lock, inside the endgame, where the LOS swings past the head faster
+   than 240 °/s and (now) the resumed search chases it. The isolation claim is asserted where it
+   means something: **before the lock**.
+5. ⚠ **`MISS_PINNED = 30.0` is TIGHT ON PURPOSE** against r60's frame-sampled 32.18 m (~6 % of
+   margin). r60 is the arm that carries "pinned and still missing"; if the wire ever drifts under
+   30 m there, the cell that IS the lesson has stopped being one, and failing loudly on it is correct.
+
+### RE-RUN IT
+
+```
+& tools/julia.ps1 --project=core tools/server.jl scenarios/slice48_search.yaml
+godot --headless --path clients/godot --script res://net/slice48_verify.gd      # exit 0 = pass
+godot --headless --path clients/godot --script res://net/slice48_ui_test.gd     # needs no server
+& tools/test.ps1                                                                # 16154 tests
+```

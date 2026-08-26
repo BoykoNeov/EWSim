@@ -1540,3 +1540,61 @@ seventy live numbers instead of fifty, and the panel listing them silently ran o
 screen and sideways into the display it shares the window with. It is the same failure as the
 previous slice's â€” a size budget that looks satisfied and is not â€” one widget over.
 
+---
+
+## Slice 48 — what a missile does when it opens its eyes and the target is not there
+
+The previous slice left the missile in a bad spot: it flies most of the way blind, on a picture handed
+to it at launch, and when its receiver finally switches on it is looking at empty sky — the target is
+just outside the narrow window the seeker can see through. Until now the head simply froze there for
+the rest of the flight, which is correct behaviour for a device that steers by chasing an error it
+cannot measure. This slice gives it the obvious thing to do instead: **look around**. The head sweeps
+back and forth around its best guess, and the one thing you can dial is how fast.
+
+**The lesson is that a search is paid for in time, and the clock belongs to the engagement rather than
+to the head.** Sweep too slowly and the target is never found at all — everything below about a third
+of the dial misses by the same one kilometre. Sweep faster and it is found every single time. What
+changes is *when*, and that turns out to be the whole story: over a wide band in the middle the
+missile finds the target, immediately flies at the absolute limit of what its airframe can do, and
+**still misses**, by six hundred metres falling to thirty. Only past a certain rate does the find
+arrive early enough for the shot to be cheap and the intercept to happen.
+
+**The sharpest single fact is that the tipping point is a twelfth of a second and nothing about it is
+visible.** Two settings one notch apart find the target 0.086 seconds apart. One of them is pinned at
+100 % of its manoeuvre limit and misses by 32 m; the other spends a third of the airframe and arrives.
+Both searches look the same, take about the same second to succeed, and end with the target found. All
+that differed is how much flying time was left afterwards.
+
+⭐ **This is also the strongest form yet of a rule this project keeps relearning: the miss distance is
+not the thing to watch.** Across the whole bottom of the dial — where the head is sweeping hard, for
+six full seconds — the missile flies a trajectory that is *identical down to the last bit* to one
+where the head never moves at all. Nothing the head does reaches the steering until something is
+actually locked on. So the display shows a servo working hard while the miss column shows literally
+the same number, and a test written on the miss would report a control that does nothing. Two earlier
+slices were abandoned for exactly that misreading.
+
+⚠⚠ **One design decision was settled by measurement rather than argument, and it reversed the plan.**
+The first version stopped searching the moment the target was first seen — which sounds obviously
+right and is wrong. Being seen once is not the same as being tracked: if the first glimpse happens
+right at the edge of the window, the target slips back out before the head has moved even once, the
+head freezes, and the missile flies straight on with a "target found" indicator lit. Four cells out of
+forty-four failed that way, missing by a kilometre while reporting success, and nothing on the display
+could show why — the margin involved was five thousandths of a degree. Letting the search simply carry
+on whenever there is no live track removed every one of those cases and changed nothing else.
+**Acquiring is not a latch.**
+
+⚠ **The scenario also had to choose which way the head sweeps first, and that is a property of the
+scenario rather than of the mechanism.** The sweep is symmetric and starts at the guess, so it has no
+way of knowing which side the target is on — a missile that knew would not need to search. On the
+previous slice's numbers the target happened to lie on the side the sweep opens toward, which hands
+every setting a free win and teaches nothing; the error was flipped so the first half of every sweep
+is spent looking the wrong way, which is the honest case and is written down in the file so nobody
+"simplifies" it back.
+
+⚠ **And a photograph again caught two things three passing test suites could not.** The display
+reported a gap of "0.00°" to cover on the very case the demo opens with — a frozen head sitting more
+than a degree outside its window, described on screen as being exactly on the edge — because the
+number it was reading is genuinely zero when no sweep is running. And the panel of live numbers,
+seven entries longer than the previous slice's, ran off the bottom of the window again: the fix that
+slice shipped shrank the text by one fixed step sized to its own list, which guarantees the next slice
+re-opens it. It now solves for a size that fits.

@@ -53,33 +53,41 @@ after phase 1 is a recurring gotcha (see conventions). "A missile is `integrate!
 + `decide!`."
 
 
-## Where the project is (2026-08-25)
+## Where the project is (2026-08-26)
 
-**Slices 1–40 + 46 + 47 COMPLETE & green — 9333 tests** (7808 before slice 47). 39 and 41–45 are GATE-0
-RECORDS (no code). ⚠⚠ **FIVE CONSECUTIVE gate-0 records shipped nothing, and on 2026-08-18 the kill
-CRITERION itself was ruled at fault** (the two-test rule below): 41, 44 and 45 are **ALIVE AS A MODEL**,
-probe code in `M:\claud_projects\temp\slice4N`; only 42 is dead outright. ⭐ **46 DISCHARGED 44's
-re-verdict** and **47 DISCHARGED 43's BLOCK** — the search family is UNBLOCKED and is the top of the
-backlog (`docs/DEFERRALS.md`). HANDOFF §10 items 1–13 are DONE; 15–40 are into the §11 Tier-A horizon.
+**Slices 1–40 + 46 + 47 + 48 COMPLETE & green — 16154 tests** (9333 before slice 48). 39 and 41–45
+are GATE-0 RECORDS (no code). ⚠⚠ **FIVE CONSECUTIVE gate-0 records shipped nothing and the kill CRITERION
+itself was ruled at fault on 2026-08-18** (the two-test rule below): 41, 44, 45 are **ALIVE AS A
+MODEL** (probes in `M:\claud_projects\temp\slice4N`); only 42 is dead outright. ⭐ **46 DISCHARGED 44's
+re-verdict, 47 DISCHARGED 43's BLOCK, and 48 SHIPPED the search family** — that thread is CLOSED; pick
+the next slice from `docs/DEFERRALS.md`. HANDOFF §10 items 1–13 are DONE; 15–40 are into the §11 Tier-A horizon.
 
-The live arc is the **missile seeker family (26–40, 46, 47)**: a seeker looks through a radome whose bend
+The live arc is the **missile seeker family (26–40, 46–48)**: a seeker looks through a radome whose bend
 depends on the look angle, so the missile's own motion feeds back into the line-of-sight it reports and past
 a loop gain it shakes itself into a limit cycle. 27–33 built, priced and budgeted the gyro cure; 34–40 put
 the seeker on a **gimbal** with **inertia**. Per-slice detail: `docs/SLICES.md`.
 
-**46 gave the seeker a RECEIVER**: the window IS the beamwidth, so `R_acq · fov` is CONSTANT (80789 m·deg)
-— a wider window costs REACH, inverting 32–36 — and a late lock is paid in MANOEUVRE AUTHORITY, never in
-MISS, which reads non-monotone and backwards.
+**46 gave the seeker a RECEIVER**: the window IS the beamwidth, so `R_acq · fov` is CONSTANT
+(80789 m·deg) — a wider window costs REACH, inverting 32–36 — and a late lock is paid in MANOEUVRE
+AUTHORITY, never in MISS.
 
-**47 made the missile BLIND** for most of the flight, flying one launch snapshot dead-reckoned with an
-authored (live) error in it. ⭐⭐⭐ **THE CLIFF IS THE WINDOW**: the handover error crosses the authored
-10° detector window between 38 and 39 m/s of belief error — 9.7846° arrives at 2.5 m, 10.0505° NEVER
-ACQUIRES (316 m) — while the MISS again says nothing and the authority walks 4.27 → 27.97 %.
-⭐⭐ **AND THE HANDOVER ERROR IS THE PICTURE ERROR × THE TIME SPENT BLIND** (the same slider gives 1.39° at
-a 3.2 s handover and 9.78° at 7.26 s) ⇒ **a midcourse budget cannot be specified in m/s alone, only
-against a handover RANGE.** ⚠⚠ 47 also **RETRACTED its own plan's ban on `gimbal_fov_margin_deg`** — at
-handover `margin + cue = fov` (⚠ SERVO-CONTINGENT — boresight vs command; it holds only while the head
-has SETTLED, 240 °/s here), so it is the headline gauge in other units and is off the HUD for REDUNDANCY; never quote the old "it improves while the engagement is lost" reason.
+**47 made the missile BLIND** for most of the flight, flying one launch snapshot with an authored
+error in it. ⭐⭐⭐ **THE CLIFF IS THE WINDOW** (the handover error crosses the 10° window between 38
+and 39 m/s of belief error and the engagement flips THERE, while the MISS says nothing) and ⭐⭐ **THE
+HANDOVER ERROR IS THE PICTURE ERROR × THE TIME SPENT BLIND** ⇒ **a midcourse budget cannot be given in
+m/s alone, only against a handover RANGE.** ⚠⚠ 47 RETRACTED its plan's ban on `gimbal_fov_margin_deg`
+(at handover `margin + cue = fov`, ⚠ SERVO-CONTINGENT — only while the head has SETTLED), so it is off
+the HUD for REDUNDANCY; never quote the old "it improves while the engagement is lost" reason.
+
+**48 let the blind missile LOOK AROUND** (a symmetric triangle sweep about the live belief).
+⭐⭐⭐ **A SEARCH SPENDS THE ENGAGEMENT, NOT THE HEAD**: under 36 °/s it never acquires — and that whole
+floor region is BIT-IDENTICAL to a frozen head, the miss ban's strongest form yet — while 36–60 °/s
+acquires EVERY time, is PINNED at 100 % of `a_max` and still misses 677 → 32 m; the 60/65 edge is
+**0.086 s** of earlier lock with nothing about the search looking different. ⚠ The authority is NOT
+monotone in ρ (it saturates then falls); the monotone gauge is `t_search`. ⭐⭐ **ACQUISITION IS NOT A
+LATCH** (a rim-graze lock is consumed and buys nothing: `margin@lock > ω_LOS·dt`), and ⚠ the sweep's
+OPENING SIDE is a SCENARIO property — 48 flips 47's error direction so it opens AWAY; never "simplify"
+that back.
 
 **The rule that keeps paying** (33, 34, 35, 37, 38): *aim `R̂` at the glass's worst-case slope*
 (`radome_slope_worst`) and the cost — of FOV, detector window, servo bandwidth, servo frame — mostly
@@ -139,17 +147,16 @@ Evidence, numbers and the re-verdict table: `docs/DEFERRALS.md` §"THE 2026-08-1
   ⭐⭐ **The rule to carry: a pole differs from a gain ONLY in that its phase VARIES with frequency, and that
   loop's fin command is a single 1.6488 Hz line.** ⇒ **measure the SPECTRUM of the signal a new dynamic
   element will sit on BEFORE proposing it** (`p2_spectrum.jl`).
-- **A SEEKER SEARCH PATTERN** (42/43/45) — **UNBLOCKED as of slice 47; never killed.** ⭐⭐ **The cost of
-  acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error.** Its LAW (sweep floor, `t_lock`,
-  the U-shaped best moment) and its three instrument bugs are in DEFERRALS. 46 supplied the horizon, **47
-  supplied the midcourse AND a slider that authors the deficit** ⇒ build it on 47's wire just past the
-  cliff. ⚠ Do NOT re-litigate that a wider window is free (46 killed it) or that the miss is the gauge.
+- **A SEEKER SEARCH PATTERN** (42/43/45) — **SHIPPED BY SLICE 48; never killed.** ⭐⭐ **The cost of
+  acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error.** ⚠ Do NOT re-litigate that a
+  wider window is free (46 killed it) or that the miss is the gauge. The candidates it raised (a one-tick
+  measurement memory in the slew gate, the COVERAGE axis, a second sweep axis): `docs/DEFERRALS.md`.
 - **Seeker range / SNR limits AS THE UNBLOCKER** (44) — **DEAD as the unblocker, ALIVE AS A MODEL — and
   SHIPPED by slice 46.** ⭐⭐ **A detection gate can only price a design variable if the ENGAGEMENT is
   launched OUTSIDE the sensor's horizon — a property of the WIRE.** ⚠ Its two survivors are confirmed on
   46's wire (**a late lock is paid in MANOEUVRE AUTHORITY, not MISS**; **32/34's narrow-window failures
-  are THE SERVO's**). ⚠⚠ **DO NOT QUOTE 44 §VII.1's “100.00 % of `a_max`”** — an r → 0 ENDGAME read;
-  gated at r > 200 m that cell spends 10.45 % against 3.10 %, and the effect SURVIVES and is MONOTONE.
+  are THE SERVO's**). ⚠⚠ **DO NOT QUOTE 44 §VII.1's “100.00 % of `a_max`”** — an r → 0 ENDGAME read; gated
+  at r > 200 m that cell spends 10.45 % against 3.10 %, and the effect SURVIVES.
 - **A rectangular / per-axis window and stop** (45) — **DEAD AS A LESSON, ALIVE AS A MODEL, both halves.**
   ⭐⭐⭐ **A TRACKER holds both axes near zero so a window's CORNERS are never visited; a SEARCH drives one
   axis to the rim BY DESIGN, which is where the corners are.** ⚠ Never quote the box's rescue without its

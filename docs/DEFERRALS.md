@@ -635,7 +635,8 @@ deception**. **Do not quote the old reason.**
 
 ### New candidates raised by slice 47
 
-- â­â­ **THE SEEKER SEARCH PATTERN (42/43/45) â€” now UNBLOCKED and the top of the backlog.** Its law is
+- â­â­ **THE SEEKER SEARCH PATTERN (42/43/45) â€” UNBLOCKED by 47 and **SHIPPED BY SLICE 48** — see the slice-48
+  section at the foot of this file. This bullet is kept for the history.** Its law is
   banked, its precondition ships, and slice 47's slider hands it a tunable overlap deficit. Author it
   on slice 47's wire with the picture error just past the cliff.
 - **A MID-FLIGHT DATALINK UPDATE.** Slice 47's belief is ONE snapshot for the whole blind phase
@@ -657,3 +658,63 @@ deception**. **Do not quote the old reason.**
   2's decision, argued at length), the third arm is a claim about the WIRE rather than a slider
   position, and it is pinned as a test. Adding a rung would reopen a settled decision for no gain.
 
+
+---
+
+# ⭐⭐⭐ SLICE 48 SHIPPED — THE SEARCH FAMILY IS CLOSED (2026-08-26)
+
+**The 42/43/45 entry above is SUPERSEDED: the seeker search pattern is no longer a deferral, a block
+or a kill. It is SHIPPED** — `search_sweep` (frames.jl), one branch in the cue block, three authored
+keys, seven telemetry keys, a `search_view` marker, `scenarios/slice48_search.yaml`, and four proofs.
+Full detail: `docs/STATUS.md` §Slice 48. Slice 43's banked law was never refuted and is still the
+right way to think about the mechanism; what shipped is the SIMULATION of it, and the law's numbers
+stayed un-quoted exactly as the plan required (they were measured on an 8 °/s servo over a ~7 s
+window; this wire is 240 °/s over ~2 s).
+
+**WHAT THE SLICE ESTABLISHED, beyond its own headline:**
+
+- ⭐⭐⭐ **ACQUISITION IS NOT A LATCH.** A lock taken with less window margin than ONE TICK of LOS
+  drift does not survive the next tick — the head freezes before it has ever slewed — so a search that
+  ends at first contact can be consumed by a glimpse and leave the missile flying straight with a
+  "found it" key on the wire. Measured: 4 of 44 cells, ~1183 m misses, 0 % of `a_max`, 0.005° of
+  margin, invisible on every gauge. The rule is `margin@lock > ω_LOS·dt`.
+- ⭐⭐ **THE DIRECTION A SYMMETRIC SWEEP OPENS INTO IS A PROPERTY OF THE SCENARIO, NOT OF THE KERNEL.**
+  The shipped pattern has no truth to read and always opens toward +azimuth; on slice 47's authored
+  error direction that happens to be straight at the target (+12.94°), which hands every arm a freebie
+  and flattens the slider. The showcase flips the error so the wrong half is paid for in full.
+- ⭐⭐ **A SEARCH SPENDS THE ENGAGEMENT, NOT THE HEAD.** Between 36 and 60 °/s the missile acquires
+  every time, flies at up to 100 % of `a_max`, and still misses by 677 → 32 m. The edge at 60/65 °/s
+  is **0.086 s** of earlier lock and nothing about the search looks different across it.
+
+## New candidates raised by slice 48
+
+- ⭐⭐ **A ONE-TICK MEASUREMENT MEMORY IN THE TRACKER'S SLEW GATE.** The gap slice 48 made visible and
+  deliberately routed around rather than fixing: the gate re-evaluates `off_axis_angle(head, TRUTH
+  NOW) ≤ fov` every tick, so a head that has just been handed a fresh, valid measurement can be
+  refused the slew that would consume it — the gate closes against a truth that has moved, before the
+  head has moved at all. A one-tick memory ("slew to a stored target the detector produced last
+  tick") closes it. ⚠⚠ THIS IS A CHANGE TO SLICES 34–47's SHIPPED PHYSICS and would need its own
+  byte-identity story; it is NOT slice 37's coasting head (that is a head moving on a REMEMBERED RATE
+  and stays dead). ⚠ Its own gate 0 must first show the state is reachable on a wire where it
+  MATTERS — on slice 48's wire the search routes around it, which is why this is a candidate and not
+  a bug fix.
+- **THE SEARCH COVERAGE (half-amplitude S) AS THE AXIS.** Slice 48 authors it at 25° and §0.7 kept it
+  in reserve. Slice 43 measured that a wrong-side guess pays `2S` in travel and *"the price
+  accelerates"*: too wide a coverage is a search that arrives too late, which is slice 48's lesson on
+  a knob whose domain is not squeezed by a 240 °/s servo. ⚠ Its own gate 0 must settle whether the
+  coverage is measured against the LIVE sweep centre (which walks away from the target while the
+  search runs) or a frozen one — slice 48 ships the live centre and never varied S.
+- **A SECOND SWEEP AXIS (raster / spiral / palmer).** Slice 48's pattern is single-axis in body
+  azimuth, named as an approximation. A real seeker searches a SOLID ANGLE. ⚠ The obvious risk is
+  that it is slice 48's lesson with a bigger constant in front — the honest gate-0 question is
+  whether the ELEVATION axis is where the target actually goes on any wire this project flies, and
+  slice 43's own gate 0 warned that an unswept axis drifts out on a schedule the search does not
+  control. Slice 48 measured the deficit as pure azimuth on its wire, so this needs a geometry where
+  it is not.
+- ⚠ **NOT a candidate: a `search` FIDELITY RUNG.** Gate 2 considered one and rejected it for slice
+  47's reason — "no search at all" is reachable from the SLIDER's own floor (ρ = 0, pinned
+  bit-identical to a wire with no anchor), so a rung would duplicate a slider position, and the
+  anchor is deliberately a key an author writes.
+- ⚠ **NOT a candidate: making the sweep direction authorable.** It would be a knob whose only effect
+  is to hand the missile information it cannot have, and the symmetric pattern already bounds the
+  cost of the wrong guess at `2S` of travel.

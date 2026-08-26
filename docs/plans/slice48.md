@@ -1109,3 +1109,56 @@ Two corrections, both worth keeping:
    VERDICT (never / pinned / cheap) and not a line, and the slider's own monotone gauge is
    **`t_search`**, which falls 2.04 → 0.267 s across the domain without one reversal.
    ⚠ This is why the verifier asserts regions and a monotone `t_search`, never a monotone authority.
+
+## ⭐⭐⭐ §5 — GATE 3 (2026-08-26): **SHIPPED.** THE SHOWCASE, AND THREE DEFECTS THE PROOFS CAUGHT
+
+`scenarios/slice48_search.yaml` + `net/slice48_verify.gd` (15 arms, **PASS**) +
+`net/slice48_ui_test.gd` (green) + a headless `Sandbox.tscn` smoke-load + three windowed shots.
+Suite green at **16154** tests (9333 before the slice). The full as-built block, with the ladder, the
+edge, the four authored differences from slice 47's wire and the client's 12th marker, is
+`docs/STATUS.md` §Slice 48 — it is not duplicated here. What belongs in the PLAN's log is what the
+gate changed about the plan:
+
+1. ⚠⚠ **THE VERIFIER'S FIRST RUN CORRECTED §4.7d's OWN NUMBERS.** Gate 0 and gate 2 gated the
+   authority on RANGE alone and the post-CPA re-crossing climbs back through 200 m **from the far
+   side**: ρ = 36 read **78.2 %** that way and **71.2 %** on the closing band. The table in §4.7d was
+   rewritten and §4.7e records it. ⭐ **A range gate is not enough on its own — pair it with the
+   closing-band gate** (now in `docs/LESSONS.md`).
+2. ⚠ **THE `sat == 0` ASSERTION HAD TO BE SPLIT AT THE LOCK, AND THE SPLIT IS A MEASUREMENT.** Slice
+   47's flat form failed r36 on 9 frames; logging WHEN showed every saturated tick at t ≥ 9.22 s —
+   2.3 s after the lock, inside the endgame, where the LOS swings past the head faster than 240 °/s
+   and the resumed search chases it. The isolation claim is asserted where it means something:
+   **before the lock**. ⚠ This is a live consequence of §4.7b's retraction and it is not a defect —
+   but it would have been invisible had the assertion simply been relaxed.
+3. ⚠⚠ **THE WINDOWED SHOT CAUGHT A DEFAULTED ZERO ON THE ARM THE SHOWCASE OPENS ON.** The live
+   deficit is honestly 0.0 off the search branch, so the HUD printed *"gap 0.00° beyond the window"*
+   over a frozen head sitting **1.34° outside** it — a number that reads as "exactly on the rim". The
+   two non-sweeping states now show the LATCHED handover gap and say so. Convention 14's fourth
+   proof earning its place for the third slice running.
+4. ⚠⚠ **AND IT CAUGHT SLICE 47's READOUT FIX RE-OPENING.** That one-step 14 → 11 font shrink was
+   sized on its own ~72 keys; this wire ships seven more and the last row of every column printed
+   through the §12 badge. The shrink now SOLVES for the size that fits and the tooth asserts the FIT
+   rather than the step. ⭐ *A hard-coded step guarantees the next slice re-opens the defect.*
+5. ⚠ **`MISS_PINNED = 30.0` IS TIGHT ON PURPOSE** against r60's frame-sampled 32.18 m (~6 % margin),
+   and the verifier says so where the constant is defined: r60 is the arm that carries "pinned and
+   still missing", so if the wire drifts under 30 m there, the cell that IS the lesson has stopped
+   being one and failing loudly on it is correct.
+
+### §5.1 — THE PLAN's OWN SCORECARD
+
+- **§0.1's pre-registered kill did NOT fire.** The authorable rate range neither always locks nor
+  never locks: it never acquires below 36 °/s, acquires-and-misses to 60, and acquires-and-hits past
+  65. Nor did the named failure mode (the boundary living in the DEFICIT rather than the RATE) —
+  every arm faces the SAME 1.3423° deficit at the same 4.936 s handover, because the search begins
+  where the cue ends and cannot move it. The verifier asserts that identity on every arm.
+- **§0.5's six prohibitions all held**, and two were load-bearing: the miss is never the gauge (and
+  is asserted forbidden as a bit-identity), and `:head_cued` was not overloaded — `:head_searching`
+  is a new key and slice 47's HUD, verifier and latches are untouched.
+- **THREE PLAN ITEMS WERE RETRACTED BY MEASUREMENT**: §1's bit-for-bit periodicity tooth (gate 1),
+  §2.2's `!seek_init` conjunct (gate 2, §4.7b), and §4.5c's authoring question (gate 0, §4.6). Each
+  is recorded where the plan stated it, with the number that overturned it.
+- **§0.7's TWO-TEST VERDICT: BOTH PASS.** MODEL — `seeker_search_rate_dps` is read every tick, the
+  offset is recomputed from `w.t`, the pattern is defined in the body frame the window is measured
+  in, and the rate limit is the shipped servo's; pinned in `test_search.jl`. LESSON — dialing ρ moves
+  acquires/`t_search`/authority across three regions on the authored scenario. **Neither replacement
+  axis was needed**; the COVERAGE (§0.7 item 1) stays in reserve as a candidate for a later slice.

@@ -463,3 +463,60 @@ travel is a HARD CEILING ON SEARCHABLE VOLUME** — a search can only look where
 and the cue itself already spends most of the travel. That is slice 45's elevation stop (*read,
 clamping, working hardware*, binding 66–68 % of in-band ticks) arriving on the azimuth ring. **An
 artifact that survives being understood is a component.**
+
+
+---
+
+## ⭐⭐⭐ A RANGE GATE IS NOT ENOUGH ON ITS OWN — THE POST-CPA RE-CROSSING COMES BACK THROUGH IT FROM THE FAR SIDE (slice 48, 2026-08-26)
+
+**The trap.** Every guidance quantity in this arc is read under a range gate (`r > 200 m`) because the
+`r → 0` endgame spikes all of them — that discipline is old and it is right. Slice 48's gate-0 and
+gate-2 probes applied it and nothing else, and read a post-lock authority peak of **78.2 %** on the
+arm that carries the lesson. The verifier, which ALSO gates on the first descending band, reads
+**71.2 %** on the same arm of the same wire.
+
+**Why.** The gate is on the range, and the range is not monotone. After CPA it climbs back **through
+the same 200 m boundary from the outside**, into a region where the missile is turning around behind
+the target and every guidance quantity is meaningless. A `r > 200` filter re-admits exactly that.
+
+⇒ **THE PAIR IS THE DISCIPLINE, NOT EITHER HALF: gate on `r > R_min` **AND** on the first descending
+band.** The closing-band gate alone lets the endgame spike in from the inside; the range gate alone
+lets the post-CPA re-crossing in from the outside. Both, or the number is not the one you think.
+
+⚠ **AND THE FAILURE IS SILENT AND PLAUSIBLE**, which is why it survived two gates: 78.2 % against
+71.2 % is not an outlier, it is a slightly worse-looking version of the right answer, and it was
+quoted in a plan log and a scenario header before the verifier caught it. This is the fourth slice in
+the arc to be bitten by this family ([[ewsim-missile-verifier-sampling]] carries the others).
+
+## ⭐⭐ A HARD-CODED SHRINK STEP GUARANTEES THE NEXT SLICE RE-OPENS THE DEFECT — SOLVE FOR THE FIT (slice 48)
+
+**The trap.** Slice 47 found its telemetry readout running off the bottom of the window and fixed it
+with a single step: `if rows * 19 > available: font = 11`. That was sized on ITS key count (24 rows ×
+15 px = 360 against 388 px of room) and it fitted — exactly, and only, for that count. Slice 48 ships
+**seven more keys**, 27 rows × 15 = 405 px, and the last row of every column printed straight through
+the badge below the panel. The fix was re-opened by the next slice's arithmetic, on a widget that had
+just been repaired.
+
+⇒ **WHEN A LAYOUT MUST FIT, WRITE THE FIT, NOT A STEP.** A row is ~1.36× the font size at every size,
+so `while fsize > floor and rows * fsize * 1.36 > available: fsize -= 1` cannot be re-opened by an
+eighth key. ⚠ And the TOOTH must assert the fit (`rows × fsize × 1.36 ≤ available`), not the step
+(`fsize == 11`) — a step-shaped assertion passes on the very wire where the layout overflows, which is
+what slice 47's did.
+
+⭐ **The general form, and it is bigger than layouts: a constant chosen to satisfy today's arithmetic
+is a latent failure with a slice number on it.** The same shape as the range gate above — a threshold
+that happens to be sufficient is not a rule, and the next wire is where the difference shows.
+
+## ⚠ WHEN A PROBE AND THE SHIPPED SEAM DISAGREE ABOUT A FREEBIE, SUSPECT THE PROBE'S ORACLE (slice 48)
+
+Slice 48's gate-0 probes forced the SWEEP DIRECTION by reading TRUTH (`dir = sign(cue_az − truth_az)`)
+so that every cell paid the wrong-side cost — deliberately, and the plan said so. The SHIPPED kernel
+cannot read truth: it always opens toward `+`. On the shipped wire that turned out to be **straight at
+the target** (+12.94° of body azimuth), so every arm locked inside 0.27 s and the slider taught
+nothing — the probe had been measuring a harder problem than the code could pose.
+
+⇒ **A PROBE THAT USES TRUTH TO SET UP THE HARD CASE IS MEASURING A DIFFERENT WIRE.** Either the
+scenario must AUTHOR the hard case (slice 48 flipped the belief-error direction so the sweep opens
+away, and wrote the reason into the YAML), or the claim has to be restated as "on this geometry".
+⚠ The tell is a gate-2 table that is uniformly EASIER than gate 0's — the direction of the surprise
+matters, and this one was in the direction that flatters the component.

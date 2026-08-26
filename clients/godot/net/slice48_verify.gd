@@ -99,7 +99,12 @@ const DEG_TOL := 0.15             # frame sampling + the servo's own lag
 const T_HAND := 4.936             # s — when the receiver opens, on every arm
 const HIT_MAX := 5.0              # a HIT, frame-sampled — a sanity bound, NEVER the lesson
 const MISS_FLOOR := 1000.0        # the floor region's miss — a VERDICT, not metres
-const MISS_PINNED := 30.0         # the pinned region must still MISS by more than this
+const MISS_PINNED := 30.0         # the pinned region must still MISS by more than this.
+                                  # ⚠ TIGHT ON PURPOSE, AND SAID SO RATHER THAN LOOSENED: r60 is the
+                                  # arm that carries "pinned and still missing" and it reads 32.18 m
+                                  # frame-sampled — about 6 % of margin. If the wire ever drifts
+                                  # under 30 m there, the cell that IS the lesson has stopped being
+                                  # one, and failing loudly on it is the correct behaviour.
 const MISS_PRESS_MAX := 30.0      # ⚠ the PRESS arm's own bound, and it is a VERDICT rather than
                                   # metres: the same slider position misses by 1039.88 m with the
                                   # horizon left on. Frame-sampled it reads 5.05 m (a HIT samples
