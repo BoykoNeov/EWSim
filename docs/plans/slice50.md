@@ -795,3 +795,65 @@ same fact from the other side: ω-at-loss is `ω_common(t_loss)`, so it inherits
   proof holds. ⚠ It does NOT extend to `F` ≥ 11, and §4.10 correction 2 already says so.
 - **STILL OPEN: P3**, the prose test — and §7.4's table has already done most of it.
 
+
+---
+
+## §8 — P3, AND THE GATE-0 VERDICT (2026-08-26)
+
+### §8.1 — P3: THE SUBSTITUTION TEST, APPLIED TO THE SENTENCE THAT SURVIVED
+
+⚠⚠ **THE SENTENCE HAS TWO HALVES AND ONLY ONE OF THEM IS THIS SLICE'S.** Getting this wrong is
+exactly the §0.2 failure the whole plan exists to prevent:
+
+| half | whose | radar-swap |
+|---|---|---|
+| *"a SHAPE can make a closing target harder to see; no smaller constant echo fakes it"* | ⚠ **SLICE 49's, ALREADY DISCHARGED.** Quoting it as slice 50's headline is the §0.2 redux. | it IS a radar sentence — 49 shipped it on a ground radar |
+| ⭐⭐⭐ *"the lock is TAKEN BACK MID-FLIGHT, and the missile flies the rest of the engagement on a FROZEN ESTIMATE, holding a heading error it can no longer learn about — **1.2° at `F` = 7.5, 5.8° at `F` = 10**"* | ⭐ **SLICE 50's, AND IT IS NEW.** | ✅ **BECOMES EMPTY** |
+
+**The swap, done explicitly:** replace *seeker* with *ground radar*. A ground radar **does not fly**,
+so there is no "rest of the engagement"; it **does not act on the estimate**, so freezing it costs
+nothing to steer; it has **no collision course**, so there is no heading error to owe; and it has
+**no time-to-go**, so `ω·t_go` has no second factor. ⇒ **the sentence does not become false, it
+becomes EMPTY — every noun in it loses its referent.** ✅ **P3 PASSES**, and §7.4's table shows it
+passes *for the gauge specifically*, where `t_loss` / `r_loss` would have failed.
+
+### §8.2 — ⭐⭐⭐ GATE 0 CLOSES. THE VERDICT.
+
+| probe | verdict |
+|---|---|
+| **P0** | ✅ PASSED (§4). The seeker loses a target it already had while the range is still falling. **Arm B, scoped to `F` ≤ 10** (§4.9: `F` ≤ 7 a true null, 7.5–10 arm B, ≥ 11 arm A and chaotic). |
+| **P1** | ✅ ANSWERED (§6, §7). §5.1's max-ratio candidate **FAILED** its pre-registered predictive test and is **DEMOTED TO THE MECHANISM**; §0.6's own primary, re-sited, **PASSES all three tests in both degrees**. |
+| **P2** | ✅ ANSWERED BY PROOF for the gauge's scope (§7.6): a fixed horizon has `dR_acq/dt = 0` and cannot take a lock back mid-flight at any `rcs_m2`. ⚠ Does not extend to `F` ≥ 11. |
+| **P3** | ✅ PASSED (§8.1). |
+
+**THE SLICE:** ⭐ the target's SHAPE decides WHEN it can be seen, so a manoeuvring target can take
+back a lock the missile already had — and the price is paid in **the heading error the missile goes
+blind holding**, not in the miss.
+
+- **SLIDER:** `rcs_fineness`, floor 1.0, **ceiling 10** (⚠ §0.7 pre-registered ~12; §4.9 cuts it to
+  10 because 11+ is a different mechanism and its miss is a divergence being sampled).
+- **GAUGE:** `ω_LOS · t_go` at the loss, in degrees. **0.00° → 5.77°.**
+- **NULL:** `F` ≤ 7, and it is bit-identical to what ships today (§7.3).
+
+### §8.3 — WHAT GATE 1 BUILDS, AND THE ONE OPEN DECISION
+
+⭐ **Almost nothing in the core** — `rcs_aspect`, the aspect helper, the `_effective_rcs` seam and
+the telemetry all shipped with slice 49 (§1). The shape is **a scenario, a gauge, a view and four
+proofs**, exactly as §1 predicted.
+
+⚠ **THE ONE OPEN DECISION, INHERITED FROM §4.7 ITEM 1: `t_go` IS NOT ON THIS WIRE.** `missile.jl:1718`
+sits inside `if haskey(w.env, :salvo_t_d)`, a salvo-coordinator gate, and there is no coordinator in a
+46–50 wire. The gauge needs it. Two options, and gate 1 picks one:
+
+1. **Emit `t_go` unconditionally** (§4.7 already calls this "a real candidate, since it is free"), and
+   let the client latch `ω·t_go` at the 1 → 0 transition — slice 49's precedent, where the client
+   latched a gauge against a range window it was given.
+2. **Emit the gauge itself** as a core key latched at the loss. ⚠ Costs core state; ⭐ but it is the
+   cleanest reading of slice 49's own lesson — *a gauge must carry its own window* — and of convention
+   13 (the client recomputes nothing).
+
+⚠⚠ **AND ONE THING GATE 1 MUST NOT SMUGGLE IN: §0.7's TURN-ONSET KEY.** §0.7 said it ships only *"if
+P0/P1 say the lesson needs it."* **They did not** — the lesson lands on `rcs_fineness` alone, with the
+target turning from t = 0. ⇒ **it stays a deferral**, and that is recorded here so a later slice does
+not find it half-argued.
+
