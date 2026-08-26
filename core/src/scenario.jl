@@ -684,6 +684,80 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                 isfinite(comp[Symbol(hk)]) ||
                     error("missile '$id': seeker.$hk must be finite (got $(comp[Symbol(hk)]))")
             end
+            # ⭐⭐⭐ SLICE 48 — THE SEARCH PATTERN: what the head does when the receiver opens and
+            # the target is NOT there. Slice 47 leaves the missile pointed where the launch-time
+            # picture said the target would be, outside its own detector window, with the slew gate
+            # correctly refusing to move a tracker that has no error signal — and the head then does
+            # nothing at all for the rest of the engagement. These keys give it the one thing it can
+            # still do: LOOK AROUND.
+            #
+            # ⚠ THE ANCHOR IS A PRESENCE GATE, THE `midcourse` POSTURE EXACTLY — `haskey(c,
+            # :seeker_search)` gates every new branch and every new telemetry key in `missile.jl`, so
+            # every slice-1..47 wire short-circuits on the literal `false` and is byte-identical BY
+            # CONSTRUCTION rather than by a zero that happens to cancel.
+            if haskey(sb, "seeker_search")
+                sb["seeker_search"] === true ||
+                    error("missile '$id': seeker.seeker_search: $(sb["seeker_search"]) is not a " *
+                          "way to turn the search OFF — OMIT the key. Its PRESENCE is the gate " *
+                          "(the guidance.midcourse posture, slice 47), and `false` would author " *
+                          "the anchor while meaning the opposite (slice 48)")
+                # ⚠ REFUSED WITHOUT A GIMBALLED HEAD, not silently ignored (the slice-31/34
+                # "refused, not branch-ordered" precedent). A STRAPDOWN seeker has no head to
+                # sweep: the pattern would have nowhere to go, the branch would never run, and the
+                # anchor would be a lie the loader had accepted.
+                haskey(sb, "gimbal_tau_s") ||
+                    error("missile '$id': seeker.seeker_search authored without " *
+                          "seeker.gimbal_tau_s — a search MOVES THE HEAD, and a strapdown seeker " *
+                          "has none, so the pattern would have nowhere to go (slice 48)")
+                comp[:seeker_search] = true
+                # ⚠⚠ THE COVERAGE IS **REQUIRED** WITH THE ANCHOR, while the RATE defaults to the
+                # NULL — and the asymmetry is the lesson's, not the loader's. `ρ = 0` is a real,
+                # meaningful arm: it is EXACTLY what ships without this slice (a held head that
+                # never acquires), it is the arm the showcase opens on, and it must be reachable by
+                # dragging the slider to its floor. A coverage of zero is not an arm at all — it is
+                # a search authored with nowhere to look, which is a silent no-op wearing an
+                # anchor. ⇒ default the one that means something, refuse the one that does not.
+                haskey(sb, "seeker_search_coverage_deg") ||
+                    error("missile '$id': seeker.seeker_search authored without " *
+                          "seeker.seeker_search_coverage_deg — a search needs somewhere to look, " *
+                          "and a zero half-amplitude is a silent no-op rather than an arm " *
+                          "(the RATE, by contrast, defaults to 0 = the null; slice 48)")
+                comp[:seeker_search_rate_dps] = _f64(get(sb, "seeker_search_rate_dps", 0.0))
+            end
+            # DEGREES at the YAML boundary, radians inside (the `gimbal_*_deg` posture — the seam
+            # converts once, and `search_sweep` owns every degenerate below the boundary).
+            # ⚠ `seeker_search_rate_dps` CARRIES ITS UNIT and the coverage does not, for slice 35's
+            # reason exactly: a RATE has a time in it, an ANGLE does not.
+            # ⚠ BOTH REFUSED WITHOUT THE ANCHOR — an authored key that nothing reads is the dead-knob
+            # class this project has now caught six times (`speed` 19, launch altitude 21, the
+            # handover bias key 36, `ζ` 40, `k_δ` 15, `(R̂,s)` 31).
+            for sk in ("seeker_search_rate_dps", "seeker_search_coverage_deg")
+                haskey(sb, sk) || continue
+                haskey(comp, :seeker_search) ||
+                    error("missile '$id': seeker.$sk authored without seeker.seeker_search: true " *
+                          "— every branch that reads it is gated on that anchor, so without it " *
+                          "this knob is DEAD (slice 48)")
+                comp[Symbol(sk)] = _f64(sb[sk])
+                isfinite(comp[Symbol(sk)]) ||
+                    error("missile '$id': seeker.$sk must be finite (got $(comp[Symbol(sk)]))")
+            end
+            # ⚠ THE VALUE BOUNDS, AT LOAD, AND ONLY ON THE AUTHORED INPUT (convention 5's split: a
+            # LIVE slider is clamped at the CONSUMER, where `search_sweep` already floors both).
+            # A NEGATIVE authored rate is refused because it would ship as the NULL — the kernel
+            # floors it — while READING like a sweep in the other direction, which is a wrong number
+            # that looks like a design choice. A non-positive coverage is refused for the reason
+            # above: it is a search with nowhere to look.
+            if haskey(comp, :seeker_search)
+                comp[:seeker_search_rate_dps] >= 0 ||
+                    error("missile '$id': seeker.seeker_search_rate_dps must be ≥ 0 " *
+                          "(got $(comp[:seeker_search_rate_dps])) — a negative rate FLOORS to the " *
+                          "null inside `search_sweep` while reading like a sweep the other way; " *
+                          "the pattern is symmetric, so there is no other way to author (slice 48)")
+                comp[:seeker_search_coverage_deg] > 0 ||
+                    error("missile '$id': seeker.seeker_search_coverage_deg must be > 0 " *
+                          "(got $(comp[:seeker_search_coverage_deg])) — a search with zero " *
+                          "half-amplitude has nowhere to look (slice 48)")
+            end
             # ⭐⭐ SLICE 46 — THE SEEKER's LINK BUDGET, i.e. HOW FAR IT CAN SEE. Slices 32/34 gave
             # the seeker a WINDOW and left "can it see the target?" as an ANGLE question alone; these
             # seven numbers are the other half, and the coupling between the two is the lesson: the

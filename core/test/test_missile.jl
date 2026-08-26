@@ -8180,10 +8180,17 @@ end
             # the same measured reason. It matters MORE there than it did in 46, because every
             # failure on that wire is a failure of POINTING, which is the servo's own job
             # description — a saturating servo would make the picture error unattributable.
+            # ⚠ SLICE 48 WIDENED IT A SEVENTH TIME AND THE ASSERT CAUGHT IT AGAIN — and this one
+            # is the cheapest of all, because slice 48's wire IS slice 47's wire with the trunnion
+            # widened and a search pattern added: the same head, the same window, the same 240 °/s
+            # servo, authored for the same measured reason. It matters MORE again, because a SEARCH
+            # is pointing and nothing else — a saturating servo would make "the sweep did not cover
+            # the gap in time" unattributable to the sweep RATE, which is the whole slider.
             @test carriers == ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml",
                                "slice37_frame.yaml", "slice38_head_gyro.yaml",
                                "slice40_heavy.yaml", "slice40_resonance.yaml",
-                               "slice46_horizon.yaml", "slice47_midcourse.yaml"]
+                               "slice46_horizon.yaml", "slice47_midcourse.yaml",
+                               "slice48_search.yaml"]
         end
     end
 
@@ -8262,7 +8269,13 @@ end
                              # `slice47_ui_test.gd`'s mirror — which is the OPPOSITE shape from the
                              # five above it: slice 47's marker takes the HUD and deliberately NOT
                              # the button, because pressing slice 46's button is slice 47's own A/B.
-                             "slice47_midcourse.yaml"]
+                             "slice47_midcourse.yaml",
+                             # ⚠ SLICE 48: slice 47's wire with the trunnion widened and a SEARCH
+                             # added, so it carries the same authored servo for the same reason.
+                             # Same remedy; its mirror is `slice48_ui_test.gd`, and its marker has
+                             # slice 47's shape — the HUD, deliberately NOT the button, because
+                             # slice 46's button is still this slice's own A/B.
+                             "slice48_search.yaml"]
             for f in readdir(base)
                 endswith(f, ".yaml") || continue
                 f in expected_rate && continue
@@ -11337,7 +11350,12 @@ end
                 inf = EWSim._airframe_view_info(load_scenario(joinpath(base, f)).world)
                 inf !== nothing && haskey(inf, :midcourse_view) && push!(carriers, f)
             end
-            @test carriers == ["slice47_midcourse.yaml"]
+            # ⚠ SLICE 48 JOINS IT, and that is the marker doing its job rather than a widening to
+            # be regretted: slice 48's wire IS this wire (the same anchor, the same belief, the same
+            # blind phase) with a SEARCH on the head, so it raises `midcourse_view` too — and its
+            # own `search_view` is checked FIRST in the client, which is what stops 47's HUD from
+            # taking a wire whose whole story is what the head did AFTER the cue was wrong.
+            @test carriers == ["slice47_midcourse.yaml", "slice48_search.yaml"]
         end
 
         # AND THE CLIFF, FLOWN OFF THE SHIPPED FILE. Two arms one metre per second apart, straddling

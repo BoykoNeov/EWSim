@@ -962,3 +962,150 @@ course, not a noisy link"* — one sentence, in the header, beside the number.
   PINNED, because a rate that changed the number of ticks spent in a branch that draws would flip
   the topology silently. **`test_search.jl` asserts byte-identity of the RNG stream across two ρ**
   (and the absolute golden remains the master check).
+
+## ⭐⭐⭐ §4.7 — GATE 2 (2026-08-26): **THE SEAM WORKS, AND IT FOUND TWO THINGS NO PROBE COULD**
+
+The wire is `search_sweep` + one branch in the cue block + one disjunct in each slew predicate + seven
+telemetry keys + three authored keys with their refusals. Teeth: `core/test/test_search.jl` grew a
+gate-2 section (A–F plus the loader), 6761 assertions in the file. **Both findings below came from
+flying the SHIPPED seam and neither was reachable from `p5_fine.jl`**, which is the whole reason
+gate 2 is not a formality (convention 10: pin against the live oracle, never against a probe).
+
+### ⚠⚠⚠ §4.7a — FINDING 1: **THE PROBE WAS GETTING THE WRONG HALF FOR FREE, AND THE SHIPPED KERNEL CANNOT**
+
+`p5_fine.jl` chose its sweep DIRECTION by reading truth (`dir = sign(caz − taz)`), which forced the
+wrong half on every cell — deliberately, and §0.8 says why. **The shipped kernel has no truth to
+read**: `search_sweep` always opens toward **+offset**, so which half it opens into is a property of
+the AUTHORED GEOMETRY. Measured on the shipped seam, on slice 47's authored error direction
+`[0, −1, 0]`:
+
+```
+    side (truth − cue, body azimuth, at search onset) = +12.94°   ⇒ THE SWEEP OPENS STRAIGHT AT IT
+```
+
+and the table collapses: **every cell from ρ = 20 up locks within 0.27 s** and the slider stops
+teaching anything. That is exactly the freebie §0.8 pre-registered against — *a missile that knew
+which way to look would not need to search* — arriving through the back door, as a property of a
+scenario rather than of a kernel.
+
+⇒ **THE SHOWCASE FLIPS THE AUTHORED ERROR DIRECTION TO `[0, +1, 0]`** (the target crosses FASTER
+than the midcourse believed, rather than slower). Then `side = −11.34°`, the sweep opens AWAY, and
+the cost of the wrong half is paid in full. ⚠ It is an authored scenario decision with its reason in
+the header, NOT a code default: on the other direction the same wire teaches nothing, and a reader
+who does not know that will "simplify" it back.
+
+### ⚠⚠⚠ §4.7b — FINDING 2: **A LOCK TAKEN AT THE RIM CONSUMES THE SEARCH AND BUYS NOTHING** — the plan's §2.2 is RETRACTED
+
+Drafted with the plan's `!seek_init` conjunct (copied from the `_cue` arm), the seam produced cells
+that **locked and then flew straight**: a `search_t_lock_s` on the wire saying the target was found,
+0 % of `a_max` spent, and a ~1183 m miss against a 1200 m null. The mechanism, read off the seam and
+not guessed:
+
+* **Acquisition LATCHES** — `seek_init` is set the first tick the target is inside the window and
+  never clears — while the **TRACK does not**.
+* At the lock tick the search stops and **the head freezes**. The next tick's slew gate is evaluated
+  against a truth LOS that has kept moving, so if the lock was taken with less margin than one tick
+  of LOS drift, **the gate closes before the head has ever slewed** and it holds for the rest of the
+  flight.
+* The rule is sharp and was measured, not inferred: every failing cell locked with **0.0013–0.0046°**
+  of window margin, every surviving one with **≥ 0.0084°**, against a LOS drift of **~0.0055°/tick**.
+  ⇒ **a lock survives iff `margin@lock > ω_LOS·dt`.**
+* Cost: **3 of 23 cells on one wire and 1 of 21 on the other**, and NOTHING on the HUD could show
+  why — 0.005° of margin is invisible beside a 10° window.
+
+**WITHOUT the conjunct: 0 pits in 44 cells across both wires**, every non-pit cell unchanged to the
+last printed digit, and the previously-pitted cells fall into line monotonically (1036.99 →
+201.53 m). ⇒ the conjunct is dropped and the plan's §2.2 predicate is **RETRACTED**.
+
+⭐⭐ **THE PRINCIPLE THE MEASUREMENT FORCED, AND IT IS THE TRANSFERABLE HALF: ACQUISITION IS NOT A
+LATCH.** If the receiver can hear the target, the head is not pointed at it, and there is no live
+track, the head should still be LOOKING — which is the entire content of having a search pattern.
+⚠ This does **not** resurrect slice 37's coasting head (a head moving on a REMEMBERED RATE — still
+dead, mis-located three times): the head re-enters the SAME open-loop pattern about the SAME belief
+centre, and `:search_t0` is NOT re-stamped, so the sweep resumes IN PHASE instead of jumping back to
+the centre.
+
+⚠ **AND THE UNDERLYING GAP IS A NEW DEFERRAL, NOT A FIX THIS SLICE MADE**: the tracker's slew gate
+re-evaluates against a moving truth and can close before it ever fires on a measurement it already
+has. A one-tick measurement memory would close it. That is a change to slices 34–47's shipped
+physics and is out of scope here; the search merely makes the hole VISIBLE, and then routes around
+it by continuing to look.
+
+### §4.7c — THE OTHER DECISIONS GATE 2 SETTLED
+
+* **ρ > 0 IS IN THE BRANCH PREDICATE**, and it is not a second implementation of the kernel's own
+  degenerate: `search_sweep` returns a ZERO OFFSET at ρ ≤ 0, this gate returns NO SEARCH, and they
+  differ by whether the head keeps being re-commanded onto the LIVE belief centre after handover.
+  The showcase's null must be the SHIPPED wire — a held head that never acquires — and it is that
+  only if the branch stays shut. Pinned bit-for-bit (test A: same position, same velocity, same head
+  angles as a wire with no anchor at all, over 9000 ticks).
+* **THE COVERAGE IS REQUIRED WITH THE ANCHOR; THE RATE DEFAULTS TO 0.** ρ = 0 is a real arm (it is
+  what ships today, and the slider's floor); a zero coverage is a search with nowhere to look, i.e. a
+  silent no-op wearing an anchor.
+* **TWO STALENESS SEMANTICS, DELIBERATELY SPLIT AND WRITTEN DOWN.** `search_offset_deg` and
+  `search_deficit_deg` are LIVE and zero when `head_searching` says the state does not exist (slice
+  47's `head_cue_err_deg` semantics exactly); `search_elapsed_s` and `search_t_lock_s` are LATCHES,
+  because they answer questions about the PAST and a client sees one frame in 16 ticks.
+  `search_t_lock_s` ships **−1.0** while no lock has happened — 0.0 is a REAL value here (a search
+  that locked on its first tick), and the arms that carry this slice's lesson never lock at all.
+* **THE CLOCK TRAP, PINNED IN BOTH DIRECTIONS.** `tick!` advances `w.t` AFTER `observe!`, so a
+  recompute reading the post-tick `w.t` dead-reckons the belief one step of target motion too far.
+  Test C pins the right clock to 1e-12 and the wrong one as a measured miss — slice 47 §6.7's defect,
+  in the one place this slice could have repeated it.
+* **DRAW TOPOLOGY (convention 3) IS PINNED, AND AGAINST A FIXED TICK COUNT.** Two ρ fly two different
+  trajectories by construction, so the arms are compared after 8000 ticks rather than at CPA: the
+  positions differ, the offsets differed, and the seeded stream is at the SAME position in both.
+
+### ⭐⭐⭐ §4.7d — THE SHOWCASE WIRE, MEASURED ON THE SHIPPED SEAM AND OFF THE SHIPPED YAML
+
+`scenarios/slice48_search.yaml`: `rcs_m2 = 0.020`, picture error **140 m/s** on `[0, +1, 0]`, stop
+**45°**, coverage **S = 25°**, window 10°, servo 240 °/s. Handover at **4.936 s / 3037 m**, latched
+cue error **11.3371°** ⇒ a **1.3423° deficit**, identical on every arm. NULL (ρ = 0): **never
+acquires, 1039.88 m.** ⚠ Authority read GATED AT r > 200 m **and on the FIRST DESCENDING BAND**
+— see §4.7e, which is a correction to the numbers this log first carried.
+
+```
+   ρ °/s  acquires  t_search s     CPA m   auth pk%
+    ≤ 35     NEVER           —   1039.88        0.0    <- what ships today
+      36      lock      2.0400    677.27       71.2    <- ⭐ THE FLOOR: found, and far too late
+      38      lock      1.8500    572.88       78.5
+      40      lock      1.7050    487.17       87.3
+      45      lock      1.4450    322.37      100.0    <- PINNED at the airframe limit…
+      50      lock      1.2650    201.53      100.0
+      55      lock      1.1300    107.44      100.0
+      60      lock      1.0230     32.09      100.0    <- ⭐⭐ …and STILL missing
+      65      lock      0.9370      0.48       32.7    <- ⭐⭐ 0.086 s SOONER, and a THIRD of the cost
+      70      lock      0.8650      0.20       31.3
+     120      lock      0.5030      0.27       25.6
+     240      lock      0.2670      0.31       22.7
+```
+
+⭐⭐⭐ **THE HEADLINE, AND IT IS SHARPER THAN "MONOTONE": THE EDGE IS BETWEEN 60 AND 65 °/s, AND
+NOTHING VISIBLE HAPPENS THERE.** The lock arrives **0.086 s** sooner and the engagement inverts — at
+60 the missile is pinned at 100 % of its manoeuvre limit and misses by 32 m; at 65 it spends a third
+of the airframe and arrives at 0.48 m. Both arms find the target, both take about a second to do it,
+and the SEARCH looks identical across the edge. What changed is how much flying time was left
+afterwards. ⇒ *a search does not spend head travel, it spends the engagement.*
+
+⚠⚠ **AND THE FLOOR REGION IS BIT-IDENTICAL, WHICH IS THE MISS-IS-NOT-THE-GAUGE CLAIM IN ITS
+STRONGEST FORM.** A head sweeping at 35 °/s and a head that never moves fly the SAME missile to the
+same 1039.88 m — nothing the head does reaches the guidance until something is LOCKED — so across a
+seventh of the slider's travel the HUD shows a sweep working hard and the miss column shows nothing
+at all. Asserted as `max|Δpos| == 0` in the verifier rather than said in a sentence.
+
+### ⚠⚠ §4.7e — THE AUTHORITY COLUMN IS NOT MONOTONE, AND THE FIRST NUMBERS THIS LOG CARRIED WERE CONTAMINATED
+
+Two corrections, both worth keeping:
+
+1. **THE MEASUREMENT.** The gate-0 and gate-2 probes accumulated the authority peak through the
+   POST-CPA RE-CROSSING: once the range turns it climbs back through the 200 m gate and every
+   guidance quantity goes wild there. ρ = 36 read **78.2 %** that way and reads **71.2 %** on the
+   first descending band. [[ewsim-missile-verifier-sampling]]'s first rule, re-learned in a fourth
+   slice — ⭐ **the r > 200 m gate is not enough on its own; it must be paired with the closing-band
+   gate, or it lets the endgame back in through the far side.**
+2. **THE SHAPE.** Authority is **NOT monotone in ρ**: it climbs 71 → 100 % as the lock gets late
+   enough to demand everything, then FALLS to 23 % once the lock is early enough that little is
+   demanded at all. That is the physics, not a defect — but it means the authority is a THREE-REGION
+   VERDICT (never / pinned / cheap) and not a line, and the slider's own monotone gauge is
+   **`t_search`**, which falls 2.04 → 0.267 s across the domain without one reversal.
+   ⚠ This is why the verifier asserts regions and a monotone `t_search`, never a monotone authority.

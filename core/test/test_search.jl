@@ -185,3 +185,417 @@
         @test search_sweep(t, 60.0, 25.0) === a
     end
 end
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# GATE 2 — THE WIRE. The kernel above is a wave; these are the teeth for the SEAM that feeds it.
+#
+# ⚠ FLOWN AGAINST THE SHIPPED YAML, not a hand-built fixture (convention 10 — pin against the LIVE
+# oracle, never against a second hand-recompute). The base wire is `slice47_midcourse.yaml` with the
+# showcase cell's four authored numbers dialled in on the comp bag, which is exactly what gate 3's
+# scenario will author: a wider trunnion (45°), a bigger picture error (140 m/s), a smaller target
+# (rcs 0.020) and the error direction FLIPPED, so the always-+ sweep opens AWAY from the target.
+#
+# THE SIX THINGS THIS SECTION HAS TEETH FOR:
+#   A. THE NULL IS THE SHIPPED WIRE — ρ = 0 with the anchor is BIT-IDENTICAL to no anchor at all.
+#   B. `:search_t0` STAMPS WHEN THE SWEEP STARTS, not when the receiver opened (the drag-up arm).
+#   C. THE SEAM SMOKE — the head is commanded to BELIEF + offset, and NEVER to the truth it is
+#      hunting for (the `head_tgt` oracle hazard, `docs/DEFERRALS.md`: 3620.675 → 0.110 m).
+#   D. THE MODEL TEST — the rate is READ EVERY TICK; changing it mid-search moves the next offset.
+#   E. DRAW TOPOLOGY (convention 3) — two ρ consume the SAME number of draws over the same ticks.
+#   F. ACQUISITION IS NOT A LATCH — the search RESUMES after a lock that did not survive.
+#   + the loader's refusals, each of which is a crash guard or a dead-knob guard.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+@testset "seeker search — THE WIRE (slice 48 gate 2)" begin
+    scen_dir = joinpath(@__DIR__, "..", "..", "scenarios")
+    sl47     = joinpath(scen_dir, "slice47_midcourse.yaml")
+
+    # The gate-3 cell, built on the shipped YAML. `anchor = false` gives the slice-47 wire verbatim.
+    function search_scn(; rho = 60.0, cov = 25.0, gain = 140.0, rcs = 0.020,
+                          sgn = 1.0, stop = 45.0, anchor = true)
+        sc = load_scenario(sl47)
+        c  = sc.world.entities[:m1].comp
+        c[:midcourse_err_gain]    = gain
+        c[:midcourse_vel_err_mps] = Vec3(0.0, sgn, 0.0)
+        c[:gimbal_stop_deg]       = stop
+        sc.world.entities[:tgt1].comp[:rcs_m2] = rcs
+        if anchor
+            c[:seeker_search] = true
+            c[:seeker_search_coverage_deg] = cov
+            c[:seeker_search_rate_dps]     = rho
+        end
+        sc
+    end
+    tel_of(sc) = get(sc.world.env, :telemetry, Dict{String,Any}())
+    telv(sc, k, d = NaN) = Float64(get(tel_of(sc), "m1.$k", d))
+
+    @testset "A. THE NULL IS THE SHIPPED WIRE — ρ = 0 is BIT-IDENTICAL to no anchor at all" begin
+        # ⭐ THE TOOTH THE WHOLE SHOWCASE RESTS ON. The slider's floor must be what ships TODAY — a
+        # held head that never acquires — and not "a search with a zero sweep", which would still
+        # re-command the head onto the LIVE belief every tick and would be a behaviour nothing has
+        # measured. That is why the branch is gated on ρ > 0 as well as on the anchor, and this is
+        # the assertion that keeps it that way.
+        a = search_scn(rho = 0.0); b = search_scn(rho = 0.0, anchor = false)
+        reached = false
+        for k in 1:9000
+            tick!(a.world, a.subs, a.dt_physics)
+            tick!(b.world, b.subs, b.dt_physics)
+            # the state the search would own: the receiver hears it, the window does not have it
+            telv(a, "seeker_detect", 0.0) == 1.0 && telv(a, "gimbal_valid", 1.0) == 0.0 &&
+                (reached = true)
+        end
+        @test reached                                   # ⚠ or the identity below is VACUOUS
+        ma = a.world.entities[:m1]; mb = b.world.entities[:m1]
+        @test ma.pos == mb.pos                          # bit-for-bit, not `atol`
+        @test ma.vel == mb.vel
+        @test ma.comp[:head_az] == mb.comp[:head_az]
+        @test ma.comp[:head_el] == mb.comp[:head_el]
+        @test telv(a, "head_searching", -1.0) == 0.0    # minted, and honestly zero
+        # …and the anchorless wire mints NONE of the new keys (byte-identity ON THE WIRE, the
+        # slice-47 shape): a client of slices 34–47 sees exactly what it saw before.
+        for k in ("head_searching", "search_offset_deg", "search_deficit_deg",
+                  "search_elapsed_s", "search_t_lock_s", "search_rate_dps", "search_coverage_deg")
+            @test !haskey(tel_of(b), "m1.$k")
+            @test haskey(tel_of(a), "m1.$k")
+        end
+        # THE "NEVER LOCKED" SENTINEL is −1.0 and not a 0.0 — a search that locks on its first tick
+        # is a REAL 0.0, so the two cannot share a value (the arms carrying the lesson never lock).
+        @test telv(a, "search_t_lock_s", 0.0) == -1.0
+    end
+
+    # Fly to the first tick of the search state and hand back the scenario, still live.
+    function fly_to_search!(sc; maxticks = 12000)
+        for k in 1:maxticks
+            tick!(sc.world, sc.subs, sc.dt_physics)
+            telv(sc, "head_searching", 0.0) == 1.0 && return k
+        end
+        return -1
+    end
+
+    @testset "B. `:search_t0` STAMPS AT THE SWEEP, NOT AT HANDOVER (the drag-up arm)" begin
+        # ⚠ THE FALSIFIER, WRITTEN DOWN FIRST: a clock stamped when the RECEIVER opened would hand a
+        # dragged-up sweep a silent head start — the first commanded offset would be
+        # `search_sweep(t_now − t_handover, …)`, some arbitrary point mid-leg, instead of 0. This is
+        # the one defect no other test in this file can see.
+        sc = search_scn(rho = 0.0)                       # opens at the NULL, like the showcase
+        blind = -1
+        for k in 1:12000                                 # …fly to well inside the blind window
+            tick!(sc.world, sc.subs, sc.dt_physics)
+            if telv(sc, "seeker_detect", 0.0) == 1.0 && telv(sc, "gimbal_valid", 1.0) == 0.0
+                blind = k; break
+            end
+        end
+        @test blind > 0
+        for k in 1:400; tick!(sc.world, sc.subs, sc.dt_physics); end   # 0.4 s of NOT searching
+        @test telv(sc, "head_searching", -1.0) == 0.0
+        @test telv(sc, "search_elapsed_s", -1.0) == 0.0
+        sc.world.entities[:m1].comp[:seeker_search_rate_dps] = 60.0    # ← the drag
+        tick!(sc.world, sc.subs, sc.dt_physics)
+        @test telv(sc, "head_searching", 0.0) == 1.0
+        @test telv(sc, "search_elapsed_s", -1.0) == 0.0                # t0 is NOW
+        @test telv(sc, "search_offset_deg", 1.0) == 0.0                # …so the sweep starts at 0
+        # and it then walks at exactly the commanded rate (an INDEPENDENT finite difference on the
+        # shipped telemetry, not a read-back of the kernel).
+        o0 = telv(sc, "search_offset_deg"); tick!(sc.world, sc.subs, sc.dt_physics)
+        o1 = telv(sc, "search_offset_deg")
+        @test (o1 - o0) / sc.dt_physics ≈ 60.0 atol = 1e-6
+    end
+
+    @testset "C. THE SEAM SMOKE — commanded to the BELIEF + offset, NEVER to the truth" begin
+        sc = search_scn(rho = 60.0)
+        k0 = fly_to_search!(sc)
+        @test k0 > 0
+        m = sc.world.entities[:m1]; t = sc.world.entities[:tgt1]; c = m.comp
+        for k in 1:600
+            tick!(sc.world, sc.subs, sc.dt_physics)
+            telv(sc, "head_searching", 0.0) == 1.0 || continue
+            # 1. THE COMMAND IS THE KERNEL, FED THE SEAM's OWN ELAPSED CLOCK AND CONVERTED ONCE.
+            off = rad2deg(search_sweep(telv(sc, "search_elapsed_s"),
+                                       deg2rad(telv(sc, "search_rate_dps")),
+                                       deg2rad(telv(sc, "search_coverage_deg"))))
+            @test telv(sc, "search_offset_deg") ≈ off atol = 1e-9
+            # 2. ⚠⚠ THE ORACLE HAZARD. `head_tgt_az` must be the BELIEF direction plus that offset —
+            #    never the truth-derived `az_m` the tracking arm writes unconditionally. Recomputed
+            #    here from the belief the guidance itself holds.
+            #    ⚠⚠ AND THE CLOCK IS THE TRAP, WHICH SLICE 47 ALREADY PAID FOR ONCE (its §6.7):
+            #    `tick!` advances `w.t` AFTER `observe!`, so a recompute that reads the POST-tick
+            #    `w.t` dead-reckons the belief ONE STEP OF TARGET MOTION too far — 0.2 m at 200 m/s,
+            #    a wrong number of exactly the size that reads like a rounding issue. Both clocks
+            #    are pinned here, the right one to 1e-12 and the wrong one as a MEASURED miss, so a
+            #    future edit cannot quietly swap them. ⚠ The belief is recomputed INLINE rather than
+            #    through `_midcourse_belief!` — an INDEPENDENT recompute (convention 11), and the
+            #    only way to evaluate it at a time other than `w.t`.
+            belief(tt) = (c[:midcourse_p0] +
+                          (c[:midcourse_v0] +
+                           get(c, :midcourse_vel_err_mps, zero(c[:midcourse_v0])) *
+                           Float64(c[:midcourse_err_gain])) * (tt - Float64(c[:midcourse_t0])))
+            bp = belief(sc.world.t - sc.dt_physics)                 # …what `observe!` actually saw
+            cen_az, cen_el = look_angles(c[:att_q], los_unit(m.pos, bp))
+            @test Float64(c[:head_tgt_az]) ≈ cen_az + deg2rad(off) atol = 1e-12
+            @test Float64(c[:head_tgt_el]) ≈ cen_el                atol = 1e-12
+            wrong_az, _ = look_angles(c[:att_q], los_unit(m.pos, belief(sc.world.t)))
+            @test !isapprox(Float64(c[:head_tgt_az]), wrong_az + deg2rad(off); atol = 1e-9)
+            # 3. …and the truth is somewhere ELSE. If the seam ever fell through to the truth write
+            #    this gap would collapse to ~0 and the search would be an oracle (slice 42: the
+            #    probe that did this went 3620.675 m → 0.110 m).
+            tru_az, tru_el = look_angles(c[:att_q], los_unit(m.pos, t.pos))
+            @test off_axis_angle(Float64(c[:head_tgt_az]), Float64(c[:head_tgt_el]),
+                                 tru_az, tru_el) > deg2rad(0.1)
+            # 4. THE DEFICIT IS THE CURRENCY: cue-to-truth MINUS the window, positive while the
+            #    search is still looking, and in the SAME degrees as `gimbal_fov_deg` beside it.
+            @test telv(sc, "search_deficit_deg") ≈
+                  rad2deg(off_axis_angle(cen_az, cen_el, tru_az, tru_el)) -
+                  telv(sc, "gimbal_fov_deg") atol = 1e-9
+            @test telv(sc, "search_deficit_deg") > 0.0
+            # 5. …and a searching head is BY DEFINITION not a valid one.
+            @test telv(sc, "gimbal_valid", 1.0) == 0.0
+        end
+        # 6. THE HEAD ACTUALLY MOVES. A pattern the servo never executes is the failure mode this
+        #    probe family has been bitten by FOUR times (`docs/LESSONS.md`) — so assert the travel
+        #    on the HEAD's own angle, not on the command.
+        @test abs(rad2deg(Float64(c[:head_az]))) > 0.0
+    end
+
+    @testset "D. THE MODEL TEST — the rate is READ EVERY TICK (§0.7's only outright kill)" begin
+        # A knob consumed at load, or baked at search onset, is a BUG rather than a dead lesson.
+        a = search_scn(rho = 60.0); b = search_scn(rho = 60.0)
+        @test fly_to_search!(a) > 0
+        @test fly_to_search!(b) > 0
+        for k in 1:120                                   # …both mid-leg, in lockstep
+            tick!(a.world, a.subs, a.dt_physics); tick!(b.world, b.subs, b.dt_physics)
+        end
+        @test telv(a, "search_offset_deg") == telv(b, "search_offset_deg")
+        b.world.entities[:m1].comp[:seeker_search_rate_dps] = 180.0
+        tick!(a.world, a.subs, a.dt_physics); tick!(b.world, b.subs, b.dt_physics)
+        @test telv(a, "search_offset_deg") != telv(b, "search_offset_deg")
+        @test telv(b, "search_rate_dps") == 180.0        # …and the wire says which rate it used
+    end
+
+    @testset "E. DRAW TOPOLOGY — two ρ, the SAME number of draws (convention 3)" begin
+        # ⚠ COMPARED AFTER A FIXED TICK COUNT, never at CPA: the two arms fly DIFFERENT trajectories
+        # by construction, so a comparison at the end of the flight would be comparing two different
+        # numbers of ticks. The claim is that the per-tick draw COUNT is invariant to the slider —
+        # the search moves the HEAD and gates the DETECTION, and it must never gate the DRAW.
+        a = search_scn(rho = 60.0); b = search_scn(rho = 240.0)
+        differed = false
+        for k in 1:8000
+            tick!(a.world, a.subs, a.dt_physics); tick!(b.world, b.subs, b.dt_physics)
+            telv(a, "search_offset_deg") == telv(b, "search_offset_deg") || (differed = true)
+        end
+        @test differed                                  # ⚠ or the stream check below is VACUOUS
+        @test a.world.entities[:m1].pos != b.world.entities[:m1].pos        # …two DIFFERENT flights
+        @test rand(a.world.rng) == rand(b.world.rng)                       # …one stream position
+    end
+
+    @testset "F. ⭐ ACQUISITION IS NOT A LATCH — the search RESUMES after a lock that died" begin
+        # ⚠⚠ THIS RETRACTS THE PLAN's §2.2, AND IT IS THE ONE PREDICATE MEASUREMENT DECIDED. With a
+        # `!seek_init` conjunct the first lock ENDS the search forever — and a lock taken with less
+        # margin than one tick of LOS drift does not survive the next tick, so the head freezes and
+        # the missile flies straight with a `search_t_lock_s` on the wire saying it found the target.
+        # Measured: 3 of 23 cells on one wire, 1 of 21 on the other; without the conjunct, 0 of 44.
+        # This is the arm that carried the defect (ρ = 210 on the SLOWER-belief wire, which grazed
+        # the rim at 0.0013° of margin).
+        sc = search_scn(rho = 210.0, sgn = -1.0)
+        locked = false; resumed = false
+        for k in 1:12000
+            tick!(sc.world, sc.subs, sc.dt_physics)
+            telv(sc, "gimbal_valid", 0.0) == 1.0 && (locked = true)
+            locked && telv(sc, "head_searching", 0.0) == 1.0 && (resumed = true)
+            resumed && break
+        end
+        @test locked
+        @test resumed
+        @test telv(sc, "search_t_lock_s", -1.0) >= 0.0   # …the FIRST lock is still what is latched
+    end
+
+    @testset "THE LOADER's REFUSALS — each a crash guard or a dead-knob guard" begin
+        base = read(sl47, String)
+        head = "gimbal_rate_dps: 240.0,"
+        @test occursin(head, base)
+        with(x) = replace(base, head => "$head $x", count = 1)
+        mktempdir() do dir
+            function loads(tag, txt)
+                p = joinpath(dir, "$tag.yaml"); write(p, txt); load_scenario(p)
+            end
+            fails(tag, txt) = @test_throws ErrorException loads(tag, txt)
+
+            # THE HAPPY PATH — the anchor plus the coverage, and the RATE defaults to the null.
+            sc = loads("ok", with("seeker_search: true, seeker_search_coverage_deg: 25.0,"))
+            c  = sc.world.entities[:m1].comp
+            @test c[:seeker_search] === true
+            @test c[:seeker_search_coverage_deg] == 25.0
+            @test c[:seeker_search_rate_dps] == 0.0        # THE NULL, and a knob can attach to it
+            # `false` is not a way to turn it off — the PRESENCE is the gate (the midcourse posture)
+            fails("anchor_false", with("seeker_search: false, seeker_search_coverage_deg: 25.0,"))
+            # the two keys are DEAD without the anchor, so they are refused rather than ignored
+            fails("rate_no_anchor", with("seeker_search_rate_dps: 60.0,"))
+            fails("cov_no_anchor",  with("seeker_search_coverage_deg: 25.0,"))
+            # …and the anchor without a coverage is a search with nowhere to look
+            fails("anchor_no_cov",  with("seeker_search: true,"))
+            # VALUE BOUNDS, on the AUTHORED input only (a live slider is floored at the consumer)
+            fails("neg_rate", with("seeker_search: true, seeker_search_coverage_deg: 25.0, " *
+                                   "seeker_search_rate_dps: -1.0,"))
+            fails("zero_cov", with("seeker_search: true, seeker_search_coverage_deg: 0.0,"))
+            fails("nan_rate", with("seeker_search: true, seeker_search_coverage_deg: 25.0, " *
+                                   "seeker_search_rate_dps: .nan,"))
+            # ⚠ A STRAPDOWN SEEKER HAS NO HEAD TO SWEEP — the pattern would have nowhere to go.
+            gim = "gimbal_tau_s: 0.05, gimbal_stop_deg: 30.0, gimbal_fov_deg: 10.0,\n" *
+                  "               gimbal_rate_dps: 240.0,"
+            @test occursin(gim, base)
+            fails("no_head", replace(base, gim => "seeker_search: true, " *
+                                                  "seeker_search_coverage_deg: 25.0,", count = 1))
+            # AND THE KNOB: live-settable WITH the anchor, refused without it (the existence check
+            # in `_parse_knobs` is what reaches it — the key is not a comp parameter at all there).
+            knob = "  - {target: m1, key: midcourse_err_gain,"
+            @test occursin(knob, base)
+            srch = "  - {target: m1, key: seeker_search_rate_dps, min: 0.0, max: 240.0,\n" *
+                   "     label: \"sweep rate (deg/s)\"}\n"
+            ok = loads("knob_ok", replace(with("seeker_search: true, " *
+                                               "seeker_search_coverage_deg: 25.0,"),
+                                          knob => srch * knob, count = 1))
+            @test any(k -> k.key === :seeker_search_rate_dps, ok.knobs)
+            fails("knob_no_anchor", replace(base, knob => srch * knob, count = 1))
+        end
+    end
+end
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# GATE 3 — THE SHIPPED SCENARIO, FLOWN OFF THE **YAML** RATHER THAN OFF A FIXTURE.
+#
+# ⚠ Every number in the gate-2 section above was measured on `slice47_midcourse.yaml` with the cell's
+# four values written into the comp bag. That is the right shape for gates 1–2 and it is NOT a proof
+# that the file a student loads is the same wire: a fixture and a YAML can drift for a whole slice
+# before anyone notices (convention 10 — pin against the LIVE oracle, never against a second hand
+# recompute). These arms fly the file.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+@testset "seeker search — THE SHIPPED SCENARIO (slice 48 gate 3)" begin
+    base = joinpath(@__DIR__, "..", "..", "scenarios")
+    scn  = load_scenario(joinpath(base, "slice48_search.yaml"))
+    mm   = scn.world.entities[:m1]; tt = scn.world.entities[:tgt1]
+
+    @testset "THE AUTHORED WIRE — slice 47's, with FOUR numbers changed and each one named" begin
+        @test scn.name == "slice48_search"
+        @test scn.world.seed == 32 && scn.dt_physics == 1.0e-3 && scn.emit_every == 16
+        # THE SEARCH ITSELF — the anchor, the reserve axis, and the slider's authored floor.
+        @test mm.comp[:seeker_search] === true
+        @test mm.comp[:seeker_search_coverage_deg] == 25.0
+        @test mm.comp[:seeker_search_rate_dps] == 0.0      # ⭐ THE DEFAULT OPENS ON THE DISEASE:
+                                                           # a head that does not sweep at all
+        # ⚠ THE FOUR THAT DIFFER FROM SLICE 47, asserted as DIFFERENCES so a silent revert is caught.
+        s47 = load_scenario(joinpath(base, "slice47_midcourse.yaml"))
+        m47 = s47.world.entities[:m1]; t47 = s47.world.entities[:tgt1]
+        @test mm.comp[:gimbal_stop_deg] == 45.0 && m47.comp[:gimbal_stop_deg] == 30.0
+        # ⭐⭐⭐ THE DIRECTION IS FLIPPED, and it is the sharpest of the four: `search_sweep` always
+        # opens toward +azimuth and has no truth to read, so WHICH HALF it opens into is a property
+        # of this file. On slice 47's direction the target sits at +12.94° from the cue and the sweep
+        # would open straight at it — every cell locking inside 0.27 s, and the slider teaching
+        # nothing. Flipped, the target is at −11.34° and the wrong half is paid for in full.
+        @test mm.comp[:midcourse_vel_err_mps] == Vec3(0.0, 1.0, 0.0)
+        @test m47.comp[:midcourse_vel_err_mps] == Vec3(0.0, -1.0, 0.0)
+        @test tt.comp[:rcs_m2] == 0.020 && t47.comp[:rcs_m2] == 0.001
+        @test mm.comp[:midcourse_err_gain] == 140.0
+        # …AND EVERYTHING ELSE IS SLICE 47's WIRE TO THE DIGIT. Anything that moves between the two
+        # files beyond the four above is unaccounted for.
+        for k in (:gimbal_fov_deg, :gimbal_rate_dps, :gimbal_tau_s, :detect_pt_w, :detect_freq_hz,
+                  :detect_tint_s, :detect_nf_db, :detect_loss_db, :detect_eta, :detect_snr_min_db,
+                  :sigma_seek, :alpha, :beta, :n_pn, :a_max, :midcourse_k)
+            @test mm.comp[k] == m47.comp[k]
+        end
+        @test tt.pos == t47.pos && tt.vel == t47.vel
+        @test mm.pos == m47.pos
+    end
+
+    @testset "THE MARKER — raised BESIDE 46's and 47's, and nobody else's" begin
+        let inf = EWSim._airframe_view_info(scn.world)
+            @test inf !== nothing
+            @test haskey(inf, :search_view)
+            @test haskey(inf, :midcourse_view)          # STILL raised — the belief IS the sweep centre
+            @test haskey(inf, :seeker_detect_view)      # STILL raised — the button stays 46's
+            @test haskey(inf, :gimbal_view) && haskey(inf, :gimbal_rate_view)
+            for absent in (:radome_view, :seeker_fov_view, :gimbal_servo_view, :gimbal_frame_view)
+                @test !haskey(inf, absent)
+            end
+        end
+        # …and NO OTHER WIRE raises it. An enumerated carrier SET rather than an `isempty`, for the
+        # reason slices 36–47 each rediscovered: an `isempty` goes on passing forever while quietly
+        # ceasing to say anything the moment a second wire is added.
+        let carriers = String[]
+            for f in readdir(base)
+                endswith(f, ".yaml") || continue
+                inf = EWSim._airframe_view_info(load_scenario(joinpath(base, f)).world)
+                inf !== nothing && haskey(inf, :search_view) && push!(carriers, f)
+            end
+            @test carriers == ["slice48_search.yaml"]
+        end
+    end
+
+    @testset "CONVENTION 9 — exactly ONE knob, and both endpoints have reasons" begin
+        @test length(scn.knobs) == 1
+        k = scn.knobs[1]
+        @test k.target === :m1 && k.key === :seeker_search_rate_dps
+        @test k.min == 0.0 && k.max == 240.0       # floor = the NULL; ceiling = the SERVO's own limit
+        @test k.max == mm.comp[:gimbal_rate_dps]   # …and that is not a coincidence, it is the reason
+        @test !k.log                               # the floor region must READ as a region
+        # ⚠ EVERY DISQUALIFIED CANDIDATE IS ASSERTED ABSENT rather than merely left out.
+        @test !any(kb.key === :seeker_search_coverage_deg for kb in scn.knobs)  # §0.7's reserve axis
+        @test !any(kb.key === :midcourse_err_gain for kb in scn.knobs)          # slice 47's slider
+        @test !any(kb.key === :rcs_m2 for kb in scn.knobs)                      # slice 46's
+        @test !any(kb.key === :gimbal_fov_deg for kb in scn.knobs)              # TWO-SIDED since 46
+    end
+
+    # THE FLOWN ARMS. ⚠ Two only, and each is a claim no static check can make.
+    function fly_file(rho; n = 9600)
+        sc = load_scenario(joinpath(base, "slice48_search.yaml"))
+        sc.world.entities[:m1].comp[:seeker_search_rate_dps] = rho   # …the way `set_param` does
+        pos = Vector{Vec3}(); tl = -1.0; auth = 0.0; nsrch = 0; rmin = Inf; prev = Inf; closing = true
+        for k in 1:n
+            tick!(sc.world, sc.subs, sc.dt_physics)
+            e = sc.world.entities[:m1]
+            push!(pos, e.pos)
+            tel = get(sc.world.env, :telemetry, Dict{String,Any}())
+            Float64(get(tel, "m1.head_searching", 0.0)) == 1.0 && (nsrch += 1)
+            tl = Float64(get(tel, "m1.search_t_lock_s", -1.0))
+            r = Float64(get(tel, "m1.los_range", Inf))
+            closing && r > prev && prev < 1e29 && (closing = false)
+            prev = r
+            closing && (rmin = min(rmin, r))
+            # ⚠ BOTH GATES — r > 200 m AND the closing band. Gated on range alone the POST-CPA
+            # re-crossing climbs back through 200 m from the far side and every guidance quantity
+            # goes wild there ([[ewsim-missile-verifier-sampling]]).
+            closing && tl >= 0.0 && r > 200.0 &&
+                (auth = max(auth, abs(Float64(get(tel, "m1.a_cmd_frac", 0.0)))))
+        end
+        (; pos, t_lock = tl, auth, nsrch, cpa = rmin)
+    end
+
+    @testset "⭐⭐⭐ THE FLOOR IS BIT-IDENTICAL — the miss is not this slice's gauge, as an identity" begin
+        # Across the whole floor region the head sweeps hard and the missile flies the SAME
+        # trajectory to the last bit, because nothing the head does reaches the guidance until
+        # something is LOCKED. A verifier reading the miss over that region would report a slider
+        # that does nothing — which is how slices 44 and 45 died.
+        a = fly_file(0.0; n = 7000)
+        b = fly_file(35.0; n = 7000)
+        @test a.nsrch == 0                       # ρ = 0 ⇒ the branch is shut: THE SHIPPED WIRE
+        @test b.nsrch > 1000                     # …while 35 °/s sweeps for seconds
+        @test a.t_lock < 0.0 && b.t_lock < 0.0   # …and neither ever finds it
+        @test all(p == q for (p, q) in zip(a.pos, b.pos))     # bit-for-bit, not `atol`
+    end
+
+    @testset "⭐⭐⭐ THE EDGE — 0.086 s of earlier lock inverts the engagement" begin
+        # 60 °/s: found in 1.023 s, PINNED at the airframe's limit, and STILL missing by 32 m.
+        # 65 °/s: found 0.086 s sooner, a third of the airframe, and it arrives.
+        lo = fly_file(60.0)
+        hi = fly_file(65.0)
+        @test lo.t_lock ≈ 1.0230 atol = 1e-3
+        @test hi.t_lock ≈ 0.9370 atol = 1e-3
+        @test 0.0 < lo.t_lock - hi.t_lock < 0.25          # a TWELFTH of a second, not a landslide
+        @test lo.auth ≥ 0.99 && lo.cpa > 30.0             # everything spent, and still a miss
+        @test hi.auth < 0.50 && hi.cpa < 5.0              # a third spent, and an arrival
+        # ⚠ AND THE AUTHORITY IS NOT MONOTONE IN ρ — asserted, so nobody "fixes" the verifier into
+        # claiming it is. It climbs to saturation as the lock gets late and FALLS once the lock is
+        # early enough that little is demanded at all.
+        @test hi.auth < lo.auth
+        @test fly_file(240.0).auth < hi.auth
+    end
+end

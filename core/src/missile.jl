@@ -940,6 +940,20 @@ function _airframe_view_info(w::World)
     # presence-gated on it, so the key is both the earliest and the only gate there is.
     any(haskey(w.entities[m].comp, :midcourse) for m in missiles) &&
         (info[:midcourse_view] = true)
+    # ⭐⭐ SLICE 48 — THE SEARCH, the 12th marker of this family, and it is raised BESIDE 46's and
+    # 47's rather than instead of either: this wire IS slice 47's wire (the same link budget, the
+    # same window, the same servo, the same blind phase) with the trunnion widened and a SEARCH
+    # PATTERN on the head. ⇒ the client must keep 46's button, and it must draw the SEARCH's block
+    # rather than 47's, because what a student watches here is the sweep covering — or failing to
+    # cover — a deficit, not the cue error that produced the deficit.
+    #
+    # ⚠ GATED ON THE **COMP KEY** `:seeker_search`, slice 38/46/47's choice: there is no search
+    # fidelity rung to gate on (gate 2's decision — "no search at all" is reachable from the
+    # slider's own floor, which a rung would duplicate), the anchor is what an author writes, and
+    # every branch that reads it is presence-gated on it. Slices 1–47 author no such key ⇒ they are
+    # byte-identical and their markers are untouched.
+    any(haskey(w.entities[m].comp, :seeker_search) for m in missiles) &&
+        (info[:search_view] = true)
     return info
 end
 
@@ -2041,6 +2055,12 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # strapdown wire never enters that block, and a telemetry read of a never-assigned local is an
     # `UndefVarError` inside a tick — which convention 5 exists to make impossible.
     mid_cued  = false; mid_cue_err = 0.0
+    # SLICE 48 — the SEARCH mode and the two numbers a HUD reads off it: the commanded sweep OFFSET
+    # (signed, body azimuth) and the OVERLAP DEFICIT the sweep exists to cover. ⚠ Declared at
+    # function scope for slice 47's reason one line up, verbatim: a strapdown wire never enters the
+    # `if _gim` block that sets them, and a telemetry read of a never-assigned local is an
+    # `UndefVarError` inside a tick.
+    searching = false; search_off = 0.0; search_def = 0.0
     # SLICE 35 — the SERVO's own two numbers: the STEP it was asked for this tick (radians,
     # post-gain, pre-limit, pre-stop) and whether `rate_max` actually bound. ⚠ THEIR ZERO INITIALISER
     # IS LOAD-BEARING ON TWO PATHS AND IS NOT DEFENSIVE PADDING. (1) THE HANDOVER tick calls
@@ -2289,7 +2309,14 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             # block ~350 lines below) — the one-tick seam discipline 2 already imposes on the
             # servo's stored target, applied to the servo's MODE. `get(…, false)` is the literal
             # `false` on every wire without the anchor ⇒ the predicate is the pre-slice-47 one.
-            if get(c, :head_cued, false) ||
+            # ⭐ SLICE 48 — AND A **SEARCHING** HEAD BYPASSES THE WINDOW FOR THE SAME REASON, WHICH
+            # IS THE ONLY REASON EITHER OF THEM MAY: a search is an OPEN-LOOP COMMAND, and the gate
+            # exists to stop a TRACKER slewing on an error signal its detector never produced. ⚠ The
+            # one-tick seam is INHERITED, not reinvented — `:head_searching` is decided at the END of
+            # tick k's `observe!` and consumed by tick k+1's slew, exactly as `:head_tgt_*` and
+            # `:head_cued` already are (discipline 2). Recomputing availability up here would be a
+            # second implementation of the gate.
+            if get(c, :head_cued, false) || get(c, :head_searching, false) ||
                off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h
                 if _so
                     # SLICE 40 on slice 37's rung — the SAME kernel with the frame changed, exactly
@@ -2319,7 +2346,9 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             # ⭐ SLICE 47 — the cue bypasses the window on THIS rung too, and for the same reason
             # (see the space-stabilized arm above). Both arms, because the cue is a property of what
             # the HEAD is being told to do, not of which frame it holds its pointing in.
-            if get(c, :head_cued, false) ||
+            # ⭐ SLICE 48 — and the SEARCH bypasses it on this rung too, for that same reason: what
+            # the head is being TOLD to do is not a property of the frame it holds its pointing in.
+            if get(c, :head_cued, false) || get(c, :head_searching, false) ||
                off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h
                 # ⚠ `head_slew_full`, NOT `head_slew` — the SHIPPED kernel returning the two
                 # quantities the servo knows and its pointing does not. The plan FORBIDS
@@ -2669,6 +2698,60 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # stored snapshot: the missile has flown since launch, so the angle to a fixed believed
         # point changes every tick even with a perfect picture.
         _cue = haskey(c, :midcourse) && !_detectable && !get(c, :seek_init, false)
+        # ⭐⭐⭐ SLICE 48 — THE ONE STATE THAT HAD NO BRANCH: **DETECTABLE, NOT LOCKED, AND OUTSIDE THE
+        # WINDOW.** The receiver can hear the target; the head is pointed where the launch-time
+        # picture said it would be; the target is not there. Until this slice that state fell into
+        # the tracking arm below, where the window gate then — correctly — refused to slew, and the
+        # head simply held for the rest of the engagement (slice 47's three broken arms live here for
+        # ~2 s each). A search is the one thing it can still do.
+        #
+        # ⚠ `!in_fov`, NOT A FRESH ANGLE TEST. `in_fov` twenty lines up already IS the availability
+        # verdict — angle AND range, `in_fov && _detectable` — so this branch can never disagree with
+        # the gate it reports at the boundary tick (the second-implementation trap this file names
+        # for `off_axis_angle` in three places).
+        #
+        # ⚠⚠ `_detectable` IS IN THE CONJUNCT EXPLICITLY AND IS **NOT** REDUNDANT WITH `!in_fov`.
+        # `in_fov` folds TWO failures into one verdict — outside the window, and out of RANGE — and
+        # here that conflation cuts the wrong way: on a wire with the anchor and a horizon but NO
+        # midcourse (which the loader deliberately permits) `!in_fov` is true from tick 1 for the
+        # range reason alone, and the head would start hunting before the receiver had opened at all.
+        # ⇒ it is also why `!_cue` is not needed: the cue requires `!_detectable`, so the two arms are
+        # mutually exclusive BY PREDICATE. The search starts where the cue stops — one instant, two
+        # branches, no gap and no overlap.
+        #
+        # ⭐⭐ AND ρ > 0 IS IN THE CONJUNCT, WHICH IS **NOT** A SECOND IMPLEMENTATION OF THE KERNEL's
+        # OWN DEGENERATE. `search_sweep` returns a ZERO OFFSET for `ρ ≤ 0`; this gate returns NO
+        # SEARCH. They differ by exactly whether the head keeps being re-commanded onto the LIVE
+        # belief centre after handover — a cue that continues past the instant the receiver opened,
+        # which is a behaviour nothing in this project has ever measured. **The showcase's null must
+        # be the SHIPPED wire** (a held head that never acquires, slice 47 verbatim), and `ρ = 0` is
+        # that null only if this branch stays shut. Pinned bit-for-bit in `test_search.jl`.
+        #
+        # ⚠⚠⚠ AND THERE IS NO `!seek_init` CONJUNCT, WHICH **RETRACTS THE PLAN's OWN §2.2** AND IS
+        # THE ONE PREDICATE IN THIS BRANCH THAT WAS DECIDED BY MEASUREMENT RATHER THAN BY ARGUMENT.
+        # Drafted with it (the `_cue` arm's shape, copied), the shipped seam produced a defect the
+        # probe wire had never shown: **A LOCK TAKEN AT THE RIM CONSUMES THE SEARCH AND BUYS
+        # NOTHING.** Acquisition LATCHES (`seek_init` is set the first tick the target is inside the
+        # window and never clears) while the TRACK does not survive: at the lock tick the search
+        # stops and the head freezes, and the next tick's slew gate is evaluated against a truth LOS
+        # that has kept moving — so if the lock was taken with less margin than one tick of LOS
+        # drift, the gate closes BEFORE the head has ever slewed and the head holds, frozen, for the
+        # rest of the flight. Measured on the shipped seam: every failing cell locked with
+        # 0.0013–0.0046° of window margin and every surviving one with ≥ 0.0084°, against a LOS drift
+        # of ~0.0055°/tick — **the rule is `margin@lock > ω_LOS·dt`, and it is sharp.** It swallowed
+        # 3 of 23 cells on one wire and 1 of 21 on the other, turning a hit into a ~1183 m miss with
+        # 0 % of `a_max` spent, and NOTHING on the HUD could show why (0.005° of margin).
+        # ⇒ WITHOUT THE CONJUNCT: **0 pits in 44 cells across both wires**, every non-pit cell
+        # unchanged to the last printed digit, and the previously-pitted cells fall into line
+        # monotonically (1036.99 → 201.53 m). ⭐ The principle the measurement forced: **ACQUISITION
+        # IS NOT A LATCH.** If the receiver can hear the target, the head is not pointed at it, and
+        # there is no live track, the head should still be LOOKING — which is the entire content of
+        # having a search pattern at all. ⚠ This does NOT resurrect slice 37's coasting head (that
+        # is the head moving on a REMEMBERED RATE, and it stays dead, mis-located three times): the
+        # head here re-enters the SAME open-loop pattern about the SAME belief centre, and `:search_t0`
+        # is NOT re-stamped, so the sweep resumes in PHASE rather than jumping back to the centre.
+        ρ_srch = deg2rad(Float64(get(c, :seeker_search_rate_dps, 0.0)))
+        _search = haskey(c, :seeker_search) && _detectable && !in_fov && ρ_srch > 0.0
         if _cue
             belief_p, _ = _midcourse_belief!(c, tgt, w)
             û_bel = los_unit(e.pos, belief_p)
@@ -2714,14 +2797,89 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             c[:head_cue_err_last] = mid_cue_err
             c[:head_tgt_az] = head_tgt_az; c[:head_tgt_el] = head_tgt_el
             c[:head_tgt_i_az] = cue_i_az; c[:head_tgt_i_el] = cue_i_el
+        elseif _search
+            # ⭐⭐⭐ THE SEARCH ARM. The head is commanded to the sweep CENTRE plus this tick's
+            # triangle offset, and the whole of the pattern is `search_sweep` (frames.jl) — a wave
+            # with no state, no memory of the head and no knowledge of what it is looking for.
+            #
+            # ⚠⚠⚠ THE WRITE BELOW IS THE SHARPEST HAZARD IN THE SLICE, AND IT IS WHY THIS ARM EXISTS
+            # AS A BRANCH RATHER THAN A FLAG. `az_m`/`el_m` are formed from TRUTH every tick
+            # regardless of the window and regardless of `_detectable`, and the tracking arm below
+            # writes `head_tgt` from them UNCONDITIONALLY. On the shipped wire that write is inert —
+            # the window gate holds the head still, so the stored target is never consumed — but a
+            # SEARCHING head bypasses that gate. Falling through to it would hand the hunting head
+            # the very truth it is supposed to be hunting for; `docs/DEFERRALS.md` records slice 42's
+            # oracle probe going 3620.675 → 0.110 m the one time this seam was crossed. ⇒ **the
+            # search arm writes `head_tgt` ITSELF, and must never fall through.**
+            #
+            # ⭐ THE CENTRE IS THE **LIVE** BELIEF, NOT A FROZEN POINTING (plan §0.8), and it has a
+            # consequence the slice is honest about: the belief and the truth keep separating after
+            # handover, so **the deficit GROWS while the search runs.** That is the mechanism behind
+            # a deadline. The rejected alternative — freeze the head where handover left it and sweep
+            # about that — discards information the missile demonstrably has. ⚠ With no midcourse
+            # authored there is no belief to centre on and the head's OWN pointing is the centre,
+            # which is the only defined choice: a search has to start from where you are looking.
+            if haskey(c, :midcourse)
+                belief_p, _ = _midcourse_belief!(c, tgt, w)
+                cen_az, cen_el = look_angles(c[:att_q]::Quat, los_unit(e.pos, belief_p))
+            else
+                cen_az = Float64(c[:head_az]); cen_el = Float64(c[:head_el])
+            end
+            # ⚠⚠ `:search_t0` IS AN INSTANT, NOT A BAKED RATE, AND THE STAMP IS THE MODEL TEST's
+            # WHOLE SUBJECT. The offset is recomputed from `w.t` EVERY tick (`search_sweep` holds no
+            # accumulator), so dragging `seeker_search_rate_dps` mid-search moves the very next
+            # commanded offset — the slice-36 dead-knob trap (a knob consumed once and never read
+            # again) closed by construction rather than by policy. ⚠ And it stamps when the SWEEP
+            # starts, NOT when the receiver opened: on an arm that opens at ρ = 0 and is dragged up
+            # later, a handover-stamped clock would hand the sweep a silent head start.
+            haskey(c, :search_t0) || (c[:search_t0] = w.t)
+            t_srch = w.t - Float64(c[:search_t0])
+            # ⚠ NO CLAMP HERE — `search_sweep` OWNS every degenerate (ρ ≤ 0, S ≤ 0, non-finite, and
+            # the `ρ·t` overflow), the same "the kernel owns it, the seam converts once" split
+            # `head_clamp` has for the stop and `head_slew` for τ. Degrees at the YAML boundary,
+            # radians inside (the `gimbal_*_deg` posture).
+            search_off = search_sweep(t_srch, ρ_srch,
+                                      deg2rad(Float64(get(c, :seeker_search_coverage_deg, 0.0))))
+            head_tgt_az = cen_az + search_off; head_tgt_el = cen_el
+            # The inertial pair through the SAME line the cue arm and the seam already use — one
+            # conversion site, so the two rungs cannot part company over a hand-rolled quaternion.
+            srch_i_az, srch_i_el =
+                az_el(rotate(c[:att_q]::Quat, los_unit_from_angles(head_tgt_az, head_tgt_el)))
+            c[:head_tgt_az] = head_tgt_az; c[:head_tgt_el] = head_tgt_el
+            c[:head_tgt_i_az] = srch_i_az; c[:head_tgt_i_el] = srch_i_el
+            searching = true
+            # ⭐⭐ THE OVERLAP DEFICIT — slice 43's currency, and the number this slice is actually
+            # about: **the cost of acquiring is `|err| − fov`, not the pointing error.** Measured
+            # from the sweep CENTRE (not from the swept head: the sweep is what has to cover it) to
+            # the TRUTH LOS, in the same body frame and through the same `off_axis_angle` kernel the
+            # window itself is measured by, minus that window. Negative ⇒ the target is already
+            # inside and the search is over; positive ⇒ that is how far the sweep must travel.
+            search_def = off_axis_angle(cen_az, cen_el, look_az_b, look_el_b) - fov_h
+            c[:search_elapsed] = t_srch
         else
             head_tgt_az, head_tgt_el = look_angles(c[:att_q]::Quat, los_unit_from_angles(az_m, el_m))
             c[:head_tgt_az] = head_tgt_az; c[:head_tgt_el] = head_tgt_el
             c[:head_tgt_i_az] = az_m; c[:head_tgt_i_el] = el_m
+            # ⭐⭐⭐ AND THIS IS WHERE A SEARCH ENDS: the tracking arm with the window OPEN, on a wire
+            # where a search ran. `search_t_lock_s` is LATCHED here because it is the slice's
+            # headline number in seconds and the client sees one frame in `emit_every` = 16 ticks —
+            # slice 47 paid to learn that a quantity live only at one instant is unsamplable at the
+            # instant that matters (a latched 9.7846° against a 16-tick-sampled 9.7401°, on a cliff
+            # 0.05° wide). ⚠ `haskey` rather than a value test, so a lock at exactly t0 latches too.
+            if haskey(c, :seeker_search) && haskey(c, :search_t0) &&
+               !haskey(c, :search_t_lock) && in_fov
+                c[:search_t_lock] = w.t - Float64(c[:search_t0])
+            end
         end
         # ⚠ MINTED ONLY UNDER THE ANCHOR, so `get(c, :head_cued, false)` at the slew is the literal
         # `false` on every prior wire and the predicate there short-circuits to the pre-slice-47 one.
         haskey(c, :midcourse) && (c[:head_cued] = _cue)
+        # ⚠ SLICE 48, THE SAME SHAPE AND THE SAME REASON — and ⚠⚠ A **NEW** KEY RATHER THAN AN
+        # OVERLOAD OF `:head_cued`. That key is shipped telemetry, slice 47's HUD reads it and
+        # `slice47_verify.gd` asserts on it; overloading it would also corrupt
+        # `head_cue_err_handover_deg`'s latch semantics, and slice 47's own gate-3 defect #1 was
+        # exactly a flag conflation.
+        haskey(c, :seeker_search) && (c[:head_searching] = _search)
     end
 
     # Lazy first-tick init (the `_observe_point!` shape): seed every memory, all rates 0.
@@ -3276,6 +3434,43 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             tel["$sid.head_cue_err_deg"]  = _finite(rad2deg(mid_cue_err))
             tel["$sid.head_cue_err_handover_deg"] =
                 _finite(rad2deg(Float64(get(c, :head_cue_err_last, 0.0))))
+        end
+        # ⭐⭐⭐ SLICE 48 — WHAT THE HEAD IS DOING WHEN IT IS LOOKING FOR SOMETHING, anchor-gated like
+        # every slice-47 key ⇒ slices 34–47 ship none of these and stay byte-identical on the wire.
+        #
+        # ⚠⚠ TWO STALENESS SEMANTICS LIVE IN THIS BLOCK AND THE SPLIT IS DELIBERATE, because two
+        # neighbouring HUD keys that disagree about what a zero MEANS is the conflation class that
+        # produced slice 47's gate-3 defect #1.
+        #   * `search_offset_deg` and `search_deficit_deg` are **LIVE, and 0.0 when the mode flag
+        #     says the state does not exist** — slice 47's `head_cue_err_deg` semantics EXACTLY, and
+        #     for its reason: a head that is not searching has no commanded sweep and no deficit to
+        #     cover, and `head_searching` beside them says which state the zero belongs to. (⚠ The
+        #     trap being avoided in the other direction is `docs/CONVENTIONS.md` §14's — a rung that
+        #     stops EMITTING makes a client's `.get(k, 0.0)` print a defaulted zero as a passed test.)
+        #   * `search_elapsed_s` and `search_t_lock_s` are **LATCHES**, and they are named for it.
+        #     They answer "how long did it hunt" and "when did it find it", which are questions about
+        #     the PAST — live-and-zeroed versions of them would be unreadable by a client sampling one
+        #     frame in `emit_every` = 16 ticks, which is what slice 47 paid to learn.
+        #
+        # ⚠ `search_t_lock_s` ships **−1.0** and not a 0.0 or a `FINITE_CEIL` while no lock has
+        # happened, because 0.0 is a REAL value here (a search that locked on its first tick) and a
+        # ceiling would read as a huge time rather than as "never". The arms that carry this slice's
+        # lesson are exactly the ones that never lock, so the sentinel is on the main path, not an
+        # edge case — a verifier that assumes a lock instant exists reads the lesson as a crash.
+        if haskey(c, :seeker_search)
+            tel["$sid.head_searching"]     = searching ? 1.0 : 0.0
+            tel["$sid.search_offset_deg"]  = _finite_coord(rad2deg(search_off))
+            tel["$sid.search_deficit_deg"] = _finite_coord(rad2deg(search_def))
+            tel["$sid.search_elapsed_s"]   = _finite(Float64(get(c, :search_elapsed, 0.0)))
+            tel["$sid.search_t_lock_s"]    =
+                _finite_coord(Float64(get(c, :search_t_lock, -1.0)))
+            # The AUTHORED sweep beside them, so the client reads the pattern's own two numbers off
+            # the wire instead of being told them (the `gimbal_stop_deg` / `gimbal_fov_deg` posture,
+            # convention 13 — the client recomputes nothing).
+            tel["$sid.search_rate_dps"]    =
+                _finite(Float64(get(c, :seeker_search_rate_dps, 0.0)))
+            tel["$sid.search_coverage_deg"] =
+                _finite(Float64(get(c, :seeker_search_coverage_deg, 0.0)))
         end
         # ⭐⭐ SLICE 36 — THE REQUIREMENT, AND THE MARGIN AGAINST IT. `head_off_deg` is what the
         # detector must cover THIS TICK; `head_off_peak_deg` is what it had to cover to get here,

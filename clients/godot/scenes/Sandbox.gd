@@ -286,6 +286,18 @@ var _midcourse_view := false       # handshake midcourse_view — 11th marker; H
 # done here at the same time as the code that creates it rather than found later.
 var _mid_was_cued := false         # …the missile HAS flown blind at some point (a real blind phase)
 var _mid_acquired := false         # …and the seeker DID eventually get it (false ⇒ handover FAILED)
+# ⭐⭐ SLICE 48 — THE SEARCH, the 12th marker. Raised BESIDE 46's and 47's: this wire IS slice 47's
+# wire (the same budget, the same window, the same blind phase) with the trunnion widened and a
+# SEARCH PATTERN on the head, so `_seeker_detect_view` keeps the BUTTON and this marker takes the
+# HUD from `_midcourse_view`. Without it slice 47's block would draw the CUE ERROR over a missile
+# whose whole story is what it did AFTER that cue turned out to be wrong — every number true, and
+# the slice invisible. (The recurring failure of this family, avoided by ordering.)
+var _search_view := false          # handshake search_view — 12th marker; HUD only (46 keeps button)
+# ⚠ ONE new latch, and ONLY one: slice 47's three below are all live on this wire (it authors the
+# midcourse anchor, so `head_cued` / `gimbal_valid` / `a_cmd_frac` all ship), and this HUD READS
+# THEM rather than minting twins. Two instruments measuring "did it ever acquire" is convention 7's
+# exact failure — one source, no drift — and the twin would be the one that goes stale.
+var _srch_was_searching := false   # …the head HAS swept at some point (false at ρ = 0: THE NULL)
 var _mid_auth_peak := 0.0          # ⭐ POST-HANDOVER authority peak — deliberately NOT slice 46's
                                    # `_authority_peak`, which is whole-flight: on a BROKEN arm the
                                    # midcourse keeps flying to CPA and reaches its own geometric
@@ -738,6 +750,12 @@ func _on_scenario(obj: Dictionary) -> void:
 	# author writes, and the arm is presence-gated on it. ⚠ HUD ONLY — the button stays slice 46's,
 	# which is this slice's own A/B (no horizon ⇒ no blind phase ⇒ the picture stops mattering).
 	_midcourse_view = bool(obj.get("midcourse_view", false))
+	# Slice 48 — the search. Raised on the COMP KEY (`seeker_search`, the authored anchor) for slice
+	# 47's reason exactly: there is no search fidelity RUNG to raise it on (gate 2's decision — "no
+	# search at all" is reachable from the slider's own floor, which a rung would duplicate).
+	# ⚠ HUD ONLY, and it takes the HUD from slice 47's marker rather than from slice 46's — see
+	# `_search_view`'s own comment.
+	_search_view = bool(obj.get("search_view", false))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -1715,6 +1733,13 @@ func _airframe3d_on_state(obj: Dictionary) -> void:
 	# test that happened to pass on a target the receiver cannot hear.
 	if float(_telemetry.get(_af3d_missile + ".gimbal_valid", 0.0)) >= 0.5:
 		_mid_acquired = true
+	# SLICE 48 — the ONE search latch, an independent `if` on its own anchor-gated key (slice 33's
+	# reason, inherited): every scenario 1–47 leaves it at its reset value.
+	# ⚠ IT IS NOT "the search ran" AS A SYNONYM FOR "the wire has a search" — at ρ = 0 the anchor is
+	# authored and the head never sweeps, which is THE NULL and the arm the showcase opens on. The
+	# headline has to be able to tell "it looked and failed" from "it never looked".
+	if float(_telemetry.get(_af3d_missile + ".head_searching", 0.0)) >= 0.5:
+		_srch_was_searching = true
 	# SLICE 36 — the REQUIREMENT's display freeze and the BIRTH angle's latch. ⚠ TWO INDEPENDENT `if`s,
 	# NOT AN `elif` AND NOT CHAINED ONTO THE BLOCK ABOVE — slice 33's finding, and here the keys DO
 	# co-occur on every shipped frame (this wire carries `head_rate_sat` AND both keys below), so a
@@ -2601,6 +2626,147 @@ func _horizon_cure_text(gated: bool) -> String:
 	return "wider window ⇒ shorter reach; 16× power ⇒ 2× range"
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 48 — THE SEARCH HUD.
+#
+# ⚠⚠ EVERY LINE IS A **FUNCTION** for slice 47's reason verbatim: `draw_string` lives in `_draw`,
+# which never runs under `--headless`, so a string built inline there has NO headless proof at all
+# (convention 14). `slice48_ui_test.gd` calls these directly, including the width budget.
+#
+# ⚠ THE WIDTH BUDGET IS INHERITED AND ASSERTED IN **PIXELS** (~55 chars of body, ~30 of headline at
+# font 15) — slice 46 shipped a 100/96-CHARACTER tooth that passed GREEN while every line clipped at
+# 1152 px AND 1920 px.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+func _srch_searching_now() -> bool:
+	return float(_telemetry.get(_af3d_missile + ".head_searching", 0.0)) >= 0.5
+
+func _srch_deficit_deg() -> float:
+	# ⭐⭐ THE CURRENCY OF ACQUISITION, AND IT IS NOT THE POINTING ERROR: `|err| − fov`, the gap the
+	# sweep still has to cover BEYOND the window's own half-width. A target 1.3° outside a 10°
+	# window is 1.3° of sweeping away, not 11.3°. Shipped from the core as ONE number so the client
+	# never subtracts (convention 13).
+	return float(_telemetry.get(_af3d_missile + ".search_deficit_deg", 0.0))
+
+func _srch_gap_handover_deg() -> float:
+	# ⭐⭐ THE GAP AT THE HANDOVER INSTANT, from slice 47's LATCHED cue error minus the window — and
+	# it exists because the live deficit is 0.0 whenever the head is not sweeping, which on the arm
+	# the showcase OPENS ON (ρ = 0, a frozen head) put "gap 0.00° beyond the window" on screen: a
+	# DEFAULTED ZERO reading as "the target is exactly at the rim" over a missile that is 1.34°
+	# outside it and falling further behind every tick. `docs/CONVENTIONS.md` §14's failure class,
+	# caught by the WINDOWED SHOT and by nothing else (convention 14's fourth proof).
+	# ⚠ It is the gap AT HANDOVER and the line says so — the live gap GROWS after that, and claiming
+	# this number is the current one would be a second lie in place of the first.
+	return _mid_cue_deg() - _mid_fov_deg()
+
+func _srch_t_lock_s() -> float:
+	# ⚠ THE LATCHED KEY, and −1.0 means NEVER — not 0.0, which is a real value (a search that found
+	# it on its first tick). The arms that carry this slice's lesson are exactly the ones that never
+	# lock, so the sentinel is on the main path.
+	return float(_telemetry.get(_af3d_missile + ".search_t_lock_s", -1.0))
+
+func _search_verdict_label(was_cued: bool, searched: bool, searching: bool,
+						   acquired: bool, deficit: float, t_lock: float) -> String:
+	# ⚠ HEADLINES GET A MUCH TIGHTER BUDGET (~30 chars) — drawn at 20 px from the same right-anchored
+	# origin (slice 46's four were 78–82 chars and every one ran off the edge).
+	if not was_cued:
+		return "NO BLIND PHASE: it sees it"
+	if acquired and t_lock >= 0.0:
+		return "FOUND IT after %.2f s" % t_lock
+	if searching:
+		# THE LIVE STATE, and it is a PREDICTION rather than a verdict: the gap still to cover, shown
+		# while the sweep is still running and there is nothing else to look at.
+		return "SEARCHING: %.1f° to cover" % deficit
+	if not searched:
+		# ⭐ THE NULL, AND IT IS A DIFFERENT SENTENCE FROM A FAILED SEARCH. At ρ = 0 the head does not
+		# sweep at all — exactly what ships without this slice — so "never found it" would credit the
+		# missile with having looked.
+		return "NOT SEARCHING: head frozen"
+	return "NEVER FOUND IT: too slow"
+
+func _search_sweep_text(searched: bool, searching: bool, rate: float, cov: float,
+						off: float, elapsed: float) -> String:
+	# THE MECHANISM — what the head is actually doing, in one line.
+	if not searched:
+		return "search: OFF (0°/s) — the head cannot look around"
+	if not searching:
+		return "search: over — the head is tracking its target"
+	return "sweep %.0f°/s ±%.0f°   offset %+.1f°   t %.2f s" % [rate, cov, off, elapsed]
+
+func _search_gap_text(searched: bool, searching: bool, acquired: bool,
+					  deficit: float, gap_hand: float, t_lock: float) -> String:
+	# ⭐⭐⭐ THE GAUGE THIS HUD EXISTS FOR — the gap the sweep must cover, in the window's own units,
+	# and then the TIME it actually took, which is the thing the engagement is running out of.
+	# ⚠⚠ THE LIVE DEFICIT IS USED **ONLY WHILE SWEEPING**, because that is the only state in which
+	# it exists: off the search branch the core ships an honest 0.0 (slice 47's `head_cue_err_deg`
+	# semantics), and printing that as a gap says "the target is exactly at the rim" on the two
+	# states where it is most wrong — the frozen head, and the sweep that ran out of engagement. Both
+	# fall back to the HANDOVER gap, which is latched, true, and labelled as what it is.
+	if acquired and t_lock >= 0.0:
+		return "found it after %.2f s of sweeping" % t_lock
+	if searching:
+		return "gap to cover %.2f° past the window   (and growing)" % deficit
+	if not searched:
+		return "gap %.2f° past the window — nothing is covering it" % gap_hand
+	return "gap was %.2f° at handover — the sweep ran out of time" % gap_hand
+
+func _search_authority_text(searching: bool, acquired: bool, live: float, peak: float) -> String:
+	# ⭐⭐ THE PRICE, IN THE ONE CURRENCY THE MISS CANNOT SHOW (slice 46's column, slice 47's shape).
+	# ⚠ NOT A NUMBER WHILE STILL SEARCHING: nothing has been spent yet, and a running gauge there
+	# invites reading the blind command as the thing that matters. What matters is what is LEFT.
+	if searching:
+		return "authority: nothing spent yet — the bill comes at lock"
+	if not acquired:
+		return "authority: NEVER SPENT — the seeker never got it"
+	return "authority after lock: %.0f%% of a_max (peak %.0f%%)" % [100.0 * live, 100.0 * peak]
+
+func _search_cure_text(searched: bool, acquired: bool) -> String:
+	# THE TRADE — and it is the thing a student would otherwise get wrong. The instinct is that
+	# finding the target is the win; the measurement is that a lock which arrives late is worth
+	# nothing, because what the sweep is really spending is the engagement's own clock.
+	if not searched:
+		return "give it a sweep rate — a frozen head never finds it"
+	if not acquired:
+		return "sweep faster — the clock is the engagement, not the head"
+	return "found is not enough: it has to be found EARLY"
+
+func _draw_search_hud_lines(vp: Vector2) -> void:
+	var searching := _srch_searching_now()
+	var deficit := _srch_deficit_deg()
+	var t_lock := _srch_t_lock_s()
+	var rate := float(_telemetry.get(_af3d_missile + ".search_rate_dps", 0.0))
+	var cov := float(_telemetry.get(_af3d_missile + ".search_coverage_deg", 0.0))
+	var off := float(_telemetry.get(_af3d_missile + ".search_offset_deg", 0.0))
+	var elapsed := float(_telemetry.get(_af3d_missile + ".search_elapsed_s", 0.0))
+	var acmd := float(_telemetry.get(_af3d_missile + ".a_cmd_frac", 0.0))
+	var lost := _mid_was_cued and not _mid_acquired
+	# THE MECHANISM — cyan while the head is sweeping, grey once it is over, orange on the NULL,
+	# where "the head cannot look around" IS the failure rather than a neutral state.
+	draw_string(_font, Vector2(vp.x - 430, 110),
+			_search_sweep_text(_srch_was_searching, searching, rate, cov, off, elapsed),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			Color(0.45, 0.90, 1.00) if searching else (Color(1.00, 0.62, 0.30) if not _srch_was_searching else Color(0.70, 0.70, 0.75)))
+	# ⭐⭐⭐ THE GAUGE — green once the target is found, orange while the gap is still open.
+	draw_string(_font, Vector2(vp.x - 430, 132),
+			_search_gap_text(_srch_was_searching, searching, _mid_acquired, deficit,
+					_srch_gap_handover_deg(), t_lock),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			Color(0.55, 1.00, 0.65) if _mid_acquired else Color(1.00, 0.62, 0.30))
+	# THE PRICE — grey while still sweeping, because nothing has been spent yet.
+	draw_string(_font, Vector2(vp.x - 430, 154),
+			_search_authority_text(searching, _mid_acquired, acmd, _mid_auth_peak),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			Color(0.70, 0.70, 0.75) if searching else (Color(1.00, 0.62, 0.30) if lost else Color(1.00, 0.85, 0.45)))
+	# ⚠ THE MISS, AS A **DISCLAIMER** RATHER THAN A GAUGE — slice 47's line verbatim in meaning, and
+	# for the same reason: it is the number a student's eye goes to, and on this wire a lock that
+	# arrives too late reads as a clean 677 m "miss" that says nothing about what went wrong.
+	draw_string(_font, Vector2(vp.x - 430, 176), "range %.0f m — the MISS says nothing here" %
+			float(_telemetry.get(_af3d_missile + ".los_range", 0.0)),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	# THE TRADE.
+	draw_string(_font, Vector2(vp.x - 430, 198), _search_cure_text(_srch_was_searching, _mid_acquired),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
 # SLICE 47 — THE MIDCOURSE HUD.
 #
 # ⚠⚠ EVERY LINE BELOW IS A **FUNCTION**, AND THAT IS THE WHOLE REASON THEY ARE FUNCTIONS: the
@@ -2988,7 +3154,25 @@ func _draw_airframe3d_hud() -> void:
 	# the slice invisible. ⚠ THE COLOUR RIDES THE HANDOVER VERDICT, not the authority peak and not
 	# the blind lamp: on this wire the thing that goes wrong is BINARY and it happens in one tick,
 	# so the honest orange is "the target was outside the window when the receiver opened".
-	if _midcourse_view:
+	# SLICE 48 — THE SEARCH, checked FIRST of all here and at the HUD-lines site, because BOTH text
+	# dispatch chains must agree and this wire raises `midcourse_view` AND `seeker_detect_view` TOO
+	# (it IS slice 47's wire, which IS slice 46's). Without this branch the headline would name the
+	# CUE ERROR over a missile whose whole story is what it did AFTER that cue turned out wrong.
+	# ⚠⚠ AND THE **3D** SITE IS DELIBERATELY LEFT TO SLICE 47's MARKER, which is the one place this
+	# slice does NOT take over: the magenta segment to the believed intercept point is exactly where
+	# the head is sweeping ABOUT, so on this wire it stops being "where the missile thinks it is
+	# going" and becomes THE CENTRE OF THE SEARCH — the most useful thing on the screen rather than
+	# a leftover. A slice-48 branch there would have had to redraw the same line.
+	# ⚠ THE COLOUR RIDES THE ACQUISITION VERDICT, not the deficit and not the sweep: on this wire a
+	# head that is SWEEPING is doing the right thing, and a head that swept and found the target too
+	# late is the arm in the deepest trouble — but it is `_mid_acquired` that separates "it is still
+	# looking" from "it never found it", and the LATENESS is named in the label and metered by the
+	# authority line, where it belongs.
+	if _search_view:
+		lbl = _search_verdict_label(_mid_was_cued, _srch_was_searching, _srch_searching_now(),
+				_mid_acquired, _srch_deficit_deg(), _srch_t_lock_s())
+		col = Color(1.00, 0.62, 0.30) if (_mid_was_cued and not _mid_acquired) else Color(0.45, 0.90, 1.00)
+	elif _midcourse_view:
 		lbl = _midcourse_verdict_label(_mid_cued_now(), _mid_was_cued, _mid_acquired,
 				_mid_cue_deg(), _mid_fov_deg())
 		col = Color(1.00, 0.62, 0.30) if (_mid_was_cued and not _mid_acquired) else Color(0.45, 0.90, 1.00)
@@ -3234,7 +3418,14 @@ func _draw_airframe3d_hud() -> void:
 	# real. What they cannot say is that the missile is flying a BELIEF, how wrong it is, or that
 	# the whole engagement turns on one angle at one instant. Every number right, and the slice
 	# invisible: this family's recurring failure, avoided by ordering.
-	if _midcourse_view:
+	# SLICE 48 — checked FIRST here too, and for the reason the three chains must ALWAYS agree.
+	# `_midcourse_view` is the block that would otherwise take this wire, and its lines are all TRUE
+	# on it — the belief is real, the cue error is real, the window is real. What they cannot say is
+	# that the head is SWEEPING, how much gap is left to cover, or that the clock it is spending is
+	# the engagement's. Every number right, and the slice invisible.
+	if _search_view:
+		_draw_search_hud_lines(vp)
+	elif _midcourse_view:
 		_draw_midcourse_hud_lines(vp)
 	elif _seeker_detect_view:
 		_draw_horizon_hud_lines(vp)
@@ -4137,9 +4328,17 @@ func _update_readout() -> void:
 		vp_h = maxf(get_viewport_rect().size.y, 240.0)
 	# The panel above this row (title, buttons, knob label + slider) plus the §12 badge below it.
 	var avail := vp_h - 260.0
+	# ⚠⚠ SLICE 48 — THE SHRINK IS A **FIT**, NOT A SINGLE STEP, AND THE WINDOWED SHOT IS WHAT
+	# CAUGHT IT. Slice 47's one-step 14 → 11 fitted its own ~72 keys (24 rows × 15 px = 360 against
+	# 388 of room) and this wire ships SEVEN MORE (27 rows × 15 = 405), so the last row of every
+	# column printed straight through the §12 approximation badge at the foot of the panel. The same
+	# defect slice 47 fixed, re-opened by the next slice's key count — which is what a hard-coded
+	# step size guarantees. ⭐ A row is ~1.36× the font size at every size, so solving for the size
+	# that fits is one loop and it cannot be re-opened by an eighth key. ⚠ THE FLOOR IS 9: below
+	# that the readout is unreadable and the honest failure is to clip rather than to lie small.
 	var fsize := 14
-	if float(rows) * 19.0 > avail:
-		fsize = 11                        # ~15 px per row, and ~21 % narrower columns with it
+	while fsize > 9 and float(rows) * float(fsize) * 1.36 > avail:
+		fsize -= 1
 	for c in cols:
 		c.add_theme_font_size_override("font_size", fsize)
 	for ci in cols.size():
@@ -4258,6 +4457,12 @@ func _on_reset_pressed() -> void:
 	_mid_was_cued = false
 	_mid_acquired = false
 	_mid_auth_peak = 0.0
+	# ⚠ SLICE 48's ONE latch, cleared for the same reason and at the same time as the code that
+	# creates it (the SIXTH time this family has fixed the stale-instrument-across-reset class). A
+	# stale `_srch_was_searching` would let a re-launch at ρ = 0 — the NULL, a head that never
+	# sweeps — display "NEVER FOUND IT" as though it had looked, which is the one distinction this
+	# headline exists to make.
+	_srch_was_searching = false
 	# Slice-36: BOTH of this slice's instruments are cleared, and each for its own reason — this is the
 	# THIRD time the family has had to fix a stale-instrument-across-reset defect, so it is done at the
 	# same time as the code that creates it rather than found later.

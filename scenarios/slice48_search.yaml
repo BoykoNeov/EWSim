@@ -1,0 +1,245 @@
+# slice48_search — THE SEEKER SEARCH PATTERN: WHAT A MISSILE DOES WHEN THE RECEIVER OPENS AND THE
+# TARGET IS NOT THERE (HANDOFF §11 Tier-A, slice 48 gate 3). This is slice 47's wire — the same
+# link budget, the same 10° window, the same 240 °/s servo, the same seed, the same launch — with
+# FOUR authored numbers changed and a SEARCH PATTERN added to the head. Every one of the four is
+# named below with the measurement that forced it.
+#
+# Slice 47 leaves a missile whose receiver opens onto empty sky: the head is pointed where the
+# launch-time picture said the target would be, the target is further out than the detector window
+# is wide, and the head then does NOTHING AT ALL for the remaining seconds of the engagement —
+# correctly, because a tracker cannot slew on an error signal its detector never produced. This
+# slice gives it the one thing it can still do: LOOK AROUND.
+#
+# > THE LESSON, IN ONE SENTENCE. A search converts a pointing error you cannot fix into TIME — and
+# > the time is bounded by the ENGAGEMENT, not by the head. Below a sweep rate the target is never
+# > found at all; above it, what you paid is not the miss but the manoeuvre authority you had left
+# > when you finally found it.
+#
+# ⭐⭐⭐ THE MIDDLE OF THE SLIDER IS THE LESSON, WHICH IS THIS SLICE'S DIFFERENCE FROM ITS
+# PREDECESSORS. Both ends are easy to read — at the bottom the missile never acquires, at the top it
+# hits for a third of its airframe — and everything worth knowing is in between, where **it finds the
+# target EVERY TIME, spends EVERYTHING IT HAS, and still misses.** Measured on this wire, authority
+# read GATED AT r > 200 m and on the FIRST DESCENDING BAND only:
+#
+#     ρ (deg/s)   acquires   t_search (s)      CPA m   post-lock a_cmd/a_max
+#       0 … 35      NEVER            —       1039.88          0.0            <- what ships today
+#           36       lock       2.0400        677.27         71.2            <- ⭐ FOUND, AND TOO LATE
+#           38       lock       1.8500        572.88         78.5
+#           40       lock       1.7050        487.17         87.3
+#           45       lock       1.4450        322.37        100.0            <- PINNED, and still 322 m
+#           50       lock       1.2650        201.53        100.0
+#           55       lock       1.1300        107.44        100.0
+#           60       lock       1.0230         32.09        100.0            <- ⭐⭐ THE LAST MISS
+#           65       lock       0.9370          0.48         32.7            <- ⭐⭐ 0.086 s SOONER
+#           70       lock       0.8650          0.20         31.3
+#          120       lock       0.5030          0.27         25.6
+#          240       lock       0.2670          0.31         22.7
+#
+# ⭐⭐⭐ **AND THE SHARP EDGE IS BETWEEN 60 AND 65 °/s, WHERE NOTHING VISIBLE HAPPENS.** The lock
+# arrives **0.086 s** sooner — one twelfth of a second — and the engagement inverts: at 60 the missile
+# is PINNED AT 100 % of its manoeuvre limit and misses by 32 m; at 65 it spends **a third** of the
+# airframe and arrives at 0.48 m. Nothing about the SEARCH looks different across that edge; both arms
+# find the target, both find it in about a second. What changed is how much flying time was left
+# afterwards. *The search does not spend head travel. It spends the engagement.*
+#
+# ⚠⚠ THE AUTHORITY COLUMN IS **NOT MONOTONE IN ρ, AND THAT IS THE PHYSICS RATHER THAN A DEFECT**: it
+# climbs 71 → 100 % as the lock gets late enough to demand everything, then FALLS to 23 % once the lock
+# arrives early enough that little is demanded at all. It is monotone in the thing that actually
+# matters — how late the lock was — up to the point where the airframe saturates and the demand stops
+# being readable. ⇒ the SLIDER's own monotone gauge is `t_search`, which falls 2.04 → 0.267 s across
+# the domain without a single reversal, and the authority is read as a THREE-REGION verdict
+# (never / pinned / cheap) rather than as a line.
+#
+# ⭐⭐ THE FLOOR IS A REGION, NOT A CELL: everything from 0 to 35 °/s misses by exactly 1039.88 m,
+# because the sweep never covers the gap before the engagement ends. That is a genuine NULL — it is
+# precisely what ships without this slice — which is a property slice 47's slider did not have.
+# ⚠⚠ AND ACROSS THAT WHOLE REGION THE TRAJECTORY IS **BIT-IDENTICAL**: a head sweeping at 35 °/s and
+# a head that never moves fly the same missile to the same 1039.88 m, because nothing the head does
+# reaches the guidance until something is LOCKED. The HUD shows a sweep working hard and the miss
+# column shows nothing at all — which is exactly why the miss is not the gauge here, and it is
+# asserted as `max|Δpos| == 0` in `net/slice48_verify.gd` rather than said in a sentence.
+#
+# ⚠⚠ THE GAUGE IS `search_t_lock_s`, THE DEFICIT AGAINST THE WINDOW, AND THE POST-LOCK AUTHORITY —
+# **NEVER THE MISS** (slices 44, 45, 46, 47 all paid for this). The miss is quoted in the table above
+# only to show the shape; once the track is gone it is sampling a divergence rather than measuring
+# one. ⚠ AND `gimbal_fov_margin_deg` STAYS OFF THE HUD for REDUNDANCY, not for deception: slice 47
+# measured `margin + cue = fov` at the handover instant, so it is the same measurement counted from
+# the other end (⚠ that identity is SERVO-CONTINGENT — it holds while the head has SETTLED, true at
+# this wire's 240 °/s, false on slice 35's 8 °/s).
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# THE FOUR NUMBERS THAT DIFFER FROM SLICE 47's WIRE, EACH WITH THE MEASUREMENT THAT FORCED IT
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# 1. ⚠⚠ `gimbal_stop_deg: 45.0` (slice 47: 30.0) — **A SEARCH NEEDS SOMEWHERE TO LOOK, AND A 30°
+#    TRUNNION IS A SEARCH THAT CANNOT LEAVE ITS CUE.** The truth LOS body angle runs +18° → −15° over
+#    this approach, so a cue 11–13° off truth already sits at 25–31° of BODY angle — ON the 30° stop.
+#    Gate 0 measured the head CLAMPED on 27–37 % of every search tick with the pattern absorbed
+#    SILENTLY (commanded 48°, head at 29.998°), which read as "the search does not work". 45° is an
+#    utterly ordinary seeker trunnion. ⚠ Say it out loud, because DEFERRALS says "author it on slice
+#    47's wire": this IS slice 47's wire, WITH THE TRUNNION WIDENED, and nothing else about the head
+#    moved.
+#
+# 2. ⚠⚠⚠ `midcourse_vel_err_mps: [0, +1, 0]` (slice 47: `[0, −1, 0]`) — **THE DIRECTION THE SWEEP
+#    OPENS INTO IS A PROPERTY OF THIS FILE, NOT OF THE KERNEL.** `search_sweep` is SYMMETRIC and
+#    always opens toward +azimuth; it has no truth to read, and a missile that knew which way to
+#    look would not need to search. On slice 47's authored direction the target happens to sit at
+#    **+12.94°** of body azimuth from the cue — so the sweep would open STRAIGHT AT IT, every cell
+#    would lock within 0.27 s, and the slider would teach nothing. Flipped (the target crosses
+#    FASTER than the picture believed, rather than slower) the target sits at **−11.34°** and the
+#    sweep opens AWAY: the cost of guessing the wrong half is paid in full, bounded and authored at
+#    `2·S` of travel rather than lucky. ⚠ DO NOT "SIMPLIFY" THIS BACK.
+#
+# 3. `rcs_m2: 0.020` (slice 47: 0.001) — a BIGGER target, i.e. a LONGER horizon (3037 m here against
+#    1437 m), which is what buys the search enough flight to be worth running. ⚠ AUTHORED, NEVER A
+#    KNOB: it is slice 46's own slider, and dragging it beside this lesson would move the horizon,
+#    the blind duration and the handover range at once (slice 44's warning, in this slice's units).
+#
+# 4. ⚠ `midcourse_err_gain: 140.0` (slice 47's DEFAULT: 38.0) — the picture error, AUTHORED here
+#    rather than dragged: this slice has ONE slider and it is the sweep rate (convention 9). **140
+#    m/s against a 200 m/s crossing target is 70 %, and THAT IS NOT A DATALINK-QUALITY STORY — it is
+#    a target that DID SOMETHING ELSE.** Label it that way and nothing else. Slice 47's 25 % ceiling
+#    was argued for a slider a student is taught to interpret; here the number is FIXTURE, never
+#    dialled, and it carries an honesty bar rather than a defensibility one. ⚠ Nothing in this wire
+#    manoeuvres — the belief is still one snapshot dead-reckoned at constant velocity, and the
+#    discrepancy is authored, not modelled.
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⭐ THE SEARCH ITSELF, IN THREE KEYS. `seeker_search: true` is the ANCHOR — its PRESENCE gates every
+# branch and every telemetry key, so slices 1–47 are byte-identical BY CONSTRUCTION.
+# `seeker_search_coverage_deg: 25.0` is the half-amplitude S, AUTHORED (it is §0.7's reserve axis and
+# a second slider beside the rate is convention 9's exact prohibition).
+# `seeker_search_rate_dps` is THE SLIDER.
+#
+# ⚠ THE DEFAULT OPENS ON THE DISEASE (the 35/36/46/47 precedent), and here the disease is the
+# unmodified wire: ρ = 0.0 is a head that does not sweep at all — exactly what slice 47 ships — so
+# the showcase opens on a missile that hears the target, cannot see it, and does nothing about it.
+# The slider teaches in ONE direction from there, and the first thing that happens is not a hit.
+#
+# ⚠⚠ A LOCK IS NOT A LATCH ON THIS WIRE, AND THAT IS A GATE-2 MEASUREMENT (`docs/plans/slice48.md`
+# §4.7b). A lock taken with less window margin than ONE TICK of LOS drift does not survive the next
+# tick — the head freezes before it has ever slewed — so the search RESUMES rather than ending at
+# the first contact. With the search ending at first contact instead, 4 of 44 measured cells locked
+# and then flew straight, spending 0 % of `a_max` and missing by ~1183 m, with nothing on the HUD
+# able to show why (0.005° of margin against a 10° window).
+#
+# ⚠ ONE LIVE KNOB BESIDE ONE FIDELITY BUTTON (the 32/34/37/40/46/47 shape, convention 9), and the
+# button is slice 46's `seeker_detect: none ↔ snr` UNCHANGED — still the sharpest A/B here. Press it
+# and the horizon goes away: the missile locks on tick 1, is never blind, and there is nothing to
+# search for. *You only search because you were blind.*
+#
+# NAMED APPROXIMATIONS (§1): the pattern is a SINGLE-AXIS SYMMETRIC TRIANGLE SWEEP IN BODY AZIMUTH —
+# not a raster, not a spiral, not a palmer scan; the sweep CENTRE is the LIVE belief direction, so
+# the deficit GROWS while the search runs (that is the mechanism behind a deadline, and it is the
+# honest form of slice 43's U-shaped best moment); NO DETECTION LOGIC CHANGES — the lock is still
+# slice 46's link budget and slice 25's noise, and a search moves the head without making the
+# detector better; plus everything slice 47 named, unchanged (one snapshot, constant velocity, no
+# datalink update, no INS drift, a non-manoeuvring target, an authored deterministic picture error).
+#
+# UNITS (§1 trifecta): `seeker_search_rate_dps` is DEGREES PER SECOND and
+# `seeker_search_coverage_deg` DEGREES at this boundary, radians inside (the `gimbal_*_deg` posture —
+# the name carries the unit only where there is a time in it, slice 35's rule).
+# `search_offset_deg` and `search_deficit_deg` are DEGREES in the BODY frame, which is the frame
+# `gimbal_fov_deg` beside them is measured in; the offset is SIGNED. `search_elapsed_s` and
+# `search_t_lock_s` are SECONDS since the sweep started, and `search_t_lock_s` ships **−1.0** while
+# no lock has happened (0.0 is a real value — a search that locked on its first tick).
+# dt = 1e-3 / emit_every = 16.
+name: slice48_search
+seed: 32
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # SLICE 46/47's SIX KEYS, UNCHANGED TO THE DIGIT — the search is NOT a fidelity rung (it is an
+  # authored comp key, `seeker.seeker_search`), for slice 47's reason exactly: the anchor is a key an
+  # AUTHOR writes, and "no search at all" is reachable from the slider's own floor rather than
+  # needing a rung.
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+  # ⭐ THE BUTTON, AND THE SHOWCASE OPENS WITH IT **ON** — the disease first. Pressing it removes the
+  # horizon, which removes the blind phase, which removes the search.
+  seeker_detect: snr
+
+entities:
+  # The interceptor — slice 46/47's plant, launch condition and seven-key seeker budget, with the
+  # trunnion widened to 45° (reason 1 above) and the search pattern added.
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               gimbal_tau_s: 0.05, gimbal_stop_deg: 45.0, gimbal_fov_deg: 10.0,
+               gimbal_rate_dps: 240.0,
+               seeker_search: true, seeker_search_coverage_deg: 25.0,
+               seeker_search_rate_dps: 0.0,
+               detect_pt_w: 200.0, detect_freq_hz: 16.0e9, detect_tint_s: 0.010,
+               detect_nf_db: 4.0, detect_loss_db: 5.0, detect_eta: 0.6,
+               detect_snr_min_db: 10.0}
+      # THE MIDCOURSE, UNCHANGED FROM SLICE 47 EXCEPT THE ERROR's DIRECTION AND MAGNITUDE (reasons 2
+      # and 4 above). ⚠ `midcourse_err_gain` IS NOT A KNOB HERE — slice 47's slider is retired to an
+      # authored key, because this slice has exactly one lesson and one gauge.
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3,
+                 midcourse: true, midcourse_k: 1.0,
+                 midcourse_vel_err_mps: [0.0, 1.0, 0.0],
+                 midcourse_err_gain: 140.0}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # ⚠⚠ THE TARGET IS SLICE 47's, +1000 m OFF THE MISSILE's BALLISTIC PLANE — the premise, not a
+  # convenience: on slice 46's in-plane geometry the authored launch heading IS the midcourse
+  # solution, so a wrong picture would have nothing to be wrong about (which is how slices 44 and 45
+  # died). ⚠ `rcs_m2` is TWENTY TIMES slice 47's and is AUTHORED, never a knob (reason 3 above).
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 3000.0, 4200.0]
+    vel: [0.0, -200.0, 0.0]
+    target: {rcs_m2: 0.020, cross_speed_mps: -200.0}
+
+knobs:
+  # EXACTLY ONE LIVE KNOB. BOTH ENDPOINTS ARE MEASURED AND BOTH HAVE REASONS:
+  #   FLOOR 0.0: THE NULL, and a true one — a head that does not sweep at all, which is exactly what
+  #     ships without this slice. Bit-identical to a wire with no search anchor at all (pinned in
+  #     `test_search.jl`: same position, same velocity, same head angles over 9000 ticks), because
+  #     the branch is gated on ρ > 0 as well as on the anchor.
+  #   CEILING 240.0 °/s: the SERVO's own maximum slew rate (`gimbal_rate_dps`), so the top of the
+  #     slider is the hardware's limit rather than an arbitrary number — above it the commanded sweep
+  #     is simply not realisable and the knob would stop meaning anything.
+  #   LINEAR, because what the axis buys is not: `t_search` falls as ~1/ρ (2.04 s at 36 °/s,
+  #     0.267 s at 240), so the interesting travel is all in the bottom sixth and a LOG slider would
+  #     stretch exactly the region where nothing changes. ⚠ The floor region (0–35) is a third of the
+  #     first tick of travel and reads as a REGION, which is the point.
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED: `seeker_search_coverage_deg` (§0.7's RESERVE axis — a
+  # second slider beside this one is convention 9's exact prohibition, and its own lesson is a
+  # different slice); `midcourse_err_gain` (slice 47's slider — dragging it here would move the
+  # deficit underneath this lesson); `rcs_m2` (slice 46's axis — the horizon, the blind duration and
+  # the handover range all at once); `gimbal_fov_deg` (⚠⚠ TWO-SIDED since slice 46 — it moves the
+  # window AND the horizon in opposite directions, so the composite is non-monotone and the lesson
+  # would reverse); `gimbal_stop_deg` (authored HARDWARE, and gate 0 measured that it binds — a
+  # slider on it would put the mechanical clamp back inside this lesson); `gimbal_rate_dps` (slice
+  # 46's measured isolation); the two belief-error VECTORS (⚠ refused at load BY TYPE — `set_param`
+  # carries one Float64, so a slider on a `Vec3` would overwrite it with a bare number and the next
+  # type assertion inside a tick would throw, dropping the connection).
+  #
+  # ⚠ THE LABEL IS LENGTH-BUDGETED (~110 characters — slice 32's shots paid for this): knob labels
+  # are drawn full-width in the UI CanvasLayer and paint OVER the `_draw` HUD column at `vp.x − 430`.
+  - {target: m1, key: seeker_search_rate_dps, min: 0.0, max: 240.0,
+     label: "SEEKER SWEEP RATE (deg/s) — watch t_lock and the AUTHORITY LEFT, not the miss"}
