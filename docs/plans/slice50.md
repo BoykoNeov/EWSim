@@ -617,3 +617,83 @@ fitted. ⚠ Quote the tangency, never the "every loss happens at ratio 1" form.
   §1's named one — guided time WITH §3 correction 1's admission written in.
 - **FAILS 1 or 2 ⇒ DEAD**, and the slice has no gauge, which by §0 is the whole remaining question.
 
+
+---
+
+## §6 — P1 HAS RUN (2026-08-26). ⚠⚠⚠ **THE RETREAT RATIO IS MONOTONE, `dt`-STABLE — AND IT DOES NOT PREDICT THE LOSS.**
+
+**Probe:** `M:\claud_projects\temp\slice50\p1_gauge.jl`, on P0's wire, 12 arms × 2 `dt`.
+
+### §6.1 — THE TABLE (`dt` = 1e-3; the half-`dt` re-fly agrees to the digits shown)
+
+| `F` | lost? | ⭐ **max ratio** (pre-loss) | max ratio (whole flight) | **min `R_acq/r`** (pre-loss) | min `R_acq/r` (whole) | ‖ω_LOS‖ AT LOSS | aspect at loss |
+|---|---|---|---|---|---|---|---|
+| 1.0 | no | **0.0000** | 0.0000 | 1.3212 | 1.3212 | — | — |
+| 3.0 | no | **1.0975** | 1.0975 | 1.3212 | 1.3212 | — | — |
+| 5.0 | no | **1.7841** | 1.7841 | 1.3212 | 1.3212 | — | — |
+| 6.0 | no | **2.0792** | 2.0792 | 1.2028 | 1.2028 | — | — |
+| 6.5 | no | **2.2189** | 2.2189 | 1.1273 | 1.1273 | — | — |
+| 7.0 | no | **2.3544** | 2.3544 | 1.0594 | 1.0594 | — | — |
+| **7.5** | **yes** | **2.4861** | 2.4861 | **1.0000** | 0.9982 | 0.00468 | 71.86° |
+| 8.0 | yes | **2.6148** | 2.6148 | 1.0000 | 0.9440 | 0.00778 | 76.39° |
+| 9.0 | yes | **2.8635** | 2.8635 | 0.9999 | 0.8463 | 0.01218 | 79.64° |
+| 10.0 | yes | **3.1028** | **123.32** | 0.9998 | 0.7511 | 0.01560 | 81.47° |
+| 11.0 | yes | **3.3346** | **80.29** | 0.9999 | 0.5994 | 0.01847 | 82.71° |
+| 12.0 | yes | **3.5601** | **67.42** | 1.0000 | 0.5476 | 0.02094 | 83.63° |
+
+### §6.2 — SCORED AGAINST §5.5, WHICH WAS FIXED BEFORE THIS RAN
+
+| # | test | result |
+|---|---|---|
+| 1 | monotone in `F` over 1–12 | ✅ **PASS** — no reversal, 0.00 → 3.56, and *strictly* increasing on every step |
+| 2 | `dt`-stable, < 1 % at half `dt` | ✅ **PASS** — worst **0.064 %**. §5.2's fixed-window estimator did its job |
+| 3 | ⭐ the 1.0 crossing lands in (7.0, 7.5] | ❌ ⚠⚠⚠ **FAIL — IT CROSSES IN (1.0, 3.0], FIVE SLIDER STEPS EARLY** |
+
+⇒ **BY §5.5's OWN PRE-REGISTERED RULE THE RETREAT RATIO IS A DIAGNOSTIC, NOT A HEADLINE GAUGE.**
+Recorded as a fail rather than argued around: the rule was written down first precisely so this
+reading could not be renegotiated after the fact.
+
+### §6.3 — ⭐⭐⭐ **AND THE FAILURE IS THE MOST TRANSFERABLE THING IN THE SLICE: A RATE CANNOT PREDICT A LEVEL CROSSING WITHOUT THE HEADROOM.**
+
+§5.4 already retracted "the loss happens where the retreat rate crosses the closing speed." **§6.1
+shows how badly:** at `F = 3` the target's visibility horizon is retreating **1.10× faster than the
+missile is closing** — and the missile never loses the lock, not for one tick. At `F = 5` it retreats
+**1.78× faster** and still never loses it. The lock survives because the horizon **started 32 %
+above the range** (`min R_acq/r` = 1.3212 = `R_b/r₀` = 8079 / 6115, the launch condition itself).
+
+⇒ **the retreat ratio measures HOW HARD THE TARGET IS PUSHING; the margin measures WHETHER IT
+WORKED.** They are different questions and only the second one has a threshold in it. ⭐ **The
+transferable form, for `docs/LESSONS.md`: a RATE gauge and a LEVEL event are not interchangeable —
+a rate can exceed its comparator for the whole flight and never produce the event, and the missing
+term is the HEADROOM the level started with.**
+
+### §6.4 — ⚠ WHAT §6.1's OTHER TWO COLUMNS SAY (both fail, and each for its own reason)
+
+- **`min R_acq/r`, the tautological alternative (§5.3).** Pre-loss it is **flat at both ends and
+  resolves only over `F` = 6 – 7.5**: below 6 the minimum sits **at t = 0** (identical 1.3212 on
+  three arms with completely different aspect histories — it is reading the LAUNCH, not the
+  encounter), and at/above 7.5 it is pinned at 1.0000 **by construction**, because the pre-loss
+  prefix ends at the level crossing. ⚠ A gauge with resolution over one and a half slider steps is
+  §0.7's "switch, not a slider."
+- **The same quantity over the WHOLE flight** does keep falling (0.998 → 0.548, monotone) —
+  ⚠⚠ **and it is `dt`-UNSTABLE exactly as §4.5 predicts**: F = 9 moves 3.1 %, F = 11 **7.3 %**,
+  F = 12 **14.7 %**. It is sampled downstream of the blind coast. **FAILS §5.5 test 2.**
+- **‖ω_LOS‖ AT THE LOSS — §0.6's pre-registered primary, correctly re-sited (§5.3).** ⭐ On the
+  domain where it exists it is **monotone (0.00468 → 0.02094) and `dt`-stable to ≤ 0.4 %** — so
+  §4.4's disqualification was of the SITING, not of the quantity. ⚠ But it is **undefined on
+  `F` ≤ 7**, which is §5.1's original objection to the at-the-loss form, unchanged.
+- ⭐⭐ **AND THE WHOLE-FLIGHT max ratio CONFIRMS §4.5 A THIRD TIME**: it explodes to **123 / 80 / 67**
+  on exactly the arms with long blind runs, and those values move by **21 % / 31 % / 22 %** at half
+  `dt`. Everything downstream of the coast is divergence being sampled. **The pre-loss prefix is not
+  a convenience, it is the measurement.**
+
+### §6.5 — THE STATE OF THE GATE AFTER P1
+
+- **P0 PASSED** (arm B, scoped to `F` ≤ 10). **P1 RAN AND ITS CANDIDATE FAILED TEST 3.**
+- **Every gauge proposed so far is now measured**: §0.6's primary (mis-sited → re-sited → monotone
+  but undefined on the null), §4.4's re-acquisition version (`dt`-unstable, retired §4.10), §4.11's
+  at-the-loss ratio (undefined on the null), §5.1's max-ratio (diagnostic, not predictive), the
+  tautological margin (flat at both ends, or `dt`-unstable). **§5.5's named fallback — guided time
+  WITH §3 correction 1's admission — is now the live option, and it is the weak one.**
+- ⚠ **STILL OPEN: the gauge, P2, P3.** §0 says the gauge IS the remaining question.
+
