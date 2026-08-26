@@ -127,7 +127,8 @@ shippable, only the headline died (the two-test rule above). **BLOCKED** = never
   SHADOWS `δ̇_max`. The rate limit itself is SHIPPED (slice 15).
 - **A second-order FIN actuator** (41) — **DEAD AS A LESSON, ALIVE AS A MODEL**, on REPARAMETERIZATION.
   ⭐⭐ **A pole differs from a gain ONLY in that its phase VARIES with frequency — and that loop's fin command
-  is a single spectral line** ⇒ **measure the SPECTRUM a new dynamic element will sit on BEFORE proposing it.**
+  is a single spectral line** ⇒ **measure the SPECTRUM a new dynamic element will sit on BEFORE proposing it**
+  (`p2_spectrum.jl`).
 - **A SEEKER SEARCH PATTERN** (42/43/45) — **SHIPPED BY SLICE 48; never killed.** ⭐⭐ **The cost of acquiring
   is the OVERLAP DEFICIT `|err| − fov`, not the pointing error.** ⚠ Do NOT re-litigate that a wider window is
   free (46 killed it) or that the miss is the gauge. Its surviving candidates: `docs/DEFERRALS.md`.
