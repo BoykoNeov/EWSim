@@ -329,3 +329,151 @@ premise inherits a constraint it does not have.**
 twice over, the `F = 1`-flying-the-byte-identical-manoeuvre control (valid precisely because
 `ManeuveringTarget` does not react to the missile, so both arms fly the same trajectory), and §0.6's
 rim-margin tick test.
+
+---
+
+## §4 — P0 HAS RUN (2026-08-26). ⭐⭐⭐ **THE SEEKER LOSES A TARGET IT ALREADY HAD, WHILE THE RANGE IS STILL FALLING.** ARM B LIVES.
+
+**Probes:** `M:\claud_projects\temp\slice50\` — `p0a_gate.jl` (+ `p0a_gate_lib.jl`), `p0a2_cell.jl`,
+`slice50_probe.yaml`, `p0b_wire.jl` (+ `p0b_lib.jl`), `p0c_dense.jl`. Gate 0 ships nothing, so the
+wire is a temp YAML, not `scenarios/`.
+
+### §4.1 — ⚠⚠ FIRST: §0.3's ARITHMETIC IS WRONG, AND ITS OWN CELL SHOWS **NO LOSS ON ANY ARM**
+
+§0.3 checks that the horizon retreats faster than the missile closes **at an assumed crossing**
+(`r = R_acq = 4000 m`). **It never checks that the crossing HAPPENS BEFORE CPA.** Those are different
+conditions and the second binds much harder. With `R_acq ≈ R_b/(F·ω·t)` and `r ≈ r₀ − V_c·t`:
+
+```
+a crossing exists only if      F·ω  >  4·V_c·R_b / r₀²
+```
+
+At §0.3's own numbers (`R_b` = 12 000 m, `r₀` = 6100 m, `V_c` ≈ 800 m/s, `F` = 8) that is
+**ω > 0.13 rad/s ≈ 7.4 °/s ≈ 3.9 g** — not the **4.6 °/s / 1.6 g** §0.3 advertises, and not the
+"wide margin" it claims. Measured (`p0a_gate.jl`, 96 cells, kinematic stand-in):
+
+| `rcs_m2` | `R_b` | `r₀` | a_lat 15 | 30 | 45 | 60 | (all at F = 8) |
+|---|---|---|---|---|---|---|---|
+| **5.0 (§0.3's own)** | 12 081 m | 6100 m | **no loss** | **no loss** | LOSS | LOSS | |
+| **1.0 (this wire)** | 8 079 m | 6100 m | no loss | **LOSS** | LOSS | LOSS | |
+
+⇒ **the wire drafted straight off §0.3 would have flown and shown nothing, on the one probe §0 says
+this slice cannot afford to get wrong.**
+
+⭐⭐ **AND THE LEVER RUNS BACKWARDS TO THE PLAN: `r₀²` IS IN THE DENOMINATOR, SO LAUNCHING DEEPER
+INSIDE THE HORIZON MAKES THE CROSSING HARDER, NOT EASIER.** §3 correction 2 was qualitatively right
+(arm B needs the gate to close mid-flight, not a launch outside the horizon) but it dropped the
+QUANTITATIVE half with it. The design variable is the **ratio `R_b/r₀`**, and §0.3's 2.0 is too big.
+The fix is a **smaller broadside horizon** (`rcs_m2: 1.0` — as ordinary an aircraft as 5 m²), **not a
+harder turn**: a harder turn pushes on §0.5's confound. ⭐ **THE TRANSFERABLE FORM: a design
+condition evaluated AT a crossing has not shown the crossing EXISTS.**
+
+### §4.2 — THE WIRE (`slice50_probe.yaml`)
+
+Slice 48's plant and seven-key seeker budget, with the search and the midcourse both REMOVED (arm B's
+missile has the lock at launch; §3 correction 2 drops the midcourse), plus: `rcs_m2: 1.0`
+(⇒ `R_b` = 8079 m), target at `[6000, 0, 4200]` with `vel [0, −300, 0]` against a missile at
+`[0, 0, 3000]` — **exact 90.00° aspect at t = 0**, measured 89.997° off the wire — and
+`maneuver: {a_lat_mps2: 30.0, turn_sign: −1.0, turn_plane: horizontal}` (3.06 g, 5.73 °/s). Launch
+range 6118 m, INSIDE the 8079 m broadside horizon. `cross_speed_mps` is refused beside a `maneuver:`
+block (scenario.jl:170), so the crossing is authored in `vel:` — §0.1 fact 4, confirmed at load.
+
+### §4.3 — ⭐⭐⭐ THE RESULT, READ OFF THE SHIPPED WIRE (`p0c_dense.jl`, dt = 1e-3)
+
+`m1.seeker_detect`, `m1.seeker_r_acq_m`, `m1.closing_speed`, `m1.los_rate`, `m1.target_aspect_deg`
+straight off the telemetry — **the headline is ONE SHIPPED KEY DIFFERENCED AGAINST ANOTHER**, zero
+recompute (convention 10). `ratio` = `|dR_acq/dt| / V_c` at the loss instant.
+
+| `F` | blind s | LOST at t / r / aspect | `dR_acq/dt` | `V_c` | **ratio** | re-GAIN t / r | ‖ω‖ | `t_go` | CPA m | det@CPA |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1.0 – 7.0 | **0.000** | — | — | — | — | — | — | — | 0.40 | YES |
+| 7.5 | 0.377 | 4.122 / 3204.6 / 71.86° | −788.4 | 727.1 | **1.08** | 4.500 / 2928 | 0.0054 | 3.99 | 0.21 | YES |
+| 8.0 | 2.096 | 3.276 / 3812.8 / 76.39° | −1112.8 | 711.7 | **1.56** | 5.373 / 2281 | 0.0312 | 3.05 | 0.39 | YES |
+| 9.0 | 3.646 | 2.635 / 4266.5 / 79.64° | −1449.5 | 704.4 | **2.06** | 6.282 / 1621 | 0.1033 | 2.21 | 33.46 | YES |
+| 10.0 | 5.023 | 2.257 / 4532.2 / 81.47° | −1709.8 | 702.2 | **2.44** | 7.281 / 995 | 0.4064 | 1.62 | 570.56 | YES |
+| 11.0 | 6.382 | 1.989 / 4720.3 / 82.71° | −1937.3 | 701.5 | **2.76** | **never** | — | — | 1032.88 | **no** |
+| 12.0 | 6.588 | 1.785 / 4863.4 / 83.63° | −2144.1 | 701.5 | **3.06** | **never** | — | — | 1038.57 | **no** |
+
+⭐⭐⭐ **THE HORIZON RETREATS AT UP TO 2144 m/s WHILE THE MISSILE CLOSES AT 702 m/s — THREE TIMES
+FASTER — AND THE FIRST LOSING ARM SITS AT A RATIO OF 1.08.** The threshold is not fitted: **the loss
+happens exactly where the retreat rate crosses the closing speed**, which is the structural statement
+no constant `rcs_m2` can reach at any value (a fixed horizon has `dR_acq/dt = 0`).
+
+⭐⭐ **AND THE ARM-B TRACE IS THE ONE §0.4 PRE-REGISTERED**: lock at launch on the broadside flash →
+lost while CLOSING, at 3.2–4.9 km → blind for 0.4–6.6 s → (mostly) re-gained. **A 3 g turn takes back
+a lock the missile already had.**
+
+### §4.4 — ⚠⚠ THE ADVISOR'S SECOND CORRECTION, CONFIRMED: **A RE-GAIN BEFORE CPA IS STRUCTURAL**, AND IT RE-SITES §0.6's PRIMARY GAUGE
+
+`r → 0` while `R_acq` flattens, so **`det@CPA` is YES on every one of P0a's 96 kinematic cells and on
+every wire arm out to F = 10.** ⇒ **§0.6's pre-registered primary — ‖ω_LOS‖ at the FINAL valid
+measurement before CPA — is sampled in the POST-RE-GAIN stretch, where it carries no aspect
+information at all.** It has to be re-sited, and P0 was built to make P1 able to (it emits EVERY
+transition, not just the first). The candidate the physics hands over: **‖ω_LOS‖ and `t_go` AT
+RE-ACQUISITION** — the heading error the missile discovers it has, and how little flying is left to
+remove it. Both are monotone in `F` (0.0054 → 0.4064 rad/s; 3.99 → 1.62 s) and neither is the miss.
+⚠ **NOT COMMITTED TO HERE — see §4.5, which finds it dt-unstable.**
+
+### §4.5 — ⚠⚠⚠ SLICE 42's RE-FLY AT HALF `dt` — AND IT SPLITS THE MEASUREMENTS IN TWO
+
+Re-flown at `dt = 5e-4`. **The threshold does NOT move: it sits between F = 7.0 and F = 7.5 at both
+`dt`, and every quantity read AT THE LOSS INSTANT agrees to 3–4 digits** (F = 8: t 3.276 → 3.278,
+r 3812.8 → 3811.3, aspect 76.39 → 76.38, ratio 1.56 → 1.56). **This is not a discretization artifact.**
+
+⚠⚠ **BUT EVERYTHING READ AFTER THE BLIND RUN MOVES, AND SOME OF IT MOVES BY 3×:**
+
+| `F` | ‖ω‖ at re-gain, dt = 1e-3 → 5e-4 | CPA, dt = 1e-3 → 5e-4 |
+|---|---|---|
+| 8.0 | 0.0312 → **0.0862** | 0.39 → 0.69 m |
+| 9.0 | 0.1033 → **0.3170** | **33.46 → 684.91 m** |
+| 10.0 | 0.4064 → 0.3836 | 570.56 → 554.63 m |
+| 11.0 | — | 1032.88 → **1197.65 m** |
+
+⇒ ⭐⭐⭐ **A GAUGE READ AT THE MOMENT THE PICTURE IS LOST IS `dt`-STABLE; A GAUGE READ AFTER THE
+COAST IS NOT.** The blind run is an open-loop integration of a frozen estimate, so anything sampled
+downstream of it inherits the coast's divergence — which is **the miss ban's mechanism, in this
+slice's units**, and it disqualifies §4.4's re-acquisition candidate as a headline gauge unless P1
+can pin it. ⚠ **P1's gauge must be read at or before the LOSS, not at the re-gain.**
+
+### §4.6 — §0.5's CONTROL IS NOW A MEASUREMENT, NOT AN ASSERTION
+
+At exact broadside `rcs_aspect(σ, F, π/2) = σ` for every `F`, and `ManeuveringTarget` never reads the
+missile — so every arm must fly the SAME missile until its own first loss. Measured over the prefix:
+
+```
+F=3  vs F=1, 8211 ticks:  max|Δpos| = 0.000e+00 m   BIT-IDENTICAL
+F=6  vs F=1, 8211 ticks:  max|Δpos| = 0.000e+00 m   BIT-IDENTICAL
+F=8  vs F=1, 3275 ticks:  max|Δpos| = 0.000e+00 m   BIT-IDENTICAL
+F=10 vs F=1, 2256 ticks:  max|Δpos| = 0.000e+00 m   BIT-IDENTICAL
+ABSENT KEY vs F=1:        max|Δpos| = 0.000e+00 m
+```
+
+⇒ any difference between arms is **ASPECT and cannot be geometry** (§0.5's confound, closed by
+measurement rather than argument), and the draw topology is untouched (convention 3).
+⚠ The absent-key arm coming out bit-identical to `F = 1` is **not** a refutation of slice 49's
+`sin²+cos²` note: the gate is a threshold with kilometres of margin here, so a last-bit difference in
+`rcs_eff_m2` cannot change the verdict and therefore cannot change the trajectory. The absent key
+remains the WIRE's null and `F = 1` the LESSON's null.
+
+### §4.7 — ⚠ TWO PLAN ERRORS FOUND IN THE TREE, RECORDED RATHER THAN SILENTLY FIXED
+
+1. **⚠⚠ `t_go` IS NOT ON THIS WIRE.** §0.6 pre-registers it as a secondary gauge citing
+   `missile.jl:1718` — but that line is inside `if haskey(w.env, :salvo_t_d)`, a **salvo-coordinator
+   gate**. There is no coordinator in a slice 46–50 wire, so the key is absent. P0 derives it as
+   `r / closing_speed` from two unconditional keys. ⚠ Whether to ship `t_go` unconditionally is a
+   **gate-1 decision**, not a P0 blocker — and it is a real candidate, since it is free.
+2. **The kinematic stand-in and the flown wire disagree on WHERE the threshold sits.** `p0a2_cell.jl`
+   predicted a loss at F = 6 (2.14 s blind); the real PN missile through a 6-DOF airframe closes
+   differently and F = 6 never loses. ⇒ **the pre-flight gate is a CELL PICKER and nothing more** —
+   quoting its blind durations as results would be quoting a point-mass.
+
+### §4.8 — THE STATE OF THE GATE
+
+- **P0: PASSED, and arm B is selected.** Arm A (denial — never a usable lock) is refuted on this wire:
+  every arm out to F = 10 acquires at launch and re-acquires before CPA. §0.2's secondary kill (a late
+  lock is reproducible by a constant) therefore never comes due — **the surviving claim is about a
+  lock that is TAKEN BACK, which a fixed horizon cannot do at any value.** P2 is answered by proof,
+  the stronger form, exactly as slice 49 §5 was.
+- **STILL OPEN: P1 (the gauge) and P3 (the substitution test).** §4.5 has already disqualified the
+  obvious candidate; §0.6's pre-registered primary is disqualified by §4.4. **The slice does not have
+  a gauge yet, and §0 says that is the whole remaining question.**
