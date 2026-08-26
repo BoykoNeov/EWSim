@@ -293,6 +293,41 @@ var _mid_acquired := false         # …and the seeker DID eventually get it (fa
 # whose whole story is what it did AFTER that cue turned out to be wrong — every number true, and
 # the slice invisible. (The recurring failure of this family, avoided by ordering.)
 var _search_view := false          # handshake search_view — 12th marker; HUD only (46 keeps button)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 49 — WHICH WAY THE TARGET IS POINTING, AND WHAT IT COSTS. The 13th marker of the family,
+# and the FIRST that lands in the SPATIAL (elevation) view rather than the 3-D airframe one — this
+# is a GROUND RADAR watching an aircraft turn its nose toward it, not a missile.
+#
+# ⚠⚠ IT DOES BOTH JOBS — the HUD **and** the BUTTON — and the button job is a DROP. The scenario
+# authors `propagation: free_space`, so without a branch this wire falls through
+# `_setup_spatial_fid_btn`'s final `else` to `_fid_kind = "propagation"` and keeps the
+# `free_space ↔ two_ray` toggle `_build_ui` wired: a student could press MULTIPATH LOBING on top of
+# a scenario whose target vanishes for a completely different reason, and the drop-out would then
+# have two candidate explanations. Convention 9's exact prohibition.
+#
+# ⚠ AN ASPECT BELONGS TO A TARGET–OBSERVER **PAIR**, which is why the marker carries both ids and
+# every line names them. A HUD reading "aspect 25°" with no subject is this family's ~13th stale
+# readout. ⚠⚠ AND THE TRAP IN THE NAMING: the telemetry is keyed on the **RADAR** id
+# (`radar1.target_aspect_deg`) while the prose names the **TARGET** — read the keys off
+# `_aspect_target` by mistake and `.get(k, 0.0)` prints "aspect 0° — nose-on" over a target sitting
+# exactly broadside, on a green run.
+var _aspect_view := false          # handshake aspect_view — HUD **and** button (the drop)
+var _aspect_target := ""           # …the shaped target the readouts describe (the SUBJECT)
+var _aspect_observer := ""         # …and the radar they are measured FROM — the TELEMETRY KEY owner
+# ⭐ THE GAUGE, AND IT IS DISPLAY ACCUMULATION RATHER THAN PHYSICS (the `_authority_peak` posture):
+# the core ships `detected` and `target_range_m` every frame, and the client only remembers the
+# longest run of consecutive undetected frames **WHILE THE RANGE IS STILL FALLING**.
+# ⚠⚠ THE "WHILE CLOSING" HALF IS LOAD-BEARING AND IS NOT HYGIENE. On this scenario the target
+# passes its closest approach at ~7.8 km and opens again, nose-on the whole way out — so a
+# whole-flight clock keeps counting on the outbound leg and drifts ABOVE the 36.50 s the ladder
+# quotes. It would be a number that is not this slice's, printed under this slice's label.
+var _asp_closing := true           # …still on the inbound leg (the gauge's own window)
+var _asp_prev_range := 0.0         # last frame's range — the turn detector (0.0 = no frame yet)
+var _asp_run_t0 := NAN             # sim t the CURRENT loss began (NAN = holding the target)
+var _asp_run_r0 := 0.0             # …and the range it began at, so the run can be priced in km
+var _asp_loss_s := 0.0             # ⭐ THE HEADLINE: longest CLOSING loss run, seconds
+var _asp_loss_km := 0.0            # …and the closing range given up over THAT run
+var _asp_t := 0.0                  # the wire's own sim clock (frames carry `t`; the client has none)
 # ⚠ ONE new latch, and ONLY one: slice 47's three below are all live on this wire (it authors the
 # midcourse anchor, so `head_cued` / `gimbal_valid` / `a_cmd_frac` all ship), and this HUD READS
 # THEM rather than minting twins. Two instruments measuring "did it ever acquire" is convention 7's
@@ -756,6 +791,16 @@ func _on_scenario(obj: Dictionary) -> void:
 	# ⚠ HUD ONLY, and it takes the HUD from slice 47's marker rather than from slice 46's — see
 	# `_search_view`'s own comment.
 	_search_view = bool(obj.get("search_view", false))
+	# Slice 49 — the ASPECT view. Raised on the COMP KEY (`rcs_fineness`, the authored shape) for
+	# slice 47/48's reason exactly: there is no aspect fidelity RUNG to raise it on, and there
+	# deliberately is not one — "no aspect at all" is reachable from the slider's own FLOOR (F = 1,
+	# a sphere), so a rung would duplicate a slider position. ⚠ It does BOTH jobs (see the vars):
+	# the HUD branch AND the button, where the job is to DROP the propagation toggle.
+	# ⚠ The PAIR is parsed here, not inferred later — `_aspect_observer` owns the telemetry keys and
+	# `_aspect_target` is the subject the lines name.
+	_aspect_view = bool(obj.get("aspect_view", false))
+	_aspect_target = str(obj.get("aspect_target", ""))
+	_aspect_observer = str(obj.get("aspect_observer", ""))
 	# A CFAR scenario ships a STATIC range axis in the handshake (core output, §1/§8); that
 	# presence flips the client into the range-power view. A slice-1/2 scenario omits it and
 	# stays the spatial elevation view. Decide the mode ONCE here — the two render paths never
@@ -809,7 +854,29 @@ func _setup_spatial_fid_btn() -> void:
 	# else `propagation` (slice 1/2, the binary toggle wired in _build_ui). The disconnect is
 	# guarded so the headless UI tests — which build the button without _build_ui's connect —
 	# don't error, exactly like _enter_cfar_mode.
-	if _fidelity.has("atmosphere"):
+	if _aspect_view:
+		# ⚠⚠ SLICE 49 — CHECKED **FIRST**, and it is the family's "check the new one first" rule with
+		# a sharper reason than usual: this wire AUTHORS `propagation: free_space`, so every branch
+		# below falls through to the final `else` and leaves the `free_space ↔ two_ray` toggle that
+		# `_build_ui` already connected. That button offers MULTIPATH LOBING — a second way for a
+		# target to vanish — on a scenario whose target vanishes because of its HEADING, and the
+		# drop-out would then have two candidate explanations on screen at once (convention 9).
+		# ⭐ THE DROP IS THE WHOLE BUTTON JOB, the slice-16/26 shape: there is nothing here to cycle,
+		# because the lesson is the ONE live knob (fineness) and the fidelity is PINNED by the author
+		# rather than offered. A rung would only duplicate the slider's own floor (F = 1, a sphere).
+		_fid_kind = "aspect"
+		if _prop_btn.pressed.is_connected(_on_prop_pressed):
+			_prop_btn.pressed.disconnect(_on_prop_pressed)
+		_prop_btn.visible = false
+		# Seed the extents to the engagement's own scale so the first frames do not rescale under the
+		# marker; they only ever grow. ⚠ THE ELEVATION VIEW IS A WEAK PICTURE FOR THIS SCENARIO AND
+		# THE HUD IS WHY IT IS STILL THE RIGHT ONE: the turn is in the HORIZONTAL plane at a constant
+		# 5 km, so on screen the target slides sideways and never climbs, and its 18 km of CROSS-range
+		# is not on this axis at all. What the student watches is the marker going grey and the
+		# block on the right saying why — the range, the aspect and the price are all telemetry.
+		_x_max = 8000.0
+		_z_max = 6000.0
+	elif _fidelity.has("atmosphere"):
 		# Slice-21 THE EXPONENTIAL ATMOSPHERE — **the ceiling you lower by CLIMBING**. The scenario ships
 		# airframe_view + `:airframe` + `:atmosphere`, so it would otherwise be CAPTURED by the airframe
 		# branch below. CHECKED FIRST — BEFORE both airframe branches — ON PURPOSE, and this is the
@@ -2626,6 +2693,178 @@ func _horizon_cure_text(gated: bool) -> String:
 	return "wider window ⇒ shorter reach; 16× power ⇒ 2× range"
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 49 — THE ASPECT HUD: WHICH WAY THE TARGET IS POINTING, AND WHAT IT COSTS.
+#
+# ⚠⚠ EVERY LINE IS A **FUNCTION**, for slice 47/48's reason verbatim: `draw_string` lives in
+# `_draw`, which never runs under `--headless`, so a string built inline there has NO headless proof
+# at all (convention 14). `slice49_ui_test.gd` calls every one of these directly.
+#
+# ⚠⚠ AND THIS VIEW'S WIDTH BUDGET IS **390 px, NOT THE FAMILY'S 430** — the first thing here that is
+# NOT inherited. Slices 34–48 drew into the 3-D airframe view, whose right edge is empty; the
+# SPATIAL view puts its ALTITUDE TICK LABELS up the right edge (`_draw_spatial_backdrop` draws them
+# at `vp.x − 34`, with "alt (km)" at `vp.x − 52`). A 430 px line therefore runs straight through
+# them at EVERY window size — the origin is anchored to the right edge, so a wider window moves
+# both. Inheriting 430 here would be slice 46's clipped-HUD defect committed on purpose.
+#
+# ⚠ THE KEYS ARE READ OFF `_aspect_observer` (the RADAR) while the prose names `_aspect_target`.
+# They are different ids, and the wire is keyed on the first one.
+
+func _asp_key(k: String) -> String:
+	# ONE site forms the telemetry key, so the observer/target confusion can only be made once.
+	return _aspect_observer + "." + k
+
+func _asp_deg() -> float:
+	# 0° = nose-on, 90° = broadside, 180° = tail-on (`aspect_angle`'s pinned convention; the core
+	# ships DEGREES, the `gimbal_*_deg` boundary posture).
+	# ⚠ THE DEFAULT IS 90 (BROADSIDE) AND NOT 0.0, because 0.0 is the LOUDEST claim this HUD can
+	# make — "nose-on", the state the whole lesson is about — and a missing key must never assert it.
+	return float(_telemetry.get(_asp_key("target_aspect_deg"), 90.0))
+
+func _asp_detected() -> bool:
+	var v = _telemetry.get(_asp_key("detected"), true)
+	return bool(v) if typeof(v) == TYPE_BOOL else float(v) >= 0.5
+
+func _asp_range_m() -> float:
+	return float(_telemetry.get(_asp_key("target_range_m"), 0.0))
+
+func _asp_run_s() -> float:
+	# The CURRENT loss, live. 0.0 while the target is being held — and that zero is honest rather
+	# than defaulted, because `_asp_run_t0` is NAN in exactly that state and the line that prints it
+	# names the state it is in.
+	return 0.0 if is_nan(_asp_run_t0) else maxf(0.0, _asp_t - _asp_run_t0)
+
+func _asp_word(deg: float) -> String:
+	# The angle in words, because "24°" alone does not say which end of the aircraft that is.
+	# ⚠ FORE/AFT SYMMETRIC BY CONSTRUCTION (`rcs_aspect`'s named approximation): 156° returns the
+	# same σ as 24°, so the word must name the TAIL rather than pretend the model can tell them
+	# apart. Printing "nose-on" over a fleeing target would be a lie the physics does not make.
+	if deg <= 30.0:
+		return "nose-on"
+	if deg >= 150.0:
+		return "tail-on"
+	if deg >= 70.0 and deg <= 110.0:
+		return "broadside"
+	return "quartering"
+
+func _asp_verdict_label(closing: bool, det: bool, run_s: float, loss_s: float, deg: float) -> String:
+	# ⚠ HEADLINES GET A MUCH TIGHTER BUDGET (~30 chars, drawn at 20 px from the same right-anchored
+	# origin). ⚠⚠ AND NONE OF THEM MAY NAME A **DETECTED %** OR A LOSS **COUNT**: the scenario header
+	# disqualifies both explicitly — the count is measured NON-MONOTONE in fineness (41 → 133 → 53 →
+	# 42, because a middling body chatters at the threshold while a slender one drops out and stays
+	# out), and a detected-% mixes the outbound leg back in. The headline names the RUN.
+	if not closing:
+		# ⭐ PAST CPA THE GAUGE IS CLOSED, AND SAYING SO IS THE POINT. The target goes on being
+		# invisible on the way out — but that invisibility is no longer being bought with closing
+		# range, which is the only currency this lesson trades in.
+		return "PAST CPA — gauge closed"
+	if not det:
+		return "GONE %.1f s, STILL CLOSING" % run_s
+	if loss_s > 0.0:
+		return "BACK — it was gone %.1f s" % loss_s
+	return "HOLDING IT: %.0f° %s" % [deg, _asp_word(deg)]
+
+func _asp_aspect_text(tgt: String, obs: String, deg: float) -> String:
+	# THE MECHANISM, AND IT NAMES THE PAIR. An aspect is not a property of a target: it is the angle
+	# between that target's nose and ONE observer, and the same aircraft is broadside to one radar
+	# and nose-on to another in the same tick (gate 2 pins exactly that, off one comp bag).
+	return "%s→%s  nose off %.0f° (%s)" % [tgt, obs, deg, _asp_word(deg)]
+
+func _asp_cost_text(sigma: float, loss_db: float) -> String:
+	# ⭐⭐ THE PRICE, AND THE dB IS **CORE-COMPUTED** (convention 13, the `js_db` posture). The client
+	# cannot form it: the broadside `rcs_m2` is a comp key an author writes and has never been on the
+	# wire, so there is nothing here to measure σ_eff against. The core subtracts; the client prints.
+	# ⚠ `_fmt`, not "%.3f": σ_eff runs to ~4e-4 m² at the top of the slider and a fixed-point format
+	# would print the lesson's own number as "0.000" (the slice-8 de_frac defect, in a new readout).
+	return "echo %s m² — %.1f dB below broadside" % [_fmt(sigma), loss_db]
+
+func _asp_detect_text(det: bool, range_m: float, pd: float) -> String:
+	# THE VERDICT AND ITS TWO INPUTS ON ONE LINE — the range it is at, and the probability the
+	# detector gives it. ⚠ `Pd` is the ANALYTIC probability at the design Pfa; `detected` is the last
+	# look's actual DRAW. Both are shown because the sphere control's whole point is that a target
+	# ~21 dB up still fades below threshold occasionally — a Swerling-1 echo is exponential.
+	# ⚠⚠ `_fmt` ON THE Pd TOO, AND THE WINDOWED SHOT IS WHAT CAUGHT IT. The first version used
+	# "%.2f" here and the photograph came back reading **"Pd 0.00"** over a wire whose `pd` was
+	# 2.5e-4 — a live, meaningful number rendered as an impossibility, and identical on screen to a
+	# Pd of 1e-12. That is the slice-8 `de_frac` defect verbatim (rk4's 1e-14 and euler's 2.5e-4 both
+	# printing "0.00", which made the integrator button look dead), committed one line after a
+	# comment about avoiding it on σ. `_fmt` is the same widget the readout and the Pfa knob use.
+	return "range %.1f km   Pd %s   %s" % [range_m / 1000.0, _fmt(pd), "SEEN" if det else "NO RETURN"]
+
+func _asp_loss_text(closing: bool, det: bool, run_s: float, run_km: float,
+					loss_s: float, loss_km: float) -> String:
+	# ⭐⭐⭐ THE GAUGE THIS HUD EXISTS FOR, AND IT IS LABELLED WITH ITS OWN WINDOW. The ladder's number
+	# is the longest loss run **WHILE CLOSING** — 0.20 s at a sphere against 36.50 s at the authored
+	# 8 — so every branch that quotes it says "closing".
+	# ⚠⚠ A WHOLE-FLIGHT CLOCK WOULD DRIFT ABOVE THE LADDER, which is why the window is in the words
+	# and in the latch alike: the target passes CPA at ~7.8 km and opens again nose-off, so it stays
+	# invisible for the rest of the run, and a gauge that kept counting there would print a number
+	# that is not this slice's under this slice's label.
+	if not closing:
+		return "closing loss was %.1f s / %.1f km given up" % [loss_s, loss_km]
+	if not det:
+		return "lost %.1f s so far, %.1f km of closing gone" % [run_s, run_km]
+	if loss_s <= 0.0:
+		# ⚠ THE NULL'S OWN SENTENCE. At a sphere the target is essentially never lost while closing,
+		# and "longest closing loss 0.0 s" reads as an instrument nothing has fed rather than as the
+		# result it is — the slice-48 defaulted-zero class, one widget over.
+		return "never lost while closing — the shape is round"
+	return "longest closing loss %.1f s / %.1f km" % [loss_s, loss_km]
+
+func _asp_cure_text(loss_s: float) -> String:
+	# THE TRADE, stated as the thing a student would otherwise get wrong: the instinct is that a
+	# small target is a dim one, i.e. that this could be faked with a smaller `rcs_m2`. It cannot —
+	# for a CONSTANT echo, detection is `r ≤ R_acq`, one threshold against a range that only comes
+	# down, so a constant target can be GAINED while closing and never LOST.
+	if loss_s <= 0.0:
+		return "drag up: a slender body is quiet nose-on"
+	# ⚠ SHORTENED AFTER MEASURING: the first draft ("…could not do this — only a SHAPE can") came to
+	# exactly 390.0 px against 390 px of room — a pass sitting ON the limit, which is one glyph away
+	# from clipping and indistinguishable from a fail until the widest line is named.
+	return "a dimmer target cannot do this — only a SHAPE"
+
+func _draw_aspect_hud_lines(vp: Vector2) -> void:
+	# ⚠ THE ORIGIN IS THE FAMILY'S `vp.x − 430`, BUT THE ROOM IS 390 px — see the block header.
+	var det := _asp_detected()
+	var deg := _asp_deg()
+	var run_s := _asp_run_s()
+	var rng := _asp_range_m()
+	var run_km := maxf(0.0, _asp_run_r0 - rng) / 1000.0
+	var lost_col := Color(1.00, 0.62, 0.30)
+	var ok_col := Color(0.55, 1.00, 0.65)
+	# THE HEADLINE — orange while the target is gone, green while it is held, grey once the gauge is
+	# closed at CPA. ⚠ THE COLOUR RIDES THE LIVE STATE AND NOT A PEAK-HOLD, which is a departure
+	# from 46/47/48 and has this wire's own reason: the thing a student watches here is a target that
+	# is gone RIGHT NOW, and a latch-coloured headline would hold the alarm lit through the whole
+	# second half of a run that recovered. The LATCHED number is named in the gauge line instead,
+	# which is where a peak belongs.
+	draw_string(_font, Vector2(vp.x - 430, 88),
+			_asp_verdict_label(_asp_closing, det, run_s, _asp_loss_s, deg),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
+			COL_TICK if not _asp_closing else (lost_col if not det else ok_col))
+	# THE MECHANISM — which way it is pointing, and to WHOM.
+	draw_string(_font, Vector2(vp.x - 430, 116),
+			_asp_aspect_text(_aspect_target, _aspect_observer, deg),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.45, 0.90, 1.00))
+	# THE PRICE — σ_eff and the dB below broadside, both straight off the wire.
+	draw_string(_font, Vector2(vp.x - 430, 138),
+			_asp_cost_text(float(_telemetry.get(_asp_key("rcs_eff_m2"), 0.0)),
+					float(_telemetry.get(_asp_key("rcs_loss_db"), 0.0))),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45))
+	# THE VERDICT AND ITS INPUTS.
+	draw_string(_font, Vector2(vp.x - 430, 160),
+			_asp_detect_text(det, rng, float(_telemetry.get(_asp_key("pd"), 0.0))),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, lost_col if not det else ok_col)
+	# ⭐⭐⭐ THE GAUGE.
+	draw_string(_font, Vector2(vp.x - 430, 182),
+			_asp_loss_text(_asp_closing, det, run_s, run_km, _asp_loss_s, _asp_loss_km),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			lost_col if (_asp_loss_s > 0.0 or not det) else COL_TICK)
+	# THE TRADE.
+	draw_string(_font, Vector2(vp.x - 430, 204), _asp_cure_text(_asp_loss_s),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
 # SLICE 48 — THE SEARCH HUD.
 #
 # ⚠⚠ EVERY LINE IS A **FUNCTION** for slice 47's reason verbatim: `draw_string` lives in `_draw`,
@@ -3789,6 +4028,19 @@ func _update_fid_btn() -> void:
 				# Slice-16: no fidelity to cycle — the button is hidden (dropped in _setup_spatial_fid_btn),
 				# the Cmα slider is the lesson. Keep it hidden here too (defensive against a re-show).
 				_prop_btn.visible = false
+		"aspect":
+			# Slice-49 THE ASPECT VIEW: there is no rung to cycle — the lesson is the fineness SLIDER,
+			# and the ONE fidelity this wire authors (`propagation: free_space`) is PINNED rather than
+			# offered. Keep the button hidden here too, the slice-16/26 "defensive against a re-show"
+			# shape and for their reason: without this case the `_:` default below would fall to
+			# `_update_prop_btn` and LABEL the dropped button "prop: free_space", which is a
+			# `free_space ↔ two_ray` toggle advertising itself on a wire that must not offer one.
+			# ⚠ THE LABEL IS OVERWRITTEN AS WELL AS THE VISIBILITY, which slices 16/26 did not need to
+			# do: they left `_build_ui`'s neutral "prop: …" placeholder standing behind a hidden
+			# button. Here the placeholder itself names the toggle this wire must not offer, so if
+			# anything ever re-shows the button the text would be the misleading half.
+			_prop_btn.text = "(no rung — the slider is the lesson)"
+			_prop_btn.visible = false
 		_:
 			_update_prop_btn()
 
@@ -4260,6 +4512,39 @@ func _spatial_on_state(obj: Dictionary) -> void:
 			_ceil_hist.pop_front()
 			_demand_hist.pop_front()
 
+	# ⭐⭐⭐ SLICE 49 — THE GAUGE, AND IT IS DISPLAY ACCUMULATION RATHER THAN PHYSICS (the
+	# `_authority_peak` posture, convention 13): the core ships `detected`, `target_range_m` and the
+	# frame's own `t`, and the client only remembers the LONGEST RUN of consecutive undetected frames
+	# **WHILE THE RANGE IS STILL FALLING**. Nothing here is recomputed — the range is a wire value
+	# precisely so that this and the verifier read the same quantity from the same place.
+	# ⚠⚠ THE "WHILE CLOSING" HALF IS THE WHOLE INSTRUMENT AND IT IS NOT HYGIENE. On this scenario the
+	# target passes its closest approach at ~7.8 km and opens again, nose-off the whole way out — so a
+	# whole-flight clock never stops counting and drifts ABOVE the 36.50 s the ladder quotes. It would
+	# be a number that is not this slice's, printed under this slice's label.
+	# ⚠ GATED ON THE ANCHOR'S OWN KEY, so every scenario 1–48 leaves all six instruments at their
+	# reset values (slice 33's independent-`if` finding — this is a chain of nothing).
+	if _aspect_view and _aspect_observer != "" and _telemetry.has(_aspect_observer + ".target_range_m"):
+		_asp_t = float(obj.get("t", _asp_t))
+		var r := float(_telemetry[_aspect_observer + ".target_range_m"])
+		# The turn is detected on the RANGE, not on a CPA guess: one frame of opening ends the window
+		# for good. ⚠ `_asp_prev_range` starts at 0.0 (no frame yet), which is why the first frame
+		# only seeds it — a 0.0 would otherwise read as an instant CPA on tick one.
+		if _asp_prev_range > 0.0 and r > _asp_prev_range:
+			_asp_closing = false
+		_asp_prev_range = r
+		if _asp_closing and not _asp_detected():
+			if is_nan(_asp_run_t0):
+				_asp_run_t0 = _asp_t
+				_asp_run_r0 = r
+			var run := _asp_t - _asp_run_t0
+			if run > _asp_loss_s:
+				_asp_loss_s = run
+				_asp_loss_km = maxf(0.0, _asp_run_r0 - r) / 1000.0
+		else:
+			# ⚠ THE RUN CLOSES ON A RE-DETECT **AND** AT CPA. Leaving it open past the turn would let
+			# the outbound leg keep extending a run that the peak above has already banked correctly.
+			_asp_run_t0 = NAN
+
 	# Drop a blip at the detected target's current screen position. The event
 	# carries `of` (the target id) but no position; the entity's pos this frame is
 	# within emit_every·dt (~16 ms) of when it fired — close enough for a blip.
@@ -4463,6 +4748,24 @@ func _on_reset_pressed() -> void:
 	# sweeps — display "NEVER FOUND IT" as though it had looked, which is the one distinction this
 	# headline exists to make.
 	_srch_was_searching = false
+	# ⚠⚠ SLICE 49's SIX, cleared for the same reason and at the same time as the code that creates
+	# them — the SEVENTH time this family has fixed the stale-instrument-across-reset class, done here
+	# rather than found later. Each one lies in its own way if it survives a Reset:
+	#   `_asp_loss_s` / `_asp_loss_km` are FROZEN MAXIMA, so a re-launch at the slider's FLOOR — a
+	#     sphere, the arm that is essentially never lost — would open displaying the previous arm's
+	#     36.5 s and 8.3 km as though the round target had done it. That is this HUD's single most
+	#     misleading state, and it is the exact comparison the slice exists to show going the other way.
+	#   `_asp_closing` / `_asp_prev_range` are the gauge's WINDOW: a stale `false` would leave a fresh
+	#     18 km launch reading "PAST CPA — gauge closed" and never measure anything at all.
+	#   `_asp_run_t0` is a live run and `_asp_t` the wire's own clock; a stale pair prints a loss that
+	#     began in the PREVIOUS flight, which is a duration with no meaning rather than a wrong one.
+	_asp_closing = true
+	_asp_prev_range = 0.0
+	_asp_run_t0 = NAN
+	_asp_run_r0 = 0.0
+	_asp_loss_s = 0.0
+	_asp_loss_km = 0.0
+	_asp_t = 0.0
 	# Slice-36: BOTH of this slice's instruments are cleared, and each for its own reason — this is the
 	# THIRD time the family has had to fix a stale-instrument-across-reset defect, so it is done at the
 	# same time as the code that creates it rather than found later.
@@ -4744,6 +5047,16 @@ func _draw_spatial() -> void:
 	# rung ships the keys (slices 16/17 draw nothing new — the strip sits above the α chart).
 	if _airframe_view and _ceil_hist.size() >= 2:
 		_draw_aero_strip()
+
+	# ⭐ SLICE 49 — THE ASPECT BLOCK, and it is the FIRST right-anchored HUD this view has ever
+	# carried (slices 34–48's all live in the 3-D airframe view). ⚠ Gated on the MARKER, so every
+	# slice-1..48 spatial wire draws exactly what it drew before — and the marker is what makes this
+	# block the difference between a target that has simply gone grey and a target whose HEADING is
+	# the reason. ⚠⚠ Its width budget is 390 px, NOT the family's 430: the altitude tick labels
+	# `_draw_spatial_backdrop` puts at `vp.x − 34` are in the way, and the origin is right-anchored
+	# so no window size rescues an over-wide line (`_draw_aspect_hud_lines`' own header).
+	if _aspect_view:
+		_draw_aspect_hud_lines(get_viewport_rect().size)
 
 func _draw_missile() -> void:
 	# The flown arc as a faint polyline (mapped from the stored WORLD breadcrumbs each draw, so it

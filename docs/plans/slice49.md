@@ -683,3 +683,156 @@ DETECTED, which is what makes a loss a loss.
 client is pure and carries ZERO physics. Its teeth must be RELATIONS between telemetry keys (the
 drop-out exists, its duration ranks correctly across arms, the control is brief), never a
 recomputation of the model.
+
+## §16 — GATE 3, THE DISPLAY HALF (2026-08-26). Suite **17280** (+26). ⭐ ALL FOUR PROOFS SHIPPED.
+
+`net/slice49_verify.gd`, `net/slice49_ui_test.gd`, the headless smoke-load, the windowed shots, the
+client's aspect HUD branch — and **two core telemetry keys the HUD could not honestly have done
+without.** Gate 3 is closed.
+
+**⚠⚠ THE DISPLAY HALF NEEDED TWO NEW WIRE KEYS, AND BOTH ARE CONVENTION 13 DOING ITS JOB.**
+
+1. **`rcs_loss_db` — THE PRICE, formed at the ONE site.** The `js_db` posture verbatim: a dB
+   DIFFERENCE is computed in the core so the client never subtracts. And here the client *could not*
+   have subtracted at all — `rcs_m2` is a comp key an author writes and has never been on the wire,
+   so a HUD has nothing to measure `rcs_eff_m2` against. ⚠ SIGNED (`_finite_coord`, not `_finite`):
+   an OBLATE body (`F < 1`, legal and documented) is BRIGHTER nose-on than broadside and reads
+   NEGATIVE; a magnitude-only clamp would silently turn a gain into a loss.
+2. **`target_range_m` — WHAT THE PRICE IS PAID IN, and the sharper of the two.** This radar has
+   never shipped a range. ⭐⭐⭐ **A GAUGE MUST CARRY ITS OWN WINDOW.** The ladder's number is the
+   longest loss run **WHILE CLOSING**; without a range the client can only ever time a WHOLE-FLIGHT
+   loss, and on this scenario the target passes CPA at ~7.8 km and opens again nose-off — so it
+   stays invisible for the rest of the run and a whole-flight clock never stops. It would drift
+   ABOVE the 36.50 s the ladder quotes, print a number that is not this slice's under this slice's
+   label, and look entirely reasonable on screen. Shipping the range makes the HUD and the verifier
+   read the SAME quantity from the SAME place, and makes "range given up" a subtraction of two wire
+   values rather than a geometry recompute in GDScript.
+
+Both are key-presence gated with the other two, so every slice-1..48 wire is byte-identical.
+
+**THE CLIENT HALF — A MARKER THAT TAKES THE HUD *AND* THE BUTTON, AND THE FIRST IN THE SPATIAL VIEW.**
+Slices 34–48's HUDs all live in the 3-D airframe view; this is a ground radar, so the block lands in
+the elevation view. The BUTTON job is a **DROP** and is not optional: the scenario authors
+`propagation: free_space`, so without a branch the wire falls through `_setup_spatial_fid_btn`'s
+final `else` to `_fid_kind = "propagation"` and keeps the `free_space ↔ two_ray` toggle `_build_ui`
+already wired — MULTIPATH LOBING offered on top of a scenario whose target vanishes because of its
+HEADING. ⚠ The label is overwritten as well as the visibility, which slices 16/26 did not need to do:
+their neutral "prop: …" placeholder was harmless behind a hidden button, and here the placeholder
+itself names the toggle that must not be on offer.
+
+**THE VERIFIER — §15's THREE ARMS PLUS A REPLAY, AND THREE OF SLICE 48's TEETH DELIBERATELY ABSENT.**
+
+| `rcs_fineness` | 1.0 (control) | **8.0 (authored)** | 12.0 |
+|---|---|---|---|
+| longest closing loss | **0.19 s** | **26.99 s** | 32.69 s |
+| range given up | 4 m | **5.84 km** | 6.38 km |
+| detected | 98.3 % | 20.2 % | 12.2 % |
+| peak dB below broadside | 0.0 | 34.5 | 41.5 |
+
+Monotone in both gauges; **141×** separation on the authored arm. The measured column matches §15 to
+the frame grid (0.20 / 27.00 / 32.70 predicted).
+
+- **NO `_turned` / CPA CHECK.** The target flies a 6 km circle at 300 m/s — a ~126 s period — so at
+  40 s every arm is still inbound and slice 48's "must reach CPA inside STEPS" would fail all of
+  them. The MIRROR is asserted instead: the range must FALL on every frame, so the closing window
+  covers the whole run by construction rather than by a filter. Stronger than the filter would be.
+- **NO SLIDER READ-BACK KEY.** `rcs_fineness` is a SHAPE, not a measurement, so it is not echoed and
+  slice 48's `_rho_seen` tooth has no analogue. Its job is done in this slice's own currency:
+  `rcs_eff_m2` must DIFFER across arms at the IDENTICAL geometry (**14 067× / 41.5 dB** measured),
+  which a swallowed `set_param` fails while passing every sent-vs-echoed check there is.
+- **NO BYTE-IDENTITY CLAIM FOR THE SPHERE.** `F = 1` and the key ABSENT are different things; the
+  `===` proof is gate 2's. Here the sphere is asserted as a NUMBER — `rcs_loss_db` exactly 0.0 on
+  every frame of a run whose aspect sweeps 90° → 24.9°.
+
+⭐⭐⭐ **AND THE BYTE-IDENTITY THAT *IS* ASSERTED IS THE OTHER WAY UP FROM SLICE 48's.** Slice 48
+proved a slider that LOOKED busy reached nothing. Here the slider reaches everything about the
+SEEING and nothing about the FLYING: across the whole domain `max|Δpos| == 0` and `max|Δaspect| == 0`
+over 2500 frames — which is also what makes the σ comparison above a clean frame-for-frame one.
+
+⭐⭐ **THE CONTROL MUST *FLICKER*, AND THAT IS ASSERTED.** The sphere is detected on 98.3 % of frames,
+not 100 %. A control that CANNOT fail makes the whole comparison a tautology, which is exactly what a
+non-fluctuating detector would produce — so `swerling: 1` is load-bearing and the verifier now says
+so with a test rather than a comment.
+
+**THE UI TEST — 11 TEETH, AND THE SHARPEST IS THAT THE GAUGE STOPS AT CPA.** A fixture banks 8.00 s /
+2.40 km while closing, then is fed 30 s of being lost on the OUTBOUND leg and must still read 8.00 s.
+Also: the marker mirror in both directions (strip it and the MULTIPATH button comes back; a slice-2
+wire keeps its own), the seven-instrument Reset clear (the **seventh** time this family has fixed the
+stale-instrument-across-reset class), and the four verdict states — none of which may name a
+detected-% or a loss COUNT, both measured non-monotone in the slider.
+
+**⚠⚠ THE WIDTH BUDGET IS A PROPERTY OF THE *VIEW*, NOT OF THE FAMILY — 390 px, NOT 430.** Slices
+34–48 drew into the 3-D airframe view, whose right edge is empty. The SPATIAL view puts its ALTITUDE
+TICK LABELS up the right edge (`_draw_spatial_backdrop`: `vp.x − 34`, "alt (km)" at `vp.x − 52`), so
+a 430 px line runs straight through them at EVERY window size — both origins are right-anchored, so
+a wider window moves both. ⭐ **Inheriting 430 here would have been slice 46's clipped-HUD defect
+committed on purpose.** The UI test now also requires 12 px of MARGIN and NAMES the widest line: the
+first run passed at exactly 390.0 px of 390, which is one glyph from clipping and indistinguishable
+from a fail until you know which line it is.
+
+## §17 — FOUR DEFECTS THE PROOFS CAUGHT, AND WHERE EACH ONE HID
+
+Every one shipped in a file that was about to be called done, and each was caught by a *different*
+proof — which is the argument for having four of them.
+
+1. **⚠⚠ `%.3e` INSIDE A FAILURE BRANCH THAT HAD NEVER RUN.** GDScript's `%` has no `%e` and no `%g`;
+   an unknown specifier makes the WHOLE format fail SILENTLY and print the format string itself.
+   Slice 21's bug, reproduced by slice 25, and now by this slice — **twice**. The first was on a
+   `print` that runs every time and was caught by READING THE OUTPUT OF A PASSING RUN (`S49V_REPLAY`
+   printed `max|Δpos| = %.12f m` verbatim on a green exit 0). The second was in the sphere-null
+   FAILURE message, which nothing had ever executed — found only by sweeping the file with a regex
+   for non-`f`/`d`/`s` specifiers. ⭐ **THE TRANSFERABLE RULE: grep the whole file for specifiers,
+   because a `print` is proved by its own output and a `_fail` message is proved by nothing.** The
+   fix ships a hand-rolled `_sci()` (the `Sandbox.gd:_fmt` construction) so a near-zero residual is
+   printable at all: `%.3f` of 1e-16 is "0.000", which reads as a PASS inside a FAILURE message.
+2. **⚠⚠ `Pd 0.00` OVER A LIVE `pd` OF 2.5e-4 — AND ONLY THE WINDOWED SHOT COULD HAVE CAUGHT IT.**
+   The HUD used `_fmt` for σ and then a fixed-point `"%.2f"` for the Pd on the very next argument of
+   the same line. Deep inside the drop-out the photograph read "Pd 0.00" — an IMPOSSIBILITY on
+   screen, and identical to a Pd twelve orders of magnitude smaller. **Slice 8's `de_frac` defect
+   verbatim** (rk4's 1e-14 and euler's 2.5e-4 both printing "0.00", which made the integrator button
+   look dead). The verifier and the UI test were both green over it; a tooth now exists.
+3. **⚠ AN EXACT IDENTITY ASSERTED WHERE A CLIENT CANNOT SEE IT.** The verifier demanded σ_eff == 4.0
+   exactly on the first frame and failed at 3.999867. Correctly: **the first frame a client ever
+   sees is `emit_every` = 16 ticks AFTER launch**, by which time the nose has come ~0.09° off
+   broadside. ⭐ **An exact identity belongs where it can be stated exactly — in the core, where
+   `test_rcs_aspect.jl` pins θ = π/2 to 1e-12. A frame-sampled client must not pretend to see t = 0.**
+   What the client CAN assert exactly is the one-sided anchor: no frame may come back BRIGHTER than
+   the authored broadside RCS, because broadside is the peak of a prolate body's curve.
+4. **⚠ A `%%` ESCAPE ON A LINE WITH NO `%` OPERATOR** printed "detected-%%" on screen — slice 48 hit
+   this on its own verdict line. The silent-format family, one level milder.
+
+**⚠ TWO HARNESS ARTIFACTS IN THE SHOTS, NEITHER A CLIENT DEFECT, BOTH WORTH KNOWING:**
+- **The detection blips pile up under a `step`.** They are created on SIM events and aged on WALL
+  time (`BLIP_TTL` = 1.6 s in `_process`), so streaming 26.5 s of sim into a few render frames leaves
+  ~1600 frames' worth of rings on screen at once. In the live realtime showcase they fade in 1.6 s.
+  Pre-existing for every spatial slice; do not "fix" the client for the harness's sake.
+- **The target marker sits behind the left UI panel for the first ~2 s** (at t = 2 s the target is
+  600 m downrange, screen x ≈ 198, and the panel reaches x ≈ 287). Also pre-existing — the spatial
+  plot starts at `MARGIN` = 64 while the panel is wider than that.
+
+**THE SHOTS, AND BOTH BRANCHES OF THE HEADLINE HAVE A PIXEL PROOF** (slice 19's rule: a shot that
+lands on the else-branch of the thing you shipped proves nothing about it). The verifier PRINTS the
+tick to aim at (`S49V_SHOT`), so the aim is measured rather than guessed:
+
+- **LOST, t = 26.496 s** — `GONE 13.5 s, STILL CLOSING` (orange) over `tgt1→radar1 nose off 41°
+  (quartering)` / `echo 3.0e-3 m² — 31.3 dB below broadside` / `range 15.5 km  Pd 2.5e-4  NO RETURN`
+  / `lost 13.5 s so far, 2.4 km of closing gone` / `a dimmer target cannot do this — only a SHAPE`.
+- **HOLDING, t = 2.000 s** — `HOLDING IT: 86° broadside` (green) over `echo 2.52 m² — 2.0 dB below
+  broadside` / `range 18.7 km  Pd 0.95  SEEN` / `never lost while closing — the shape is round` /
+  `drag up: a slender body is quiet nose-on`.
+
+Every number in both blocks agrees with the left readout panel's raw keys, and the block clears the
+altitude labels at the right edge in both.
+
+**THE FOUR PROOFS, AS RUN:**
+
+| proof | command | result |
+|---|---|---|
+| verifier | `godot --headless --path clients/godot --script res://net/slice49_verify.gd` (needs the server) | `S49V PASS 4 arms`, exit 0 |
+| UI test | `… --script res://net/slice49_ui_test.gd` (no server) | `S49UI OK`, exit 0 |
+| smoke-load | fresh server + headless `res://scenes/Sandbox.tscn` | server log reached `EWSIM_SERVER_DONE` |
+| windowed shot | temporary harness, `--resolution 1920x1080` | two PNGs, both branches, read and checked |
+
+⚠ Regression: all twelve spatial/3-D UI tests re-run green (3, 4, 13, 14, 17, 19, 21, 22, 46, 47, 48,
+49) after the `_setup_spatial_fid_btn` / `_update_fid_btn` / `_spatial_on_state` / `_draw_spatial` /
+`_on_reset_pressed` edits.

@@ -590,6 +590,11 @@ function _observe_point!(r::RadarSensor, w::World)
     # been seen — the key-presence gate for the telemetry (a wire with no `:rcs_fineness` anywhere
     # ships no new keys and is byte-identical, the `terrain_clearance_m` / `jnr_db` precedent).
     best_asp = nothing; best_rcs = nothing
+    # ⭐ …AND THE COST, AS **ONE CORE-COMPUTED NUMBER** — the `js_db` posture verbatim (a dB
+    # DIFFERENCE is formed HERE so the client never subtracts, convention 13). The client CANNOT
+    # form this one anyway: `rcs_m2` is a comp key an author writes and has never been on the wire,
+    # so a HUD would have nothing to measure σ_eff against.
+    best_loss = nothing
     any_detect = false
     for tid in target_ids
         tgt = w.entities[tid]
@@ -610,8 +615,13 @@ function _observe_point!(r::RadarSensor, w::World)
             if haskey(tgt.comp, :rcs_fineness)
                 best_asp = aspect_angle(tgt.pos, tgt.vel, radar.pos)
                 best_rcs = _effective_rcs(tgt, radar.pos)
+                # dB BELOW BROADSIDE, and the NAME carries the sign so no reader has to guess it:
+                # positive = this much quieter than the authored `rcs_m2`. Never ±Inf — `rcs_aspect`'s
+                # denominator `(sin²θ + F²cos²θ)²` is strictly positive for every `F > 0`, and the
+                # consumer's own floor keeps `F` there.
+                best_loss = lin2db(max(Float64(tgt.comp[:rcs_m2]), 1.0e-12) / best_rcs)
             else
-                best_asp = nothing; best_rcs = nothing
+                best_asp = nothing; best_rcs = nothing; best_loss = nothing
             end
         end
         if is_look && detect_once(snr_eff, th, w.rng; swerling = sw, n_pulses = np)
@@ -657,12 +667,27 @@ function _observe_point!(r::RadarSensor, w::World)
     # ⭐ SLICE 49 — WHICH WAY THE TARGET IS POINTING, AND WHAT THAT COSTS IT. Shipped ONLY when the
     # strongest target carries a `:rcs_fineness` (key-presence gated, so every slice-1..48 wire is
     # byte-identical). DEGREES on the wire, radians inside — the `gimbal_*_deg` boundary posture.
-    # ⚠ Both are READOUTS with no consumer in the physics, which is why they belong here: the
+    # ⚠ ALL FOUR are READOUTS with no consumer in the physics, which is why they belong here: the
     # detection verdict is `detected`/`pd` above, and a HUD that showed only those could not say
-    # WHY the target vanished. Aspect is the reason; σ_eff is the mechanism.
+    # WHY the target vanished. Aspect is the reason; σ_eff is the mechanism; the dB is the PRICE;
+    # the range is what the price is being paid IN.
     if best_asp !== nothing
         tel["$sid.target_aspect_deg"] = _finite_coord(rad2deg(best_asp))
         tel["$sid.rcs_eff_m2"]        = _finite(best_rcs)
+        # ⚠ SIGNED, so `_finite_coord` and not `_finite`: an OBLATE body (`F < 1`, legal and
+        # documented at `rcs_aspect`) is BRIGHTER nose-on than broadside and this reads NEGATIVE.
+        # A magnitude-only clamp would silently turn a gain into a loss.
+        tel["$sid.rcs_loss_db"]       = _finite_coord(best_loss)
+        # ⭐⭐ AND THE RANGE, WHICH IS WHAT MAKES THE DROP-OUT A LESSON RATHER THAN A NUMBER. The
+        # gauge this slice is measured on is the longest loss run **WHILE CLOSING** (the scenario's
+        # own header), and until now this radar shipped no range at all — so a client could only
+        # ever have timed a WHOLE-FLIGHT loss. On this wire the target passes CPA at ~7.8 km and
+        # opens again, so a whole-flight clock keeps counting on the outbound leg and drifts ABOVE
+        # the 36.50 s the ladder quotes: the HUD would print a number that is not the slice's.
+        # Shipped HERE, gated with the other two, so the HUD and the verifier read the SAME
+        # quantity from the SAME place (convention 7) — and so "range given up" is a subtraction of
+        # two wire values rather than a geometry recompute in GDScript (convention 13).
+        tel["$sid.target_range_m"]    = _finite(_range(best_pos, radar.pos))
     end
     return nothing
 end

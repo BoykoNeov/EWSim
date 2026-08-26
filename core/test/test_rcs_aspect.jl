@@ -270,6 +270,67 @@ end
         @test tel["radar1.rcs_eff_m2"]        ≈ σ          atol = 1e-15
     end
 
+    @testset "⭐⭐ THE TWO HUD KEYS — the PRICE and what it is paid IN (gate 3, display half)" begin
+        # ⚠⚠ THESE EXIST BECAUSE THE CLIENT MAY NOT FORM THEM (conventions 7 and 13). `rcs_m2` is a
+        # comp key an author writes and has NEVER been on the wire, so a HUD has nothing to measure
+        # σ_eff against and cannot make the dB itself; and the radar has never shipped a RANGE, so a
+        # client clock could only ever have timed a WHOLE-FLIGHT loss — which on this scenario keeps
+        # counting past CPA and drifts above the 36.50 s the ladder quotes. Both are formed at the
+        # ONE site, the `js_db` posture verbatim.
+
+        # ⭐ ANCHOR 1 — BROADSIDE IS EXACTLY ZERO dB, at every fineness. The default geometry is
+        # abeam, which is the one place the model is a no-op; here that is the POINT (an EXTERNAL
+        # anchor), not the trap it was three times elsewhere in this slice.
+        for F in (1.0, 2.5, 8.0, 12.0)
+            w, subs = _aspect_world(fineness = F)
+            tick!(w, subs, 1.0e-3)
+            @test w.env[:telemetry]["radar1.rcs_loss_db"] ≈ 0.0 atol = 1e-12
+        end
+        # ⭐ ANCHOR 2 — NOSE-ON IS `40·log10(F)` dB, hand-computable and independent of the code
+        # under test: σ/F⁴ in linear is 4·(10·log10 F) in dB. F = 10 ⇒ 40 dB, the real-airframe
+        # order `rcs_aspect`'s own docstring claims.
+        for (F, want) in ((10.0, 40.0), (2.0, 40.0 * log10(2.0)), (8.0, 40.0 * log10(8.0)))
+            w, subs = _aspect_world(fineness = F, radar_pos = Vec3(5.0e4, 25_000.0, 5_000.0))
+            tick!(w, subs, 1.0e-3)
+            @test w.env[:telemetry]["radar1.rcs_loss_db"] ≈ want atol = 1e-9
+        end
+        # …and an INDEPENDENT recompute at an arbitrary angle (convention 11): the dB must be the
+        # ratio of the AUTHORED broadside value to the shipped σ_eff, not of σ_eff to itself.
+        w, subs = _aspect_world(fineness = 6.0, radar_pos = Vec3(2.0e4, 4.0e4, 3.0e3))
+        tick!(w, subs, 1.0e-3)
+        tel = w.env[:telemetry]
+        @test tel["radar1.rcs_loss_db"] ≈ 10 * log10(4.0 / tel["radar1.rcs_eff_m2"]) atol = 1e-12
+        @test tel["radar1.rcs_loss_db"] > 0.0                    # …quieter than broadside, off-abeam
+
+        # ⚠⚠ THE SIGN, AND IT IS WHY THE CLAMP IS `_finite_coord` AND NOT `_finite`. An OBLATE body
+        # (`F < 1`, legal and documented at `rcs_aspect`) is BRIGHTER nose-on than broadside, so the
+        # key reads NEGATIVE — a magnitude-only clamp would silently turn a gain into a loss, which
+        # is the units/signs trifecta in a readout.
+        w, subs = _aspect_world(fineness = 0.25, radar_pos = Vec3(5.0e4, 25_000.0, 5_000.0))
+        tick!(w, subs, 1.0e-3)
+        @test w.env[:telemetry]["radar1.rcs_loss_db"] ≈ 40.0 * log10(0.25) atol = 1e-9
+        @test w.env[:telemetry]["radar1.rcs_loss_db"] < 0.0
+
+        # ⭐ THE RANGE, against an INDEPENDENT `los_range` — and it is the SAME target the σ and the
+        # SNR describe, which is the whole reason it is carried alongside them rather than derived.
+        w, subs = _aspect_world(fineness = 8.0)
+        tick!(w, subs, 1.0e-3)
+        tel = w.env[:telemetry]
+        @test tel["radar1.target_range_m"] ≈
+              los_range(w.entities[:radar1].pos, w.entities[:tgt1].pos) atol = 1e-9
+        @test tel["radar1.target_range_m"] > 24_000.0            # ~25.5 km, and NOT a defaulted 0.0
+
+        # ⚠ THE DEGENERATES REACH THESE TWO AS WELL (conventions 5/6): a live slider that drives the
+        # fineness to its floor must leave both keys finite and on the wire, never ±Inf and never a
+        # NaN. `lin2db` of a floored σ is a large NEGATIVE dB — huge but finite, which ships.
+        for bad in (0.0, -3.0, 1.0e6)
+            w, subs = _aspect_world(fineness = bad, radar_pos = Vec3(5.0e4, 25_000.0, 5_000.0))
+            @test (tick!(w, subs, 1.0e-3); true)
+            @test isfinite(w.env[:telemetry]["radar1.rcs_loss_db"])
+            @test isfinite(w.env[:telemetry]["radar1.target_range_m"])
+        end
+    end
+
     @testset "the new telemetry is KEY-PRESENCE gated (no defaulted zeros on old wires)" begin
         # ⚠ The CLAUDE.md trap: a client `.get(k, 0.0)` prints a DEFAULTED ZERO as a passed test.
         # These keys must be ABSENT on a scalar wire, never present-and-zero.
@@ -277,11 +338,18 @@ end
         tick!(w, subs, 1.0e-3)
         @test !haskey(w.env[:telemetry], "radar1.target_aspect_deg")
         @test !haskey(w.env[:telemetry], "radar1.rcs_eff_m2")
+        # ⚠ THE TWO HUD KEYS RIDE THE SAME GATE — `rcs_loss_db` defaulting to 0.0 would read
+        # "0 dB below broadside" (a target at its BRIGHTEST) on a wire with no aspect model at all,
+        # and `target_range_m` defaulting to 0.0 would read as a target sitting on the antenna.
+        @test !haskey(w.env[:telemetry], "radar1.rcs_loss_db")
+        @test !haskey(w.env[:telemetry], "radar1.target_range_m")
         @test haskey(w.env[:telemetry], "radar1.snr_db")          # …the old keys still ship
         w2, subs2 = _aspect_world(fineness = 6.0)
         tick!(w2, subs2, 1.0e-3)
         @test haskey(w2.env[:telemetry], "radar1.target_aspect_deg")
         @test haskey(w2.env[:telemetry], "radar1.rcs_eff_m2")
+        @test haskey(w2.env[:telemetry], "radar1.rcs_loss_db")
+        @test haskey(w2.env[:telemetry], "radar1.target_range_m")
     end
 
     @testset "a live slider can never crash a tick (convention 5)" begin
