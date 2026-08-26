@@ -999,6 +999,59 @@ function head_slew_full(head_az::Real, head_el::Real, tgt_az::Real, tgt_el::Real
     return (p[1], p[2], dem, sat)                      # shared with the seam's handover init
 end
 
+"""
+    search_sweep(t_since_start, rate, coverage) -> offset
+
+The SEARCH PATTERN's whole geometry: a **symmetric triangle sweep**, returning the head's commanded
+angular OFFSET from the sweep centre `t_since_start` seconds after the search began, for a commanded
+sweep `rate` and a half-amplitude `coverage`.
+
+    offset(0) = 0 ,  rising at +rate to +coverage, reversing to −coverage, reversing again
+    |offset| ≤ coverage  everywhere ,  period  T = 4·coverage/rate
+
+⚠ **UNIT-AGNOSTIC, AND DELIBERATELY SO** (convention 12 — pure, measurement-agnostic): `rate` and
+`coverage` are in the SAME angle unit and `offset` comes back in it. The seam feeds it RADIANS and
+radians per second (`scenario.jl` converts `seeker_search_rate_dps` / `seeker_search_coverage_deg`
+once, the `gimbal_*_deg` posture). Nothing here knows that, and nothing here knows what an angle is
+FOR — this kernel is a wave, and the head, the stop and the window are the caller's business.
+
+⭐⭐ **SYMMETRIC — THE SWEEP STARTS AT THE CENTRE AND OPENS BOTH WAYS, AND THAT IS THE MODELLING
+DECISION, NOT AN AESTHETIC ONE** (`docs/plans/slice48.md` §0.8). A pattern that opened toward the
+side the target is actually on would hand every arm a FREEBIE the missile cannot have: **a missile
+that knew which way to look would not need to search.** Starting at the cue centre makes the cost of
+guessing the wrong half BOUNDED AND AUTHORED (`2·coverage` of extra travel, slice 43's gate-0 law)
+rather than lucky. ⚠ The gate-0 probe forced the wrong half by reading TRUTH (`p5_fine.jl`'s `dir`);
+the shipped pattern cannot and does not — it always opens toward **+offset**, and which half that is
+relative to the target is a property of the authored geometry, fixed and deterministic.
+
+⭐ **WHAT THIS KERNEL IS NOT: A PREDICTOR** (§1's own ban). Slice 43 banked `travel = deficit/(1 −
+ω/ρ)` and `t_lock = travel/ρ + τ`; those are **verifier and probe arithmetic**. Shipping them here
+would be a second implementation of the thing the simulation exists to produce, and a verifier
+comparing the two would be checking the model against itself.
+
+⚠ **THE PHASE IS RECOMPUTED FROM `t_since_start` ON EVERY CALL — there is no state and no
+accumulator**, which is what makes the shipped `seeker_search_rate_dps` a LIVE knob rather than a
+number baked at search onset (§0.5 item 6, and the slice-36 dead-knob trap it names). Change `rate`
+between two calls and the next offset changes; the cost is that a mid-sweep rate change moves the
+PHASE as well (`ρ·t` jumps), which is the honest behaviour of a commanded rate with no integrator
+and is pinned as such.
+
+⚠ Convention 5/6 degenerates, all clamped HERE so a slider can never crash a tick — each is one drag
+away: `rate ≤ 0` ⇒ **0.0**, the NULL, a head that does not sweep at all and is exactly what ships
+without this slice; `coverage ≤ 0` ⇒ 0.0 (nowhere to look); any non-finite input ⇒ 0.0, and the
+`ρ·t` overflow that a huge rate reaches after a long flight ⇒ 0.0 as well, never a NaN offset
+propagated into the head's pointing state (which `head_clamp` would NOT catch — it handles a
+non-finite *stop*, not a non-finite *azimuth*).
+"""
+function search_sweep(t_since_start::Real, rate::Real, coverage::Real)
+    t = Float64(t_since_start); ρ = Float64(rate); S = Float64(coverage)
+    (isfinite(t) && isfinite(ρ) && isfinite(S)) || return 0.0
+    (ρ > 0.0 && S > 0.0) || return 0.0
+    p = mod(ρ * t, 4S)                                 # phase along ONE period, from t — no state
+    isfinite(p) || return 0.0                          # `ρ·t` overflowed ⇒ mod(Inf, 4S) is NaN
+    return p ≤ S ? p : (p ≤ 3S ? 2S - p : p - 4S)
+end
+
 # --- THE HEAD'S REFERENCE FRAME (slice 37, §11 Tier-A — the deferral slice 34 named FOURTH) --------
 #
 # Slices 34/35 gave the seeker a head with its own pointing state, its own first-order servo and its
