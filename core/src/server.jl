@@ -122,6 +122,12 @@ function scenario_frame(srv::Server)
     # for a non-terrain scenario (the keys simply don't appear).
     tinfo = _terrain_info(scn.world)
     tinfo === nothing || merge!(frame, tinfo)
+    # ⭐ A slice-49 scenario ships an `aspect_view` marker + the target/observer it describes (the
+    # same handshake-once pattern) so the client draws the aspect block rather than slice 2's
+    # propagation view — whose fidelity button would offer a MULTIPATH lesson on a wire whose target
+    # vanishes for a completely different reason. `nothing` for every slice-1..48 scenario.
+    aspinfo = _aspect_view_info(scn.world)
+    aspinfo === nothing || merge!(frame, aspinfo)
     return frame
 end
 

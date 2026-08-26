@@ -565,3 +565,54 @@ comp bag where the loader cannot see it, and `rcs_aspect` throws by design — s
 it and the tick survives (convention 5), shipping a huge-but-finite σ (convention 6). And the
 telemetry keys are ABSENT on a scalar wire rather than present-and-zero, which is CLAUDE.md's
 `.get(k, 0.0)` trap.
+
+---
+
+## §13 — GATE 3, CORE HALF (2026-08-26). Suite **17249** (+35). ⚠ The Godot half is still open.
+
+`scenarios/slice49_aspect.yaml`, the `aspect_view` marker (`radar.jl` + `server.jl`), and the
+gate-3 testset. **⚠ P1b's numbers did NOT survive to the ship, and that is the expected outcome, not
+a problem.** P1b steered the heading toward the radar and STOPPED — a guidance law. The shipped
+`ManeuveringTarget` applies a CONSTANT lateral accel, so the target flies a CIRCLE and keeps turning
+THROUGH nose-on. The geometry was therefore re-measured on the shipped mover (P4) and then again
+through `load_scenario` on the file that ships (P5), which is convention 10 in its plainest form.
+
+**THE GEOMETRY, AND THE ONE CONSTRAINT THAT SETS IT.** On a circle of turn radius `R_t` entered
+broadside at range `R0`, the closest approach to the radar is **`R0 − 2·R_t`**. So the turn radius
+sets BOTH how fast the nose comes round AND how close the target ever gets — a lazier turn is a
+target that never closes at all (it orbits at its start range, and there is no lesson). Shipped:
+`R0` = 18 km, 300 m/s, `R_t` = 6 km (`a_lat` = 15 m/s², 1.53 g), CPA ≈ 7.8 km.
+
+**THE LADDER, FLOWN THROUGH THE LOADER (90 s), longest loss run while CLOSING:**
+
+| `rcs_fineness` | 1.0 (sphere) | 2.0 | 4.0 | 6.0 | **8.0 (authored)** | 10.0 | 12.0 |
+|---|---|---|---|---|---|---|---|
+| **loss (s)** | 0.20 | 0.20 | 1.30 | 5.30 | **36.50** | 40.20 | 46.60 |
+| range given up | 0.0 km | 0.0 km | 0.4 km | 1.4 km | **8.3 km** | 9.1 km | 9.8 km |
+| detected | 99.2 % | 96.0 % | 68.0 % | 40.7 % | **29.1 %** | 22.9 % | 18.1 % |
+
+**Monotone in both columns.** ⭐ And the key REMOVED entirely reads **0.20 s / 99.2 %** — identical
+to the sphere to the digit, which is the null being a real null. ⚠ Identical NUMBER, different CODE
+PATH; that distinction is gate 2's `===` tooth and must not be collapsed.
+
+⭐⭐ **THE SPHERE CONTROL IS THE TOOTH, AND SWERLING 1 IS WHAT MAKES IT ONE.** The control is lost
+41 separate times — a 4 m² target ~21 dB above threshold still fades below it occasionally, because
+a Swerling-1 echo is exponentially distributed. What it cannot do is STAY lost. ⚠⚠ **`swerling: 1`
+in the scenario is LOAD-BEARING and must not be tidied to a non-fluctuating detector**: that would
+hand the sphere a perfect 100 % and turn the slice's central comparison into a tautology — a test
+whose control cannot fail.
+
+**THE VIEW MARKER'S HOLE CHECK COMES BACK POSITIVE.** Without `aspect_view`, a slice-49 wire is a
+slice-2 wire to the client: it would draw the two-ray propagation view and offer a
+`free_space ↔ two_ray` button — **a lesson about MULTIPATH LOBING on a scenario whose target
+vanishes for a completely different reason**, and the drop-out would read as a propagation null.
+The marker carries `aspect_target` and `aspect_observer` because an aspect belongs to a
+target–observer PAIR; a HUD reading "aspect 25°" with no subject is this family's ~13th stale
+readout. ⚠ Gated on the COMP KEY, not a fidelity — there is deliberately no `aspect` rung, because
+"no aspect at all" is reachable from the slider's own floor (a sphere), and a rung would duplicate a
+slider position (slice 47/48's settled decision).
+
+**⚠ STILL OPEN — THE FOUR PROOFS (convention 14).** `net/slice49_verify.gd`, `net/slice49_ui_test.gd`,
+the headless smoke-load and the windowed shot, plus the client's aspect HUD branch. ⚠ `STEPS` must
+be a multiple of `emit_every` = 16 (pinned as a test here so an edit to either breaks in the core
+first), and anything computed inside `_draw` has NO headless proof.

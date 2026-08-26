@@ -340,3 +340,139 @@ end
         @test atan(e_horz.vel[2], e_horz.vel[1]) ≈ 30.0 / 250.0 * 20.0 rtol = 1e-6
     end
 end
+
+# --- slice 49 GATE 3: THE SHIPPED SCENARIO -----------------------------------------------------
+#
+# The wire the client opens on. These are the teeth that would catch a scenario edit silently
+# destroying the lesson — a re-tuned turn, a gentler radar, a target that stops being detected at
+# birth. ⚠ They fly 60 s (60 000 ticks) rather than the 90 s the YAML quotes, so a number here is
+# the 60 s column and NOT the YAML's; the two agree because the drop-out has finished by then, and
+# the arms that disagree (detected %) are asserted as inequalities rather than values.
+#
+# ⭐⭐ THE ONE THAT MATTERS: THE SPHERE CONTROL. Every "the target vanishes" tooth is worthless
+# without an arm that CANNOT vanish for this reason and still gets a fair chance to — and this
+# radar is Swerling 1, so the control genuinely does drop out, 41 separate times. What separates
+# the arms is DEPTH AND DURATION, not presence.
+
+const _SCEN49 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice49_aspect.yaml"))
+
+# Fly the shipped scenario, optionally overriding the fineness (or removing it entirely).
+# Returns (longest closing loss in seconds, its range span in m, detected fraction).
+function _fly49(F; tmax = 60.0)
+    sc = load_scenario(_SCEN49)
+    w, subs = sc.world, sc.subs
+    if F === nothing
+        delete!(w.entities[:tgt1].comp, :rcs_fineness)
+    elseif F !== :authored
+        w.entities[:tgt1].comp[:rcs_fineness] = F
+    end
+    n = round(Int, tmax / sc.dt_physics)
+    ts = Float64[]; rs = Float64[]; ds = Bool[]
+    for _ in 1:n
+        tick!(w, subs, sc.dt_physics)
+        tel = w.env[:telemetry]
+        push!(ts, w.t)
+        push!(rs, los_range(w.entities[:radar1].pos, w.entities[:tgt1].pos))
+        push!(ds, get(tel, "radar1.detected", false) === true)
+    end
+    fd = findfirst(identity, ds)
+    fd === nothing && return (0.0, 0.0, 0.0, false)
+    best_d = 0.0; best_span = 0.0; k = fd
+    while k <= length(ds)
+        if !ds[k]
+            j = k; while j < length(ds) && !ds[j+1]; j += 1; end
+            if rs[j] < rs[k]                       # CLOSING across the run
+                d = ts[j] - ts[k]
+                if d > best_d
+                    best_d = d; best_span = rs[k] - rs[j]
+                end
+            end
+            k = j + 1
+        else
+            k += 1
+        end
+    end
+    return (best_d, best_span, count(ds) / length(ds), true)
+end
+
+@testset "aspect-dependent RCS — THE SHIPPED SCENARIO (slice 49 gate 3)" begin
+
+    @testset "the scenario loads, and it is the one lesson it claims to be" begin
+        sc = load_scenario(_SCEN49)
+        @test sc isa EWSim.Scenario
+        tgt = sc.world.entities[:tgt1]
+        @test tgt.comp[:rcs_fineness] == 8.0            # the AUTHORED value the wire opens on
+        @test tgt.comp[:turn_plane] === :horizontal     # …and the plane the lesson needs
+        @test tgt.comp[:rcs_m2] == 4.0
+        # EXACTLY ONE LIVE KNOB (convention 9 — one lesson per scenario), and it is the fineness.
+        @test length(sc.knobs) == 1
+        @test sc.knobs[1].key === :rcs_fineness && sc.knobs[1].target === :tgt1
+        @test !sc.knobs[1].log                          # LINEAR, deliberately (the YAML says why)
+        @test sc.knobs[1].min == 1.0 && sc.knobs[1].max == 12.0
+        # `free_space`, so a multipath null can never be mistaken for the aspect drop-out.
+        @test sc.world.fidelity[:propagation] === :free_space
+        # ⚠ CONVENTION 14: a verifier's STEPS must be a multiple of `emit_every` or it hangs
+        # SILENTLY. Pin the value the .gd scripts divide by, so an edit to one breaks here first.
+        @test sc.emit_every == 16
+        @test sc.dt_physics == 1.0e-3                   # the realtime floor (a coarser dt stalls)
+    end
+
+    @testset "the view marker routes the client away from slice 2's propagation view" begin
+        sc = load_scenario(_SCEN49)
+        info = EWSim._aspect_view_info(sc.world)
+        @test info !== nothing
+        @test info[:aspect_view] === true
+        # An aspect belongs to a target–observer PAIR, so the marker names both. A HUD that said
+        # "aspect 25°" with no subject would be this family's ~13th stale readout.
+        @test info[:aspect_target] == "tgt1"
+        @test info[:aspect_observer] == "radar1"
+        # …and it is ABSENT on a scenario with no shaped target (every slice 1–48 wire).
+        sc2 = load_scenario(normpath(joinpath(@__DIR__, "..", "..", "scenarios",
+                                          "slice2_tworay.yaml")))
+        @test EWSim._aspect_view_info(sc2.world) === nothing
+    end
+
+    @testset "⭐⭐ THE SPHERE CONTROL — it DOES drop out, and never for long" begin
+        # Swerling-1 fading is real: a 4 m² target ~21 dB above threshold still fades below it
+        # occasionally, so the control is not a target that cannot be lost. What it cannot do is
+        # STAY lost — for a constant echo, detection is `r ≤ R_acq`, one threshold against a range
+        # that only comes down, so a loss can only ever be a fade.
+        d1, span1, det1, ok1 = _fly49(1.0)
+        @test ok1
+        @test d1 ≤ 0.5                       # …two looks of the 10 Hz cadence, no more
+        @test span1 < 100.0                  # …and essentially no range given up
+        @test det1 > 0.95                    # holds the target ~all the way in
+        # ⚠⚠ THE KEY REMOVED ENTIRELY IS THE SAME NUMBER — the sphere is a TRUE null, not an
+        # approximate one. (It is NOT the same CODE PATH; that distinction is gate 2's tooth.)
+        d0, span0, det0, ok0 = _fly49(nothing)
+        @test ok0 && d0 == d1 && det0 == det1
+    end
+
+    @testset "⭐⭐⭐ THE AUTHORED WIRE — the target vanishes while it is still closing" begin
+        d8, span8, det8, ok8 = _fly49(:authored)
+        @test ok8                            # it IS detected at birth — or there is nothing to lose
+        @test d8 > 20.0                      # measured 36.50 s; the tooth is the ORDER, not the digit
+        @test span8 > 5_000.0                # measured 8.3 km of closing range given up
+        @test det8 < 0.35                    # measured 23.7 % over 60 s
+        # THE SEPARATION, which is the slice: the same radar, the same flight, the same broadside
+        # cross-section — only the SHAPE differs — and the loss is two orders of magnitude longer.
+        d1, _, _, _ = _fly49(1.0)
+        @test d8 / max(d1, 1.0e-9) > 50.0
+    end
+
+    @testset "the slider is MONOTONE in the gauge (a non-monotone one is a dead slider)" begin
+        # `k` (28), `ω_n` (40) and `σ_seek` (25) all died as sliders on non-monotonicity. The gauge
+        # here is the LONGEST closing loss — ⚠ NOT the loss COUNT, which is measured non-monotone
+        # (41 → 133 → 53 → 42), and not a detected-%, which mixes the outbound leg back in.
+        ladder = [(F, _fly49(F)[1]) for F in (1.0, 4.0, 6.0, 8.0, 12.0)]
+        for k in 2:length(ladder)
+            @test ladder[k][2] ≥ ladder[k-1][2]
+        end
+        @test ladder[end][2] > ladder[1][2] + 20.0     # …and it actually TRAVELS, not just holds
+        # The detected fraction falls monotonically too — a second, independent gauge agreeing.
+        dets = [_fly49(F)[3] for F in (1.0, 4.0, 6.0, 8.0, 12.0)]
+        for k in 2:length(dets)
+            @test dets[k] ≤ dets[k-1]
+        end
+    end
+end

@@ -268,6 +268,38 @@ const _SNR_DB_FLOOR = -120.0
 _snr_db_wire(snr_lin::Real) = snr_lin > 0 ? max(lin2db(snr_lin), _SNR_DB_FLOOR) : _SNR_DB_FLOOR
 
 """
+    _aspect_view_info(w::World) -> Union{Nothing, Dict}
+
+The slice-49 view marker — the `terrain_grid` / `airframe_view` handshake-once pattern. Raised when
+ANY target carries a `:rcs_fineness`, so the client draws the aspect block (which way the target is
+pointing, and what it costs) instead of the plain radar view. `nothing` on every slice-1..48
+scenario, where the keys simply do not appear.
+
+⚠ **GATED ON THE COMP KEY, NOT ON A FIDELITY** — slice 38/46/47/48's choice and for their reason.
+There is no `aspect` rung to gate on and there deliberately is not one: "no aspect at all" is
+reachable from the SLIDER's own floor (`rcs_fineness = 1`, a sphere), so a rung would duplicate a
+slider position, and the shape is what an author writes.
+
+⚠⚠ **THE MARKER-HOLE CHECK COMES BACK POSITIVE.** Without it a slice-49 wire is, to the client,
+a slice-2 wire: it would draw the two-ray propagation view and its fidelity button would offer
+`free_space ↔ two_ray` — a lesson about MULTIPATH lobing, on a scenario whose target vanishes for
+forty seconds for a completely different reason. Two mechanisms in one view is what convention 9
+exists to prevent, and the drop-out would read as a propagation null. The marker also carries the
+target id so the HUD can name the entity whose aspect it is quoting — an aspect belongs to a
+target-observer PAIR, and a HUD that said "aspect 25°" with no subject would be the ~13th
+stale-readout of this family.
+"""
+function _aspect_view_info(w::World)
+    tgts = sort!(Symbol[id for (id, e) in w.entities
+                        if e.kind === :target && haskey(e.comp, :rcs_fineness)])
+    isempty(tgts) && return nothing
+    radars = sort!(Symbol[id for (id, e) in w.entities if e.kind === :radar])
+    info = Dict{Symbol,Any}(:aspect_view => true, :aspect_target => String(tgts[1]))
+    isempty(radars) || (info[:aspect_observer] = String(radars[1]))
+    return info
+end
+
+"""
     _effective_rcs(tgt::Entity, obs_pos::Vec3) -> Float64   (m²)
 
 **THE ONE PLACE ASPECT IS APPLIED** (slice 49). The target's radar cross-section as seen from

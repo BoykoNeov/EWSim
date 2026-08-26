@@ -1,0 +1,132 @@
+# slice49_aspect — ASPECT-DEPENDENT RCS: a target that turns its nose toward the radar VANISHES
+# while it is still closing.
+#
+# THE LESSON, in one sentence: a target's echo is not a number it carries around — it is a property
+# of its SHAPE and its HEADING, and a slender body seen nose-on returns thousands of times less than
+# the same body seen broadside. Drag the slider from a sphere to a needle and watch a target the
+# radar was holding comfortably at 18 km disappear for FORTY SECONDS and NINE KILOMETRES of closing
+# range, then reappear near its closest approach.
+#
+# ⭐⭐⭐ WHY THIS CANNOT BE FAKED WITH A SMALLER `rcs_m2`. For a constant echo, detection is a
+# monotone function of RANGE: `r ≤ R_acq`, one threshold, one range, and `r` only comes down on an
+# approach. So a constant target can be GAINED while closing and never LOST. Measured on this wire
+# (docs/plans/slice49.md §9, §13): the sphere arm IS lost, 41 separate times — Swerling-1 fading is
+# real and a bright target still fades below threshold occasionally — but **never for more than
+# 0.20 s**, two ticks of the 10 Hz look cadence. The needle arm is lost for **40.20 s**. That 200×
+# separation, against a control that could and did flicker, is the slice.
+#
+# THE GEOMETRY, and every number in it has a reason:
+#   • The target starts BROADSIDE at 18 km — perpendicular to the radar's line of sight, which is
+#     where an aspect curve PEAKS. It must start DETECTED or there is nothing to lose (the first
+#     draft of gate 0's probe started the target nose-on and beyond the horizon; its null meant
+#     nothing, because a probe that starts undetected cannot measure a drop-out).
+#   • It TURNS INBOUND at 1.53 g. `ManeuveringTarget` applies a CONSTANT lateral accel, so this is a
+#     6 km-radius circle rather than a steer-and-stop: the target keeps turning THROUGH nose-on. ⚠ Do
+#     NOT re-tune this to a gentler turn without re-measuring — the closest approach is
+#     `R0 − 2·R_turn`, so the turn radius sets both how fast the nose comes round AND how close it
+#     gets, and a lazier turn is a target that never closes at all (it orbits at its start range).
+#   • `turn_plane: horizontal` — slice 49's one edit to shipped physics. Slice 12's target turned in
+#     the VERTICAL plane and named that as an approximation; an aircraft turns in the horizontal one.
+#     ⚠⚠ A STRAIGHT-FLYING TARGET CAN NEVER PRODUCE THIS LESSON AT ANY FINENESS: flying past a
+#     radar, its aspect goes 0°→90° up to closest approach and 90°→180° after, while the range goes
+#     down then up — so σ rises exactly while the range falls and falls exactly while it rises. The
+#     two effects are ALIGNED on both legs. The turn is the mechanism, not the staging.
+#   • `propagation: free_space`, DELIBERATELY, and it is the one fidelity this wire authors. Slice
+#     2's `two_ray` adds multipath lobing AND a 4/3-Earth horizon mask — two more ways for a target
+#     to vanish, on a scenario about a third way. Convention 9: one lesson per scenario.
+#
+# ⚠ THE GAUGE IS THE LONGEST LOSS RUN WHILE CLOSING (seconds, and km of range given up). It is NOT
+# the number of losses — measured NON-MONOTONE in fineness on the gate-0 wire (41 → 133 → 53 → 42:
+# at middling slenderness the target hovers AT the threshold and chatters constantly, while a truly
+# slender one drops out hard and stays out, so MORE slenderness gives FEWER losses). It is not a
+# "detected %" either, which mixes the outbound leg back in. Non-monotone gauges are how sliders die
+# in this project (`k` 28, `ω_n` 40, `σ_seek` 25).
+#
+# MEASURED LADDER on this exact wire (docs/plans/slice49.md §13), longest closing loss:
+#     fineness    1.0     2.0     4.0     6.0     8.0    10.0    12.0
+#     loss (s)    0.20    0.20    1.30    5.30   36.50   40.20   46.60
+#     detected   99.2%   96.0%   68.0%   40.7%   29.1%   22.9%   18.1%
+# (90 s of flight; the authored 8.0 is the column that ships. `rcs_fineness` REMOVED entirely reads
+#  0.20 s / 99.2 % — identical to the sphere to the digit, which is the null being a real null.)
+# Monotone in BOTH columns, and the floor is a true null: a sphere is aspect-independent by
+# construction, so `rcs_fineness: 1.0` is the same physics as authoring no shape at all.
+
+name: slice49_aspect
+seed: 49
+dt_physics: 1.0e-3
+emit_every: 16                 # ~62 Hz frames. ⚠ A verifier's STEPS must be a MULTIPLE of this
+                               # (convention 14) or it hangs SILENTLY.
+fidelity:
+  propagation: free_space      # see the geometry note above — the ONE fidelity, and it is pinned
+                               # rather than offered as the lesson's button.
+  detection:   analytic
+
+entities:
+  # The air-defence radar. Slice 2's block verbatim — 50 kW at 9.4 GHz on a 30 m mast, Pfa 1e-6,
+  # Swerling 1, ONE pulse, looking at 10 Hz. ⚠ SWERLING 1 IS LOAD-BEARING HERE AND IS NOT A DEFAULT
+  # TO BE TIDIED AWAY: it is what makes the CONTROL arm flicker. A non-fluctuating detector would
+  # give the sphere a perfect 100 % and turn this scenario's central comparison into a tautology.
+  - id: radar1
+    kind: radar
+    pos: [0, 0, 30]
+    radar:
+      pt_w:         50000
+      gain_db:      35
+      freq_hz:      9.4e9
+      bandwidth_hz: 1.0e6
+      noise_fig_db: 3
+      losses_db:    4
+      pfa:          1.0e-6
+      swerling:     1
+      n_pulses:     1
+      revisit_s:    0.1
+
+  # The target: 300 m/s at 5 km, born due +y of the radar on a +x heading — i.e. exactly BROADSIDE,
+  # its brightest aspect, 18 km out and comfortably inside the horizon a 4 m² broadside echo buys.
+  - id: tgt1
+    kind: target
+    pos: [0.0, 18000.0, 5000.0]
+    vel: [300.0, 0.0, 0.0]
+    target:
+      # ⭐ `rcs_m2` KEEPS ITS AUTHORED MEANING AND GAINS A SHARPER ONE: with a fineness present it is
+      # the BROADSIDE cross-section, the peak of the curve. That is why the aspect model is
+      # NORMALIZED rather than derived from semi-axes — the raw ellipsoid would fix σ from the
+      # metres (a 5 m × 0.5 m body gives 78.5 m²) and override every RCS this project has authored.
+      rcs_m2: 4.0
+      # THE SLIDER. The body's length/width ratio: 1 is a sphere, 10 is a needle 40 dB quieter
+      # nose-on than broadside. Authored at 8 so the wire OPENS mid-lesson — the target is already
+      # being lost, and dragging DOWN toward a sphere is as instructive as dragging up.
+      rcs_fineness: 8.0
+      maneuver:
+        # 1.53 g toward the radar. `turn_sign: -1` is the direction that brings the nose ROUND
+        # toward the radar rather than away; +1 flies the mirror engagement and never closes.
+        a_lat_mps2: 15.0
+        turn_sign: -1.0
+        turn_plane: horizontal
+
+knobs:
+  # EXACTLY ONE LIVE KNOB, and no fidelity button (the slice-16/26 shape — a live knob spanning a
+  # threshold, with nothing to toggle beside it). BOTH ENDPOINTS ARE MEASURED AND BOTH HAVE REASONS:
+  #   FLOOR 1.0: A SPHERE, and a true null — aspect-independent BY CONSTRUCTION, so it is the same
+  #     physics as authoring no shape at all. ⚠⚠ It is the LESSON's null and NOT the WIRE's null:
+  #     the byte-identity path is the key being ABSENT, because `sin²θ + cos²θ` is 1 in algebra and
+  #     not always 1.0 in floating point. Two different things that must not be conflated.
+  #   CEILING 12.0: past the point where the lesson has fully arrived (the target is invisible for
+  #     most of the run at 10), so the top of the slider is "more of the same" rather than a new
+  #     regime — and a fineness of 12 is still a physically ordinary airframe.
+  #   LINEAR, and deliberately NOT log: what the axis buys is concentrated at the TOP (0.2 s at
+  #     F = 2, 40 s at F = 10), so a log slider would stretch exactly the region where nothing
+  #     changes — slice 48's argument, with the ends the other way round. The flat bottom third
+  #     reads as a REGION, which is the point: slenderness buys you nothing until it buys you
+  #     everything.
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED: `rcs_m2` (slice 2's own axis, and here it would move
+  # the horizon UNDER the lesson — a dimmer target vanishes sooner for a reason that has nothing to
+  # do with which way it points); `pt_w` (same objection, from the other end of the link budget);
+  # `a_lat_mps2` (⚠⚠ TWO-SIDED — the turn radius sets how fast the nose comes round AND how close
+  # the target ever gets, `R0 − 2·R_turn`, so the composite is non-monotone and the lesson would
+  # reverse); `pfa` (it moves the CONTROL's chatter as well as the arm, which is the one thing this
+  # scenario needs held still); `turn_plane` (⚠ refused BY TYPE — `set_param` carries one Float64,
+  # so a slider on a Symbol would overwrite it with a bare number and the next branch inside a tick
+  # would take the wrong plane silently).
+  - {target: tgt1, key: rcs_fineness, min: 1.0, max: 12.0, label: "Target fineness L/r (1 = sphere)"}
