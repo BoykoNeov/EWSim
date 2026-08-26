@@ -32,6 +32,16 @@
 # O(dt) lesson rung).
 const INTEGRATOR_MODES = (:rk4, :euler)
 
+# The TARGET's turn plane (slice 49). Slice 12's `ManeuveringTarget` turns in the x–z
+# (VERTICAL) plane and its docstring named that as an approximation rather than defending
+# it as physics — which blocked slice 49, whose whole lesson is what a HORIZONTAL turn does
+# to a target's radar cross-section (an aircraft that turns its nose toward the radar).
+# ⚠ `:vertical` is FIRST and is the default everywhere, so every slice 1–48 wire keeps the
+# exact expression it has today (byte-identity by early return, never by an algebraic
+# identity). Defined HERE beside `INTEGRATOR_MODES` for convention 7's reason — one list, no
+# drift: `scenario.jl`'s loader validates against this tuple rather than re-spelling the pair.
+const TARGET_TURN_PLANES = (:vertical, :horizontal)
+
 # Standard gravity, m/s² (WGS/CGPM). Flat-earth constant field pointing along −z.
 const G_ACCEL = 9.80665
 

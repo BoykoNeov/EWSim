@@ -198,11 +198,11 @@ very close to broadside. Evaluated properly at fineness `F = L/r = 10`:
 | θ | `(sin²θ + F² cos²θ)²` | σ relative to broadside |
 |---|---|---|
 | 65° | 349.0 | 1/349 |
-| 72.6° | 6.053 ×10⁰ → 6.05 | 1/6.05 |
-| 82° | 8.70 | 1/8.70 |
+| 72.6° | 9.853 → 97.08 | 1/97.08 |
+| 82° | 8.512 | 1/8.512 |
 
 ⇒ over the ρ = 240 window (65 → 72.6°) σ moves **3.60×** ⇒ **1.38× in range**; over the ρ = 40 window
-(65 → 81.7°) σ moves **40.1×** ⇒ **2.52× in range**. The horizon would move **3038 → 7660 m**.
+(65 → 82°) σ moves **41.00×** ⇒ **2.53× in range**. The horizon would move **3038 → 7688 m**.
 **ARM A IS NOT FLAT.** ⭐ The transferable form: *a fourth-root law does not make a component
 negligible if the quantity under it is raised to the fourth power on the way in* — the ellipsoid's
 `^(1/4)` in range and `^2` in the denominator very nearly cancel, and the naive "σ^(1/4), so nothing
@@ -464,3 +464,53 @@ of a second and no longer.*
 F = 1 hand anchors), the aspect angle helper with §0.3 item 3's target→observer sign pinned at 0/90/
 180°, and the `turn_plane` extension to `ManeuveringTarget` (§7 option 1) with its byte-identity
 tooth and `scenario.jl:157`'s now-stale error message corrected in the same commit.
+
+---
+
+## §11 — GATE 1 SHIPPED (2026-08-26). Suite **17159** (was 16154, +1005).
+
+Three pure kernels and their teeth. `core/test/test_rcs_aspect.jl`, registered in `runtests.jl`
+after `test_search.jl`.
+
+| what | where | anchors |
+|---|---|---|
+| `rcs_aspect(σ_broadside, F, θ)` | `rf.jl` | broadside EXACT at every F (`==`, atol 0); nose/tail `σ/F⁴` hand-computed; sphere aspect-independent; **and an INDEPENDENT oracle** — the raw ellipsoid `π a²b²c²/(…)²` from real semi-axes, agreeing to `rtol 1e-12` over 73 angles at two different shapes |
+| `aspect_angle(tgt_pos, tgt_vel, obs_pos)` | `frames.jl` | 0 / π/2 / π on hand-built geometries, both abeam sides, out of plane, the 45° quarter, **and P0's own 63.8823° off `slice48_search.yaml`** |
+| `_lateral_accel(v, a, sign, plane)` | `missile.jl` | ⭐ **the byte-identity tooth** |
+| `TARGET_TURN_PLANES` | `dynamics.jl` | convention 7 — one list, `:vertical` first and pinned first |
+
+**⭐ THE BYTE-IDENTITY TOOTH, AND IT IS THE ONE THAT WOULD HAVE KILLED THE SLICE AT GATE 2.** Over
+three velocities × three accelerations × both signs, the default arm and the explicit `:vertical`
+arm are asserted `==` — **atol 0, not a tolerance** — against the two-argument expression slices
+12–48 flew, recomputed inline in the test. The `:horizontal` arm is checked to be the x–y sibling,
+to be ⟂ to velocity **by an independent dot product** rather than by re-deriving the perpendicular,
+to have magnitude `a`, and to never touch z (while `:vertical` never touches y). Both zero-guards
+are pinned on both planes. ⇒ the full suite, `test_determinism.jl` and the ABSOLUTE golden included,
+passes unchanged — slices 1–48 are untouched.
+
+**⚠ MY HAND ARITHMETIC WAS WRONG A SECOND TIME, AND THE TEST CAUGHT IT.** §2 recorded the 65°→82°
+σ ratio as **40.1×**; the true value is **41.00×** (the draft mis-squared cos 82°). §2's table and
+the range figure are corrected (2.53×, horizon 3038 → 7688 m) and the test now pins 41.00 at
+atol 0.05. ⭐ **The CLAIM never moved** — an order of magnitude over seventeen degrees, where the
+sin²-lobe reasoning that produced the original kill prediction gives ~1.2×. ⭐⭐ **The transferable
+part: this is the SECOND arithmetic slip in the same three-line calculation, and both times the slip
+was in the same direction — toward the answer that would have killed the slice.** A number that
+decides a headline gets a test, not a calculator.
+
+**TWO DESIGN DECISIONS PINNED AS TESTS, so a later slice cannot quietly reverse them:**
+- **A degenerate target reduces to the SCALAR model, not to a NaN.** No velocity ⇒ no nose ⇒
+  `aspect_angle` returns π/2 ⇒ `rcs_aspect` returns the AUTHORED `rcs_m2`, exactly (`==`).
+  Convention 6, and it means a stationary or coincident entity is quietly correct rather than
+  quietly poisoned.
+- **`F < 1` is LEGAL, not an error** — an oblate body, wider than long, brighter nose-on than
+  broadside. Pinned with its inequality. Only `F ≤ 0` and `σ ≤ 0` throw, the `detection_range`
+  posture (clamp at the CONSUMER, convention 5).
+
+**GATE 2 WIRES:** `rcs_fineness` through the loader onto the target comp; the effective σ read off
+`rcs_aspect(rcs_m2, F, aspect_angle(tgt.pos, tgt.vel, obs.pos))` at BOTH consumers off the one
+primitive (`radar.jl:290` and `missile.jl:2627` — §0 fact 1, and the seeker-side-copy prohibition
+that comment already carries); `maneuver.turn_plane` validated at load against `TARGET_TURN_PLANES`;
+and ⚠ `scenario.jl:157`'s `cross_speed_mps` refusal message, whose stated reason (*"whose lateral
+accel is in-plane by construction"*) the turn plane makes stale even though the guard itself still
+stands. ⚠ Re-check convention 3's draw-count invariance on the `:cfar` rung (§8's clearance covers
+the `:snr` path only).

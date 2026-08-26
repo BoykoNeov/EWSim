@@ -174,6 +174,38 @@ shadowing `Base.range`; it is the 3-D sibling of radar.jl's internal `_range`.
 los_range(from::Vec3, to::Vec3) = _norm3(to - from)
 
 """
+    aspect_angle(tgt_pos::Vec3, tgt_vel::Vec3, obs_pos::Vec3) -> Float64   (rad, 0..π)
+
+The **ASPECT ANGLE**: the angle, measured AT THE TARGET, between the target's own nose and the
+direction of the observer (slice 49). `0` = nose-on (the observer is dead ahead of the target),
+`π/2` = broadside, `π` = tail-on. [`rcs_aspect`](@ref) consumes it.
+
+⚠⚠ **SIGN / FRAME — THE VECTOR IS TARGET → OBSERVER, AND GETTING IT BACKWARDS SWAPS NOSE AND
+TAIL.** `cos θ = (v̂ · d̂)` with `d = obs_pos − tgt_pos`. Using observer→target instead reflects
+θ about π/2, which is INVISIBLE under `rcs_aspect`'s fore/aft symmetry and becomes a silent wrong
+number the moment a tail lobe is ever added. Pinned at 0, π/2 and π in `test_rcs_aspect.jl`
+against hand-computed geometries — the units/frames/signs trifecta (HANDOFF §1), treated as
+first-class here for the same reason [`los_rate`](@ref)'s sign is.
+
+⚠ **THE NOSE IS THE VELOCITY DIRECTION, NOT AN ATTITUDE** (named approximation, HANDOFF §1):
+targets in this project carry `vel` and no attitude quaternion, so this assumes zero sideslip and
+zero angle of attack on the target. A target with an attitude of its own would use it instead.
+
+**DEGENERATE ⇒ BROADSIDE, DELIBERATELY.** A stationary target (`‖vel‖ → 0`) has no nose, and a
+coincident observer has no direction; both return `π/2`. That is the choice that makes
+[`rcs_aspect`](@ref) return the AUTHORED `rcs_m2` unchanged — the degenerate reduces to the
+scalar model rather than to a NaN (convention 6: no Inf/NaN to JSON) or to an arbitrary lobe.
+"""
+function aspect_angle(tgt_pos::Vec3, tgt_vel::Vec3, obs_pos::Vec3)
+    nv = _norm3(tgt_vel)
+    nv < _FRAME_EPS && return 0.5π
+    d  = obs_pos - tgt_pos
+    nd = _norm3(d)
+    nd < _FRAME_EPS && return 0.5π
+    return acos(clamp(_dot(tgt_vel, d) / (nv * nd), -1.0, 1.0))
+end
+
+"""
     range_rate(rel_pos::Vec3, rel_vel::Vec3) -> Float64   (m/s)
 
 Range rate `d‖r‖/dt = (r·v)/‖r‖` for relative position `r = rel_pos` and relative

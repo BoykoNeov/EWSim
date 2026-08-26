@@ -27,6 +27,7 @@ using Random
     include("test_guidance.jl")
     include("test_midcourse.jl")
     include("test_search.jl")
+    include("test_rcs_aspect.jl")
     include("test_gnss.jl")
     include("test_jamming.jl")
     include("test_radar.jl")

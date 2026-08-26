@@ -169,6 +169,64 @@ const SEEKER_DETECT_MODES = (:none, :snr)
 #   • 4/3-Earth radar horizon         (standard-atmosphere refraction, k = 4/3)
 # Everything is the SNR *modulation*; the detector (detection.jl) is untouched.
 
+"""
+    rcs_aspect(rcs_broadside_m2, fineness, aspect_rad) -> Float64   (m²)
+
+**HOW VISIBLE YOU ARE DEPENDS ON WHICH WAY YOU ARE POINTING** (slice 49). The physical-optics
+radar cross-section of a body of revolution, NORMALIZED to its broadside value:
+
+    σ(θ) = σ_broadside / (sin²θ + F²·cos²θ)²
+
+`θ` is the ASPECT ANGLE (radians) — the angle at the target between its own nose and the
+direction of the observer, so `θ = 0` is nose-on, `π/2` broadside, `π` tail-on
+([`aspect_angle`](@ref) forms it, and owns the sign). `F` is the **FINENESS RATIO** `L/r`, the
+dimensionless slenderness of the body: how many times longer than wide.
+
+This is the standard high-frequency ellipsoid `σ = π a²b²c² / (a²sin²θcos²φ + b²sin²θsin²φ +
+c²cos²θ)²` for a body of revolution, divided through by its own `θ = π/2` value. ⭐ **THE
+NORMALIZATION IS THE DESIGN DECISION, NOT A COSMETIC ONE.** The raw form fixes σ from the axes
+alone — a 5 m × 0.5 m body gives σ_broadside = πL² = 78.5 m², which is ~4000× what
+`scenarios/slice48_search.yaml` deliberately authors. The arc's `rcs_m2` values are TUNING
+numbers for where a horizon should sit, and a model that overrides them is a model no existing
+scenario can carry. Normalized, `rcs_m2` keeps its authored meaning and gains a sharper one — it
+is the BROADSIDE RCS — and exactly ONE new number is authored, with a physical name.
+
+Three anchors, all hand-checkable (convention 11's EXTERNAL anchor, pinned in
+`test_rcs_aspect.jl`):
+
+* `θ = π/2` (broadside) ⇒ σ ≡ `σ_broadside`, **exactly**, at every `F`.
+* `θ = 0` or `π` (nose/tail) ⇒ σ = `σ_broadside / F⁴`. F = 10 is **40 dB** down, the right order
+  for a real airframe.
+* `F = 1` (a sphere) ⇒ σ ≡ `σ_broadside` at every angle — aspect-independent, the NULL.
+
+⚠⚠ **THE FOURTH-ROOT REFLEX IS A TRAP HERE, AND IT COST THIS SLICE A WRONG PREDICTION.**
+[`detection_range`](@ref) goes as σ^(1/4), so "a 40 dB swing is only 10× in range" invites the
+conclusion that aspect is negligible. It is not: this denominator is SQUARED, so for a slender
+body the `F²cos²θ` term dominates until θ is very near broadside, and σ moves 40× over the 17°
+between 65° and 82°. The `^(1/4)` going out and the `^2` coming in very nearly cancel. See
+`docs/plans/slice49.md` §2.
+
+⚠ **FORE/AFT SYMMETRY IS A NAMED APPROXIMATION** (HANDOFF §1): σ(θ) ≡ σ(π−θ), so a fleeing
+target looks exactly like an approaching one. Real airframes have a distinct tail return
+(engine / exhaust). A tail lobe is a deferral, not a defect.
+
+⚠ **DOMAIN.** `σ_broadside > 0` and `F > 0` throw `DomainError` by design — the
+[`detection_range`](@ref) posture, clamped at the CONSUMER (convention 5), never here.
+`F < 1` is legal and is an OBLATE body (wider than long — brighter nose-on than broadside);
+the formula handles it and the units stay honest.
+
+⚠⚠ **DO NOT USE `F = 1` AS THE BYTE-IDENTITY PATH.** `sin²θ + cos²θ` is 1 in algebra and not
+always 1.0 in floating point, so a scalar-RCS wire must branch PAST this call entirely (an early
+return on the key being absent), never route through it with `F = 1`.
+"""
+function rcs_aspect(rcs_broadside_m2::Real, fineness::Real, aspect_rad::Real)
+    rcs_broadside_m2 > 0 || throw(DomainError(rcs_broadside_m2, "broadside RCS must be > 0"))
+    fineness > 0 || throw(DomainError(fineness, "fineness ratio must be > 0"))
+    s, c = sincos(aspect_rad)
+    d = s * s + fineness * fineness * c * c
+    return rcs_broadside_m2 / (d * d)
+end
+
 const R_EARTH    = 6.371e6   # m, mean Earth radius (geometric horizon)
 const K_FOURTHIRDS = 4 / 3   # standard-atmosphere effective-radius factor
 

@@ -995,7 +995,22 @@ end
 # +90° in x-z: `(vx,vz) → (−vz,vx)`). At v→0 (or a purely-vertical v) the in-plane speed vanishes →
 # zero accel (no NaN — the pursuit/frames zero-guard house style). Shared by the RK4 step AND the
 # truth `a_T` publish so they agree by construction.
-function _lateral_accel(v::Vec3, a_lat::Float64, sign::Float64)
+# ⭐ SLICE 49 — THE TURN PLANE IS AUTHORABLE, AND `:vertical` IS BYTE-IDENTICAL BY EARLY RETURN.
+# The `:vertical` branch below is the SAME EXPRESSION slices 12–48 flew, on the same line, reached
+# before anything new is evaluated — not an algebraic special case of a general form (the
+# `rcs_aspect` F = 1 hazard, one file over: `sin²+cos²` is 1 in algebra and not always 1.0 in
+# floating point). `:horizontal` is the x–y sibling, `(vx,vy) → (−vy,vx)`, +90° about +z, which is
+# what an aircraft actually does and what slice 49's lesson needs (a straight-flying target can
+# NEVER drop out of detection while closing, at any fineness — the turn IS the mechanism).
+# ⚠ An unknown plane is refused at LOAD against `TARGET_TURN_PLANES` (convention 5: validate
+# authored inputs at load), so this consumer needs no third branch and no throw inside a tick.
+function _lateral_accel(v::Vec3, a_lat::Float64, sign::Float64, plane::Symbol = :vertical)
+    if plane === :horizontal
+        vx, vy = v[1], v[2]
+        s = sqrt(vx * vx + vy * vy)
+        s < _FRAME_EPS && return zero(Vec3)
+        return (a_lat * sign / s) * Vec3(-vy, vx, 0.0)
+    end
     vx, vz = v[1], v[3]
     s = sqrt(vx * vx + vz * vz)
     s < _FRAME_EPS && return zero(Vec3)
@@ -1005,7 +1020,7 @@ end
 """
     ManeuveringTarget(id)
 
-Advances entity `id` on a CONSTANT-lateral-accel coordinated g-turn in the x-z plane — the curving
+Advances entity `id` on a CONSTANT-lateral-accel coordinated g-turn — the curving
 maneuvering foil for the augmented-PN lesson (slice 12), the accelerating sibling of
 [`ConstantVelocity`](@ref). Each physics step it solves `(ṗ, v̇) = (v, a_lat·perp(v))` via
 `integrator_step(:rk4, …)` (dynamics.jl — the same stepper the missile flies, but ALWAYS `:rk4`, NOT
@@ -1015,7 +1030,13 @@ movers would double-integrate). A ⟂-v turn is speed-preserving (RK4 holds it t
 
 Config in the entity `comp` bag, read with DEFAULTS so a bare/live config can't crash a tick:
 `:a_lat_mps2` (lateral accel magnitude, m/s²; `0` → straight-line, the APN feedforward vanishes) and
-`:turn_sign` (`±1`, the turn direction; default `+1`). Writes `comp[:a_target]::Vec3` — the TRUTH
+`:turn_sign` (`±1`, the turn direction; default `+1`); and — since slice 49 — `:turn_plane`
+(`:vertical` | `:horizontal`, [`TARGET_TURN_PLANES`](@ref); default `:vertical`). ⭐ **The plane was
+an APPROXIMATION slice 12 named, not physics it defended**: the x–z turn is the augmented-PN foil's
+convenience, while an aircraft turns in x–y. Slice 49 needs the horizontal one because a
+straight-flying target can never drop out of a radar's detection while closing at any fineness — the
+turn is that lesson's mechanism, not its staging. ⚠ `:vertical` is reached by an EARLY RETURN in
+`_lateral_accel`, so every slice 12–48 wire is byte-identical. Writes `comp[:a_target]::Vec3` — the TRUTH
 target accel THIS tick (from the post-step velocity) — which the missile's phase-4 `:apn` `decide!`
 reads for the feedforward (phase-1 write < phase-4 read; comp survives `empty!(w.env)`). GRAVITY-FREE
 (feels only `a_T` — the ConstantVelocity lineage; § gravity handling above).
@@ -1029,12 +1050,16 @@ function integrate!(mt::ManeuveringTarget, w::World, dt::Float64)
     c     = e.comp
     a_lat = Float64(get(c, :a_lat_mps2, 0.0))
     tsign = Float64(get(c, :turn_sign, 1.0))
-    p′, v′ = integrator_step(:rk4, v -> _lateral_accel(v, a_lat, tsign), e.pos, e.vel, dt)
+    # ⚠ Slice 49: read with a DEFAULT at the consumer, like every other key in this bag — a bare
+    # `maneuver:` block or a live write can never KeyError a tick. Absent ⇒ `:vertical` ⇒ the
+    # slices 12–48 expression, byte-for-byte.
+    plane = Symbol(get(c, :turn_plane, :vertical))
+    p′, v′ = integrator_step(:rk4, v -> _lateral_accel(v, a_lat, tsign, plane), e.pos, e.vel, dt)
     e.pos = p′
     e.vel = v′
     # The TRUTH target accel THIS tick, from the POST-step velocity (matches what the phase-4 `:apn`
     # decide! consumes). `a_lat = 0` → zero → the APN feedforward vanishes (`:apn`-on-CV ≈ `:pn`).
-    c[:a_target] = _lateral_accel(v′, a_lat, tsign)
+    c[:a_target] = _lateral_accel(v′, a_lat, tsign, plane)
     return nothing
 end
 
