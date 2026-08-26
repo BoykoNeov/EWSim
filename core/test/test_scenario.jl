@@ -763,6 +763,72 @@ end
         @test_throws Exception load_scenario(mkman("200.0", ".inf"))  # Inf turn_sign rejected too
     end
 
+    # --- slice 49: the aspect keys at the LOADER ------------------------------------------------
+    #
+    # Two new authored keys, and each has a consumer that CANNOT survive a bad value inside a tick:
+    # `rcs_aspect` throws a DomainError on `F <= 0`, and `_lateral_accel` has no branch for an
+    # unknown turn plane. Convention 5: validate authored inputs at LOAD, clamp live ones at the
+    # consumer. The clamp half lives in test_rcs_aspect.jl; this is the load half.
+    @testset "slice 49 — rcs_fineness and turn_plane at the loader" begin
+        mkasp = function (fin = nothing, plane = nothing)
+            tgt = "rcs_m2: 1.0"
+            fin === nothing || (tgt *= ", rcs_fineness: $fin")
+            plane === nothing || (tgt *= ", maneuver: {a_lat_mps2: 30.0, turn_plane: $plane}")
+            f = tempname() * ".yaml"
+            write(f, """
+            name: slice49_loader
+            seed: 49
+            entities:
+              - id: radar1
+                kind: radar
+                pos: [0, 0, 30]
+                radar:
+                  pt_w: 50000
+                  gain_db: 35
+                  freq_hz: 9.4e9
+                  bandwidth_hz: 1.0e6
+                  noise_fig_db: 3
+                  losses_db: 4
+                  pfa: 1.0e-6
+                  swerling: 1
+              - id: tgt1
+                kind: target
+                pos: [0.0, 25000.0, 5000.0]
+                vel: [250.0, 0.0, 0.0]
+                target: {$tgt}
+            """)
+            f
+        end
+        # THE CONTROL: no new keys at all, i.e. every slice-1..48 target block.
+        sc0 = load_scenario(mkasp())
+        @test sc0 isa EWSim.Scenario
+        @test !haskey(sc0.world.entities[:tgt1].comp, :rcs_fineness)   # …and the key is ABSENT,
+        @test !haskey(sc0.world.entities[:tgt1].comp, :turn_plane)     # not defaulted in
+
+        # rcs_fineness: authored, landing at a knob-addressable comp key.
+        sc = load_scenario(mkasp(10.0))
+        @test sc.world.entities[:tgt1].comp[:rcs_fineness] == 10.0
+        @test load_scenario(mkasp(0.4)) isa EWSim.Scenario     # F < 1 is an OBLATE body — LEGAL
+        @test load_scenario(mkasp(1.0)) isa EWSim.Scenario     # F = 1 is a sphere — the LESSON null
+        @test load_scenario(mkasp(1.0e6)) isa EWSim.Scenario   # huge but finite: a needle, not a crash
+        @test_throws Exception load_scenario(mkasp(0.0))       # F = 0 has no body behind it
+        @test_throws Exception load_scenario(mkasp(-3.0))      # …nor does a negative one
+        @test_throws Exception load_scenario(mkasp(".inf"))    # convention 6: no Inf to the wire
+        @test_throws Exception load_scenario(mkasp(".nan"))
+
+        # turn_plane: validated against TARGET_TURN_PLANES (convention 7 — one list, no drift), so
+        # a value the loader accepts can never reach a `_lateral_accel` with no branch for it.
+        @test load_scenario(mkasp(nothing, "vertical")).world.entities[:tgt1].comp[:turn_plane] ===
+              :vertical
+        @test load_scenario(mkasp(nothing, "horizontal")).world.entities[:tgt1].comp[:turn_plane] ===
+              :horizontal
+        @test_throws Exception load_scenario(mkasp(nothing, "lateral"))    # not in the tuple
+        @test_throws Exception load_scenario(mkasp(nothing, "Horizontal")) # case matters — a Symbol
+        @test_throws Exception load_scenario(mkasp(nothing, "3"))
+        # …and both keys together load, since a shaped target that also turns is the showcase.
+        @test load_scenario(mkasp(10.0, "horizontal")) isa EWSim.Scenario
+    end
+
     @testset "loader parses slice13_decoy.yaml (decoy seduction vs α-β gate, spatial view)" begin
         # The slice-13 showcase: a DECOY seduces the :scan CFAR-scanning seeker; the α-β predicted-LOS gate
         # rejects it. Keeps the SPATIAL view (discrimination is the missile-view discriminator, the button

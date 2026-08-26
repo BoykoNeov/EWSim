@@ -137,6 +137,24 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                 error("target '$id': cross_speed_mps must be finite " *
                       "(got $(comp[:cross_speed_mps]))")
         end
+        # ⭐ SLICE 49: an OPTIONAL FINENESS RATIO — the target's SLENDERNESS `F = L/r`, which turns
+        # `rcs_m2` from a number the target carries around into the BROADSIDE value of an aspect
+        # curve (`rcs_aspect`, rf.jl). PRESENCE-gated at BOTH consumers (radar.jl's `_target_snr`
+        # and the seeker's detection horizon), so a target without the key — every slice-1..48
+        # scenario — takes the scalar branch on the line it takes today and is byte-identical.
+        # ⚠⚠ THE ABSENT KEY IS THE BYTE-IDENTITY PATH, NOT `F = 1`: `sin²θ + cos²θ` is 1 in algebra
+        # and not always 1.0 in floating point, so `F = 1` is the LESSON's null (a sphere) and NOT
+        # the wire's null. The two are deliberately different things.
+        # Load-validated > 0 and FINITE: `F ≤ 0` has no body behind it and would throw a DomainError
+        # inside a tick, which silently drops the client's connection (convention 5 — validate
+        # authored inputs at LOAD). `F < 1` is LEGAL and is an oblate body (wider than long,
+        # brighter nose-on than broadside), so there is no upper guard and no ≥ 1 floor.
+        if haskey(tb, "rcs_fineness")
+            comp[:rcs_fineness] = _f64(tb["rcs_fineness"])
+            (isfinite(comp[:rcs_fineness]) && comp[:rcs_fineness] > 0) ||
+                error("target '$id': rcs_fineness must be finite and > 0 " *
+                      "(got $(comp[:rcs_fineness])) — it is the body's length/width ratio")
+        end
         # Slice 12: a `maneuver:` sub-block turns the straight-line target into a CURVING one — swap
         # ConstantVelocity → ManeuveringTarget (the augmented-PN foil). `a_lat_mps2`/`turn_sign` land
         # at KNOB-ADDRESSABLE comp keys, read with DEFAULTS at the consumer (a bare block / live
@@ -154,11 +172,19 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # BLOCK, not the comp bag — `haskey(comp, :cross_speed_mps)` would work only because
             # the parse above happens to sit above this fork, and a later reorder would silently
             # disarm it (the slice-28/29 loader shape).
+            # ⚠ SLICE 49 CORRECTED THIS MESSAGE'S REASON, NOT ITS VERDICT. It used to justify itself
+            # with "whose lateral accel is in-plane by construction" — which the authorable
+            # `turn_plane` below makes FALSE. The guard still stands for the reason that never
+            # depended on the plane: the pin lives in ConstantVelocity, and a maneuver block
+            # replaces that mover, so nothing would ever read the key. ⚠⚠ A guard whose stated
+            # reason has rotted is how a later slice re-imports a killed framing — fix the words in
+            # the same commit as the physics.
             haskey(tb, "cross_speed_mps") &&
                 error("target '$id': cross_speed_mps is incompatible with a `maneuver:` block — " *
                       "the crossing-speed pin lives in the ConstantVelocity mover, which a " *
-                      "maneuver block replaces with ManeuveringTarget (whose lateral accel is " *
-                      "in-plane by construction), so the key would be a DEAD knob (slice 30)")
+                      "maneuver block replaces with ManeuveringTarget, so NOTHING would read the " *
+                      "key and it would be a DEAD knob (slice 30). Set the target's `vel:` " *
+                      "directly instead")
             mn = tb["maneuver"]
             comp[:a_lat_mps2] = _f64(get(mn, "a_lat_mps2", 0.0))
             comp[:turn_sign]  = _f64(get(mn, "turn_sign", 1.0))
@@ -166,6 +192,19 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                 error("target '$id': maneuver.a_lat_mps2 must be finite (got $(comp[:a_lat_mps2]))")
             isfinite(comp[:turn_sign]) ||   # a NaN/Inf sign → NaN accel → NaN pos → non-finite JSON (conv. 6)
                 error("target '$id': maneuver.turn_sign must be finite (got $(comp[:turn_sign]))")
+            # ⭐ SLICE 49: the TURN PLANE. Slice 12 turned in x–z and NAMED that as an
+            # approximation; an aircraft turns in x–y, and slice 49's lesson needs it (a
+            # straight-flying target can never drop out of a radar's detection while closing).
+            # Validated against `TARGET_TURN_PLANES` (dynamics.jl) — convention 7, one list, no
+            # drift — so a value the loader accepts can never reach a `_lateral_accel` that has no
+            # branch for it. ABSENT ⇒ `:vertical` ⇒ the slices 12–48 expression, byte-for-byte.
+            if haskey(mn, "turn_plane")
+                tp = Symbol(mn["turn_plane"])
+                tp in TARGET_TURN_PLANES ||
+                    error("target '$id': maneuver.turn_plane must be one of " *
+                          "$(TARGET_TURN_PLANES) (got :$tp)")
+                comp[:turn_plane] = tp
+            end
             subs = Subsystem[ManeuveringTarget(id)]
         else
             subs = Subsystem[ConstantVelocity(id)]

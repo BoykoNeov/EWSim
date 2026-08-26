@@ -2649,7 +2649,16 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # ⚠ THE RCS IS THE **TARGET'S** — `scenario.jl` has loaded `:rcs_m2` on every target entity
         # since slice 1, and minting a seeker-side copy would give one target two RCS numbers that
         # can silently disagree (convention 7's exact failure).
+        # ⭐⭐ SLICE 49 — AND THAT COMMENT IS EXACTLY WHY THE ASPECT MODEL IS NOT SPELLED OUT HERE.
+        # `_effective_rcs` (radar.jl) is the ONE site where a shape becomes a cross-section; a
+        # seeker that applied aspect while the ground radar did not — or applied it with the
+        # observer vector the other way round — is the two-numbers failure this comment already
+        # forbids, one level up. ⚠ The observer is the MISSILE (`e.pos`), not the radar. With no
+        # `:rcs_fineness` authored it early-returns `:rcs_m2` and every slice 11–48 wire is
+        # byte-identical; the floor below is unchanged and still clamps at the consumer.
         rcs_det = max(Float64(get(tgt.comp, :rcs_m2, 1.0)), 1.0e-12)
+        haskey(tgt.comp, :rcs_fineness) &&
+            (rcs_det = max(_effective_rcs(tgt, e.pos), 1.0e-12))
         snr_min = Float64(get(c, :detect_snr_min_db, 10.0))
         r_los_det = los_range(e.pos, tgt.pos)
         r_acq_det = detection_range(rp_det, rcs_det; snr_min_db = snr_min)
@@ -3689,6 +3698,16 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # window at Ku band is a 54 cm dish, which is not going in a small air-to-air airframe). A
         # READOUT with no consumer in the physics, which is exactly why it belongs on the wire and
         # not in the loop.
+        # ⭐ SLICE 49 — WHICH WAY THE TARGET IS POINTING, FROM THE MISSILE'S SEAT. Key-presence
+        # gated on the target carrying a `:rcs_fineness`, so every slice 11–48 wire ships exactly
+        # the keys it ships today. DEGREES on the wire, radians inside. ⚠ The observer is the
+        # MISSILE — this is a DIFFERENT aspect from the ground radar's on the same target at the
+        # same instant, which is the whole content of "aspect is not a property of the target".
+        if haskey(tgt.comp, :rcs_fineness)
+            tel["$sid.target_aspect_deg"] = _finite_coord(
+                rad2deg(aspect_angle(tgt.pos, tgt.vel, e.pos)))
+            tel["$sid.rcs_eff_m2"] = _finite(rcs_det)
+        end
         tel["$sid.seeker_aperture_m"] = _finite(
             aperture_diameter(Float64(get(c, :detect_freq_hz, 16.0e9)),
                               max(2 * (_gim ? fov_h : fov_rad), 1.0e-9)))

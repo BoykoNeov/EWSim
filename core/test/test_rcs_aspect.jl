@@ -177,3 +177,166 @@
         @test TARGET_TURN_PLANES[1] === :vertical      # the DEFAULT is first, and stays first
     end
 end
+
+# --- slice 49 GATE 2: THE WIRE -----------------------------------------------------------------
+#
+# Gate 1 pinned the kernels. These pin the SEAM: that the aspect model reaches the physics through
+# exactly ONE site (`_effective_rcs`), that the key-absent path is the slices-1..48 line and not an
+# algebraic special case, that the loader refuses what the consumer cannot survive, and that the
+# horizontal turn is a real turn on the real mover.
+#
+# ⭐⭐ THE ONE THAT MATTERS is "TWO OBSERVERS, ONE TARGET, TWO CROSS-SECTIONS". Every equal-value
+# tooth below also passes if aspect were a property stamped on the target once per tick — the
+# slice-30 lesson, one arc over (only a DISAGREEING pair separates the orders). A radar and a
+# missile looking at the same target at the same instant must read DIFFERENT σ, or the seam is
+# wrong in a way no single-observer test can see.
+
+# A bare radar + target world: no movers, truth written by the caller, so the aspect under test is
+# exactly the geometry named. `fineness === nothing` withholds the key — the presence gate is the
+# thing under test.
+function _aspect_world(; tgt_pos = Vec3(0.0, 25_000.0, 5_000.0), tgt_vel = Vec3(250.0, 0.0, 0.0),
+                         rcs = 4.0, fineness = nothing, radar_pos = Vec3(0.0, 0.0, 30.0))
+    w = World(seed = 49)
+    comp = Dict{Symbol,Any}(:rcs_m2 => rcs)
+    fineness === nothing || (comp[:rcs_fineness] = fineness)
+    w.entities[:tgt1] = Entity(:tgt1, :target; pos = tgt_pos, vel = tgt_vel, comp = comp)
+    w.entities[:radar1] = Entity(:radar1, :radar; pos = radar_pos, vel = zero(Vec3),
+        comp = Dict{Symbol,Any}(:pt_w => 50_000.0, :gain_db => 35.0, :freq_hz => 9.4e9,
+                                :bandwidth_hz => 1.0e6, :noise_fig_db => 3.0, :losses_db => 4.0,
+                                :pfa => 1.0e-6, :swerling => 1, :n_pulses => 1, :revisit_s => 0.1))
+    return w, Subsystem[RadarSensor(:radar1; revisit_s = 0.1)]
+end
+
+@testset "aspect-dependent RCS — THE WIRE (slice 49 gate 2)" begin
+
+    @testset "⚠⚠ BYTE-IDENTITY — no `rcs_fineness` ⇒ the slices-1..48 line, bit-for-bit" begin
+        w, _ = _aspect_world()
+        tgt = w.entities[:tgt1]
+        # The presence gate short-circuits before ANY arithmetic, so the returned value is the
+        # authored object itself — `===`, not an approximate compare.
+        @test EWSim._effective_rcs(tgt, Vec3(0.0, 0.0, 30.0)) === tgt.comp[:rcs_m2]
+        # …at every geometry, including ones where an aspect model would bite hardest.
+        for op in (Vec3(0.0,0.0,0.0), Vec3(1e5,0.0,0.0), Vec3(0.0,25_000.0,5_000.0),
+                   Vec3(-3e4, 1e4, -2e3))
+            @test EWSim._effective_rcs(tgt, op) === tgt.comp[:rcs_m2]
+        end
+        # ⭐ PAIRED with an arm that DOES branch, so the claim is not vacuous (a test that only
+        # compares two key-absent runs proves determinism, not gating).
+        # ⚠ The observer must be OFF BROADSIDE for this to bite. The default geometry here is
+        # exactly abeam, where sigma legitimately EQUALS the authored value at every fineness — a
+        # first draft paired against that point and read as a pass-with-no-branch.
+        w2, _ = _aspect_world(fineness = 10.0)
+        @test EWSim._effective_rcs(w2.entities[:tgt1], Vec3(1.0e5, 25_000.0, 5_000.0)) !=
+              w2.entities[:tgt1].comp[:rcs_m2]
+        # ⚠⚠ AND `F = 1` IS **NOT** THE BYTE-IDENTITY PATH — that is the whole reason the gate is on
+        # the KEY. A sphere is the LESSON null; the absent key is the WIRE null. Both must produce
+        # the same NUMBER while being reached by different code.
+        w3, _ = _aspect_world(fineness = 1.0)
+        @test EWSim._effective_rcs(w3.entities[:tgt1], Vec3(0.0,0.0,30.0)) ≈ 4.0 atol = 1e-13
+    end
+
+    @testset "⭐⭐ TWO OBSERVERS, ONE TARGET, TWO CROSS-SECTIONS" begin
+        # The target flies +x at 25 km due +y of the radar: BROADSIDE to an observer abeam of it
+        # and NOSE-ON to one sitting dead ahead — at the SAME INSTANT, off the SAME comp bag.
+        w, _ = _aspect_world(fineness = 10.0)
+        tgt = w.entities[:tgt1]
+        σ_abeam  = EWSim._effective_rcs(tgt, Vec3(0.0, 25_000.0, 6_000.0))
+        σ_ahead  = EWSim._effective_rcs(tgt, Vec3(50_000.0, 25_000.0, 5_000.0))
+        σ_astern = EWSim._effective_rcs(tgt, Vec3(-50_000.0, 25_000.0, 5_000.0))
+        @test σ_abeam  ≈ 4.0            atol = 1e-12
+        @test σ_ahead  ≈ 4.0 / 10_000   atol = 1e-15      # 40 dB down
+        @test σ_astern ≈ 4.0 / 10_000   atol = 1e-15      # fore/aft symmetric, the NAMED approx
+        @test σ_abeam / σ_ahead ≈ 10_000 atol = 1e-6      # 10⁴ apart, one target, one tick
+    end
+
+    @testset "the seam reaches the radar through the ONE site" begin
+        # `_target_snr` must read the aspect value, not the raw key — checked against an
+        # INDEPENDENT link-budget recompute off `rcs_aspect`, not off `_effective_rcs` (which
+        # would be the same call twice).
+        w, subs = _aspect_world(fineness = 10.0, tgt_vel = Vec3(0.0, -250.0, 0.0))
+        tick!(w, subs, 1.0e-3)
+        tel = w.env[:telemetry]
+        tgt, rdr = w.entities[:tgt1], w.entities[:radar1]
+        rp = RadarParams(50_000.0, 35.0, 9.4e9, 1.0e6, 3.0, 4.0)
+        θ  = aspect_angle(tgt.pos, tgt.vel, rdr.pos)
+        σ  = rcs_aspect(4.0, 10.0, θ)
+        R  = los_range(rdr.pos, tgt.pos)
+        @test tel["radar1.snr_db"] ≈ lin2db(snr_freespace(rp, σ, R)) atol = 1e-9
+        # …and the flown σ is three orders below the authored key, so this could not have passed
+        # off `comp[:rcs_m2]`.
+        @test σ < 4.0 / 1000
+        # THE READOUTS, describing the same target the SNR does. DEGREES on the wire.
+        @test tel["radar1.target_aspect_deg"] ≈ rad2deg(θ) atol = 1e-9
+        @test tel["radar1.rcs_eff_m2"]        ≈ σ          atol = 1e-15
+    end
+
+    @testset "the new telemetry is KEY-PRESENCE gated (no defaulted zeros on old wires)" begin
+        # ⚠ The CLAUDE.md trap: a client `.get(k, 0.0)` prints a DEFAULTED ZERO as a passed test.
+        # These keys must be ABSENT on a scalar wire, never present-and-zero.
+        w, subs = _aspect_world()                       # no fineness
+        tick!(w, subs, 1.0e-3)
+        @test !haskey(w.env[:telemetry], "radar1.target_aspect_deg")
+        @test !haskey(w.env[:telemetry], "radar1.rcs_eff_m2")
+        @test haskey(w.env[:telemetry], "radar1.snr_db")          # …the old keys still ship
+        w2, subs2 = _aspect_world(fineness = 6.0)
+        tick!(w2, subs2, 1.0e-3)
+        @test haskey(w2.env[:telemetry], "radar1.target_aspect_deg")
+        @test haskey(w2.env[:telemetry], "radar1.rcs_eff_m2")
+    end
+
+    @testset "a live slider can never crash a tick (convention 5)" begin
+        # The loader refuses `F <= 0`, but a live `set_param` writes straight to the comp bag and
+        # `rcs_aspect` throws a DomainError by design. The CONSUMER floor is what stands between
+        # that and a dropped connection.
+        for bad in (0.0, -3.0, -1.0e-30)
+            w, subs = _aspect_world(fineness = bad)
+            @test (tick!(w, subs, 1.0e-3); true)
+            v = w.env[:telemetry]["radar1.rcs_eff_m2"]
+            @test isfinite(v) && v > 0
+        end
+        # A degenerate RCS too, and a huge-but-finite fineness — finite out, never an infinity.
+        w, subs = _aspect_world(rcs = 0.0, fineness = 1.0e6)
+        @test (tick!(w, subs, 1.0e-3); true)
+        @test isfinite(w.env[:telemetry]["radar1.rcs_eff_m2"])
+        @test isfinite(w.env[:telemetry]["radar1.snr_db"])
+    end
+
+    @testset "⭐ the HORIZONTAL turn is a real turn on the real mover" begin
+        # `ManeuveringTarget`, not the kernel: the plane must survive the comp bag and the RK4 step.
+        function turn(plane; n = 20_000, dt = 1.0e-3)
+            w = World(seed = 49)
+            comp = Dict{Symbol,Any}(:rcs_m2 => 1.0, :a_lat_mps2 => 30.0, :turn_sign => 1.0)
+            plane === nothing || (comp[:turn_plane] = plane)
+            w.entities[:tgt1] = Entity(:tgt1, :target; pos = Vec3(0.0, 25_000.0, 5_000.0),
+                                       vel = Vec3(250.0, 0.0, 0.0), comp = comp)
+            subs = Subsystem[ManeuveringTarget(:tgt1)]
+            tr = Float64[]
+            for _ in 1:n
+                tick!(w, subs, dt)
+                e = w.entities[:tgt1]
+                append!(tr, (e.pos[1], e.pos[2], e.pos[3], e.vel[1], e.vel[2], e.vel[3]))
+            end
+            return tr, w.entities[:tgt1]
+        end
+        tr_absent,     e_absent = turn(nothing)
+        tr_vertical,   e_vert   = turn(:vertical)
+        tr_horizontal, e_horz   = turn(:horizontal)
+        # ⚠⚠ THE BYTE-IDENTITY TOOTH, THROUGH THE WHOLE MOVER: absent is :vertical, bit-for-bit over
+        # 20 000 ticks of pos AND vel — the full trace, not a summary.
+        @test tr_absent == tr_vertical
+        @test tr_absent != tr_horizontal          # …PAIRED, so the claim is not vacuous
+        # The VERTICAL turn never leaves the x–z plane; the HORIZONTAL never leaves x–y.
+        @test e_vert.pos[2] == 25_000.0 && e_vert.vel[2] == 0.0
+        @test e_horz.pos[3] == 5_000.0  && e_horz.vel[3] == 0.0
+        @test e_vert.pos[3] != 5_000.0            # …and each DOES move in its own plane
+        @test e_horz.pos[2] != 25_000.0
+        # A coordinated turn is SPEED-PRESERVING on either plane (RK4 holds it to machine eps) —
+        # an INDEPENDENT invariant, not a restatement of the perpendicular.
+        for e in (e_vert, e_horz)
+            @test hypot(e.vel[1], e.vel[2], e.vel[3]) ≈ 250.0 rtol = 1e-9
+        end
+        # …and after 20 s at 30 m/s the heading has swept a/v*t = 2.4 rad — hand-computed from the
+        # turn rate, not read back off the trace.
+        @test atan(e_horz.vel[2], e_horz.vel[1]) ≈ 30.0 / 250.0 * 20.0 rtol = 1e-6
+    end
+end

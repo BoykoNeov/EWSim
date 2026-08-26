@@ -268,6 +268,37 @@ const _SNR_DB_FLOOR = -120.0
 _snr_db_wire(snr_lin::Real) = snr_lin > 0 ? max(lin2db(snr_lin), _SNR_DB_FLOOR) : _SNR_DB_FLOOR
 
 """
+    _effective_rcs(tgt::Entity, obs_pos::Vec3) -> Float64   (m²)
+
+**THE ONE PLACE ASPECT IS APPLIED** (slice 49). The target's radar cross-section as seen from
+`obs_pos`: its authored `:rcs_m2` when it has no shape, and [`rcs_aspect`](@ref) of that value at
+[`aspect_angle`](@ref) when it carries a `:rcs_fineness`.
+
+⚠⚠ **THERE IS EXACTLY ONE OF THESE, AND THAT IS THE POINT.** `missile.jl`'s seeker horizon calls
+THIS function rather than repeating the two lines, because `missile.jl:2624`'s own standing comment
+says a seeker-side RCS copy *"would give one target two RCS numbers that can silently disagree
+(convention 7's exact failure)"* — and an aspect model applied at one consumer and not the other is
+that failure exactly. It lives in `radar.jl` (not a §9 pure lib) because it consumes an `Entity`;
+the PHYSICS it calls is pure and lives in `rf.jl` / `frames.jl`.
+
+⚠ **THE ABSENT KEY IS AN EARLY RETURN, NOT `F = 1`.** A target with no `:rcs_fineness` returns
+`comp[:rcs_m2]` on the line it has returned it on since slice 1 — no `sincos`, no division, no
+rounding — so every slice 1–48 wire is byte-identical. Routing through `rcs_aspect` with `F = 1`
+would be algebraically equal and NOT bit-equal (`sin²+cos²` is not always exactly 1.0), which is a
+distinction convention 2 makes load-bearing.
+
+⚠ Clamped at the CONSUMER (convention 5): a live slider can drive `:rcs_fineness` to a value
+`rcs_aspect` would throw a `DomainError` on, and a throw inside `observe!` silently drops the
+client's connection. The floor ships a huge-but-finite σ (convention 6), never an ±Inf.
+"""
+function _effective_rcs(tgt::Entity, obs_pos::Vec3)
+    haskey(tgt.comp, :rcs_fineness) || return tgt.comp[:rcs_m2]     # ← the slices 1–48 line
+    σ = max(Float64(tgt.comp[:rcs_m2]), 1.0e-12)
+    F = max(Float64(tgt.comp[:rcs_fineness]), 1.0e-9)
+    return rcs_aspect(σ, F, aspect_angle(tgt.pos, tgt.vel, obs_pos))
+end
+
+"""
     _target_snr(prop, rp, radar, tgt, ter=nothing) -> (snr_lin, visible)
 
 Single-target SNR under the active `propagation` fidelity, plus a horizon-visibility
@@ -287,7 +318,7 @@ here, per HANDOFF §1/§10 and the slice-2/18 plans.
 function _target_snr(prop::Symbol, rp::RadarParams, radar::Entity, tgt::Entity,
                      ter::Union{Nothing,TerrainParams} = nothing)
     R   = _range(tgt.pos, radar.pos)
-    rcs = tgt.comp[:rcs_m2]
+    rcs = _effective_rcs(tgt, radar.pos)
     if prop === :free_space
         return snr_freespace(rp, rcs, R), true
     elseif prop === :terrain
@@ -522,6 +553,11 @@ function _observe_point!(r::RadarSensor, w::World)
     best_pd  = 0.0
     best_visible = true
     best_pos = w.entities[target_ids[1]].pos   # strongest target's pos → terrain clearance readout
+    # ⭐ SLICE 49: the strongest target's ASPECT and its aspect-adjusted RCS, carried alongside so
+    # the readouts below describe the SAME target the SNR does. `nothing` while no shaped target has
+    # been seen — the key-presence gate for the telemetry (a wire with no `:rcs_fineness` anywhere
+    # ships no new keys and is byte-identical, the `terrain_clearance_m` / `jnr_db` precedent).
+    best_asp = nothing; best_rcs = nothing
     any_detect = false
     for tid in target_ids
         tgt = w.entities[tid]
@@ -539,6 +575,12 @@ function _observe_point!(r::RadarSensor, w::World)
             best_pd  = pd
             best_visible = vis
             best_pos = tgt.pos
+            if haskey(tgt.comp, :rcs_fineness)
+                best_asp = aspect_angle(tgt.pos, tgt.vel, radar.pos)
+                best_rcs = _effective_rcs(tgt, radar.pos)
+            else
+                best_asp = nothing; best_rcs = nothing
+            end
         end
         if is_look && detect_once(snr_eff, th, w.rng; swerling = sw, n_pulses = np)
             any_detect = true
@@ -579,6 +621,16 @@ function _observe_point!(r::RadarSensor, w::World)
     if contribs !== nothing
         tel["$sid.jnr_db"] = _snr_db_wire(jnr_total)
         tel["$sid.js_db"]  = _snr_db_wire(jnr_total) - _snr_db_wire(best_snr_th)
+    end
+    # ⭐ SLICE 49 — WHICH WAY THE TARGET IS POINTING, AND WHAT THAT COSTS IT. Shipped ONLY when the
+    # strongest target carries a `:rcs_fineness` (key-presence gated, so every slice-1..48 wire is
+    # byte-identical). DEGREES on the wire, radians inside — the `gimbal_*_deg` boundary posture.
+    # ⚠ Both are READOUTS with no consumer in the physics, which is why they belong here: the
+    # detection verdict is `detected`/`pd` above, and a HUD that showed only those could not say
+    # WHY the target vanished. Aspect is the reason; σ_eff is the mechanism.
+    if best_asp !== nothing
+        tel["$sid.target_aspect_deg"] = _finite_coord(rad2deg(best_asp))
+        tel["$sid.rcs_eff_m2"]        = _finite(best_rcs)
     end
     return nothing
 end

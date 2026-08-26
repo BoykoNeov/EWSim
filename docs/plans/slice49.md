@@ -514,3 +514,54 @@ and ⚠ `scenario.jl:157`'s `cross_speed_mps` refusal message, whose stated reas
 accel is in-plane by construction"*) the turn plane makes stale even though the guard itself still
 stands. ⚠ Re-check convention 3's draw-count invariance on the `:cfar` rung (§8's clearance covers
 the `:snr` path only).
+
+---
+
+## §12 — GATE 2 SHIPPED (2026-08-26). Suite **17214** (+55 over gate 1).
+
+**ONE SITE.** `_effective_rcs(tgt::Entity, obs_pos::Vec3)` in `radar.jl` is the only place in the
+project where a shape becomes a cross-section. `radar.jl`'s `_target_snr` and the seeker's detection
+horizon (`missile.jl`) BOTH call it — because `missile.jl:2624`'s standing comment already says a
+seeker-side RCS copy *"would give one target two RCS numbers that can silently disagree"*, and an
+aspect model applied at one consumer and not the other is that failure one level up. It lives in
+`radar.jl` rather than a §9 pure lib because it consumes an `Entity`; the physics it calls
+(`rcs_aspect`, `aspect_angle`) is pure and lives in `rf.jl` / `frames.jl`.
+
+| what | where |
+|---|---|
+| `rcs_fineness` on the `target:` block, validated finite and > 0 | `scenario.jl` |
+| `maneuver.turn_plane`, validated against `TARGET_TURN_PLANES` | `scenario.jl` |
+| `radar1.target_aspect_deg`, `radar1.rcs_eff_m2` (key-presence gated) | `radar.jl` |
+| `m1.target_aspect_deg`, `m1.rcs_eff_m2` (key-presence gated) | `missile.jl` |
+
+**⭐⭐ THE TOOTH THAT MATTERS: TWO OBSERVERS, ONE TARGET, TWO CROSS-SECTIONS.** Every equal-value
+check also passes if aspect were a property stamped on the target once per tick — the slice-30
+lesson one arc over (*only a DISAGREEING pair separates the orders*). So an observer abeam and an
+observer dead ahead are read off the SAME comp bag at the SAME instant and must differ by **10⁴** at
+F = 10. That is the tooth no single-observer test can supply, and it is why the seeker gets
+`e.pos` and the radar gets `radar.pos` rather than either reading a stored number.
+
+**BYTE-IDENTITY, THREE WAYS.** (a) With `:rcs_fineness` absent, `_effective_rcs` returns
+`comp[:rcs_m2]` — asserted `===`, the authored object itself, at four geometries. (b) Through the
+whole `ManeuveringTarget` mover, plane-absent ≡ `:vertical` over **20 000 ticks of pos AND vel,
+`==` on the full trace**, paired against a `:horizontal` arm that differs. (c) The full suite,
+`test_determinism.jl` and the ABSOLUTE golden included, unchanged.
+
+⚠ **A FIRST DRAFT OF THE "PAIRED" ARM WAS VACUOUS AND THE SUITE CAUGHT IT.** It compared the aspect
+value against the authored one at the fixture's default geometry — which is exactly ABEAM, where σ
+legitimately EQUALS `rcs_m2` at every fineness. It read as *"the branch did not fire"*. ⭐ The
+transferable form: **a not-equal tooth needs its geometry chosen as carefully as an equal one** — an
+off-broadside observer is what makes it a test.
+
+**THE STALE GUARD IS FIXED IN THE SAME COMMIT.** `scenario.jl`'s refusal of `cross_speed_mps`
+alongside a `maneuver:` block used to justify itself with *"whose lateral accel is in-plane by
+construction"* — which `turn_plane` makes false. The verdict is unchanged and the reason is
+rewritten to the one that never depended on the plane (the pin lives in `ConstantVelocity`, which a
+maneuver block replaces, so nothing would read the key). ⚠ A guard whose stated reason has rotted is
+how a later slice re-imports a killed framing.
+
+**TWO DEGENERATE POLICIES, PINNED:** a live `set_param` can write `rcs_fineness ≤ 0` straight to the
+comp bag where the loader cannot see it, and `rcs_aspect` throws by design — so the CONSUMER floors
+it and the tick survives (convention 5), shipping a huge-but-finite σ (convention 6). And the
+telemetry keys are ABSENT on a scalar wire rather than present-and-zero, which is CLAUDE.md's
+`.get(k, 0.0)` trap.
