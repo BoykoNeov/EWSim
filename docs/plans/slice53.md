@@ -95,10 +95,26 @@ gain is gated on the SAME key, and is read INSIDE that branch.** Consequences, a
   point of the MODEL test: a key nothing reads is a bug, so the loader must make it unauthorable.
 - **A sphere with a tail lobe is incoherent and the model says so out loud:** at `F` = 1 the body
   curve is flat, and `G` then tilts a sphere, which is not a body of revolution any more. The
-  docstring names it; the SCENARIO refuses it by keeping `F` ≥ some authored floor above 1 on the
-  showcase wire. ⚠ It is NOT refused at load — `F` = 1, `G` = 100 is a legal call and returns a
-  finite number, because a kernel that throws on a live slider's floor is convention 5's exact
-  prohibition.
+  docstring names it; **the showcase avoids it by authoring `rcs_fineness: 8.0` FIXED** — the
+  arc's own value (49 and 50 both author 8), not a knob, so the shape is held still while the
+  ASYMMETRY is dialled (convention 9: one mechanism on the wire). ⚠ It is NOT refused at load —
+  `F` = 1 with `G` = 100 is a legal call and returns a finite number, because a kernel that throws
+  on a live slider's floor is convention 5's exact prohibition.
+
+**THE SLIDER'S DOMAIN, pre-registered as a PROCEDURE rather than a number** (`docs/LESSONS.md`: *a
+number you invented must not decide a headline*):
+
+- **FLOOR = 1.0, fixed and non-negotiable** — the exact symmetric null, and the same "the floor is
+  the lesson's null, not the wire's" posture slice 49 and 50 both ship.
+- **CEILING = decided by P7's ladder**, measured over `G` ∈ {1, 2, 5, 10, 20, 50, 100} and quoted
+  in full so a reader can redraw the line. It is the last cell that is still MONOTONE in the gauge
+  **and** still a physically ordinary airframe — at `F` = 8 the tail sits `G/4096` of broadside, so
+  `G` = 100 is a tail 20 dB above the nose and still 16 dB below broadside.
+- ⚠ **THE AXIS IS IN dB AND THE SLIDER IS LINEAR** — the opposite of slice 49's situation, where
+  the payoff concentrated at the TOP and linear was right. Here `G` = 1 → 10 is 10 dB and
+  10 → 100 is another 10, so a linear 1–100 drag spends 90 % of its travel on the second half of
+  the effect. **If P7's ladder confirms that, the ceiling comes DOWN rather than the axis going
+  log** (the knob protocol carries min/max, not a curve).
 
 ### §0.4 The seam, and the ONE site
 
@@ -115,20 +131,37 @@ seeker for free, and that is a hazard, not a bonus**: F1 below exists because "f
 mechanism*). Each is copied into its probe file's header. **F1 and F2 are the slice; F3–F6 are
 hygiene.**
 
-### ⚠⚠ F1 — THE KNOB IS PREDICTED **INERT ON BOTH SHIPPED ASPECT WIRES**, BY CONSTRUCTION
+### ⚠⚠ F1 — WHICH SHIPPED WIRES EVER VISIT THE REAR HEMISPHERE **WHILE DETECTABLE**
 
-The bracket is identically 1.0 for θ < π/2. Slice 49's target turns its nose TOWARD the radar and
-slice 50's turns it TOWARD the missile — both mechanisms live in the FORWARD hemisphere. ⇒
-**prediction: `rcs_tail_gain` changes nothing on `scenarios/slice49_aspect.yaml` and
-`scenarios/slice50_defensive.yaml`, at every value, byte for byte.**
+The bracket is identically 1.0 for θ < π/2, so the knob can only bite where the observer is BEHIND
+the target. ⚠⚠ **THE ARITHMETIC FIRST** (`docs/LESSONS.md:13` — *run the arithmetic premise before
+the code*), and it PREDICTS A SPLIT rather than the flat "inert everywhere" a first draft of this
+section asserted:
+
+- **Slice 50 — forward hemisphere throughout.** 30 m/s² at 300 m/s is 0.1 rad/s ≈ 5.7 °/s over a
+  ~6–8 s flight ⇒ **~40° of heading change**, from 90° aspect toward ~50°. The bracket never
+  leaves 1.0. **Prediction: byte-identical at every `G`.**
+- **Slice 49 — ⚠ PREDICTED TO REACH IT.** 15 m/s² at 300 m/s is 0.05 rad/s ≈ 2.86 °/s over 90 s ⇒
+  **~258° of heading change**, so the orbit carries the nose through 0° and out the far side. The
+  bracket is LIVE for part of that run.
+
+⇒ **the question F1 actually asks is not "is it inert" but "are the rear-hemisphere ticks ones
+where the target is DETECTABLE at all"** — at `F` = 8, tail-on σ is `σ_b/4096`, which may be dim
+enough that a live bracket changes nothing that any gauge can see.
 
 - **The probe:** replay both shipped wires unmodified, log `aspect_angle` every tick, print
-  min/max and the fraction of DETECTED ticks with θ > 90°.
-- **PASS (the slice continues) = the prediction holds and the slice must author a NEW geometry.**
-  ⭐ That is the finding, not a failure: it says in one measurement that this candidate cannot be
-  "slice 49 with one more key", which is the shape four of the five 41–45 kills took.
-- **FAIL = one of the shipped wires DOES spend time in the rear hemisphere** ⇒ the slice is
-  cheaper than expected AND slice 50's byte-identity claim needs re-checking before anything ships.
+  min/max, the fraction of ALL ticks with θ > 90°, and — the column that decides it — the fraction
+  of **DETECTED** ticks with θ > 90°.
+- **OUTCOME A (predicted for 50, and for 49's detected ticks): no detectable rear-hemisphere time
+  ⇒ the slice must author a NEW geometry.** ⭐ That is a finding, not a failure: it says in one
+  measurement that this candidate cannot be "slice 49 with one more key", which is the shape four
+  of the five 41–45 kills took.
+- **OUTCOME B: a shipped wire spends DETECTED ticks behind the target** ⇒ the slice may be cheaper
+  than expected, **and** slice 49/50's byte-identity stories must be re-checked before anything
+  ships. ⚠ The presence gate contains the risk either way — neither shipped scenario authors a
+  `rcs_tail_gain`, so both stay byte-identical regardless — but an "inert" claim in the write-up
+  would be false, and this arc kills slices for exactly that (`docs/LESSONS.md`: *an "on every arm"
+  claim must name the arms where the mechanism does not run*).
 
 ### ⚠⚠ F2 — THE REPARAMETERIZATION KILL: **ONE ASPECT IS ONE NUMBER, AND ONE NUMBER IS A GAIN**
 
@@ -166,11 +199,27 @@ Three filters, all of which have killed something on this arc:
 **The proposed gauge, pre-registered so it can be refuted:** on a single straight pass, the
 DIFFERENCE between the range at which the track is finally lost on the OUTBOUND leg and the range
 at which it is first gained on the INBOUND leg — *"how much further you can follow it home than you
-could ever see it coming."* ⭐ Its null is EXACTLY ZERO and is a THEOREM, not a tuning: with
-`G` = 1 the model gives σ(θ) ≡ σ(π−θ), so at equal range the two legs present the identical
-cross-section and the pass is symmetric in echo. **No scalar `rcs_m2` and no `rcs_fineness`
-produces a non-zero value** — that is the substitution test passed by construction, and F4 checks
-it empirically rather than trusting this paragraph.
+could ever see it coming."*
+
+⭐ **THE THEOREM, and it is about the ECHO:** with `G` = 1 the model gives σ(θ) ≡ σ(π−θ), so at
+equal range the two legs present the IDENTICAL cross-section and the pass is symmetric in echo.
+**No scalar `rcs_m2` and no `rcs_fineness` can produce an asymmetry** — the substitution test is
+passed by construction.
+
+⚠⚠ **AND THE THEOREM DOES NOT REACH THE GAUGE, WHICH IS THE TRAP.** The gauge is a range
+difference read through a **Swerling-1 detector**: identical σ on the two legs still means
+DIFFERENT random draws, so the measured difference at `G` = 1 will be some non-zero fading noise,
+not zero. Slice 49's own control is the precedent and it is the favourable one — its sphere arm
+flickered **41 separate times** and the slice earned its headline as a **183× separation against a
+control that could and did fail**, never as "the control was silent."
+
+⇒ **PRE-REGISTERED, so a non-zero reading at high `G` is attributable:** P3 must first fly the
+`G` = 1 wire across **N ≥ 8 seeds** and quote the noise floor in metres (mean and max |asymmetry|).
+The `G` ladder must clear **max-null × 3** at its authored ceiling, or the gauge is measuring the
+detector and the slice dies. ⚠ This is a DIFFERENT null from F4's: F4's is exact because it is the
+same arithmetic path; F3's is stochastic because a detector sits between the physics and the
+number. Slice 49 kept the LESSON null and the WIRE null apart for the same reason one level over —
+do not let F4's exactness be quoted for F3.
 
 ### ⚠ F4 — THE NULL MUST BE MEASURED, NOT DEFINED (slice 50's rule, applied to a NEW kernel)
 
@@ -251,7 +300,8 @@ velocity vector), a narrow nozzle lobe with its own width key, and any change to
    geometry is needed at all.
 2. **P2 (F2)** — build W1 and W2 as probe scenarios; print the aspect histogram over detected
    ticks for each. **Kill W2 here if it pins.**
-3. **P3 (F3)** — the gauge ladder in `G` on W1, with the inbound leg as the control.
+3. **P3 (F3)** — ⚠ the `G` = 1 NOISE FLOOR across N ≥ 8 seeds FIRST, then the gauge ladder in `G`
+   on W1 with the inbound leg as the control. A ladder quoted without its floor is unattributable.
 4. **P4 (F3/F2)** — the substitution test: sweep `rcs_m2` and `rcs_fineness` and show neither
    reproduces a non-zero asymmetry.
 5. **P5 (F4)** — the two nulls, byte-identity.
