@@ -290,10 +290,18 @@ func _finish_arm() -> String:
 		"pos": _pos_trace.duplicate(true),
 	}
 	_res[tag] = m
+	# ⚠⚠ THE DRAG ARM PRINTS ITS **LAST** PAIR, NOT ITS MAXIMA, and the distinction is this slice's
+	# own lesson applied to its own log: a peak-of-peaks straddling a drag is "the widest thing seen
+	# across two different settings", which is precisely the meaningless quantity the re-arm exists
+	# to abolish. Printing 21.60 / 18.61 (86.2 %) on the arm that proves the peaks re-arm would put
+	# the bug's own number in the evidence for its fix.
+	var p_told: float = float(m["told_last"] if arm.has("drag") else m["told"])
+	var p_flown: float = float(m["flown_last"] if arm.has("drag") else m["flown"])
+	var p_frac := (p_flown / p_told) if p_told > 0.0 else NAN
 	print(("S52V_ARM   %-9s S=%6.2f deg rung=%-4s  ->  t_lock=%s  told=%6.2f flown=%6.2f (%s)  " +
 		   "auth=%6.1f%%  hold=%6.2f%%  miss=%9.4f  search_frames=%d") %
 		  [tag, m["S"], RUNG_ON if blind else RUNG_OFF, _lock_str(m["tlock"]),
-		   m["told"], m["flown"], _frac_str(m["frac"]), 100.0 * m["auth"], m["hold"],
+		   p_told, p_flown, _frac_str(p_frac), 100.0 * m["auth"], m["hold"],
 		   m["miss"], m["searching"]])
 	if not (_n_gate > 100):
 		return "arm %s: the r > 200 m window must contain frames to measure (got %d)" % [tag, _n_gate]

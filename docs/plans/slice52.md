@@ -1,6 +1,6 @@
 # Slice 52 — **HOW WIDE SHOULD A SEEKER SEARCH?** (slice 48's reserve axis, `seeker_search_coverage_deg`)
 
-**STATUS: COMPLETE — GATES 0–3 BUILT & GREEN, 2026-08-31. Suite 18632 / 18632; the as-built record
+**STATUS: COMPLETE — GATES 0–3 BUILT & GREEN, 2026-08-31. Suite 18651 / 18651; the as-built record
 is `docs/STATUS.md` §"Slice 52". Gate 3's own section is §XII below, and it CORRECTS §IX's "no core
 change" a second time (§X corrected it for the client; §XII ships an INSTRUMENT and a drag re-arm).** ⚠ Gate 2 RETRACTED one of §II's sentences (the `2/60` identity) and re-scoped §VI's
 contamination column; read §XI before quoting §II or §VI. Seven probes in
@@ -541,7 +541,7 @@ the fraction falls as the sweep's period `4S/ρ` shrinks toward `gimbal_tau_s` =
 `scenarios/slice52_coverage.yaml` (slice 48's wire, three authored numbers changed, the coverage as
 THE slider), `core/test/test_search.jl`'s gate-3 section, the 14th view marker, a HUD block with the
 family's first drawn GEOMETRY since slice 38, `net/slice52_verify.gd` (18 arms) and
-`net/slice52_ui_test.gd` (11 teeth). **Suite 18489 → 18632.** Full as-built detail is in
+`net/slice52_ui_test.gd` (11 teeth). **Suite 18489 → 18651.** Full as-built detail is in
 `docs/STATUS.md`; this section records only what a LATER SLICE would trip on.
 
 ### ⚠⚠ §IX's "NO CORE CHANGE WAS MADE AND NONE IS NEEDED" IS NOW CORRECTED TWICE

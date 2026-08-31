@@ -1394,6 +1394,30 @@ end
         # and reported 0.99 where the un-dragged arm measures 0.69: a stale peak swapped for a
         # flattering one. This bound is what separates the two implementations.
         @test tv52("search_realized_peak_deg") < 5.0
+        # ⚠⚠ AND THE PIN ABOVE IS ONE DRAG **PHASE**, SO IT IS NOT THE LAW — F1's own discipline
+        # (*a threshold measured at one operating point is not a law*) turned on the FIX rather than
+        # on the lesson. Flown at six phases spanning more than a quarter of the 1.667 s sweep
+        # period, the settled fraction is 0.6662 … 0.6784 and the commanded peak is EXACTLY 6.0
+        # every time — so the general claim is a BOUND, and the tight `atol` above belongs only to
+        # the phase it was measured at. ⚠ A drag at tick 5600 reads 4.0705, which that `atol` would
+        # fail; three phases are re-flown here so nobody tightens the bound onto one of them.
+        for k_drag in (5450, 5600, 5900)
+            sc2 = load_scenario(joinpath(base52, "slice52_coverage.yaml"))
+            c2  = sc2.world.entities[:m1].comp
+            for _ in 1:k_drag
+                tick!(sc2.world, sc2.subs, sc2.dt_physics)
+            end
+            c2[:seeker_search_coverage_deg] = 6.0
+            for _ in 1:1400
+                tick!(sc2.world, sc2.subs, sc2.dt_physics)
+            end
+            t2 = get(sc2.world.env, :telemetry, Dict{String,Any}())
+            told2  = Float64(t2["m1.search_offset_peak_deg"])
+            flown2 = Float64(t2["m1.search_realized_peak_deg"])
+            @test Float64(t2["m1.head_searching"]) == 1.0    # …still hunting, or the cell is empty
+            @test told2 ≈ 6.0 atol = 1.0e-6                  # the COMMAND re-arms exactly, always
+            @test 0.66 < flown2 / told2 < 0.69               # …and the head's share is phase-robust
+        end
     end
 
     @testset "THE LOADER's REFUSALS for the new anchor — a crash guard and a dead-knob guard" begin

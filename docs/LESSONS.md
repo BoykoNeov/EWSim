@@ -506,6 +506,13 @@ instrument must start measuring the new setting.
 merely one at which the old value stops applying. Two of the three wrong answers look right in a
 one-line diff.
 
+⚠⚠ **AND THE RESTART RULE MUST THEN BE MEASURED AT MORE THAN ONE PHASE OF THE THING IT RESTARTS** —
+this arc's own F1 discipline (*a threshold measured at one operating point is not a law*) turned on
+the FIX instead of on the lesson, which is where it is easiest to forget. Six drag phases across a
+quarter of the sweep period gave a commanded peak of EXACTLY the new width every time and a flown
+fraction of 0.6662 … 0.6784 — so the law is a BOUND, and the tight `atol` that the first-measured
+phase invites would have failed at another phase by seven times its own tolerance.
+
 ⚠ And the transit itself needs a name on screen: while the head is still outside the new band the
 peak is the LIVE offset, so `flown > told` — impossible in steady state, hence a reliable signal the
 client reads and NAMES rather than printing a fraction over 100 %.

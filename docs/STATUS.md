@@ -7443,7 +7443,16 @@ here the drag IS the pedagogy. Three things about the fix that must not be "simp
 ⭐ **AND THE SLICE NOW CARRIES THE ONLY ARM IN THIS FAMILY THAT MOVES A SLIDER WHILE THE PHYSICS IS
 RUNNING** — `slice52_verify.gd`'s `drag` arm, a two-leg step around `DRAG_AT` = 5296 — plus a core
 tooth and a UI-test transit tooth. ⚠ The verifier reads `told_last` / `flown_last`, **never** the
-running maxima: *a peak-of-peaks cannot see a knob that fell*, which is the bug restated as a rule.
+running maxima — *a peak-of-peaks cannot see a knob that fell* — **including in its own printed arm
+line**, which otherwise reported 21.60 / 18.61 (86.2 %) on the very arm that proves the re-arm: the
+bug's own number in the evidence for its fix.
+
+⚠⚠ **AND THE RE-ARM IS PINNED AS A BOUND, NOT AS ONE NUMBER** — F1's discipline (*a threshold
+measured at one operating point is not a law*) turned on the fix. Across six drag phases spanning
+more than a quarter of the 1.667 s sweep period the commanded peak re-arms to **EXACTLY 6.0000**
+every time and the flown fraction sits in **0.6662 … 0.6784**. ⚠ A drag at tick 5600 reads 4.0705,
+which the tight `atol` on the measured-phase cell would fail — so three further phases are flown in
+`test_search.jl` asserting the BOUND, and nobody can tighten it onto one of them.
 
 ## THE THREE NUMBERS THAT DIFFER FROM SLICE 48's WIRE
 
@@ -7503,7 +7512,7 @@ unprovable (convention 14).
 `core/test/test_search.jl` gains a gate-3 section (the authored wire against slice 48's key by key,
 the marker + its single-carrier set, convention 9's endpoints, the instrument's key sets, the
 flown/told ladder, the cliff, the bit-identical floor, the clean ceiling, **the drag re-arm** and the
-loader's two refusals). **Suite 18489 → 18642, PASS 18642 / 18642 in 9m32s.**
+loader's two refusals). **Suite 18489 → 18651, PASS 18651 / 18651 in 7m54s.**
 
 ⚠ **THREE ENUMERATED CARRIER SETS HAD TO BE EXTENDED, each with its own recorded reason** — and every
 one FAILED first, which is the assert doing its job: `search_view` in `test_search.jl` (gate 1
@@ -7524,7 +7533,7 @@ no number in either photographed state (the un-dragged ladder is bit-identical t
 after the fix) and the transit branch it added to `_s52_sweep_text` is unreachable without a drag —
 which the UI test calls directly, so it is compiled and executed headlessly. What is unproven is
 nothing: no painting changed. The smoke-load and UI test were both re-run against the final file.
-| **full Julia suite** | **PASS 18642 / 18642** |
+| **full Julia suite** | **PASS 18651 / 18651** |
 
 ⭐⭐ **AND A THIRD FINDING, FROM THE DRAG ARM'S FIRST RUN: A LIVE DRAG *STEPS* THE COMMANDED
 OFFSET.** `search_sweep` is continuous in TIME and **discontinuous in `S`** — at a fixed phase a 25°
