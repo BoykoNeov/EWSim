@@ -1,8 +1,10 @@
 # Slice 53 — **A TAIL LOBE**: does a target look the same going away as coming at you?
 
-**STATUS: GATE-0 PLAN WRITTEN, 2026-08-31. NO PROBE HAS RUN.** ⚠ Everything below the falsifier
-list is a PREDICTION, not a measurement, and is written first on purpose (slice 41's discipline —
-`docs/LESSONS.md:13`, *"pre-register the falsifier"*). Probes will live in
+**STATUS: GATE 0 IN PROGRESS — P1 AND P2 HAVE RUN (2026-08-31); F1 AND F2 ARE DISCHARGED.**
+⚠ Everything below the falsifier list was written as a PREDICTION before any probe ran (slice 41's
+discipline — `docs/LESSONS.md:13`, *"pre-register the falsifier"*) and is **left unedited on
+purpose** so the predictions can be scored. **§2 at the foot of this file records what was
+MEASURED, including where the predictions were wrong.** Probes and their full write-ups live in
 `M:\claud_projects\temp\slice53\`. No core change is authorised by this document; §0 states what a
 core change would be IF gate 0 lives.
 
@@ -312,3 +314,99 @@ velocity vector), a narrow nozzle lobe with its own width key, and any change to
 RECORD and not a slice** — written up with both tests shown (`docs/LESSONS.md`: *a kill record must
 show BOTH tests*), with the kernel's MODEL verdict stated separately from the LESSON one. Do not
 reach for a fourth geometry to rescue it.
+
+---
+
+## §2 GATE 0 — WHAT HAS ACTUALLY BEEN MEASURED (append-only; §0/§1 above stay as written)
+
+Full write-ups, with every raw number and the probe sources, are in
+`M:\claud_projects\temp\slice53\p1_findings.md` and `M:\claud_projects\temp\slice53\p2_findings.md`
+(probes: `p1_aspect.jl`, `p2_wires.jl`, `p2b_w1_length.jl`, `p2c_substitution.jl`; raw output in the
+matching `*_out.txt`). This section is the SUMMARY the repo carries.
+
+### §2.1 P1 (F1) — DISCHARGED, and the plan's own hedge was refuted
+
+The split §F1 predicted is real — the bracket is inert on `slice50_defensive` and LIVE on
+`slice49_aspect` — but F1's expectation that 49's rear-hemisphere looks would be *too dim to matter*
+is measured FALSE: **91 of 271 rear looks are already DETECTED**, and the 130–150° band flips at
+`G` ≈ 10. ⚠ Consequences that bind later gates: an "inert on both shipped wires" claim would be
+FALSE and must name slice 49 as the arm where the mechanism runs; 49's byte-identity holds by the
+PRESENCE GATE, not by the geometry; and **slice 53 must not author `rcs_tail_gain` onto
+`slice49_aspect.yaml`** — it would rewrite a shipped, quoted ladder.
+
+### §2.2 ⭐⭐⭐ A THEOREM THAT PRUNES THE CANDIDATE SET (found while building P2)
+
+`aspect_angle` is the angle between the target's velocity and the target→observer direction, so for
+a **stationary** observer `ṙ = −‖v‖·cos θ` EXACTLY ⇒ **θ > 90° ⇔ the target is OPENING.** On any
+ground-radar wire the rear hemisphere and the receding leg are the SAME TICKS: a tail lobe can only
+ever brighten a target that is moving away, and a "rear hemisphere while closing" ground geometry
+**does not exist**. Only a moving observer can be behind a target and still closing. ⇒ the candidate
+set is CLOSED rather than sampled, and the slice's sentence is not a nicely-phrased gauge but the
+only statement this kernel can make: *how much further you can follow it home than you could ever
+see it coming.*
+
+### §2.3 P2 (F2) — DISCHARGED ON W1; W2 DEAD; a THIRD wire the plan did not list is LIVE
+
+⚠ The proposed kernel does not exist in the repo. It was patched onto `_effective_rcs` inside the
+probe process, with the presence branch untouched, and **verified BIT-IDENTICAL to the shipped
+kernel over 30 000 ticks of `slice49_aspect` with no tail gain authored.** ⚠ That is the patch being
+honest — it is NOT F4/P5, which is a whole-flight `max|Δpos|` against the key being ABSENT.
+
+- **W1 — the straight fly-past — LIVES, on a measured ladder.** 160 s, aspect 18.33° → 171.43°,
+  range 15802 → 4970 → 33343 m. Gauge (first gain inbound, last loss outbound, read AT RANGE),
+  seeds 53/149/250, mean asymmetry: `G` = 1 **−511.7 m** (the floor; max |asym| 1349.3 m ⇒ F3's bar
+  is 4047.8 m), 2 → −46.2, 5 → +2745.5, 10 → **+4705.2**, 20 → +7222.0, 50 → +15755.5,
+  100 → **+19684.2 m**. **Monotone in the mean AND on every individual seed**, clearing the bar from
+  `G` = 10. ⚠ Three seeds is a RANKING read; P3 still owes the N ≥ 8 floor.
+  ⭐⭐⭐ **THE STRUCTURAL FACT:** the INBOUND gain range is **bit-identical at every `G` from 1 to
+  100** (10570.9 / 11265.0 / 9811.6 m) — the forward hemisphere is untouched by construction, so the
+  whole ladder is ONE LEG MOVING WHILE THE OTHER IS NAILED DOWN. That is a shape change in the
+  strictest available sense, and it is what F2 asks for.
+- **W2 — the stern chase — DEAD, and slightly worse than F2 predicted.** Aspect over all pre-CPA
+  ticks 108.62°–180.00° (median 175.63°) — it pins, as predicted. ⚠⚠ But over DETECTED ticks it is
+  108.62°–132.20°, and only 1402 of 18 841 ticks are detected at all: **the seeker sees nothing for
+  the first 92 % of the chase**, so the only ticks where the aspect moves are the r → 0 ENDGAME this
+  arc bans quoting (44 §VII.1). 86 % of what `G` does on that span is a constant multiplier.
+  ⚠ A MODEL statement worth keeping for the docstring: under the shipped symmetric model **a
+  stern-chase seeker is blind for the whole chase**, because tail-on and nose-on are the same number.
+- **W3 — a target that turns and RUNS under a missile (slice 50's wire with `turn_sign: +1`) — LIVE
+  PHYSICS, REFUSED AS THE WIRE, NOT KILLED.** At `G` = 1 the lock is lost at t = 0.975 s and the
+  missile coasts eight seconds blind; at `G` = 100 it holds to r = 0.2 m. Refused on three counts:
+  (1) ⚠⚠ its natural gauge is the MISS, banned four times and **re-earned a fifth time here** —
+  2668.8 → **2753.6** → 0.2 m is NOT monotone, and the `G` = 10 arm holds the lock all the way to
+  closest approach and still misses by MORE than the arm that went blind at t = 0.975 s; (2) its only
+  other gauge is slice 50's `ω_LOS·t_go`, which is this plan's own pre-registered "49 with a sign
+  flip" kill; (3) the aspect barely sweeps — 7.89° over detected ticks at `G` = 1.
+  ⇒ **If W1 fails P3, W3 is where to look next, and it would need a gauge invented rather than
+  borrowed.**
+- **F2's SECOND HALF — the scalar fit — HAS NO SOLUTION.** `rcs_m2` swept 4 → 64 and `rcs_fineness`
+  swept 2 → 12 on W1 with **no tail gain present**: every uncensored arm stays inside the fading
+  floor. They move the inbound and outbound ranges TOGETHER (`rcs_m2` 4 → 64 moves the inbound gain
+  10.6 → 15.7 km and the outbound loss 10.0 → 18.4 km), which is what a brighter target does. **No
+  scalar `s` can reproduce a ladder in which one of the two ranges does not move at all.**
+
+### §2.4 ⚠⚠ A GAUGE DEFECT FOUND AND FIXED MID-PROBE — **EVERY EDGE NEEDS A CENSORING FLAG**
+
+The gauge can be clamped at BOTH ends of the flight and the first probe guarded only one. The
+outbound edge (a track still held when the run stops) was caught and cost a re-fly at 160 s. The
+INBOUND edge is **slice 49's rule from the other side — *a probe that starts DETECTED cannot measure
+a gain*** — and it nearly produced a false refutation of this slice's central theorem:
+`rcs_fineness = 2.0` reported **+16 177 m of asymmetry with no tail gain present**, which was
+entirely the wire's opening range being reported as a "gain". With the flag added, all three seeds of
+that arm are censored and the arm has NO measurement. ⇒ a censoring flag must exist for every edge a
+gauge can be clamped against, not for the one that bit last time.
+
+### §2.5 WHAT P3 INHERITS, AND THREE THINGS IT MUST DECIDE RATHER THAN ASSUME
+
+1. ⚠ **The `G` = 1 floor's MEAN is −511.7 m, not zero.** On three seeds that is inside the scatter
+   (−1349 → +417). If N ≥ 8 confirms a NEGATIVE bias it is an asymmetry in the MEASUREMENT — the
+   last-look-before-loss and the first-look-after-gain are not symmetric samplers while the range is
+   changing — and it must be named, not left as a signed floor under a signed ladder.
+2. ⚠ **The ceiling is not decided, and §0.3's worry about a linear 1–100 axis is CONFIRMED REAL:**
+   the gauge moves 2745 → 4705 → 7222 m over `G` = 5 → 20 and then jumps to 15 756 m by `G` = 50, so
+   the interesting travel is the bottom third of a 1–100 slider. **A ceiling of 20 is the candidate
+   to beat**, and P7 must justify whatever it picks against this table.
+3. ⚠ **P4's control arms need the same care as its slider.** The bright arms (`rcs_m2` = 64,
+   `rcs_fineness` = 4) already sit at +2924 m — three quarters of the bar — because a brighter
+   target's detection window grows toward the wire's ends and the censoring starts to bite. The `G`
+   ladder is immune by construction (its inbound edge never moves); the CONTROLS are not.
