@@ -198,12 +198,16 @@ end
 #   1. THE FIRST NEGATIVE EXTREME IS AT `3S/ρ`, and nothing earlier reaches it. This is the whole
 #      mechanism behind gate 0 §IV's *FIRST-EXCURSION-OR-NEVER*: the deficit GROWS while the search
 #      runs, so if the band does not cover the target on the first pass out, no later pass will.
-#   2. THE SCALE LAW — `t` enters only through `ρt/S`. This is the STRUCTURAL reason `t_lock` came
-#      out linear in `S` at slope `2/ρ` (§II: 0.04000 s/° against `2/60`), and pinning it here makes
-#      the flown number a CONSEQUENCE rather than a fit.
+#   2. THE SCALE LAW — `t` enters only through `ρt/S`. This is the STRUCTURAL reason `t_lock` comes
+#      out very nearly linear in `S`, and it fixes the wave's own contribution to that slope at
+#      `2/ρ`. ⚠⚠ IT DOES NOT MAKE THE FLOWN NUMBER A CONSEQUENCE, and gate 0 §II's claim that it
+#      does — *"0.04000 s/° = 2/60 to four digits"* — is a FALSE IDENTITY: `2/60` is 0.033333, and
+#      the flown chord is 20 % ABOVE it. What the wire adds is the target's own angular motion
+#      during the sweep, which no kernel law contains. Retracted and measured in gate 2, tooth C.
 #   3. THE `2S` WRONG-HALF LAW — a target at `−a` of the cue is first covered at `(2S + a)/ρ`.
 #      Slice 43 banked it on an 8 °/s servo over a ~7 s window; gate 0 measured it on the shipped
 #      kernel at 60–240 °/s; here it is an IDENTITY, with the `2/ρ` slope as its derivative.
+#      ⚠ AND IT IS THE FIXED-TARGET CASE — a LOWER BOUND on the wire, never the flown cost.
 #   + THE MODEL TEST's KERNEL HALF for the coverage (slice 48's §0.7 tooth is RATE-only), and the
 #     `S ≤ 0` degenerate across the PHASE rather than at one time — because `S` is slice 52's
 #     SLIDER and `S ≤ 0` is its floor, which is a load it did not carry while it was authored.
@@ -259,6 +263,9 @@ end
             end
             # THE SLOPE, as an INDEPENDENT finite difference across S at FIXED a (convention 11):
             # widening the sweep by 1° delays first cover of the SAME target by exactly `2/ρ` s.
+            # ⚠⚠ "AT FIXED `a`" IS THE WHOLE CAVEAT, and gate 2 tooth C is where it is paid: on the
+            # wire `a` is NOT fixed — the cue walks away from the truth at ~6.85 °/s while the head
+            # travels — so this exact derivative is a LOWER BOUND that the flight beats by 20 %.
             for (S1, S2) in ((5.0, 6.0), (12.5, 25.0), (25.0, 45.0))
                 S1 < a && continue                 # …the same guard, and it BITES at a = 8°
                 @test ((2S2 + a) / ρ - (2S1 + a) / ρ) / (S2 - S1) ≈ 2 / ρ atol = 1e-12
@@ -569,6 +576,350 @@ end
             @test any(k -> k.key === :seeker_search_rate_dps, ok.knobs)
             fails("knob_no_anchor", replace(base, knob => srch * knob, count = 1))
         end
+    end
+end
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 52 GATE 2 — THE COVERAGE AT THE **SEAM** (`docs/plans/slice52.md` §XI).
+#
+# The block above is a WAVE: `search_sweep` has no target, no servo and no engagement, so every
+# law in it is exact. Between that wave and the head there is a gimbal with a lag and a stop; in
+# front of the head there is a target whose angle is RUNNING AWAY while the search travels. This
+# section is what the coverage axis does once those three are in the loop, and two of its results
+# are visible at NO OTHER GATE:
+#
+#   ⭐⭐⭐ THE WIRE PAYS **MORE** THAN THE `2S` LAW, AND THE EXCESS IS THE RACE. Gate 1 tooth 3
+#         pins `dt_first-cover/dS = 2/ρ` for a target that HOLDS STILL. Flown, the same derivative
+#         at ρ = 60 is 0.040000 s/° against `2/ρ` = 0.033333 — **20 % over** — because the deficit
+#         grows by ~6.85 °/s while the head is out on the wrong side.
+#   ⭐⭐⭐ THE HEAD DOES NOT FLY THE COVERAGE YOU AUTHOR. The servo is a low-pass on the sweep, so
+#         the realized peak-to-peak is 0.52–0.86 of what the command actually swept and shrinks
+#         as the sweep's PERIOD shortens ⇒ the floor `S*` RISES with the rate: 5.00° at ρ = 60,
+#         5.75 at 120, 7.50 at 240. A faster sweep needs a WIDER one — the opposite of the
+#         intuition slice 48's rate knob leaves behind, and no property of the kernel.
+#
+# ⚠ FLOWN AGAINST THE SHIPPED `slice48_search.yaml`, not slice 48's `search_scn` fixture: every
+# number in gate 0 §§I–VIII was measured on that file, slice 48's own gate 3 already proves the
+# fixture and the file are the same wire, and the fixture is scoped inside the block above.
+# ⚠⚠ AND EVERY FLIGHT STOPS INSIDE THE CLOSING PHASE (`nmax` = 7000 against a CPA near tick 8900),
+# because a longer one picks up the POST-INTERCEPT re-search — the episode trap that printed
+# "never acquired" beside a 1 cm hit at gate 0 §VIII, and its THIRD occurrence on this slice.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+@testset "seeker search COVERAGE — THE WIRE (slice 52 gate 2)" begin
+    scen52 = joinpath(@__DIR__, "..", "..", "scenarios", "slice48_search.yaml")
+
+    # The shipped file with the two search numbers written onto the comp bag — which is exactly
+    # what a slider does (`missile.jl:2954` re-reads both every searching tick) and exactly what
+    # gate 0's probes did. The file authors ρ = 0.0, so EVERY arm must write the rate: forget it
+    # on one and its "NEVER" passes because the branch never opened.
+    function cov_scn(; S = 25.0, rho = 60.0, stop = nothing, gain = nothing)
+        sc = load_scenario(scen52)
+        c  = sc.world.entities[:m1].comp
+        c[:seeker_search_coverage_deg] = Float64(S)
+        c[:seeker_search_rate_dps]     = Float64(rho)
+        stop === nothing || (c[:gimbal_stop_deg]    = Float64(stop))
+        gain === nothing || (c[:midcourse_err_gain] = Float64(gain))
+        sc
+    end
+    telc(sc)            = get(sc.world.env, :telemetry, Dict{String,Any}())
+    tvc(sc, k, d = NaN) = Float64(get(telc(sc), "m1.$k", d))
+
+    @testset "0. THE OVERRIDES WRITE KEYS SOMETHING READS (the dead-knob guard on the HARNESS)" begin
+        # ⚠ Every arm below is a comp-bag write. A typo'd key would be silently inert and would
+        # turn this whole section into assertions about the NULL arm (`docs/LESSONS.md` §45).
+        sc = load_scenario(scen52); c = sc.world.entities[:m1].comp
+        for k in (:seeker_search_coverage_deg, :seeker_search_rate_dps,
+                  :gimbal_stop_deg, :midcourse_err_gain)
+            @test haskey(c, k)
+        end
+        # …and the head's own state, which the flights below read for the REALIZED sweep (tooth G),
+        # is minted by the seam rather than authored — so it is asserted after a tick, not at load.
+        @test !haskey(c, :head_az)
+        tick!(sc.world, sc.subs, sc.dt_physics)
+        @test haskey(c, :head_az)
+    end
+
+    # ONE FLIGHT, EVERY COLUMN — stopped at the FIRST lock, and never past `nmax` ticks.
+    # `t_lock` < 0 is the shipped "never" sentinel. `reach` is the widest COMMANDED offset (which
+    # is NOT what the head flew — tooth G), `nclamp` the searching ticks spent on the mechanical
+    # stop, `def` the deficit series over the first search episode, and `ptp_head`/`ptp_cmd` the
+    # realized sweep against the commanded one.
+    function fly52(; S, rho = 60.0, stop = nothing, gain = nothing, nmax = 7000, keep_pos = false)
+        sc  = cov_scn(; S, rho, stop, gain)
+        c   = sc.world.entities[:m1].comp
+        stp = Float64(c[:gimbal_stop_deg])
+        pos = Vec3[]; def = Float64[]; cmd = Float64[]; hd = Float64[]
+        nsrch = 0; nclamp = 0; nvalid = 0; k_srch = 0; reach = 0.0; maxhead = 0.0; tl = -1.0
+        for k in 1:nmax
+            tick!(sc.world, sc.subs, sc.dt_physics)
+            keep_pos && push!(pos, sc.world.entities[:m1].pos)
+            tvc(sc, "gimbal_valid", 0.0) == 1.0 && (nvalid += 1)
+            if tvc(sc, "head_searching", 0.0) == 1.0
+                nsrch += 1; k_srch == 0 && (k_srch = k)
+                reach = max(reach, abs(tvc(sc, "search_offset_deg")))
+                maxhead = max(maxhead, tvc(sc, "head_angle_deg", 0.0))
+                tvc(sc, "head_angle_deg", 0.0) ≥ stp - 1.0e-6 && (nclamp += 1)
+                push!(def, tvc(sc, "search_deficit_deg"))
+                push!(cmd, tvc(sc, "search_offset_deg"))
+                push!(hd,  rad2deg(Float64(c[:head_az])))
+            end
+            tl = tvc(sc, "search_t_lock_s", -1.0)
+            tl ≥ 0.0 && break                       # …the first lock ENDS the measurement
+        end
+        (; t_lock = tl, k_srch, nsrch, nclamp, nvalid, reach, maxhead, def, pos,
+           ptp_cmd  = isempty(cmd) ? NaN : maximum(cmd) - minimum(cmd),
+           ptp_head = isempty(hd)  ? NaN : maximum(hd)  - minimum(hd))
+    end
+
+    @testset "A. ⭐⭐ THE COVERAGE IS LIVE — BUT INVISIBLE UNTIL THE FIRST REVERSAL" begin
+        # ⚠⚠ THIS IS THE TOOTH GATE 1 WROTE ITS WARNING FOR. Slice 48's rate twin (tooth D above)
+        # ticks 120 steps — 0.12 s — past search onset and then asserts the offsets DIFFER one
+        # tick after the drag. Copied verbatim onto the coverage it asserts that two EQUAL numbers
+        # differ: on the opening leg the offset is `ρt` and `S` does not enter the arithmetic at
+        # all, so a 25° sweep and a 12° sweep are the SAME WAVE until the narrower one turns at
+        # `S/ρ`. The fix is to SAMPLE PAST `min(S₁,S₂)/ρ`, never to loosen the comparison.
+        a = cov_scn(); b = cov_scn()
+        ka = 0; kb = 0
+        for k in 1:12000
+            tick!(a.world, a.subs, a.dt_physics); tick!(b.world, b.subs, b.dt_physics)
+            ka == 0 && tvc(a, "head_searching", 0.0) == 1.0 && (ka = k)
+            kb == 0 && tvc(b, "head_searching", 0.0) == 1.0 && (kb = k)
+            ka > 0 && kb > 0 && break
+        end
+        @test ka > 0 && ka == kb                       # …the same wire, to the tick (4936)
+        for k in 1:120
+            tick!(a.world, a.subs, a.dt_physics); tick!(b.world, b.subs, b.dt_physics)
+        end
+        @test tvc(a, "search_elapsed_s") ≈ 0.120 atol = 1e-9
+        @test tvc(a, "search_offset_deg") == tvc(b, "search_offset_deg")   # …bit-for-bit equal
+        @test tvc(a, "search_offset_deg") ≈ 7.2 atol = 1e-9                # = 0.12 s × 60 °/s
+        b.world.entities[:m1].comp[:seeker_search_coverage_deg] = 12.0            # ← THE DRAG
+        tick!(a.world, a.subs, a.dt_physics); tick!(b.world, b.subs, b.dt_physics)
+        # ⭐ THE WIRE SAYS THE KNOB MOVED ON THE VERY NEXT TICK — which is what a HUD reads — while
+        # the BEHAVIOUR cannot move yet. Two different claims, and both are pinned.
+        @test tvc(b, "search_coverage_deg") == 12.0
+        @test tvc(a, "search_coverage_deg") == 25.0
+        @test tvc(a, "search_offset_deg") == tvc(b, "search_offset_deg")
+        # …and it stays invisible for the rest of the NARROWER arm's opening leg: 12/60 = 0.200 s.
+        blind = 0
+        for k in 1:78
+            tick!(a.world, a.subs, a.dt_physics); tick!(b.world, b.subs, b.dt_physics)
+            tvc(a, "search_offset_deg") == tvc(b, "search_offset_deg") && (blind += 1)
+        end
+        @test blind == 78                              # …to elapsed 0.1990, one tick short of 12/60
+        @test tvc(a, "search_offset_deg") ≈ 11.94 atol = 1e-9
+        for k in 1:121
+            tick!(a.world, a.subs, a.dt_physics); tick!(b.world, b.subs, b.dt_physics)
+        end
+        @test tvc(a, "search_elapsed_s") ≈ 0.320 atol = 1e-9
+        @test tvc(a, "search_offset_deg") ≈ 19.2 atol = 1e-9   # still climbing to its own 25° turn
+        @test tvc(b, "search_offset_deg") ≈  4.8 atol = 1e-9   # …and the 12° arm is on its way back
+        @test tvc(a, "search_offset_deg") - tvc(b, "search_offset_deg") > 1.0
+    end
+
+    @testset "B. ⭐⭐⭐ THE CLIFF, AND A FLOOR THAT IS THE NULL TO THE BIT" begin
+        # The boundary may be pinned at all only because F1 cleared it: `S*` = 5.00° at BOTH `dt`
+        # = 1e-3 and 5e-4, zero movement, no cell flipping LOCK ↔ NEVER (gate 0 §V) — which is
+        # where slices 42 and 51 died. ⚠ F6 still holds: the LOCATION is not the headline.
+        nul = fly52(S = 0.0,  keep_pos = true)
+        lo  = fly52(S = 4.75, keep_pos = true)
+        hi  = fly52(S = 5.0)
+        @test nul.t_lock < 0.0 && lo.t_lock < 0.0            # …neither ever finds it
+        @test hi.t_lock ≈ 0.2660 atol = 1e-6                 # …and a quarter of a degree more does
+        # ⚠ THE NON-VACUITY TWIN, in the `sweep reached ±` form gate 0 §VII carried for the same
+        # reason: a NEVER that never SEARCHED would pass this testset for the wrong reason.
+        @test nul.nsrch > 1000 && lo.nsrch == nul.nsrch
+        @test nul.reach == 0.0
+        @test lo.reach ≈ 4.74 atol = 1e-9
+        # ⭐ …and with the head demonstrably sweeping, the whole floor is the NULL trajectory to the
+        # last bit: nothing the head does reaches the guidance until something is LOCKED.
+        @test length(lo.pos) == length(nul.pos)
+        @test all(p == q for (p, q) in zip(lo.pos, nul.pos))
+    end
+
+    @testset "C. ⭐⭐⭐ THE FLOWN COST EXCEEDS THE 2S LAW — gate 1's 2/ρ is the FIXED-TARGET case" begin
+        # ⚠⚠ THE RETRACTION, STATED WHERE IT CAN BE READ: gate 0 §II wrote "0.04000 s/° = 2/60 to
+        # four digits". `2/60` is 0.033333. The flown chord is 20 % ABOVE the kernel's law, not
+        # equal to it — and slice 43 had already banked the same excess on its own wire (0.262 →
+        # 0.347 s/° against a bound of 0.250: *"the target moves while you look the wrong way, and
+        # that excess IS the finding"*, `docs/DEFERRALS.md`). Gate 2 restores it.
+        S  = (6.0, 10.0, 20.0, 25.0, 45.0)
+        tl = [fly52(S = s).t_lock for s in S]
+        @test all(t -> t ≥ 0.0, tl)
+        @test tl ≈ [0.2990, 0.4490, 0.8290, 1.0230, 1.8590] atol = 1e-6
+        @test all(tl[k] > tl[k - 1] for k in 2:length(tl))               # F6 — no chatter
+        chord = (tl[end] - tl[1]) / (S[end] - S[1])
+        @test chord ≈ 0.040000 atol = 1e-7
+        @test chord > 2 / 60.0                                   # ⭐ THE INEQUALITY IS THE PHYSICS
+        @test chord / (2 / 60.0) ≈ 1.2000 atol = 1e-3
+        # …and it is not an artifact of ONE rate: the same excess at 4× the sweep speed.
+        t10 = fly52(S = 10.0, rho = 240.0).t_lock
+        t45 = fly52(S = 45.0, rho = 240.0).t_lock
+        @test t10 ≈ 0.1290 atol = 1e-6
+        @test t45 ≈ 0.4410 atol = 1e-6
+        c240 = (t45 - t10) / 35.0
+        @test c240 ≈ 0.0089143 atol = 1e-6
+        @test c240 > 2 / 240.0
+        # ⚠ AND IT MAY ONLY BE READ OVER A WIDE BRACKET. `t_lock` is quantized at `dt` = 1e-3, so
+        # an ADJACENT pair cannot resolve the excess at all: the 5→6 chord measures 0.0330, BELOW
+        # `2/ρ` by a third of one tick. A local slope here is an instrument reading rather than a
+        # physical one — the same shape as gate 0 §V's *re-fly a narrow threshold at half `dt`*.
+        @test (fly52(S = 6.0).t_lock - fly52(S = 5.0).t_lock) / 1.0 < 2 / 60.0
+    end
+
+    @testset "D. ⭐⭐ THE RACE — the deficit GROWS while the search runs (no such thing at gate 1)" begin
+        # This is the mechanism behind BOTH of the section's headline results and behind gate 0
+        # §IV's FIRST-EXCURSION-OR-NEVER: the sweep centre is the LIVE dead-reckoned belief, and it
+        # walks away from the truth at ~6.85 °/s while the head is out on the wrong side. The
+        # kernel cannot see this — it has no target.
+        r = fly52(S = 25.0)
+        @test length(r.def) > 1000
+        @test r.def[1]   ≈ 1.3423 atol = 1e-4                  # the deficit INHERITED at onset
+        @test r.def[end] ≈ 8.3535 atol = 1e-4                  # …and what it had become at the lock
+        @test all(r.def[k] > r.def[k - 1] for k in 2:length(r.def))   # STRICTLY, on every tick
+        @test (r.def[end] - r.def[1]) / (length(r.def) * 1.0e-3) ≈ 6.854 atol = 1e-2
+        # ⇒ a sweep must cover not the deficit it INHERITS but the one it will face after it has
+        # travelled, which is why `S*` runs several times the deficit at onset (gate 0 §VIII).
+        @test r.def[end] > 5 * r.def[1]
+    end
+
+    @testset "E. THE TRUNNION IS NOT THE SLIDER — the 2× stop, on the ONE cell where it BINDS" begin
+        # Slice 41's rule: to prove a clamp is not setting your metric, VARY THE CLAMP.
+        # ⚠⚠ AND THE CELL HAD TO BE FOUND, NOT ASSUMED. Gate 0 §VI carried a contamination column
+        # reading 2.43 % at `S` = 25 and 18.97 % at `S` = 30 — but it was computed over the WHOLE
+        # flight, and over the ACQUISITION (search onset → first lock) the stop binds on exactly
+        # ZERO ticks in both of those cells. All of that 19 % is the POST-LOCK re-search, i.e. an
+        # episode `t_lock` was never read on. Measured pre-lock at stop 45: `S` = 25/30/35/40 all
+        # 0 clamped ticks, peak head angle 27.54 / 32.52 / 37.51 / 42.49° against a 45° stop.
+        # ⇒ the honest row is `S` = 45, and it is the only one on the ladder.
+        a = fly52(S = 45.0, stop = 45.0)
+        b = fly52(S = 45.0, stop = 60.0)
+        c = fly52(S = 45.0, stop = 90.0)
+        # ⚠ A TICK COUNT IS NOT PINNED EXACTLY. The 102 this was measured at came off a probe whose
+        # window ends at tick 7000; `fly52`'s ends at the lock, and two windows that differ by one
+        # tick make an `== 102` a coin toss. The ZEROS are pinned exactly, because "the stop never
+        # binds" is a claim rather than a count.
+        @test a.nclamp > 50                              # ⚠ or the invariance below is VACUOUS
+        @test a.maxhead ≈ 45.0 atol = 1e-9               # …pinned ON the stop, ~102 ticks of them
+        @test b.nclamp == 0
+        @test c.nclamp == 0
+        @test b.maxhead ≈ 47.479 atol = 0.05             # …the travel the 45° stop was removing
+        @test a.t_lock ≈ 1.8590 atol = 1e-6
+        @test a.t_lock == b.t_lock                       # …EXACTLY, not `atol`, and named in pairs
+        @test b.t_lock == c.t_lock                       #    so a failure says WHICH stop moved it
+        # ⭐ AND THE REASON: `search_sweep` recomputes its phase from `t_since_start` with no
+        # accumulator, so a clamped head does not fall BEHIND its own schedule — it resumes the
+        # commanded angle the instant the command re-enters the travel. ⚠ Honest only while the
+        # servo is faster than the sweep; on slice 35's 8 °/s head it would not be.
+    end
+
+    @testset "F. ⭐⭐⭐ S* IS NOT A CONSTANT — it TRACKS THE PICTURE ERROR" begin
+        # THE LESSON, at the seam. `midcourse_err_gain` is slice 47's authored picture quality and
+        # it sets the deficit the search inherits; the narrowest coverage that still acquires moves
+        # with it. ⚠ Convention 9 keeps the picture error an authored FIXTURE in the showcase — it
+        # is varied HERE, in a test, precisely so the scenario need not carry a second slider.
+        never180 = fly52(S = 11.0,  gain = 180.0)
+        lock180  = fly52(S = 11.25, gain = 180.0)
+        @test never180.t_lock < 0.0 && never180.nsrch > 1000    # …searched hard, never covered
+        @test lock180.t_lock ≈ 0.5850 atol = 1e-6
+        # ⇒ at slice 48's authored picture error 5.00° acquires (tooth B); at 180 it does not, and
+        # the floor has moved to 11.25 — a knob whose right value the SEEKER cannot know.
+        @test fly52(S = 5.0, gain = 180.0).t_lock < 0.0
+        @test never180.def[1] ≈ 4.6069 atol = 1e-4              # …the inherited deficit, 3.4× B's
+        # ⚠⚠ AND THE EPISODE MUST BE ASSERTED, NOT FOUND. With a GOOD picture the handover lands
+        # inside the window and the missile never searches at all during the engagement — the only
+        # search on that wire is a POST-INTERCEPT one against a target now astern, which gate 0
+        # §VIII first read as "never acquired" beside a 1 cm hit.
+        good = fly52(S = 25.0, gain = 100.0)
+        @test good.nsrch == 0 && good.k_srch == 0               # …no search episode AT ALL, here
+        @test good.nvalid > 1000                                # …because it could see all along
+        @test good.t_lock < 0.0                                 # ⚠ and THIS is not a failure
+    end
+
+    @testset "G. ⭐⭐⭐ THE HEAD DOES NOT FLY THE COVERAGE YOU AUTHOR — so S* RISES WITH THE RATE" begin
+        # Gate 0 read `search_offset_deg` — the COMMAND — everywhere, and the command is a triangle
+        # of amplitude exactly `S`. Between it and the head sits the gimbal, and a lag is a
+        # LOW-PASS: the head's peak-to-peak is a FRACTION of the commanded one (which is itself
+        # short of `2S` when the lock arrives mid-leg, so both are read on the same window), and it
+        # falls as the sweep's period `4S/ρ` shrinks toward `gimbal_tau_s`. Slice 43 measured the
+        # same thing on its own wire (realized sweep −19.73° → −4.39° as ρ went 8 → 64) and named
+        # it *THE HEAD, NOT THE COMMAND, IS WHAT SEARCHES*; here it is on the shipped kernel.
+        slow = fly52(S = 25.0, rho =  60.0)
+        fast = fly52(S = 25.0, rho = 240.0)
+        @test slow.ptp_cmd ≈ 36.30 atol = 1e-2
+        @test fast.ptp_cmd ≈ 38.80 atol = 1e-2
+        @test slow.ptp_head / slow.ptp_cmd ≈ 0.8637 atol = 1e-3
+        @test fast.ptp_head / fast.ptp_cmd ≈ 0.5216 atol = 1e-3
+        @test fast.ptp_head / fast.ptp_cmd < slow.ptp_head / slow.ptp_cmd < 1.0
+        # ⚠ BOTH RATIOS ARE READ ON THE ACQUISITION WINDOW, WHICH THE LOCK TRUNCATES: neither arm
+        # completes a full excursion before it locks (0.2670 s of a 0.4167 s period at ρ = 240),
+        # so the ABSOLUTE fraction carries some of that truncation and only the ORDERING is the
+        # lag's. Read without the truncation — `S` = 45, where the period is 0.75 / 3.00 s — the
+        # same ordering is 0.6728 at ρ = 240 against 0.8883 at 60 (gate 0's probe §9).
+        # ⭐⭐⭐ AND THE CONSEQUENCE IS A SIGN NOBODY WOULD GUESS: the same 6° sweep that acquires at
+        # 60 °/s NEVER acquires at 240 °/s, because at 240 the head flies only a third of it. The
+        # floor is 5.00° at ρ = 60, 5.75 at 120 and 7.50 at 240 (bracketed at 0.25°).
+        @test fly52(S = 6.0, rho =  60.0).t_lock ≈ 0.2990 atol = 1e-6
+        @test fly52(S = 6.0, rho = 240.0).t_lock < 0.0
+        # ⚠ THIS QUALIFIES TWO SENTENCES OF GATE 0. §II's *"at ρ = 240 the whole ladder is benign"*
+        # is true only ABOVE 7.50°, and slice 48's *faster is monotone better* is a statement about
+        # ITS authored 25° coverage, not about the rate axis at every width. ⚠ It is NOT a kill of
+        # either: both hold where they were measured.
+    end
+
+    @testset "H. DRAW TOPOLOGY — two COVERAGES, the SAME number of draws (convention 3)" begin
+        # ⚠ 6000 ticks, not slice 48's 4000: the search does not open until tick 4936 on this wire,
+        # and a comparison that stops before then compares two identical pre-search flights and
+        # asserts nothing (measured — the first run of this probe reported `differed = false`).
+        a = cov_scn(S = 6.0); b = cov_scn(S = 25.0)
+        differed = false
+        for k in 1:6000
+            tick!(a.world, a.subs, a.dt_physics); tick!(b.world, b.subs, b.dt_physics)
+            tvc(a, "search_offset_deg") == tvc(b, "search_offset_deg") || (differed = true)
+        end
+        @test differed                                                   # ⚠ or the check is VACUOUS
+        @test a.world.entities[:m1].pos != b.world.entities[:m1].pos     # …two DIFFERENT flights
+        @test rand(a.world.rng) == rand(b.world.rng)                     # …one stream position
+    end
+
+    @testset "I. THE SLIDER'S FLOOR AT THE CONSUMER — and the wire's ECHO is not the value USED" begin
+        # Convention 5: an authored input is validated at LOAD (slice 48's `zero_cov` refusal above)
+        # and a LIVE knob is floored at the CONSUMER. Dragged to its floor mid-sweep the head stops
+        # sweeping and the tick survives — for 200 more ticks, which is the part a one-tick check
+        # would miss.
+        for bad in (0.0, NaN)
+            sc = cov_scn()
+            for k in 1:12000
+                tick!(sc.world, sc.subs, sc.dt_physics)
+                tvc(sc, "head_searching", 0.0) == 1.0 && break
+            end
+            for k in 1:150; tick!(sc.world, sc.subs, sc.dt_physics); end
+            @test tvc(sc, "search_offset_deg") ≈ 9.0 atol = 1e-9        # …mid-leg, 0.15 s × 60
+            sc.world.entities[:m1].comp[:seeker_search_coverage_deg] = bad
+            for k in 1:201; tick!(sc.world, sc.subs, sc.dt_physics); end
+            @test tvc(sc, "head_searching", 0.0) == 1.0                 # …still in the search state
+            @test tvc(sc, "search_offset_deg") == 0.0                   # …with a sweep of nothing
+            for k in ("search_offset_deg", "search_deficit_deg", "search_elapsed_s",
+                      "search_t_lock_s", "search_coverage_deg", "head_angle_deg", "head_off_deg")
+                @test isfinite(tvc(sc, k))                              # convention 6, after a drag
+            end
+        end
+        # ⚠⚠ AND THE ONE THING A VIEW MUST NOT DO WITH THIS KEY. `search_coverage_deg` echoes the
+        # BAG, finite-clamped (`_finite`), while the KERNEL floors a non-finite `S` to 0.0 — so on
+        # a NaN the wire reports `FINITE_CEIL` beside a sweep of exactly zero, and a HUD that drew
+        # the band from the echo would draw 1e9°. Pinned, not fixed: no shipped path reaches it
+        # (the loader refuses a NaN and a slider is clamped to its authored range), and gate 3's
+        # band must be drawn from `search_offset_deg` under `head_searching`, never from the echo.
+        sc = cov_scn()
+        for k in 1:12000
+            tick!(sc.world, sc.subs, sc.dt_physics)
+            tvc(sc, "head_searching", 0.0) == 1.0 && break
+        end
+        sc.world.entities[:m1].comp[:seeker_search_coverage_deg] = NaN
+        tick!(sc.world, sc.subs, sc.dt_physics)
+        @test tvc(sc, "search_coverage_deg") == EWSim.FINITE_CEIL
+        @test tvc(sc, "search_offset_deg")   == 0.0
     end
 end
 

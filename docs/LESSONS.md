@@ -972,3 +972,23 @@ and the classification must be a stated REGIME, printed on the row:
 ⭐ The tell that something is wrong is almost always **a headline gauge disagreeing with a crude
 orientation number in the same row** — NEVER beside 0.01 m. Keep one such column (CPA here, printed
 for orientation and banned as a gauge) precisely so the contradiction is visible on the row.
+
+### ⚠⚠ THIRD OCCURRENCE, AND IT HAD ALREADY POISONED A PRINTED COLUMN (slice 52 gate 2, 2026-08-31)
+
+The first two occurrences were about a ROW (a regime the row did not name). The third was about a
+COLUMN inside a row that was otherwise correct. Gate 0's F3 contamination column — *the share of
+searching ticks the head spends on its mechanical stop* — read **2.43 % at `S` = 25 and 18.97 % at
+`S` = 30**, and was used to pick which cell to prove the trunnion invariance on. Flown again with
+the window cut at the FIRST LOCK, both cells clamp on **exactly zero** ticks: every one of those
+percentages is from the POST-LOCK re-search, an episode the metric beside it (`t_lock`) was never
+read on. The gauge and its contamination column were scoped to different episodes **in the same
+table**, and nothing in the table said so.
+
+⇒ **A GUARD COLUMN INHERITS THE GAUGE'S WINDOW, OR IT GUARDS NOTHING.** Cut every column — the
+contamination ones especially — at the same two ticks the headline is read between, and say in the
+header which two they are. ⚠ The failure is silent in the safe direction: it reported contamination
+that was not there, so the verdict (F3 passes) survived. The next one may not.
+
+⭐ AND IT MOVED THE PROOF: with the window right, the stop binds before the lock on exactly ONE cell
+of the whole ladder (`S` = 45 at a 45° stop, 102 ticks pinned at 45.000°), which is the only cell on
+which "vary the clamp and watch `t_lock` not move" means anything.

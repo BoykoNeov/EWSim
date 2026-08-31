@@ -1,6 +1,8 @@
 # Slice 52 — **HOW WIDE SHOULD A SEEKER SEARCH?** (slice 48's reserve axis, `seeker_search_coverage_deg`)
 
-**STATUS: GATE 0 PASSED + GATE 1 BUILT & GREEN, 2026-08-31. THE SLICE LIVES; GATES 2–3 NOT YET BUILT.** Seven probes in
+**STATUS: GATE 0 PASSED + GATES 1 AND 2 BUILT & GREEN, 2026-08-31. THE SLICE LIVES; GATE 3 NOT YET
+BUILT.** ⚠ Gate 2 RETRACTED one of §II's sentences (the `2/60` identity) and re-scoped §VI's
+contamination column; read §XI before quoting §II or §VI. Seven probes in
 `M:\claud_projects\temp\slice52\`. **No core change was made and none is needed** — the key already
 exists, is read every tick and is already on the wire; what is missing is a showcase. Verdict table
 in §IX.
@@ -140,10 +142,18 @@ measured the opposite on the pre-47 wire (`|a_cmd|` exactly 0.0 for 6955 consecu
 | 40 | 4.37 | 1.6380 | 0.9290 | 0.6348 | 0.0 | 446.05 |
 | 45 | 10.72 | 1.8590 | 0.7815 | 0.5918 | 0.0 | 578.10 |
 
-- ⭐⭐ **`t_lock` IS EXACTLY LINEAR IN `S`, AT SLOPE `2/ρ`.** 0.2990 → 1.8590 s over `S` = 6 → 45 is
-  **0.04000 s/° = 2/60** to four digits, and the ρ = 240 ladder gives 0.00886 against `2/240` =
+- ⭐⭐ **`t_lock` IS VERY NEARLY LINEAR IN `S`, AND IT COSTS MORE THAN `2/ρ`.** 0.2990 → 1.8590 s
+  over `S` = 6 → 45 is **0.04000 s/°**, and the ρ = 240 ladder gives 0.00886 against `2/240` =
   0.00833. ⇒ **slice 43's banked `2S` wrong-half travel law, measured on the shipped kernel for the
   first time** — 43 measured it on an 8 °/s servo over a ~7 s window, this is 60–240 °/s over ~2 s.
+  ⚠⚠ **THE SENTENCE THIS BULLET FIRST CARRIED — *"0.04000 s/° = 2/60 to four digits"* — IS A FALSE
+  IDENTITY AND IS RETRACTED (gate 2, §XI tooth C).** `2/60` is **0.033333**; the flown chord is
+  **20 % ABOVE** the kernel's law, and at ρ = 240 it is 7 % above. The excess is not noise, it is
+  the finding: slice 43 had already banked it in exactly this form (*0.262 → 0.347 s/° against a
+  bound of 0.250 — "the target moves while you look the wrong way, and that excess IS the
+  finding"*, `docs/DEFERRALS.md`), and this plan lost it by writing `≈` as `=`. ⚠ A local slope
+  cannot be used to check it: `t_lock` is quantized at `dt`, so the 5 → 6 chord reads 0.0330 —
+  *below* `2/ρ` by a third of one tick. **Read the excess over a WIDE bracket or not at all.**
 - ⭐ **The direction of the cost is OPPOSITE to slice 48's knob.** 48's rate is monotone BETTER
   upward (buy a faster servo). Coverage is monotone WORSE upward, and its best value sits
   **immediately above a cliff** where the missile gets nothing at all.
@@ -368,9 +378,10 @@ OTHER argument, and the file had no tooth on it beyond `|offset| ≤ S` and the 
    resting on a single flown coincidence (`S` = 6, ρ = 60 locking at 0.2990 s against a predicted
    0.300). It is now an identity, exact on binary-exact `(ρ, S)`.
 2. **THE SCALE LAW — `t` enters only through `ρt/S`**, i.e. the wave is `S ·` the unit triangle.
-   ⭐⭐ This is the STRUCTURAL reason §II's `t_lock` came out linear at slope `2/ρ`; pinning it here
-   makes the flown 0.04000 s/° a CONSEQUENCE rather than a fit, which is the form
-   `docs/LESSONS.md` asks a measured coefficient to be shipped in.
+   ⭐⭐ This is the STRUCTURAL reason §II's `t_lock` came out very nearly linear in `S`, and it
+   fixes the WAVE's own share of that slope at `2/ρ`. ⚠⚠ It does **not** make the flown 0.04000 s/°
+   a consequence — that was §II's false identity, retracted above and measured at §XI tooth C. The
+   kernel law is the FIXED-TARGET case and the flight beats it by 20 %.
 3. **THE `2S` WRONG-HALF LAW — first cover of a target at `−a` costs `(2S + a)/ρ`**, with `2/ρ` as
    its derivative in `S` at fixed `a`. Slice 43 banked this on an 8 °/s servo over ~7 s; gate 0 read
    it off the shipped kernel at 60–240 °/s; it is now arithmetic that cannot drift.
@@ -425,3 +436,99 @@ guard, so at a deficit of 8° it compared "first cover" times for a 5° sweep th
   itself, since a HUD that changed shape mid-drag is convention 5's hazard in the VIEW.
   **§IX is corrected to that extent: the "no core change" verdict is a GATE-0 finding about the
   PHYSICS, and it does not reach the client.**
+
+---
+
+## §XI — GATE 2 (2026-08-31): **THE SEAM. WHAT THE COVERAGE DOES ONCE A SERVO AND A MOVING TARGET ARE IN THE LOOP**
+
+`core/test/test_search.jl`, a new top-level section between slice 48's gate-2 and gate-3 blocks.
+**90 teeth, suite 18399 → 18489, PASS 18489 / 18489 in 7m50s. NO CORE FILE TOUCHED.** Gate 1 pinned
+a WAVE — `search_sweep` has no target, no servo and no
+engagement, so every law in it is exact. Gate 2 flies the shipped `scenarios/slice48_search.yaml`
+with the two search numbers written onto the comp bag (exactly what a slider does, exactly what
+gate 0's probes did), and **two of its results exist at no other gate.**
+
+⚠ **EVERY FLIGHT STOPS AT THE FIRST LOCK AND NEVER PAST TICK 7000** (CPA is near 8900). A longer
+one picks up the POST-INTERCEPT re-search — §VIII's episode trap, and this slice's THIRD occurrence
+of it (see the trunnion below, where it had already contaminated a printed column).
+
+### ⭐⭐⭐ THE TWO HEADLINE RESULTS
+
+**C — THE WIRE PAYS MORE THAN THE `2S` LAW, AND THE EXCESS IS THE RACE.** Gate 1 tooth 3 pins
+`d(first cover)/dS = 2/ρ` **for a target that holds still**. Flown, at ρ = 60, the chord over
+`S` = 6 → 45 is **0.040000 s/° against `2/ρ` = 0.033333 — 20 % over**; at ρ = 240, over 10 → 45 it
+is **0.0089143 against 0.0083333 — 7 % over**. Both inequalities are teeth. ⚠ And the ladder is
+pinned to the digit (0.2990 / 0.4490 / 0.8290 / 1.0230 / 1.8590) with F6's no-chatter check beside
+it. ⚠⚠ A LOCAL slope cannot see this at all — `t_lock` is quantized at `dt`, so the 5 → 6 chord
+reads 0.0330, *below* `2/ρ` by a third of one tick; that too is a tooth, so nobody "tightens" the
+bracket and reads the wrong sign.
+
+**G — THE HEAD DOES NOT FLY THE COVERAGE YOU AUTHOR, SO `S*` RISES WITH THE RATE.** Gate 0 read
+`search_offset_deg` — the **COMMAND** — everywhere, and the command is a triangle of amplitude
+exactly `S`. Between it and the head sits the gimbal, and a lag is a LOW-PASS: measured head
+peak-to-peak / COMMANDED peak-to-peak, both read on the SAME window, is **0.8637 at ρ = 60 and
+0.5216 at ρ = 240** (both at `S` = 25). ⚠ That window is the acquisition, which the LOCK truncates —
+neither arm completes a full excursion — so the absolute fraction carries some truncation and only
+the ORDERING is the lag's; read where truncation is minor (`S` = 45, period 0.75 / 3.00 s) the same
+ordering is **0.6728 against 0.8883**. And
+the fraction falls as the sweep's period `4S/ρ` shrinks toward `gimbal_tau_s` = 0.05 s.
+⇒ **the floor is 5.00° at ρ = 60, 5.75° at 120 and 7.50° at 240** (bracketed at 0.25°): **the same
+6° sweep that acquires at 60 °/s never acquires at 240 °/s.** A FASTER sweep needs a WIDER one.
+- ⚠ **THIS QUALIFIES TWO GATE-0 SENTENCES WITHOUT KILLING EITHER.** §II's *"at ρ = 240 the whole
+  ladder is benign"* is true only **above 7.50°** (its ladder started at 10) — ⚠⚠ **and the SAME
+  sentence is in gate 0's commit message (`10e96bd`), which cannot be edited, so this line is the
+  only place the correction lives.** And slice 48's
+  *faster is monotone better* is a statement about **its authored 25° coverage**, not about the
+  rate axis at every width — at `S` = 6 the rate axis has an expensive end.
+- ⭐ Slice 43 named this exact thing on its own wire — *THE HEAD, NOT THE COMMAND, IS WHAT
+  SEARCHES* (realized sweep −19.73° → −4.39° as ρ went 8 → 64). It is now on the shipped kernel.
+
+### THE REST OF THE SECTION, AND WHAT EACH TOOTH STOPS
+
+- **A — THE COVERAGE IS LIVE, BUT INVISIBLE UNTIL THE FIRST REVERSAL.** ⚠⚠ **The tooth gate 1
+  wrote its warning for.** Slice 48's rate twin ticks 120 steps (0.12 s) past search onset and then
+  asserts the offsets differ one tick after the drag; copied verbatim onto the coverage it asserts
+  that two EQUAL numbers differ. Flown: after a 25 → 12 drag the offsets stay **bit-identical for
+  78 more ticks** and diverge exactly at elapsed 0.2000 s = `min(S₁,S₂)/ρ`. ⭐ And the WIRE says the
+  knob moved on the very next tick (`search_coverage_deg` = 12.0) while the BEHAVIOUR cannot — two
+  different claims, both pinned, and the HUD reads the first one.
+- **B — THE CLIFF, AND A FLOOR THAT IS THE NULL TO THE BIT.** 4.75 never / 5.00 locks at 0.2660,
+  with the non-vacuity twin gate 0 §VII invented (`reach` = 4.74° of commanded sweep, `nsrch`
+  equal to the null's) — then the floor arm's whole position series is `==` to the null's.
+- **D — THE RACE, WHICH GATE 1 CANNOT SEE.** `search_deficit_deg` 1.3423 → 8.3535°, **strictly
+  increasing on every one of 1022 ticks**, 6.854 °/s. This is the mechanism under both headlines
+  and under §IV's FIRST-EXCURSION-OR-NEVER.
+- **E — THE TRUNNION, AND A CONTAMINATION COLUMN THAT WAS MEASURING THE WRONG EPISODE.**
+  ⚠⚠ **Gate 0 §VI's clamp percentages (2.43 % at `S` = 25, 18.97 % at 30) are POST-LOCK.** Over the
+  acquisition itself the stop binds **zero** ticks in those cells (peak head angle 27.54 / 32.52 /
+  37.51 / 42.49° against a 45° stop). The only cell on the ladder where it binds before the lock is
+  `S` = 45 — 102 ticks pinned at exactly 45.000° — and `t_lock` there is **bit-identical** across
+  stops 45 / 60 / 90 (1.8590 s), with the 60° arm reaching 47.479° of travel the 45° stop removed.
+  ⇒ F3's verdict is unchanged and now rests on the episode it is about.
+- **F — `S*` TRACKS THE PICTURE ERROR, AND THE EPISODE IS ASSERTED.** At `midcourse_err_gain` 180
+  the floor has moved to 11.25° (11.00 never, 11.25 locks at 0.5850) against 5.00 at slice 48's
+  authored 140, with the inherited deficit 4.6069 vs 1.3423°. ⚠⚠ And the good-picture arm
+  (gain 100) is asserted to have **no search episode at all** inside the closing phase
+  (`nsrch == 0`) while the track is valid for 1000+ ticks — the shape that first read as "never
+  acquired" beside a 1 cm hit.
+- **H — DRAW TOPOLOGY (convention 3)** for the new slider: two coverages, one RNG stream position.
+  ⚠ 6000 ticks, not slice 48's 4000 — the search does not open until tick 4936, and the first run
+  of this probe reported `differed = false` for exactly that reason.
+- **I — THE SLIDER'S FLOOR AT THE CONSUMER (conventions 5/6)**, held for 200 ticks after the drag
+  rather than for one. ⚠⚠ **AND ONE THING GATE 3's VIEW MUST NOT DO:** `search_coverage_deg` echoes
+  the BAG finite-clamped, while the kernel floors a non-finite `S` to 0.0 — so on a NaN the wire
+  reports `FINITE_CEIL` (1e9) beside a sweep of exactly zero. **Pinned, not fixed** (no shipped path
+  reaches it: the loader refuses a NaN and a slider is clamped to its authored range), but the band
+  must be drawn from `search_offset_deg` under `head_searching`, never from the echo.
+- **0 — THE DEAD-KNOB GUARD ON THE HARNESS ITSELF.** Every arm here is a comp-bag write; a typo'd
+  key would be silently inert and would turn the section into assertions about the null arm.
+
+### ⚠ WHAT GATE 2 CHANGES FOR GATE 3
+
+1. **The showcase's authored rate is now a MEASURED choice, not a copy.** ρ = 60 °/s is where the
+   coverage axis spans the whole three-region verdict AND where the head still flies 86 % of what
+   it is commanded. At 240 the ladder is benign above 7.5° and the slider teaches nothing below it.
+2. **The slider's floor cannot be 0 and mean "no sweep" the way slice 48's rate floor does** — at
+   `S` = 0 the branch still runs with a zero sweep. The floor's meaning is a TOOTH here (tooth I),
+   and gate 3's knob endpoints must be argued from it.
+3. **The verifier may not read a local slope**, and may not read anything past the first lock.
