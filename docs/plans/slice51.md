@@ -239,9 +239,12 @@ reverses when the step halves is not a lesson.
 
 ⚠ **THIS IS A "LESSON" KILL AND NOT A "MODEL" KILL** (the 2026-08-18 two-test rule). No component was
 proposed, nothing shipped is refuted, and no key is removed. `maneuver.turn_start_s` was never
-written; if a later slice wants it, §I's emulation shows the seam is clean and ten shipped scenarios
-author a `maneuver:` block with no such key — absent ⇒ `w.t ≥ 0.0` ⇒ the turn starts at `t` = 0 ⇒
-every slice 12–50 wire byte-identical. **Verified by name, not by construction (LESSONS §752).**
+written; if a later slice wants it, §I's emulation shows the seam is clean: **EIGHT** shipped
+scenarios author a `maneuver:` block (12, 15, 19, 21, 22×2, 49, 50) and none carries such a key —
+absent ⇒ `w.t ≥ 0.0` ⇒ the turn starts at `t` = 0 ⇒ every slice 12–50 wire byte-identical.
+**Verified by name, not by construction (LESSONS §752).** ⚠ And the first count taken here was TEN,
+because `grep -l 'maneuver:'` matches the two scenarios whose comments say they have **no** such
+block (`slice14_salvo`, `slice20_induced_drag`) — §752's own failure, in the very sentence citing it.
 
 ## §VII — WHAT IS BANKED (the three findings, in the order they are worth)
 

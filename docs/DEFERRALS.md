@@ -892,8 +892,10 @@ read at a bounded time after the return, or it inherits this kill. ⚠ It is sti
 **⚠ THE TURN ONSET KEY (`maneuver.turn_start_s`) — UN-BUILT, AND THE SEAM IS CLEAN.** Slice 50 named
 it *"the most interesting axis in the slice"* and ruled it not-authorable. Slice 51 emulated it (write
 `:a_lat_mps2` per tick; `ManeuveringTarget` reads it with a default every tick, `missile.jl:1092`) and
-confirms: ten shipped scenarios author a `maneuver:` block, none would grow the key, absent ⇒ turn
-from `t` = 0 ⇒ every slice 12–50 wire byte-identical (**checked by name, LESSONS §752**). ⚠ It is a
+confirms: **eight** shipped scenarios author a `maneuver:` block (12, 15, 19, 21, 22×2, 49, 50),
+none would grow the key, absent ⇒ turn from `t` = 0 ⇒ every slice 12–50 wire byte-identical
+(**checked by name, LESSONS §752** — ⚠ the file-level grep first said TEN, matching two comments that
+say the opposite)). ⚠ It is a
 one-commit key whenever a slice needs it — but slice 51 is NOT that slice, and a key with no lesson
 behind it is not worth a commit.
 
