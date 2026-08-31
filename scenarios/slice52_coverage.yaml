@@ -1,0 +1,228 @@
+# slice52_coverage — HOW WIDE SHOULD A SEEKER SEARCH? (HANDOFF §11 Tier-A, slice 52 gate 3). This
+# is slice 48's wire — the same link budget, the same 10° window, the same 45° trunnion, the same
+# seed, the same launch, the same authored picture error — with the SWEEP RATE nailed down and the
+# other half of `search_sweep` handed to the student instead. Slice 48 asked how FAST the head
+# should look around; this file asks how WIDE.
+#
+# > THE LESSON, IN ONE SENTENCE. A sweep must be sized to the uncertainty you actually have: too
+# > narrow never reaches the target at all, and every degree wider than necessary is paid TWICE, in
+# > travel spent before you ever look at the right place.
+#
+# ⭐⭐⭐ AND THAT MAKES THIS THE FIRST **TWO-SIDED** KNOB OF THE SEARCH FAMILY, which is the whole
+# difference from slice 48. A sweep RATE is monotone better upward — buy the fastest servo you can
+# afford — and its expensive end is the servo's own limit rather than anything the search does. A
+# COVERAGE has an expensive end of its own, immediately above a cliff where the missile gets
+# nothing at all, so the right value is a MATCH rather than a maximum.
+#
+#     S (deg)  clamped   t_lock s   FLOWN ±°  flown/told   a/a_max    CPA m
+#       1        no        NEVER      0.266      0.27         —      1039.88  <- ⭐ THE FLOOR, AND
+#       2        no        NEVER      0.828      0.41         —      1039.88     IT IS A REGION:
+#       4        no        NEVER      2.367      0.59         —      1039.88     every cell here is
+#       4.75     no        NEVER      3.020      0.64         —      1039.88     BIT-IDENTICAL
+#       5.00     no       0.2660      3.243      0.65       0.227       0.29  <- ⭐⭐ THE CLIFF,
+#       6        no       0.2990      4.157      0.69       0.232       0.07     0.25° WIDE
+#      10        no       0.4490      8.004      0.80       0.248       0.03
+#      16        no       0.6760     13.959      0.87       0.282       0.07
+#      20        no       0.8290     17.953      0.90       0.305       0.42
+#      25        no       1.0230     22.951      0.92       1.000      32.09  <- ⭐⭐ SLICE 48's OWN
+#      30        no       1.2220     27.951      0.93       1.000     171.73     COVERAGE
+#      35        no       1.4260     32.950      0.94       1.000     309.79
+#      40        no       1.6380     37.949      0.95       0.929     446.05  <- the ceiling
+#      45      102 ticks  1.8590     40.476      0.90       0.782     578.10  <- ⚠ OFF THE SLIDER:
+#                                                                                the stop binds
+#
+# ⭐⭐⭐ AND READ THE `flown/told` COLUMN, BECAUSE IT IS WHY THE FLOOR IS AT 5° AND NOT AT 1.5°.
+# The gap to cover at the moment of the first excursion is about 3°, and a 4.75° sweep looks more
+# than wide enough for it — but the head only FLIES ±3.02° of that 4.75, and it misses the window's
+# rim by 0.03°. **A head does not fly the coverage you author**, and the narrower the sweep the
+# less of it survives: 27 % at 1°, 65 % at 5°, 95 % at 40°, because a sweep's period is `4S/ρ` and
+# the gimbal's lag is a fixed 0.05 s. A student sizing this sweep from the authored number alone
+# would predict the floor at 3° and be wrong by two thirds.
+#
+# ⭐⭐⭐ THE SHOWCASE OPENS AT 25.0° — SLICE 48's OWN AUTHORED NUMBER — AND IT IS THE DISEASE (the
+# 35/36/46/47/48 precedent). At 25° this missile finds the target every single time, flies the rest
+# of the engagement PINNED at 100 % of its manoeuvre limit, and still misses by 32 m. Drag DOWN to
+# 6° and it arrives at 7 cm having spent a quarter of the airframe. **The number the previous slice
+# shipped is four times wider than this engagement needs, and nothing on slice 48's HUD could have
+# said so** — because slice 48 never varied it.
+#
+# ⚠⚠ THE GAUGE IS `search_t_lock_s` AND THE THREE-REGION AUTHORITY VERDICT, **NEVER THE MISS**
+# (slices 44, 45, 46, 47, 48 all paid for this; the CPA column above is quoted to show the shape and
+# for nothing else). Across the whole floor region the trajectory is BIT-IDENTICAL to a head that
+# never swept at all — 1° and 4.75° of sweep fly the same missile to the same 1039.88 m — because
+# nothing the head does reaches the guidance until something is LOCKED.
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# THE THREE NUMBERS THAT DIFFER FROM SLICE 48's WIRE, EACH WITH THE MEASUREMENT THAT FORCED IT
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# 1. ⭐⭐ `seeker_search_rate_dps: 60.0` (slice 48: 0.0, its slider's floor) — **A MEASURED CHOICE,
+#    NOT A COPY, AND IT IS THE ONE PLACE THE TWO SLICES COMPOSE.** At 240 °/s the whole coverage
+#    ladder is benign — every cell hits, authority 0.213 → 0.247 — and the slider would teach
+#    nothing. At 60 the SAME ladder spans never → found-but-pinned → found-early-and-cheap, which is
+#    slice 48's own three-region verdict re-earned on the other axis. ⚠ And 60 is where the head
+#    still flies 92 % of the sweep it is commanded at the showcase's opening width; at 120 it flies
+#    84 % and at 240 only 70 %, and the FLOOR ITSELF MOVES WITH IT — 5.00° / 5.75° / 7.50°, so the
+#    same 6° sweep that acquires at 60 °/s never acquires at 240. **A faster sweep needs a wider
+#    one.** The two knobs COMPOSE; they do not substitute.
+#
+# 2. ⭐⭐⭐ `seeker_search_coverage_deg: 25.0` IS NOW **THE SLIDER** (slice 48 authored it and
+#    §0.7 of its plan kept it in reserve). Everything about it below.
+#
+# 3. ⭐⭐⭐ `seeker_search_realized: true` — **THE INSTRUMENT, AND THE ONLY NEW PHYSICS-SIDE KEY THE
+#    SLICE SHIPS.** `search_offset_deg` is what the head is COMMANDED: a triangle of amplitude
+#    exactly S. Between it and the sky sits the gimbal, and a lag is a low-pass — over the
+#    acquisition the head's widest excursion is 0.92 of the commanded one at 60 °/s and 0.70 at 240
+#    (a fixed 0.05 s of lag against a sweep period of `4S/ρ`). A slice whose entire
+#    subject is HOW WIDE cannot leave the width the head actually flew off the wire, so this key
+#    turns on `search_realized_deg` and `search_realized_peak_deg` beside the commanded pair.
+#    ⚠ AUTHORED RATHER THAN UNIVERSAL, and the reason is convention 2: slice 48's wire authors the
+#    search and NOT the instrument, so its frames stay byte-identical. It is also what raises this
+#    slice's view marker — the two wires are otherwise indistinguishable to the client.
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⭐⭐ WHY THE RIGHT WIDTH IS NOT A NUMBER IN THE SEEKER's DATASHEET. The sweep centre is the LIVE
+# belief, and the belief is a dead-reckoned snapshot walking away from the truth at ~6.9 °/s — so
+# the gap the sweep has to cover GROWS while the search runs. The head reaches its first extreme on
+# the WRONG side at `3S/ρ`, and it locks if and only if the band covers the target THERE: it is
+# FIRST-EXCURSION-OR-NEVER, and no later sweep is better than an earlier one. ⇒ the sweep must
+# cover not the gap it inherits but the gap it will face after `3S/ρ` seconds of travel, which is
+# why widening is not free even when the target is well inside the widened band.
+# ⇒ **the narrowest coverage that still acquires tracks the PICTURE ERROR, steeply**: 5.00° at the
+# 140 authored here, 8.00° at 160, 11.25° at 180, 15.75° at 200, 22.25° at 220. Below a picture
+# error of ~130 the handover lands INSIDE the window and no sweep is needed at all — *a search
+# costs time, and time is worthless when you were launched already able to see.*
+#
+# ⚠ ONE LIVE KNOB BESIDE ONE FIDELITY BUTTON (the 32/34/37/40/46/47/48 shape, convention 9), and
+# the button is slice 46's `seeker_detect: none ↔ snr` UNCHANGED — still the sharpest A/B here.
+# Press it and the horizon goes away: the missile locks on tick 1, is never blind, and there is
+# nothing to search for at any width. *You only search because you were blind.*
+#
+# NAMED APPROXIMATIONS (§1): everything slice 48 named, unchanged — a SINGLE-AXIS SYMMETRIC
+# TRIANGLE SWEEP IN BODY AZIMUTH (not a raster, not a spiral, not a palmer scan); the sweep CENTRE
+# is the LIVE belief, so the deficit grows while the search runs; NO DETECTION LOGIC CHANGES (the
+# lock is still slice 46's link budget and slice 25's noise — a wider search does not make the
+# detector better); one belief snapshot dead-reckoned at constant velocity, no datalink update, no
+# INS drift, a non-manoeuvring target, an authored deterministic picture error.
+# ⚠ AND ONE THIS SLICE ADDS: the realized sweep is measured against the LIVE centre it is swept
+# about, so it is the head's offset from the belief and NOT its travel in inertial space.
+#
+# UNITS (§1 trifecta): `seeker_search_coverage_deg` is DEGREES at this boundary (radians inside —
+# the `gimbal_*_deg` posture, slice 35's rule: the name carries the unit only where there is a time
+# in it, which is why the RATE says `_dps` and the coverage does not). `search_realized_deg` is
+# SIGNED degrees in the BODY frame, measured from the sweep CENTRE, exactly as `search_offset_deg`
+# beside it; `search_realized_peak_deg` is its running MAGNITUDE peak and is never negative.
+# dt = 1e-3 / emit_every = 16.
+name: slice52_coverage
+seed: 32
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # SLICE 46/47/48's SIX KEYS, UNCHANGED TO THE DIGIT — the coverage is not a fidelity rung (it is
+  # an authored comp key), for slice 48's reason exactly: the anchor is a key an AUTHOR writes, and
+  # the slider's own floor already reaches a search that never gets there.
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+  # ⭐ THE BUTTON, AND THE SHOWCASE OPENS WITH IT **ON** — the disease first. Pressing it removes
+  # the horizon, which removes the blind phase, which removes the search at every width.
+  seeker_detect: snr
+
+entities:
+  # The interceptor — slice 48's plant, launch condition, seven-key seeker budget and 45° trunnion,
+  # to the digit, with the sweep RATE authored at 60 °/s and the instrument turned on.
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               gimbal_tau_s: 0.05, gimbal_stop_deg: 45.0, gimbal_fov_deg: 10.0,
+               gimbal_rate_dps: 240.0,
+               seeker_search: true, seeker_search_coverage_deg: 25.0,
+               seeker_search_rate_dps: 60.0,
+               seeker_search_realized: true,
+               detect_pt_w: 200.0, detect_freq_hz: 16.0e9, detect_tint_s: 0.010,
+               detect_nf_db: 4.0, detect_loss_db: 5.0, detect_eta: 0.6,
+               detect_snr_min_db: 10.0}
+      # THE MIDCOURSE, UNCHANGED FROM SLICE 48 — including the belief error's DIRECTION, which is
+      # what makes the sweep open AWAY from the target and the wrong-half cost real (slice 48's
+      # reason 2: on slice 47's direction the target sits at +12.94° and the sweep opens straight at
+      # it, so every width would lock at once and the slider would teach nothing).
+      # ⚠⚠ `midcourse_err_gain: 140.0` IS A FIXTURE HERE, NOT A KNOB — convention 9, and this slice
+      # needs it harder than slice 48 did: it is the quantity that SETS the right coverage, so a
+      # second slider on it would let a student move the answer and the question at once.
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3,
+                 midcourse: true, midcourse_k: 1.0,
+                 midcourse_vel_err_mps: [0.0, 1.0, 0.0],
+                 midcourse_err_gain: 140.0}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # SLICE 48's TARGET, to the digit — +1000 m off the missile's ballistic plane so the authored
+  # launch heading is NOT the midcourse solution (on an in-plane geometry a wrong picture has
+  # nothing to be wrong about, which is how slices 44 and 45 died). ⚠ `rcs_m2` is AUTHORED, never a
+  # knob: it is slice 46's own slider and dragging it here would move the horizon, the blind
+  # duration and the handover range at once.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 3000.0, 4200.0]
+    vel: [0.0, -200.0, 0.0]
+    target: {rcs_m2: 0.020, cross_speed_mps: -200.0}
+
+knobs:
+  # EXACTLY ONE LIVE KNOB. BOTH ENDPOINTS ARE MEASURED AND BOTH HAVE REASONS — and neither of them
+  # is 0, which is the difference from slice 48's slider and is itself a measurement:
+  #   FLOOR 1.0°: ⚠⚠ **NOT ZERO, AND DELIBERATELY.** Slice 48's rate floor is a true null — a head
+  #     that does not sweep at all. A coverage of 0 is NOT the same object: the search branch still
+  #     runs, the head is still commanded, the sweep is simply zero-amplitude — and the loader
+  #     refuses it as an authored value ("a search with nowhere to look"). 1.0° is a head that
+  #     visibly sweeps, on a wire that visibly searches, and STILL never gets there. That is the
+  #     honest floor for this axis: **the failure being taught is REACH, not inaction.**
+  #   CEILING 40.0°: the widest sweep this trunnion can fly with the mechanical stop staying OUT of
+  #     the acquisition — the head peaks at 42.49° against the authored 45° stop. At 45° the stop
+  #     binds for 102 ticks BEFORE the lock, and while the gauge survives it (`t_lock` is
+  #     bit-identical across stops of 45 / 60 / 90, because a positional sweep computed from
+  #     `t_since_start` cannot fall behind its own schedule) a showcase whose top cell is clamped
+  #     would be teaching the trunnion beside the coverage. ⚠ NOT an arbitrary round number: it is
+  #     the largest ladder cell measured clean.
+  #   LINEAR, because the cost is: `t_lock` runs 0.2660 → 1.6380 s across the domain at very nearly
+  #     a constant 0.040 s per degree. ⚠ And the floor region (1 → 4.75°) is a tenth of the travel
+  #     and must READ as a region — a log slider would stretch exactly the part where the answer is
+  #     already "never".
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED, AND THE FIRST ONE IS THE INTERESTING ONE:
+  #   `seeker_search_rate_dps` (slice 48's OWN slider — the two COMPOSE, and dragging both would let
+  #     a student move the floor and the width at once: at 240 °/s the floor is 7.50° and at 60 it
+  #     is 5.00°, so the same drag would mean different things at different rates);
+  #   `midcourse_err_gain` (slice 47's slider — it is what SETS the right coverage, so it is the
+  #     answer to this slice's question and cannot also be an input to it);
+  #   `rcs_m2` (slice 46's — the horizon, the blind duration and the handover range at once);
+  #   `gimbal_fov_deg` (⚠⚠ TWO-SIDED since slice 46 — it moves the window AND the horizon in
+  #     opposite directions, and here it would additionally move the DEFICIT, which is the very
+  #     thing the coverage is being matched to);
+  #   `gimbal_stop_deg` (authored HARDWARE, and the ceiling above is chosen precisely to keep it
+  #     out of the measurement);
+  #   the two belief-error VECTORS (⚠ refused at load BY TYPE — `set_param` carries one Float64).
+  #
+  # ⚠ THE LABEL IS LENGTH-BUDGETED (~110 characters — slice 32's shots paid for this): knob labels
+  # are drawn full-width in the UI CanvasLayer and paint OVER the `_draw` HUD column at `vp.x − 430`.
+  - {target: m1, key: seeker_search_coverage_deg, min: 1.0, max: 40.0,
+     label: "SEEKER SWEEP WIDTH (deg) — too narrow never reaches it, too wide is paid TWICE"}

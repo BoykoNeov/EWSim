@@ -789,6 +789,31 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                           "(the RATE, by contrast, defaults to 0 = the null; slice 48)")
                 comp[:seeker_search_rate_dps] = _f64(get(sb, "seeker_search_rate_dps", 0.0))
             end
+            # ⭐⭐⭐ SLICE 52 — THE INSTRUMENT THAT MEASURES THE SWEEP THE HEAD ACTUALLY FLEW.
+            # `seeker_search_realized: true` turns on two telemetry keys (`search_realized_deg` and
+            # its peak) and the client's 14th view marker. It is authored rather than universal for
+            # convention 2's reason: slice 48's wire must stay byte-identical, and a key every search
+            # wire grew would change its frames.
+            #
+            # ⚠ THE ANCHOR POSTURE, EXACTLY AS ABOVE — presence is the gate and `false` is refused,
+            # because a `false` authors the instrument while meaning the opposite. ⚠⚠ AND IT IS
+            # REFUSED WITHOUT `seeker_search`, for the dead-knob reason this project has now caught
+            # six times: the quantity is formed on the SEARCH arm of the seam, so on a wire with no
+            # search there is nothing to realize and the key would be read by nothing.
+            if haskey(sb, "seeker_search_realized")
+                sb["seeker_search_realized"] === true ||
+                    error("missile '$id': seeker.seeker_search_realized: " *
+                          "$(sb["seeker_search_realized"]) is not a way to turn the instrument OFF " *
+                          "— OMIT the key. Its PRESENCE is the gate (the seeker_search posture, " *
+                          "slice 48), and `false` would author it while meaning the opposite " *
+                          "(slice 52)")
+                haskey(comp, :seeker_search) ||
+                    error("missile '$id': seeker.seeker_search_realized authored without " *
+                          "seeker.seeker_search: true — the realized sweep is formed on the SEARCH " *
+                          "arm of the seam, so without a search there is nothing to measure and " *
+                          "this key would be DEAD (slice 52)")
+                comp[:seeker_search_realized] = true
+            end
             # DEGREES at the YAML boundary, radians inside (the `gimbal_*_deg` posture — the seam
             # converts once, and `search_sweep` owns every degenerate below the boundary).
             # ⚠ `seeker_search_rate_dps` CARRIES ITS UNIT and the coverage does not, for slice 35's

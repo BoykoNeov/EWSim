@@ -751,10 +751,29 @@ halves of the two-test rule PASS, and all six pre-registered falsifiers are answ
 - **The floor is a genuine NULL** — bit-identical to `S` = 0 over 8926 ticks (`max|Δpos|` =
   0.000e+00) while the head is demonstrably sweeping to ±S.
 
-**⚠ WHAT IS LEFT IS A SHOWCASE, NOT PHYSICS.** No core change was made and none is needed: the key
-is read every tick (`missile.jl:2954`) and already emitted. Gates 1–3 would author
-`scenarios/slice52_*.yaml` on slice 48's geometry with ρ AUTHORED at 60 °/s and the coverage as THE
-slider, plus a view and the four proofs.
+**⭐⭐⭐ SHIPPED IN FULL, 2026-08-31 — `scenarios/slice52_coverage.yaml`, suite 18632 / 18632, all
+four proofs green.** The as-built record is `docs/STATUS.md` §"Slice 52". The slider spans 1.0–40.0°
+(⚠ **neither endpoint is zero** — a coverage of 0 is a search with nowhere to look, refused at load,
+and NOT slice 48's null of a head that does not move), opens on slice 48's own authored 25° because
+that is **the disease**, and the ceiling is the last cell the 45° trunnion stays out of.
+
+**⚠⚠ ONE THING GATE 0's "no core change was made and none is needed" DID NOT REACH, and gate 1 §X
+caught it: THE CLIENT.** A slice-52 wire IS a slice-48 wire with a different slider, so it authors
+`:seeker_search` and raises `search_view` — and slice 48's HUD is ALL TRUE on it while never saying
+that the WIDTH is what is being dialled. **The first marker in this family whose fallback is its
+predecessor's own block about the same head, and ordering alone could not have fixed it.** ⇒ gate 3
+ships one new authored anchor, `seeker_search_realized`, which is an INSTRUMENT rather than a view
+flag: it turns on `search_realized_deg` / `search_realized_peak_deg` / `search_offset_peak_deg` and
+raises the 14th marker. ⚠ Authored rather than universal so slice 48's frames stay byte-identical.
+
+**⭐⭐⭐ AND THE INSTRUMENT PAID FOR ITSELF IMMEDIATELY — THE HEAD DOES NOT FLY THE COVERAGE YOU
+AUTHOR.** Over the acquisition the head reaches **0.27** of a 1° command, **0.65** at the cliff,
+**0.92** at 25°, **0.95** at 40° (a fixed 0.05 s of lag against a sweep period of `4S/ρ`); and at a
+fixed 25° it falls 0.9188 / 0.8389 / 0.7021 as ρ goes 60 / 120 / 240, which is why the floor RISES
+with the rate — 5.00 / 5.75 / 7.50°. **A faster sweep needs a wider one.** ⇒ at the cliff the gap was
+2.8035°, the AUTHORED band 5.00° (2.20° of overshoot) and the FLOWN band 3.2429° (0.44° of margin):
+**a designer sizing this sweep from the authored number alone predicts the floor at ~3° and is wrong
+by two thirds.**
 
 **⚠⚠ CLOSED BY THIS GATE 0, so nobody re-proposes them:**
 
@@ -765,6 +784,27 @@ slider, plus a view and the four proofs.
   replaced it is the composition result above.
 - **`S*`'s multiplier over the inherited deficit as a number to quote** — 2.4–3.7× is ρ = 60's
   outcome, not a coefficient and not a law.
+
+### New candidates raised by slice 52 (2026-08-31)
+
+- **THE `search_offset_peak_deg` / `search_realized_peak_deg` PAIR AS A DESIGN GAUGE IN ITS OWN
+  RIGHT.** Slice 52 uses the ratio as an EXPLANATION (why the floor sits where it does). It is also
+  a servo-sizing statement: the head flies a fixed fraction of its command set by `4S/(ρ·τ)`, and a
+  slice could ask what `gimbal_tau_s` a given search pattern actually requires. ⚠ The kill risk is
+  slice 41's in new clothes: `τ`, `ρ` and `S` all enter that one group, so a `τ` sweep may reproduce
+  an `S` sweep by construction. **Its gate 0 must fly the group, not the three knobs.**
+- **AN ELEVATION AXIS ON THE COVERAGE, i.e. slice 45's rectangle re-asked in this slice's currency.**
+  45 died as a lesson because *a TRACKER holds both axes near zero so a window's corners are never
+  visited*; slice 52's search drives ONE axis to the rim by design and 45's own note says a SEARCH is
+  the case where corners are visited. ⚠ Still needs the geometry slice 48's own candidate asked for —
+  a wire where the deficit is NOT pure azimuth — and that is the whole gate-0 question.
+- ⚠ **NOT a candidate: `midcourse_err_gain` as a slider beside the coverage.** It is what SETS the
+  right coverage (`S*` = 5.00° at 140 and 22.25° at 220), so it is the ANSWER to slice 52's question
+  and cannot also be an input to it. Convention 9, with a reason stronger than the usual one.
+- ⚠ **NOT a candidate: re-opening whether the band may be drawn from `search_coverage_deg`.** Gate 2
+  tooth I measured that the echo reports `FINITE_CEIL` on a NaN beside a sweep of exactly zero; gate
+  3 made the prohibition structural by shipping a peak of the COMMAND instead. Do not "simplify" the
+  HUD back onto the echo.
 
 ## New candidates raised by slice 49
 

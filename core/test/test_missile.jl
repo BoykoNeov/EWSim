@@ -8270,11 +8270,18 @@ end
             # the first wire on which the thing being lost is lost for a reason that is NOT the
             # missile's: a saturating servo would offer a second explanation for a dropped lock, on
             # the one wire whose entire claim is that the TARGET caused it.
+            # ⚠ SLICE 52 WIDENED IT A NINTH TIME AND THE ASSERT CAUGHT IT AGAIN — and this one
+            # is the cheapest widening there can be, because slice 52's wire IS slice 48's wire with
+            # a DIFFERENT SLIDER: the same head, the same window, the same 240 °/s servo, authored
+            # for the same measured reason. It matters as much as it did in 48 and for the same
+            # sentence with one word changed — a saturating servo would make "the sweep did not
+            # cover the gap in time" unattributable to the sweep WIDTH.
             @test carriers == ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml",
                                "slice37_frame.yaml", "slice38_head_gyro.yaml",
                                "slice40_heavy.yaml", "slice40_resonance.yaml",
                                "slice46_horizon.yaml", "slice47_midcourse.yaml",
-                               "slice48_search.yaml", "slice50_defensive.yaml"]
+                               "slice48_search.yaml", "slice50_defensive.yaml",
+                               "slice52_coverage.yaml"]
         end
     end
 
@@ -8367,7 +8374,13 @@ end
                              # button, because slice 46's button is still this slice's own A/B:
                              # press it and the horizon goes away, the lock is never taken back, and
                              # the target's shape stops mattering at all).
-                             "slice50_defensive.yaml"]
+                             "slice50_defensive.yaml",
+                             # ⚠ SLICE 52: slice 48's wire with the SWEEP WIDTH as the slider
+                             # instead of the sweep rate, so it carries the same authored-wide servo
+                             # for the same reason. Same remedy; its mirror is
+                             # `slice52_ui_test.gd`, and its marker has 47/48's shape — the HUD,
+                             # deliberately NOT the button.
+                             "slice52_coverage.yaml"]
             for f in readdir(base)
                 endswith(f, ".yaml") || continue
                 f in expected_rate && continue
@@ -11447,7 +11460,12 @@ end
             # blind phase) with a SEARCH on the head, so it raises `midcourse_view` too — and its
             # own `search_view` is checked FIRST in the client, which is what stops 47's HUD from
             # taking a wire whose whole story is what the head did AFTER the cue was wrong.
-            @test carriers == ["slice47_midcourse.yaml", "slice48_search.yaml"]
+            # ⚠ SLICE 52 JOINS IT TOO, for slice 48's reason exactly: its wire IS slice 48's
+            # wire with a different slider, so the belief that the head sweeps ABOUT is this one's
+            # — and its own `search_realized_view` is checked FIRST in the client, ahead of both
+            # `search_view` and this marker.
+            @test carriers == ["slice47_midcourse.yaml", "slice48_search.yaml",
+                               "slice52_coverage.yaml"]
         end
 
         # AND THE CLIFF, FLOWN OFF THE SHIPPED FILE. Two arms one metre per second apart, straddling

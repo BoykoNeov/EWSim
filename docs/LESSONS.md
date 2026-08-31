@@ -397,6 +397,90 @@ height and width at once. âš  **This is slice 46's finding one widget over**:
 WIDE, here there were too MANY of them. A layout budget is not a per-line property; it is a property
 of everything sharing the window.
 
+### ⚠⚠ THIRD OCCURRENCE (slice 52, 2026-08-31) — **THREE DEFECTS, AND ALL THREE ARE ABOUT WHETHER THE PICTURE AGREES WITH ITSELF**
+
+The verifier (17 arms), the UI test (11 teeth, including the band's geometry down to the pixel), the
+smoke-load and the full 18632-test suite were all green, and the shot still changed three things:
+
+1. **A FILLED BAND INSIDE A FILLED BAND IS NOT A COMPARISON.** The slice's whole picture is a
+   commanded width containing a narrower flown one. At the showcase's opening width the head flies
+   92 % of its command, so the outer band was a **two-pixel sliver** either side and the containment —
+   the entire content — was invisible. An OUTLINE reads at every ratio, including the 27 % one at the
+   slider's floor. ⭐ **A geometric claim needs a form that survives its own extreme case**, and the
+   extreme case here is the one the design is *best* at.
+2. **A ROUNDED HEADLINE CAN DISAGREE WITH THE CONTROL THE STUDENT IS HOLDING.** `%.0f` on the width
+   printed *"SWEEPING 5°"* beside a slider reading **4.75** — at the cliff, which is exactly where a
+   student stops to read it. ⚠ Not a truncation bug: every number was right. The defect is that the
+   HUD and the widget disagreed, and no assertion in any suite compares them.
+3. **THE SAME NUMBER TWICE UNDER TWO LABELS** — slice 50's own finding, arrived at independently and
+   caught the same way. The block inherited 47/48's "range %.0f m — the MISS says nothing here" onto
+   a view whose shared header already draws "range to target", so the shot came back with 2615 m
+   printed twice. ⇒ the disclaimer names the **closing speed** instead, which is the other clock the
+   sweep is racing and appears nowhere else on screen.
+
+⚠ All three are invisible to a text-only proof by construction: two are about SPATIAL relations
+between drawn things, and the third is about a number's relation to a widget outside the HUD.
+
+## ⭐⭐⭐ A VIEW MARKER MUST SEPARATE WIRES THAT DIFFER ONLY BY THE **SLIDER**, AND ITS GATE MUST BE AN INSTRUMENT, NOT A FLAG (slice 52, 2026-08-31)
+
+Every view marker from 35 to 50 separated wires that differed in PHYSICS — a rung, a comp key, a
+target property — so the gate was always something the wire genuinely had that the others did not.
+Slice 52's wire is slice 48's wire with a different slider: the same missile, the same anchor, the
+same blind phase, the same numbers except three. It therefore authors `:seeker_search` and **raises
+slice 48's marker**, and slice 48's HUD block is ALL TRUE on it — the sweep is real, the gap is real,
+the lock time is real. What it cannot say is that the WIDTH is what is being dialled.
+
+⚠⚠ **THIS IS THE ONE FORM OF THE INVISIBLE-SLICE FAILURE THAT ORDERING CANNOT FIX.** The family's
+standing remedy since slice 35 is "check the newest marker FIRST in every dispatch chain". That works
+when a newer marker EXISTS to check. Here there was nothing to raise it on.
+
+⭐⭐⭐ **THE WAY OUT IS TO ASK WHAT THE NEW SLIDER'S LESSON NEEDS ON THE WIRE THAT THE OLD ONE DID
+NOT, AND SHIP THAT.** Slice 52 needed the width the head ACTUALLY flew (its gate 2 had measured that
+a head flies 0.27–0.95 of its command). That is a real instrument, read every searching tick, and
+authoring it is what distinguishes the wire. ⇒ `seeker_search_realized` gates two telemetry keys AND
+the marker.
+
+⚠ **A MARKER KEY WITH NO PHYSICS BEHIND IT WOULD HAVE BEEN THE DEAD-KNOB CLASS** — a key consumed at
+load and read by nothing, which the two-test rule calls the one outright kill. The test that
+distinguishes the two: *does the physics read this key every tick?* If the honest answer is no, you
+have written a view flag into a physics bag and should find the instrument instead.
+
+⚠ **AND THE CARRIER SETS MUST BE EXTENDED, NEVER LOOSENED.** Three enumerated sets failed the moment
+the new scenario landed (`search_view`, `midcourse_view`, and the `gimbal_rate_dps` list plus its
+mirror exemption) — each one the assert doing its job. The NEW marker's set is what still carries the
+separation, so it stays a single-file list.
+
+## ⚠⚠ AN "ON EVERY ARM" CLAIM MUST NAME THE ARMS WHERE THE MECHANISM DOES NOT RUN — AND THE EXEMPTION IS USUALLY THE CLAIM (slice 52, 2026-08-31)
+
+`slice52_verify.gd` asserted two things on every arm and both failed on the first run, neither
+because the physics was wrong:
+
+- *"the flown sweep is strictly inside the commanded one"* — true wherever a band is swept, and
+  **undefined** on the horizon-OFF arms, which register exactly ONE searching frame: the tick the
+  branch opens, where `search_sweep(0) === 0.0` by construction (the kernel's own tooth 1). Both
+  peaks are a true 0.0 there. ⇒ gate the claim on **a band having been swept** (`told > 0`), not on a
+  frame count.
+- *"the head sweeps on every arm, because the rate is authored"* — and the mid-run PRESS arm never
+  sweeps at all, because the horizon is removed BEFORE the handover so the receiver never opens onto
+  empty sky. ⭐ That is not an exemption, it is *you only search because you were blind* — slice 48's
+  own sentence — so it ships as `@test searching == 0` rather than as a skip.
+
+⚠ The general shape: when a universal claim fails on an arm, ask whether that arm is **outside the
+claim's domain** before weakening the claim. Twice here the arm outside the domain was carrying a
+result worth asserting in its own right.
+
+## ⚠ A "HAS THIS ARM DRAINED YET?" PREDICATE MUST BE ARM-SPECIFIC, OR THE SECOND SHOT PHOTOGRAPHS THE FIRST (slice 52, 2026-08-31)
+
+A two-arm windowed-shot harness reset, dragged the slider, stepped N and waited for "the search keys
+look live" before capturing. That predicate was **already satisfied by the previous arm's telemetry**,
+which a Reset does not clear on the client, so the second shot re-photographed the first arm's frame
+with the second arm's filename. ⚠ It printed plausible numbers and the PNG was not obviously wrong.
+
+⇒ two fixes, and the second is the general one: (a) discriminate on a value that is unique to THIS
+arm — the slider's own echo coming back off the wire — and (b) **one arm per process**, which has no
+previous arm to be confused by. ⭐ The same class as the stale-instrument-across-reset bug this family
+has now fixed seven times, moved into the measuring harness instead of the display.
+
 ## Retract a rule you inherited if the wire refuses it â€” and say what replaced it (slice 47)
 
 âš âš  **A ban carried forward from a probe the plan itself flagged as CONFOUNDED did not survive contact

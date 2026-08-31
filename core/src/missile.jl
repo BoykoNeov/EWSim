@@ -954,6 +954,25 @@ function _airframe_view_info(w::World)
     # byte-identical and their markers are untouched.
     any(haskey(w.entities[m].comp, :seeker_search) for m in missiles) &&
         (info[:search_view] = true)
+    # ⭐⭐ SLICE 52 — THE SEARCH's **WIDTH**, the 14th marker of this family, and it is the first
+    # raised on a wire that is another slice's wire with a DIFFERENT SLIDER rather than with new
+    # physics. That is exactly why it has to exist: slice 52 flies slice 48's missile, authors slice
+    # 48's anchor and raises slice 48's marker, so `search_view` alone cannot tell the two apart —
+    # and slice 48's HUD is ALL TRUE here (the sweep is real, the gap is real, the lock time is
+    # real) while never saying that the WIDTH is the thing being dialled, that too narrow never
+    # reaches at all, or that every extra degree is paid twice in travel. The family's recurring
+    # invisible-slice failure, in the one form ordering alone could not have fixed.
+    #
+    # ⚠ GATED ON THE **COMP KEY** `:seeker_search_realized`, 38/46/47/48's posture, and the key is
+    # an INSTRUMENT rather than a flag: it turns on `search_realized_deg` /
+    # `search_realized_peak_deg`, the head's own flown sweep, which gate 2 measured at 86 % of the
+    # command at ρ = 60 and 52 % at 240. A view marker with no physics behind it would be the
+    # dead-knob class this project has caught six times; this one is read every searching tick.
+    # ⚠⚠ AND IT IS DISJOINT FROM `slice48_search.yaml` BY CONSTRUCTION — that file authors the
+    # search and not the instrument — which is what keeps slice 48's frames byte-identical and its
+    # own carrier test meaningful (`test_search.jl` enumerates BOTH sets).
+    any(haskey(w.entities[m].comp, :seeker_search_realized) for m in missiles) &&
+        (info[:search_realized_view] = true)
     # ⭐⭐ SLICE 50 — THE ASPECT-DEPENDENT ENGAGEMENT, the 13th marker of this family, and it is the
     # FIRST raised on a property of the **TARGET** rather than of the missile. Every marker above
     # asks what the missile is built out of; this one asks what it is shooting at. That is the whole
@@ -2969,6 +2988,42 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             # inside and the search is over; positive ⇒ that is how far the sweep must travel.
             search_def = off_axis_angle(cen_az, cen_el, look_az_b, look_el_b) - fov_h
             c[:search_elapsed] = t_srch
+            # ⭐⭐⭐ SLICE 52 — **THE SWEEP THE HEAD ACTUALLY FLEW**, beside the one it was commanded.
+            # `search_off` above is the COMMAND — a triangle of amplitude exactly `S`, which is what
+            # slice 48 read everywhere and what slice 52's gate 0 read everywhere. Between it and the
+            # sky sits the gimbal, and a lag is a LOW-PASS: gate 2 measured the head's peak-to-peak
+            # against the command's, on the same window, at **0.8637 at ρ = 60 °/s and 0.5216 at
+            # 240** — so the same 6° sweep that acquires at 60 never acquires at 240, and the floor
+            # rises 5.00 → 7.50°. ⇒ **a head does not fly the coverage you author**, and a slice whose
+            # whole subject is HOW WIDE cannot leave that quantity off the wire.
+            #
+            # ⚠ READ AFTER THIS TICK'S SLEW (`c[:head_az]` is written above, at the servo seam) and
+            # against THIS tick's centre, so the pair is simultaneous rather than a difference of two
+            # instants. `wrap_angle` because both are principal-interval body azimuths.
+            # ⚠⚠ ANCHOR-GATED ON `:seeker_search_realized` AND NOT ON `:seeker_search` — slice 48's
+            # wire authors the search and must stay BYTE-IDENTICAL (convention 2), so the instrument
+            # is a key an author asks for rather than one every search wire grows.
+            # ⚠ The PEAK is held HERE and not in the client: a client sees one frame in `emit_every`
+            # = 16 ticks and would sample the excursion's shoulders, which is what slice 47 paid to
+            # learn. It runs over the whole search HISTORY (a resumed search after a dropped lock
+            # keeps accumulating), because the question it answers is "how wide did this head ever
+            # actually sweep", not "how wide on this leg".
+            # ⚠⚠ THE **COMMANDED** PEAK IS HELD HERE TOO, AND THAT IS A VIEW PROHIBITION MADE
+            # STRUCTURAL. Gate 2 tooth I measured that `search_coverage_deg` is the BAG's value
+            # finite-clamped while the kernel floors a non-finite `S` to 0.0 — so on a NaN the wire
+            # would report `FINITE_CEIL` beside a sweep of exactly zero, and a HUD that drew its
+            # band from that echo would draw a band a billion degrees wide over a head standing
+            # still. ⇒ **the width the client draws comes from `search_offset_deg`, never from the
+            # echo**, and holding its peak in the core is what lets a client sampling one frame in
+            # sixteen have it at all.
+            if haskey(c, :seeker_search_realized)
+                real_off = wrap_angle(Float64(c[:head_az]) - cen_az)
+                c[:search_realized] = real_off
+                c[:search_realized_peak] =
+                    max(Float64(get(c, :search_realized_peak, 0.0)), abs(real_off))
+                c[:search_cmd_peak] =
+                    max(Float64(get(c, :search_cmd_peak, 0.0)), abs(search_off))
+            end
         else
             head_tgt_az, head_tgt_el = look_angles(c[:att_q]::Quat, los_unit_from_angles(az_m, el_m))
             c[:head_tgt_az] = head_tgt_az; c[:head_tgt_el] = head_tgt_el
@@ -3584,6 +3639,31 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
                 _finite(Float64(get(c, :seeker_search_rate_dps, 0.0)))
             tel["$sid.search_coverage_deg"] =
                 _finite(Float64(get(c, :seeker_search_coverage_deg, 0.0)))
+            # ⭐⭐⭐ SLICE 52 — THE REALIZED SWEEP, ANCHOR-GATED **INSIDE** THE SEARCH BLOCK so that
+            # a slice-48 wire's frame is byte-identical (convention 2 — slices are ADDITIVE).
+            # `search_realized_deg` is the head's own offset from the sweep centre THIS tick and
+            # `search_realized_peak_deg` the widest it has ever reached, both SIGNED/UNSIGNED exactly
+            # as `search_offset_deg` and a peak-hold are: the pair is COMMANDED vs FLOWN, and the
+            # ratio between them is what makes "how wide should the sweep be?" a question about the
+            # servo as well as about the picture.
+            # ⚠ THEY SHIP ON **EVERY** FRAME ONCE THE ANCHOR IS AUTHORED, including before the first
+            # sweep and after the lock, where they hold their last value — never-stale beats
+            # sometimes-absent, because a key that stops emitting makes a client's `.get(k, 0.0)`
+            # print a DEFAULTED ZERO as a passed test (`docs/CONVENTIONS.md` §14). ⚠⚠ AND HERE THAT
+            # default would be a LIE THE LESSON CANNOT SURVIVE: 0.0 realized means "the head never
+            # moved", which is the slider's own floor verdict.
+            if haskey(c, :seeker_search_realized)
+                tel["$sid.search_realized_deg"] =
+                    _finite_coord(rad2deg(Float64(get(c, :search_realized, 0.0))))
+                tel["$sid.search_realized_peak_deg"] =
+                    _finite_coord(rad2deg(Float64(get(c, :search_realized_peak, 0.0))))
+                # ⚠⚠ THE COMMANDED PEAK IS THE **DRAWN** WIDTH, and it exists so that no client
+                # ever has to reach for `search_coverage_deg` to size a band (gate 2 tooth I: the
+                # echo can report `FINITE_CEIL` beside a sweep of exactly zero). It is a peak of
+                # `search_offset_deg` — the same quantity, held where the emit grid cannot miss it.
+                tel["$sid.search_offset_peak_deg"] =
+                    _finite_coord(rad2deg(Float64(get(c, :search_cmd_peak, 0.0))))
+            end
         end
         # ⭐⭐ SLICE 36 — THE REQUIREMENT, AND THE MARGIN AGAINST IT. `head_off_deg` is what the
         # detector must cover THIS TICK; `head_off_peak_deg` is what it had to cover to get here,

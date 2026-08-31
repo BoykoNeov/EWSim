@@ -7340,3 +7340,168 @@ does not (probe P3 — every worthless recovery returns at 24.5 / 19.1 / 15.0° 
 That is not a branch anyone wrote; it is the absence of one, which is why it went unnamed for
 seventeen slices. ⚠ **Fixing it moves slices 34–50** and needs its own decision — `docs/DEFERRALS.md`.
 ⚠ And `head_off > fov` is `in_fov`'s DEFINITION (slice 42's tautology) — an explanation, never a gauge.
+
+---
+
+# Slice 52 — **HOW WIDE SHOULD A SEEKER SEARCH?** (`seeker_search_coverage_deg`, 2026-08-31)
+
+Slice 48's reserve axis, shipped. The wire is `scenarios/slice52_coverage.yaml` — **slice 48's wire
+with three authored numbers changed** — and the slider is the sweep's HALF-AMPLITUDE `S`. Gate 0's
+verdict, gate 1's kernel laws and gate 2's seam results are in `docs/plans/slice52.md` §§I–XI; this
+block is the as-built record of gate 3.
+
+**THE LESSON.** *A sweep must be sized to the uncertainty you actually have: too narrow never
+reaches the target at all, and every degree wider than necessary is paid TWICE, in travel spent
+before the head ever looks at the right half of the sky.*
+
+⭐⭐⭐ **THE FIRST TWO-SIDED KNOB OF THE SEARCH FAMILY, AND SLICE 48's OWN AUTHORED NUMBER IS ON THE
+WRONG SIDE OF IT.** A sweep RATE is monotone better upward and its expensive end belongs to the
+servo. A COVERAGE has an expensive end of its own, immediately above a cliff — so the right value is
+a MATCH, not a maximum.
+
+## THE LADDER, FLOWN OFF THE SHIPPED FILE (ρ authored at 60 °/s)
+
+| `S` ° | clamped | `t_lock` s | FLOWN ±° | flown/told | a/a_max | CPA m |
+|---|---|---|---|---|---|---|
+| 1 | no | **NEVER** | 0.266 | 0.27 | — | 1039.88 |
+| 2 | no | **NEVER** | 0.828 | 0.41 | — | 1039.88 |
+| 4 | no | **NEVER** | 2.367 | 0.59 | — | 1039.88 |
+| 4.75 | no | **NEVER** | 3.020 | 0.64 | — | 1039.88 |
+| **5.00** | no | **0.2660** | 3.243 | 0.65 | 0.227 | 0.29 |
+| 6 | no | 0.2990 | 4.157 | 0.69 | 0.232 | 0.07 |
+| 10 | no | 0.4490 | 8.004 | 0.80 | 0.248 | 0.03 |
+| 16 | no | 0.6760 | 13.959 | 0.87 | 0.282 | 0.07 |
+| 20 | no | 0.8290 | 17.953 | 0.90 | 0.305 | 0.42 |
+| **25** (slice 48's) | no | 1.0230 | 22.951 | 0.92 | **1.000** | **32.09** |
+| 30 | no | 1.2220 | 27.951 | 0.93 | 1.000 | 171.73 |
+| 35 | no | 1.4260 | 32.950 | 0.94 | 1.000 | 309.79 |
+| 40 (the ceiling) | no | 1.6380 | 37.949 | 0.95 | 0.929 | 446.05 |
+| 45 (OFF the slider) | **102 ticks** | 1.8590 | 40.476 | 0.90 | 0.782 | 578.10 |
+
+⚠ The CPA column is quoted to show the SHAPE and for nothing else — **the miss is forbidden as the
+gauge** and the floor region proves why: 1, 2, 4 and 4.75° fly a **BIT-IDENTICAL** trajectory to the
+same 1039.88 m while the head sweeps four visibly different bands (`max|Δpos| == 0` over 700 frames,
+asserted in both `test_search.jl` and `slice52_verify.gd`).
+
+## ⭐⭐⭐ THE NEW PHYSICS-SIDE KEY: `seeker_search_realized` — **THE HEAD DOES NOT FLY THE COVERAGE YOU AUTHOR**
+
+`search_offset_deg` is what the head is COMMANDED: a triangle of amplitude exactly `S`. Between it
+and the sky sits a **fixed 0.05 s** of gimbal lag, and the sweep's period is `4S/ρ` — so the
+NARROWER the sweep the less of it survives. Over the acquisition the head reaches **0.27** of a 1°
+command, **0.65** at the cliff, **0.92** at the showcase's opening 25°, **0.95** at 40°; and at a
+fixed 25° it falls **0.9188 / 0.8389 / 0.7021** as ρ goes 60 / 120 / 240 °/s, which is why the floor
+RISES with the rate (5.00 / 5.75 / 7.50°). **A faster sweep needs a wider one.**
+
+⭐⭐⭐ **AND THAT IS WHAT SETS THE CLIFF.** At `S` = 5.00 the gap to cover was **2.8035°** and the
+authored band overshoots it by **2.20°** — so a student sizing this sweep from the authored number
+alone predicts the floor near 3° and is wrong by two thirds. What actually just clears the gap is the
+**3.2429°** the head FLEW (excess **0.44°**). The last failing cell is not one where the command was
+too narrow either: 4.74° commanded against the same gap, and 3.02° flown.
+
+| what shipped | where |
+|---|---|
+| `:seeker_search_realized` — the authored anchor (presence-gated, `false` refused, refused without `seeker_search`) | `core/src/scenario.jl` |
+| the realized offset + its running peak, formed every searching tick at the seam | `core/src/missile.jl` (after `c[:search_elapsed]`) |
+| `search_realized_deg`, `search_realized_peak_deg`, `search_offset_peak_deg` | `core/src/missile.jl` emit block |
+| `search_realized_view` — the **14th** view marker | `core/src/missile.jl` `_airframe_view_info` |
+| the HUD block, six lines + the band, and the band's GEOMETRY as a pure function | `clients/godot/scenes/Sandbox.gd` |
+
+⚠⚠ **`search_offset_peak_deg` IS A VIEW PROHIBITION MADE STRUCTURAL.** Gate 2 tooth I measured that
+`search_coverage_deg` echoes the comp bag FINITE-CLAMPED while the kernel floors a non-finite `S` to
+exactly 0.0 — so on a NaN the wire reports 1e9 beside a sweep of zero. The HUD's band is sized from a
+peak of the COMMAND and never from that echo, and `slice52_ui_test.gd` feeds a 1e9 echo to prove it.
+
+## THE THREE NUMBERS THAT DIFFER FROM SLICE 48's WIRE
+
+1. **`seeker_search_rate_dps: 60.0`** (slice 48: 0.0, its slider's floor) — a MEASURED choice: at
+   240 °/s the whole coverage ladder is benign (every cell hits) and the slider teaches nothing; at
+   60 the same ladder spans never / found-but-pinned / found-early-and-cheap.
+2. **`seeker_search_coverage_deg: 25.0` is now THE SLIDER** (slice 48 authored it and never varied it).
+3. **`seeker_search_realized: true`** — the instrument above. ⚠ Authored rather than universal so
+   slice 48's frames stay byte-identical (convention 2), and it is also what raises the marker.
+
+## THE SLIDER — 1.0 … 40.0°, LINEAR, opening at 25.0
+
+⚠⚠ **NEITHER ENDPOINT IS ZERO, and the floor's reason is the difference from slice 48's slider.** A
+sweep RATE of 0 is a true null — a head that does not sweep at all. A COVERAGE of 0 is a different
+object: the search branch still runs, the head is still commanded, the sweep is merely
+zero-amplitude — and the loader refuses it as an authored value ("a search with nowhere to look").
+**1.0° is a head that VISIBLY sweeps and still never gets there: the failure taught here is REACH,
+not inaction.** The CEILING is the last cell the mechanical stop stays out of — head peak **42.49°**
+against the authored 45° trunnion at `S` = 40, where `S` = 45 binds for **102 ticks before the lock**.
+
+⭐ **THE DEFAULT OPENS ON THE DISEASE** (the 35/36/46/47/48 precedent) and the disease is *the number
+the previous slice shipped*: at 25° the missile finds the target every time, flies the rest of the
+engagement pinned at 100 % of `a_max`, and misses by 32 m; at 6° it arrives having spent 22 %.
+
+## THE MARKER, AND WHY IT HAD TO EXIST
+
+⭐⭐⭐ **THE FIRST MARKER IN THIS FAMILY RAISED ON A WIRE THAT DIFFERS FROM ITS PREDECESSOR ONLY BY
+THE SLIDER.** Every earlier marker separated wires that differed in PHYSICS. A slice-52 wire authors
+slice 48's anchor and therefore raises `search_view` too, so that marker can no longer tell the two
+apart — and slice 48's HUD is ALL TRUE here (the sweep is real, the gap is real, the lock time is
+real) while never saying that the WIDTH is what is being dialled. **Ordering alone could not have
+fixed this one**, which is why gate 1 §X wrote the problem down before a scenario existed.
+⚠ It takes the HUD and **not** the button: slice 46's `seeker_detect` is still this slice's own A/B.
+⚠ Checked FIRST in **both** dispatch chains (the verdict label and the HUD lines) — slice 50 shipped
+a bug where one chain was edited and the other was not, with every headless proof green.
+
+## THE HUD, AND THE ONE PIECE OF GEOMETRY THIS FAMILY HAS DRAWN SINCE SLICE 38
+
+Six lines plus a **band strip**: the head's whole mechanical travel, the width it was TOLD (an
+outline), the width it FLEW (a fill), the live head (a white marker) and two ticks at the gap it has
+to reach — which **walk outward** while the sweep runs, because the belief the sweep is centred on is
+drifting away from the truth at ~6.8 °/s. `_s52_band_rects` RETURNS the rectangles rather than
+painting them, so the drawing has a headless proof down to the pixel; only the `draw_rect` calls are
+unprovable (convention 14).
+
+⭐ **THREE THINGS THE WINDOWED SHOT DECIDED, AND NOTHING ELSE COULD HAVE:**
+1. The `told` band is an **OUTLINE, not a fill** — at the opening width the head flies 92 % of its
+   command, so a filled band is a two-pixel sliver and the containment is invisible.
+2. The headline prints `%.1f`, not `%.0f` — at the cliff it read *"SWEEPING 5°"* over a slider the
+   student was holding at **4.75**.
+3. The disclaimer names the **CLOSING SPEED**, not the range — slice 50's own correction, arrived at
+   independently: this view already draws "range to target" in its shared header, so the shot came
+   back with the same number twice under two labels.
+
+## THE TESTS
+
+`core/test/test_search.jl` gains a gate-3 section (the authored wire against slice 48's key by key,
+the marker + its single-carrier set, convention 9's endpoints, the instrument's key sets, the
+flown/told ladder, the cliff, the bit-identical floor and the clean ceiling, plus the loader's two
+refusals). **Suite 18489 → 18632, PASS 18632 / 18632 in 8m03s.**
+
+⚠ **THREE ENUMERATED CARRIER SETS HAD TO BE EXTENDED, each with its own recorded reason** — and every
+one FAILED first, which is the assert doing its job: `search_view` in `test_search.jl` (gate 1
+predicted this in writing), and `midcourse_view` plus the `gimbal_rate_dps` list *and* the
+`gimbal_rate_view` mirror exemption in `test_missile.jl`. The lists are EXTENDED, never loosened.
+
+## THE FOUR PROOFS
+
+| proof | result |
+|---|---|
+| **verifier** (`slice52_verify.gd`, 17 arms × 11200 steps) | **PASS**, exit 0 |
+| **UI test** (`slice52_ui_test.gd`, 11 teeth) | **PASS**, exit 0 — 386 / 306 px against 430 |
+| **headless smoke-load** (`Sandbox.tscn`) | **PASS** — `EWSIM_SERVER_DONE` with **empty** stderr |
+| **windowed shot** (two: `S` = 4.75 at step 5504, `S` = 25 at step 6400) | **PASS after three fixes** (above) |
+| **full Julia suite** | **PASS 18632 / 18632** |
+
+⚠ **TWO VERIFIER FINDINGS WORTH KEEPING**, both first runs: the horizon-OFF arms register exactly
+**one** searching frame — the tick the branch opens, where `search_sweep(0) === 0.0` by construction —
+so a "flown < told" claim must be gated on a band having been swept and not on a frame count. And the
+PRESSED arm **never searches at all**: the horizon is removed at 3.2 s, before the 4.936 s handover,
+so the receiver never opens onto empty sky. That is not an exemption but the claim — *you only search
+because you were blind* — and it is asserted as `searching == 0`.
+
+## RUN IT
+
+```
+& tools/julia.ps1 --project=core tools/server.jl scenarios/slice52_coverage.yaml
+godot --headless --path clients/godot --script res://net/slice52_verify.gd     # S52V PASS 17 arms
+godot --headless --path clients/godot --script res://net/slice52_ui_test.gd    # S52UI OK (no server)
+```
+
+Live: the server above, then Godot on `clients/godot` (`Sandbox.tscn` auto-detects the search-width
+view). One slider, one button. Drag DOWN from 25 to 6 and the same missile arrives instead of missing
+by 32 m; drag to 4.75 and it never finds the target at all while the head sweeps for four seconds.
+Press `detect` and there is nothing to search for at any width.

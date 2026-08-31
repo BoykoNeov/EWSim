@@ -293,6 +293,13 @@ var _mid_acquired := false         # …and the seeker DID eventually get it (fa
 # whose whole story is what it did AFTER that cue turned out to be wrong — every number true, and
 # the slice invisible. (The recurring failure of this family, avoided by ordering.)
 var _search_view := false          # handshake search_view — 12th marker; HUD only (46 keeps button)
+# ⭐⭐⭐ SLICE 52 — THE SEARCH's WIDTH, the 14th marker, and the first raised on a wire that is
+# another slice's wire with a DIFFERENT SLIDER rather than with new physics. That is exactly why it
+# exists: a slice-52 wire authors slice 48's anchor and raises `_search_view` too, so that marker
+# can no longer tell the two apart — and slice 48's block is ALL TRUE here while never saying that
+# the WIDTH is what is being dialled. ⚠ HUD ONLY: the button stays slice 46's, which is still this
+# slice's own A/B (no horizon ⇒ no blind phase ⇒ nothing to search for at ANY width).
+var _s52_view := false             # handshake search_realized_view — 14th marker; HUD only
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # SLICE 49 — WHICH WAY THE TARGET IS POINTING, AND WHAT IT COSTS. The 13th marker of the family,
 # and the FIRST that lands in the SPATIAL (elevation) view rather than the 3-D airframe one — this
@@ -830,6 +837,11 @@ func _on_scenario(obj: Dictionary) -> void:
 	# ⚠ HUD ONLY, and it takes the HUD from slice 47's marker rather than from slice 46's — see
 	# `_search_view`'s own comment.
 	_search_view = bool(obj.get("search_view", false))
+	# Slice 52 — the search's WIDTH. Raised on the COMP KEY `seeker_search_realized`, 47/48's
+	# posture, and the key is an INSTRUMENT rather than a flag: it turns on the head's own flown
+	# sweep (`search_realized_deg` and the two peaks), which is what this HUD draws its band from.
+	# ⚠ It must be checked BEFORE `_search_view` at BOTH text sites — a slice-52 wire raises both.
+	_s52_view = bool(obj.get("search_realized_view", false))
 	# Slice 49 — the ASPECT view. Raised on the COMP KEY (`rcs_fineness`, the authored shape) for
 	# slice 47/48's reason exactly: there is no aspect fidelity RUNG to raise it on, and there
 	# deliberately is not one — "no aspect at all" is reachable from the slider's own FLOOR (F = 1,
@@ -3075,6 +3087,152 @@ func _search_cure_text(searched: bool, acquired: bool) -> String:
 	return "found is not enough: it has to be found EARLY"
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+# ⭐⭐⭐ SLICE 52 — THE SEARCH's **WIDTH**: HOW WIDE SHOULD A SEEKER SEARCH?
+#
+# This wire IS slice 48's wire with a different slider, so slice 48's block is ALL TRUE on it — the
+# sweep is real, the gap is real, the lock time is real — and it never says that the WIDTH is the
+# thing being dialled, that too narrow never reaches at all, or that every extra degree is paid
+# twice. The family's recurring invisible-slice failure in the one form ORDERING alone could not
+# have fixed, which is why this slice ships a marker of its own (`search_realized_view`) rather
+# than sharing `search_view`.
+#
+# ⭐⭐ THE THREE LATCHES ARE **READ, NOT TWINNED** (convention 7 — one source, no drift): the blind
+# phase and the acquisition are slice 47's, "the head has swept" is slice 48's, and this slice adds
+# NONE. It therefore adds nothing to `_on_reset_pressed` either, which is the first time in this
+# family that a new HUD has not had to fix the stale-instrument-across-reset class.
+#
+# ⚠⚠ EVERY LINE IS A **FUNCTION**, for 47/48/49/50's reason verbatim: `draw_string` lives in
+# `_draw`, which never runs under `--headless`, so a string built inline there has NO headless proof
+# at all (convention 14). ⭐ AND SO IS THE **BAND'S GEOMETRY** — `_s52_band_rects` returns the
+# rectangles rather than painting them, so the one drawing this slice ships is checkable by
+# `slice52_ui_test.gd` down to the pixel. Only the `draw_rect` calls are unprovable.
+#
+# ⚠ THE WIDTH BUDGET IS INHERITED AND ASSERTED IN **PIXELS** (~55 chars of body, ~30 of headline at
+# font 15/20) — slice 46 shipped a CHARACTER tooth that passed green while every line clipped.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+func _s52_told_deg() -> float:
+	# ⚠⚠ THE **COMMANDED PEAK**, AND DELIBERATELY NOT `search_coverage_deg`. Gate 2 tooth I measured
+	# that the coverage echo is the comp bag's value finite-clamped while the kernel floors a
+	# non-finite sweep to exactly 0.0 — so on a NaN the wire reports 1e9 beside a head standing
+	# still, and a band drawn from it would be a billion degrees wide over a motionless seeker. This
+	# key is a peak of `search_offset_deg`, held in the core because a client sees one frame in
+	# `emit_every` = 16 ticks and would sample the excursion's shoulders.
+	return float(_telemetry.get(_af3d_missile + ".search_offset_peak_deg", 0.0))
+
+func _s52_flown_deg() -> float:
+	# ⭐⭐⭐ THE SWEEP THE HEAD ACTUALLY FLEW — the number this slice exists to put on screen. The
+	# head reaches 27 % of a 1° command and 95 % of a 40° one, because a sweep's period is `4S/ρ`
+	# against a fixed 0.05 s of gimbal lag. **A head does not fly the coverage you author.**
+	return float(_telemetry.get(_af3d_missile + ".search_realized_peak_deg", 0.0))
+
+func _s52_need_deg(searching: bool) -> float:
+	# THE GAP THE BAND HAS TO REACH, and it is slice 48's own two-state read for slice 48's own
+	# reason: `search_deficit_deg` is LIVE and honestly 0.0 whenever the head is not sweeping, so
+	# printing it off the search branch would say "the target is exactly at the rim" on precisely
+	# the states where that is most wrong. The non-sweeping states fall back to the LATCHED handover
+	# gap (`docs/CONVENTIONS.md` §14's defaulted-zero class, caught by a windowed shot in slice 48).
+	return _srch_deficit_deg() if searching else _srch_gap_handover_deg()
+
+func _s52_verdict_label(was_cued: bool, searched: bool, searching: bool, acquired: bool,
+						told: float, need: float, t_lock: float) -> String:
+	# ⚠ HEADLINES GET A MUCH TIGHTER BUDGET (~30 chars) — drawn at 20 px from the same
+	# right-anchored origin.
+	if not was_cued:
+		return "NO BLIND PHASE: it sees it"
+	if acquired and t_lock >= 0.0:
+		return "FOUND IT after %.2f s" % t_lock
+	if searching:
+		# THE LIVE STATE, and it is the slice in one line: the width being flown against the width
+		# that would be needed. Both move — the first because the head lags, the second because the
+		# belief is walking away from the truth.
+		# ⚠ `%.1f` ON BOTH, AND THE **WINDOWED SHOT** IS WHAT FORCED IT: at the slider's own cliff the
+		# widths are 4.74 and 4.744, and a `%.0f` on the first printed "SWEEPING 5°: needs 4.7°" over
+		# a slider reading 4.75 — a headline that disagreed with the control the student was holding.
+		return "SWEEPING %.1f°: needs %.1f°" % [told, need]
+	if not searched:
+		return "NOT SWEEPING: head frozen"
+	# ⭐⭐ AND THE FLOOR'S VERDICT IS THIS SLICE'S OWN, NOT SLICE 48's. There the failure is "too
+	# slow"; here the sweep may be running at full rate for the whole engagement and simply never
+	# reach the target. **A REACH failure, not a deadline.**
+	return "TOO NARROW: never reached it"
+
+func _s52_sweep_text(searched: bool, told: float, flown: float, elapsed: float) -> String:
+	# ⭐⭐⭐ THE MECHANISM, AND IT IS THE ONE COMPARISON NO EARLIER HUD IN THIS FAMILY COULD DRAW:
+	# what the head was TOLD to sweep against what it actually FLEW.
+	if not searched:
+		return "sweep: not started — the head has swept nothing yet"
+	return "told %.1f°   FLOWN %.1f° (%.0f%%)   t %.2f s" % [
+			told, flown, 100.0 * flown / maxf(told, 1.0e-6), elapsed]
+
+func _s52_reach_text(searched: bool, searching: bool, acquired: bool,
+					 flown: float, need: float, t_lock: float) -> String:
+	# ⭐⭐⭐ THE GAUGE THIS HUD EXISTS FOR — does the FLOWN band reach the gap? Slice 48 asks how
+	# long the sweep took; this asks whether it gets there at all, which is the question a width has
+	# and a rate does not.
+	if acquired and t_lock >= 0.0:
+		return "reached it after %.2f s of sweeping" % t_lock
+	if searching:
+		return "flown %.1f° vs %.1f° needed   (and growing)" % [flown, need]
+	if not searched:
+		return "%.2f° to reach — and nothing is sweeping yet" % need
+	return "needed %.2f° at handover — never reached it" % need
+
+func _s52_cure_text(searched: bool, acquired: bool) -> String:
+	# THE TRADE, AND IT POINTS **BOTH WAYS**, which is what makes this axis different from slice
+	# 48's. There the instruction is always "faster". Here it is "wider" below the cliff and
+	# "narrower" above it, and the right answer is a MATCH rather than a maximum.
+	if not searched:
+		return "give it a sweep — a frozen head never finds it"
+	if not acquired:
+		return "WIDEN it: the flown band never reached the gap"
+	return "now NARROW it — every extra degree is paid TWICE"
+
+func _s52_live_deg() -> float:
+	# WHERE THE HEAD IS **RIGHT NOW**, signed, off the sweep centre — the live twin of the peak. It
+	# is what makes the band move rather than merely grow: the marker runs out to the flown edge and
+	# back while the gap ticks walk steadily outward, and the race between those two IS the lesson.
+	return float(_telemetry.get(_af3d_missile + ".search_realized_deg", 0.0))
+
+func _s52_band_rects(x0: float, y: float, told: float, flown: float, need: float,
+					 span: float, live: float = 0.0) -> Array:
+	# ⭐⭐⭐ THE ONE PIECE OF **GEOMETRY** THIS FAMILY HAS DRAWN SINCE SLICE 38, and it is a function
+	# so that it has a headless proof (convention 14 — `_draw` never runs under `--headless`, and
+	# slice 50 shipped a dispatch bug that only a windowed shot could see). The caller paints these
+	# rectangles and computes nothing.
+	#
+	# THE PICTURE: one strip spanning the head's whole mechanical travel, ±`span` about the sweep
+	# centre. Inside it, the band the head was TOLD to sweep, the band it actually FLEW, and two
+	# ticks at ±`need` — the gap it has to reach. The lesson is legible without a number: while the
+	# ticks sit OUTSIDE the flown band, the missile is not going to find anything, and the ticks
+	# WALK OUTWARD while the sweep runs because the belief is drifting away from the truth.
+	#
+	# ⚠ EVERYTHING IS CLAMPED TO THE STRIP: a width wider than the travel is a real state (the
+	# slider's ceiling is 40° against a 45° stop, and a dragged value is clamped at the consumer,
+	# not at the author), and a rectangle painted off the edge of the column would draw over the 3-D
+	# view rather than failing.
+	var w := 400.0
+	var h := 16.0
+	var sp: float = maxf(span, 1.0)
+	var ppd: float = (w * 0.5) / sp
+	var cx: float = x0 + w * 0.5
+	var t: float = clampf(absf(told), 0.0, sp)
+	var f: float = clampf(absf(flown), 0.0, sp)
+	# ⚠ A NEGATIVE `need` IS A REAL STATE AND NOT AN ERROR: the deficit is `|err| − fov`, so it goes
+	# negative the moment the target is inside the window. Clamped to zero, the ticks meet at the
+	# centre, which is exactly what "no gap left to cover" looks like.
+	var n: float = clampf(need, 0.0, sp)
+	return [
+		{"kind": "travel", "rect": Rect2(x0, y, w, h)},
+		{"kind": "told",   "rect": Rect2(cx - t * ppd, y + 2.0, 2.0 * t * ppd, h - 4.0)},
+		{"kind": "flown",  "rect": Rect2(cx - f * ppd, y + 4.0, 2.0 * f * ppd, h - 8.0)},
+		{"kind": "need_neg", "rect": Rect2(cx - n * ppd - 1.0, y - 3.0, 2.0, h + 6.0)},
+		{"kind": "need_pos", "rect": Rect2(cx + n * ppd - 1.0, y - 3.0, 2.0, h + 6.0)},
+		# ⚠ THE LIVE HEAD, LAST so it paints over the bands, and CLAMPED like everything else.
+		{"kind": "head", "rect": Rect2(cx + clampf(live, -sp, sp) * ppd - 1.5, y + 1.0, 3.0, h - 2.0)},
+	]
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
 # ⭐⭐⭐ SLICE 50 — THE ASPECT-DEPENDENT ENGAGEMENT HUD: **THE LOCK BEING TAKEN BACK.**
 #
 # ⚠⚠ EVERY LINE IS A **FUNCTION**, for slice 47/48/49's reason verbatim: `draw_string` lives in
@@ -3270,6 +3428,75 @@ func _draw_s50_hud_lines(vp: Vector2) -> void:
 	# THE TRADE.
 	draw_string(_font, Vector2(vp.x - 430, 198), _s50_cure_text(_s50_latched, _s50_armed),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+
+
+func _draw_s52_hud_lines(vp: Vector2) -> void:
+	var searching := _srch_searching_now()
+	var told := _s52_told_deg()
+	var flown := _s52_flown_deg()
+	var need := _s52_need_deg(searching)
+	var t_lock := _srch_t_lock_s()
+	var elapsed := float(_telemetry.get(_af3d_missile + ".search_elapsed_s", 0.0))
+	var acmd := float(_telemetry.get(_af3d_missile + ".a_cmd_frac", 0.0))
+	var lost := _mid_was_cued and not _mid_acquired
+	# THE MECHANISM — told vs flown. Cyan while sweeping, grey once it is over, orange before it has
+	# swept anything, where "the head has not started looking" is a state and not a neutral one.
+	draw_string(_font, Vector2(vp.x - 430, 110),
+			_s52_sweep_text(_srch_was_searching, told, flown, elapsed),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			Color(0.45, 0.90, 1.00) if searching else (Color(1.00, 0.62, 0.30) if not _srch_was_searching else Color(0.70, 0.70, 0.75)))
+	# ⭐⭐⭐ THE GAUGE — does the FLOWN band reach the gap? Green once it has, orange while it has not.
+	draw_string(_font, Vector2(vp.x - 430, 132),
+			_s52_reach_text(_srch_was_searching, searching, _mid_acquired, flown, need, t_lock),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			Color(0.55, 1.00, 0.65) if _mid_acquired else Color(1.00, 0.62, 0.30))
+	# THE PRICE — slice 48's line and slice 48's function, READ rather than twinned (convention 7):
+	# it is the same quantity measured the same way, and a second one would be free to drift.
+	draw_string(_font, Vector2(vp.x - 430, 154),
+			_search_authority_text(searching, _mid_acquired, acmd, _mid_auth_peak),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			Color(0.70, 0.70, 0.75) if searching else (Color(1.00, 0.62, 0.30) if lost else Color(1.00, 0.85, 0.45)))
+	# ⚠ THE MISS, AS A **DISCLAIMER** RATHER THAN A GAUGE — 47/48's line in meaning, and for a reason
+	# this wire makes sharper still: across the whole floor region the missile flies a BIT-IDENTICAL
+	# trajectory to the same 1039.88 m whatever the head is doing.
+	# ⚠⚠ IT NAMES THE **CLOSING SPEED**, NOT THE RANGE, AND THAT IS SLICE 50's CORRECTION APPLIED
+	# HERE FOR SLICE 50's REASON — **found by the windowed shot and by nothing else**. Slices 47/48
+	# print "range %.0f m" here, but this view already draws "range to target" in its shared header
+	# at y 66, so the shot came back with the same number twice under two labels. The closing speed
+	# is the OTHER clock the sweep is racing (the gap grows at ~6.8 °/s while the range falls at
+	# ~700 m/s) and it appears nowhere else on screen.
+	draw_string(_font, Vector2(vp.x - 430, 176), "closing at %.0f m/s — the MISS says nothing here" %
+			float(_telemetry.get(_af3d_missile + ".closing_speed", 0.0)),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	# THE TRADE, and it points BOTH ways on this axis.
+	draw_string(_font, Vector2(vp.x - 430, 198), _s52_cure_text(_srch_was_searching, _mid_acquired),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	# ⭐⭐⭐ THE BAND ITSELF. The travel the head has, the width it was told, the width it flew, and
+	# two ticks at the gap it has to reach — which WALK OUTWARD while the sweep runs, because the
+	# belief the sweep is centred on is drifting away from the truth at about 6.8 °/s.
+	# ⚠ The GEOMETRY is `_s52_band_rects`; nothing here computes, so the picture has a headless proof.
+	var span := float(_telemetry.get(_af3d_missile + ".gimbal_stop_deg", 45.0))
+	var reached: bool = _s52_flown_deg() >= _s52_need_deg(searching)
+	for r in _s52_band_rects(vp.x - 430, 212, told, flown, need, span, _s52_live_deg()):
+		var k := str(r["kind"])
+		var col := COL_TICK
+		if k == "travel":
+			col = Color(0.22, 0.24, 0.30)
+		elif k == "told":
+			# ⚠ AN OUTLINE, NOT A FILL, AND THE **WINDOWED SHOT** IS WHAT DECIDED IT: at the
+			# showcase's opening width the head flies 92 % of its command, so a filled `told` band
+			# is a two-pixel sliver either side of the flown one and the containment — the whole
+			# content of this picture — is invisible. An outline reads at every ratio, including
+			# the 27 % one at the slider's floor.
+			draw_rect(r["rect"], Color(0.35, 0.62, 0.75), false, 2.0)
+			continue
+		elif k == "flown":
+			col = Color(0.45, 0.90, 1.00)
+		elif k == "head":
+			col = Color(1.00, 1.00, 1.00)
+		else:
+			col = Color(0.55, 1.00, 0.65) if reached else Color(1.00, 0.62, 0.30)
+		draw_rect(r["rect"], col, true)
 
 
 func _draw_search_hud_lines(vp: Vector2) -> void:
@@ -3719,7 +3946,18 @@ func _draw_airframe3d_hud() -> void:
 	# comments above, and it was still possible to edit one and not the other with every headless
 	# proof green. ⭐ THAT IS PRECISELY THE JOB OF THE FOURTH PROOF: headless never runs `_draw`, so
 	# a chain disagreement is INVISIBLE to the verifier and the UI test alike.
-	if _s50_view:
+	# ⭐⭐⭐ SLICE 52 — checked FIRST here too, and for the reason all five chains must ALWAYS agree.
+	# `_search_view` is the block that would otherwise take this wire, and every number on it is
+	# TRUE: the sweep is real, the gap is real, the lock time is real. What it cannot say is that
+	# the WIDTH is the thing being dialled, that a band too narrow never reaches at all, or that the
+	# head is flying less of the sweep than it was told. Every number right and the slice invisible:
+	# this family's recurring failure, avoided by ordering, for the sixth slice running.
+	if _s52_view:
+		lbl = _s52_verdict_label(_mid_was_cued, _srch_was_searching, _srch_searching_now(),
+				_mid_acquired, _s52_told_deg(), _s52_need_deg(_srch_searching_now()),
+				_srch_t_lock_s())
+		col = Color(1.00, 0.62, 0.30) if (_mid_was_cued and not _mid_acquired) else Color(0.45, 0.90, 1.00)
+	elif _s50_view:
 		lbl = _s50_verdict_label(_s50_armed, _s50_keys, _s50_latched, _s50_det_now(),
 				_s50_regained, _s50_deg)
 		# The colour rides the LIVE state, not the latch: what a student watches here is a lock that
@@ -3989,7 +4227,14 @@ func _draw_airframe3d_hud() -> void:
 	# they cannot say is that the horizon is MOVING, that the TARGET is what moved it, or that a lock
 	# the missile already had was taken back. Every number right and the slice invisible: this
 	# family's recurring failure, avoided by ordering, for the fifth slice running.
-	if _s50_view:
+	# ⭐⭐⭐ SLICE 52 — checked FIRST here too, and for the reason all five chains must ALWAYS agree.
+	# `_search_view` is the block that would otherwise take this wire (a slice-52 wire authors slice
+	# 48's anchor and raises its marker), and its lines are all TRUE on it. What they cannot say is
+	# that the WIDTH is the slider, that a band too narrow never reaches the target at any duration,
+	# or that the head flies less than it is told — which is the whole slice.
+	if _s52_view:
+		_draw_s52_hud_lines(vp)
+	elif _s50_view:
 		_draw_s50_hud_lines(vp)
 	elif _search_view:
 		_draw_search_hud_lines(vp)

@@ -977,7 +977,12 @@ end
             @test haskey(inf, :midcourse_view)          # STILL raised — the belief IS the sweep centre
             @test haskey(inf, :seeker_detect_view)      # STILL raised — the button stays 46's
             @test haskey(inf, :gimbal_view) && haskey(inf, :gimbal_rate_view)
-            for absent in (:radome_view, :seeker_fov_view, :gimbal_servo_view, :gimbal_frame_view)
+            for absent in (:radome_view, :seeker_fov_view, :gimbal_servo_view, :gimbal_frame_view,
+                           # ⚠ SLICE 52's OWN MARKER IS ABSENT HERE, AND THAT IS WHAT KEEPS THE TWO
+                           # WIRES APART: this file authors the search and NOT the instrument
+                           # (`seeker_search_realized`), so slice 52's HUD — which is checked FIRST
+                           # in the client — cannot take slice 48's wire.
+                           :search_realized_view)
                 @test !haskey(inf, absent)
             end
         end
@@ -990,7 +995,14 @@ end
                 inf = EWSim._airframe_view_info(load_scenario(joinpath(base, f)).world)
                 inf !== nothing && haskey(inf, :search_view) && push!(carriers, f)
             end
-            @test carriers == ["slice48_search.yaml"]
+            # ⚠⚠ **TWO CARRIERS SINCE SLICE 52, AND GATE 1 PREDICTED THIS FAILURE IN WRITING**
+            # (`docs/plans/slice52.md` §X): a slice-52 wire IS a slice-48 wire with a different
+            # slider, so it authors `:seeker_search` and raises this marker too. The list is
+            # EXTENDED rather than the check loosened — an `isempty`/`in` would go on passing
+            # forever while quietly ceasing to say anything.
+            # ⚠ What separates the two wires is slice 52's own `search_realized_view`, whose carrier
+            # set is enumerated in that slice's own gate-3 block below.
+            @test carriers == ["slice48_search.yaml", "slice52_coverage.yaml"]
         end
     end
 
@@ -1061,5 +1073,304 @@ end
         # early enough that little is demanded at all.
         @test hi.auth < lo.auth
         @test fly_file(240.0).auth < hi.auth
+    end
+end
+
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 52 GATE 3 — THE SHIPPED SCENARIO: **HOW WIDE SHOULD A SEEKER SEARCH?**
+#
+# `scenarios/slice52_coverage.yaml` is slice 48's wire with the sweep RATE nailed down at a MEASURED
+# 60 °/s and the other half of `search_sweep` handed to the student. Gate 1 pinned the WAVE, gate 2
+# flew slice 48's file with the two search numbers written onto the comp bag; this block asserts the
+# SHIPPED FILE — what an author wrote, what the client is told, and the three claims the showcase
+# makes that no earlier gate could make because no scenario existed to make them on.
+#
+# ⭐⭐⭐ THE ONE THING HERE THAT IS NEW PHYSICS-SIDE: `seeker_search_realized`. Gate 2 measured that
+# the head flies only a fraction of the sweep it is commanded (a lag is a low-pass, and a sweep's
+# period is `4S/ρ`), and a slice whose whole subject is HOW WIDE cannot leave the width the head
+# ACTUALLY flew off the wire. The key is an INSTRUMENT rather than a flag — it turns on
+# `search_realized_deg` / `search_realized_peak_deg`, both formed every searching tick — and it is
+# also what raises this slice's view marker, because the two wires are otherwise indistinguishable
+# to the client (gate 1 §X wrote that problem down before this file existed).
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+@testset "seeker search COVERAGE — THE SHIPPED SCENARIO (slice 52 gate 3)" begin
+    base52 = normpath(joinpath(@__DIR__, "..", "..", "scenarios"))
+    scn52  = load_scenario(joinpath(base52, "slice52_coverage.yaml"))
+    scn48  = load_scenario(joinpath(base52, "slice48_search.yaml"))
+    m52    = scn52.world.entities[:m1].comp
+    m48    = scn48.world.entities[:m1].comp
+
+    @testset "THE AUTHORED WIRE — slice 48's, with THREE numbers changed and each one named" begin
+        @test scn52.world.seed == scn48.world.seed == 32
+        @test scn52.dt_physics == scn48.dt_physics == 1.0e-3
+        @test scn52.world.fidelity == scn48.world.fidelity      # the six rungs, to the digit
+        # 1. THE SWEEP RATE — slice 48's slider FLOOR (its null) becomes this wire's authored
+        #    fixture, and 60 °/s is a MEASURED choice: at 240 the whole coverage ladder is benign
+        #    and the slider teaches nothing, at 60 it spans never / pinned / cheap.
+        @test m52[:seeker_search_rate_dps] == 60.0
+        @test m48[:seeker_search_rate_dps] == 0.0
+        # 2. THE COVERAGE — the same authored 25.0 on both files; what changed is that here it is
+        #    THE SLIDER (asserted under convention 9 below).
+        @test m52[:seeker_search_coverage_deg] == m48[:seeker_search_coverage_deg] == 25.0
+        # 3. THE INSTRUMENT — authored here and DELIBERATELY NOT there, which is what keeps slice
+        #    48's frames byte-identical (convention 2: slices are ADDITIVE).
+        @test m52[:seeker_search_realized] === true
+        @test !haskey(m48, :seeker_search_realized)
+        # …AND EVERYTHING ELSE IS SLICE 48's WIRE TO THE DIGIT. Anything that moves between the two
+        # files beyond the three above is unaccounted for.
+        for k in (:seeker_search, :gimbal_fov_deg, :gimbal_rate_dps, :gimbal_tau_s, :gimbal_stop_deg,
+                  :detect_pt_w, :detect_freq_hz, :detect_tint_s, :detect_nf_db, :detect_loss_db,
+                  :detect_eta, :detect_snr_min_db, :sigma_seek, :alpha, :beta, :n_pn, :a_max,
+                  :midcourse, :midcourse_k, :midcourse_err_gain, :midcourse_vel_err_mps)
+            @test m52[k] == m48[k]
+        end
+        t52 = scn52.world.entities[:tgt1]; t48 = scn48.world.entities[:tgt1]
+        @test t52.pos == t48.pos && t52.vel == t48.vel
+        @test t52.comp[:rcs_m2] == t48.comp[:rcs_m2] == 0.020
+        @test scn52.world.entities[:m1].pos == scn48.world.entities[:m1].pos
+        # ⚠ THE PICTURE ERROR IS A FIXTURE ON BOTH WIRES AND IT MATTERS MORE HERE: it is the
+        # quantity that SETS the right coverage (gate 2 tooth F — S* runs 5.00° at 140 and 11.25°
+        # at 180), so a second slider on it would let a student move the answer and the question at
+        # the same time.
+        @test m52[:midcourse_err_gain] == 140.0
+    end
+
+    @testset "THE MARKER — the 14th, raised BESIDE 48's / 47's / 46's, and by nobody else" begin
+        let inf = EWSim._airframe_view_info(scn52.world)
+            @test inf !== nothing
+            @test haskey(inf, :search_realized_view)
+            @test haskey(inf, :search_view)             # STILL raised — this IS a search wire
+            @test haskey(inf, :midcourse_view)          # STILL raised — the belief IS the centre
+            @test haskey(inf, :seeker_detect_view)      # STILL raised — the button stays 46's
+            @test haskey(inf, :gimbal_view) && haskey(inf, :gimbal_rate_view)
+            for absent in (:radome_view, :seeker_fov_view, :gimbal_servo_view, :gimbal_frame_view,
+                           :seeker_aspect_view)
+                @test !haskey(inf, absent)
+            end
+        end
+        # ⚠⚠ THE ENUMERATED CARRIER SET, AND IT IS THE HALF THAT ACTUALLY DOES THE WORK. Slice 48's
+        # `search_view` now has TWO carriers (asserted in its own block above), so it can no longer
+        # tell the two wires apart — this marker is the one that can, and an `isempty` here would go
+        # on passing forever while quietly ceasing to say anything.
+        let carriers = String[]
+            for f in readdir(base52)
+                endswith(f, ".yaml") || continue
+                inf = EWSim._airframe_view_info(load_scenario(joinpath(base52, f)).world)
+                inf !== nothing && haskey(inf, :search_realized_view) && push!(carriers, f)
+            end
+            @test carriers == ["slice52_coverage.yaml"]
+        end
+    end
+
+    @testset "CONVENTION 9 — exactly ONE knob, and NEITHER endpoint is zero" begin
+        @test length(scn52.knobs) == 1
+        k = scn52.knobs[1]
+        @test k.target === :m1 && k.key === :seeker_search_coverage_deg
+        # ⚠⚠ THE FLOOR IS 1.0 AND **NOT 0**, and the difference from slice 48's slider is the
+        # lesson rather than a detail. A sweep rate of 0 is a true null — a head that does not sweep
+        # at all. A coverage of 0 is a different object: the search branch still runs, the head is
+        # still commanded, the sweep is merely zero-amplitude — and the loader refuses it outright
+        # as an authored value. 1.0° is a head that VISIBLY sweeps and STILL never gets there, which
+        # is the failure this axis teaches: REACH, not inaction.
+        @test k.min == 1.0
+        @test k.min > 0.0
+        # ⚠ THE CEILING IS THE LAST CELL THE MECHANICAL STOP STAYS OUT OF — measured, not rounded:
+        # the head peaks at 42.49° against the authored 45° trunnion at S = 40, and at S = 45 the
+        # stop binds for 102 ticks BEFORE the lock (gate 2 tooth E). A showcase whose top cell is
+        # clamped would be teaching the trunnion beside the coverage.
+        @test k.max == 40.0
+        @test k.max < m52[:gimbal_stop_deg]
+        @test !k.log                               # the floor region must READ as a region
+        # ⚠ EVERY DISQUALIFIED CANDIDATE IS ASSERTED ABSENT rather than merely left out — and the
+        # first one is the interesting one: slice 48's OWN slider. The two knobs COMPOSE (the floor
+        # is 5.00° at 60 °/s and 7.50° at 240), so dragging both would let a student move the floor
+        # and the width at once.
+        for dead in (:seeker_search_rate_dps, :midcourse_err_gain, :rcs_m2, :gimbal_fov_deg,
+                     :gimbal_stop_deg, :gimbal_rate_dps, :midcourse_vel_err_mps)
+            @test !any(kb -> kb.key === dead, scn52.knobs)
+        end
+    end
+
+    # ONE FLIGHT OFF THE SHIPPED FILE, stopped at the FIRST lock and never past `nmax` ticks.
+    # ⚠⚠ NOTHING PAST THE FIRST LOCK, on purpose (gate 2's rule): a longer flight picks up the
+    # POST-INTERCEPT re-search, which is this slice's fourth occurrence of the episode trap.
+    # `S === nothing` flies the file's own authored coverage — the arm the showcase OPENS on.
+    function fly52g3(; S = nothing, rho = nothing, nmax = 7000, keep_pos = false)
+        sc = load_scenario(joinpath(base52, "slice52_coverage.yaml"))
+        c  = sc.world.entities[:m1].comp
+        S   === nothing || (c[:seeker_search_coverage_deg] = Float64(S))
+        rho === nothing || (c[:seeker_search_rate_dps]     = Float64(rho))
+        stp = Float64(c[:gimbal_stop_deg])
+        pos = Vec3[]
+        nsrch = 0; nclamp = 0; tl = -1.0
+        pk_cmd = 0.0; pk_real = 0.0; pk_head = 0.0; def_last = NaN
+        peak_key = 0.0; cmd_key = 0.0
+        for k in 1:nmax
+            tick!(sc.world, sc.subs, sc.dt_physics)
+            tel = get(sc.world.env, :telemetry, Dict{String,Any}())
+            tv(key, d = NaN) = Float64(get(tel, "m1.$key", d))
+            keep_pos && push!(pos, sc.world.entities[:m1].pos)
+            if tv("head_searching", 0.0) == 1.0
+                nsrch += 1
+                pk_cmd  = max(pk_cmd,  abs(tv("search_offset_deg")))
+                pk_real = max(pk_real, abs(tv("search_realized_deg")))
+                pk_head = max(pk_head, abs(tv("head_angle_deg", 0.0)))
+                peak_key = tv("search_realized_peak_deg", NaN)
+                cmd_key  = tv("search_offset_peak_deg", NaN)
+                def_last = tv("search_deficit_deg")
+                abs(tv("head_angle_deg", 0.0)) >= stp - 1.0e-6 && (nclamp += 1)
+            end
+            tl = tv("search_t_lock_s", -1.0)
+            tl >= 0.0 && break
+        end
+        (; t_lock = tl, nsrch, nclamp, pk_cmd, pk_real, pk_head, def_last, peak_key, cmd_key, pos,
+           frac = pk_real / max(pk_cmd, 1.0e-12))
+    end
+
+    @testset "⭐ THE INSTRUMENT SHIPS — two keys, on THIS wire and on no earlier one" begin
+        # The slice-52 frame carries the realized pair; slice 48's frame does NOT, which is the
+        # byte-identity claim stated as a key-set fact rather than as a sentence.
+        s52 = load_scenario(joinpath(base52, "slice52_coverage.yaml"))
+        s48 = load_scenario(joinpath(base52, "slice48_search.yaml"))
+        for _ in 1:5200                                    # past the 4.936 s handover
+            tick!(s52.world, s52.subs, s52.dt_physics)
+            tick!(s48.world, s48.subs, s48.dt_physics)
+        end
+        t52 = get(s52.world.env, :telemetry, Dict{String,Any}())
+        t48 = get(s48.world.env, :telemetry, Dict{String,Any}())
+        @test haskey(t52, "m1.search_realized_deg") && haskey(t52, "m1.search_realized_peak_deg")
+        @test haskey(t52, "m1.search_offset_peak_deg")
+        for k in ("m1.search_realized_deg", "m1.search_realized_peak_deg",
+                  "m1.search_offset_peak_deg")
+            @test !haskey(t48, k)
+        end
+        # …and NOTHING ELSE about the frame differs: the two key SETS are equal once the new pair is
+        # removed. A slice that grew a key on an old wire would fail here rather than in a golden.
+        @test setdiff(Set(keys(t52)), Set(keys(t48))) ==
+              Set(["m1.search_realized_deg", "m1.search_realized_peak_deg",
+                   "m1.search_offset_peak_deg"])
+        @test isempty(setdiff(Set(keys(t48)), Set(keys(t52))))
+        # ⚠ NEVER-STALE: the pair ships on EVERY frame once the anchor is authored, including
+        # BEFORE the first sweep, where a key that stopped emitting would read downstream as a
+        # defaulted 0.0 — and here 0.0 means "the head never moved", which is the slider's own
+        # floor verdict (`docs/CONVENTIONS.md` §14).
+        let s = load_scenario(joinpath(base52, "slice52_coverage.yaml"))
+            tick!(s.world, s.subs, s.dt_physics)
+            tel = get(s.world.env, :telemetry, Dict{String,Any}())
+            @test Float64(tel["m1.head_searching"]) == 0.0        # not searching yet…
+            @test haskey(tel, "m1.search_realized_deg")           # …and the keys are there anyway
+            @test tel["m1.search_realized_peak_deg"] == 0.0
+            @test tel["m1.search_offset_peak_deg"] == 0.0
+        end
+    end
+
+    @testset "⭐⭐⭐ THE HEAD DOES NOT FLY THE COVERAGE YOU AUTHOR — on the SHIPPED file" begin
+        # The commanded sweep is a triangle of amplitude exactly S; between it and the sky sits a
+        # 0.05 s lag, and the sweep's period is `4S/ρ` — so the NARROWER the sweep the less of it
+        # survives. Read over the ACQUISITION only (the lock ends the measurement).
+        fr = Float64[]
+        for S in (1.0, 2.0, 4.0, 6.0, 10.0, 16.0, 25.0, 40.0)
+            r = fly52g3(; S)
+            @test r.nsrch > 100
+            @test r.pk_real < r.pk_cmd                     # the head NEVER reaches the command
+            @test r.pk_real ≈ r.peak_key atol = 1.0e-9     # the core's own peak-hold IS this number
+            # ⚠⚠ AND THE **COMMANDED** PEAK IS ON THE WIRE TOO, which is a VIEW prohibition made
+            # structural: gate 2 tooth I measured that `search_coverage_deg` echoes the bag
+            # finite-clamped while the kernel floors a non-finite S to 0.0, so a HUD sizing its
+            # band from that echo would draw a billion degrees over a motionless head. The band is
+            # drawn from THIS key — a peak of `search_offset_deg` — and never from the echo.
+            @test r.pk_cmd ≈ r.cmd_key atol = 1.0e-9
+            push!(fr, r.frac)
+        end
+        # ⭐⭐ STRICTLY RISING WITH THE WIDTH: 0.27 at 1°, 0.65 at 6°, 0.92 at 25°, 0.95 at 40°.
+        @test all(fr[i] < fr[i + 1] for i in 1:(length(fr) - 1))
+        @test fr[1] ≈ 0.2659 atol = 1.0e-3
+        @test fr[end] ≈ 0.9492 atol = 1.0e-3
+        # ⭐⭐⭐ AND FALLING WITH THE **RATE** AT A FIXED WIDTH, which is gate 2's headline G on the
+        # shipped file: a faster sweep has a shorter period against the same fixed lag, so the head
+        # flies less of it — and the FLOOR RISES with the rate (5.00° at 60 °/s, 7.50° at 240).
+        # **A faster sweep needs a wider one.** The two knobs compose; they do not substitute.
+        f60  = fly52g3(; S = 25.0, rho = 60.0).frac
+        f120 = fly52g3(; S = 25.0, rho = 120.0).frac
+        f240 = fly52g3(; S = 25.0, rho = 240.0).frac
+        @test f60 > f120 > f240
+        @test f60 ≈ 0.9188 atol = 1.0e-3
+        @test f240 ≈ 0.7021 atol = 1.0e-3
+    end
+
+    @testset "⭐⭐⭐ THE CLIFF, AND IT IS THE **FLOWN** BAND THAT SETS IT" begin
+        lo = fly52g3(; S = 4.75)
+        hi = fly52g3(; S = 5.00)
+        @test lo.t_lock < 0.0                    # NEVER — and the head swept the whole time
+        @test lo.nsrch > 1000
+        @test hi.t_lock ≈ 0.2660 atol = 1.0e-3
+        # ⭐⭐⭐ THE TOOTH THIS SECTION EXISTS FOR. At the cliff the gap the sweep had to cover was
+        # 2.8035°, the AUTHORED coverage was 5.00° — nearly two degrees more than needed — and the
+        # head FLEW only 3.2429°, four tenths of a degree past the gap. A student sizing this sweep
+        # from the authored number alone would predict the floor at about 3° and be wrong by two
+        # thirds, because the number they were reading is not the sweep the head flies.
+        @test hi.def_last ≈ 2.8035 atol = 1.0e-3
+        @test hi.pk_cmd - hi.def_last > 2.0          # the AUTHORED band overshoots the gap…
+        @test 0.0 < hi.pk_real - hi.def_last < 0.5   # …and the FLOWN one only just clears it
+        # ⚠ AND THE LAST FAILING CELL IS NOT A CELL WHERE THE COMMAND WAS TOO NARROW: 4.74° of
+        # commanded reach against the same ~2.8° gap. It fails on what the head FLEW (3.02°) and on
+        # the phase of the race, not on the number an author wrote.
+        @test lo.pk_cmd ≈ 4.7400 atol = 1.0e-3
+        @test lo.pk_real ≈ 3.0198 atol = 1.0e-3
+    end
+
+    @testset "⭐⭐⭐ THE FLOOR IS A REGION, AND IT IS BIT-IDENTICAL ACROSS IT" begin
+        # Nothing the head does reaches the guidance until something is LOCKED, so every cell of the
+        # floor flies the SAME missile — while the head is demonstrably doing different things in
+        # each (the `pk_real` row exists precisely so a zero difference cannot be misread as a head
+        # that did nothing). A verifier reading the miss over this region would report a slider that
+        # does nothing, which is how slices 44 and 45 died.
+        b = fly52g3(; S = 1.0, keep_pos = true)
+        @test b.t_lock < 0.0 && b.nsrch > 1000
+        for S in (2.0, 3.0, 4.0, 4.75)
+            a = fly52g3(; S, keep_pos = true)
+            @test a.t_lock < 0.0
+            @test length(a.pos) == length(b.pos)
+            @test all(p == q for (p, q) in zip(a.pos, b.pos))       # bit-for-bit, not `atol`
+            @test a.pk_real > b.pk_real                             # …and the heads DIFFER, visibly
+        end
+    end
+
+    @testset "⚠ THE CEILING IS CLEAN — the trunnion stays OUT of the acquisition below it" begin
+        # The stop is authored at 45.0 and the slider stops at 40.0 for a measured reason.
+        top = fly52g3(; S = 40.0)
+        @test top.nclamp == 0
+        @test top.pk_head ≈ 42.492 atol = 1.0e-2
+        @test top.pk_head < m52[:gimbal_stop_deg]
+        # …and one step past the ceiling the stop DOES bind, before the lock — which is the whole
+        # reason 40 and not 45 (gate 2 tooth E; and `t_lock` survives it, so this is a hygiene
+        # choice about what the showcase TEACHES, not a claim that the gauge would break).
+        over = fly52g3(; S = 45.0)
+        @test over.nclamp > 50
+        @test over.t_lock ≈ 1.8590 atol = 1.0e-3
+    end
+
+    @testset "THE LOADER's REFUSALS for the new anchor — a crash guard and a dead-knob guard" begin
+        # ⚠ `false` is refused rather than honoured: presence is the gate (the `seeker_search` /
+        # `midcourse` posture), so a `false` would author the instrument while meaning the opposite.
+        let y = joinpath(mktempdir(), "s.yaml")
+            write(y, "name: t\n" *
+                     "entities:\n" *
+                     "  - {id: m1, kind: missile, pos: [0.0, 0.0, 0.0],\n" *
+                     "     missile: {seeker: {gimbal_tau_s: 0.05, seeker_search: true,\n" *
+                     "                        seeker_search_coverage_deg: 25.0,\n" *
+                     "                        seeker_search_realized: false}}}\n")
+            @test_throws ErrorException load_scenario(y)
+        end
+        # ⚠⚠ AND REFUSED WITHOUT THE SEARCH ITSELF — the dead-knob guard this project has caught six
+        # times: the realized sweep is formed on the SEARCH arm of the seam, so on a wire with no
+        # search there is nothing to measure and the key would be read by nothing.
+        let y = joinpath(mktempdir(), "s.yaml")
+            write(y, "name: t\n" *
+                     "entities:\n" *
+                     "  - {id: m1, kind: missile, pos: [0.0, 0.0, 0.0],\n" *
+                     "     missile: {seeker: {gimbal_tau_s: 0.05, seeker_search_realized: true}}}\n")
+            @test_throws ErrorException load_scenario(y)
+        end
     end
 end

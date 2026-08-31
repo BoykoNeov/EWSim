@@ -1823,3 +1823,51 @@ cannot — and until now that was not a decision anyone had written down, it was
 one, which is the kind of thing that quietly becomes a wrong answer. It is now named in the code
 where the behaviour comes from. Naming it is not fixing it: a fix would change how the seeker behaves
 in every slice from 34 to 50, and that is its own decision for another day.
+
+## Slice 52 — how wide should the seeker look around? (2026-08-31)
+
+Slice 48 gave a blinded missile the one thing it can still do — look around — and asked how FAST it
+should sweep. The answer there had one direction: faster, up to the limit of the motor that moves the
+head. This slice asks the other half of the same question: how WIDE should it sweep? And that answer
+has two directions, which is what makes it a different lesson rather than the same one relabelled.
+
+⭐⭐⭐ **Sweep too narrow and the head never gets to where the target is — not eventually, not ever.
+Sweep wider than you need and you pay for the extra twice over,** because the head walks out to one
+side and all the way back before it looks at the other side at all, and by then the target has moved
+on. So the right width is a *match* to how wrong your information was, not the biggest number the
+hardware allows. On this engagement anything below five degrees never finds the target at all;
+around six degrees the missile hits it; and at twenty-five — **the width the previous slice shipped
+and never questioned** — the missile still finds the target every single time, spends every last bit
+of its manoeuvring ability, and misses by thirty-two metres. Nothing on the previous slice's display
+could have shown that, because the previous slice never moved this dial.
+
+⭐⭐⭐ **And the sharpest finding is that the head does not fly the sweep you asked for.** The
+instruction sent to the head is a clean side-to-side sweep of exactly the width you typed. The head
+is on a mount that takes a fixed fraction of a second to respond, so it is always running behind — and
+a narrow sweep reverses so quickly that the head barely gets going before it is told to come back. It
+manages about a quarter of a one-degree sweep, two thirds of a five-degree one, and nineteen twentieths
+of a forty-degree one. This is not a detail: it is what decides where the "never finds it" region
+ends. At the boundary the gap the head had to cover was about 2.8 degrees and the width asked for was
+5.0 — nearly twice what was needed — but the head only actually swung 3.2 degrees, and that is what
+just barely closed the gap. Anyone sizing this sweep from the number in the file would have predicted
+the boundary at three degrees and been wrong by two thirds. The same effect means a **faster** sweep
+needs a **wider** one: at the fastest setting the head flies only seven tenths of its instruction, and
+the "never finds it" region grows by half again.
+
+The display had to be given something it did not have: a reading of what the head actually swept, not
+just what it was told to. That reading is now on the wire and drawn as a picture — a strip showing the
+head's full range of travel, the width asked for, the narrower width actually flown, where the head is
+right now, and two marks showing how far it still has to reach. The marks drift steadily outward while
+the search runs, because the missile is sweeping around where it *believes* the target is and that
+belief is getting worse every moment. Watching the flown band chase two marks that keep moving away is
+the whole mechanism in one image.
+
+Two smaller things are worth carrying. **The miss distance is again useless as a score**, and this
+wire shows it more starkly than any before: across the whole "too narrow" region the missile flies a
+trajectory that is identical to the last bit at every width, even though the head is visibly doing
+four different things — nothing the head does reaches the steering until something is actually locked
+on. And **the dial's bottom end is not zero here**, unlike the previous slice's. A sweep rate of zero
+is a head that does not move. A sweep width of zero is not the same object at all: the search still
+runs, it just has nowhere to look, and the file loader refuses it outright. The bottom of the dial is
+one degree — a head that is visibly sweeping, hard, and still never gets there. The failure this slice
+teaches is about **reach**, not about doing nothing.
