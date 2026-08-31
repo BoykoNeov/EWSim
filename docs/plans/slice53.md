@@ -645,18 +645,29 @@ the ceiling of 50 stands as §2.8 wrote it, and the gate-3 showcase MAY be a sin
 live slider. ⭐ This is a much stronger statement than §2.8's — the mechanism survives the filter
 that killed five sliders on this arc, **on every individual trajectory**, not on an average.
 
-### ⚠ THE ONE THING GATE 3 MUST DESIGN AROUND — **THE BOTTOM OF THE SLIDER HAS DEAD ZONES**
+### ⚠⚠ THE ONE THING GATE 3 MUST DESIGN AROUND — **THE SLIDER HAS DEAD ZONES, AND THEY ARE NOT
+### ONLY AT THE BOTTOM**
 
-Every seed has 1–3 FLAT cells and they are concentrated at low `G`: seed 53 does not move at all
-from `G` = 1 to `G` = 5, seed 250 sits at +877.6 m across `G` = 2 → 10, seed 5 sits at +2410.5 m
-across `G` = 5 → 20. That is the edge's quantisation to a look index, not a physics failure — but on
-a LIVE slider it means **a user dragging one flight from 1 to 2 can see nothing move at all.**
+13 of the 48 intervals are FLAT. Counted per interval across the 8 seeds:
 
-⇒ gate 3 must not let the first inch of the drag read as "the knob is dead" (49's `.get(k, 0.0)`
-family of traps, one level up: here the number is REAL and simply has not changed yet). Either the
-view shows the batch, or the authored default sits where the ladder is already moving, or the
-readout says *how many looks* the edge moved rather than only metres. **Decided at gate 3, recorded
-here.**
+| interval | 1→2 | 2→5 | 5→10 | 10→20 | **20→50** | 50→100 |
+|---|---|---|---|---|---|---|
+| seeds flat | 4 | 3 | 3 | 2 | **0** | 1 |
+
+⚠ **The ONLY interval clean on all eight seeds is `G` = 20 → 50.** Flats are commonest at the bottom
+(seed 53 does not move at all from `G` = 1 to 5) but they reach 10 → 20 on two seeds — which straddles
+the region §2.8 reasons about — and even 50 → 100 on seed 53 (+6244.0 twice). **This is a stronger
+constraint than "the first inch of the drag is dead", not a weaker one.**
+
+The cause is the edge's quantisation to a look index, not a physics failure: two adjacent `G` values
+can legitimately declare the loss at the identical look. But on a LIVE slider it means **a user
+dragging one flight can see nothing move over a whole interval, anywhere below `G` = 20 and
+occasionally above it.**
+
+⇒ gate 3 must not let a flat stretch read as "the knob is dead" (49's `.get(k, 0.0)` family of
+traps one level up: here the number is REAL and simply has not changed yet). Either the view shows
+the batch, or the authored default sits inside 20 → 50, or the readout says *how many looks* the edge
+moved rather than only metres. **Decided at gate 3, recorded here.**
 
 ### HOW BIG A BATCH, IF ONE IS EVER WANTED (estimated from n = 8, quoted as such)
 
@@ -664,9 +675,25 @@ here.**
 |---|---|---|---|---|---|---|---|
 | sd (m) | 609.9 | 762.9 | 830.9 | 842.9 | 870.0 | 1411.3 | 1354.9 |
 | se at n = 8 (m) | 215.6 | 269.7 | 293.8 | 298.0 | 307.6 | 499.0 | 479.0 |
-| seeds for se ≤ mean/3 | 2112 | 147 | 11 | 3 | **1** | **1** | **1** |
+| seeds for the BATCH MEAN's se ≤ mean/3 | 2112 | 147 | 11 | 3 | 2 | 2 | 2 |
 
-⭐ **The scatter is essentially FLAT in `G`** (sd 610 → 870 m from `G` = 1 to 20 while the mean goes
-+40 → +2699 m) — the lobe moves the mean without widening the distribution, which is why one flight
-suffices from `G` = 20 up and why the per-seed ladders are clean. ⚠ The `n` column is an estimate
-from 8 seeds and is not a licence to quote a headline from one flight at low `G`.
+⚠⚠ **THE LAST ROW IS FLOORED AT 2 AND MEANS ONLY WHAT IT SAYS.** The raw `(3·sd/mean)²` returns 1
+at `G` ≥ 20, which is the formula running below its own domain — **a single flight has no standard
+error at all.** The row is about how many seeds a BATCH MEAN needs, nothing else. In particular it
+is NOT a licence to quote a headline from one flight: one flight at `G` = 20 is a single draw from a
+distribution with sd 870 m, and the table above shows that draw ranging +1480.6 … +3959.7 m across
+the eight seeds. **What licenses a one-flight showcase is the PER-SEED MONOTONICITY above — zero
+reversals on 8 of 8 — and nothing in this table.**
+
+⭐ The genuine finding here is that **the scatter does not grow with the effect**: sd goes 610 → 870 m
+from `G` = 1 to 20 while the mean goes +40 → +2699 m. The lobe moves the mean without widening the
+distribution, which is why the per-seed ladders come out clean.
+
+### ⚠ ONE ADDITION TO WHAT P4 MUST RUN (advisor, after P3b)
+
+§2.8 point 3 already requires §2.5 item 3's control arms (`rcs_m2` = 64, `rcs_fineness` = 4) to be
+**re-measured under `N`\* = 3 with mirrored edges** before being quoted. Add to that: **run the
+controls through the SAME per-seed reversal check P3b just ran**, on the same 8 seeds and the same
+rule, in the same probe. F2's substitution test needs the controls to FAIL to reproduce the
+asymmetry — and *a control that produces a non-monotone or seed-dependent asymmetry is a different
+and WEAKER refutation than one that produces none.* The distinction has to be measured, not assumed.
