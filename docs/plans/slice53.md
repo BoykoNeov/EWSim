@@ -1,6 +1,8 @@
 # Slice 53 — **A TAIL LOBE**: does a target look the same going away as coming at you?
 
-**STATUS: GATE 0 IN PROGRESS — P1, P2 AND P3 HAVE RUN (2026-08-31); F1, F2 AND F3 ARE DISCHARGED.**
+**STATUS: GATE 0 IN PROGRESS — P1, P2 AND P3 HAVE RUN (2026-08-31); F1 AND F2 ARE DISCHARGED, AND
+F3's MONOTONICITY AND BAR FILTERS WITH THEM. ⚠ F3's THIRD FILTER — *not sayable without the
+asymmetry* — IS P4's SUBSTITUTION TEST AND IS STILL OPEN.**
 ⚠ P3 FIXED TWO THINGS P4–P7 MUST USE VERBATIM: the run-length rule `N`\* = 3 and MIRRORED edges
 (§2.8). The ceiling is 50. **§2.3's and §2.6's ladder magnitudes are superseded by §2.8 — do not
 quote them.**
@@ -532,14 +534,30 @@ from zero. **There is no measurement asymmetry to name; §2.5 item 1 is CLOSED.*
 | vs BAR | null | 0.07× | 0.27× | 0.50× | **0.93× fail** | **1.90× PASS** | 2.35× PASS |
 
 **MONOTONE at `N` = 1, 3, 5 and 10 AND under both edge definitions — eight monotone ladders out of
-eight**, 8/8 uncensored in every cell. F3's third filter is discharged.
+eight**, 8/8 uncensored in every cell — and §2.9 confirms it holds on **every individual seed**,
+not just the ensemble mean. **F3's MONOTONICITY filter is discharged.** ⚠ F3's filters are named,
+never numbered, from here on: the *un-banned* and *monotone* filters are discharged; the
+*not-sayable-without-the-asymmetry* filter is P4's substitution test and is OPEN.
 
 ### ⚠⚠ THE §0.3 / §2.5-ITEM-2 COLLISION, AND ITS ANSWER — **THE CEILING IS 50**
 
 §2.5 named `G` = 20 "the candidate to beat" and §0.3 pre-registered that the ceiling should come
 DOWN rather than the axis going log. **F3's bar is not cleared until `G` = 50; 20 reaches 0.93× and
-misses.** ⇒ **20 is beaten and the ceiling is 50** — the lowest cell that clears the pre-registered
-bar, stated as the rule requires and *not* rescued by a statistic chosen afterwards.
+misses.** ⇒ **20 is beaten and the ceiling is 50.**
+
+⚠⚠ **THE DERIVATION MATTERS AS MUCH AS THE NUMBER, AND F3's BAR IS NOT THE SELECTION RULE.**
+§0.3's criterion is *"the last cell that is still MONOTONE in the gauge **and** still a physically
+ordinary airframe"* — every cell measured is monotone and §0.1 calls `G` = 100 an ordinary airframe
+outright, so §0.3's own rule taken literally returns **100**. F3's bar is a NECESSARY CONDITION at
+whatever ceiling is authored, never a way of picking one. The chain P7 inherits is therefore:
+
+1. §0.3's literal criterion ⇒ **100**.
+2. §0.3's OWN dB caveat fires, and it is now MEASURED rather than feared: on a 1–100 linear drag the
+   top half buys 19 % of the effect ⇒ **the ceiling comes down** (§0.3's stated response).
+3. F3's bar FLOORS how far it may come down: below 50 the ladder no longer clears 3 × max-null at
+   8 seeds ⇒ **50**, and at 50 the drag is close to the diagonal (39 % of travel, 48 % of effect).
+
+Same number, sourced correctly — and each step is a thing P7 can audit or overturn on its own.
 
 ⭐ **AND §0.3's LINEAR-AXIS WORRY IS RE-MEASURED IN THE GAUGE'S OWN UNITS, WHERE IT LARGELY
 VANISHES.** §0.3 reasoned in dB; the gauge is in metres. Fraction of the slider's travel vs fraction
@@ -592,3 +610,63 @@ one level up.
 5. ❌ F4 (P5, the two nulls) and F2's substitution half (P4) are untouched. §2.2's theorem is about
    σ and **does not reach a number read through a Swerling detector** — the same trap F3
    pre-registered, and P3 has now shown it was worth pre-registering twice.
+
+### §2.9 P3b — **THE LADDER PER SEED. THE SLIDER THE USER DRAGS IS ONE FLIGHT, AND P3 HAD NO
+### EVIDENCE ABOUT ONE FLIGHT** (probe `p3b_perseed.jl`, `p3b_out.txt`)
+
+⚠⚠ **WHAT §2.8 DID NOT MEASURE.** Every "monotone" in §2.8 is a statement about the ENSEMBLE MEAN
+over 8 seeds. A showcase slider is dragged on ONE seeded flight, and this arc has killed five
+sliders on exactly that distinction — `k` (28), `ω_n` (40), `σ_seek` (25), the loss COUNT (49) and
+miss-vs-`rcs_fineness` (50). The scatter said the worry was live, not theoretical: at `G` = 5 the
+mean is +777.2 m over a −531.8 … +2410.5 m spread, and §2.8's `min` column repeats −657.6 m at
+`G` = 1 **and** `G` = 2, i.e. some seed's edge had not moved at all between those cells.
+
+**THE BRANCH WAS PRE-REGISTERED IN THE PROBE HEADER BEFORE THE RUN** (all-monotone ⇒ the ceiling of
+50 stands and a one-flight slider is legal; any reversal ⇒ the gauge is an ENSEMBLE gauge, the
+showcase becomes a seeded batch under convention 15, **and a monotone seed must not be selected**).
+A FLAT cell was declared in advance to be *not* a reversal — the edge is quantised to look indices,
+so two adjacent `G` values can legitimately declare the loss at the identical look.
+
+### THE RESULT — **ZERO REVERSALS ON 8 OF 8 SEEDS** (metres, `N`\* = 3, mirrored edges)
+
+| seed | `G`=1 | 2 | 5 | 10 | 20 | 50 | 100 | rev | flat |
+|---|---|---|---|---|---|---|---|---|---|
+| 53 | −531.8 | −531.8 | −531.8 | +1720.6 | +1819.9 | +6244.0 | +6244.0 | **0** | 3 |
+| 149 | +315.7 | +315.7 | +870.7 | +1480.6 | +1480.6 | +6044.4 | +7411.4 | **0** | 2 |
+| 250 | +583.1 | +877.6 | +877.6 | +877.6 | +3516.5 | +8114.0 | +8508.7 | **0** | 2 |
+| 1 | +444.3 | +665.0 | +665.0 | +2615.9 | +3417.2 | +3865.5 | +5843.9 | **0** | 1 |
+| 2 | −441.7 | −255.7 | +446.4 | +446.4 | +2270.5 | +5256.7 | +6170.4 | **0** | 1 |
+| 3 | −361.9 | −361.9 | +1131.9 | +1796.9 | +2716.8 | +4095.7 | +6154.7 | **0** | 1 |
+| 4 | −657.6 | −657.6 | +347.5 | +371.0 | +3959.7 | +4449.7 | +5192.3 | **0** | 1 |
+| 5 | +968.4 | +1461.6 | +2410.5 | +2410.5 | +2410.5 | +6180.1 | +9022.3 | **0** | 2 |
+
+**Total reversals: 0. Largest reversal: 0.0 m.** ⇒ **the pre-registered all-monotone branch fires**:
+the ceiling of 50 stands as §2.8 wrote it, and the gate-3 showcase MAY be a single flight with a
+live slider. ⭐ This is a much stronger statement than §2.8's — the mechanism survives the filter
+that killed five sliders on this arc, **on every individual trajectory**, not on an average.
+
+### ⚠ THE ONE THING GATE 3 MUST DESIGN AROUND — **THE BOTTOM OF THE SLIDER HAS DEAD ZONES**
+
+Every seed has 1–3 FLAT cells and they are concentrated at low `G`: seed 53 does not move at all
+from `G` = 1 to `G` = 5, seed 250 sits at +877.6 m across `G` = 2 → 10, seed 5 sits at +2410.5 m
+across `G` = 5 → 20. That is the edge's quantisation to a look index, not a physics failure — but on
+a LIVE slider it means **a user dragging one flight from 1 to 2 can see nothing move at all.**
+
+⇒ gate 3 must not let the first inch of the drag read as "the knob is dead" (49's `.get(k, 0.0)`
+family of traps, one level up: here the number is REAL and simply has not changed yet). Either the
+view shows the batch, or the authored default sits where the ladder is already moving, or the
+readout says *how many looks* the edge moved rather than only metres. **Decided at gate 3, recorded
+here.**
+
+### HOW BIG A BATCH, IF ONE IS EVER WANTED (estimated from n = 8, quoted as such)
+
+| `G` | 1 | 2 | 5 | 10 | 20 | 50 | 100 |
+|---|---|---|---|---|---|---|---|
+| sd (m) | 609.9 | 762.9 | 830.9 | 842.9 | 870.0 | 1411.3 | 1354.9 |
+| se at n = 8 (m) | 215.6 | 269.7 | 293.8 | 298.0 | 307.6 | 499.0 | 479.0 |
+| seeds for se ≤ mean/3 | 2112 | 147 | 11 | 3 | **1** | **1** | **1** |
+
+⭐ **The scatter is essentially FLAT in `G`** (sd 610 → 870 m from `G` = 1 to 20 while the mean goes
++40 → +2699 m) — the lobe moves the mean without widening the distribution, which is why one flight
+suffices from `G` = 20 up and why the per-seed ladders are clean. ⚠ The `n` column is an estimate
+from 8 seeds and is not a licence to quote a headline from one flight at low `G`.
