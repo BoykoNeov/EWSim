@@ -358,6 +358,11 @@ honest — it is NOT F4/P5, which is a whole-flight `max|Δpos|` against the key
   is 4047.8 m), 2 → −46.2, 5 → +2745.5, 10 → **+4705.2**, 20 → +7222.0, 50 → +15755.5,
   100 → **+19684.2 m**. **Monotone in the mean AND on every individual seed**, clearing the bar from
   `G` = 10. ⚠ Three seeds is a RANKING read; P3 still owes the N ≥ 8 floor.
+  ⚠⚠ **THESE MAGNITUDES ARE SUPERSEDED — SEE §2.6.** The outbound loss here is a single Swerling
+  crossing, and it is measured to be a FLICKER: the final detection is routinely 80–181 looks after
+  the previous one. The effect is real and stays monotone under a run-length rule, but every number
+  in this bullet overstates it by ~1.7×. Quote §2.6's table, not this one. The INBOUND
+  bit-identity below is unaffected and stands.
   ⭐⭐⭐ **THE STRUCTURAL FACT:** the INBOUND gain range is **bit-identical at every `G` from 1 to
   100** (10570.9 / 11265.0 / 9811.6 m) — the forward hemisphere is untouched by construction, so the
   whole ladder is ONE LEG MOVING WHILE THE OTHER IS NAILED DOWN. That is a shape change in the
@@ -398,6 +403,10 @@ gauge can be clamped against, not for the one that bit last time.
 
 ### §2.5 WHAT P3 INHERITS, AND THREE THINGS IT MUST DECIDE RATHER THAN ASSUME
 
+⚠⚠ **READ §2.6 FIRST — it adds a FOURTH thing (the loss rule `N`) and re-derives the numbers items
+1 and 2 below are reasoning from.** The signed floor and the ceiling argument both move with the
+rule, so treat the two items as questions that survive rather than as figures that do.
+
 1. ⚠ **The `G` = 1 floor's MEAN is −511.7 m, not zero.** On three seeds that is inside the scatter
    (−1349 → +417). If N ≥ 8 confirms a NEGATIVE bias it is an asymmetry in the MEASUREMENT — the
    last-look-before-loss and the first-look-after-gain are not symmetric samplers while the range is
@@ -410,3 +419,70 @@ gauge can be clamped against, not for the one that bit last time.
    `rcs_fineness` = 4) already sit at +2924 m — three quarters of the bar — because a brighter
    target's detection window grows toward the wire's ends and the censoring starts to bite. The `G`
    ladder is immune by construction (its inbound edge never moves); the CONTROLS are not.
+
+### §2.6 ⚠⚠ A **THIRD** CENSORING EDGE — THE OUTBOUND LOSS WAS A FLICKER SAMPLER, AND §2.3's LADDER
+### MAGNITUDES ARE SUPERSEDED BY THE TABLE BELOW (probe `p2d_flicker.jl`, `p2d_out.txt`)
+
+§2.4 found two edges of the flight. There is a third, and it is not an edge of the flight but of the
+DETECTOR: `p2b`'s outbound loss is `findlast(detected)`, and under Swerling-1 that is *the last look
+that happened to draw above threshold*, not the range where the target became reliably invisible.
+
+**MEASURED, and it is not marginal.** The last five detections on each arm, with the gap in looks to
+the previous detection:
+
+| arm | final detection | SNR there | gap to the previous detection |
+|---|---|---|---|
+| `G` = 50, seed 149 | 27571.9 m | **+0.47 dB** | **181 looks — 18 seconds** |
+| `G` = 100, seed 250 | 31060.5 m | +1.38 dB | 117 looks |
+| `G` = 100, seed 53 | 32067.8 m | +0.82 dB | 100 looks |
+| `G` = 50, seed 53 | 26039.0 m | +1.48 dB | 81 looks |
+| `G` = 1, seed 250 | 10228.9 m | +2.86 dB | 36 looks |
+
+⇒ **the headline "+19684 m at `G` = 100" in §2.3 was set by single lucky fades**, and the identical
+27571.9 m at `G` = 50 and `G` = 100 on seed 149 — flagged there only as "monotone holds" — was the
+tell. ⚠ This is CLAUDE.md's own slice-49/50 line arriving from a new direction: **a gauge must carry
+its own window.** A single threshold crossing is not a loss; a track is given up after a RUN.
+
+**THE RULE, and the ladder under it.** Walking outbound, the track is given up at the first detection
+whose NEXT detection is more than `N` looks away (or absent) — slice 49's "longest loss run" logic
+applied to the edge rather than the interior. The same rule mirrored gives the inbound gain. Mean
+asymmetry over seeds 53/149/250, in metres:
+
+| `G` | N = 1 | N = 3 | N = 5 | N = 10 |
+|---|---|---|---|---|
+| 1 | −3037.7 | −1820.5 | −1279.9 | −659.2 |
+| 2 | −3037.7 | −1722.3 | −978.0 | −397.8 |
+| 5 | −2937.8 | −1537.3 | −191.8 | +1261.6 |
+| 10 | −2937.8 | −583.2 | +1136.5 | +2259.4 |
+| 20 | −2676.7 | +329.5 | +3106.0 | +5606.2 |
+| 50 | −2242.2 | +4858.0 | +6332.9 | +8312.1 |
+| 100 | −128.0 | +5445.2 | +8914.9 | +11543.9 |
+
+⚠ `N` = 1 is the STRICTEST rule (give up at the first detection with any gap after it); the raw
+`findlast` of §2.3 is `N` = ∞. Larger `N` is more permissive and declares the loss later.
+
+**WHAT SURVIVES AND WHAT DOES NOT:**
+
+- ✅ **The effect is real and the ladder is MONOTONE under every rule tested**, `N` = 1 through 10.
+  The mechanism is not an artefact of the sampler.
+- ❌ **The MAGNITUDES in §2.3 are not quotable.** The raw read overstates by roughly 1.7× against
+  `N` = 10 (+19684 vs +11544 m at `G` = 100) and the floor moves with the rule too (−511.7 raw,
+  −659.2 at `N` = 10, −1279.9 at `N` = 5). **A ladder and its floor must be read under the SAME
+  rule**, which is why the table above is the one to carry forward.
+- ✅ **The structural fact of §2.3 is UNAFFECTED and remains the strongest thing P2 measured.** The
+  inbound leg's SNR values and Swerling draws are bit-identical at every `G`, so *any* rule applied
+  to that leg returns the same range. The lobe still moves one leg while the other is nailed down.
+- ⚠ **`N` is now a decision P3 must make and justify**, not a number to inherit. The effect's SIZE
+  and the floor both scale with it, and picking `N` after seeing the ladder is exactly the thing this
+  project's own discipline forbids. Anchor it on something outside this gauge — slice 49's control
+  flickered for at most 0.20 s, i.e. **two looks**, which argues for a small `N` (3–5), not 10.
+
+### §2.7 CORRECTION TO §2.3's REFUSAL OF W3
+
+§2.3 refused W3 on three counts. **Count (3) — "the aspect barely sweeps, 7.89° over detected ticks"
+— is not an independent reason and must not be read as one.** The detected span is narrow *because*
+the lock is lost a second into the flight, which is the very mechanism the lobe would remove; it is
+downstream of the wire's behaviour at `G` = 1, not evidence against the wire. **W3 is refused on
+counts (1) and (2) alone** — the miss is banned and measured non-monotone here, and its only other
+gauge is slice 50's, which this plan pre-registered as the "49 with a sign flip" kill. That is
+sufficient, and W3 stays LIVE as the fallback if W1 fails P3.
