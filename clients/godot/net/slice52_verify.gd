@@ -65,6 +65,8 @@ const TID := "tgt1"
 const STEPS := 11200
 const PRESS_AT := 3200            # a multiple of 16, and BEFORE the 4.936 s handover, so the press
                                   # is what removes the blind phase
+const DRAG_AT := 5296             # a multiple of 16, and MID-SEARCH (the sweep opens at 4936, the
+                                  # authored 25° arm locks at 5959) — the drag arm's first leg
 
 const RUNG_ON := "snr"
 const RUNG_OFF := "none"
@@ -120,6 +122,7 @@ var _handshaked := false
 var _t0 := 0.0
 var _t_target := 0.0
 var _pending_press := ""
+var _pending_drag := 0.0          # ⭐ the MID-SEARCH drag arm — the one path no other proof walks
 
 var _arms: Array = []
 var _idx := -1
@@ -147,6 +150,10 @@ var _n_srchkey := 0
 var _n_realkey := 0               # ⭐ frames carrying the slice's OWN instrument keys
 var _told_peak := 0.0             # the COMMANDED peak, off the wire's own latch
 var _flown_peak := 0.0            # …and the peak the head actually flew
+# ⚠ THE **LAST** VALUES, NOT THE RUNNING MAXIMA. A peak-of-peaks cannot see a knob that FELL, which
+# is exactly the bug the drag arm exists to catch: the running max would keep the pre-drag 21.84.
+var _told_last := 0.0
+var _flown_last := 0.0
 var _head_peak := 0.0             # the body angle, for the trunnion claim
 var _win_seen := 0.0
 var _stop_seen := 0.0
@@ -192,6 +199,13 @@ func _process(_dt_frame: float) -> bool:
 		_t_target = STEPS * _dt
 		_client.send({"type": "step", "n": STEPS - PRESS_AT})
 		return false
+	if _pending_drag > 0.0:
+		var s_new := _pending_drag
+		_pending_drag = 0.0
+		_client.send(_set_param_cmd(MID, "seeker_search_coverage_deg", s_new))
+		_t_target = STEPS * _dt
+		_client.send({"type": "step", "n": STEPS - DRAG_AT})
+		return false
 	var aerr := _finish_arm()
 	if aerr != "":
 		return _fail(aerr)
@@ -220,6 +234,12 @@ func _build_arms() -> void:
 	# 5) ⭐ THE PRESS ITSELF, MID-FLIGHT, WHILE STILL BLIND, with the slider at its FLOOR — a width
 	#    that otherwise never finds the target at all.
 	_arms.append({"tag": "midpress", "S": S_FLOOR, "press": RUNG_OFF})
+	# 6) ⭐⭐⭐ THE MID-SEARCH DRAG — **the only arm in any of the four proofs that moves the slider
+	#    while the physics is running**, and it is here because slice 49's rule says a live drag
+	#    reaches none of them. Narrowing 25° → 6° mid-search is the direction this HUD's own cure
+	#    line asks for, and before the seam re-armed its peaks it left the band drawing a 22° sweep
+	#    over a head covering ±6 for the rest of the flight.
+	_arms.append({"tag": "drag", "S": S_AUTH48, "drag": 6.0})
 
 func _launch_arm() -> void:
 	_idx += 1
@@ -237,6 +257,12 @@ func _launch_arm() -> void:
 		_pending_press = str(arm["press"])
 		_t_target = PRESS_AT * _dt
 		_client.send({"type": "step", "n": PRESS_AT})
+	elif arm.has("drag"):
+		# ⚠ A MULTIPLE OF `emit_every` (16), and MID-SEARCH: the sweep opens at tick 4936 and the
+		# authored 25° arm locks at 5959, so 5296 is inside the acquisition on both sides.
+		_pending_drag = float(arm["drag"])
+		_t_target = DRAG_AT * _dt
+		_client.send({"type": "step", "n": DRAG_AT})
 	else:
 		_t_target = STEPS * _dt
 		_client.send({"type": "step", "n": STEPS})
@@ -258,6 +284,7 @@ func _finish_arm() -> String:
 		"searching": _n_searching, "cue": _cue_hand, "def": _def_first, "def_max": _def_max,
 		"elapsed": _elapsed_max, "srchkey": _n_srchkey, "realkey": _n_realkey,
 		"told": _told_peak, "flown": _flown_peak, "frac": frac, "head": _head_peak,
+		"told_last": _told_last, "flown_last": _flown_last,
 		"S": float(arm["S"]), "cov_seen": _cov_seen, "rho_seen": _rho_seen,
 		"blind": blind, "win": _win_seen, "stop": _stop_seen, "rate": _rate_seen,
 		"pos": _pos_trace.duplicate(true),
@@ -286,13 +313,25 @@ func _finish_arm() -> String:
 				 _win_seen, _stop_seen, _rate_seen, _rho_seen])
 	# ⚠ THE SLIDER'S OWN TRIPWIRE (slice 19's discipline): the coverage is READ BACK OFF THE WIRE, so
 	# each arm proves the slider reached THE PHYSICS rather than merely being accepted by the server.
-	if absf(_cov_seen - float(arm["S"])) > 1.0e-9:
+	if not arm.has("drag") and absf(_cov_seen - float(arm["S"])) > 1.0e-9:
 		return (("arm %s: the wire must report the coverage the slider sent (%.4f vs %.4f) — a " +
 				"set_param that is accepted and never consumed passes every other check here") %
 				[tag, _cov_seen, float(arm["S"])])
 	# ⚠⚠ SLICE 35's RATE LIMIT MUST NEVER BIND BEFORE THE LOCK. The servo is authored at 240 °/s
 	# against a 60 °/s sweep exactly so a failure to reach the target is attributable to the WIDTH.
-	if not (_n_sat_pre == 0):
+	if arm.has("drag"):
+		# ⭐⭐ AND THE DRAG ARM IS EXEMPT BECAUSE OF WHAT IT MEASURES, NOT TO GET PAST A CHECK:
+		# `search_sweep` is continuous in TIME and **discontinuous in `S`**, so moving the slider
+		# steps the commanded offset — at a fixed phase a 25° triangle and a 6° one are simply in
+		# different places — and the servo rate-limits through that step. It is the one thing on
+		# this wire that a slider drag does and a sweep never can, it lasts a couple of frames, and
+		# it is asserted as a BOUNDED TRANSIENT rather than skipped.
+		if not (_n_sat_pre > 0 and _n_sat_pre <= 8):
+			return (("arm %s: a live drag STEPS the commanded offset (the sweep is discontinuous in " +
+					"S), so the servo must rate-limit through it BRIEFLY — got %d saturated frames " +
+					"before the lock, expected 1…8. Zero would mean the drag never reached the " +
+					"physics; many would mean the step is not being absorbed") % [tag, _n_sat_pre])
+	elif not (_n_sat_pre == 0):
 		return (("arm %s: slice 35's rate limit bound on %d frames BEFORE the lock — a sweep the " +
 				"servo cannot execute is not a test of the sweep WIDTH. (It had %d frames after " +
 				"the lock, which is the ENDGAME and is not this slice's mechanism)") %
@@ -536,6 +575,33 @@ func _verdict() -> bool:
 		return _fail(("…and it must never have searched (%d frames) — the save is the BUTTON's and " +
 					  "not the width's") % mp["searching"])
 
+	# ⭐⭐⭐ 10. THE MID-SEARCH DRAG — the state slice 49's rule says no proof of this family visits.
+	# Narrow the sweep while the head is hunting and BOTH peaks must re-arm: the band's width is the
+	# COMMANDED peak, and a stale one draws a 22° sweep over a head now covering ±6 for the rest of
+	# the flight, with the headline naming a width the slider does not show.
+	var dg: Dictionary = _res["drag"]
+	print(("S52V_DRAG   dragged %.1f -> %.1f deg at %.3f s; the wire then reports told %.3f / flown " +
+		   "%.3f deg (an un-dragged 6.00 deg arm reads %.3f / %.3f)") %
+		  [S_AUTH48, 6.0, DRAG_AT * _dt, dg["told_last"], dg["flown_last"],
+		   _res["s%s" % _sname(6.0)]["told"], _res["s%s" % _sname(6.0)]["flown"]])
+	if not (float(dg["told_last"]) < 0.5 * S_AUTH48):
+		return _fail(("⭐⭐⭐ after narrowing the sweep the COMMANDED peak must re-arm (%.3f° against " +
+					  "the %.1f° it was dragged away from) — a peak that only ever grows is stale " +
+					  "for the rest of the flight, and the HUD draws its band from THIS key") %
+					 [dg["told_last"], S_AUTH48])
+	if not (absf(float(dg["told_last"]) - 6.0) < 0.2):
+		return _fail("…and it must settle on the width now authored (%.3f° vs 6.0°)" % dg["told_last"])
+	if not (float(dg["flown_last"]) < float(dg["told_last"])):
+		return _fail(("…and the REALIZED peak must re-arm with it (%.3f° against a %.3f° command) — " +
+					  "the head is what a drag cannot move instantly, so a peak restarted at the " +
+					  "moment it re-enters the new band samples it AT THE RIM and reports a " +
+					  "flattering ~99 %% where the un-dragged arm measures 69 %%") %
+					 [dg["flown_last"], dg["told_last"]])
+	if not (absf(float(dg["flown_last"]) / maxf(float(dg["told_last"]), 1e-9) - 0.6929) < 0.08):
+		return _fail(("…and it must land on the UN-DRAGGED 6° arm's own fraction (%.4f vs 0.6929) — " +
+					  "that is what separates 'measures the new sweep' from 'merely forgot the old " +
+					  "one'") % [float(dg["flown_last"]) / maxf(float(dg["told_last"]), 1e-9)])
+
 	print("S52V PASS  ", _arms.size(), " arms")
 	quit(0)
 	return true
@@ -590,6 +656,7 @@ func _reset_scan_accum() -> void:
 	_cue_hand = 0.0; _def_first = -1.0; _def_max = 0.0; _t_lock_key = -1.0
 	_elapsed_max = 0.0; _n_srchkey = 0; _n_realkey = 0
 	_told_peak = 0.0; _flown_peak = 0.0; _head_peak = 0.0
+	_told_last = 0.0; _flown_last = 0.0
 	_win_seen = 0.0; _stop_seen = 0.0; _rate_seen = 0.0; _rho_seen = 0.0; _cov_seen = 0.0
 	_pos_trace.clear()
 
@@ -647,6 +714,8 @@ func _scan(f: Dictionary) -> void:
 		_n_realkey += 1
 		# ⚠ BEFORE THE LOCK ONLY, so the post-intercept re-search cannot widen either peak. That
 		# episode is this slice's fourth encounter with the trap.
+		_told_last = float(tel.get(MID + ".search_offset_peak_deg", 0.0))
+		_flown_last = float(tel[MID + ".search_realized_peak_deg"])
 		if _t_lock_frame < 0.0:
 			_told_peak = maxf(_told_peak, float(tel.get(MID + ".search_offset_peak_deg", 0.0)))
 			_flown_peak = maxf(_flown_peak, float(tel[MID + ".search_realized_peak_deg"]))

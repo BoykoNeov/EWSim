@@ -3162,6 +3162,13 @@ func _s52_sweep_text(searched: bool, told: float, flown: float, elapsed: float) 
 	# what the head was TOLD to sweep against what it actually FLEW.
 	if not searched:
 		return "sweep: not started — the head has swept nothing yet"
+	# ⚠⚠ THE TRANSIT STATE, AND IT IS REACHABLE ONLY BY A **DRAG** — the state slice 49's rule says
+	# no proof of this family ever visits. Narrow the sweep mid-search and the command re-arms on the
+	# next tick while the head is still out at the old excursion, so `flown > told` for up to half a
+	# period. That is impossible in steady state, so it is a reliable signal — and printing the
+	# fraction there would put "315 %" on screen over a head doing nothing wrong.
+	if flown > told + 0.05:
+		return "sweep NARROWED to %.1f° — head still out at %.1f°" % [told, flown]
 	return "told %.1f°   FLOWN %.1f° (%.0f%%)   t %.2f s" % [
 			told, flown, 100.0 * flown / maxf(told, 1.0e-6), elapsed]
 

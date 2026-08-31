@@ -1,7 +1,8 @@
 # Slice 52 — **HOW WIDE SHOULD A SEEKER SEARCH?** (slice 48's reserve axis, `seeker_search_coverage_deg`)
 
-**STATUS: GATE 0 PASSED + GATES 1 AND 2 BUILT & GREEN, 2026-08-31. THE SLICE LIVES; GATE 3 NOT YET
-BUILT.** ⚠ Gate 2 RETRACTED one of §II's sentences (the `2/60` identity) and re-scoped §VI's
+**STATUS: COMPLETE — GATES 0–3 BUILT & GREEN, 2026-08-31. Suite 18632 / 18632; the as-built record
+is `docs/STATUS.md` §"Slice 52". Gate 3's own section is §XII below, and it CORRECTS §IX's "no core
+change" a second time (§X corrected it for the client; §XII ships an INSTRUMENT and a drag re-arm).** ⚠ Gate 2 RETRACTED one of §II's sentences (the `2/60` identity) and re-scoped §VI's
 contamination column; read §XI before quoting §II or §VI. Seven probes in
 `M:\claud_projects\temp\slice52\`. **No core change was made and none is needed** — the key already
 exists, is read every tick and is already on the wire; what is missing is a showcase. Verdict table
@@ -532,3 +533,86 @@ the fraction falls as the sweep's period `4S/ρ` shrinks toward `gimbal_tau_s` =
    `S` = 0 the branch still runs with a zero sweep. The floor's meaning is a TOOTH here (tooth I),
    and gate 3's knob endpoints must be argued from it.
 3. **The verifier may not read a local slope**, and may not read anything past the first lock.
+
+---
+
+## §XII — GATE 3 (2026-08-31): **THE SHOWCASE, AND THE ONE BUG NO PROOF IN THIS FAMILY WOULD HAVE CAUGHT**
+
+`scenarios/slice52_coverage.yaml` (slice 48's wire, three authored numbers changed, the coverage as
+THE slider), `core/test/test_search.jl`'s gate-3 section, the 14th view marker, a HUD block with the
+family's first drawn GEOMETRY since slice 38, `net/slice52_verify.gd` (18 arms) and
+`net/slice52_ui_test.gd` (11 teeth). **Suite 18489 → 18632.** Full as-built detail is in
+`docs/STATUS.md`; this section records only what a LATER SLICE would trip on.
+
+### ⚠⚠ §IX's "NO CORE CHANGE WAS MADE AND NONE IS NEEDED" IS NOW CORRECTED TWICE
+
+§X corrected it for the CLIENT (there is no marker that separates a slice-52 wire from a slice-48
+one). Gate 3 corrects it for the PHYSICS side too, and the reason is a measurement rather than a
+convenience: **the head does not fly the coverage you author** (0.27 of a 1° command, 0.95 of a 40°
+one; 0.92 / 0.84 / 0.70 at a fixed 25° as ρ goes 60 / 120 / 240) — so a slice whose entire subject is
+HOW WIDE cannot leave the flown width off the wire. ⇒ `seeker_search_realized` ships as an authored
+ANCHOR turning on `search_realized_deg`, `search_realized_peak_deg` and `search_offset_peak_deg`, and
+it is what raises the marker. ⚠ Authored rather than universal so slice 48's frames stay
+byte-identical.
+
+### ⭐⭐⭐ THE BUG, AND WHY IT MATTERS BEYOND THIS SLICE
+
+A peak that is only ever `max`-ed is correct while the knob holds still and **permanently stale the
+moment the knob FALLS.** Dragging 25° → 6° mid-search left `search_offset_peak_deg` at **21.84** and
+the realized peak at **18.85 for the rest of the flight**: the band drew a 22° sweep over a head now
+covering ±6, and the headline named a width the slider did not show. ⚠⚠ **THE HARMFUL DIRECTION IS
+THE ONE THE HUD'S OWN CURE LINE ASKS FOR** — *"now NARROW it — every extra degree is paid TWICE."*
+
+**NONE OF THE FOUR PROOFS REACHED IT**, and that is slice 49's rule landing on the instrument this
+slice shipped: the verifier sends every `set_param` at t = 0 before stepping, the UI test feeds
+synthetic telemetry, and gate 2 tooth A's 25 → 12 drag runs on `slice48_search.yaml`, **which does not
+author this anchor** — so these keys had never been flown across a drag at all.
+
+⇒ **the fix is RE-ARM, not disarm** (slice 49 disarmed): there the drag destroyed the episode being
+measured; here the drag IS the pedagogy, so the right answer is to start measuring the new sweep.
+
+### ⚠⚠ THREE THINGS ABOUT THE RE-ARM THAT A LATER SLICE MUST NOT "SIMPLIFY"
+
+1. **ONLY THE PEAKS ARE CLEARED — NEVER `:search_t0`.** Re-stamping the phase would move the
+   commanded offset itself and destroy gate 2 tooth A's measured property (a drag is invisible for
+   `min(S₁,S₂)/ρ`; bit-identical for 78 more ticks, diverging at exactly 0.2000 s).
+2. **THE RESTART INSTANT IS THE CENTRE CROSSING, NOT RE-ENTRY INTO THE NEW BAND** — and the
+   difference is the whole value of the key. The command re-arms instantly and the head does not, so
+   a plain `max` from zero re-records the old 18.9° on the very next tick. Restarting when the head
+   re-enters ±S is no better: it is transiting INWARD through the whole band, so the first sample is
+   at the RIM and the arm reported **flown/told = 0.99** where the un-dragged 6° arm measures
+   **0.69** — a stale peak swapped for a flattering one. The centre crossing is where the new sweep
+   actually begins. Flown, the drag arm now reads **4.0004 / 6.0000 = 0.667** against that arm's
+   0.6929.
+3. **WHILE THE HEAD IS STILL OUTSIDE THE NEW BAND THE REALIZED PEAK IS THE LIVE OFFSET**, so
+   `flown > told` — impossible in steady state, and therefore a reliable signal the CLIENT can read.
+   `_s52_sweep_text` names that state ("sweep NARROWED to 2.1° — head still out at 18.9°") instead of
+   printing a fraction over 100 %.
+
+⭐ **AND THE SLICE NOW CARRIES THE ONLY ARM IN THIS FAMILY THAT MOVES A SLIDER WHILE THE PHYSICS IS
+RUNNING** (`slice52_verify.gd`'s `drag` arm, a two-leg step around `DRAG_AT` = 5296), plus a core
+tooth and a UI-test transit tooth. ⚠ The verifier reads `told_last` / `flown_last`, **not** the
+running maxima — *a peak-of-peaks cannot see a knob that fell*, which is the bug restated as an
+instrument design rule.
+
+### ⭐⭐ AND ONE MORE THING THE DRAG ARM MEASURED ON ITS FIRST RUN
+
+**A LIVE DRAG *STEPS* THE COMMANDED OFFSET.** `search_sweep` is continuous in TIME and
+**discontinuous in `S`**: at a fixed phase a 25° triangle and a 6° one are in different places, so
+moving the slider hands the servo a step and slice 35's rate limit binds for 2 frames. ⚠ The
+isolation check every verifier in this family carries (*the rate limit must never bind before the
+lock*) therefore does not reach a drag arm — and the exemption is the CLAIM, asserted as a bounded
+transient of 1…8 frames so that "the drag reached the physics" and "the step is absorbed" are both
+tested. ⇒ **a positional pattern's parameter is not a continuous input when a student is holding it.**
+
+### ⚠ THE OTHER THINGS GATE 3 MEASURED THAT ARE NOT IN `docs/STATUS.md`
+
+- **The horizon-OFF arms register exactly ONE searching frame** — the tick the branch opens, where
+  `search_sweep(0) === 0.0` by construction (gate 1 tooth 1). A "flown < told" claim must be gated on
+  a BAND having been swept, never on a frame count.
+- **The mid-run PRESS arm never searches at all** (the horizon is removed at 3.2 s, before the
+  4.936 s handover), so *you only search because you were blind* is asserted as `searching == 0`
+  rather than skipped.
+- **The slider's ceiling is 40° and not 45°** because 45 is the only ladder cell where the stop binds
+  BEFORE the lock (102 ticks). ⚠ `t_lock` survives it — this is a choice about what the showcase
+  TEACHES, not a claim that the gauge would break.

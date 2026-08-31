@@ -316,7 +316,19 @@ func _initialize() -> void:
 		return _fail("⭐ the LIVE head marker must lie inside the band it has swept (%s vs %s) — the peak IS this marker's own running maximum" % [head, flown])
 	if not (head.position.x < cx):
 		return _fail("⚠ a NEGATIVE live offset must draw on the negative side of the centre (%.1f vs %.1f)" % [head.position.x, cx])
-	print("S52UI_BAND   flown ⊂ told ⊂ travel, concentric, live head inside; the ticks walk %.1f -> %.1f px; clamped past the trunnion" % [x_early, x_late])
+	# ⚠⚠ THE POST-DRAG TRANSIT, WHICH IS THE ONE STATE ONLY A **DRAG** REACHES — and slice 49's rule
+	# is that a drag reaches none of the four proofs, so it is asserted here or nowhere. Narrow the
+	# sweep mid-search and the command re-arms on the next tick while the head is still out at the
+	# old excursion: `flown > told`, impossible in steady state. The BAND draws the flown fill wider
+	# than the told outline, which is the correct picture (the head is outside the new band), and the
+	# TEXT must name it rather than print a fraction over 100 %.
+	var g_tr: Array = sb._s52_band_rects(1490.0, 212.0, 2.1, 18.9, 5.0, 45.0, -18.9)
+	if not (_kind_rect(g_tr, "flown").size.x > _kind_rect(g_tr, "told").size.x):
+		return _fail("⚠⚠ during the post-drag transit the FLOWN band must draw wider than the freshly re-armed TOLD one — that is the head being outside the new sweep, and hiding it would be the stale-peak bug drawn as if it were fine")
+	var tr_txt: String = sb._s52_sweep_text(true, 2.1, 18.9, 0.6)
+	if tr_txt.contains("%") or not tr_txt.to_lower().contains("narrow"):
+		return _fail("⚠⚠ the transit state must be NAMED, not printed as a fraction over 100 %% — got '%s'" % tr_txt)
+	print("S52UI_BAND   flown ⊂ told ⊂ travel, concentric, live head inside; the ticks walk %.1f -> %.1f px; the post-drag transit reads '%s'" % [x_early, x_late, tr_txt])
 
 	# ══ TOOTH 7 — ⚠⚠ THE BAND IS **NEVER** SIZED FROM THE COVERAGE ECHO ══════════════════════════
 	# Gate 2 tooth I measured that `search_coverage_deg` echoes the comp bag FINITE-CLAMPED while the
@@ -341,6 +353,7 @@ func _initialize() -> void:
 	var body := [sb._s52_sweep_text(false, 0.0, 0.0, 0.0),
 				 sb._s52_sweep_text(true, 25.0, 22.95, 1.02),
 				 sb._s52_sweep_text(true, 40.0, 37.95, 12.34),
+				 sb._s52_sweep_text(true, 2.1, 18.9, 0.6),
 				 sb._s52_reach_text(false, false, false, 0.0, 1.337, -1.0),
 				 sb._s52_reach_text(true, true, false, 3.24, 2.804, -1.0),
 				 sb._s52_reach_text(true, false, false, 3.02, 8.400, -1.0),

@@ -3017,10 +3017,61 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             # echo**, and holding its peak in the core is what lets a client sampling one frame in
             # sixteen have it at all.
             if haskey(c, :seeker_search_realized)
+                # ⚠⚠⚠ THE PEAKS **RE-ARM ON A DRAG**, AND THIS IS THE ONE PLACE THIS SLICE COULD
+                # HAVE SHIPPED A LYING HUD. A peak that is only ever `max`-ed is correct while the
+                # knob holds still and PERMANENTLY STALE the moment it falls: dragging 25° → 6°
+                # mid-search leaves `search_offset_peak_deg` at 21.84 and the realized peak at
+                # 18.85 for the rest of the flight, so the band draws a 22° sweep over a head now
+                # covering ±6 and the headline names a width the slider does not show. ⚠ AND THE
+                # HARMFUL DIRECTION IS THE ONE THE HUD'S OWN CURE LINE ASKS FOR (*"now NARROW it"*).
+                # ⚠ This is slice 49's rule — *a live SLIDER DRAG invalidates a latched instrument
+                # exactly as a Reset does* — reaching the instrument THIS slice shipped.
+                # ⭐ RE-ARM, NOT DISARM (slice 49 disarmed): there the drag destroyed the episode
+                # being measured, here the drag IS the pedagogy, so the right answer is to start
+                # measuring the new sweep rather than to refuse to measure at all.
+                # ⚠⚠ **ONLY THE PEAKS ARE CLEARED — NEVER `:search_t0`.** Re-stamping the phase
+                # would move the commanded offset itself and destroy the measured property that a
+                # drag is invisible until `min(S₁,S₂)/ρ` (gate 2 tooth A: bit-identical for 78 more
+                # ticks, diverging at exactly 0.2000 s).
+                # ⚠ BOTH search numbers are in the guard: the realized peak is set by the RATE as
+                # much as by the width (a head flies 0.92 of a 25° sweep at 60 °/s and 0.70 at 240).
+                cov_srch = deg2rad(Float64(get(c, :seeker_search_coverage_deg, 0.0)))
+                let knobs = (cov_srch, ρ_srch)
+                    if get(c, :search_peak_knobs, nothing) !== knobs
+                        c[:search_peak_knobs]     = knobs
+                        c[:search_realized_peak]  = 0.0
+                        c[:search_cmd_peak]       = 0.0
+                        c[:search_peak_pending]   = true
+                    end
+                end
+                prev_off = Float64(get(c, :search_realized, 0.0))
                 real_off = wrap_angle(Float64(c[:head_az]) - cen_az)
                 c[:search_realized] = real_off
-                c[:search_realized_peak] =
-                    max(Float64(get(c, :search_realized_peak, 0.0)), abs(real_off))
+                # ⚠⚠ THE COMMAND RE-ARMS INSTANTLY AND THE HEAD DOES NOT, WHICH IS THE SECOND HALF
+                # OF THE SAME BUG. A 25° → 6° drag leaves the head physically 18.9° off the centre,
+                # so a plain `max` from zero re-records 18.9 on the very next tick and the peak is
+                # stale again — measured, not reasoned. ⇒ while the head is still OUTSIDE the new
+                # commanded envelope the realized peak is the LIVE offset (which is what the head is
+                # honestly doing: coming back in), and it restarts as a running maximum the first
+                # tick the new sweep actually owns the head.
+                # ⭐ The client can SEE that state, because it is exactly `flown > told` — impossible
+                # in steady state — and `_s52_sweep_text` names it rather than printing a fraction
+                # over 100 %. ⚠ On an un-dragged flight the head starts AT the centre, so the pending
+                # flag clears on the first searching tick and every pinned number is unchanged.
+                # ⚠⚠ AND THE RESTART INSTANT IS THE **CENTRE CROSSING**, NOT THE MOMENT THE HEAD
+                # RE-ENTERS THE NEW BAND — measured, and the difference is the whole value of the
+                # key. Restarting at re-entry samples the head AT THE RIM (it is transiting inward
+                # through the whole band), so a 25° → 6° drag reported flown/told = 0.99 where the
+                # un-dragged 6° arm measures 0.69: a stale peak replaced by a flattering one. The
+                # centre crossing is where the new sweep actually begins, so the first excursion it
+                # records is the new command's own.
+                if get(c, :search_peak_pending, false)
+                    c[:search_realized_peak] = abs(real_off)
+                    real_off * prev_off ≤ 0.0 && (c[:search_peak_pending] = false)
+                else
+                    c[:search_realized_peak] =
+                        max(Float64(get(c, :search_realized_peak, 0.0)), abs(real_off))
+                end
                 c[:search_cmd_peak] =
                     max(Float64(get(c, :search_cmd_peak, 0.0)), abs(search_off))
             end

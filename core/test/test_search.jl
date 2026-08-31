@@ -1350,6 +1350,52 @@ end
         @test over.t_lock ≈ 1.8590 atol = 1.0e-3
     end
 
+    @testset "⭐⭐⭐ THE PEAKS RE-ARM ON A DRAG — the lying-HUD bug this slice nearly shipped" begin
+        # ⚠⚠ A PEAK THAT IS ONLY EVER `max`-ED IS PERMANENTLY STALE THE MOMENT THE KNOB FALLS, and
+        # the falling direction is the one the HUD's own cure line asks for (*"now NARROW it"*).
+        # Measured before the fix: dragging 25° → 6° mid-search left `search_offset_peak_deg` at
+        # 21.84 and the realized peak at 18.85 for the REST OF THE FLIGHT, so the band drew a 22°
+        # sweep over a head covering ±6 and the headline named a width the slider did not show.
+        # ⚠ Slice 49's rule — *a live SLIDER DRAG invalidates a latched instrument exactly as a
+        # Reset does, and reaches NONE of the four gate-3 proofs* — so it is asserted here.
+        sc = load_scenario(joinpath(base52, "slice52_coverage.yaml"))
+        c  = sc.world.entities[:m1].comp
+        for _ in 1:5300
+            tick!(sc.world, sc.subs, sc.dt_physics)
+        end
+        tv52(k) = Float64(get(get(sc.world.env, :telemetry, Dict{String,Any}()), "m1.$k", NaN))
+        @test tv52("head_searching") == 1.0            # …mid-search, or this proves nothing
+        told_before = tv52("search_offset_peak_deg")
+        @test told_before ≈ 21.84 atol = 1.0e-2
+        t0_before = Float64(c[:search_t0])
+        # THE DRAG — a comp-bag write, which is exactly what `set_param` does.
+        c[:seeker_search_coverage_deg] = 6.0
+        tick!(sc.world, sc.subs, sc.dt_physics)
+        # ⭐ THE COMMAND RE-ARMS ON THE VERY NEXT TICK: the peak is now a fresh partial excursion of
+        # the NEW sweep, nowhere near the old 21.84.
+        @test tv52("search_offset_peak_deg") < 2.5
+        for _ in 1:1200
+            tick!(sc.world, sc.subs, sc.dt_physics)
+        end
+        @test tv52("head_searching") == 1.0            # …still searching, so the window is real
+        @test tv52("search_coverage_deg") == 6.0
+        @test tv52("search_offset_peak_deg") ≈ 6.0 atol = 1.0e-3
+        # ⭐⭐⭐ AND THE REALIZED PEAK LANDS ON THE **UN-DRAGGED 6° ARM'S OWN NUMBER**, which is the
+        # only check that proves the re-arm measures the new sweep rather than merely forgetting the
+        # old one: 4.0004 against that arm's 4.1572, i.e. a flown fraction of 0.667 against 0.693.
+        @test tv52("search_realized_peak_deg") ≈ 4.0004 atol = 1.0e-2
+        @test abs(tv52("search_realized_peak_deg") / tv52("search_offset_peak_deg") - 0.6929) < 0.05
+        # ⚠⚠ AND `:search_t0` IS **UNTOUCHED** — re-stamping the phase would move the commanded
+        # offset itself and destroy gate 2 tooth A's measured property (a drag is invisible for
+        # `min(S₁,S₂)/ρ`, bit-identical for 78 more ticks and diverging at exactly 0.2000 s).
+        @test Float64(c[:search_t0]) === t0_before
+        # ⚠ THE RESTART INSTANT IS THE CENTRE CROSSING, NOT RE-ENTRY INTO THE NEW BAND. Restarting
+        # at re-entry samples the head AT THE RIM — it is transiting inward through the whole band —
+        # and reported 0.99 where the un-dragged arm measures 0.69: a stale peak swapped for a
+        # flattering one. This bound is what separates the two implementations.
+        @test tv52("search_realized_peak_deg") < 5.0
+    end
+
     @testset "THE LOADER's REFUSALS for the new anchor — a crash guard and a dead-knob guard" begin
         # ⚠ `false` is refused rather than honoured: presence is the gate (the `seeker_search` /
         # `midcourse` posture), so a `false` would author the instrument while meaning the opposite.

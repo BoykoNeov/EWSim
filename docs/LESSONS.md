@@ -469,6 +469,47 @@ because the physics was wrong:
 claim's domain** before weakening the claim. Twice here the arm outside the domain was carrying a
 result worth asserting in its own right.
 
+## ⭐⭐⭐ A RUNNING MAXIMUM CANNOT SEE A KNOB THAT **FELL** — AND NO PROOF IN THIS FAMILY DRAGS A SLIDER (slice 52, 2026-08-31)
+
+Slice 52 shipped a peak-hold instrument (the widest sweep the head has flown) and very nearly shipped
+a HUD that lies. A `max` is correct while the knob holds still and **permanently stale the moment the
+knob falls**: dragging the width 25° → 6° mid-search left the commanded peak at 21.84 and the
+realized peak at 18.85 **for the rest of the flight**, so the band drew a 22° sweep over a head now
+covering ±6.
+
+⚠⚠ **AND THE HARMFUL DIRECTION WAS THE ONE THE HUD'S OWN CURE LINE ASKED FOR** (*"now NARROW it"*).
+When an instrument is asymmetric in a knob, check the direction your own text recommends first.
+
+⚠⚠ **NONE OF THE FOUR PROOFS REACHED IT, AND THAT IS STRUCTURAL RATHER THAN AN OVERSIGHT** — slice
+49's rule (*a live SLIDER DRAG invalidates a latched instrument as a Reset does, and reaches none of
+the four gate-3 proofs*) landing on a NEW instrument. Every verifier in this family sends `set_param`
+at t = 0 **before** stepping, so its "arms" are scenario variants rather than drags; the UI test feeds
+synthetic telemetry, so it never exercises accumulation at all; and the nearest existing drag tooth
+ran on the PREVIOUS slice's scenario, which does not author the new anchor. ⇒ **a new latched or
+peak-held key needs an arm that moves the slider WHILE THE PHYSICS RUNS** — a two-leg step, exactly
+the shape the mid-run fidelity press has used since slice 37.
+
+⭐ **RE-ARM IS NOT THE SAME DECISION AS DISARM, AND THE LESSON DECIDES WHICH.** Slice 49 DISARMED on
+a drag because the drag destroyed the episode being measured. Here the drag IS the pedagogy, so the
+instrument must start measuring the new setting.
+
+⭐⭐ **AND THE RE-ARM INSTANT IS ITS OWN MEASUREMENT.** Three implementations were flown:
+
+| restart at | what it reports after a 25° → 6° drag |
+|---|---|
+| never (a plain `max`) | 21.84 / 18.85 — the OLD sweep, forever |
+| the next tick (`max` from zero) | 18.9 again — the command re-arms instantly, the HEAD does not |
+| re-entry into the new band | flown/told = **0.99** — sampled AT THE RIM while transiting inward |
+| **the centre crossing** | **0.667**, against the un-dragged arm's 0.6929 ✓ |
+
+⇒ **restarting a peak requires an instant at which the new setting actually OWNS the quantity**, not
+merely one at which the old value stops applying. Two of the three wrong answers look right in a
+one-line diff.
+
+⚠ And the transit itself needs a name on screen: while the head is still outside the new band the
+peak is the LIVE offset, so `flown > told` — impossible in steady state, hence a reliable signal the
+client reads and NAMES rather than printing a fraction over 100 %.
+
 ## ⚠ A "HAS THIS ARM DRAINED YET?" PREDICATE MUST BE ARM-SPECIFIC, OR THE SECOND SHOT PHOTOGRAPHS THE FIRST (slice 52, 2026-08-31)
 
 A two-arm windowed-shot harness reset, dragged the slider, stepped N and waited for "the search keys

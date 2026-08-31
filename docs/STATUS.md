@@ -7411,6 +7411,40 @@ too narrow either: 4.74° commanded against the same gap, and 3.02° flown.
 exactly 0.0 — so on a NaN the wire reports 1e9 beside a sweep of zero. The HUD's band is sized from a
 peak of the COMMAND and never from that echo, and `slice52_ui_test.gd` feeds a 1e9 echo to prove it.
 
+## ⭐⭐⭐ THE BUG THIS SLICE NEARLY SHIPPED: **A PEAK THAT ONLY EVER GROWS CANNOT SEE A KNOB THAT FELL**
+
+A running maximum is correct while the knob holds still and **permanently stale the moment it falls.**
+Dragging 25° → 6° mid-search left `search_offset_peak_deg` at **21.84** and the realized peak at
+**18.85 for the rest of the flight**: the band drew a 22° sweep over a head now covering ±6 and the
+headline named a width the slider did not show. ⚠⚠ **AND THE HARMFUL DIRECTION IS THE ONE THE HUD'S
+OWN CURE LINE ASKS FOR** — *"now NARROW it — every extra degree is paid TWICE."*
+
+⚠⚠ **NONE OF THE FOUR PROOFS REACHED IT** — slice 49's rule landing on the instrument this slice
+shipped. The verifier sent every `set_param` at t = 0 before stepping; the UI test feeds synthetic
+telemetry; and gate 2 tooth A's 25 → 12 drag runs on `slice48_search.yaml`, **which does not author
+this anchor**, so these keys had never been flown across a drag at all.
+
+⇒ **RE-ARM, NOT DISARM** (slice 49 disarmed): there the drag destroyed the episode being measured;
+here the drag IS the pedagogy. Three things about the fix that must not be "simplified":
+
+1. **ONLY THE PEAKS ARE CLEARED — NEVER `:search_t0`.** Re-stamping the phase would move the
+   commanded offset and destroy gate 2 tooth A's measured property (bit-identical for 78 more ticks,
+   diverging at exactly `min(S₁,S₂)/ρ`).
+2. ⭐⭐ **THE RESTART INSTANT IS THE CENTRE CROSSING, NOT RE-ENTRY INTO THE NEW BAND.** The command
+   re-arms instantly and the head does not, so a plain `max` from zero re-records the old 18.9° on
+   the next tick — and restarting at re-entry is no better, because the head is transiting INWARD
+   through the whole band and the first sample is at the RIM: that arm reported **flown/told = 0.99**
+   where the un-dragged 6° arm measures **0.69**, a stale peak swapped for a flattering one. Flown,
+   the drag now reads **4.0004 / 6.0000 = 0.667** against that arm's 0.6929.
+3. **WHILE THE HEAD IS STILL OUTSIDE THE NEW BAND THE REALIZED PEAK IS THE LIVE OFFSET**, so
+   `flown > told` — impossible in steady state, hence a reliable signal the client can read.
+   `_s52_sweep_text` NAMES that state instead of printing a fraction over 100 %.
+
+⭐ **AND THE SLICE NOW CARRIES THE ONLY ARM IN THIS FAMILY THAT MOVES A SLIDER WHILE THE PHYSICS IS
+RUNNING** — `slice52_verify.gd`'s `drag` arm, a two-leg step around `DRAG_AT` = 5296 — plus a core
+tooth and a UI-test transit tooth. ⚠ The verifier reads `told_last` / `flown_last`, **never** the
+running maxima: *a peak-of-peaks cannot see a knob that fell*, which is the bug restated as a rule.
+
 ## THE THREE NUMBERS THAT DIFFER FROM SLICE 48's WIRE
 
 1. **`seeker_search_rate_dps: 60.0`** (slice 48: 0.0, its slider's floor) — a MEASURED choice: at
@@ -7468,8 +7502,8 @@ unprovable (convention 14).
 
 `core/test/test_search.jl` gains a gate-3 section (the authored wire against slice 48's key by key,
 the marker + its single-carrier set, convention 9's endpoints, the instrument's key sets, the
-flown/told ladder, the cliff, the bit-identical floor and the clean ceiling, plus the loader's two
-refusals). **Suite 18489 → 18632, PASS 18632 / 18632 in 8m03s.**
+flown/told ladder, the cliff, the bit-identical floor, the clean ceiling, **the drag re-arm** and the
+loader's two refusals). **Suite 18489 → 18642, PASS 18642 / 18642 in 9m32s.**
 
 ⚠ **THREE ENUMERATED CARRIER SETS HAD TO BE EXTENDED, each with its own recorded reason** — and every
 one FAILED first, which is the assert doing its job: `search_view` in `test_search.jl` (gate 1
@@ -7480,13 +7514,26 @@ predicted this in writing), and `midcourse_view` plus the `gimbal_rate_dps` list
 
 | proof | result |
 |---|---|
-| **verifier** (`slice52_verify.gd`, 17 arms × 11200 steps) | **PASS**, exit 0 |
+| **verifier** (`slice52_verify.gd`, 18 arms × 11200 steps, incl. the MID-SEARCH DRAG) | **PASS**, exit 0 |
 | **UI test** (`slice52_ui_test.gd`, 11 teeth) | **PASS**, exit 0 — 386 / 306 px against 430 |
 | **headless smoke-load** (`Sandbox.tscn`) | **PASS** — `EWSIM_SERVER_DONE` with **empty** stderr |
 | **windowed shot** (two: `S` = 4.75 at step 5504, `S` = 25 at step 6400) | **PASS after three fixes** (above) |
-| **full Julia suite** | **PASS 18632 / 18632** |
 
-⚠ **TWO VERIFIER FINDINGS WORTH KEEPING**, both first runs: the horizon-OFF arms register exactly
+⚠ **THE SHOTS PREDATE THE DRAG RE-ARM, AND THAT IS STATED RATHER THAN GLOSSED.** The re-arm changes
+no number in either photographed state (the un-dragged ladder is bit-identical to the digit, verified
+after the fix) and the transit branch it added to `_s52_sweep_text` is unreachable without a drag —
+which the UI test calls directly, so it is compiled and executed headlessly. What is unproven is
+nothing: no painting changed. The smoke-load and UI test were both re-run against the final file.
+| **full Julia suite** | **PASS 18642 / 18642** |
+
+⭐⭐ **AND A THIRD FINDING, FROM THE DRAG ARM'S FIRST RUN: A LIVE DRAG *STEPS* THE COMMANDED
+OFFSET.** `search_sweep` is continuous in TIME and **discontinuous in `S`** — at a fixed phase a 25°
+triangle and a 6° one are simply in different places — so moving the slider hands the servo a step
+and slice 35's rate limit binds for 2 frames. That is the one thing on this wire a drag does and a
+sweep never can; the verifier asserts it as a BOUNDED TRANSIENT (1…8 frames) rather than exempting
+the arm, so "the drag reached the physics" and "the step is absorbed" are both claims.
+
+⚠ **TWO FURTHER VERIFIER FINDINGS WORTH KEEPING**, both first runs: the horizon-OFF arms register exactly
 **one** searching frame — the tick the branch opens, where `search_sweep(0) === 0.0` by construction —
 so a "flown < told" claim must be gated on a band having been swept and not on a frame count. And the
 PRESSED arm **never searches at all**: the horizon is removed at 3.2 s, before the 4.936 s handover,

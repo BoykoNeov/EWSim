@@ -45,7 +45,7 @@ Fixed order each `tick!`: **phase 1** `integrate!` (movers/airframe) → `empty!
 
 ## Where the project is (2026-08-31)
 
-**Slices 1–40 + 46–50 + 52 COMPLETE & green — 18632 tests.** 39 and 41–45 are GATE-0 RECORDS (no code):
+**Slices 1–40 + 46–50 + 52 COMPLETE & green — 18642 tests.** 39 and 41–45 are GATE-0 RECORDS (no code):
 ⚠⚠ **five in a row shipped nothing and the kill CRITERION itself was ruled at fault on 2026-08-18** (the
 two-test rule below) — 41, 44, 45 are **ALIVE AS A MODEL** (probes in `M:\claud_projects\temp\slice4N`),
 only 42 is dead outright. ⭐ **46 DISCHARGED 44, 47 DISCHARGED 43's BLOCK, 48 SHIPPED the search family and
@@ -107,11 +107,11 @@ those inline eagerly and recursively, which is the problem this split exists to 
 
 **When a slice completes**, the doc ritual writes FIVE places in order: the as-built block into
 `docs/STATUS.md` (`## Slice N — TITLE (date)`), a plain-language paragraph into `docs/SLICES.md`,
-discharged/new/killed candidates into `docs/DEFERRALS.md`, transferable method lessons into
-`docs/LESSONS.md` (⚠ fold onto the EXISTING heading when it is a repeat occurrence), and into `CLAUDE.md`
+discharged/new/killed candidates into `docs/DEFERRALS.md`, method lessons into
+`docs/LESSONS.md` (⚠ fold onto the EXISTING heading when it repeats), and into `CLAUDE.md`
 **only** the state line + any new dead end **as ONE LINE**. ⚠⚠ **`CLAUDE.md` is a ROUTER — keep it under
-~16 KB** (trimmed 6×; **17.3 on 2026-08-31 after slice 52 — it is OVER, and the next slice must trim BEFORE
-it adds**). It is loaded every turn and grows
+~16 KB** (trimmed 6×; **17.5 on 2026-08-31 after slice 52 — it is OVER, and the next slice must trim
+BEFORE it adds**). It is loaded every turn and grows
 by absorbing what belongs in the ledgers: **numbers, test names and evidence go DOWNSTREAM; verdict words
 and ⚠ prohibitions stay HERE.**
 
@@ -134,16 +134,16 @@ the headline died (the two-test rule above). **BLOCKED** = never killed at all.
 
 - **A nulling-loop head servo** (39) — **DEAD**: an algebraic IDENTITY with the shipped feed-forward under
   transformed parameters. ⚠ FINITE loop gain is un-killed.
-- **Memory track / a coasting head** (37) — **DEAD AS A LESSON, ALIVE AS A MODEL**: a break here is not an
-  episode but the rest of the flight ⇒ the cure is the ESTIMATOR's frozen rate, not the head.
+- **Memory track / a coasting head** (37) — **DEAD AS A LESSON, ALIVE AS A MODEL**: a break here is the rest
+  of the flight, not an episode ⇒ the cure is the ESTIMATOR's frozen rate, not the head.
 - **A scalar rate-limited fin inside the coupled loop** (20) — **DEAD AS A LESSON**: `δ_max` structurally
   SHADOWS `δ̇_max`. The rate limit itself is SHIPPED (slice 15).
 - **A second-order FIN actuator** (41) — **DEAD AS A LESSON, ALIVE AS A MODEL**, on REPARAMETERIZATION.
   ⭐⭐ **A pole differs from a gain only in that its phase VARIES with frequency, and that loop's fin command
   is ONE spectral line** ⇒ **measure the SPECTRUM before proposing a new dynamic element.**
-- **A SEEKER SEARCH PATTERN** (42/43/45) — **SHIPPED BY 48, and its WIDTH by 52; never killed.** ⭐⭐ **The cost of acquiring is the
-  OVERLAP DEFICIT `|err| − fov`, not the pointing error.** ⚠ Do NOT re-litigate that a wider window is free
-  (46 killed it) or that the miss is the gauge.
+- **A SEEKER SEARCH PATTERN** (42/43/45) — **SHIPPED BY 48, its WIDTH by 52; never killed.** ⭐⭐ **The cost
+  of acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error.** ⚠ Do NOT re-litigate that a
+  wider window is free (46 killed it) or that the miss is the gauge.
 - **Seeker range / SNR limits AS THE UNBLOCKER** (44) — **DEAD as the unblocker, ALIVE AS A MODEL — SHIPPED
   by 46.** ⭐⭐ **A detection gate can only price a design variable if the ENGAGEMENT launches OUTSIDE the
   sensor's horizon** (⚠ 50: near its EDGE). ⚠ **32/34's narrow-window failures are THE SERVO's.** ⚠⚠ **DO
@@ -165,15 +165,18 @@ the headline died (the two-test rule above). **BLOCKED** = never killed at all.
   **the miss ban is a ban on a REGION, not on a GAUGE** — ⚠ the BOUNDARY past a blind coast is what does not
   reproduce (halving `dt` FLIPS whether the track returns), NOT everything past it. ⭐⭐⭐ **A lock is given
   back by the HEAD, not the ECHO.** ⚠ `head_off > fov` is `in_fov`'s DEFINITION — never a gauge.
-- **Disqualified by non-monotonicity** — `k` (28), `ω_n` (40), `σ_seek` (25), miss-vs-`K` / miss-vs-`α_stall` (20,
-  22), the loss COUNT (49), miss-vs-`rcs_fineness` (50, reverses 4×). ⚠ **NOT component kills — that physics is
+- **Disqualified by non-monotonicity** — `k` (28), `ω_n` (40), `σ_seek` (25), miss-vs-`K` / miss-vs-`α_stall`
+  (20, 22), the loss COUNT (49), miss-vs-`rcs_fineness` (50). ⚠ **NOT component kills — that physics is
   SHIPPED**; only their use as the showcase SLIDER died.
 - **Harness traps that cost real hours** — `STEPS` MUST be a multiple of `emit_every` (else a SILENT hang);
   `%g`/`%.2e` are not GDScript specifiers and one bad one kills the WHOLE `%`; frame-sampling error is
   ASYMMETRIC (a miss samples faithfully, a HIT coarsely); an rms measured where a CLAMP binds reads as a KILL;
   a HUD width budget is in PIXELS and belongs to the VIEW (46, 49); a key that stops EMITTING makes
-  `.get(k, 0.0)` print a DEFAULTED ZERO as a PASSED TEST — ⚠ WHICH default is itself a claim (49), and ⚠⚠ when
-  the lesson's NULL is that same value, only PRESENCE separates them (50). Teeth: `docs/CONVENTIONS.md` §14.
+  `.get(k, 0.0)` print a DEFAULTED ZERO as a PASSED TEST — ⚠ WHICH default is a claim (49), and ⚠⚠ when the
+  lesson's NULL is that value only PRESENCE separates them (50); ⚠⚠ **a PEAK-HOLD cannot see a knob that
+  FELL, and NO gate-3 proof DRAGS a slider** (52) — re-arm on the drag, at the instant the new setting OWNS
+  the quantity; ⚠ a probe's "has this arm drained?" test must be ARM-SPECIFIC or the next capture
+  re-photographs the last one (52). Teeth: `docs/CONVENTIONS.md` §14.
 
 ## Conventions / hard-won disciplines (ONE LINE EACH; the teeth are `docs/CONVENTIONS.md`)
 
@@ -211,5 +214,5 @@ Each slice `N` ships `scenarios/sliceN_*.yaml`, a `net/sliceN_verify.gd` and a `
 - **Live:** `& tools/julia.ps1 --project=core tools/server.jl scenarios/sliceN_*.yaml`, then Godot on
   `clients/godot` (`Sandbox.tscn` auto-detects the view). ⚠ The server serves **one** client then exits.
 - **Headless proof:** `godot --headless --path clients/godot --script res://net/sliceN_verify.gd`
-  (exit 0 = pass, needs that server); `… sliceN_ui_test.gd` needs none.
-  ⚠ See [[ewsim-godot-headless]] for the `_console.exe` / non-`pwsh` caveats on this machine.
+  (exit 0 = pass, needs that server); `… sliceN_ui_test.gd` needs none. ⚠ [[ewsim-godot-headless]] has the
+  `_console.exe` / non-`pwsh` caveats **and the windowed-shot recipe**.
