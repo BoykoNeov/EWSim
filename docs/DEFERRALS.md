@@ -719,6 +719,53 @@ window; this wire is 240 °/s over ~2 s).
   is to hand the missile information it cannot have, and the symmetric pattern already bounds the
   cost of the wrong guess at `2S` of travel.
 
+### ⭐ GATE 0 RAN ON THE COVERAGE AXIS, 2026-08-31 — **IT LIVES, AND ITS OPEN QUESTION IS ANSWERED**
+
+**⚠ DO NOT RE-DERIVE THIS.** The COVERAGE candidate above asked its own gate 0 to *"settle whether the
+coverage is measured against the LIVE sweep centre (which walks away from the target while the
+search runs) or a frozen one"*. It is the LIVE centre, and that is not a detail — **it is the
+mechanism**: the deficit GROWS while the search runs (1.3423° → 8.155° in one second on slice 48's
+wire), so later sweep excursions are strictly worse than earlier ones and acquisition is
+**FIRST-EXCURSION-OR-NEVER**, at `3S/ρ`.
+
+**Seven probes, no core change, full record in `M:\claud_projects\EW\docs\plans\slice52.md`.** Both
+halves of the two-test rule PASS, and all six pre-registered falsifiers are answered:
+
+- ⭐⭐⭐ **THE RIGHT COVERAGE IS NOT A CONSTANT — IT IS SET BY THE HANDOVER PICTURE ERROR.** `S*`
+  (the narrowest sweep that still acquires) runs **5.00 → 22.25°** as `midcourse_err_gain` runs
+  140 → 220, and below ~130 **no search is needed at all**. ⇒ the designer's instruction is MATCH,
+  not MAXIMISE — **a rule a sweep RATE cannot carry**, because faster is better at every picture
+  error. That is the separation from slice 48.
+- ⭐⭐ **THE TWO KNOBS COMPOSE, THEY DO NOT SUBSTITUTE.** At ρ = 240 °/s the whole coverage ladder is
+  benign (every cell hits); at ρ = 60 the same ladder spans never → hit → pinned-and-miss. And the
+  signs are opposite: the rate is monotone BETTER upward, the coverage monotone WORSE.
+- ⭐ **THE CLIFF SURVIVES A HALVED STEP** — `S*` = 5.00° at `dt` = 1e-3 AND 5e-4, movement 0.00°, no
+  cell flipping either way. This is where slices 42 and 51 died and this axis does not, structurally:
+  42's band was made OF the step, `S*` is an angular race containing no `dt`.
+- ⭐ **THE TRUNNION IS NOT IN THE MEASUREMENT** — `t_lock` invariant to `gimbal_stop_deg` across
+  45 → 90 on every row, spread 0.0000 s, including the row where the stop binds 19 % of searching
+  ticks. ⭐⭐ Because **a POSITIONAL sweep cannot be delayed by a mechanical stop**: `search_sweep` is
+  a phase computed from time with no accumulator, so a clamped head never falls behind its own
+  schedule. ⚠ Honest only while the servo outruns the sweep (240 vs 60 °/s here); false on slice 35's
+  8 °/s head.
+- **The floor is a genuine NULL** — bit-identical to `S` = 0 over 8926 ticks (`max|Δpos|` =
+  0.000e+00) while the head is demonstrably sweeping to ±S.
+
+**⚠ WHAT IS LEFT IS A SHOWCASE, NOT PHYSICS.** No core change was made and none is needed: the key
+is read every tick (`missile.jl:2954`) and already emitted. Gates 1–3 would author
+`scenarios/slice52_*.yaml` on slice 48's geometry with ρ AUTHORED at 60 °/s and the coverage as THE
+slider, plus a view and the four proofs.
+
+**⚠⚠ CLOSED BY THIS GATE 0, so nobody re-proposes them:**
+
+- **REACH vs DEADLINE as the way to tell the two knobs apart** — unanswerable on this wire. Because
+  the deficit grows, BOTH floors are reach failures against a moving band, and the only duration
+  lever available (slowing the closure) is CONFOUNDED: it lengthens the blind phase, which grows the
+  very deficit it was meant to relieve. Every arm gets monotonically worse with more time. What
+  replaced it is the composition result above.
+- **`S*`'s multiplier over the inherited deficit as a number to quote** — 2.4–3.7× is ρ = 60's
+  outcome, not a coefficient and not a law.
+
 ## New candidates raised by slice 49
 
 ⚠ Read the two-test rule at the top of this file before proposing to kill any of these.

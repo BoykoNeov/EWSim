@@ -938,3 +938,37 @@ to check, in order:
 ⚠ **And the verdict WORD is part of the record.** "DEAD" and "DEAD AS A LESSON, ALIVE AS A MODEL" are
 read by future slices as permission or prohibition; `CLAUDE.md` §"Dead ends" tells readers to read the
 verdict word first. Writing the bare word after running one of the two tests **mislabels the shelf**.
+
+## ⭐⭐⭐ AN EPISODE-SCOPED GAUGE MUST ASSERT WHICH EPISODE IT IS IN, NOT MERELY FIND ONE (slice 52 gate 0, 2026-08-31)
+
+A probe measuring "the search" scoped every column to *the first search episode on the wire*: find
+the first tick where `head_searching` is set, read the deficit and the head-off angle there, and
+report the latched lock time. On a wire where the picture error was small it printed
+
+    err_gain 60 | deficit@onset 104.3°  head_off@onset 178.3°  t_lock NEVER  ...  CPA 0.01 m
+
+**Every number is correct and not one of them is about the search.** With a good enough handover the
+missile locks the instant the receiver opens and never searches during the engagement at all — so
+the only search episode on that wire is a POST-INTERCEPT one, against a target now 180° astern. A
+reader would have read *"never acquired"* beside a **1 cm hit**.
+
+⚠ **THIS IS NOT THE DEFAULTED-ZERO TRAP** (slice 49, and this same probe hit that one too — an arm
+that never searched reported `min head_off` = 0.0000 and a verdict of COVERED, off a key that simply
+stops being written). That trap is a MISSING value read as a real one. This is the opposite: a
+present, correct value **from the wrong occurrence of the thing you are scoping to.** No default is
+involved and no key is absent, so every guard written for the first trap passes.
+
+⇒ **THE PROCEDURE:** a gauge scoped to "the episode" must classify the run before it reads a column,
+and the classification must be a stated REGIME, printed on the row:
+
+- *did the event this gauge exists to measure happen at all, or did the run skip it?* (here: the lock
+  PRECEDED the first search — `k_lock < k_search` — so there was no search to measure);
+- *is the episode I found the FIRST one, or a later recurrence?* (slice 48: acquisition is not a
+  latch, so a search RESUMES after a lost track — the same probe's deficit column reached 170° on a
+  late re-search and had to be re-scoped to search-onset → first-lock);
+- and the row prints the regime word (`no search needed`), never a number in a column whose meaning
+  depends on a regime the row does not name.
+
+⭐ The tell that something is wrong is almost always **a headline gauge disagreeing with a crude
+orientation number in the same row** — NEVER beside 0.01 m. Keep one such column (CPA here, printed
+for orientation and banned as a gauge) precisely so the contradiction is visible on the row.
