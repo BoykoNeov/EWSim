@@ -829,6 +829,64 @@ end
         @test load_scenario(mkasp(10.0, "horizontal")) isa EWSim.Scenario
     end
 
+    # --- slice 51: the turn ONSET at the LOADER --------------------------------------------------
+    #
+    # `maneuver.turn_start_s` — the moment the target BREAKS. REFUSED at load rather than clamped at
+    # the consumer, and for a reason its neighbours in the block do not share: the consumer tests
+    # `w.t ≥ turn_start_s`, and a NaN makes that FALSE FOREVER — the target silently never turns.
+    # That is a DEAD KNOB, which is the one OUTRIGHT kill under the 2026-08-18 two-test rule (a knob
+    # consumed but never obeyed is a bug, not a lesson), so it must not be reachable from YAML.
+    @testset "slice 51 — maneuver.turn_start_s at the loader" begin
+        mkbrk = function (ts = nothing; a_lat = "30.0")
+            mnb = "a_lat_mps2: $a_lat, turn_plane: horizontal"
+            ts === nothing || (mnb *= ", turn_start_s: $ts")
+            f = tempname() * ".yaml"
+            write(f, """
+            name: slice51_loader
+            seed: 51
+            entities:
+              - id: tgt1
+                kind: target
+                pos: [0.0, 25000.0, 5000.0]
+                vel: [250.0, 0.0, 0.0]
+                target: {rcs_m2: 1.0, maneuver: {$mnb}}
+            """)
+            f
+        end
+        # THE CONTROL: a `maneuver:` block with no onset key — i.e. every slice 12..50 target block.
+        sc0 = load_scenario(mkbrk())
+        @test sc0 isa EWSim.Scenario
+        @test !haskey(sc0.world.entities[:tgt1].comp, :turn_start_s)   # ABSENT, not defaulted in —
+        # …which is what makes the consumer's `get(c, :turn_start_s, 0.0)` the byte-identical path.
+
+        @test load_scenario(mkbrk(0.0)).world.entities[:tgt1].comp[:turn_start_s] == 0.0
+        @test load_scenario(mkbrk(2.5)).world.entities[:tgt1].comp[:turn_start_s] == 2.5
+        @test load_scenario(mkbrk(1.0e9)) isa EWSim.Scenario    # never gets round to it — the NULL
+        @test_throws Exception load_scenario(mkbrk(-1.0))       # a 2nd spelling of 0.0 (slice 19)
+        @test_throws Exception load_scenario(mkbrk(".inf"))     # `w.t ≥ Inf` false forever → dead
+        @test_throws Exception load_scenario(mkbrk(".nan"))     # `w.t ≥ NaN` false forever → dead
+        # ⚠ NOT refused beside a zero lateral accel, unlike the `cross_speed_mps` guard above:
+        # `a_lat_mps2` is a LIVE SLIDER on the shipped 12/15 wires, so the onset becomes live the
+        # moment a student drags it. `cross_speed_mps` is read by NOTHING, EVER — that is the whole
+        # distinction, and conflating the two would import a guard's reason into a case it never had.
+        @test load_scenario(mkbrk(2.5; a_lat = "0.0")) isa EWSim.Scenario
+        # …and the key is refused OUTSIDE a maneuver block the same way every other one is: a plain
+        # target has no `maneuver:` fork, so nothing parses it (it is simply not read — the loader
+        # only reaches this branch through the block).
+        f = tempname() * ".yaml"
+        write(f, """
+        name: slice51_plain
+        seed: 51
+        entities:
+          - id: tgt1
+            kind: target
+            pos: [0.0, 25000.0, 5000.0]
+            vel: [250.0, 0.0, 0.0]
+            target: {rcs_m2: 1.0}
+        """)
+        @test !haskey(load_scenario(f).world.entities[:tgt1].comp, :turn_start_s)
+    end
+
     @testset "loader parses slice13_decoy.yaml (decoy seduction vs α-β gate, spatial view)" begin
         # The slice-13 showcase: a DECOY seduces the :scan CFAR-scanning seeker; the α-β predicted-LOS gate
         # rejects it. Keeps the SPATIAL view (discrimination is the missile-view discriminator, the button

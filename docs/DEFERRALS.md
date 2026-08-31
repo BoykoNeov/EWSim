@@ -865,7 +865,17 @@ Four slices banned the miss on this arc and all four gave the same reason: a bli
 open-loop integration, chaotic in its initial condition. **The miss was simply the first quantity
 anyone tried to read there.** The reason applies verbatim to the return time, the head angle at the
 return, the recovered share of the heading debt, and to the yes/no of whether the track resumes. ⇒
-**a slice on this arc may read a number AT the loss and may not read one AFTER the blind phase.**
+**a slice on this arc may read a number AT the loss and may not SCORE one on the far side of the
+blind phase.**
+
+⚠ **SAID PRECISELY (this paragraph was over-broad on first writing and is corrected here).** It is
+not that nothing after a blind coast reproduces — slice 51's own probe P9 shows the flight
+RE-CONVERGES once the guidance loop closes again, and the `F` = 10 arm agrees on the CPA to 2.8 % at
+both step sizes. What does not reproduce is the **BOUNDARY**: which side of *"does the track come
+back at all"* a marginal setting falls on, plus anything read while the loop is still open. A future
+slice MAY read a number past a blind phase if it stays clear of that boundary and says how far
+clear; what it may not do is make the boundary the thing its slider scores. **An over-broad ban
+retires work that was never in danger** — the failure the 2026-08-18 re-verdict exists to stop.
 
 ### ⭐⭐⭐ AND A SENTENCE SLICE 50 SHIPS IS SHARPENED (not refuted)
 
@@ -889,15 +899,29 @@ ruled unreadable** — so the candidate needs a wire whose blind phase is SHORT 
 read at a bounded time after the return, or it inherits this kill. ⚠ It is still a change to slices
 34–50's shipped physics with its own byte-identity story.
 
-**⚠ THE TURN ONSET KEY (`maneuver.turn_start_s`) — UN-BUILT, AND THE SEAM IS CLEAN.** Slice 50 named
-it *"the most interesting axis in the slice"* and ruled it not-authorable. Slice 51 emulated it (write
-`:a_lat_mps2` per tick; `ManeuveringTarget` reads it with a default every tick, `missile.jl:1092`) and
-confirms: **eight** shipped scenarios author a `maneuver:` block (12, 15, 19, 21, 22×2, 49, 50),
-none would grow the key, absent ⇒ turn from `t` = 0 ⇒ every slice 12–50 wire byte-identical
-(**checked by name, LESSONS §752** — ⚠ the file-level grep first said TEN, matching two comments that
-say the opposite)). ⚠ It is a
-one-commit key whenever a slice needs it — but slice 51 is NOT that slice, and a key with no lesson
-behind it is not worth a commit.
+⭐ **UPDATE 2026-08-31 — THE GAP IS NOW NAMED IN THE CODE, WHICH IS NOT THE SAME AS FIXED.** Under
+the MODEL half of the two-test rule this is a model gap, not merely a missing lesson: a real seeker
+re-cues onto a signal arriving off-boresight, ours cannot, and until now that was *the absence of a
+branch* rather than anything a reader could find. It is written down at the site where the behaviour
+falls out (`core/src/missile.jl`, the `in_fov = in_fov && _detectable` conjunction). ⚠ The candidate
+above is unchanged: NAMING IS NOT FIXING, and a fix still moves slices 34–50 and needs its own
+decision.
+
+**⭐ THE TURN ONSET KEY (`maneuver.turn_start_s`) — ⚠ DISCHARGED, BUILT AND SHIPPED 2026-08-31, as
+the MODEL half of slice 51.** It was recorded here as un-built with the note *"a key with no lesson
+behind it is not worth a commit."* ⚠⚠ **That sentence applied the two-test rule only half way** and
+is RETRACTED: the rule's own words are that a pass-model / fail-lesson result *"ships as physics +
+tests + authorable keys"*, and EWSim is a battlefield simulator as well as a teaching instrument. A
+target that has been turning since `t` = 0 in every scenario from 12 to 50 is staging, not a defence;
+an aircraft breaks at a MOMENT. Shipped as a consumer gate in `ManeuveringTarget.integrate!`, a
+load-time validator in `scenario.jl`, and teeth in `test_missile.jl` / `test_scenario.jl`. Full
+record: `M:\claud_projects\EW\docs\plans\slice51.md` §VIII. ⚠ It is a KEY, not a slice — no
+scenario, view, verifier or slider ships with it, and it must not be quoted as slice 52.
+
+**⭐ NEW, RAISED BY THAT BUILD — AUTHOR AN ONSET *BETWEEN* STEP BOUNDARIES.** The onset is quantized
+to a physics step, and 500 steps of 1e-3 accumulate to 0.5000000000000003 — just ABOVE 0.5. So an
+onset authored AT a step boundary bites on the side the float drift happens to fall; author it
+between them when a step matters. Measured, named in the docstring, pinned in `test_missile.jl`.
 
 **⚠⚠ CLOSED BY SLICE 51, so nobody re-proposes them:**
 

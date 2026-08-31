@@ -45,13 +45,14 @@ Fixed order each `tick!`: **phase 1** `integrate!` (movers/airframe) → `empty!
 
 ## Where the project is (2026-08-31)
 
-**Slices 1–40 + 46–50 COMPLETE & green — 18153 tests.** 39, 41–45 and **51** are GATE-0 RECORDS (no code):
+**Slices 1–40 + 46–50 COMPLETE & green — 18173 tests.** 39 and 41–45 are GATE-0 RECORDS (no code):
 ⚠⚠ **five in a row shipped nothing and the kill CRITERION itself was ruled at fault on 2026-08-18** (the
 two-test rule below) — 41, 44, 45 are **ALIVE AS A MODEL** (probes in `M:\claud_projects\temp\slice4N`),
 only 42 is dead outright. ⭐ **46 DISCHARGED 44, 47 DISCHARGED 43's BLOCK, 48 SHIPPED the search family**
 — that thread is CLOSED; **49 LEFT THE MISSILE** for a ground radar and **50 BROUGHT ITS PHYSICS BACK**,
-discharging 49's own top candidate. **51 answered 50's own ⭐ candidate with a KILL** (below). Pick the
-next from `docs/DEFERRALS.md`. HANDOFF §10 items 1–13 DONE; 15–40 are into the §11 Tier-A horizon.
+discharging 49's own top candidate. **51 KILLED 50's own ⭐ candidate — but is NOT a "no code"
+record** (below): given the MODEL test it shipped `maneuver.turn_start_s` + tests and NAMED a model gap.
+Pick the next from `docs/DEFERRALS.md`. HANDOFF §10 items 1–13 DONE; 15–40 are into the §11 Tier-A horizon.
 
 The live arc is the **missile seeker family (26–40, 46–48, 50)**: a seeker looks through a radome whose bend
 depends on the look angle, so the missile's own motion feeds back into the line-of-sight it reports, and past a
@@ -153,11 +154,11 @@ the headline died (the two-test rule above). **BLOCKED** = never killed at all.
   rung (40), the handover bias key (36), `(R̂,s)` (31). ⚠⚠ **Launch altitude (21) is NOT one of these — it is a
   MODEL GAP**: `_integrate_6dof!` passes a CONSTANT `rho` on the path the 26–50 arc flies, and its own comment
   reserves the seam for ρ(z).
-- **PRICING A RE-ACQUISITION** (51) — **DEAD AS A LESSON**: ⭐⭐⭐ **the miss ban is a ban on a REGION, not on a
-  GAUGE** — nothing downstream of a blind coast reproduces (halving `dt` FLIPS whether the track ever returns),
-  while at-loss numbers hold to 0.06 %. ⭐⭐⭐ **A lock is given back by the HEAD, not the ECHO** (50's "lock
-  given back" is the RANGE lamp; the dead arms are BIT-IDENTICAL to never regaining). ⚠ `head_off > fov` is
-  `in_fov`'s DEFINITION — never a gauge.
+- **PRICING A RE-ACQUISITION** (51) — **DEAD AS A LESSON, ALIVE AS A MODEL** (`turn_start_s` SHIPPED): ⭐⭐⭐
+  **the miss ban is a ban on a REGION, not on a GAUGE** — ⚠ the BOUNDARY past a blind coast is what does not
+  reproduce (halving `dt` FLIPS whether the track returns), NOT everything past it; at-loss holds to 0.06 %.
+  ⭐⭐⭐ **A lock is given back by the HEAD, not the ECHO** (50's "lock given back" is the RANGE lamp; the dead
+  arms are BIT-IDENTICAL to never regaining). ⚠ `head_off > fov` is `in_fov`'s DEFINITION — never a gauge.
 - **Disqualified by non-monotonicity** — `k` (28), `ω_n` (40), `σ_seek` (25), miss-vs-`K` / miss-vs-`α_stall` (20,
   22), the loss COUNT (49), miss-vs-`rcs_fineness` (50, reverses 4×). ⚠ **NOT component kills — that physics is
   SHIPPED**; only their use as the showcase SLIDER died.

@@ -156,7 +156,8 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                       "(got $(comp[:rcs_fineness])) — it is the body's length/width ratio")
         end
         # Slice 12: a `maneuver:` sub-block turns the straight-line target into a CURVING one — swap
-        # ConstantVelocity → ManeuveringTarget (the augmented-PN foil). `a_lat_mps2`/`turn_sign` land
+        # ConstantVelocity → ManeuveringTarget (the augmented-PN foil). `a_lat_mps2`/`turn_sign` —
+        # and, since 49/51, `turn_plane`/`turn_start_s` — land
         # at KNOB-ADDRESSABLE comp keys, read with DEFAULTS at the consumer (a bare block / live
         # slider can't KeyError a tick). A plain target (NO `maneuver:` block) stays ConstantVelocity
         # → byte-identical to slices 1..11 (the additivity master-check). `a_lat_mps2` is load-
@@ -204,6 +205,31 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                     error("target '$id': maneuver.turn_plane must be one of " *
                           "$(TARGET_TURN_PLANES) (got :$tp)")
                 comp[:turn_plane] = tp
+            end
+            # ⭐ SLICE 51: the TURN ONSET — the moment the target BREAKS. Every scenario 12–50
+            # authored a target already turning at `t = 0`, which is staging, not a defence: an
+            # aircraft breaks when it sees the launch. ABSENT ⇒ the key never lands in the comp bag
+            # ⇒ the consumer's `get(c, :turn_start_s, 0.0)` ⇒ byte-identical to slices 12–50.
+            # ⚠ REFUSED at load, not clamped at the consumer, and for a reason the other keys in
+            # this block do not share: a NaN start time makes `w.t ≥ t_start` FALSE FOREVER, so the
+            # target silently never turns — a DEAD KNOB, which is the one OUTRIGHT kill under the
+            # 2026-08-18 two-test rule (a knob consumed but never obeyed is a bug, not a lesson).
+            # A NEGATIVE start is refused as a SECOND SPELLING of `0.0` (slice 19's `speed` trap in
+            # miniature — two authorings, one behaviour, and the student learns nothing from the
+            # difference). Huge-but-finite is LEGAL: it is a target that never gets round to
+            # turning inside the run, which is an honest scenario and the lesson's own NULL.
+            # ⚠ NOT refused beside `a_lat_mps2: 0.0`, unlike the `cross_speed_mps` guard above —
+            # `a_lat_mps2` is a LIVE SLIDER on the shipped 12/15 wires, so the onset becomes live
+            # the moment the student drags it. `cross_speed_mps` is read by NOTHING, EVER; that is
+            # the distinction, and it is the whole of it.
+            if haskey(mn, "turn_start_s")
+                comp[:turn_start_s] = _f64(mn["turn_start_s"])
+                (isfinite(comp[:turn_start_s]) && comp[:turn_start_s] ≥ 0) ||
+                    error("target '$id': maneuver.turn_start_s must be finite and ≥ 0 " *
+                          "(got $(comp[:turn_start_s])) — it is the time the target BREAKS, in " *
+                          "seconds. A NaN/Inf would make `w.t ≥ turn_start_s` false forever (the " *
+                          "target would silently NEVER turn — a dead knob), and a negative value " *
+                          "is a second spelling of 0.0 (turning from the first step)")
             end
             subs = Subsystem[ManeuveringTarget(id)]
         else

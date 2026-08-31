@@ -1780,11 +1780,19 @@ hypersensitive to tiny differences. Everyone read that as "don't use the miss". 
 miss. **It is about where in the flight you are allowed to read a number at all.** Cut the simulation
 step in half — the standard check for whether a result is real or an artefact of the arithmetic — and
 everything measured at the moment the target is lost reproduces to within a sixteenth of one per
-cent, exactly as slice 50 found. Everything measured *after* the blind stretch does not: the moment
-the echo returns moves by 11 %, and at one setting **inside slice 50's own slider** the answer to
-"does the missile ever get its track back?" flips outright from yes to no, with the miss going from
-33 metres to 685. A teaching instrument whose lesson reverses when you halve the step is not a
+cent, exactly as slice 50 found. What is measured while the missile is still blind does not: the
+moment the echo returns moves by 11 %, and at one setting **inside slice 50's own slider** the answer
+to "does the missile ever get its track back?" flips outright from yes to no, with the miss going
+from 33 metres to 685. A teaching instrument whose lesson reverses when you halve the step is not a
 lesson, so the slice was killed rather than dressed up.
+
+⚠ **Said carefully, because the first draft of this said more than the evidence does.** It is not
+that nothing after a blind stretch can be trusted — once the missile can see again and is steering
+again, the flights re-converge, and the settings where it never gets the track back agree with
+themselves at both step sizes. What cannot be trusted is the **tipping point**: the settings where
+"does it come back?" is finely balanced. A future slice may read a number after a blind stretch if it
+stays well away from that tipping point and says how far away. What it cannot do is build a lesson
+*on* the tipping point — which is exactly what pricing a second lock would have to do.
 
 Two smaller things were measured on the way. **A defensive turn has to be early**: delay the target's
 turn by half a second and the missile never loses the lock at all — the horizon has to fall through
@@ -1792,3 +1800,26 @@ the range, and waiting gives it less range to fall through. And the seeker's own
 usable dial here, because widening it also shortens the reach (they are the same piece of hardware,
 slice 46's lesson): open it far enough to catch the returning echo and the missile can no longer see
 the target at the start, which is a different scenario rather than a different setting.
+
+⭐⭐ **And two things shipped anyway, because EWSim is a simulator as well as a lesson.** The
+project's own rule since August 18th is that failing the "does it teach anything?" test kills the
+headline, not the hardware — so the second, separate question always has to be asked: is the physics
+real and worth having? Twice here it was.
+
+**Targets can now be told *when* to break.** Until this slice every scenario's target had been
+turning since the first instant of the run and never stopped, which is a convenience of the staging,
+not a defence. Real aircraft break at a moment — when the launch is spotted, when the warning
+receiver lights up. Scenarios can now say when (`maneuver.turn_start_s`), and a target that isn't
+told simply behaves exactly as before, down to the last bit. Two details worth knowing: the turn can
+only start on a simulation step, so an instruction to break at a time that falls between steps takes
+effect at the next one; and because the clock is built up by adding tiny numbers, a break asked for
+exactly *on* a step boundary lands on whichever side the rounding falls — so put it between them if a
+single step matters.
+
+**And a gap in the seeker was written down.** When the echo comes back, our seeker only picks the
+target up again if its head happens to still be pointing the right way. A real one would swing onto a
+signal arriving from off to the side, or at least widen its search when it is expecting one. Ours
+cannot — and until now that was not a decision anyone had written down, it was simply the absence of
+one, which is the kind of thing that quietly becomes a wrong answer. It is now named in the code
+where the behaviour comes from. Naming it is not fixing it: a fix would change how the seeker behaves
+in every slice from 34 to 50, and that is its own decision for another day.

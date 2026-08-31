@@ -191,7 +191,16 @@ measured to be irreproducible.
 
 ---
 
-## ⭐⭐⭐ §V — P8/P9: **WHAT KILLS THE SLICE. NOTHING DOWNSTREAM OF A BLIND COAST REPRODUCES.**
+## ⭐⭐⭐ §V — P8/P9: **WHAT KILLS THE SLICE. THE BOUNDARY DOWNSTREAM OF A BLIND COAST DOES NOT REPRODUCE.**
+
+> ⚠ **THIS HEADING WAS RETRACTED AND REWORDED ON 2026-08-31, SAME DAY.** It first read *"NOTHING
+> downstream of a blind coast reproduces"*, which **P9 in this very section contradicts**: once the
+> guidance loop CLOSES again the flight re-converges, and the short-end arms agree on every verdict
+> at both step sizes. The claim that survives the evidence is narrower and is the one that kills the
+> slice: **the BOUNDARY does not reproduce** — which side of *"does the track come back at all"* a
+> marginal setting falls on — together with anything read while the loop is still open. ⚠⚠ Left in
+> place rather than silently corrected because an over-broad ban retires work that was never in
+> danger, and this record is what a future slice will quote. See LESSONS §"A BAN ON A GAUGE".
 
 F4 was the last falsifier and it fired hardest. Run on the **shipped slice-50 scenario with no onset
 emulated at all**, full `dt` against half `dt`:
@@ -209,9 +218,12 @@ emulated at all**, full `dt` against half `dt`:
 | | **drift** | **0.000 %** | **0.001 %** | 0.49 % | 17.2 % | same | 2.8 % |
 
 **Everything measured AT the loss reproduces to 0.08 % or better — slice 50's own result, confirmed
-independently. Everything measured AFTER the blind coast does not**, and at `F` = 9.0 — *inside slice
+independently. What is measured WHILE THE LOOP IS OPEN does not**, and at `F` = 9.0 — *inside slice
 50's shipped slider domain* — halving the step **flips the qualitative verdict**: the track comes back
-at one step size and never comes back at the other, with the CPA going 33 m → 685 m.
+at one step size and never comes back at the other, with the CPA going 33 m → 685 m. ⚠ Note the row
+that is NOT chaos: at `F` = 10.0 the track never returns at either step size and the CPA agrees to
+2.8 %. **The instability is not "after the loss" as a blanket region — it is concentrated where the
+return is finely balanced**, and `F` = 9.0 is that balance point.
 
 ⇒ ⭐⭐⭐ **THE MISS BAN WAS NEVER A BAN ON A GAUGE. IT IS A BAN ON A REGION OF THE FLIGHT.** 44, 46,
 48 and 50 each banned the miss on this arc and each gave the same reason — a blind coast is an
@@ -248,9 +260,11 @@ block (`slice14_salvo`, `slice20_induced_drag`) — §752's own failure, in the 
 
 ## §VII — WHAT IS BANKED (the three findings, in the order they are worth)
 
-1. ⭐⭐⭐ **NOTHING DOWNSTREAM OF A BLIND COAST REPRODUCES — the miss ban is a ban on a REGION.**
-   §V. The most transferable thing here: it tells every future slice on this arc where it may and may
-   not read a number.
+1. ⭐⭐⭐ **THE BOUNDARY DOWNSTREAM OF A BLIND COAST DOES NOT REPRODUCE — the miss ban is a ban on a
+   REGION.** §V. The most transferable thing here: it tells every future slice on this arc where it
+   may and may not read a number. ⚠ Stated as *"nothing downstream reproduces"* in this record's
+   first draft and RETRACTED the same day — see the box at the head of §V for the narrower claim the
+   evidence actually supports.
 2. ⭐⭐⭐ **A LOCK IS GIVEN BACK BY THE HEAD, NOT BY THE ECHO** — and when the head has been carried
    away, the flight is **bit-identical** (`max|Δpos| = 0.000e+00`) to one that never got the target
    back. §II/§III. ⚠ It also sharpens a sentence slice 50 ships: *"lock given back"* on that wire is
@@ -260,3 +274,70 @@ block (`slice14_salvo`, `slice20_induced_drag`) — §752's own failure, in the 
 
 ⚠ **AND ONE NON-FINDING, RECORDED SO IT IS NOT RE-IMPORTED:** `head_off > fov ⟺ no track` is the
 definition of `in_fov`, not a measurement (§III).
+
+---
+
+## ⭐⭐ §VIII — WHAT SHIPPED ANYWAY (added 2026-08-31, after the verdict)
+
+§VI closed with *"no component was proposed"* and treated that as the end of it. **That applied the
+2026-08-18 two-test rule only half way.** The rule's own words are that a pass-model / fail-lesson
+result **"ships as physics + tests + authorable keys"** — the LESSON dies, the hardware does not, and
+EWSim is a battlefield simulator as well as a teaching instrument. Slice 51 failed the LESSON test
+and was never given the MODEL test. Given it, two things come out.
+
+### 1. `maneuver.turn_start_s` — SHIPPED (the turn onset)
+
+**The model claim, independent of any lesson:** every scenario from 12 to 50 authors a target that
+has been turning since `t` = 0 and never stops. That is staging, not a defence. An aircraft breaks
+at a MOMENT — when the launch is seen, when the RWR lights — and a simulator that cannot express the
+moment cannot express a defensive break at all. §I needed exactly this and had to EMULATE it from
+outside the core, which is itself the argument: a quantity a probe must fake is a quantity the
+simulator is missing.
+
+- **Consumer** (`core/src/missile.jl`, `ManeuveringTarget.integrate!`): `a_lat` is zeroed until
+  `w.t ≥ turn_start_s`. ⚠⚠ **The gate is on the VALUE, not on the call.** `_lateral_accel` with
+  `a_lat = 0` returns SIGNED ZEROS — measured `(-0.0, 0.0, -0.0)` on the slice-12 heading — so
+  zeroing the value is BIT-identical to the already-shipped `a_lat_mps2: 0.0` path, while an early
+  `return zero(Vec3)` would be ≈-equal and not bit-equal. The absolute golden would have found it;
+  the advisor found it first.
+- **Loader** (`core/src/scenario.jl`): finite and ≥ 0, refused at LOAD. A NaN/Inf makes
+  `w.t ≥ turn_start_s` false forever ⇒ the target silently never turns ⇒ a DEAD KNOB, which is the
+  one OUTRIGHT kill under the two-test rule. A negative value is a second spelling of `0.0`.
+  ⚠ NOT refused beside `a_lat_mps2: 0.0`, unlike `cross_speed_mps`: `a_lat_mps2` is a live slider on
+  the shipped 12/15 wires, so the onset goes live the moment a student drags it. `cross_speed_mps`
+  is read by NOTHING, EVER — that, and only that, is what the older guard rests on.
+- **Named approximation, measured not assumed** (probes `p10_onset_key.jl` / `p11_onset_dt.jl`,
+  `M:\claud_projects\temp\slice51\`): the onset is QUANTIZED to a physics step. A value that is an
+  exact multiple of `dt` lands exactly (0.5 s is the 501st tick at both 1e-3 and 5e-4); anything else
+  lands late by under one step, and that lateness HALVES with `dt` (0.5005 s realizes at 0.5010,
+  then at 0.5005). ⚠⚠ It is also the one place `w.t`'s float accumulation is load-bearing: 500 steps
+  of 1e-3 accumulate to 0.5000000000000003, i.e. just ABOVE the boundary. Had the drift gone the
+  other way, the same authoring would bite one step later. **Do not author an onset AT a step
+  boundary when a step matters.**
+- **Byte-identity verified BY NAME** (LESSONS §752, and §VI's own near-miss): the eight scenarios
+  authoring a `maneuver:` block are 12, 15, 19, 21, 22_departure, 22_stall, 49, 50, and `grep` finds
+  `turn_start_s` in none of them. Absent ⇒ the key never lands in the comp bag ⇒
+  `get(c, :turn_start_s, 0.0)` ⇒ `w.t ≥ 0.0` true on the first step.
+- **Tests:** consumer teeth in `core/test/test_missile.jl` (the onset tick; pre-onset BIT-equality to
+  the `a_lat = 0` wire, signed zeros included; `0.0` bit-equal to the key absent; the huge-finite
+  null; the `dt` quantization), loader teeth in `core/test/test_scenario.jl` (the control with the
+  key absent, the accepted values, and the four refusals).
+- ⚠ **This is a KEY, not a HEADLINE.** It ships no scenario, no view, no verifier and no slider — it
+  is not slice 52 and must not be quoted as one. Under the two-test rule it is exactly what a
+  fail-lesson / pass-model result is entitled to: physics, tests, and an authorable key.
+
+### 2. No re-cue on a returning echo — NAMED, NOT FIXED
+
+§III found that when the echo comes back the track resumes only if the head happens to still be
+pointed within its window — and on slice 50's wire it routinely is not, because the head has been
+slewing on the estimator's FROZEN rate through the blind phase. **That is not a branch anyone wrote;
+it is the absence of one**, which is why it had gone unnamed for seventeen slices. A real seeker
+re-cues onto a signal arriving off-boresight, or widens its search when one is expected.
+
+Named at the site where the behaviour falls out (`core/src/missile.jl`, at the
+`in_fov = in_fov && _detectable` conjunction). ⚠ **NAMING IS NOT FIXING.** A fix changes seeker
+behaviour on slices 34–50 and needs its own decision — carried to `docs/DEFERRALS.md` as a candidate,
+with the standing warning that `head_off > fov` is `in_fov`'s definition and can never be its gauge.
+
+⇒ **THE VERDICT, RESTATED:** slice 51 is **DEAD AS A LESSON, ALIVE AS A MODEL** — the standard
+verdict word since 2026-08-18, and §VI should have used it.

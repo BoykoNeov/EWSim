@@ -861,8 +861,19 @@ At `rcs_fineness` = 9.0 — *inside a shipped slider's own domain* — the track
 size and never comes back at the other, and the CPA goes 33 m → 685 m.
 
 ⇒ **The ban was never about the miss. It is about WHERE IN THE FLIGHT a number is read.** Everything
-at the loss reproduces; nothing after the blind phase does. The miss was simply the first quantity
-anyone tried to read on the wrong side of it.
+at the loss reproduces. The miss was simply the first quantity anyone tried to read on the wrong
+side of it.
+
+⚠ **AND SAY THAT PRECISELY — THE FIRST DRAFT OF THIS LESSON OVERSTATED IT.** It read *"nothing after
+the blind phase reproduces,"* which slice 51's own probe P9 contradicts: once the guidance loop is
+CLOSED again the flight RE-CONVERGES, and arms that resume early agree across step sizes. What does
+not reproduce is the **BOUNDARY** — which side of *"does the track come back at all"* a marginal
+setting falls on — plus everything measured while the loop is still open. The distinction matters
+because it is not a counsel of despair: a slice may read a number after a blind phase if it stays
+well clear of that boundary and says how far clear. ⚠⚠ What a slice may NOT do is SCORE the boundary,
+and the boundary is precisely what a re-acquisition lesson would have to score — which is why 51 dies
+and a future slice need not. **An over-broad ban retires work that was never in danger**, which is
+the same failure the 2026-08-18 two-test re-verdict was written to stop.
 
 ⚠ **The practical rule:** when you inherit a ban, ask whether it names a QUANTITY or a REGION. A
 quantity ban is discharged by choosing a better quantity — which is exactly what slice 51 did, three
@@ -894,3 +905,36 @@ which **is the definition of `in_fov`** — slice 42's `off@lock == fov` column,
 echoing back its own authored constant. A quantity can be the right EXPLANATION and still be a
 forbidden GAUGE. ⇒ before scoring a slider on a threshold, ask whether the threshold is a
 MEASUREMENT or the gate's own definition read back.
+
+## ⭐⭐⭐ A KILL RECORD MUST SHOW **BOTH** TESTS — WRITING THE RULE DOWN IS NOT APPLYING IT (slice 51, 2026-08-31)
+
+The 2026-08-18 re-verdict exists because slices 41–45 killed COMPONENTS for failing a LESSON test.
+It is in `CLAUDE.md`, loaded every turn, with its own ⭐⭐⭐ heading. **Slice 51's kill record still
+applied only the lesson half** — it ran three gauges, four counterfactual arms and a half-`dt` re-fly,
+concluded "killed", and wrote *"no component was proposed"* as if that closed it. It took the user
+saying **"we are developing also a simulator"** to get the second test run at all. Given it, the same
+probe data yielded an authorable key worth shipping and a model gap worth naming.
+
+⚠ **The failure mode is specific and it is not forgetfulness.** A gate-0 probe campaign is BUILT
+around the lesson question — every falsifier, every arm, every table column is aimed at "does dialling
+it move a headline?". By the time the verdict is written, the lesson test is the only test in the
+author's head, and "no component was proposed" reads as a fact about the slice rather than what it
+is: **a fact about the QUESTION the author chose to ask.** A rule is not applied by being loaded.
+
+⇒ **THE PROCEDURE, and it is cheap:** a kill record does not close until it answers, in writing and
+as a separate section, **"what would this ship if the lesson question had never been asked?"** Sources
+to check, in order:
+
+1. **What did the probe have to EMULATE from outside the core?** Slice 51 faked a turn onset by
+   writing `:a_lat_mps2` per tick. **A quantity a probe must fake is a quantity the simulator is
+   missing** — this is the single highest-yield question, and the answer is usually already sitting
+   in the probe's own §I.
+2. **What behaviour did the probe EXPLAIN that no comment in the core admits to?** Slice 51 found the
+   seeker throws away an echo returning off-boresight. That was never a decision; it was the absence
+   of a branch, and an absence cannot be found by grep. **Name it at the site, even if you do not fix it.**
+3. **Which of the dead gauges would be a fine TELEMETRY KEY or explanatory variable?** Failing as a
+   score is not failing as an output.
+
+⚠ **And the verdict WORD is part of the record.** "DEAD" and "DEAD AS A LESSON, ALIVE AS A MODEL" are
+read by future slices as permission or prohibition; `CLAUDE.md` §"Dead ends" tells readers to read the
+verdict word first. Writing the bare word after running one of the two tests **mislabels the shelf**.

@@ -1000,7 +1000,7 @@ end
 
 # --- the MANEUVERING TARGET: a curving phase-1 mover (slice 12, HANDOFF §10 item 10) ----------
 # The maneuvering FOIL for the augmented-PN lesson. ConstantVelocity (radar.jl) flies a straight
-# line; ManeuveringTarget applies a CONSTANT lateral acceleration ⟂ its velocity (a coordinated,
+# line; ManeuveringTarget applies a constant lateral acceleration ⟂ its velocity (a coordinated,
 # speed-preserving g-turn IN THE x-z PLANE), so the target CURVES — the thing plain PN can't lead.
 # Against it plain PN lags by the target-accel term and, under a binding g-limit, SATURATES → misses;
 # APN's `(N/2)·a_T⊥` feedforward (Autopilot.decide!'s `:apn` branch above) anticipates the maneuver →
@@ -1019,8 +1019,18 @@ end
 # commanded `a_T`, not `−g` — the ConstantVelocity lineage; the missile's own gravity leaves a small
 # honest `:apn` residual — gravity-comp PN is DEFERRED, HANDOFF §10 / convention 9).
 #
-# NAMED APPROXIMATIONS (HANDOFF §1): a CONSTANT lateral accel (no jink/weave program — a later
-# fidelity step); planar in x-z (the elevation view's plane, no cross-range — the slice-10 precedent);
+# NAMED APPROXIMATIONS (HANDOFF §1): a lateral accel that is CONSTANT ONCE ON and never switches off
+# — since slice 51 it may switch ON at an authored `turn_start_s`, which is a defensive BREAK, still
+# not a jink/weave program (a later fidelity step); ⚠ that onset is QUANTIZED to a physics step (the
+# first step whose ACCUMULATED `w.t ≥ turn_start_s`) — an exact multiple of `dt` lands exactly, and
+# anything else lands LATE by up to one `dt`, a lateness that HALVES when `dt` does (probe: 0.5 s is
+# tick 501 at both 1e-3 and 5e-4, identical to 1e-16; 0.5005 s realizes at 0.5010 then 0.5005). A
+# re-fly at half `dt` WILL see that — it is the discretization, not a bug, and slice 51's rule says
+# to expect it. ⚠⚠ It is also the ONE place `w.t`'s float ACCUMULATION is load-bearing: 500 steps of
+# 1e-3 accumulate to 0.5000000000000003, i.e. just ABOVE the boundary. Had the drift gone the other
+# way the same authoring would break one step later, so do NOT author an onset AT a step boundary
+# when a step matters — put it between them;
+# planar in x-z (the elevation view's plane, no cross-range — the slice-10 precedent);
 # and — the one the AERO ARC makes load-bearing — **the target is AERODYNAMICALLY FREE**. It has no
 # mass, no Q, no C_Lα, no α, no attitude, no drag of any kind: `a_lat` is DELIVERED BY FIAT, the turn
 # is speed-preserving to machine eps, and NOTHING caps it. So the target has no `a_max_aero` ceiling
@@ -1071,8 +1081,14 @@ movers would double-integrate). A ⟂-v turn is speed-preserving (RK4 holds it t
 
 Config in the entity `comp` bag, read with DEFAULTS so a bare/live config can't crash a tick:
 `:a_lat_mps2` (lateral accel magnitude, m/s²; `0` → straight-line, the APN feedforward vanishes) and
-`:turn_sign` (`±1`, the turn direction; default `+1`); and — since slice 49 — `:turn_plane`
-(`:vertical` | `:horizontal`, [`TARGET_TURN_PLANES`](@ref); default `:vertical`). ⭐ **The plane was
+`:turn_sign` (`±1`, the turn direction; default `+1`); since slice 49 `:turn_plane`
+(`:vertical` | `:horizontal`, [`TARGET_TURN_PLANES`](@ref); default `:vertical`); and — since slice
+51 — `:turn_start_s` (seconds; the target flies STRAIGHT until then, default `0.0` ⇒ turning from
+the first step, byte-identical to slices 12–50). ⭐ **A real aircraft breaks at a MOMENT** — when the
+launch is seen, when the RWR lights — and a target that has been turning since `t = 0` is a staging
+convenience, not a defence. ⚠ The onset is QUANTIZED to a physics step (the first step whose
+accumulated `w.t ≥ turn_start_s`), so a value that is not a multiple of `dt` realizes LATE by under
+one step, and that lateness halves with `dt` (§ NAMED APPROXIMATIONS above). ⭐ **The plane was
 an APPROXIMATION slice 12 named, not physics it defended**: the x–z turn is the augmented-PN foil's
 convenience, while an aircraft turns in x–y. Slice 49 needs the horizontal one because a
 straight-flying target can never drop out of a radar's detection while closing at any fineness — the
@@ -1095,6 +1111,14 @@ function integrate!(mt::ManeuveringTarget, w::World, dt::Float64)
     # `maneuver:` block or a live write can never KeyError a tick. Absent ⇒ `:vertical` ⇒ the
     # slices 12–48 expression, byte-for-byte.
     plane = Symbol(get(c, :turn_plane, :vertical))
+    # ⭐ SLICE 51 — THE TURN ONSET. Before `:turn_start_s` the target flies STRAIGHT; from the first
+    # step whose `w.t ≥ turn_start_s` it turns, and never stops. Absent ⇒ `0.0` ⇒ `w.t ≥ 0.0` is
+    # true on the very first step (`tick!` advances `w.t` AFTER phase 4), so every slice 12–50 wire
+    # is byte-for-byte unchanged. ⚠ THE GATE IS ON THE VALUE, NOT THE CALL: zeroing `a_lat` makes
+    # the pre-onset path bit-identical to an authored `a_lat_mps2: 0.0` (which already ships and is
+    # tested), whereas an early `return zero(Vec3)` would NOT — `(0.0*sign/s)*Vec3(-vz,0,vx)` carries
+    # SIGNED ZEROS into `comp[:a_target]`, and `-0.0` is a different bit pattern from `0.0`.
+    a_lat = w.t ≥ Float64(get(c, :turn_start_s, 0.0)) ? a_lat : 0.0
     p′, v′ = integrator_step(:rk4, v -> _lateral_accel(v, a_lat, tsign, plane), e.pos, e.vel, dt)
     e.pos = p′
     e.vel = v′
@@ -2712,6 +2736,20 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     else
         _detectable = true
     end
+    # ⚠⚠ A NAMED MODEL GAP — SLICE 51: **THERE IS NO RE-CUE ON A RETURNING ECHO.** The conjunction
+    # below is the whole of the reacquisition logic: when a target that went undetectable becomes
+    # detectable again, it re-enters the track ONLY if the head happens to still be pointing within
+    # its window. The head, meanwhile, has been slewing on the estimator's FROZEN rate through the
+    # blind phase, so on slice 50's own wire the echo routinely comes back 15–25° off a 10° window
+    # and is thrown away — measured, not supposed (probe P3: every worthless recovery returns at
+    # 24.5/19.1/15.0°, every useful one inside 0.1–5.9°). A real seeker would re-cue onto a signal
+    # arriving off-boresight, or at least widen its search when one is expected; ours cannot, and
+    # that is a MODEL GAP, not a lesson (nothing about it is dialable, and slice 51's kill says
+    # nothing downstream of the blind phase reproduces well enough to SCORE it). Written down here,
+    # at the site where the behaviour falls out, because it is currently invisible: it is not a
+    # branch anyone wrote, it is the absence of one. ⚠ FIXING IT MOVES SLICES 34–50 and needs its
+    # own decision — see `docs/DEFERRALS.md`. ⚠ And do NOT reach for `head_off > fov` as its gauge:
+    # that is `in_fov`'s DEFINITION, i.e. slice 42's `off@lock == fov` tautology (slice 51 §IV).
     in_fov = in_fov && _detectable
 
     # SEAM DISCIPLINE 2 — the servo's target for the NEXT tick: the MEASURED LOS rotated into the

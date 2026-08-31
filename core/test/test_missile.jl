@@ -1096,6 +1096,81 @@ end
         @test norm3(w.entities[:t].pos - straight) > 1.0      # the maneuver bent the path
     end
 
+    # --- slice 51: the TURN ONSET (`:turn_start_s`) — shipped as a MODEL, not as a lesson --------
+    #
+    # Slice 51's headline (pricing a re-acquisition) died at gate 0, but the two-test rule (2026-08-18)
+    # kills the SLICE'S HEADLINE, not the hardware: every scenario 12–50 authored a target already
+    # turning at `t = 0`, which is staging rather than a defence, and an aircraft breaks at a MOMENT.
+    # The teeth here are ANCHORS, not recomputes (convention 11): the pre-onset path must be
+    # BIT-EQUAL to the already-shipped `a_lat_mps2 = 0.0` path, and `turn_start_s = 0.0` BIT-EQUAL to
+    # the key being absent (convention 2 — additivity). ⚠ Both use `w.t`, so they must run through
+    # `tick!` (which advances `w.t` AFTER phase 4), NOT through a bare `integrate!`.
+    @testset "slice 51 — :turn_start_s delays the break; pre-onset is BIT-EQUAL to a_lat = 0" begin
+        mkw = function (; kv...)
+            w = World(seed = 0)
+            c = Dict{Symbol,Any}(:rcs_m2 => 1.0, :a_lat_mps2 => 200.0, :turn_sign => 1.0)
+            for (k, v) in kv; c[k] = v; end
+            w.entities[:t] = Entity(:t, :target; pos = Vec3(6000.0, 0.0, 4200.0),
+                                    vel = Vec3(-800.0, 0.0, 200.0), comp = c)
+            w, Subsystem[ManeuveringTarget(:t)]
+        end
+        # THE ONSET TICK, measured on the wire (probe p10/p11, NOT hand-computed — convention 10):
+        # `w.t` at tick k's phase 1 is (k-1)·dt, so a 0.5 s break first bites on the 501st tick.
+        wa, sa = mkw(turn_start_s = 0.5)
+        for _ in 1:500; tick!(wa, sa, dt); end
+        @test norm3(wa.entities[:t].comp[:a_target]) == 0.0    # …500 ticks in: still flying straight
+        tick!(wa, sa, dt)                                      # the 501st (its phase 1 sees w.t = 0.5)
+        @test norm3(wa.entities[:t].comp[:a_target]) ≈ 200.0 atol = 1e-9   # …and it BREAKS
+
+        # THE ANCHOR: before the onset the target is not merely "close to" straight — it is the SAME
+        # FLOATING-POINT PATH as the shipped a_lat = 0 wire, bit for bit, including `a_target`.
+        # ⚠⚠ This is why the consumer gates the VALUE and not the CALL: `_lateral_accel` with
+        # a_lat = 0 returns SIGNED ZEROS — `(-0.0, 0.0, -0.0)` on this heading (probe p10) — so an
+        # early `return zero(Vec3)` would be ≈-equal and NOT bit-equal, and the golden would find it.
+        # ⚠ The loops COUNT their disagreements and assert ONCE — 2400 ticks of `@test` would inflate
+        # the suite headline by ~5 k for one key, and the count is a number this project quotes.
+        wb, sb = mkw(turn_start_s = 0.5); wc, sc = mkw(a_lat_mps2 = 0.0)
+        n_diff = 0
+        for _ in 1:400
+            tick!(wb, sb, dt); tick!(wc, sc, dt)
+            # Vec3 is an immutable SVector, so `===` IS bit-equality (and -0.0 !== 0.0).
+            (wb.entities[:t].pos === wc.entities[:t].pos &&
+             wb.entities[:t].vel === wc.entities[:t].vel) || (n_diff += 1)
+        end
+        @test n_diff == 0                                      # 400/400 ticks bit-equal
+        aTb = wb.entities[:t].comp[:a_target]::Vec3; aTc = wc.entities[:t].comp[:a_target]::Vec3
+        @test all(bitstring.(Tuple(aTb)) .== bitstring.(Tuple(aTc)))      # …signed zeros included
+        @test any(signbit, Tuple(aTc))                        # the -0.0 really is there (the reason)
+
+        # ADDITIVITY (convention 2): `turn_start_s = 0.0` == the key ABSENT == every 12–50 wire.
+        wd, sd = mkw(turn_start_s = 0.0); we, se = mkw()
+        n_diff0 = 0
+        for _ in 1:2000
+            tick!(wd, sd, dt); tick!(we, se, dt)
+            (wd.entities[:t].pos === we.entities[:t].pos &&
+             wd.entities[:t].vel === we.entities[:t].vel) || (n_diff0 += 1)
+        end
+        @test n_diff0 == 0                                     # 2000/2000 ticks bit-equal
+        # …and a huge-but-finite onset is the lesson's NULL: a target that never gets round to it.
+        wf, sf = mkw(turn_start_s = 1.0e9); wg, sg = mkw(a_lat_mps2 = 0.0)
+        for _ in 1:2000; tick!(wf, sf, dt); tick!(wg, sg, dt); end
+        @test wf.entities[:t].pos === wg.entities[:t].pos
+
+        # THE QUANTIZATION, named in the docstring and pinned here: an onset that is NOT a multiple
+        # of dt realizes LATE by under one step, and the lateness HALVES with dt (probe p11).
+        onset_t = function (ts, h)
+            w, s = mkw(turn_start_s = ts)
+            for _ in 1:round(Int, 1.0 / h)
+                tb = w.t; tick!(w, s, h)
+                norm3(w.entities[:t].comp[:a_target]) > 0.0 && return tb
+            end
+            NaN
+        end
+        @test onset_t(0.5005, dt)   ≈ 0.5010 atol = 1e-9      # a full step late at dt = 1e-3
+        @test onset_t(0.5005, dt/2) ≈ 0.5005 atol = 1e-9      # …and exact at half dt — it halved
+        @test onset_t(0.5, dt) ≈ onset_t(0.5, dt/2) atol = 1e-12   # a multiple of dt does NOT move
+    end
+
     @testset "decide! under :apn writes comp[:a_ctrl] matching pn_accel_augmented on the realized state" begin
         w, subs = apn_world(guidance = :apn, a_lat = 200.0, a_max = 3000.0)   # generous a_max → clamp inert
         tick!(w, subs, dt); empty!(w.events)                  # tick 1: mover writes a_target, decide! commands

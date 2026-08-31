@@ -7260,3 +7260,74 @@ Live: the server above, then Godot on `clients/godot` (`Sandbox.tscn` auto-detec
 view). One slider, no button. Drag to 10 and the lock is taken back sooner and costs more; drag to 7
 and a target 452× dimmer than a sphere is still never lost. ⚠ Dragging DISARMS the gauge — press Reset
 to measure the new shape.
+
+---
+
+# ⭐⭐ SLICE 51 — NOT A SLICE: **THE MODEL HALF OF A GATE-0 KILL** (`maneuver.turn_start_s`, 2026-08-31)
+
+⚠⚠ **READ THE HEADING.** Slice 51 is a **gate-0 kill record** (`docs/plans/slice51.md`) — it ships no
+scenario, no Godot view, no verifier, no UI test and no slider, and it is **NOT slice 52**. What it
+ships is the MODEL half the 2026-08-18 two-test rule entitles a fail-lesson result to: *"it ships as
+physics + tests + authorable keys."* This block exists so the as-built ledger records code that
+actually landed; the reasoning is in `docs/plans/slice51.md` §VIII.
+
+## WHAT LANDED
+
+| where | what |
+|---|---|
+| `core/src/missile.jl` — `ManeuveringTarget.integrate!` | `a_lat` zeroed until `w.t ≥ turn_start_s` |
+| `core/src/missile.jl` — the docstring + NAMED APPROXIMATIONS | the onset, and its `dt` quantization |
+| `core/src/missile.jl` — at `in_fov = in_fov && _detectable` | the **no-re-cue MODEL GAP**, named only |
+| `core/src/scenario.jl` — the `maneuver:` fork | `turn_start_s` validated finite and ≥ 0 at LOAD |
+| `core/test/test_missile.jl` | the consumer teeth (below) |
+| `core/test/test_scenario.jl` | the loader teeth (the control, 3 accepts, 4 refusals) |
+
+## THE THREE THINGS A LATER SLICE WILL TRIP ON
+
+1. ⚠⚠ **THE GATE IS ON THE VALUE, NOT ON THE CALL.** `_lateral_accel` with `a_lat = 0` returns
+   **signed zeros** — measured `(-0.0, 0.0, -0.0)` on the slice-12 heading (probe `p10_onset_key.jl`,
+   read as bitstrings). Zeroing `a_lat` is therefore BIT-identical to the shipped `a_lat_mps2: 0.0`
+   path; an early `return zero(Vec3)` would be `≈`-equal and **not** bit-equal, and the ABSOLUTE
+   golden — not `test_determinism` — is what would have caught it (convention 2).
+2. ⚠ **THE ONSET IS QUANTIZED TO A PHYSICS STEP, AND `w.t`'s FLOAT ACCUMULATION IS LOAD-BEARING.**
+   `turn_start_s` = 0.5 at `dt` = 1e-3 first bites on the **501st tick**, whose phase-1 `w.t` is
+   `0.5000000000000003` — just ABOVE the boundary, by drift. A value that is *not* a multiple of `dt`
+   lands late by under one step and the lateness HALVES with `dt` (0.5005 → realized 0.5010 at 1e-3,
+   0.5005 at 5e-4). Pinned in `test_missile.jl`. ⇒ **author an onset BETWEEN step boundaries.**
+3. ⚠ **BYTE-IDENTITY WAS CHECKED BY NAME** (LESSONS §752): the **eight** scenarios authoring a
+   `maneuver:` block are 12, 15, 19, 21, 22_departure, 22_stall, 49, 50 — and `grep` finds
+   `turn_start_s` in none. ⚠ `grep -l 'maneuver:'` matches TEN files; two of them
+   (`slice14_salvo`, `slice20_induced_drag`) say in comments that they have **no** such block.
+
+## THE LOADER'S REASONING (why REFUSE and not clamp)
+
+`turn_start_s` is refused at LOAD for a reason its neighbours in the block do not share: the consumer
+tests `w.t ≥ turn_start_s`, and **NaN/Inf makes that false forever** ⇒ the target silently never turns
+⇒ a DEAD KNOB, which is the one OUTRIGHT kill under the two-test rule. Negative is refused as a second
+spelling of `0.0` (slice 19's `speed` trap in miniature). Huge-but-finite is LEGAL — a target that
+never gets round to turning, which is the lesson's own null. ⚠ **NOT refused beside `a_lat_mps2: 0.0`**,
+unlike `cross_speed_mps`: `a_lat_mps2` is a LIVE SLIDER on the shipped 12/15 wires, so the onset goes
+live the moment a student drags it. `cross_speed_mps` is read by NOTHING, EVER — that is the entire
+distinction, and importing the older guard's reason here would be the framing-rot this file warns of.
+
+## THE CONSUMER TEETH (anchors, not recomputes — convention 11)
+
+- 500 ticks straight, the 501st turns at `|a_T|` = 200.0 (the measured onset, not `0.5/dt`).
+- 400 ticks compared with `===` on `pos`/`vel` (SVector — `===` IS bit-equality) against the
+  `a_lat = 0` wire, plus a `bitstring` comparison of `comp[:a_target]` and a `signbit` assertion that
+  the `-0.0` is really there — i.e. the test states the reason clause 1 gives.
+- 2000 ticks compared the same way for `turn_start_s = 0.0` vs the key ABSENT (convention 2).
+- ⚠ **Both loops COUNT disagreements and assert ONCE** (`@test n_diff == 0`). The per-tick `@test`
+  form was written first and ran green at 22971 — **it inflated the suite headline by 4818 for one
+  key**, and that headline is a number `CLAUDE.md` quotes. Coverage is identical; the count is not.
+- `turn_start_s = 1e9` bit-equal to `a_lat = 0` — the null.
+- the `dt` quantization: 0.5005 realizes at 0.5010 (full `dt`) and 0.5005 (half), while 0.5 does not move.
+
+## THE NAMED MODEL GAP (named, NOT fixed)
+
+There is **no re-cue on a returning echo**: when a target becomes detectable again it re-enters the
+track only if the head still happens to point within its window, and on slice 50's wire it routinely
+does not (probe P3 — every worthless recovery returns at 24.5 / 19.1 / 15.0° against a 10° window).
+That is not a branch anyone wrote; it is the absence of one, which is why it went unnamed for
+seventeen slices. ⚠ **Fixing it moves slices 34–50** and needs its own decision — `docs/DEFERRALS.md`.
+⚠ And `head_off > fov` is `in_fov`'s DEFINITION (slice 42's tautology) — an explanation, never a gauge.
