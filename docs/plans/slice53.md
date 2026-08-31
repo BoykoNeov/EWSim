@@ -1,6 +1,9 @@
 # Slice 53 — **A TAIL LOBE**: does a target look the same going away as coming at you?
 
-**STATUS: GATE 0 IN PROGRESS — P1 AND P2 HAVE RUN (2026-08-31); F1 AND F2 ARE DISCHARGED.**
+**STATUS: GATE 0 IN PROGRESS — P1, P2 AND P3 HAVE RUN (2026-08-31); F1, F2 AND F3 ARE DISCHARGED.**
+⚠ P3 FIXED TWO THINGS P4–P7 MUST USE VERBATIM: the run-length rule `N`\* = 3 and MIRRORED edges
+(§2.8). The ceiling is 50. **§2.3's and §2.6's ladder magnitudes are superseded by §2.8 — do not
+quote them.**
 ⚠ Everything below the falsifier list was written as a PREDICTION before any probe ran (slice 41's
 discipline — `docs/LESSONS.md:13`, *"pre-register the falsifier"*) and is **left unedited on
 purpose** so the predictions can be scored. **§2 at the foot of this file records what was
@@ -486,3 +489,106 @@ downstream of the wire's behaviour at `G` = 1, not evidence against the wire. **
 counts (1) and (2) alone** — the miss is banned and measured non-monotone here, and its only other
 gauge is slice 50's, which this plan pre-registered as the "49 with a sign flip" kill. That is
 sufficient, and W3 stays LIVE as the fallback if W1 fails P3.
+
+### §2.8 P3 (F3) — **DISCHARGED. THE NEGATIVE FLOOR WAS THE GAUGE'S OWN DEFINITION, AND THE CEILING
+### IS 50** (probe `p3_floor.jl`, `p3_out.txt`; full write-up `p3_findings.md`)
+
+8 seeds (P2's 53/149/250, extended by the stated rule "the first five positive integers"), 200 s,
+`revisit_s` = 0.1. **Two decisions were fixed in the probe header BEFORE the run**, because §2.6's
+own rule against picking `N` after seeing the ladder applies to every choice the gauge makes:
+
+- **`N`\* = 3**, anchored outside this gauge: slice 49's CONTROL was dark for at most 0.20 s on the
+  *identical* `revisit_s` = 0.1 (`docs/STATUS.md`, and the key REMOVED reads the same 0.20 s) ⇒
+  0.20 s = 2 missed looks = a gap of 3 ⇒ tolerate gap ≤ 3, give up on gap > 3.
+- **The two edges are the SAME FUNCTION**: `gain(inbound, N) := edge(reverse(inbound), N)`.
+
+### ⭐⭐⭐ §2.5 ITEM 1 IS DISSOLVED, NOT CONFIRMED — **A DIFFERENCE OF TWO EDGES IS ONLY A MEASUREMENT IF THE TWO EDGES ARE THE SAME MEASUREMENT**
+
+`p2d`'s pair was never a mirror pair: the outbound rule took the first detection **followed by** a
+gap > `N` (the end of the first sustained run), while the inbound rule took the first detection that
+**has a successor** within `N` — which accepts an **isolated early pair**. The inbound rule was
+strictly the more permissive one ⇒ the gain was declared at longer range ⇒ the difference was biased
+**negative by a near-constant offset**. That is the sign *and* the shape §2.5 item 1 flagged
+(−3037.7 / −3037.7 / −2937.8 m at `N` = 1 for `G` = 1/2/5 — a fixed offset is a rule bias; Swerling
+noise does not do that). The `G` = 1 floor, 8/8 uncensored, metres:
+
+| rule | MIRRORED mean | MIRRORED max\|·\| | `p2d` mean | `p2d` max\|·\| |
+|---|---|---|---|---|
+| `N` = 1 | −112.0 | 572.2 | −2658.1 | 3478.6 |
+| **`N` = 3** ⭐ | **+39.8** | **968.4** | −1595.9 | 2609.0 |
+| `N` = 5 | −14.5 | 911.5 | −1140.0 | 1800.8 |
+| `N` = 10 | −92.3 | 1151.4 | −594.3 | 1593.1 |
+
+⇒ **the mirrored floor straddles zero at every rule** while the old one is negative by 0.6–2.7 km at
+every rule. At `N`\* = 3: mean +39.8 m, sd 609.9, se 215.6, **mean/se = +0.18** — not distinguishable
+from zero. **There is no measurement asymmetry to name; §2.5 item 1 is CLOSED.**
+
+### THE LADDER, AND F3's BAR (max\|null\| = 968.4 m ⇒ **BAR = 2905.2 m**)
+
+| `G` | 1 | 2 | 5 | 10 | 20 | **50** | 100 |
+|---|---|---|---|---|---|---|---|
+| mean (m) | +39.8 | +189.1 | +777.2 | +1465.0 | +2699.0 | **+5531.3** | +6818.5 |
+| min over 8 seeds | −657.6 | −657.6 | −531.8 | +371.0 | +1480.6 | +3865.5 | +5192.3 |
+| vs BAR | null | 0.07× | 0.27× | 0.50× | **0.93× fail** | **1.90× PASS** | 2.35× PASS |
+
+**MONOTONE at `N` = 1, 3, 5 and 10 AND under both edge definitions — eight monotone ladders out of
+eight**, 8/8 uncensored in every cell. F3's third filter is discharged.
+
+### ⚠⚠ THE §0.3 / §2.5-ITEM-2 COLLISION, AND ITS ANSWER — **THE CEILING IS 50**
+
+§2.5 named `G` = 20 "the candidate to beat" and §0.3 pre-registered that the ceiling should come
+DOWN rather than the axis going log. **F3's bar is not cleared until `G` = 50; 20 reaches 0.93× and
+misses.** ⇒ **20 is beaten and the ceiling is 50** — the lowest cell that clears the pre-registered
+bar, stated as the rule requires and *not* rescued by a statistic chosen afterwards.
+
+⭐ **AND §0.3's LINEAR-AXIS WORRY IS RE-MEASURED IN THE GAUGE'S OWN UNITS, WHERE IT LARGELY
+VANISHES.** §0.3 reasoned in dB; the gauge is in metres. Fraction of the slider's travel vs fraction
+of the gauge's range:
+
+| `G` | 5 | 10 | 20 | 50 | 100 |
+|---|---|---|---|---|---|
+| 1–50 slider: travel / effect | 8 % / 13 % | 18 % / 26 % | 39 % / 48 % | **100 % / 100 %** | — |
+| 1–100 slider: travel / effect | 4 % / 11 % | 9 % / 21 % | 19 % / 39 % | 49 % / 81 % | 100 % / 100 % |
+
+⇒ on 1–50 the gauge is close to the diagonal (39 % of the drag buys 48 % of the effect); on 1–100
+the top half of the drag buys 19 %. **The ceiling F3's bar forces is also the ceiling that makes the
+linear axis honest**, and §0.3's log-curve fallback is not needed. **THE AXIS STAYS LINEAR.**
+
+⚠ A POST-HOC observation, recorded WITH its provenance and NOT substituted for the bar: the null
+spread (−657.6 … +968.4) and the `G` = 20 spread (+1480.6 … +3959.7) are **completely disjoint from
+`G` = 20 upward**, overlapping at `G` = 10. Defensible — and exactly the statistic this project
+forbids choosing after seeing the numbers. It does not move the ceiling.
+
+### ⚠ A DEFECT IN F3's OWN BAR, FOUND BY RUNNING IT — **A THRESHOLD MUST CARRY ITS OWN SAMPLE SIZE**
+
+F3 wrote the bar as `3 × max|null|` and fixed only `N ≥ 8`. **A maximum does not stabilise** — adding
+seeds can only raise it, so the bar RISES as the evidence improves and a slice passing at 8 seeds can
+fail at 16 with no physics changing. Measured here: max\|null\| swings 572.2 → 1151.4 m across the
+four rules on the same 8 seeds, driven by which single seed was worst. ⇒ **always quote the bar with
+its seed count**; `G` = 50 clears at 1.90× and has room for the bar to grow, `G` = 20 at 0.93× would
+have been decided by one unlucky seed. This is the arc's "a gauge must carry its own window" arriving
+one level up.
+
+### THE STRUCTURAL CONTROL HOLDS EXACTLY ON 8 SEEDS, AND A PROPERTY NOBODY ASKED FOR
+
+- **§2.3's strongest fact re-checked over 56 flights:** the inbound gain range is identical at every
+  `G` on all 8 seeds (7078.0983 / 6805.9246 / 6243.9596 / 6785.4645 / 7207.3690 / 7250.9401 /
+  7630.3031 / 5899.9563 m). The lobe moves one leg while the other is nailed down.
+- ⭐ **The run-length rule makes the gauge INDEPENDENT OF FLIGHT LENGTH.** Truncating the same traces
+  from 200 s to 160 s reproduces every cell to the last printed digit, 8/8 uncensored at both. The
+  raw `findlast` of §2.3 crawled outward with the flight; this does not. P2's shorter-flight table
+  stays comparable, and the insensitivity is independent evidence the rule is right.
+
+### WHAT P4–P7 INHERIT
+
+1. **`N`\* = 3 and the mirrored edges are FIXED** — P4–P7 use them verbatim.
+2. **The ceiling is 50.** P7's job is now to justify or refute 50 against the bar *at its own seed
+   count*, not to pick a number. The floor stays 1.0 (§0.3, non-negotiable).
+3. ⚠⚠ **DO NOT CARRY §2.3's OR §2.6's MAGNITUDES INTO P4.** §2.5 item 3's control arms (`rcs_m2` =
+   64, `rcs_fineness` = 4, quoted at +2924 m) must be **re-measured under `N`\* = 3 with mirrored
+   edges** before being quoted against anything.
+4. **P6 (F5) has a specific target:** `G` = 50 carries the headline and `G` = 20 vs 50 is where the
+   ceiling rests — both re-fly at `dt` = 5e-4 on the same seeded stream.
+5. ❌ F4 (P5, the two nulls) and F2's substitution half (P4) are untouched. §2.2's theorem is about
+   σ and **does not reach a number read through a Swerling detector** — the same trap F3
+   pre-registered, and P3 has now shown it was worth pre-registering twice.
