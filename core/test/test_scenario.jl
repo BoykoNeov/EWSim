@@ -885,6 +885,18 @@ end
             target: {rcs_m2: 1.0}
         """)
         @test !haskey(load_scenario(f).world.entities[:tgt1].comp, :turn_start_s)
+
+        # ⭐ AND THE SEAM END-TO-END, ONCE: YAML → loader → comp bag → consumer, on the loader's OWN
+        # subsystem list. The consumer teeth in test_missile.jl build their worlds programmatically,
+        # so nothing else proves that the key the loader WRITES is the key `integrate!` READS —
+        # convention 7's failure in miniature (one name, two spellings, no test between them).
+        # ⚠ No shipped scenario authors `turn_start_s`: slice 51 shipped a KEY, not a slice.
+        scb = load_scenario(mkbrk(0.5))
+        v0  = scb.world.entities[:tgt1].vel
+        for _ in 1:500; EWSim.tick!(scb.world, scb.subs, 1.0e-3); end
+        @test scb.world.entities[:tgt1].vel == v0        # 500 ticks: dead straight, EXACTLY
+        for _ in 1:200; EWSim.tick!(scb.world, scb.subs, 1.0e-3); end
+        @test scb.world.entities[:tgt1].vel != v0        # …then it breaks
     end
 
     @testset "loader parses slice13_decoy.yaml (decoy seduction vs α-β gate, spatial view)" begin

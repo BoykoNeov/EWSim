@@ -7280,7 +7280,7 @@ actually landed; the reasoning is in `docs/plans/slice51.md` §VIII.
 | `core/src/missile.jl` — at `in_fov = in_fov && _detectable` | the **no-re-cue MODEL GAP**, named only |
 | `core/src/scenario.jl` — the `maneuver:` fork | `turn_start_s` validated finite and ≥ 0 at LOAD |
 | `core/test/test_missile.jl` | the consumer teeth (below) |
-| `core/test/test_scenario.jl` | the loader teeth (the control, 3 accepts, 4 refusals) |
+| `core/test/test_scenario.jl` | the loader teeth (the control, 3 accepts, 4 refusals) + the seam |
 
 ## THE THREE THINGS A LATER SLICE WILL TRIP ON
 
@@ -7298,6 +7298,13 @@ actually landed; the reasoning is in `docs/plans/slice51.md` §VIII.
    `maneuver:` block are 12, 15, 19, 21, 22_departure, 22_stall, 49, 50 — and `grep` finds
    `turn_start_s` in none. ⚠ `grep -l 'maneuver:'` matches TEN files; two of them
    (`slice14_salvo`, `slice20_induced_drag`) say in comments that they have **no** such block.
+
+⭐ **AND THE SEAM END-TO-END, ONCE** (`test_scenario.jl`): a YAML authoring `turn_start_s: 0.5` is
+loaded, then ticked on the LOADER'S OWN subsystem list — 500 ticks with `vel` EXACTLY unchanged, 200
+more and it has broken. The consumer teeth build their worlds programmatically, so without this
+nothing proves the key the loader WRITES is the key `integrate!` READS (convention 7 in miniature:
+one name, two spellings, no test between them). ⚠ **No shipped scenario authors the key** — this
+ships a KEY, not a slice.
 
 ## THE LOADER'S REASONING (why REFUSE and not clamp)
 
@@ -7317,9 +7324,11 @@ distinction, and importing the older guard's reason here would be the framing-ro
   `a_lat = 0` wire, plus a `bitstring` comparison of `comp[:a_target]` and a `signbit` assertion that
   the `-0.0` is really there — i.e. the test states the reason clause 1 gives.
 - 2000 ticks compared the same way for `turn_start_s = 0.0` vs the key ABSENT (convention 2).
-- ⚠ **Both loops COUNT disagreements and assert ONCE** (`@test n_diff == 0`). The per-tick `@test`
-  form was written first and ran green at 22971 — **it inflated the suite headline by 4818 for one
-  key**, and that headline is a number `CLAUDE.md` quotes. Coverage is identical; the count is not.
+- ⚠ **Both loops COUNT disagreements and assert ONCE** (`@test n_diff == 0`). ⚠⚠ **THE SUITE TOTAL
+  FOR THIS WORK IS 18175** (from 18153). A per-tick `@test` form was written first and also ran
+  green, at **22971** — the SAME code and the SAME coverage, with one assertion per tick instead of
+  one per loop: **it inflated the headline by 4818 for a single key.** 22971 is not a second total
+  and is recorded only so the aggregation is not mistaken for a coverage cut.
 - `turn_start_s = 1e9` bit-equal to `a_lat = 0` — the null.
 - the `dt` quantization: 0.5005 realizes at 0.5010 (full `dt`) and 0.5005 (half), while 0.5 does not move.
 
