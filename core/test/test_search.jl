@@ -187,6 +187,119 @@
 end
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 52 GATE 1 — THE **COVERAGE** AXIS, AS A LAW OF THE SAME KERNEL (`docs/plans/slice52.md`).
+#
+# Slice 48 shipped `search_sweep` and varied only its RATE. Slice 52's axis is the other argument,
+# the half-amplitude `S`, and gate 0 measured three things about it that NOTHING IN THE REPO
+# ENFORCES — they live in the plan doc and in probes under `M:\claud_projects\temp\slice52\`. This
+# section is that enforcement, and it is a GATE 1 because every one of them is a property of the
+# pure wave rather than of a flight:
+#
+#   1. THE FIRST NEGATIVE EXTREME IS AT `3S/ρ`, and nothing earlier reaches it. This is the whole
+#      mechanism behind gate 0 §IV's *FIRST-EXCURSION-OR-NEVER*: the deficit GROWS while the search
+#      runs, so if the band does not cover the target on the first pass out, no later pass will.
+#   2. THE SCALE LAW — `t` enters only through `ρt/S`. This is the STRUCTURAL reason `t_lock` came
+#      out linear in `S` at slope `2/ρ` (§II: 0.04000 s/° against `2/60`), and pinning it here makes
+#      the flown number a CONSEQUENCE rather than a fit.
+#   3. THE `2S` WRONG-HALF LAW — a target at `−a` of the cue is first covered at `(2S + a)/ρ`.
+#      Slice 43 banked it on an 8 °/s servo over a ~7 s window; gate 0 measured it on the shipped
+#      kernel at 60–240 °/s; here it is an IDENTITY, with the `2/ρ` slope as its derivative.
+#   + THE MODEL TEST's KERNEL HALF for the coverage (slice 48's §0.7 tooth is RATE-only), and the
+#     `S ≤ 0` degenerate across the PHASE rather than at one time — because `S` is slice 52's
+#     SLIDER and `S ≤ 0` is its floor, which is a load it did not carry while it was authored.
+#
+# ⚠ THESE ARE INVARIANCES, NOT A SECOND ORACLE. The independent oracle is `tri_oracle` above; what
+# is asserted below are relations BETWEEN points of the same kernel, which is the only honest thing
+# a scale law can be. ⚠ And the REACH half of the lesson — *`S < a` and `−a` is never reached, at
+# any `t`* — is deliberately NOT a test: it is slice 48's tooth 2 (`|offset| ≤ S`) restated in this
+# slice's currency, and convention 11 bans a tautology dressed as a tooth.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+@testset "seeker search COVERAGE — the S axis (slice 52 gate 1)" begin
+
+    @testset "1. ⭐⭐ THE FIRST NEGATIVE EXTREME IS AT 3S/ρ — first-excursion-or-never" begin
+        for (ρ, S) in ((60.0, 25.0), (60.0, 6.0), (240.0, 5.0), (12.0, 45.0))
+            @test search_sweep( S / ρ, ρ, S) ≈  S atol = 1e-12 * S   # …out to the wrong side first
+            @test search_sweep(3S / ρ, ρ, S) ≈ -S atol = 1e-12 * S   # …and only THEN to the other
+            # ⚠ AND IT IS THE **FIRST** TIME, which is what makes `3S/ρ` a deadline rather than a
+            # coincidence. 256 samples strictly inside (0, 3S/ρ) — read as a MINIMUM rather than as
+            # 256 assertions, for §2's ledger reason — none of which may have reached −S already.
+            @test minimum(search_sweep(3S / ρ * k / 257, ρ, S) for k in 1:256) > -S   # atol 0
+        end
+        # EXACTLY, where the arithmetic is binary-exact (§4's form, one level up).
+        for (ρ, S) in ((1.0, 1.0), (2.0, 8.0), (0.5, 4.0))
+            @test search_sweep(3S / ρ, ρ, S) === -S
+        end
+    end
+
+    @testset "2. ⭐⭐ THE SCALE LAW — t enters ONLY through ρt/S (the unit triangle)" begin
+        # `offset(t; ρ, S) = S · f(ρt/S)`, with `f` the unit triangle — amplitude 1, period 4, which
+        # is what this same kernel IS at `(ρ, S) = (1, 1)`. ⇒ every time the wave takes to do
+        # anything scales as `S/ρ`, which is §II's linear `t_lock` before a missile is involved.
+        for (ρ, S) in ((60.0, 25.0), (240.0, 5.0), (7.0, 90.0), (0.5, 1.5))
+            for k in 0:32
+                t = 1.37 * 4S / ρ * k / 32                 # 1.37 periods — not commensurate
+                @test search_sweep(t, ρ, S) ≈ S * search_sweep(ρ * t / S, 1.0, 1.0) atol = 1e-12 * S
+            end
+        end
+    end
+
+    @testset "3. ⭐⭐⭐ THE 2S WRONG-HALF LAW — reaching −a costs (2S + a)/ρ, so dt/dS = 2/ρ" begin
+        # The sweep always opens toward +offset (§0.8 — a head that knew which way to look would not
+        # need to search), so a target `a` degrees to the WRONG side is not covered until the head
+        # has climbed to +S, come back through the cue and gone out to −a. Every degree of coverage
+        # is therefore paid TWICE, and THAT is slice 52's sentence.
+        for (ρ, a) in ((60.0, 3.0), (240.0, 1.0), (12.0, 8.0))
+            for S in (a, 2a, 5.0, 12.5, 25.0, 45.0)
+                S < a && continue                  # narrower than the deficit ⇒ never reached at all
+                t★ = (2S + a) / ρ
+                @test search_sweep(t★, ρ, S) ≈ -a atol = 1e-12 * S
+                # …and, again, it is the FIRST time — the cost is paid once, up front, not per pass.
+                @test minimum(search_sweep(t★ * k / 257, ρ, S) for k in 1:256) > -a
+            end
+            # THE SLOPE, as an INDEPENDENT finite difference across S at FIXED a (convention 11):
+            # widening the sweep by 1° delays first cover of the SAME target by exactly `2/ρ` s.
+            for (S1, S2) in ((5.0, 6.0), (12.5, 25.0), (25.0, 45.0))
+                S1 < a && continue                 # …the same guard, and it BITES at a = 8°
+                @test ((2S2 + a) / ρ - (2S1 + a) / ρ) / (S2 - S1) ≈ 2 / ρ atol = 1e-12
+                @test search_sweep((2S2 + a) / ρ, ρ, S2) ≈
+                      search_sweep((2S1 + a) / ρ, ρ, S1) atol = 1e-12 * S2
+            end
+        end
+    end
+
+    @testset "4. ⚠ THE COVERAGE IS READ ON EVERY CALL — the MODEL test's KERNEL half" begin
+        # Slice 48's §0.7 tooth stands between the RATE and the slice-36 dead-knob class. Slice 52's
+        # slider is the OTHER argument and needs its own: a coverage baked at search onset would
+        # make these two calls agree. ⚠ Gate 0 §0 recorded MODEL as "PASS **by inspection**"; this
+        # is that inspection converted into a tooth, which is the only form the two-test rule's one
+        # outright kill may be claimed in.
+        # ⚠⚠ AND THE TIME AT WHICH IT IS READ IS THE TRAP, CAUGHT BY THIS TOOTH FAILING ON ITS
+        # FIRST RUN AT `t` = 0.3: **A COVERAGE CHANGE IS INVISIBLE UNTIL THE FIRST REVERSAL.** On the
+        # opening leg the offset is `ρt` and `S` does not enter it at all, so 25.0° and 25.5°
+        # returned the SAME 18.0 and the model test read as a dead knob. `t` = 0.5 is past the turn
+        # for both (`S/ρ` = 0.4167 s at the wider one). ⭐ That is §1's mechanism arriving in a place
+        # this plan did not expect it — the coverage is not a thing the sweep HAS, it is a thing the
+        # sweep does not reach until it has run for `S/ρ`.
+        t = 0.5
+        @test search_sweep(t, 60.0, 25.0) != search_sweep(t, 60.0, 12.0)
+        @test search_sweep(t, 60.0, 25.0) != search_sweep(t, 60.0, 25.5)
+        # …and the OPENING LEG is asserted the other way up, so the property above is pinned rather
+        # than merely dodged: before `S/ρ` the two ARE equal, and a tooth read there proves nothing.
+        @test search_sweep(0.3, 60.0, 25.0) === search_sweep(0.3, 60.0, 25.5) === 18.0
+    end
+
+    @testset "5. ⚠ S ≤ 0 IS A **SLIDER FLOOR** NOW — 0.0 at every PHASE, not at one time" begin
+        # §6 pins `S ≤ 0` at a single `t`, which was enough while the coverage was an authored
+        # constant. It is slice 52's dragged knob, so its floor is reached MID-SWEEP from an
+        # arbitrary phase, and the guard is pinned across the phase instead.
+        for S in (0.0, -1e-12, -1.0, -25.0), t in (0.0, 1e-9, 0.25, 1.0, 3.7, 1e4)
+            @test search_sweep(t, 60.0, S) === 0.0
+        end
+    end
+end
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
 # GATE 2 — THE WIRE. The kernel above is a wave; these are the teeth for the SEAM that feeds it.
 #
 # ⚠ FLOWN AGAINST THE SHIPPED YAML, not a hand-built fixture (convention 10 — pin against the LIVE

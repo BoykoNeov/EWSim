@@ -1,6 +1,6 @@
 # Slice 52 — **HOW WIDE SHOULD A SEEKER SEARCH?** (slice 48's reserve axis, `seeker_search_coverage_deg`)
 
-**STATUS: GATE 0 — PASSED, 2026-08-31. THE SLICE LIVES; GATES 1–3 NOT YET BUILT.** Seven probes in
+**STATUS: GATE 0 PASSED + GATE 1 BUILT & GREEN, 2026-08-31. THE SLICE LIVES; GATES 2–3 NOT YET BUILT.** Seven probes in
 `M:\claud_projects\temp\slice52\`. **No core change was made and none is needed** — the key already
 exists, is read every tick and is already on the wire; what is missing is a showcase. Verdict table
 in §IX.
@@ -345,3 +345,77 @@ emitted. What is missing is a SHOWCASE — `scenarios/slice52_*.yaml` (slice 48'
 at 60 °/s, `seeker_search_coverage_deg` as THE slider over roughly 0–45°), a view that draws the
 swept band against the inherited deficit, and slice 48's four proofs. ⚠ Convention 9: the picture
 error stays an authored FIXTURE, exactly as slice 48 retired slice 47's slider to a constant.
+
+---
+
+## §X — GATE 1 (2026-08-31): **THE COVERAGE AXIS IS NOW A LAW IN THE REPO, NOT A NUMBER IN THIS FILE**
+
+`core/test/test_search.jl`, a new top-level section between slice 48's gate-1 and gate-2 blocks.
+**224 teeth, suite 18175 → 18399, PASS 18399 / 18399 in 7m28s.** ⚠ NO CORE FILE WAS TOUCHED — this
+gate is pure enforcement of what §§I–VIII measured, which is the whole reason it could be written
+before a scenario exists.
+
+**WHY A GATE 1 AT ALL, GIVEN §IX's "no core change".** Because gate 0's results lived in exactly two
+places, and neither is the repo: this document, and probes under `M:\claud_projects\temp\slice52\`.
+The ritual's *new model ⇒ new test* is not satisfied by a measurement that only a plan remembers.
+⭐ Slice 48 shipped `search_sweep` and varied only its RATE; every claim slice 52 makes is about the
+OTHER argument, and the file had no tooth on it beyond `|offset| ≤ S` and the period.
+
+### THE FIVE TEETH, AND WHAT EACH ONE STOPS
+
+1. **THE FIRST NEGATIVE EXTREME IS AT `3S/ρ`, AND NOTHING EARLIER REACHES IT.** §IV's
+   FIRST-EXCURSION-OR-NEVER is a claim about *when* the band first covers the wrong side, and it was
+   resting on a single flown coincidence (`S` = 6, ρ = 60 locking at 0.2990 s against a predicted
+   0.300). It is now an identity, exact on binary-exact `(ρ, S)`.
+2. **THE SCALE LAW — `t` enters only through `ρt/S`**, i.e. the wave is `S ·` the unit triangle.
+   ⭐⭐ This is the STRUCTURAL reason §II's `t_lock` came out linear at slope `2/ρ`; pinning it here
+   makes the flown 0.04000 s/° a CONSEQUENCE rather than a fit, which is the form
+   `docs/LESSONS.md` asks a measured coefficient to be shipped in.
+3. **THE `2S` WRONG-HALF LAW — first cover of a target at `−a` costs `(2S + a)/ρ`**, with `2/ρ` as
+   its derivative in `S` at fixed `a`. Slice 43 banked this on an 8 °/s servo over ~7 s; gate 0 read
+   it off the shipped kernel at 60–240 °/s; it is now arithmetic that cannot drift.
+4. **THE MODEL TEST's KERNEL HALF.** ⚠⚠ §0 recorded MODEL as **"PASS by inspection"** — a
+   code-reading, and the two-test rule's model half is its ONLY outright kill. It is a tooth now.
+5. **`S ≤ 0` PINNED ACROSS THE PHASE**, not at one time. §6 pinned it at a single `t`, which was
+   enough while the coverage was an authored constant; it is this slice's dragged knob, so its floor
+   is reached MID-SWEEP from an arbitrary phase.
+
+⚠ **ONE CLAIM DELIBERATELY NOT WRITTEN AS A TEST.** The REACH half — *`S < a` and `−a` is never
+reached at any `t`* — is slice 48's tooth 2 (`|offset| ≤ S`) restated in this slice's currency.
+Convention 11 bans a tautology dressed as a tooth, so it is a comment deriving it, not an `@test`.
+
+### ⭐⭐ THE ONE REAL FINDING: **A COVERAGE CHANGE IS INVISIBLE UNTIL THE FIRST REVERSAL**
+
+Tooth 4 FAILED on its first run, and the reason is a property of the wave this plan had not written
+down anywhere: **on the opening leg the offset is `ρt` and `S` does not enter the arithmetic at
+all.** Read at `t` = 0.3 s, a 25.0° sweep and a 25.5° sweep both return exactly **18.0**, and the
+tooth built to prove the knob is LIVE reads it as a DEAD KNOB — the slice-36 class, arrived at from
+the opposite direction.
+
+⇒ the tooth is read at `t` = 0.5 s, past the first turn for both (`S/ρ` = 0.4167 s at the wider
+one), **and the opening leg's equality is pinned as a tooth in its own right** so the property is
+RECORDED rather than stepped around. ⭐ This is §1's mechanism turning up in a place the plan did not
+expect it: *the coverage is not something the sweep HAS, it is something the sweep does not reach
+until it has run for `S/ρ`.* ⚠ It is also a live warning for gate 2 and for the verifier — **any
+`S`-comparison sampled inside the first `S/ρ` of a search compares two identical numbers**, and on
+this wire at ρ = 60 that is the first 0.42 s of every arm.
+
+The second failure was ordinary: the slope sub-check inherited none of the outer loop's `S < a`
+guard, so at a deficit of 8° it compared "first cover" times for a 5° sweep that never covers.
+
+### ⚠ TWO THINGS GATE 1 SETTLES **FOR** GATES 2–3, BOTH AGAINST §IX
+
+- **`@test carriers == ["slice48_search.yaml"]`** (`test_search.jl`, the enumerated-carrier set)
+  FAILS the moment any `scenarios/slice52_*.yaml` authoring `:seeker_search` lands, because that key
+  is what raises `search_view`. Expected, and it is the test doing precisely its job; gate 3 extends
+  the list rather than loosening the check.
+- ⚠⚠ **§IX's "a view that draws the swept band" AND "no core change" CANNOT BOTH BE TRUE.**
+  `_draw_search_hud_lines` (`clients/godot/scenes/Sandbox.gd:3275`) is **FIVE `draw_string` LINES AND
+  NO GEOMETRY** — there is nothing in the client that draws a band today. And a slice-52 wire is
+  slice 48's wire with a different slider, so there is **no new comp key for a new view marker to
+  switch on**, which is the mechanism every marker in this family since slice 38 has used. ⇒ gate 3
+  must either (a) ship a new key the marker can gate on, or (b) share `search_view` and switch the
+  block on something already distinguishing — and (b) needs a candidate that is not the slider
+  itself, since a HUD that changed shape mid-drag is convention 5's hazard in the VIEW.
+  **§IX is corrected to that extent: the "no core change" verdict is a GATE-0 finding about the
+  PHYSICS, and it does not reach the client.**
