@@ -842,3 +842,55 @@ legal default of the right type.
 ⚠ **This is the same defect as the vocabulary lesson above, in DEFAULTED form rather than COMPUTED
 form, and both shipped in the same slice.** ⇒ when a HUD block is keyed off a marker, the question is
 not only *"are the numbers right?"* but *"is this block entitled to draw at all on this wire?"*
+
+## ⭐⭐⭐ A BAN ON A GAUGE CAN BE A BAN ON A REGION OF THE FLIGHT — CHECK WHICH ONE YOU INHERITED (slice 51 gate 0, 2026-08-31)
+
+Slices 44, 46, 48 and 50 each banned the MISS as a gauge on the missile-seeker arc, and all four gave
+the same reason: **a blind coast is an open-loop integration, chaotic in its initial condition.**
+Every later slice read that as *"do not use the miss."*
+
+Slice 51 tried to price a RE-ACQUISITION — a different quantity, in a different currency (authority
+and owed heading, never the miss), with a proper counterfactual arm — and the same reason killed it.
+Measured on the SHIPPED slice-50 wire with nothing emulated, full `dt` against half `dt`:
+
+| measured | `t_loss` | `r_loss` | `t_back` | head angle at the return | does the track resume? |
+|---|---|---|---|---|---|
+| drift at half `dt` | **0.06 %** | **0.04 %** | **11 %** | **179–2742 %** | ⚠⚠ **FLIPS** at `F` = 9.0 |
+
+At `rcs_fineness` = 9.0 — *inside a shipped slider's own domain* — the tracker comes back at one step
+size and never comes back at the other, and the CPA goes 33 m → 685 m.
+
+⇒ **The ban was never about the miss. It is about WHERE IN THE FLIGHT a number is read.** Everything
+at the loss reproduces; nothing after the blind phase does. The miss was simply the first quantity
+anyone tried to read on the wrong side of it.
+
+⚠ **The practical rule:** when you inherit a ban, ask whether it names a QUANTITY or a REGION. A
+quantity ban is discharged by choosing a better quantity — which is exactly what slice 51 did, three
+times, before discovering the ban was not that kind. **A region ban is discharged only by moving the
+measurement, or by not making it.**
+
+⭐ And the cheap test that would have found it first: re-fly at half `dt` and diff the QUALITATIVE
+verdicts, not only the numbers. A percentage on a near-zero quantity is noise; a boolean that flips
+is the whole finding.
+
+## ⭐⭐ TWO FLAGS THAT ARE ALMOST THE SAME FLAG — THE **THIRD** OCCURRENCE, AND THIS TIME IT IS A LESSON'S OWN SENTENCE (slice 51, 2026-08-31)
+
+Slice 47 recorded that two nearly-identical flags get conflated and that the conflation shows up on
+the one arm that matters. Slice 50 kept them apart correctly IN THE CODE — `seeker_detect` is the
+RANGE verdict alone, `gimbal_valid` is the `in_fov` conjunction, and its STATUS block says so — and
+then wrote its PROSE against the range lamp: *"lock given back — yes"* on both live arms.
+
+Slice 51 measured what the sentence covers. On `rcs_fineness` = 9.25 / 9.75 / 10.0 the echo returns
+before CPA and the tracker **never resumes**, because the head has drifted 15–24° off a 10° window
+while it had no measurement to slew on. Those flights are **bit-identical** (`max|Δpos|` =
+`0.000e+00`) to arms whose horizon was collapsed at the loss and never allowed to return.
+
+⇒ **A LOCK IS GIVEN BACK BY THE HEAD, NOT BY THE ECHO.** ⚠ No shipped test is wrong — slice 50 pins
+at-loss quantities only — but a reader of the ledger would have carried the wrong picture.
+
+⚠⚠ **AND THE OBVIOUS GAUGE FOR IT IS A TAUTOLOGY, WHICH IS THE PART THAT NEARLY SHIPPED.** *"The
+recovery is worthless when the head angle at the return exceeds the window"* is `head_off > fov`,
+which **is the definition of `in_fov`** — slice 42's `off@lock == fov` column, the inclusive gate
+echoing back its own authored constant. A quantity can be the right EXPLANATION and still be a
+forbidden GAUGE. ⇒ before scoring a slider on a threshold, ask whether the threshold is a
+MEASUREMENT or the gate's own definition read back.

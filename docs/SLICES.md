@@ -1755,3 +1755,40 @@ same number as a broken instrument.** A round target owes zero degrees. A displa
 number it needs also shows zero degrees. No amount of checking the *value* can tell those apart, so
 the display tracks whether the number arrived at all, separately from what it says, and prints a
 different sentence for each case.
+
+## Slice 51 — what is a second lock worth? (gate 0, killed, 2026-08-31)
+
+Slice 50 left a loose end. Its missile loses the target when the target turns away, and then — in
+both live arms — **gets it back**: the turn carries the target round past nose-on, the echo returns,
+and the missile is looking at it again. Slice 50 said that this happens and never asked what it was
+worth. Is a lock you get back as good as the one you lost, or does it arrive too late to spend?
+
+⭐⭐⭐ **The first answer was better than the question: quite often the missile gets nothing back at
+all, because the echo returns to a head that is no longer pointing at it.** While the missile is
+blind the seeker head has no measurement to steer by, so it holds where it was — and the target keeps
+moving. On the slenderer targets the head ends up 15 to 24 degrees off a window ten degrees wide, so
+when the echo comes back the missile throws it away. Those flights are not merely worse; they are
+**identical, to the last decimal place, to flights whose target vanished for good**. The missile's
+instruments say the target came back and nothing whatsoever changes. ⇒ **a lock is given back by the
+head, not by the echo** — and slice 50's own phrase "lock given back" describes a lamp that only
+means "the echo is loud enough again", which is not the same thing as being able to use it.
+
+⚠ **Then the slice died on something bigger, and this is the part worth carrying.** Four earlier
+slices had banned the *miss distance* as a way of scoring this family, all four for the same stated
+reason: once the missile is flying blind it is coasting open-loop, and where it ends up is
+hypersensitive to tiny differences. Everyone read that as "don't use the miss". It is not about the
+miss. **It is about where in the flight you are allowed to read a number at all.** Cut the simulation
+step in half — the standard check for whether a result is real or an artefact of the arithmetic — and
+everything measured at the moment the target is lost reproduces to within a sixteenth of one per
+cent, exactly as slice 50 found. Everything measured *after* the blind stretch does not: the moment
+the echo returns moves by 11 %, and at one setting **inside slice 50's own slider** the answer to
+"does the missile ever get its track back?" flips outright from yes to no, with the miss going from
+33 metres to 685. A teaching instrument whose lesson reverses when you halve the step is not a
+lesson, so the slice was killed rather than dressed up.
+
+Two smaller things were measured on the way. **A defensive turn has to be early**: delay the target's
+turn by half a second and the missile never loses the lock at all — the horizon has to fall through
+the range, and waiting gives it less range to fall through. And the seeker's own window is not a
+usable dial here, because widening it also shortens the reach (they are the same piece of hardware,
+slice 46's lesson): open it far enough to catch the returning echo and the missile can no longer see
+the target at the start, which is a different scenario rather than a different setting.

@@ -840,3 +840,73 @@ closing rate — killed at gate 0 by its own pre-registered predictive test, see
 loss RANGE as this slice's gauge (it carries identical information and a ground radar can say it, so
 it fails the substitution test); and slice 48's rim-margin conjunct on this wire (an ANGULAR rule
 applied to a RANGE-gate loss — a no-op that would have looked like a safeguard).
+
+---
+
+# ⭐⭐⭐ SLICE 51 ANSWERED SLICE 50's OWN ⭐ CANDIDATE — "RE-ACQUISITION AS A LESSON" IS **DEAD AS A LESSON** (2026-08-31)
+
+Slice 50 raised **"⭐ RE-ACQUISITION AS A LESSON IN ITS OWN RIGHT"** — both live arms get the lock
+back, the slice asserts that it happens and does NOT price it, and *"what the second lock is worth ...
+is a gauge nobody has measured."*
+
+**It is measured, and it cannot be a slice.** Nine probes, no core change, full record in
+`docs/plans/slice51.md`. ⚠ **A LESSON KILL, NOT A MODEL KILL** — nothing was proposed to ship,
+nothing shipped is refuted, and no key is removed.
+
+**THE KILL, in one line:** a mechanism, an axis and a counterfactual were all found, and then the
+quantity the slice exists to measure turned out **not to reproduce under a halved integration step**
+— on the SHIPPED slice-50 wire with nothing emulated, at `rcs_fineness` = 9.0, halving `dt` **flips
+whether the track ever comes back** (resumes at 1e-3, NEVER at 5e-4; CPA 33 m → 685 m), while every
+at-loss quantity reproduces to 0.08 %.
+
+### ⭐⭐⭐ WHAT THIS ADDS TO 44/46/48/50's MISS BAN — **IT WAS NEVER A BAN ON A GAUGE**
+
+Four slices banned the miss on this arc and all four gave the same reason: a blind coast is an
+open-loop integration, chaotic in its initial condition. **The miss was simply the first quantity
+anyone tried to read there.** The reason applies verbatim to the return time, the head angle at the
+return, the recovered share of the heading debt, and to the yes/no of whether the track resumes. ⇒
+**a slice on this arc may read a number AT the loss and may not read one AFTER the blind phase.**
+
+### ⭐⭐⭐ AND A SENTENCE SLICE 50 SHIPS IS SHARPENED (not refuted)
+
+Slice 50's table says *"lock given back — yes"* on both live arms. That is the RANGE lamp
+(`seeker_detect`, `missile.jl:3737`), and slice 50 says so itself. **The TRACK is a different flag**
+(`gimbal_valid`, the `in_fov` conjunction): on `F` = 9.25 / 9.75 / 10.0 the echo returns and the
+tracker never resumes, and those flights are **bit-identical** (`max|Δpos| = 0.000e+00`) to arms whose
+horizon was collapsed at the loss and never allowed back. ⇒ **A LOCK IS GIVEN BACK BY THE HEAD, NOT
+BY THE ECHO.** ⚠ Slice 50's shipped tests are unaffected — it pins at-loss quantities only.
+
+## New candidates raised by slice 51
+
+⚠ Read the two-test rule at the top of this file before proposing to kill any of these.
+
+**⚠⚠ A ONE-TICK MEASUREMENT MEMORY / A RE-CUE ON THE RETURNING ECHO — NOW WITH A MEASURED MOTIVE,
+AND STILL BLOCKED BY THE SAME REGION.** Slice 48 raised the slew-gate memory as a candidate and
+required its gate 0 to *"show the state is reachable on a wire where it MATTERS."* Slice 51 shows a
+wire where it plainly matters: the echo comes back, the head is 15–24° off, and the missile throws
+it away. ⚠⚠ **But the improvement would have to be measured after a blind coast, which §V has just
+ruled unreadable** — so the candidate needs a wire whose blind phase is SHORT and whose gauge is
+read at a bounded time after the return, or it inherits this kill. ⚠ It is still a change to slices
+34–50's shipped physics with its own byte-identity story.
+
+**⚠ THE TURN ONSET KEY (`maneuver.turn_start_s`) — UN-BUILT, AND THE SEAM IS CLEAN.** Slice 50 named
+it *"the most interesting axis in the slice"* and ruled it not-authorable. Slice 51 emulated it (write
+`:a_lat_mps2` per tick; `ManeuveringTarget` reads it with a default every tick, `missile.jl:1092`) and
+confirms: ten shipped scenarios author a `maneuver:` block, none would grow the key, absent ⇒ turn
+from `t` = 0 ⇒ every slice 12–50 wire byte-identical (**checked by name, LESSONS §752**). ⚠ It is a
+one-commit key whenever a slice needs it — but slice 51 is NOT that slice, and a key with no lesson
+behind it is not worth a commit.
+
+**⚠⚠ CLOSED BY SLICE 51, so nobody re-proposes them:**
+
+- **`gimbal_fov_deg` as a slider on slice 50's wire** — slice 46 shipped the coupling (the window IS
+  the beamwidth), so widening it shortens the horizon: at `fov` = 6–8° the missile never detects the
+  target at all and at 16–20° it starts blind and acquires later. ⇒ the knob does not move slice
+  50's engagement, **it turns it into slice 46's** — two SCENARIOS on one knob, not two mechanisms.
+- **`rcs_fineness` as the axis for anything measured after the loss** — the recovered share reverses
+  three times across 7.5–10.0 (0.960, 0.976, 0.974, 0.524, 0.597, 0.215, 0.610, 0.000, 0.371, 0.000,
+  0.000). Same class as `k` (28), `ω_n` (40), `σ_seek` (25), the loss count (49).
+- **The head's angle at the return, as a GAUGE** — `head_off > fov ⇔ no track` **is the definition
+  of `in_fov`**, i.e. slice 42's `off@lock == fov` column: the inclusive gate echoing back its own
+  authored constant. ⚠ It is a fine EXPLANATORY variable and would be a fine telemetry key; it can
+  never be what a slider is scored on.
