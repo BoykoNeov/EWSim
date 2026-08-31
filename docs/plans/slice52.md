@@ -396,9 +396,15 @@ the opposite direction.
 one), **and the opening leg's equality is pinned as a tooth in its own right** so the property is
 RECORDED rather than stepped around. ⭐ This is §1's mechanism turning up in a place the plan did not
 expect it: *the coverage is not something the sweep HAS, it is something the sweep does not reach
-until it has run for `S/ρ`.* ⚠ It is also a live warning for gate 2 and for the verifier — **any
-`S`-comparison sampled inside the first `S/ρ` of a search compares two identical numbers**, and on
-this wire at ρ = 60 that is the first 0.42 s of every arm.
+until it has run for `S/ρ`.* ⚠⚠ It is also a live warning for gate 2 and for the verifier, **and the
+BOUND MATTERS**: two arms at `S₁` and `S₂` return identical offsets only while BOTH are still on
+their opening leg, i.e. for `t < min(S₁, S₂)/ρ` — between the two turns they DIVERGE, so the dead
+zone is set by the NARROWER arm and not by "the" coverage. At ρ = 60 a 12°-vs-25° pair is blind for
+0.20 s and a 25.0°-vs-25.5° pair for 0.4167 s. ⚠⚠ **AND IT IS AIMED STRAIGHT AT GATE 2's TOOTH D
+TWIN**: slice 48's rate version ticks **120 steps — 0.12 s —** past search onset before it changes
+the knob, which is INSIDE the opening leg on every coverage pair worth flying. Copied verbatim it
+asserts that two equal numbers differ; the fix is to SAMPLE PAST `min(S₁,S₂)/ρ`, never to loosen the
+comparison.
 
 The second failure was ordinary: the slope sub-check inherited none of the outer loop's `S < a`
 guard, so at a deficit of 8° it compared "first cover" times for a 5° sweep that never covers.
