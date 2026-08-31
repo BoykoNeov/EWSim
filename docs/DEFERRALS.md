@@ -810,6 +810,15 @@ by two thirds.**
 
 ⚠ Read the two-test rule at the top of this file before proposing to kill any of these.
 
+⭐ **PICKED UP AS SLICE 53, 2026-08-31 — GATE-0 PLAN WRITTEN, NO PROBE HAS RUN:**
+`M:\claud_projects\EW\docs\plans\slice53.md`. ⚠⚠ **Two things this entry gets wrong are already
+settled there and must not be re-derived:** the "two-observer geometry gate 2 already tests" is
+**NOT a candidate wire** (it is a static seam test in a bare world with no movers — no slider, no
+gauge, no headline), and a proposed rear-hemisphere lobe is predicted **INERT on both shipped
+aspect wires by construction** (49 and 50 both live in the FORWARD hemisphere), so the slice must
+author a new geometry. The pre-registered kill is slice 41's in aspect-space: **one aspect is one
+number, and one number is a gain** — a stern chase reparameterizes `rcs_m2`.
+
 **⭐⭐ A TAIL LOBE (fore/aft asymmetry).** `rcs_aspect` is fore/aft SYMMETRIC by construction —
 σ(θ) ≡ σ(π−θ), so a fleeing target looks exactly like an approaching one, and slice 49's HUD has to
 say "tail-on" rather than "nose-on" past 150° because the model genuinely cannot tell them apart.

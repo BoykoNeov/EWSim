@@ -22,70 +22,60 @@ PowerShell 5.1 mangles double quotes passed to `julia -e`. **Put Julia code in a
 - `core/test/runtests.jl` — the contract enforcer. New model ⇒ new test here.
 - `clients/godot/`, `clients/notebooks/` — thin clients. **No physics here.**
 - `scenarios/*.yaml` — declarative source of truth for runs, tests, MC inputs.
-- `docs/plans/` — staged plans / context / task checklists (incl. gate-0 kill records).
-- `docs/*.md` — the ledgers. What each one holds and when to open it: the table below.
+- `docs/plans/` — staged plans / context / task checklists (incl. gate-0 kill records); `docs/*.md` are the
+  ledgers (which one, when: the table below).
 
 ## Invariants that catch the real bugs
 
-- **Physics lives in the core, never in a Godot script or a notebook cell.** If it can't run headless from
+- **Physics lives in the core, never in a Godot script or a notebook cell** — if it can't run headless from
   `runtests.jl`, it's in the wrong place.
-- **Units / frames / signs are the bug trifecta.** SI Float64 internally, inertial frame, quaternion
-  body<-inertial = `[1,0,0,0]`. Test frame round-trips and LOS-rate signs from day one.
-- **Determinism is on CPU.** Same seed + same scenario ⇒ bit-identical trace (enforced by
-  `test_determinism.jl`). GPU is for bulk statistics only, never replay.
-- **Approximations are switchable and named.** Every subsystem carries a `fidelity` knob; dialing it and
-  watching what changes *is* the lesson. Never simulate at carrier frequency (baseband / link budget).
+- **Units / frames / signs are the bug trifecta.** SI Float64, inertial frame, quaternion body<-inertial =
+  `[1,0,0,0]`; test frame round-trips and LOS-rate signs from day one.
+- **Determinism is on CPU.** Same seed + scenario ⇒ bit-identical trace (`test_determinism.jl`); GPU is for
+  bulk statistics, never replay.
+- **Approximations are switchable and named.** Every subsystem carries a `fidelity` knob, and dialing it
+  *is* the lesson. Never simulate at carrier frequency (baseband / link budget).
 
 ## Tick contract (the phase map, HANDOFF §3)
 
 Fixed order each `tick!`: **phase 1** `integrate!` (movers/airframe) → `empty!(w.env)` → **phase 2**
 `build_env!` (cross-subsystem fields, e.g. jamming) → **phase 3** `observe!` (sensors) → **phase 4** `decide!`
-(estimators/guidance). The `empty!` after phase 1 is a recurring gotcha (see conventions). "A missile is
-`integrate!` + `observe!` + `decide!`."
+(estimators/guidance). "A missile is `integrate!` + `observe!` + `decide!`."
 
 ## Where the project is (2026-08-31)
 
-**Slices 1–40 + 46–50 + 52 COMPLETE & green — 18651 tests.** 39 and 41–45 are GATE-0 RECORDS (no code):
-⚠⚠ **five in a row shipped nothing and the kill CRITERION itself was ruled at fault on 2026-08-18** (the
-two-test rule below) — 41, 44, 45 are **ALIVE AS A MODEL** (probes in `M:\claud_projects\temp\slice4N`),
-only 42 is dead outright. ⭐ **46 DISCHARGED 44, 47 DISCHARGED 43's BLOCK, 48 SHIPPED the search family and
-52 ITS WIDTH** — that thread is CLOSED. **49 LEFT THE MISSILE** for a ground radar and **50 BROUGHT ITS
-PHYSICS BACK**, discharging 49's own top candidate. **51 KILLED 50's own ⭐ candidate — but is NOT a "no
-code" record** (below): given the MODEL test it shipped `maneuver.turn_start_s` + tests and NAMED a model
-gap. Pick the next from `docs/DEFERRALS.md`.
+**Slices 1–40 + 46–50 + 52 COMPLETE & green — 18651 tests.** 39 and 41–45 are GATE-0 RECORDS (no code) —
+⚠⚠ **five in a row shipped nothing and the kill CRITERION was ruled at fault on 2026-08-18** (the two-test
+rule below); 41/44/45 are **ALIVE AS A MODEL** (probes in `M:\claud_projects\temp\slice4N`), only 42 is
+dead outright. ⭐ **46 DISCHARGED 44, 47 DISCHARGED 43's BLOCK, 48 SHIPPED the search family and
+52 ITS WIDTH** — that thread is CLOSED. **49/50 MADE THE ECHO A SHAPE**, on a ground radar then back under
+the seeker. **51 KILLED 50's own ⭐ candidate — but is NOT a "no code" record**: given the MODEL test it
+shipped `maneuver.turn_start_s` + tests and NAMED a model gap. Pick the next from `docs/DEFERRALS.md`.
 HANDOFF §10 items 1–13 DONE; 15–40 are into the §11 Tier-A horizon.
 
 The live arc is the **missile seeker family (26–40, 46–48, 50, 52)**: a seeker looks through a radome whose
-bend depends on the look angle, so the missile's own motion feeds back into the line-of-sight it reports, and past a
-loop gain it shakes itself into a limit cycle. 27–33 built, priced and budgeted the gyro cure; 34–40 put the
-seeker on a **gimbal** with **inertia**; 46–48 gave it a RECEIVER, BLINDED it, then let it SEARCH, and **52
-SIZED that search**. **49 stepped OUT** for a ground radar and an echo that is a SHAPE rather than a number;
-**50 pointed that same shape back at the seeker.** Per-slice detail — and every number behind the lines below — is in `docs/SLICES.md`.
+bend depends on the look angle, so the missile's own motion feeds back into the line-of-sight it reports, and
+past a loop gain it shakes itself into a limit cycle. 27–33 priced the gyro cure; 34–40 put the seeker on a
+**gimbal** with **inertia**; 46–48/52 gave it a RECEIVER, BLINDED it, then let it SEARCH and SIZED that
+search. Per-slice detail — and every number behind the lines below — is in `docs/SLICES.md`.
 
-- **46/47/48/52 — THE CLOSED HANDOVER-AND-SEARCH THREAD** (numbers in `docs/SLICES.md`). **46 — the window
-  IS the beamwidth** (a wider window costs REACH; a late lock is paid in AUTHORITY, never MISS). **47 — ⭐⭐⭐
-  THE CLIFF IS THE WINDOW**: handover error = PICTURE error × TIME BLIND. **48 — ⭐⭐⭐ A SEARCH SPENDS THE
-  ENGAGEMENT, NOT THE HEAD**, ⭐⭐ **ACQUISITION IS NOT A LATCH.** ⚠⚠ 47 RETRACTED its ban on
-  `gimbal_fov_margin_deg`. ⚠ Authority is NOT monotone in ρ (`t_search` is the gauge); the sweep's OPENING
-  SIDE is a SCENARIO property.
-- **52 — ⭐⭐⭐ SIZE THE SWEEP TO THE UNCERTAINTY, DO NOT MAXIMISE IT** (48's reserve axis, the WIDTH — the
-  family's first TWO-SIDED knob): too narrow never reaches at any duration, every extra degree is paid TWICE
-  in travel, and **48's own authored width is on the expensive side of its own wire.** ⭐⭐⭐ **A HEAD DOES
-  NOT FLY THE COVERAGE YOU AUTHOR** (0.27→0.95 of the command as the sweep widens, LESS as it speeds up) ⇒
-  **a faster sweep needs a WIDER one**, and the FLOWN band — never the authored number — sets the floor.
-  ⚠⚠ A view marker must separate wires differing only by the SLIDER, and its gate must be an INSTRUMENT:
-  ordering cannot fix that one. ⚠ This slider's floor is NOT zero (a zero WIDTH is a search with nowhere to
-  look, not 48's motionless head).
-- **49 — ⭐⭐⭐ A CONSTANT ECHO CAN BE GAINED WHILE CLOSING AND NEVER LOST** ⇒ **only a SHAPE makes a
-  closing target harder to see; no smaller `rcs_m2` fakes it.** ⚠ The gauge is the longest loss run WHILE
-  CLOSING. ⭐⭐ **A GAUGE MUST CARRY ITS OWN WINDOW**; ⚠⚠ **a live DRAG invalidates a latch as a Reset does
-  — and reaches NONE of the four gate-3 proofs.**
-- **50 — ⭐⭐⭐ A TARGET CAN TAKE A LOCK BACK BY TURNING** (49's shape, under the SEEKER): the horizon
-  RETREATS faster than the missile closes; the price is **the heading error it goes blind holding**, never
-  the MISS — RE-EARNED, not inherited. ⚠⚠ Launching DEEPER inside the horizon makes the drop-out HARDER, so
-  launch near its EDGE. ⭐⭐ **A NULL ARM AND A SUB-THRESHOLD ARM ARE DIFFERENT CONTROLS**, ⚠⚠ **a drag
-  DISARMS a latched INSTANT** (a DURATION may restart, an instant may not), ⚠⚠ **the lesson's NULL and a
-  dead instrument's DEFAULT are the same 0.000°** ⇒ PRESENCE decides, ⭐⭐ **A VOCABULARY IS A GAUGE.**
+- **46/47/48/52 — THE CLOSED HANDOVER-AND-SEARCH THREAD.** **46 — the window IS the beamwidth** (a wider
+  window costs REACH; a late lock is paid in AUTHORITY, never MISS). **47 — ⭐⭐⭐ THE CLIFF IS THE WINDOW**:
+  handover error = PICTURE error × TIME BLIND. **48 — ⭐⭐⭐ A SEARCH SPENDS THE ENGAGEMENT, NOT THE HEAD**,
+  ⭐⭐ **ACQUISITION IS NOT A LATCH.** **52 — ⭐⭐⭐ SIZE THE SWEEP TO THE UNCERTAINTY, DO NOT MAXIMISE IT**
+  (too narrow never reaches; every degree wider is paid TWICE in travel), ⭐⭐⭐ **A HEAD DOES NOT FLY THE
+  COVERAGE YOU AUTHOR** ⇒ **a faster sweep needs a WIDER one** and the FLOWN band sets the floor. ⚠⚠ 47
+  RETRACTED its ban on `gimbal_fov_margin_deg`. ⚠ Authority is NOT monotone in ρ; the sweep's OPENING SIDE
+  is a SCENARIO property; 52's floor is NOT zero. ⚠⚠ A view marker must separate wires differing only by
+  the SLIDER, and its gate must be an INSTRUMENT.
+- **49/50 — ⭐⭐⭐ A CONSTANT ECHO CAN BE GAINED WHILE CLOSING AND NEVER LOST** ⇒ **only a SHAPE makes a
+  closing target harder to see; no smaller `rcs_m2` fakes it** (49, a ground radar) — and ⭐⭐⭐ **A TARGET
+  CAN TAKE A LOCK BACK BY TURNING** (50, that shape under the SEEKER): the horizon RETREATS faster than the
+  missile closes, and the price is **the heading error it goes blind holding**, never the MISS. ⚠ The gauge
+  is the longest loss run WHILE CLOSING; ⭐⭐ **A GAUGE MUST CARRY ITS OWN WINDOW.** ⚠⚠ Launch near the
+  horizon's EDGE, not deep inside. ⭐⭐ **A NULL ARM AND A SUB-THRESHOLD ARM ARE DIFFERENT CONTROLS**, ⚠⚠ **a
+  live DRAG invalidates a latch as a Reset does** and **DISARMS a latched INSTANT**, ⚠⚠ **the lesson's NULL
+  and a dead instrument's DEFAULT read the same** ⇒ PRESENCE decides, ⭐⭐ **A VOCABULARY IS A GAUGE.**
 
 **The rule that keeps paying** (33, 34, 35, 37, 38): *aim `R̂` at the glass's worst-case slope*
 (`radome_slope_worst`) and the cost — of FOV, detector window, servo bandwidth, servo frame — mostly
@@ -93,7 +83,7 @@ goes away.
 
 ## Read on demand — DO NOT preload these
 
-Triggered by what you are about to do, not by topic. Reference them as paths; **never** as `@`-imports —
+Triggered by what you are about to do, not by topic. Reference them as paths, **never** as `@`-imports —
 those inline eagerly and recursively, which is the problem this split exists to fix.
 
 | Before you… | Read |
@@ -110,10 +100,9 @@ those inline eagerly and recursively, which is the problem this split exists to 
 discharged/new/killed candidates into `docs/DEFERRALS.md`, method lessons into
 `docs/LESSONS.md` (⚠ fold onto the EXISTING heading when it repeats), and into `CLAUDE.md`
 **only** the state line + any new dead end **as ONE LINE**. ⚠⚠ **`CLAUDE.md` is a ROUTER — keep it under
-~16 KB** (trimmed 6×; **17.5 on 2026-08-31 after slice 52 — it is OVER, and the next slice must trim
-BEFORE it adds**). It is loaded every turn and grows
-by absorbing what belongs in the ledgers: **numbers, test names and evidence go DOWNSTREAM; verdict words
-and ⚠ prohibitions stay HERE.**
+~16 KB** (trimmed 7×; 16.1 on 2026-08-31 before slice 53). It is loaded every turn and grows by absorbing
+what belongs in the ledgers: **numbers, test names and evidence go DOWNSTREAM; verdict words and ⚠
+prohibitions stay HERE.**
 
 ## ⭐⭐⭐ TWO AIMS ⇒ TWO TESTS ⇒ TWO VERDICTS (2026-08-18 — READ BEFORE KILLING ANYTHING)
 
