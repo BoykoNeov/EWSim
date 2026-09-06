@@ -2664,10 +2664,12 @@ end
         @test wa.entities[:m1].pos === wc.entities[:m1].pos
     end
 
-    @testset "⭐ INERT WITHOUT ITS HOST — `:atmosphere` needs `:pitch_coupled` (half-a-missile guard)" begin
-        # `_atm_on`'s THIRD conjunct, pinned. ρ(z) reaches ONLY the coupled path: `_integrate_coupled!`
-        # is gated on `:pitch_coupled`, so under `:point_mass` the translation flies `total_accel`'s
-        # AUTHORED constant ρ whatever this rung says. The conjunct makes every OTHER ρ-reading site
+    @testset "⭐ INERT WITHOUT ITS HOST — `:atmosphere` needs a REAL PLANT (half-a-missile guard)" begin
+        # `_atm_on`'s THIRD conjunct, pinned. ⚠ 2026-09-06: that conjunct now reads `:pitch_coupled`
+        # OR `:six_dof` (see the bug-fix testset below) — this one pins the half that did NOT change,
+        # and it is the half the conjunct exists for. ρ(z) reaches only plants that integrate a real
+        # force, so under `:point_mass` the translation flies `total_accel`'s AUTHORED constant ρ
+        # whatever this rung says. The conjunct makes every OTHER ρ-reading site
         # revert with it — without it the readouts (and slice-16's rotational `_integrate_airframe!`)
         # would report ρ(z) while pos/vel flew ρ₀: HALF THE MISSILE IN ONE ATMOSPHERE AND HALF IN
         # ANOTHER. Inert-without-its-host is the slice-14 (`:salvo` needs a `:datalink`) / slice-13
@@ -2703,6 +2705,86 @@ end
               air_density(wc.entities[:m1].pos[3]; rho0 = 1.225, H = 8500.0)
         @test isapprox(wc.env[:telemetry]["m1.rho_air"], 0.878; atol = 1e-3)   # ~2.8 km up
         @test wc.env[:telemetry]["m1.rho_air"] < 0.95 * 1.225   # …a REAL move off ρ₀, not a wobble
+    end
+
+    @testset "⭐⭐⭐ THE 2026-09-06 FIX — `:atmosphere` REACHES `:six_dof` TOO (30 slices INERT)" begin
+        # THE DEFECT, and why it hid. Slice 21 wrote `_atm_on`'s third conjunct as
+        # `=== :pitch_coupled` when that was the ONLY plant integrating a real force. Slice 23 then
+        # added `:six_dof` — the plant EVERY slice from 23 to 54 actually flies — and nobody came
+        # back here, so a 6-DOF wire authoring `scale_height_m` ran `:atmosphere === :exponential`
+        # with ρ FROZEN AT ρ₀. An AUTHORED KEY THE PHYSICS DOES NOT READ is the exact shape
+        # `docs/PROHIBITIONS.md` §3 files as a BUG rather than a feature, and it never surfaced
+        # because no shipped scenario pairs the key with this rung (21 and 22 author
+        # `airframe: pitch_coupled` fixed) — it was reachable only by a NEW scenario or a LIVE
+        # `:airframe` toggle, i.e. exactly the two cases a user would hit first.
+        #
+        # ⚠⚠ EVERY ASSERTION BELOW FAILED BEFORE THE FIX. Pre-fix these two worlds were `===` on
+        # pos/vel/att and `rho_air` read a flat 1.225 — that is what makes this a tooth and not a
+        # restatement of the code.
+        # ⚠ 60 s, NOT 6 — MEASURED, not chosen (convention 10). At 6 s this missile is only 2.8 km
+        # up where ρ/ρ₀ is still 0.878, and the two arms separate by 2.2 m: real, but a threshold
+        # that close to the noise is not a tooth. The 4.4× collapse is a SIXTY-second story (the
+        # coupled arm's own note above says so). At 60 s it is 19.9 km, ρ/ρ₀ = 0.0963, Δpos 8988 m.
+        we, se = atm_world(H = 8500.0, atmosphere = :exponential, airframe = :six_dof)
+        wk, sk = atm_world(H = 8500.0, atmosphere = :constant,    airframe = :six_dof)
+        for _ in 1:60000
+            tick!(we, se, dt); empty!(we.events)
+            tick!(wk, sk, dt); empty!(wk.events)
+        end
+        me, mk = we.entities[:m1], wk.entities[:m1]
+        # 1. THE RUNG BITES THE 6-DOF TRAJECTORY. Not merely "not bit-equal" — a METRIC separation,
+        #    so a one-ulp leak could never pass for the fix (measured: 8988 m, 711 m/s).
+        @test n3(me.pos - mk.pos) > 1000.0
+        @test n3(me.vel - mk.vel) > 100.0
+        # 2. …AND IT REACHED THE MOMENT, NOT JUST THE DRAG. The attitude is advanced ONLY by
+        #    `stt_moments`, whose control/damping terms are ½ρV²·S·d-scaled — so a fix that had
+        #    rerouted `total_accel` alone (a split atmosphere INSIDE one integrator) would leave
+        #    `att_q`/`omega_body` bit-equal here. This is the assertion that separates the two.
+        @test me.comp[:att_q]      !== mk.comp[:att_q]
+        @test me.comp[:omega_body] !== mk.comp[:omega_body]
+        # 3. THE COHERENCE TOOTH (the one that matters): every ρ-reading site describes the SAME
+        #    air as the plant flew. `rho_air` comes from `_airframe_rho`; `a_lift`/`turn_radius_m`
+        #    come from the 6-DOF readout block's own `p6`, which was a SEPARATE `get(c, :rho)`
+        #    expression until this fix. They must now agree, and agree with ρ(z) at the flown z.
+        tel = we.env[:telemetry]
+        ρz  = air_density(me.pos[3]; rho0 = 1.225, H = 8500.0)
+        V   = n3(me.vel)
+        @test tel["m1.rho_air"] == ρz                       # `==`, no tolerance to hide behind
+        @test tel["m1.rho_air"] < 0.2 * 1.225               # a REAL move off ρ₀ — it CLIMBED to 19.9 km
+        @test tel["m1.q_dyn"] ≈ 0.5 * ρz * V^2 rtol = 1e-12
+        # …`a_lift` rebuilt from FIRST PRINCIPLES (convention 11's independent recompute), not from
+        # `lift_accel_3d`: this launch is in-plane, so β sits at the FP floor and the 2-plane
+        # resultant collapses to the pitch term |a_L| = Q·S·C_Lα·|α|/m with Q from ρ(z).
+        @test abs(tel["m1.beta"]) < 1e-6
+        @test tel["m1.a_lift"] ≈ 0.5 * ρz * V^2 * (π * 0.1^2) * 20.0 * abs(tel["m1.alpha"]) / 140.0 rtol = 1e-9
+        @test tel["m1.turn_radius_m"] ≈ V^2 / tel["m1.a_lift"] rtol = 1e-9
+        # 4. THE FIX DID NOT WIDEN TO `:point_mass`. A LIVE toggle there must revert EVERY site to
+        #    ρ₀ TOGETHER — the half-a-missile guard is untouched, because that plant makes its accel
+        #    by fiat and has no lift ceiling for the air to lower.
+        we.fidelity[:airframe] = :point_mass
+        for _ in 1:5; tick!(we, se, dt); empty!(we.events); end
+        @test EWSim._airframe_rho(me.comp, we, me.pos[3]) == 1.225
+        @test we.env[:telemetry]["m1.rho_air"] == 1.225
+    end
+
+    @testset "the 6-DOF ρ(z) fix is ADDITIVE — no scale height ⇒ BIT-IDENTICAL across the rung" begin
+        # The else-arm of `_integrate_6dof!`'s new two-closure split is slice 23/24's code TEXTUALLY
+        # VERBATIM, so byte-identity is by CONSTRUCTION, not by trusting `exp(0) == 1` (the slice-20
+        # `-0.0` trap). A 6-DOF wire with NO `af_scale_height` — i.e. every scenario from 23 to 54 —
+        # must be unmoved by the `:atmosphere` rung in either position, and must not grow a key.
+        wa, sa = atm_world(H = nothing, atmosphere = :exponential, airframe = :six_dof)
+        wb, sb = atm_world(H = nothing, atmosphere = :constant,    airframe = :six_dof)
+        for _ in 1:4000
+            tick!(wa, sa, dt); empty!(wa.events)
+            tick!(wb, sb, dt); empty!(wb.events)
+        end
+        @test wa.entities[:m1].pos              === wb.entities[:m1].pos
+        @test wa.entities[:m1].vel              === wb.entities[:m1].vel
+        @test wa.entities[:m1].comp[:att_q]     === wb.entities[:m1].comp[:att_q]
+        @test wa.entities[:m1].comp[:omega_body] === wb.entities[:m1].comp[:omega_body]
+        @test wa.env[:telemetry]["m1.a_lift"]   === wb.env[:telemetry]["m1.a_lift"]
+        # KEY-gated as ever: no scale height ⇒ no `rho_air` on the wire (the a_induced precedent).
+        @test !haskey(wa.env[:telemetry], "m1.rho_air")
     end
 
     @testset "the `rho_air` wire key — KEY-gated, ships under BOTH rungs, matches the integrator" begin

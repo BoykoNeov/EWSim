@@ -202,20 +202,37 @@ end
 # VERBATIM (byte-identity by construction, not by trusting `exp(0) == 1`; the `-0.0` trap the
 # slice-20 induced-drag gate documents).
 #
-# ⭐ THE THIRD CONJUNCT IS NOT DECORATION — `:atmosphere` IS INERT WITHOUT `:pitch_coupled`, the
+# ⭐ THE THIRD CONJUNCT IS NOT DECORATION — `:atmosphere` IS INERT WITHOUT A REAL PLANT, the
 # slice-14 (`:salvo` inert without a `:datalink`) / slice-13 (`discrimination` inert without
-# `:scan`) shape. ρ(z) reaches ONLY the coupled path: `_integrate_coupled!` is itself gated on
-# `:pitch_coupled`, so under `:point_mass` the translation flies `total_accel`'s AUTHORED constant
-# ρ no matter what this rung says. Without this conjunct the readouts (and slice-16's rotational
+# `:scan`) shape. ρ(z) reaches ONLY the paths that integrate a real force — `_integrate_coupled!`
+# and (since the 2026-09-06 fix below) `_integrate_6dof!` — so under `:point_mass` the translation
+# flies `total_accel`'s AUTHORED constant ρ no matter what this rung says. Without this conjunct
+# the readouts (and slice-16's rotational
 # `_integrate_airframe!`) would report ρ(z) while pos/vel flew ρ₀ — HALF THE MISSILE IN ONE
 # ATMOSPHERE AND HALF IN ANOTHER, and a readout that describes a different missile than the one on
 # screen is exactly what the four-site `_airframe_rho` funnel exists to prevent. Under
 # `:point_mass` every site reverts to ρ₀ together, which is COHERENT: that plant makes its accel by
 # fiat, so there is no lift ceiling for the air to lower and nothing for ρ(z) to mean.
+#
+# ⭐⭐⭐ 2026-09-06 — THE THIRD CONJUNCT NOW ADMITS `:six_dof` TOO, AND THAT IS A BUG FIX, NOT A
+# WIDENING. Slice 21 wrote `=== :pitch_coupled` when `:pitch_coupled` was the ONLY real plant;
+# slice 23 then added a SECOND real plant and did not come back here, so from slice 23 to slice 54
+# a 6-DOF wire authoring `scale_height_m` would have run `:atmosphere === :exponential` with ρ
+# FROZEN AT ρ₀ — the rung silently inert on the plant every later slice actually flies, which is
+# the "unread key" shape this file's own §3 calls a BUG rather than a feature
+# (`docs/PROHIBITIONS.md` §3: "21 IS A BUG TICKET, NOT A TRIGGER"). The predicate's REASON was
+# never "pitch_coupled specifically" — it was **"a plant whose translation integrates a real
+# force"**, which `:six_dof` is and `:point_mass` (accel by fiat) is not. `:point_mass` still
+# reverts EVERY ρ-reading site to ρ₀ together, which is the coherence the paragraph above defends.
+# ⚠ BYTE-IDENTITY: no shipped scenario or test authors `af_scale_height` on a `:six_dof` wire
+# (slice 21's and 22's are the only two files carrying the key, both `airframe: pitch_coupled`
+# authored fixed), so every wire 1–54 is unchanged. The fix is reachable only by a NEW scenario or
+# a LIVE `:airframe` toggle of slice 21's — which is precisely the case that was silently wrong.
 _atm_on(c::Dict{Symbol,Any}, w::World) =
     haskey(c, :af_scale_height) &&
     get(w.fidelity, :atmosphere, :constant) === :exponential &&
-    get(w.fidelity, :airframe, :point_mass) === :pitch_coupled
+    (get(w.fidelity, :airframe, :point_mass) === :pitch_coupled ||
+     get(w.fidelity, :airframe, :point_mass) === :six_dof)
 
 # The airframe's air density at height `z` — ρ(z) under the live rung, else the authored constant.
 # **Returns the IDENTICAL expression the frozen paths already had when gated off**, which is what
@@ -474,17 +491,50 @@ function _integrate_6dof!(m::BallisticMissile, e::Entity, c::Dict{Symbol,Any}, w
     # coupling IS the mid-stage re-evaluation (`rk4_6dof` renormalizes q each stage). ṗ = vel;
     # v̇ = the point-mass force (gravity+drag, the SAME `total_accel` closure) + the 2-plane lift;
     # q̇ = ½ q ⊗ [0,ω]; ω̇ = I⁻¹(M − ω×Iω). The stage `P` (position) is threaded for the
-    # `rk4_6dof` contract and reserved for a future ρ(z) on this path (slice 21's stage-z seam),
-    # read by nothing this slice — deliberately, lift is constant-ρ (drag-free) here.
-    f = (P, Vv, Qq, W) -> begin
-        a  = total_accel(Vv; rho = rho, cd_area = cd_area, mass = mass) +
-             lift_accel_3d(Vv, Qq, mass, p; c_yaw = c_yaw)
-        q̇  = attitude_kinematics(Qq, W)
-        M  = steering === :bank_to_turn ?
-             btt_moments(Qq, Vv, W, δp, δy, φ_cmd, p; I_xx = Idiag[1], τ_roll = τ_roll) :
-             stt_moments(Qq, Vv, W, δp, δy, p; c_roll = c_roll)
-        ω̇  = body_rate_deriv(W, M, Idiag)
-        (Vv, a, q̇, ω̇)
+    # `rk4_6dof` contract and reserved for a future ρ(z) on this path (slice 21's stage-z seam).
+    #
+    # ⭐⭐⭐ 2026-09-06 — THAT SEAM IS NOW READ (the `_atm_on` bug fix above). Slice 23 wrote "ρ(z)
+    # on the 6-DOF path is a later composition, not this slice", and thirty slices went by with the
+    # `:atmosphere` rung inert on the plant they all fly. TWO SIBLING CLOSURES, never a ternary
+    # inside `f`: the else-arm below is slice 23/24's code TEXTUALLY VERBATIM, so byte-identity is
+    # by CONSTRUCTION rather than by trusting `exp(0) == 1` (the slice-20 `-0.0` trap, and the
+    # `_integrate_coupled!` arm's own discipline).
+    #
+    # ⚠⚠ ALL THREE CONSUMERS TAKE THE STAGE ρ, NOT JUST THE DRAG. `total_accel` (parasitic drag),
+    # `lift_accel_3d` (both lift planes) and the MOMENT (`stt_moments`/`btt_moments`, whose control
+    # and damping terms are ½ρV²·S·d-scaled) all read `p_s`. Rerouting only `total_accel` would put
+    # a SPLIT ATMOSPHERE INSIDE ONE INTEGRATOR — a nose flying ρ₀ air on a body flying ρ(z) — which
+    # is a strictly worse version of the bug being fixed (advisor). The params are rebuilt PER STAGE
+    # from the stage height `P[3]` (an isbits struct, stack-allocated and free), the same move
+    # `_integrate_coupled!` makes and for the same reason: airframe3d.jl never learns about
+    # altitude, it just receives a `p` whose `rho` is the stage value.
+    f = if _atm_on(c, w)
+        H_sh = Float64(c[:af_scale_height])
+        (P, Vv, Qq, W) -> begin
+            ρs  = air_density(P[3]; rho0 = rho, H = H_sh)      # ← THE STAGE HEIGHT
+            p_s = AirframeParams(p.S, p.d, p.I, p.Cma, p.Cmd, p.Cmq, ρs, p.Cla, p.K)
+            a  = total_accel(Vv; rho = ρs, cd_area = cd_area, mass = mass) +
+                 lift_accel_3d(Vv, Qq, mass, p_s; c_yaw = c_yaw)
+            q̇  = attitude_kinematics(Qq, W)
+            M  = steering === :bank_to_turn ?
+                 btt_moments(Qq, Vv, W, δp, δy, φ_cmd, p_s; I_xx = Idiag[1], τ_roll = τ_roll) :
+                 stt_moments(Qq, Vv, W, δp, δy, p_s; c_roll = c_roll)
+            ω̇  = body_rate_deriv(W, M, Idiag)
+            (Vv, a, q̇, ω̇)
+        end
+    else
+        # ── SLICES 23/24, TEXTUALLY VERBATIM. Serves BOTH key-absent AND `:atmosphere ===
+        # :constant`, so the rung's OFF state and every prior slice take literally the same code.
+        (P, Vv, Qq, W) -> begin
+            a  = total_accel(Vv; rho = rho, cd_area = cd_area, mass = mass) +
+                 lift_accel_3d(Vv, Qq, mass, p; c_yaw = c_yaw)
+            q̇  = attitude_kinematics(Qq, W)
+            M  = steering === :bank_to_turn ?
+                 btt_moments(Qq, Vv, W, δp, δy, φ_cmd, p; I_xx = Idiag[1], τ_roll = τ_roll) :
+                 stt_moments(Qq, Vv, W, δp, δy, p; c_roll = c_roll)
+            ω̇  = body_rate_deriv(W, M, Idiag)
+            (Vv, a, q̇, ω̇)
+        end
     end
     p′, v′, q′, ω′ = rk4_6dof(f, e.pos, e.vel, q0, ω0, dt)
     if p′[3] ≤ 0.0
@@ -675,10 +725,14 @@ function build_env!(m::BallisticMissile, w::World)
         ω  = get(c, :omega_body, zero(Vec3))::Vec3
         γ  = atan(e.vel[3], e.vel[1])
         α, β = body_incidence(qa, e.vel)
-        # Constant-ρ AirframeParams (no atmosphere on the 6-DOF path this slice — named deferral).
+        # ⭐ 2026-09-06 — ρ(z) UNDER THE LIVE RUNG, else the authored constant (the IDENTICAL
+        # expression when gated off ⇒ byte-identical). This was slice 23's `get(c, :rho, 1.225)`
+        # and is the FIFTH ρ-reading site: with `_integrate_6dof!` now flying ρ(z), leaving this
+        # one on ρ₀ would publish `a_lift`/`turn_radius_m` for a missile in different air from the
+        # one on screen — the `_atm_on` latent-bug class committed by the very fix that closes it.
         p6 = AirframeParams(Float64(c[:af_S]), Float64(c[:af_d]), Float64(c[:af_I]),
                             Float64(c[:af_cma]), Float64(c[:af_cmd]), Float64(c[:af_cmq]),
-                            Float64(get(c, :rho, 1.225)), Float64(get(c, :af_cla, 0.0)),
+                            _airframe_rho(c, w, e.pos[3]), Float64(get(c, :af_cla, 0.0)),
                             Float64(get(c, :af_k_induced, 0.0)))
         c_yaw6 = Float64(get(c, :af_cy_beta, p6.Cla))
         tel["$sid.pos_y"]   = _finite_coord(e.pos[2])         # the out-of-plane axis (the discard's tell)

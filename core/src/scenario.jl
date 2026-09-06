@@ -1378,6 +1378,11 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                 # exactly. Refuse the combination here instead: it is not a supported physics
                 # pairing (stall × ρ(z) is a named deferral), and a scenario that asks for it is
                 # asking for a lesson neither slice ships.
+                # ⚠ 2026-09-06, a NARROWING of this sentence, not a change to the rule: since ρ(z)
+                # now also reaches `_integrate_6dof!`, "the stall arm would override ρ(z)" names
+                # the COUPLED path specifically — the 6-DOF path has NO stall arm at all, so there
+                # `alpha_stall` is inert rather than overriding. The refusal STANDS either way
+                # (convention 9, and an inert authored key is worse than a refused one).
                 haskey(ab, "scale_height_m") &&
                     error("missile '$id': airframe.alpha_stall and airframe.scale_height_m are " *
                           "MUTUALLY EXCLUSIVE — slice 22's stall arm is constant-ρ and would " *

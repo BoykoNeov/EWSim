@@ -40,13 +40,22 @@
 #   • THE AERO ATMOSPHERE ONLY. This is NOT §11's RF "layered atmosphere / ducting / tropospheric
 #     scatter" entry, which lives behind the `propagation` knob and is a SEPARATE slice. Do not
 #     conflate them: nothing here touches the radar path.
-#   • ρ(z) reaches the COUPLED airframe path ONLY (`_integrate_coupled!`, missile.jl). The
-#     point-mass/ballistic drag path keeps a constant ρ, because `dynamics.jl`'s steppers take a
-#     `v -> a(v)` closure with NO position in it; changing that contract to `(p, v) -> a` touches
-#     slice 8's `rk4_step`/`euler_step` — the byte-identity surface of every ballistic slice — for
-#     a path that carries no altitude lesson. NAMED DEFERRAL: it deserves its own slice.
-#     ⇒ THE CONSEQUENCE, ENFORCED IN CODE, NOT MERELY DOCUMENTED: `:atmosphere` IS INERT WITHOUT
-#     `:airframe === :pitch_coupled` — missile.jl's `_atm_on` carries that conjunct, so under
+#   • ρ(z) reaches THE PLANTS THAT INTEGRATE A REAL FORCE — `_integrate_coupled!` AND, since the
+#     2026-09-06 fix, `_integrate_6dof!` (both in missile.jl). ⚠⚠ THAT SECOND HALF WAS A BUG FOR
+#     THIRTY SLICES: this bullet originally read "the COUPLED path ONLY", written when
+#     `:pitch_coupled` was the only real plant; slice 23 added `:six_dof` and did not come back,
+#     so a 6-DOF wire authoring `scale_height_m` ran `:exponential` with ρ frozen at ρ₀ — an
+#     AUTHORED KEY THE PHYSICS DID NOT READ, which is the shape `docs/PROHIBITIONS.md` §3 files as
+#     a BUG rather than a feature. `rk4_6dof`'s closure already carried the stage position; only
+#     the predicate and three call sites were missing.
+#     The point-mass/ballistic drag path DOES keep a constant ρ, and that half is a real deferral:
+#     `dynamics.jl`'s steppers take a `v -> a(v)` closure with NO position in it, and changing that
+#     contract to `(p, v) -> a` touches slice 8's `rk4_step`/`euler_step` — the byte-identity
+#     surface of every ballistic slice — for a path that carries no altitude lesson and makes its
+#     accel by fiat anyway. NAMED DEFERRAL: it deserves its own slice.
+#     ⇒ THE CONSEQUENCE, ENFORCED IN CODE, NOT MERELY DOCUMENTED: `:atmosphere` IS INERT WITHOUT A
+#     REAL PLANT (`:pitch_coupled` or `:six_dof`) — missile.jl's `_atm_on` carries that conjunct
+#     as a two-way disjunction, so under
 #     `:point_mass` EVERY ρ-reading site (readouts included) reverts to ρ₀ TOGETHER. Without it
 #     the readouts and slice-16's rotational `_integrate_airframe!` would report ρ(z) while pos/vel
 #     flew ρ₀ — half the missile in one atmosphere and half in another. Inert-without-its-host is

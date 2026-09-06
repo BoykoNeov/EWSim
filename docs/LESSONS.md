@@ -1671,3 +1671,59 @@ only see one shape.
    exists to stop a re-proposal mid-sentence; each entry gets a ONE-LINE trigger tag and nothing more,
    and the cost, evidence and build order live in `docs/DEFERRALS.md` §"THE BUILD LIST". A trip-wire
    that argues with itself is not a trip-wire.
+
+## ⭐⭐⭐ A GATE PREDICATE THAT NAMES A SPECIFIC RUNG IS A CLAIM WITH A SHELF LIFE — AND NOTHING IN THE SUITE EXPIRES IT (2026-09-06, the ρ(z) × `:six_dof` bug)
+
+**What happened.** Slice 21 gated the exponential atmosphere on
+`get(w.fidelity, :airframe, :point_mass) === :pitch_coupled`, and wrote a long, correct, and much-cited
+comment explaining why: a plant that makes its accel by fiat has no lift ceiling for the air to lower, so
+`:point_mass` must revert *every* ρ-reading site together or you get **half the missile in one atmosphere
+and half in another**. That reasoning is still right. **The predicate that expressed it stopped being
+right two slices later**, when slice 23 added `:six_dof` — a second plant that *does* integrate a real
+force. From slice 23 to slice 54, a 6-DOF wire authoring `scale_height_m` ran `:atmosphere ===
+:exponential` with ρ frozen at ρ₀: an **authored key the physics never read**, which is the same shape as
+slice 19's `speed` and slice 36's handover bias — the arc's signature failure, committed again in the one
+place the arc had already written its best essay about.
+
+**Why nothing caught it, and this is the part worth keeping.**
+
+1. **Every existing test passed, correctly.** The suite pinned `:pitch_coupled ⇒ ρ(z)` and `:point_mass ⇒
+   ρ₀`, both true before and after. There was no test for the third rung value **because the third rung
+   value did not exist when the tests were written**, and adding a rung does not fail anybody else's test.
+2. **Byte-identity — the master check — is *structurally blind* to this class.** Convention 2 asks whether
+   a new slice leaves every prior wire unmoved. A new rung value that nothing pairs with an older key
+   leaves every prior wire *perfectly* unmoved. The check is working exactly as designed and reports
+   green; the defect lives precisely in the combination no shipped scenario authors.
+3. **The comment aged into a false statement without a single character changing.** atmosphere.jl said
+   "ρ(z) reaches the COUPLED airframe path ONLY" — a true description of intent, read for thirty slices as
+   a true description of the code. ⚠⚠ A prose invariant is not enforced by being emphatic.
+4. **The seam was left *ready* and that made it look done.** `rk4_6dof`'s closure had carried the stage
+   position `P` since slice 17, with a comment saying it was "reserved for a future ρ(z) on this path".
+   Threading an argument for a future use is a **debt marker, not an implementation**, and it reads like
+   the opposite when you skim.
+
+⇒ **THE RULE. When a slice adds a value to a fidelity rung, grep every predicate that tests that rung by
+`===` and decide, per site, whether the new value belongs on the true side.** Not "does anything break" —
+nothing will. The question is *what property was the conjunct actually asserting?* Here the answer was
+never "`:pitch_coupled` specifically"; it was **"a plant whose translation integrates a real force"**, and
+the moment a second such plant existed the predicate was wrong even though every test stayed green.
+
+⚠⚠ **AND COUNT THE CONSUMER SITES BEFORE YOU FIX IT, NOT AFTER.** The funnel comment in missile.jl says
+"the four-site `_airframe_rho` funnel" — there was a **fifth**: the 6-DOF telemetry block built its own
+`AirframeParams` from a bare `get(c, :rho, 1.225)`, because when it was written no ρ(z) existed on that
+path to funnel. Fixing only the predicate and the integrator would have published `a_lift` and
+`turn_radius_m` for a missile in **different air from the one on screen** — the exact bug class the fix
+was closing, newly committed by the fix. ⭐ The general form: **a funnel's site count is a fact about the
+day it was written.** Re-derive it by grepping the quantity, never by trusting the comment that counts it.
+
+⚠ **Also: the stage ρ must reach every consumer inside the integrator, not just the obvious one.** Drag is
+where you think of density first, but `stt_moments`/`btt_moments` are ½ρV²·S·d-scaled too. Rerouting
+`total_accel` alone gives a **split atmosphere inside a single RK4 step** — silent, and strictly worse
+than the frozen-ρ bug it replaces. ⭐ The tooth that separates the two fixes is an assertion on **`att_q`
+and `omega_body`**, which only the moment can move; a pos/vel assertion passes on the broken half-fix.
+
+⚠ **The threshold was measured, not chosen** (convention 10, again). The first draft asserted the two arms
+separate by > 100 m after 6 s and failed at 2.2 m — at 6 s the missile is 2.8 km up and ρ/ρ₀ is still
+0.878. The collapse is a **sixty-second** story: 19.9 km, ρ/ρ₀ = 0.0963, 8988 m and 711 m/s apart. The
+coupled arm's own test comment had said exactly this ("a 60-SECOND story, not a 6-second one") and the
+draft copied the duration from the wrong neighbour.

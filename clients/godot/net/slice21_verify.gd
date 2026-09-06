@@ -417,11 +417,16 @@ func _check_handshake(f: Dictionary) -> String:
 	var fid: Dictionary = f.get("fidelity", {})
 	if str(fid.get("atmosphere", "")) != "exponential":
 		return "a slice-21 scenario must default :atmosphere to exponential (the lesson ships ON), got %s" % str(fid.get("atmosphere", "<absent>"))
-	# THE CROSS-FIDELITY DEPENDENCY, ASSERTED (slice 19's, restated — never implied): ρ(z) reaches the
-	# COUPLED path ONLY. `_atm_on` carries `:pitch_coupled` as a conjunct, so under `:point_mass` this
-	# whole rung is INERT (there is no lift ceiling for the air to lower). The scenario must author it.
+	# THE CROSS-FIDELITY DEPENDENCY, ASSERTED (slice 19's, restated — never implied): ρ(z) reaches only
+	# the plants that integrate a REAL FORCE. `_atm_on` carries that as a conjunct, so under
+	# `:point_mass` this whole rung is INERT (there is no lift ceiling for the air to lower).
+	# ⚠ 2026-09-06: that conjunct now admits `:six_dof` as well as `:pitch_coupled` (it was a BUG that
+	# it did not — see `docs/PROHIBITIONS.md` §3). THIS ASSERTION IS UNCHANGED AND STILL RIGHT: the
+	# slice-21 SHOWCASE authors `:pitch_coupled` fixed because `:atmosphere` is its one toggled
+	# fidelity (convention 9), so a `:six_dof` slice-21 scenario would be a different lesson, not this
+	# one. The check pins the scenario, never the predicate.
 	if str(fid.get("airframe", "")) != "pitch_coupled":
-		return "a slice-21 scenario must AUTHOR :airframe at pitch_coupled — `:atmosphere` is INERT without it (ρ(z) reaches the coupled path only; a point-mass plant makes its accel by fiat and has no lift ceiling to lower), got %s" % str(fid.get("airframe", "<absent>"))
+		return "a slice-21 scenario must AUTHOR :airframe at pitch_coupled — this showcase holds the plant fixed so `:atmosphere` is its ONE toggled fidelity (convention 9); and under :point_mass the rung is INERT, since that plant makes its accel by fiat and has no lift ceiling to lower, got %s" % str(fid.get("airframe", "<absent>"))
 	if str(fid.get("autopilot", "")) != "alpha":
 		return "a slice-21 scenario must AUTHOR the autopilot at :alpha (the inner α/g loop is what the ceiling clamps), got %s" % str(fid.get("autopilot", "<absent>"))
 	if str(fid.get("guidance", "")) != "pn":

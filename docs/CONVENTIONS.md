@@ -145,3 +145,51 @@ paraphrase away the specifics.
 
 15. **Batches own their OWN seeded stream** (never `w.rng`) so a sweep can't desync the live trace
     — the *distribution* path (no byte-identity assert; the Threads/GPU seam). Determinism is CPU.
+
+16. **The trap checklist — every entry below cost real hours.** Read the relevant half BEFORE
+    writing a probe, a verifier tooth, a gate-3 proof or a HUD branch. This is the ONE list of
+    trap NAMES; `docs/LESSONS.md` carries the long-form story behind each (grep the slice number),
+    and §14 above carries the gate-3-specific teeth in full. ⚠ It deliberately does NOT live in
+    `docs/PROHIBITIONS.md`: that file rules on CANDIDATES — a trap is a method discipline, not a
+    component anyone proposed.
+
+    **(a) HARNESS / PROBE traps.**
+    - A verifier's `STEPS` MUST be a multiple of the scenario's `emit_every`, or the run hangs
+      **silently** to `MAX_SECONDS` and reads exactly like a slow wire (slice 31; §14 has the
+      arithmetic and the "measure before waiting" recipe).
+    - `%g` and `%.2e` are NOT GDScript format specifiers, and ONE bad specifier kills the WHOLE `%`
+      expression. ⚠ **Grep the whole file for specifiers**: a `print` is proved by its own output,
+      but a `_fail` message's format string is proved by NOTHING until the test fails (slice 49,
+      the THIRD occurrence; the class of the slice-1 `%g` bug at convention 6).
+    - **Frame-sampling error is ASYMMETRIC** — a MISS samples faithfully, a HIT samples coarsely.
+      Quote frame numbers and pin the ratio ([[ewsim-missile-verifier-sampling]]).
+    - An rms measured where a CLAMP binds reads as a KILL of whatever you were measuring — it is
+      the clamp's number, not the physics'.
+    - A key that stops EMITTING makes `.get(k, 0.0)` print a **DEFAULTED ZERO as a PASSED TEST**.
+      ⚠ WHICH default you pick is a CLAIM — pick the one that asserts the least (slice 49); ⚠⚠ and
+      when the lesson's own NULL *is* that value, only **PRESENCE** separates the two (slice 50).
+    - ⚠⚠ **A PEAK-HOLD cannot see a knob that FELL** (slice 52) — re-arm on the drag, at the instant
+      the new setting OWNS the quantity, not at the next frame.
+    - A probe's "has this arm drained yet?" predicate must be **ARM-SPECIFIC**, or the second shot
+      photographs the first (slice 52).
+    - ⚠⚠ **Slice 53 RETRACTED "no gate-3 proof DRAGS a slider"** — its verifier does, and a drag
+      tooth is MANDATORY once the latch lives on the WIRE (§14; retraction §7 of
+      `docs/PROHIBITIONS.md`). ⚠⚠ **Slice 54 adds the harder half: something must deliberately
+      SURVIVE the drag**, or the tooth only proves you can clear state.
+
+    **(b) HUD / VIEW traps.**
+    - A HUD budget is in **PIXELS** and belongs to the **VIEW**, not the family (slices 46, 49;
+      §14 has the 430-vs-390 px numbers and the ≥12 px margin rule).
+    - ⚠⚠ It is not just a WIDTH but **a CORNER THAT MAY ALREADY BE OCCUPIED**: slice 54's two
+      right-anchored blocks collide at EVERY window size, and a width tooth passes anyway.
+    - ⚠⚠ **A view marker must go in the chain its own wire actually REACHES** (slice 54: the first
+      draft sat first in `_spatial_hud_kind()` and was DEAD CODE on a `:cfar` wire, reading as
+      handled). It must also **separate wires that differ only by the SLIDER**, and be gated on the
+      author's KEY, never on the slider's VALUE (slice 52).
+    - ⚠ **Gate a windowed shot on the WIRE, never on a FRAME COUNT** (slice 54), and ⚠ a
+      **CUMULATIVE** gauge read mid-pass is not the pass's answer.
+    - ⚠ `get_theme_default_font()` does NOT exist on `Sandbox.gd` and calling it breaks EVERY
+      dependent script; the file has exactly one `_font`.
+    - ⚠ Anything the verdict computes inside `_draw` has **no headless proof** — including WHICH
+      dispatch branch wins; and the blind spot works both ways, since a **frame-handler**
+      accumulator has no proof either (§14, slices 31 / 50 / 53).

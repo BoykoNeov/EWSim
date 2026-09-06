@@ -25,9 +25,9 @@ be built are in `docs/DEFERRALS.md` §"THE BUILD LIST" — go there before propo
 
 ⚠⚠ **A line here was ruled on ONCE, on a specific scenario, with specific numbers.** Do not paraphrase
 a ⚠ into a decision — open the cited slice in `docs/STATUS.md` (`## Slice N`) first. And check a later
-slice before quoting an earlier one: prohibitions in this file HAVE been retracted (47 on
-`gimbal_fov_margin_deg`, 53 on "no gate-3 proof drags a slider"), and the retractions are recorded on
-the per-slice lines in `CLAUDE.md`, not here.
+slice before quoting an earlier one: **prohibitions in this file HAVE been retracted, and every
+withdrawal is listed in §6 below.** Read §6 before quoting anything above it — a ban that was
+measured wrong reads exactly like a ban that was measured right.
 
 ---
 
@@ -59,18 +59,72 @@ the per-slice lines in `CLAUDE.md`, not here.
 
 ## 3. Dead knobs that are BUGS, not features
 
-- **Dead knobs that are BUGS, not features** — `speed` (19, FIXED), `k_δ` (15, cancels exactly), `ζ` on the lag rung (40), the handover bias key (36), `(R̂,s)` (31). ⚠⚠ **Launch altitude (21) is NOT one — it is a MODEL GAP**: `_integrate_6dof!` passes a CONSTANT `rho` and its own comment reserves the seam for ρ(z).
-  ⇒ ⚠⚠ **21 IS A BUG TICKET, NOT A TRIGGER** — VERIFIED open at `core/src/missile.jl:476–477` on 2026-09-06. ⇒ **`INSTRUMENT` ONLY** for `k_δ` (15, an exact cancellation) and `ζ` (40, a term the model lacks); ⚠⚠ `speed` (19, FIXED), 36 and 31 were repaired plumbing BUGS and stay out even of that.
+- **Dead knobs that are BUGS, not features** — `speed` (19, FIXED), `k_δ` (15, cancels exactly), `ζ` on the lag rung (40), the handover bias key (36), `(R̂,s)` (31). ⚠⚠ **Launch altitude (21) was NOT one — it was a MODEL GAP**, `_integrate_6dof!` passing a CONSTANT `rho` while its own comment reserved the seam for ρ(z). ✅ **FIXED 2026-09-06** — see below.
+  ⇒ ✅ **21 WAS A BUG TICKET, NOT A TRIGGER — AND IT IS FIXED (2026-09-06).** `_atm_on`'s third conjunct read `=== :pitch_coupled`, written by slice 21 when that was the only plant integrating a real force; slice 23 added `:six_dof` and nobody came back, so for THIRTY SLICES `:atmosphere === :exponential` was inert on the plant the entire 23–54 arc flies. Closed by a two-way disjunction in the predicate, a two-closure split in `_integrate_6dof!` (stage ρ to `total_accel`, `lift_accel_3d` AND the moment), and the 6-DOF readout block's own `p6` — a FIFTH ρ site nobody had counted. ⚠ Shipped physics + tests only, no scenario or view (the slice-51 `turn_start_s` precedent). ⚠ The point-mass / ballistic half stays open and is a REAL deferral (it touches slice 8's `rk4_step` byte-identity surface). ⭐ **The transferable half: a conjunct that names a specific rung is a claim with a shelf life** — see `docs/LESSONS.md`. ⇒ **`INSTRUMENT` ONLY** for `k_δ` (15, an exact cancellation) and `ζ` (40, a term the model lacks); ⚠⚠ `speed` (19, FIXED), 36 and 31 were repaired plumbing BUGS and stay out even of that.
 
 ## 4. Disqualified by non-monotonicity — the SLIDER died, the physics did not
 
 - **Disqualified by non-monotonicity** — `k` (28), `ω_n` (40), `σ_seek` (25), miss-vs-`K` / miss-vs-`α_stall` (20, 22), the loss COUNT (49), miss-vs-`rcs_fineness` (50), **`bad`-vs-`pfa` (54)**. ⚠ **NOT component kills — that physics is SHIPPED**; only their use as the showcase SLIDER died.
   ⇒ **TIER 2 — `CURVE`, seven ready-made lessons and NO new physics**: a reversal says an OPTIMUM exists and names where. ⭐ Slice 54 already shipped the technique.
 
-## 5. Harness traps that cost real hours
+## 5. Harness / probe and HUD / view traps — MOVED OUT, and deliberately
 
-- **Harness traps that cost real hours** — `STEPS` MUST be a multiple of `emit_every` (else a SILENT hang); `%g`/`%.2e` are not GDScript specifiers and one bad one kills the WHOLE `%`; frame-sampling error is ASYMMETRIC (a miss samples faithfully, a HIT coarsely); an rms measured where a CLAMP binds reads as a KILL; a key that stops EMITTING makes `.get(k, 0.0)` print a DEFAULTED ZERO as a PASSED TEST — ⚠ WHICH default is a claim (49), and ⚠⚠ when the lesson's NULL is that value only PRESENCE separates them (50); ⚠⚠ **a PEAK-HOLD cannot see a knob that FELL** (52) — re-arm on the drag, at the instant the new setting OWNS the quantity; ⚠ a probe's "has this arm drained?" test must be ARM-SPECIFIC (52). ⚠⚠ **53 RETRACTED "no gate-3 proof DRAGS a slider"** — its verifier does, and it is MANDATORY once the latch lives on the WIRE; ⚠⚠ **54 adds the harder half — something must deliberately SURVIVE a drag.**
+**They are not here.** The complete trap CHECKLIST — `emit_every` hangs, GDScript format
+specifiers, asymmetric frame sampling, defaulted zeros, peak-holds that cannot see a fall, HUD
+pixel budgets, occupied corners, dead-code dispatch chains, `get_theme_default_font()` — is
+`docs/CONVENTIONS.md` **§16**, with the gate-3-specific teeth in **§14** of the same file and the
+long-form story per slice in `docs/LESSONS.md`.
 
-## 6. HUD / view traps
+⚠ **This is the fold, not an omission.** A trap had THREE homes (here, §14, and LESSONS.md) and now
+has TWO, because the split is a real one: **this file rules on CANDIDATES** — things somebody
+proposed and something decided against — while **a trap is a method discipline** nobody proposed
+and nothing ruled on. Keeping trap names here made the file look like the place to check before
+writing a probe, which it never was.
 
-- **HUD / view traps** — a HUD budget is in PIXELS and belongs to the VIEW (46, 49), and ⚠⚠ **it is not just a WIDTH but a CORNER THAT MAY ALREADY BE OCCUPIED** (54: two right-anchored blocks collide at EVERY window size, and a width tooth passes). ⚠⚠ **A view marker must go in the chain its own wire REACHES** (54's first draft sat first in `_spatial_hud_kind()` and was DEAD CODE on a `:cfar` wire, reading as handled), must separate wires differing only by the SLIDER, and must be gated on the author's KEY, never the slider's VALUE. ⚠ **Gate a windowed shot on the WIRE, never a FRAME COUNT** (54), and ⚠ a CUMULATIVE gauge read mid-pass is not the pass's answer. ⚠ `get_theme_default_font()` does not exist on `Sandbox.gd` — it breaks EVERY dependent script; the file has one `_font`. Teeth: `docs/CONVENTIONS.md` §14.
+## 6. RETRACTIONS — rulings this file (or its ancestors) carried and later WITHDREW
+
+⚠⚠ **A rulings file that does not list its own withdrawals is a trap**, because the withdrawn text
+is exactly the text most likely to be quoted years later by someone who found it and stopped
+reading. Every retraction below was measured on a shipped wire, not argued. **Do not quote the old
+reason for any of them.**
+
+- **RETRACTED — `gimbal_fov_margin_deg` is disqualified "because the angle margin improves
+  monotonically"** (recorded from slice 47 gate-0 P6b, in slice 46's candidate list; withdrawn by
+  slice 47). **Measured on the shipped wire it does NOT improve monotonically** — it separates the
+  ends of the slider cleanly in both samplings a HUD author would use (9.9932° → −2.9281° at
+  handover; 9.5682° → 1.6764° post-lock), and P6b's inversion came off the sweep that entry itself
+  flags as confounded. ⭐⭐ **The replacement is stronger than the ban:** at the handover instant
+  `margin + cue = fov`, to a tenth of a degree on four arms — the two "rival" gauges are ONE
+  measurement counted from opposite ends. ⇒ the margin stays off the HUD for **REDUNDANCY**
+  (convention 9), **not for deception.** ⚠⚠ The identity is **SERVO-CONTINGENT, not definitional**:
+  it holds only while the head has SETTLED on its cue (240 °/s here; on slice 35's 8 °/s wire the
+  two gauges separate). Full record: `docs/DEFERRALS.md` §"A BAN THIS LEDGER HELPED CARRY IS
+  RETRACTED".
+
+- **RETRACTED — "no gate-3 proof DRAGS a slider"** (a slice-52 rule; withdrawn by slice 53).
+  Slice 53's verifier drags one, and doing so is **MANDATORY** once the latch lives on the WIRE —
+  otherwise a client-side disarm leaves a headless proof reading a stale value as a live
+  measurement: green, and false. ⚠⚠ Slice 54 adds the harder half — **something must deliberately
+  SURVIVE the drag**, or the tooth only proves you can clear state. Teeth: `docs/CONVENTIONS.md`
+  §14 and §16(a).
+
+- **RETRACTED — the outright kills recorded by slices 41 and 43–45** (withdrawn 2026-08-18 by the
+  two-test rule). Those gate-0 records applied a LESSON test and wrote up the result as if it
+  retired the COMPONENT. It does not: **pass model / fail lesson = "DEAD AS A LESSON, ALIVE AS A
+  MODEL"**, and the hardware ships as physics + tests + authorable keys. ⚠ What is NOT retracted:
+  the bar for NEW proposals, and slice 39's rule that a reparameterization must not ship as an
+  ARCHITECTURE. Full record: `docs/DEFERRALS.md` §"THE 2026-08-18 RE-VERDICT".
+
+- **RETRACTED — "a key with no lesson behind it is not worth a commit"** (a ledger note against
+  `maneuver.turn_start_s`; withdrawn 2026-08-31 by slice 51, which shipped the key). ⚠⚠ That
+  sentence applied the two-test rule **only half way** — the rule's own words are that a
+  pass-model / fail-lesson result *"ships as physics + tests + authorable keys"*, and EWSim is a
+  battlefield simulator as well as a teaching instrument. ⚠ It shipped as a KEY, not a slice: no
+  scenario, view, verifier or slider, and it must not be quoted as slice 52.
+
+- **RETRACTED — "failed the SLIDER test" read as "failed the LESSON test"** (withdrawn 2026-09-06).
+  A lesson needs a TRIGGER and a CONTRAST, and a slider is **one trigger of five** (SLIDER · RIVAL ·
+  REGIME · CURVE · NULL). Every kill in §1 that turned on "dialing it does not move the headline
+  metric" therefore killed a HEADLINE, not the teaching value — which is why each entry there now
+  carries a trigger TAG. ⚠⚠ A tag never revives the headline the ruling killed, and `INSTRUMENT` is
+  not a revival at all. Cost and evidence: `docs/DEFERRALS.md` §"THE BUILD LIST".

@@ -44,7 +44,7 @@ Fixed order each `tick!`: **phase 1** `integrate!` (movers/airframe) → `empty!
 
 ## Where the project is (2026-09-06)
 
-**Slices 1–40 + 46–50 + 52–54 COMPLETE & green — 20051 tests.** 39 and 41–45 are GATE-0 RECORDS (no code) —
+**Slices 1–40 + 46–50 + 52–54 COMPLETE & green — 20069 tests.** 39 and 41–45 are GATE-0 RECORDS (no code) —
 ⚠⚠ **five in a row shipped nothing and the kill CRITERION was ruled at fault on 2026-08-18** (the two-test
 rule below); 41/44/45 are **ALIVE AS A MODEL** (probes in `M:\claud_projects\temp\slice4N`), only 42 is dead
 outright. ⭐ **46 DISCHARGED 44, 47 DISCHARGED 43's BLOCK, 48 SHIPPED the search family and 52 ITS WIDTH** —
@@ -88,7 +88,7 @@ discharged/new/killed candidates into `docs/DEFERRALS.md`, method lessons into `
 (⚠ fold onto the EXISTING heading when it repeats), **every new ⚠ prohibition — with its reasoning,
 its numbers and its slice cite — into `docs/PROHIBITIONS.md`**, and into `CLAUDE.md` **only** the
 state line + any new dead end's NAME AND VERDICT WORD, folded into an EXISTING line.
-⚠⚠ **`CLAUDE.md` is a ROUTER — target ~16 KB** (16.1 KB: 15.4 after the 2026-09-06 structural split, +0.7 for the TRIGGER block below; 9 prose
+⚠⚠ **`CLAUDE.md` is a ROUTER — target ~16 KB** (16.3 KB: 15.4 after the 2026-09-06 split, +0.7 TRIGGER block, +0.1 the ρ(z) fix; 9 prose
 trims before it). **Numbers, test names, evidence — and now the REASONING behind a prohibition — go
 DOWNSTREAM; only the state line, the verdict words, the trip-wire NAMES and the conventions stay HERE.**
 ⚠⚠ **PROSE-TRIMMING WILL NOT SAVE THIS FILE A SECOND TIME.** If it goes over again the answer is another
@@ -125,9 +125,9 @@ listed only so it is not re-proposed as open.
 - **DEAD** — **a nulling-loop head servo** (39); **seeker noise × the BTT roll loop** as a COUPLING claim; **a cubic radome curve**; **an "acquisition knife-edge"** (42 gate 1).
 - **DEAD AS A LESSON, ALIVE AS A MODEL** — **memory track / a coasting head** (37); **a scalar rate-limited fin in the coupled loop** (20); **a second-order FIN actuator** (41); **a rectangular / per-axis window and stop** (45, both halves); **PRICING A RE-ACQUISITION** (51). **DEAD AS THE DEFAULT, ALIVE AS A MODEL** — **an angle-domain radome corrector**.
 - **✅ SHIPPED — never re-propose as open** — **a SEEKER SEARCH PATTERN** (42/43/45 ⇒ 48, its WIDTH 52); **seeker range / SNR limits** (44 ⇒ 46); **a TAIL LOBE** (49/50 ⇒ 53); **a GIVE-UP RULE AS THE SLIDER** (53 ⇒ 54). ⚠ Each carries what it did NOT discharge.
-- **Dead knobs that are BUGS, not features** — `speed` (19), `k_δ` (15), `ζ` on the lag rung (40), the handover bias key (36), `(R̂,s)` (31). ⚠⚠ **Launch altitude (21) is NOT one — it is a MODEL GAP.**
+- **Dead knobs that are BUGS, not features** — `speed` (19), `k_δ` (15), `ζ` on the lag rung (40), the handover bias key (36), `(R̂,s)` (31). ⚠⚠ **Launch altitude (21) was a MODEL GAP, ✅ FIXED 2026-09-06** — `:atmosphere` was inert on `:six_dof` for 30 slices.
 - **Disqualified by non-monotonicity** (the showcase SLIDER died; the physics is SHIPPED) — `k` (28), `ω_n` (40), `σ_seek` (25), miss-vs-`K` / miss-vs-`α_stall` (20, 22), the loss COUNT (49), miss-vs-`rcs_fineness` (50), `bad`-vs-`pfa` (54).
-- **Harness traps that cost real hours** and **HUD / view traps** — ⚠⚠ each is a LIST, not a line, and every entry cost real hours: read `docs/PROHIBITIONS.md` §5–§6 before writing a probe, a verifier tooth, a gate-3 proof or a HUD branch. Teeth: `docs/CONVENTIONS.md` §14.
+- **Harness traps that cost real hours** and **HUD / view traps** — ⚠⚠ each is a LIST, not a line, and every entry cost real hours: read `docs/CONVENTIONS.md` §16 (names) / §14 (teeth) before writing a probe, a verifier tooth, a gate-3 proof or a HUD branch. ⚠ Retractions: `docs/PROHIBITIONS.md` §6.
 
 ## Conventions / hard-won disciplines (ONE LINE EACH; the teeth are `docs/CONVENTIONS.md`)
 
