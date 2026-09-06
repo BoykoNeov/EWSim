@@ -1337,3 +1337,93 @@ look-quantisation, not a window artefact** — the `G` = 90 / `G` = 100 tie is r
 **wire A only** (x0 = −15 km, 200 s, σ = 4 m², F = 8, `revisit_s` = 0.1, `N`\* = 3). P6 Arm 2 already
 showed the METRES are a joint property of the tail lobe and the tracker. **The ceiling of 50 is
 justified on this wire and is quoted with it** — not re-flown on others, and not claimed beyond them.
+
+---
+
+## §3 GATE 1 — WHAT SHIPPED (2026-09-06). **THE MODEL TEST IS PASSED: THE KEY IS READ EVERY TICK**
+
+Scope is exactly §0.7's first four bullets. The scenario, the knob and the Godot proofs are gate 3
+and are NOT here. Full suite green: **19412 tests, up from 18651 (+761)**, `test_determinism.jl` and
+the absolute golden unchanged — which is the additivity master check for this kind of edit.
+
+**`core/src/rf.jl` — the kernel, as an OPTIONAL KEYWORD.** `rcs_aspect(σ, F, θ; tail_gain = 1.0)`,
+the local `two_ray_factor4(Δφ; refl = -1.0)` precedent. ⭐ **The default is what makes the
+byte-identity structural rather than inspected**: every slice 1–52 call site and every existing
+assertion is untouched, so nothing had to be re-verified by reading it. The expression order is
+load-bearing and is commented as such — `σ * (1 + (G−1)·aft²) / (d*d)` reduces to `σ / (d*d)` bit
+for bit at `G` = 1 (`1 + 0.0·x` is exactly 1.0 and `σ * 1.0 === σ`), while folding the bracket into
+the denominator would be algebraically equal and NOT bit-equal.
+
+**`core/src/radar.jl` — one new expression, no new call site.** ⚠ One WORDING correction goes with
+it: `rcs_loss_db` is documented as *"positive = this much quieter than the authored `rcs_m2`"*, and
+a tail gain makes the rear hemisphere BRIGHTER than broadside wherever `G` outruns `F⁴` (`F` = 1 at
+any `G` > 1). The sign convention is unchanged — the oblate case already read negative — but the
+HUD wording downstream of it is now conditionally wrong, and gate 3 renders that key. `G` is read with `get(…, 1.0)`
+INSIDE the existing `:rcs_fineness` branch of `_effective_rcs` — the UNCONDITIONAL MULTIPLY §2.12
+item 2 requires, not a second presence gate — and floored (not ceilinged) at the consumer.
+⚠ A pre-existing hazard is now NAMED in that docstring rather than newly created: `set_param` does
+not clamp to a knob's min/max, so a live `:rcs_fineness` of `Inf` already drives `rcs_loss_db` to
++Inf. The tail gain inherits that exposure and does not widen it; authored values are load-validated
+finite, and the shipped client only sends what its slider spans.
+
+**`core/src/scenario.jl` — BOTH halves of §2.13a.** The key is learned (finite, `> 0`; `G` < 1 legal)
+**and** refused without an `rcs_fineness`. The guard reads the YAML block `tb`, never `comp`, per the
+`maneuver:` fork's own warning that a later reorder silently disarms a comp-side check.
+
+**`core/src/frames.jl` — the promissory note is CASHED, not deleted.** `aspect_angle`'s sign
+paragraph said a flipped vector *"becomes a silent wrong number the moment a tail lobe is ever
+added"*. That moment arrived: at `G` ≠ 1 the cross-section discriminates θ from π−θ. The note is
+retained because the discrimination is CONDITIONAL — on a wire authoring no gain (every slice 1–52
+scenario) a flipped vector is still silent, so the standalone geometry teeth still carry it.
+
+**`core/test/test_rcs_aspect.jl` — four new blocks, +761 tests**, each arm naming the line that
+differs (§2.12's rule). Kernel: the keyword-default bit-identity over a θ×F grid; the forward
+hemisphere untouched at every `G` INCLUDING at broadside exactly; the nose/tail anchors (`σ/F⁴` and
+`G·σ/F⁴`, `rtol` not `==` because `sin(π)` = 1.22e-16); ⭐⭐ the mirror pair `σ(π−φ)/σ(φ) =
+1 + (G−1)cos²φ` as an EXTERNAL hand-checkable ratio; the hemisphere width pinned as a number (half
+the excess at 45° off the tail); `G` < 1 continuous through 1; monotone in `G`; the domain.
+Seam: the shaped-but-gainless wire bit-identical, paired against an arm that moves; two ends of one
+pass differing by exactly 50× at one instant off one comp bag; the scalar target SHADOWING the gain
+(why the loader refuses it); the consumer floor surviving 0/−5/−1e9 inside a real `tick!`.
+Loader: the ANTI-P6a tooth (author it, assert it reaches `comp`, assert the physics reads it), the
+refusal without a fineness, and `0 / −3 / .inf / .nan` refused at load — ⚠ **on the MESSAGE, not
+just on `ErrorException`**: a YAML parse failure or an `_f64` conversion error is a refusal for the
+wrong reason, and on `.nan`/`.inf` that is the plausible one, so pinning the sentence is what proves
+the finiteness guard itself ran.
+⭐⭐ the `frames.jl` PROMISSORY NOTE CASHED: the observer-reversed `aspect_angle` now yields a
+σ that differs by the full `G` at a rear aspect, so the sign is pinned by the PHYSICS and not only
+by standalone geometry teeth (and still agrees with the gain absent, which is why those teeth stay).
+Seeker: the shipped slice-50 engagement flown TWICE, bit-identical (that flight never leaves the
+forward hemisphere — `max` aspect ≤ 90°), paired with a tail-on variant where the seeker's own
+acquisition range moves by `bracket^(1/4)` = 2.659, the link budget's own exponent.
+
+### ⚠ FOUR THINGS THE BUILD CORRECTED IN §0–§2 — all found by a test FAILING, none by reading
+
+1. ⚠⚠ **FORE/AFT SYMMETRY WAS NEVER BIT-EXACT, ONLY ALGEBRAIC — AND THAT WAS TRUE IN SLICE 49
+   TOO.** `rcs_aspect(σ,8,0.6) == rcs_aspect(σ,8,π−0.6)` FAILS at the last ulp (`cos(π−φ)` ≠
+   `−cos(φ)` in Float64), so the retraction tooth needs an `rtol` on the OLD identity while the new
+   asymmetry needs none. ⭐ **This slice did not introduce the looseness:** slice 49's own
+   `σ_astern ≈ σ_ahead atol = 1e-15` was passing on a TOLERANCE and not on an identity all along —
+   the same floating-point fact that keeps `F` = 1 out of the byte-identity path, one identity
+   over. A reader must not conclude the tail lobe made a bit-exact symmetry approximate; it made
+   an approximate symmetry CONDITIONAL.
+2. **THE HEMISPHERE MAP HAS TWO REAR OBSERVERS, NOT ONE.** A first draft asserted "exactly one of
+   five observers moves"; the tail QUARTER observer at (−30 km, 10 km) is also behind a +x-heading
+   target. The tooth now pins the whole boolean vector, which is a hemisphere map rather than a
+   smoke test: a kernel leaking forward lights all five, one never firing lights none.
+3. ⚠⚠ **THE MULTIPLIER IS `G` ONLY AT θ = π.** A first draft asserted the radar-seam σ was 20× the
+   gainless one; at that geometry's 168.7° it is 19.3×. Quoting the knob's value where the hand
+   formula belongs is §2.15 §3's "buys range at a fixed threshold" mistake one level down, and it
+   is now written as `1 + (G−1)cos²θ`.
+4. ⚠ **A NEW HARNESS TRAP, and it is §2.13a's shape exactly.** Building YAML variants by
+   `replace`-ing a line out of a triple-quoted literal produces a MALFORMED file that still loads
+   clean: Julia dedents the literal, so deleting a line leaves its indentation behind and the next
+   key folds onto the previous one. The "no fineness" arm silently stopped being that arm and the
+   refusal tooth passed vacuously. **Build scenario variants from a FUNCTION, never by line
+   surgery.** Belongs in `docs/LESSONS.md` when this slice completes, beside the `.get(k, 0.0)`
+   family.
+
+**⇒ GATE 1 IS COMPLETE. NEXT IS GATE 2/3:** `scenarios/slice53_*.yaml` on wire A (x0 = −15 km,
+200 s, σ = 4 m², F = 8 FIXED, `revisit_s` = 0.1, `N`\* = 3), the knob (floor 1.0, ceiling 50.0,
+LINEAR, authored default 20 — §2.15 §5), the four gate-3 proofs, and the one-clause re-scope of
+`clients/godot/net/slice50_ui_test.gd` tooth 9b (F6).

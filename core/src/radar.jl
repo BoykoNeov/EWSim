@@ -339,12 +339,33 @@ distinction convention 2 makes load-bearing.
 ⚠ Clamped at the CONSUMER (convention 5): a live slider can drive `:rcs_fineness` to a value
 `rcs_aspect` would throw a `DomainError` on, and a throw inside `observe!` silently drops the
 client's connection. The floor ships a huge-but-finite σ (convention 6), never an ±Inf.
+
+⭐ **SLICE 53 — THE TAIL LOBE ENTERS HERE AND NOWHERE ELSE, AND IT IS AN UNCONDITIONAL MULTIPLY,
+NOT A SECOND PRESENCE GATE.** `:rcs_tail_gain` is read with `get(…, 1.0)` INSIDE the shaped branch,
+so there is exactly one new expression and no new call site. Three deliberate consequences:
+
+* A target with no `:rcs_fineness` takes the early return above and never sees the gain — which is
+  why the LOADER refuses a tail gain authored without a fineness (`scenario.jl`). ⚠⚠ Gate 0's P6a
+  found the pair of defects that makes this load-time refusal load-bearing: an unknown `target:`
+  key is DROPPED silently, so "author it and watch nothing happen" is the `speed` (19) /
+  handover-bias (36) dead-knob failure wearing a legitimate-looking run.
+* A shaped target with no tail gain gets `G` = 1.0, whose bracket is exactly 1.0, so slice 49's and
+  50's wires are bit-identical (measured, gate 0 P5 — all three nulls exact, no extra branch).
+* `G` is FLOORED, not ceilinged: a live slider dragged to 0 or below would throw a `DomainError`
+  inside `observe!`, so it is clamped to a tiny positive; there is no upper clamp because every
+  large-but-FINITE `G` is crash-safe and just paints a brighter tail (the `:rcs_fineness` posture,
+  and convention 6 is satisfied by finiteness, not by smallness). ⚠ A live slider carrying a
+  literal `Inf` is a PRE-EXISTING hazard of this readout and NOT this key's: `:rcs_fineness` = Inf
+  already drives `best_rcs` → 0 and ships `rcs_loss_db` = +Inf below. `set_param` does not clamp to
+  the knob's declared min/max, so the guard is the same one it has always been — the authored
+  values are load-validated finite, and the shipped client only sends what its slider spans.
 """
 function _effective_rcs(tgt::Entity, obs_pos::Vec3)
     haskey(tgt.comp, :rcs_fineness) || return tgt.comp[:rcs_m2]     # ← the slices 1–48 line
     σ = max(Float64(tgt.comp[:rcs_m2]), 1.0e-12)
     F = max(Float64(tgt.comp[:rcs_fineness]), 1.0e-9)
-    return rcs_aspect(σ, F, aspect_angle(tgt.pos, tgt.vel, obs_pos))
+    G = max(Float64(get(tgt.comp, :rcs_tail_gain, 1.0)), 1.0e-9)
+    return rcs_aspect(σ, F, aspect_angle(tgt.pos, tgt.vel, obs_pos); tail_gain = G)
 end
 
 """
@@ -636,6 +657,13 @@ function _observe_point!(r::RadarSensor, w::World)
                 # positive = this much quieter than the authored `rcs_m2`. Never ±Inf — `rcs_aspect`'s
                 # denominator `(sin²θ + F²cos²θ)²` is strictly positive for every `F > 0`, and the
                 # consumer's own floor keeps `F` there.
+                # ⚠ SLICE 53 — "QUIETER" IS NOW THE COMMON CASE, NOT THE ONLY ONE, AND A HUD MUST
+                # NOT WORD IT AS THOUGH IT WERE. A tail gain multiplies the rear hemisphere, so
+                # σ_eff EXCEEDS the authored `rcs_m2` — and this reads NEGATIVE — wherever
+                # `G > F⁴·(…)`, i.e. astern of a body that is not slender enough to pay for its own
+                # lobe (`F` = 1 with any `G` > 1; `F` = 8 needs `G` > 4096). The oblate case at
+                # line ~695 already documented a negative reading, so the SIGN CONVENTION is
+                # unchanged and needs no new key — only the wording downstream of it does.
                 best_loss = lin2db(max(Float64(tgt.comp[:rcs_m2]), 1.0e-12) / best_rcs)
             else
                 best_asp = nothing; best_rcs = nothing; best_loss = nothing

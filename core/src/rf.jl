@@ -170,17 +170,20 @@ const SEEKER_DETECT_MODES = (:none, :snr)
 # Everything is the SNR *modulation*; the detector (detection.jl) is untouched.
 
 """
-    rcs_aspect(rcs_broadside_m2, fineness, aspect_rad) -> Float64   (m²)
+    rcs_aspect(rcs_broadside_m2, fineness, aspect_rad; tail_gain = 1.0) -> Float64   (m²)
 
-**HOW VISIBLE YOU ARE DEPENDS ON WHICH WAY YOU ARE POINTING** (slice 49). The physical-optics
-radar cross-section of a body of revolution, NORMALIZED to its broadside value:
+**HOW VISIBLE YOU ARE DEPENDS ON WHICH WAY YOU ARE POINTING** (slice 49) — **AND COMING AT YOU IS
+NOT THE SAME AS GOING AWAY** (slice 53). The physical-optics radar cross-section of a body of
+revolution, NORMALIZED to its broadside value, times a REAR-HEMISPHERE lobe:
 
-    σ(θ) = σ_broadside / (sin²θ + F²·cos²θ)²
+    σ(θ) = σ_broadside · [1 + (G − 1)·max(0, −cos θ)²] / (sin²θ + F²·cos²θ)²
 
 `θ` is the ASPECT ANGLE (radians) — the angle at the target between its own nose and the
 direction of the observer, so `θ = 0` is nose-on, `π/2` broadside, `π` tail-on
 ([`aspect_angle`](@ref) forms it, and owns the sign). `F` is the **FINENESS RATIO** `L/r`, the
-dimensionless slenderness of the body: how many times longer than wide.
+dimensionless slenderness of the body: how many times longer than wide. `G` (`tail_gain`,
+dimensionless) is **HOW MANY TIMES BRIGHTER THE TAIL IS THAN THE NOSE** — the engine face and
+exhaust a real airframe shows to an observer BEHIND it.
 
 This is the standard high-frequency ellipsoid `σ = π a²b²c² / (a²sin²θcos²φ + b²sin²θsin²φ +
 c²cos²θ)²` for a body of revolution, divided through by its own `θ = π/2` value. ⭐ **THE
@@ -191,13 +194,25 @@ numbers for where a horizon should sit, and a model that overrides them is a mod
 scenario can carry. Normalized, `rcs_m2` keeps its authored meaning and gains a sharper one — it
 is the BROADSIDE RCS — and exactly ONE new number is authored, with a physical name.
 
-Three anchors, all hand-checkable (convention 11's EXTERNAL anchor, pinned in
-`test_rcs_aspect.jl`):
+Anchors, all hand-checkable (convention 11's EXTERNAL anchor, pinned in `test_rcs_aspect.jl`):
 
-* `θ = π/2` (broadside) ⇒ σ ≡ `σ_broadside`, **exactly**, at every `F`.
-* `θ = 0` or `π` (nose/tail) ⇒ σ = `σ_broadside / F⁴`. F = 10 is **40 dB** down, the right order
-  for a real airframe.
-* `F = 1` (a sphere) ⇒ σ ≡ `σ_broadside` at every angle — aspect-independent, the NULL.
+* `θ = π/2` (broadside) ⇒ σ ≡ `σ_broadside`, **exactly**, at every `F` AND at every `G` — the lobe
+  weight `max(0, −cos θ)²` is exactly `0.0` there. `rcs_m2` keeps the sharper meaning slice 49 gave
+  it: it is the BROADSIDE cross-section, and a tail gain does not move it.
+* `θ = 0` (nose-on) ⇒ σ = `σ_broadside / F⁴`, at every `G`. F = 10 is **40 dB** down, the right
+  order for a real airframe.
+* `θ = π` (tail-on) ⇒ σ = `G·σ_broadside / F⁴` — the sentence `G` carries: *the tail is `G` times
+  brighter than the nose.* At F = 8, `G` = 50 is a tail 17 dB above the nose and still 19 dB below
+  broadside — an ordinary airframe, not a special effect.
+* `F = 1` (a sphere) ⇒ σ ≡ `σ_broadside` at every angle **when `G` = 1** — aspect-independent, the
+  NULL. ⚠ A sphere with a tail lobe is INCOHERENT (`G` tilts a body that has no ends), and the
+  model says so here rather than refusing it: `F` = 1 with `G` > 1 is a legal call that returns a
+  finite number, because a kernel that throws at a live slider's floor is convention 5's exact
+  prohibition. Author `F` > 1 whenever `G` > 1.
+* `G` = 1 ⇒ the bracket is `1 + 0.0·x` = exactly `1.0`, and `σ·1.0 == σ` in IEEE arithmetic ⇒ the
+  whole curve is slice 49's, **bit for bit**, at every θ and every `F`. That is the LESSON's null.
+  ⚠⚠ It is still NOT the WIRE's null — see the `F = 1` warning below; the byte-identity path for a
+  scalar-RCS target is the KEY BEING ABSENT, one level up in `_effective_rcs` (radar.jl).
 
 ⚠⚠ **THE FOURTH-ROOT REFLEX IS A TRAP HERE, AND IT COST THIS SLICE A WRONG PREDICTION.**
 [`detection_range`](@ref) goes as σ^(1/4), so "a 40 dB swing is only 10× in range" invites the
@@ -206,25 +221,59 @@ body the `F²cos²θ` term dominates until θ is very near broadside, and σ mov
 between 65° and 82°. The `^(1/4)` going out and the `^2` coming in very nearly cancel. See
 `docs/plans/slice49.md` §2.
 
-⚠ **FORE/AFT SYMMETRY IS A NAMED APPROXIMATION** (HANDOFF §1): σ(θ) ≡ σ(π−θ), so a fleeing
-target looks exactly like an approaching one. Real airframes have a distinct tail return
-(engine / exhaust). A tail lobe is a deferral, not a defect.
+⚠⚠ **FORE/AFT SYMMETRY IS NO LONGER A PROPERTY OF THIS FUNCTION — IT IS A PROPERTY OF `G` = 1**
+(slice 53, RETRACTING slice 49's paragraph here in place). σ(θ) ≡ σ(π−θ) held by construction while
+the only shape term was `cos²θ`; the lobe weight `max(0, −cos θ)²` is the term that breaks it, and
+it breaks it in ONE direction only. Anything that read the old identity — a test, a HUD vocabulary,
+a comment reasoning "nose and tail are the same number so this sign cannot matter" — is now
+conditional on the wire authoring no tail gain. [`aspect_angle`](@ref)'s sign is the case that
+matters most: it was previously INVISIBLE here and is now measurable at any `G` ≠ 1.
 
-⚠ **DOMAIN.** `σ_broadside > 0` and `F > 0` throw `DomainError` by design — the
+⚠ **THE LOBE IS HEMISPHERE-WIDE, AND THAT IS A NAMED APPROXIMATION** (HANDOFF §1). `max(0, −cos θ)²`
+is exactly zero over the WHOLE forward hemisphere (θ < π/2 ⇒ nose-on and every approaching aspect is
+slice 49's number, bit for bit) and then rises smoothly to `G` at θ = π, half-power ≈45° off the
+tail. A real exhaust return is NARROWER than that — a nozzle spike, not a hemisphere. Squared (not
+linear) is why the derivative is continuous at broadside, so there is no kink for a detector to trip
+over; the price of that smoothness is the width. A narrow lobe with its own width key is a deferral,
+not a defect, exactly as fore/aft symmetry was one before this.
+
+⚠ **`G` < 1 IS LEGAL AND IS A QUIET TAIL** — a target DIMMER astern than nose-on. It is correctly
+signed and continuous through `G` = 1; nothing is special-cased. The floor of **1.0 on the shipped
+slider is a LESSON choice** (the null the student returns to), never a model limit: this kernel's
+limit is `G` > 0.
+
+⚠ **DOMAIN.** `σ_broadside > 0`, `F > 0` and `G > 0` throw `DomainError` by design — the
 [`detection_range`](@ref) posture, clamped at the CONSUMER (convention 5), never here.
 `F < 1` is legal and is an OBLATE body (wider than long — brighter nose-on than broadside);
-the formula handles it and the units stay honest.
+the formula handles it and the units stay honest. `G ≤ 0` is refused because at θ = π the bracket
+would go NEGATIVE — a negative cross-section, not a dim one.
+
+⚠⚠ **DO NOT WRITE "THE TAIL GAIN BUYS RANGE AT A FIXED DETECTION THRESHOLD"** (slice 53 gate 0, P7
+§3 / P7a §B). Raising `G` reshapes the SNR-vs-range curve, so it changes the local SLOPE where a
+run-rule tracker gives up as well as the level, and the measured SNR at the declared edge moved
++2.71 dB over `G` = 1 → 10. The `σ^(1/4)` range law is a bound on the ORDER of the effect, not an
+identity for it.
 
 ⚠⚠ **DO NOT USE `F = 1` AS THE BYTE-IDENTITY PATH.** `sin²θ + cos²θ` is 1 in algebra and not
 always 1.0 in floating point, so a scalar-RCS wire must branch PAST this call entirely (an early
 return on the key being absent), never route through it with `F = 1`.
 """
-function rcs_aspect(rcs_broadside_m2::Real, fineness::Real, aspect_rad::Real)
+function rcs_aspect(rcs_broadside_m2::Real, fineness::Real, aspect_rad::Real;
+                    tail_gain::Real = 1.0)
     rcs_broadside_m2 > 0 || throw(DomainError(rcs_broadside_m2, "broadside RCS must be > 0"))
     fineness > 0 || throw(DomainError(fineness, "fineness ratio must be > 0"))
+    tail_gain > 0 || throw(DomainError(tail_gain, "tail gain must be > 0"))
     s, c = sincos(aspect_rad)
     d = s * s + fineness * fineness * c * c
-    return rcs_broadside_m2 / (d * d)
+    # The lobe weight: zero over the whole FORWARD hemisphere (c ≥ 0), 1 at θ = π. `max` BEFORE the
+    # square, or the square would resurrect the forward half and re-symmetrize the curve.
+    aft = max(0.0, -c)
+    # ⚠ THE KEYWORD DEFAULT IS THE BYTE-IDENTITY PATH, AND THE ORDER OF THESE OPERATIONS IS WHAT
+    # MAKES IT ONE. At `tail_gain` = 1 the bracket is `1 + 0.0·aft²` = exactly 1.0, and
+    # `σ * 1.0 === σ` in IEEE arithmetic, so this reduces to slice 49's `σ / (d*d)` bit for bit —
+    # every slice 1–52 call site keeps its number without being edited. Multiplying into `d*d`
+    # instead (`σ / (d*d/bracket)`) would be algebraically equal and NOT bit-equal.
+    return rcs_broadside_m2 * (1 + (tail_gain - 1) * aft * aft) / (d * d)
 end
 
 const R_EARTH    = 6.371e6   # m, mean Earth radius (geometric horizon)

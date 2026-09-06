@@ -11,8 +11,10 @@
 #   2. An INDEPENDENT oracle: the RAW physical-optics ellipsoid `π a²b²c²/(…)²` built from actual
 #      semi-axes, which reaches the same curve through a different expression.
 #   3. ⚠⚠ `aspect_angle`'s SIGN — target→observer, pinned at 0 / π/2 / π on hand-built geometries.
-#      A flipped vector reflects θ about π/2, which `rcs_aspect`'s fore/aft symmetry HIDES, so the
-#      angle must be pinned on its own and not through the σ it feeds.
+#      A flipped vector reflects θ about π/2, which fore/aft symmetry HIDES, so the angle must be
+#      pinned on its own and not through the σ it feeds. ⭐ SLICE 53 made that symmetry conditional
+#      on `rcs_tail_gain` = 1, so the σ now discriminates the two ends TOO — but only on a wire
+#      that authors a gain, which is why these teeth stay exactly as they are.
 #   4. The degenerates a slider or a scenario reaches in one step — finite, defined, non-throwing.
 #   5. ⭐ THE ONE THAT WOULD HAVE KILLED THE SLICE AT GATE 2: `_lateral_accel`'s `:vertical` branch
 #      is BYTE-IDENTICAL to the slices 12–48 expression, and `:horizontal` genuinely leaves it.
@@ -195,10 +197,13 @@ end
 # exactly the geometry named. `fineness === nothing` withholds the key — the presence gate is the
 # thing under test.
 function _aspect_world(; tgt_pos = Vec3(0.0, 25_000.0, 5_000.0), tgt_vel = Vec3(250.0, 0.0, 0.0),
-                         rcs = 4.0, fineness = nothing, radar_pos = Vec3(0.0, 0.0, 30.0))
+                         rcs = 4.0, fineness = nothing, radar_pos = Vec3(0.0, 0.0, 30.0),
+                         tail_gain = nothing)
     w = World(seed = 49)
     comp = Dict{Symbol,Any}(:rcs_m2 => rcs)
     fineness === nothing || (comp[:rcs_fineness] = fineness)
+    # Slice 53: withheld by default, so every slice-49/50 caller above is untouched.
+    tail_gain === nothing || (comp[:rcs_tail_gain] = tail_gain)
     w.entities[:tgt1] = Entity(:tgt1, :target; pos = tgt_pos, vel = tgt_vel, comp = comp)
     w.entities[:radar1] = Entity(:radar1, :radar; pos = radar_pos, vel = zero(Vec3),
         comp = Dict{Symbol,Any}(:pt_w => 50_000.0, :gain_db => 35.0, :freq_hz => 9.4e9,
@@ -245,7 +250,11 @@ end
         σ_astern = EWSim._effective_rcs(tgt, Vec3(-50_000.0, 25_000.0, 5_000.0))
         @test σ_abeam  ≈ 4.0            atol = 1e-12
         @test σ_ahead  ≈ 4.0 / 10_000   atol = 1e-15      # 40 dB down
-        @test σ_astern ≈ 4.0 / 10_000   atol = 1e-15      # fore/aft symmetric, the NAMED approx
+        # ⚠ SLICE 53 RE-SCOPED THIS LINE RATHER THAN DELETING IT: fore/aft symmetry is no longer a
+        # property of `rcs_aspect` — it is a property of a wire authoring NO `rcs_tail_gain`, which
+        # this one is (`_aspect_world` withholds the key). The mirror tooth, with a gain, is in the
+        # slice-53 block at the foot of this file.
+        @test σ_astern ≈ 4.0 / 10_000   atol = 1e-15      # symmetric HERE, because G is absent
         @test σ_abeam / σ_ahead ≈ 10_000 atol = 1e-6      # 10⁴ apart, one target, one tick
     end
 
@@ -855,5 +864,419 @@ end
         for a in (a8, a10)
             @test maximum(maximum(abs.(a.pos[i] .- sph.pos[i])) for i in 1:(a.k - 1)) == 0.0
         end
+    end
+end
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 53 — **A TAIL LOBE**: does a target look the same going away as coming at you? (gate 1)
+#
+# `rcs_aspect` was fore/aft SYMMETRIC by construction — σ(θ) ≡ σ(π−θ) — so a fleeing target looked
+# exactly like an approaching one, and slice 49's HUD had to say "tail-on" rather than "nose-on"
+# past 150° because the model genuinely could not tell them apart. `rcs_tail_gain` (`G`) is the
+# engine face and exhaust a real airframe shows to an observer BEHIND it:
+#
+#     σ(θ) = σ_broadside · [1 + (G − 1)·max(0, −cos θ)²] / (sin²θ + F²·cos²θ)²
+#
+# WHAT THIS BLOCK HAS TEETH FOR, and every one of them names the LINE THAT DIFFERS between its two
+# arms (gate-0 P5's rule — a comparison whose arms execute the same code is not a measurement):
+#   1. THE KEYWORD DEFAULT IS THE BYTE-IDENTITY PATH. `tail_gain = 1.0` ⇒ the bracket is exactly
+#      1.0 and `σ·1.0 === σ`, so slices 49–52 keep their numbers bit for bit without being edited.
+#      ⚠ `===` here is a BIT-IDENTITY tooth on two Float64s reached by DIFFERENT expressions — it
+#      is NOT gate-0 P5's vacuous type tooth, where both arms ran the one shared early-return line.
+#   2. THE FORWARD HEMISPHERE IS UNTOUCHED AT EVERY `G` — including AT broadside, exactly, which is
+#      what lets `rcs_m2` keep the sharper meaning slice 49 gave it (the BROADSIDE peak) and lets
+#      slice 50's "every arm starts on the same cross-section" argument survive verbatim.
+#   3. ⭐⭐ THE ASYMMETRY ITSELF, as an EXTERNAL anchor rather than a recompute: the mirror pair
+#      σ(π−φ)/σ(φ) = 1 + (G−1)cos²φ, hand-checkable, the two sides sharing an identical denominator.
+#   4. THE HEMISPHERE-WIDE LOBE, pinned as a NUMBER — half the excess at 45° off the tail. The
+#      docstring names that width as an approximation (a real exhaust return is narrower), and a
+#      named approximation nobody measures is a claim, not a model.
+#   5. ⭐⭐⭐ THE LOADER LEARNS THE KEY. Gate 0 lost a probe to `load_scenario` accepting
+#      `rcs_tail_gain:` and silently DROPPING it (§2.13a) — a run that looks legitimate and flies
+#      the null. And then REFUSES it without an `rcs_fineness`, because the scalar branch of
+#      `_effective_rcs` returns before the gain is ever read: fixing only the first turns a
+#      silently-IGNORED key into a silently-SHADOWED one.
+#   6. THE SEAM IS STILL ONE SITE, so the lobe reaches the missile seeker for free — measured on
+#      the shipped slice-50 wire, where it is INERT (that engagement never leaves the forward
+#      hemisphere), and on a tail-on geometry, where the seeker's own acquisition range moves by
+#      the fourth root the link budget demands.
+
+@testset "the TAIL LOBE — the kernel (slice 53 gate 1)" begin
+    σ_bs = 4.0
+
+    @testset "⚠⚠ `tail_gain = 1.0` IS THE BYTE-IDENTITY PATH — the bracket is exactly 1.0" begin
+        # The two arms differ by a real expression: `σ * (1 + (G−1)·aft²) / (d*d)` against
+        # `σ / (d*d)`. `1 + 0.0·x` is exactly 1.0 and `σ * 1.0` is exact in IEEE, so this is an
+        # equality of BITS and not of algebra — the property convention 2 makes load-bearing
+        # (slices 49–52 are not re-tuned here, they are untouched).
+        for F in (1.0, 2.0, 8.0, 10.0, 0.5), θ in range(0.0, π; length = 37)
+            @test rcs_aspect(σ_bs, F, θ; tail_gain = 1.0) === rcs_aspect(σ_bs, F, θ)
+        end
+        # …and an Int 1 goes down the same path (a knob arriving as an integer must not branch).
+        @test rcs_aspect(σ_bs, 8.0, 2.7; tail_gain = 1) === rcs_aspect(σ_bs, 8.0, 2.7)
+    end
+
+    @testset "⭐ THE FORWARD HEMISPHERE IS UNTOUCHED AT EVERY `G` — bit for bit, incl. broadside" begin
+        # `max(0, −cos θ)` is identically ZERO for θ ≤ π/2, so nose-on and every APPROACHING aspect
+        # is slice 49's number. ⚠ π/2 is included on purpose: `cos(π/2)` is +6.1e-17 in Float64 —
+        # POSITIVE — so the weight is exactly 0.0 there and the boundary lands on the safe side.
+        for G in (0.25, 2.0, 20.0, 50.0, 1.0e6), F in (1.0, 8.0, 10.0),
+            θ in range(0.0, π/2; length = 25)
+            @test rcs_aspect(σ_bs, F, θ; tail_gain = G) === rcs_aspect(σ_bs, F, θ)
+        end
+        # BROADSIDE IS THE AUTHORED VALUE AT EVERY `G`, exactly — atol 0, an identity not a fit.
+        for G in (0.25, 1.0, 20.0, 50.0, 1.0e6), F in (1.0, 3.0, 8.0, 10.0)
+            @test rcs_aspect(σ_bs, F, π/2; tail_gain = G) == σ_bs
+        end
+    end
+
+    @testset "the anchors at the two ends — nose `σ/F⁴`, tail `G·σ/F⁴`" begin
+        # NOSE-ON: the slice-49 number at every `G` (hand-computed, not recomputed).
+        for G in (0.25, 1.0, 50.0)
+            @test rcs_aspect(σ_bs, 10.0, 0.0; tail_gain = G) ≈ 4.0 / 10_000 atol = 1e-15
+        end
+        # TAIL-ON: `G` times that, which is the ONE SENTENCE the knob carries.
+        # ⚠ rtol, NOT `==`: `sin(π)` is 1.22e-16, so the denominator is not exactly F⁴.
+        for G in (0.25, 2.0, 20.0, 50.0)
+            @test rcs_aspect(σ_bs, 10.0, π; tail_gain = G) ≈ G * 4.0 / 10_000 rtol = 1e-12
+            @test rcs_aspect(σ_bs,  2.0, π; tail_gain = G) ≈ G * 0.25         rtol = 1e-12
+        end
+        # ⭐ THE HEADLINE PAIR, at the arc's authored F = 8 and the measured ceiling G = 50: the
+        # tail is 17.0 dB brighter than the nose and still 19.1 dB BELOW broadside — an ordinary
+        # airframe, not a special effect. Both numbers are quoted in the kernel's docstring.
+        tail = rcs_aspect(σ_bs, 8.0, π;   tail_gain = 50.0)
+        nose = rcs_aspect(σ_bs, 8.0, 0.0; tail_gain = 50.0)
+        @test 10 * log10(tail / nose) ≈ 16.9897 atol = 1e-4          # 10·log10(50)
+        @test 10 * log10(tail / σ_bs) ≈ -19.1339 atol = 1e-4         # 10·log10(50/8⁴)
+    end
+
+    @testset "⭐⭐ THE ASYMMETRY — the mirror pair, against a hand-checkable EXTERNAL ratio" begin
+        # THE WHOLE SLICE, in one identity. φ and π−φ share an IDENTICAL denominator (cos²φ is the
+        # same at both), so the entire difference is the bracket, and the bracket at π−φ is
+        # 1 + (G−1)cos²φ — arithmetic a reader does on paper, not a second call to the kernel.
+        for G in (0.25, 2.0, 20.0, 50.0), F in (2.0, 8.0), φ in (0.1, 0.4, π/4, 1.0, 1.4)
+            near = rcs_aspect(σ_bs, F, φ;     tail_gain = G)
+            far  = rcs_aspect(σ_bs, F, π - φ; tail_gain = G)
+            @test far / near ≈ 1 + (G - 1) * cos(φ)^2 rtol = 1e-12
+            # …and `near` is slice 49's number untouched — the inbound leg is its own control.
+            @test near === rcs_aspect(σ_bs, F, φ)
+        end
+        # THE SYMMETRY THAT USED TO HOLD IS NOW CONDITIONAL ON `G` = 1, which is the retraction the
+        # docstring makes in place. Written as comparisons so it cannot be read as prose.
+        # ⚠ The OLD identity was always ALGEBRAIC and never bit-exact — `cos(π − φ)` and `−cos(φ)`
+        # differ in the last ulp — which is the same floating-point fact that keeps `F` = 1 out of
+        # the byte-identity path. It needs an `rtol`; the RETRACTION below does not.
+        @test rcs_aspect(σ_bs, 8.0, 0.6) ≈ rcs_aspect(σ_bs, 8.0, π - 0.6) rtol = 1e-12    # G absent
+        @test rcs_aspect(σ_bs, 8.0, 0.6; tail_gain = 20.0) !=
+              rcs_aspect(σ_bs, 8.0, π - 0.6; tail_gain = 20.0)
+    end
+
+    @testset "⭐⭐ THE PROMISSORY NOTE IN `frames.jl` IS CASHED — the σ NOW PINS THE SIGN" begin
+        # `aspect_angle`'s docstring said a target→observer vector used backwards *"becomes a
+        # silent wrong number the moment a tail lobe is ever added"*. This is that moment, asserted
+        # rather than promised. The FLIPPED form is `aspect_angle(obs, v, tgt)` — the same call
+        # with its two positions swapped, which reflects θ about π/2 — and the two σ it produces
+        # are now DIFFERENT numbers at a rear aspect, where slice 49's kernel returned one number
+        # for both. ⚠ The conditionality is the other half of the tooth: with the gain absent the
+        # two still agree, which is why `frames.jl` keeps its standalone geometry teeth.
+        tgt_pos, v = Vec3(0.0, 25_000.0, 5_000.0), Vec3(250.0, 0.0, 0.0)
+        obs = Vec3(-50_000.0, 25_000.0, 5_000.0)                       # dead ASTERN of the target
+        θ_ok   = aspect_angle(tgt_pos, v, obs)                         # target → observer, correct
+        θ_flip = aspect_angle(obs, v, tgt_pos)                         # observer → target, wrong
+        @test θ_ok  > π/2 && θ_flip < π/2                              # tail-on read as nose-on
+        @test rcs_aspect(σ_bs, 8.0, θ_ok) ≈ rcs_aspect(σ_bs, 8.0, θ_flip) rtol = 1e-12  # 49: silent
+        @test rcs_aspect(σ_bs, 8.0, θ_ok; tail_gain = 50.0) ≈
+              50 * rcs_aspect(σ_bs, 8.0, θ_flip; tail_gain = 50.0) rtol = 1e-9          # 53: 17 dB
+    end
+
+    @testset "⚠ THE LOBE IS HEMISPHERE-WIDE — the named approximation, pinned as a NUMBER" begin
+        # `max(0, −cos θ)²` = 1/2 at θ = 135°: HALF the excess brightness survives 45° off the
+        # tail. A real exhaust return is a narrow nozzle spike; this width is the price of a weight
+        # whose derivative is continuous at broadside (squared, not linear — no kink to trip on).
+        for G in (2.0, 20.0, 50.0)
+            r135 = rcs_aspect(σ_bs, 8.0, 3π/4; tail_gain = G) / rcs_aspect(σ_bs, 8.0, 3π/4)
+            @test r135 ≈ 1 + (G - 1) / 2 rtol = 1e-12
+        end
+        # CONTINUOUS AND FLAT AT BROADSIDE (the squared weight's other half): the excess just
+        # inside the rear hemisphere falls QUADRATICALLY with the offset, so a tenth of the offset
+        # is a hundredth of the step — there is no edge for a detector to sit on.
+        exc(h) = rcs_aspect(σ_bs, 8.0, π/2 + h; tail_gain = 50.0) - rcs_aspect(σ_bs, 8.0, π/2 + h)
+        # ⚠ 2 % rather than 1e-12: the DENOMINATOR moves with `h` as well, so a ten-fold offset is
+        # a hundred-fold excess only to leading order (measured 98.8, not 100.0). A tighter bound
+        # here would be pinning the ellipsoid curve, not the weight's continuity.
+        @test exc(1e-2) / exc(1e-3) ≈ 100.0 rtol = 0.02
+    end
+
+    @testset "`G` < 1 is a QUIET tail; `G` > 1 is monotone; both are continuous through 1" begin
+        # A target DIMMER astern than nose-on is legal and correctly signed — nothing is
+        # special-cased at 1. ⚠ The shipped slider's floor of 1.0 is a LESSON choice (the null the
+        # student returns to), NOT a model limit (gate-0 P7 §4).
+        @test rcs_aspect(σ_bs, 8.0, π; tail_gain = 0.25) < rcs_aspect(σ_bs, 8.0, 0.0)
+        @test rcs_aspect(σ_bs, 8.0, π; tail_gain = 0.25) ≈ 0.25 * 4.0 / 8.0^4 rtol = 1e-12
+        # Continuity through the null, from BOTH sides, against the exact value AT it.
+        at1 = rcs_aspect(σ_bs, 8.0, 2.5)
+        @test rcs_aspect(σ_bs, 8.0, 2.5; tail_gain = 1 - 1e-9) ≈ at1 rtol = 1e-8
+        @test rcs_aspect(σ_bs, 8.0, 2.5; tail_gain = 1 + 1e-9) ≈ at1 rtol = 1e-8
+        # STRICTLY MONOTONE in `G` at a rear aspect — the property every disqualified slider in
+        # this arc (28, 40, 25, 20, 22, 49, 50) failed. Here it is structural: the bracket is
+        # AFFINE in `G` with a non-negative coefficient.
+        ladder = [rcs_aspect(σ_bs, 8.0, 2.5; tail_gain = G) for G in (1.0, 2.0, 5.0, 10.0, 20.0, 50.0)]
+        @test issorted(ladder) && allunique(ladder)
+    end
+
+    @testset "domain + degenerates — `G > 0` throws, everything else stays finite (conv. 5/6)" begin
+        # `G ≤ 0` is refused because at θ = π the bracket would go NEGATIVE — a negative
+        # cross-section, not a dim one. Refused HERE (like σ and F), clamped at the CONSUMER.
+        @test_throws DomainError rcs_aspect(σ_bs, 8.0, 0.5; tail_gain = 0.0)
+        @test_throws DomainError rcs_aspect(σ_bs, 8.0, 0.5; tail_gain = -1.0)
+        # …and it throws even where the weight is zero, so the domain is a property of the KEY and
+        # not of the geometry it happens to be called at (a guard that fires only once the target
+        # turns away is not a guard — it is a crash waiting for a heading).
+        @test_throws DomainError rcs_aspect(σ_bs, 8.0, 0.0; tail_gain = -1.0)
+        # A SPHERE WITH A TAIL LOBE IS INCOHERENT, and the model says so out loud rather than
+        # refusing it: `F` = 1 with `G` > 1 is a legal call (a live slider's floor may not throw)
+        # returning a finite number — and the number is the tell, because the "broadside peak" is
+        # no longer the peak. Author `F` > 1 whenever `G` > 1.
+        @test rcs_aspect(σ_bs, 1.0, π; tail_gain = 50.0) ≈ 50 * σ_bs rtol = 1e-12
+        @test rcs_aspect(σ_bs, 1.0, π; tail_gain = 50.0) >
+              rcs_aspect(σ_bs, 1.0, π/2; tail_gain = 50.0)
+        for G in (1e-9, 1e-3, 1e6, 1e9), θ in (0.0, 1.0, π/2, 2.5, π)
+            v = rcs_aspect(σ_bs, 8.0, θ; tail_gain = G)
+            @test isfinite(v) && v > 0
+        end
+    end
+end
+
+@testset "the TAIL LOBE — THE SEAM (slice 53 gate 1)" begin
+
+    @testset "⚠⚠ THE SHAPED-BUT-GAINLESS WIRE IS BIT-IDENTICAL — slices 49–52, untouched" begin
+        # ARM 1 has no `:rcs_tail_gain` key at all; ARM 2 authors the null. Different comp bags,
+        # different `get` outcomes, one shared kernel — and the same bits out.
+        w49,  _ = _aspect_world(fineness = 8.0)
+        wnul, _ = _aspect_world(fineness = 8.0, tail_gain = 1.0)
+        obs = (Vec3(0.0,0.0,30.0), Vec3(1e5,25_000.0,5_000.0), Vec3(-1e5,25_000.0,5_000.0),
+               Vec3(-3e4,1e4,-2e3), Vec3(0.0,25_000.0,6_000.0))
+        for op in obs
+            @test EWSim._effective_rcs(wnul.entities[:tgt1], op) ===
+                  EWSim._effective_rcs(w49.entities[:tgt1], op)
+        end
+        # ⭐ PAIRED with an arm that DOES move, at the SAME observers, so the identity above is not
+        # a statement about the geometry being inert (gate-0 P5's rule, and slice 49's own note
+        # that its first draft of this tooth paired against a broadside point and read as a pass).
+        w50, _ = _aspect_world(fineness = 8.0, tail_gain = 50.0)
+        moved = [EWSim._effective_rcs(w50.entities[:tgt1], op) !=
+                 EWSim._effective_rcs(w49.entities[:tgt1], op) for op in obs]
+        # EXACTLY the two observers BEHIND the target move (3 is dead astern; 4 is off the tail
+        # quarter, at −30 km on a +x heading). ⚠ The abeam and ahead ones do not, and that is the
+        # point: this list is a HEMISPHERE MAP, not a smoke test — a kernel that leaked forward
+        # would light all five, and one that never fired would light none.
+        @test moved == [false, false, true, true, false]
+    end
+
+    @testset "⭐⭐⭐ ONE TARGET, ONE INSTANT, TWO ENDS OF THE PASS — and they now DIFFER" begin
+        # The target flies +x at 25 km due +y of the radar. An observer dead AHEAD of it and one
+        # dead ASTERN sit at the same range on the same axis, off the SAME comp bag, in the same
+        # tick — and slice 49's model returned the IDENTICAL number for both. That is the sentence
+        # this slice retires: which way you point does not just change how bright you are, it
+        # changes it ASYMMETRICALLY, and no single cross-section number can say that.
+        w, _ = _aspect_world(fineness = 10.0, tail_gain = 50.0)
+        tgt = w.entities[:tgt1]
+        σ_abeam  = EWSim._effective_rcs(tgt, Vec3(0.0, 25_000.0, 6_000.0))
+        σ_ahead  = EWSim._effective_rcs(tgt, Vec3( 50_000.0, 25_000.0, 5_000.0))
+        σ_astern = EWSim._effective_rcs(tgt, Vec3(-50_000.0, 25_000.0, 5_000.0))
+        @test σ_abeam  ≈ 4.0                  atol = 1e-12   # broadside, the authored key, at any G
+        @test σ_ahead  ≈ 4.0 / 10_000         atol = 1e-15   # 40 dB down — slice 49's number
+        @test σ_astern ≈ 50.0 * 4.0 / 10_000  atol = 1e-13   # 17 dB back UP, and only astern
+        @test σ_astern / σ_ahead ≈ 50.0       rtol = 1e-9    # the knob's one sentence, on the wire
+    end
+
+    @testset "⚠⚠ A SCALAR-RCS TARGET SHADOWS THE GAIN — which is why the LOADER refuses it" begin
+        # No `:rcs_fineness` ⇒ the slices-1..48 early return fires BEFORE the gain is read, and a
+        # `G` of 50 changes literally nothing (gate-0 P5 §4, re-asked properly by P6a). That is a
+        # DEAD KNOB — the `speed` (19) / handover-bias (36) failure mode — so `scenario.jl` makes
+        # it unauthorable rather than leaving it here to be silently ignored.
+        w, _ = _aspect_world(tail_gain = 50.0)
+        tgt = w.entities[:tgt1]
+        for op in (Vec3(-1e5,25_000.0,5_000.0), Vec3(1e5,25_000.0,5_000.0), Vec3(0.0,0.0,30.0))
+            @test EWSim._effective_rcs(tgt, op) === tgt.comp[:rcs_m2]
+        end
+    end
+
+    @testset "a live slider can never crash a tick (convention 5) — the CONSUMER floor" begin
+        # `set_param` does not clamp to a knob's declared min/max, so a client can drive the comp
+        # key to 0 or negative, where `rcs_aspect` THROWS — and a throw inside `observe!` silently
+        # drops the connection. Floored at the consumer, in the same expression `:rcs_fineness` is.
+        for G in (0.0, -5.0, -1.0e9, 1.0e-30)
+            w, subs = _aspect_world(fineness = 8.0, tail_gain = G,
+                                    tgt_vel = Vec3(0.0, 250.0, 0.0))   # flying AWAY: the gain bites
+            σ = EWSim._effective_rcs(w.entities[:tgt1], Vec3(0.0, 0.0, 30.0))
+            @test isfinite(σ) && σ > 0
+            tick!(w, subs, 1.0e-3)                                      # …and the tick survives
+            @test isfinite(w.env[:telemetry]["radar1.rcs_eff_m2"])
+        end
+        # A huge-but-finite gain ships a huge-but-finite σ (convention 6 — never ±Inf).
+        w, subs = _aspect_world(fineness = 8.0, tail_gain = 1.0e9, tgt_vel = Vec3(0.0, 250.0, 0.0))
+        tick!(w, subs, 1.0e-3)
+        @test isfinite(w.env[:telemetry]["radar1.rcs_eff_m2"])
+        @test isfinite(w.env[:telemetry]["radar1.rcs_loss_db"])
+    end
+
+    @testset "the seam reaches the RADAR through the ONE site, gain and all" begin
+        # An INDEPENDENT link-budget recompute off `rcs_aspect` (not off `_effective_rcs`, which
+        # would be the same call twice). Target flying AWAY from the radar ⇒ rear hemisphere.
+        w, subs = _aspect_world(fineness = 10.0, tail_gain = 20.0,
+                                tgt_vel = Vec3(0.0, 250.0, 0.0))
+        tick!(w, subs, 1.0e-3)
+        tel = w.env[:telemetry]
+        tgt, rdr = w.entities[:tgt1], w.entities[:radar1]
+        rp = RadarParams(50_000.0, 35.0, 9.4e9, 1.0e6, 3.0, 4.0)
+        θ  = aspect_angle(tgt.pos, tgt.vel, rdr.pos)
+        @test θ > π/2                                          # not vacuous: the lobe is LIVE here
+        σ  = rcs_aspect(4.0, 10.0, θ; tail_gain = 20.0)
+        R  = los_range(rdr.pos, tgt.pos)
+        @test tel["radar1.snr_db"]     ≈ lin2db(snr_freespace(rp, σ, R)) atol = 1e-9
+        @test tel["radar1.rcs_eff_m2"] ≈ σ                               atol = 1e-15
+        # …and it is 19.3× the number the same wire would have shipped without the gain, so this
+        # could not have passed off slice 49's expression. ⚠ NOT 20×: the multiplier is the full
+        # `G` only at θ = π, and this geometry sits at 168.7° — quoting the knob's own value where
+        # the hand formula belongs is the "buys range at a fixed threshold" mistake one level down
+        # (gate-0 P7 §3).
+        @test σ / rcs_aspect(4.0, 10.0, θ) ≈ 1 + 19 * cos(θ)^2 rtol = 1e-12
+        @test σ > 19 * rcs_aspect(4.0, 10.0, θ)
+        # THE HUD's cost key follows it: dB BELOW broadside, with the tail lobe paying 13 dB back.
+        @test tel["radar1.rcs_loss_db"] ≈ lin2db(4.0 / σ) atol = 1e-9
+    end
+end
+
+@testset "the TAIL LOBE — THE LOADER (slice 53 gate 1)" begin
+    # ⚠⚠ THE TEST THAT WOULD HAVE CAUGHT THE DEFECT GATE 0 TRIPPED OVER. `load_scenario` DROPS an
+    # unknown `target:` key silently, so before this block a scenario could author
+    # `rcs_tail_gain: 50`, load clean, print a plausible run — and fly the null. Every gate-0 probe
+    # from P3 on had to INJECT the key into `entity.comp` after load for exactly this reason
+    # (docs/plans/slice53.md §2.13a). This is the `.get(k, 0.0)` family one level up: the wire
+    # accepts the key and there is no value anywhere to clamp at.
+    # ⚠ THE YAML IS BUILT BY A FUNCTION, NOT BY `replace`-ing lines out of one literal. A first
+    # draft did the latter and the "no fineness" arm SILENTLY STOPPED BEING that arm — deleting a
+    # line from a dedented triple-quoted string leaves its indentation behind, and the next key
+    # folds onto the previous one. A malformed variant that loads clean is a test asserting
+    # nothing, which is the same shape as the defect this block exists to catch.
+    function _yaml(; fine = "8.0", gain = "20.0")
+        io = IOBuffer()
+        println(io, "name: tailgain")
+        println(io, "seed: 53")
+        println(io, "dt_physics: 1.0e-3")
+        println(io, "entities:")
+        println(io, "  - id: tgt1")
+        println(io, "    kind: target")
+        println(io, "    pos: [0.0, 18000.0, 5000.0]")
+        println(io, "    vel: [300.0, 0.0, 0.0]")
+        println(io, "    target:")
+        println(io, "      rcs_m2: 4.0")
+        fine === nothing || println(io, "      rcs_fineness: ", fine)
+        gain === nothing || println(io, "      rcs_tail_gain: ", gain)
+        return String(take!(io))
+    end
+
+    mktempdir() do dir
+        good = joinpath(dir, "good.yaml"); write(good, _yaml())
+        c = load_scenario(good).world.entities[:tgt1].comp
+        @test haskey(c, :rcs_tail_gain)             # ⇐ THE ANTI-P6a TOOTH
+        @test c[:rcs_tail_gain] == 20.0
+        @test c[:rcs_tail_gain] isa Float64         # SI Float64 on the wire, like every other key
+        # …and it REACHES the physics from there, which is the second half of the model test: a key
+        # that loads but is read by nothing is the same bug wearing a value. The observer sits dead
+        # ASTERN, where `G` multiplies the nose/tail floor `σ/F⁴` exactly.
+        w = load_scenario(good).world
+        σ = EWSim._effective_rcs(w.entities[:tgt1], Vec3(-5e4, 18_000.0, 5_000.0))
+        @test σ ≈ 20 * 4.0 / 8.0^4 rtol = 1e-12
+        # A target that authors NO gain keeps its slice-49 comp bag exactly — the key is optional
+        # and its ABSENCE is the wire's null (not `G` = 1, which is the LESSON's null).
+        p0 = joinpath(dir, "nogain.yaml"); write(p0, _yaml(gain = nothing))
+        @test !haskey(load_scenario(p0).world.entities[:tgt1].comp, :rcs_tail_gain)
+
+        # ⚠⚠ REFUSED WITHOUT A FINENESS. Fixing only the drop above would turn a silently-IGNORED
+        # key into a silently-SHADOWED one: `_effective_rcs` early-returns on the scalar branch and
+        # never reads the gain. A knob nothing reads is a BUG (the 2026-08-18 two-test rule's only
+        # outright kill), so the loader makes it unauthorable.
+        p1 = joinpath(dir, "noshape.yaml"); write(p1, _yaml(fine = nothing))
+        @test_throws ErrorException load_scenario(p1)
+        # DOMAIN, at LOAD: `G ≤ 0` is a NEGATIVE cross-section at θ = π and `rcs_aspect` throws on
+        # it — inside a tick that drops the client's connection, so authored inputs are validated
+        # here (convention 5) while live sliders are clamped at the consumer. `.inf`/`.nan` are
+        # convention 6's other half: a non-finite σ is JSON poison the moment it is emitted.
+        # ⚠ THE MESSAGE IS PART OF THE TOOTH. `@test_throws ErrorException` alone would pass on a
+        # YAML parse failure or an `_f64` conversion error — a refusal for the WRONG REASON, which
+        # on `.nan`/`.inf` is exactly the plausible failure (the parser may hand back a string).
+        # Pinning the text is what proves the finiteness guard itself ran.
+        for (nm, bad) in (("zero", "0.0"), ("neg", "-3.0"), ("inf", ".inf"), ("nan", ".nan"))
+            p = joinpath(dir, "bad_$nm.yaml")
+            write(p, _yaml(gain = bad))
+            @test_throws "rcs_tail_gain must be finite and > 0" load_scenario(p)
+        end
+        # …and the same for the shape refusal, which has its own sentence.
+        @test_throws "rcs_tail_gain needs rcs_fineness" load_scenario(p1)
+        # ⚠ `G` < 1 IS LEGAL — a QUIET tail (dimmer astern than nose-on), the posture `F` < 1
+        # already has. The shipped slider's floor of 1.0 is a LESSON choice, not a model limit.
+        p2 = joinpath(dir, "quiet.yaml"); write(p2, _yaml(gain = "0.25"))
+        @test load_scenario(p2).world.entities[:tgt1].comp[:rcs_tail_gain] == 0.25
+    end
+end
+
+@testset "the TAIL LOBE REACHES THE SEEKER — for free, through the ONE site (slice 53 gate 1)" begin
+    # ⚠ "FOR FREE" IS A HAZARD, NOT A BONUS (gate-0 F1): `_effective_rcs` is the one place a shape
+    # becomes a cross-section, and the missile seeker's detection horizon already routes through
+    # it. So the new key lands on TWO shipped consumers whether or not either scenario authors it,
+    # and both halves of that have to be measured rather than asserted.
+
+    @testset "⭐ ON THE SHIPPED SLICE-50 ENGAGEMENT IT IS INERT — that flight never turns its tail" begin
+        # slice50_defensive launches BROADSIDE (aspect exactly 90.0° at t = 0) and the target then
+        # turns its NOSE toward the missile — the forward hemisphere for the whole run. So an
+        # injected gain of 50 must change the flight by ZERO metres and not one telemetry bit.
+        # This is the strongest form of the forward-hemisphere property available: not a kernel
+        # identity, a whole engagement flown twice.
+        function _fly53(G)
+            sc = load_scenario(_SCEN50)
+            w, subs, dt = sc.world, sc.subs, sc.dt_physics
+            G === nothing || (w.entities[:tgt1].comp[:rcs_tail_gain] = G)
+            pos = NTuple{3,Float64}[]; racq = Float64[]; asp = Float64[]
+            for _ in 1:2000                     # 2 s — cheap, and well inside the detection block
+                tick!(w, subs, dt)
+                e = w.entities[:m1]; t = w.entities[:tgt1]
+                push!(pos, (e.pos[1], e.pos[2], e.pos[3]))
+                push!(racq, Float64(get(w.env[:telemetry], "m1.seeker_r_acq_m", NaN)))
+                push!(asp, aspect_angle(t.pos, t.vel, e.pos))
+            end
+            (; pos, racq, asp)
+        end
+        a, b = _fly53(nothing), _fly53(50.0)
+        @test maximum(maximum(abs(a.pos[i][j] - b.pos[i][j]) for j in 1:3)
+                      for i in eachindex(a.pos)) == 0.0
+        @test a.racq == b.racq
+        @test maximum(a.asp) ≤ π/2 + 1e-12      # …and here is WHY: never behind the target
+    end
+
+    @testset "⭐⭐ TURN THE TARGET'S TAIL TO THE MISSILE AND THE SEEKER'S HORIZON MOVES" begin
+        # The paired arm the inert one needs. Same scenario, same tick, ONE edit: the target's nose
+        # points directly AWAY from the missile at launch — the geometry slice 49's HUD could only
+        # call "tail-on" because the model could not tell it from nose-on.
+        # ⚠ The anchor is the FOURTH ROOT — `detection_range` goes as σ^(1/4) — recomputed from the
+        # aspect the flight actually flew, not from the one the setup intended.
+        function _tailon(G)
+            sc = load_scenario(_SCEN50)
+            w, subs, dt = sc.world, sc.subs, sc.dt_physics
+            t, m = w.entities[:tgt1], w.entities[:m1]
+            away = t.pos - m.pos
+            t.vel = away * (sqrt(sum(abs2, t.vel)) / sqrt(sum(abs2, away)))  # tail-on, same speed
+            G === nothing || (t.comp[:rcs_tail_gain] = G)
+            tick!(w, subs, dt)
+            (; racq = w.env[:telemetry]["m1.seeker_r_acq_m"],
+               θ = aspect_angle(t.pos, t.vel, m.pos))
+        end
+        n, g = _tailon(nothing), _tailon(50.0)
+        @test n.θ > 3.10                                  # ~π: the tail lobe is at full strength
+        @test g.racq > n.racq
+        bracket = 1 + (50.0 - 1) * max(0.0, -cos(g.θ))^2
+        @test g.racq / n.racq ≈ bracket^0.25 rtol = 1e-9  # σ^(1/4), the link budget's own exponent
+        @test g.racq / n.racq ≈ 2.659 atol = 1e-3         # 50^(1/4), hand-checkable
     end
 end

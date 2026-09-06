@@ -182,10 +182,17 @@ direction of the observer (slice 49). `0` = nose-on (the observer is dead ahead 
 
 ⚠⚠ **SIGN / FRAME — THE VECTOR IS TARGET → OBSERVER, AND GETTING IT BACKWARDS SWAPS NOSE AND
 TAIL.** `cos θ = (v̂ · d̂)` with `d = obs_pos − tgt_pos`. Using observer→target instead reflects
-θ about π/2, which is INVISIBLE under `rcs_aspect`'s fore/aft symmetry and becomes a silent wrong
-number the moment a tail lobe is ever added. Pinned at 0, π/2 and π in `test_rcs_aspect.jl`
-against hand-computed geometries — the units/frames/signs trifecta (HANDOFF §1), treated as
-first-class here for the same reason [`los_rate`](@ref)'s sign is.
+θ about π/2. Pinned at 0, π/2 and π in `test_rcs_aspect.jl` against hand-computed geometries — the
+units/frames/signs trifecta (HANDOFF §1), treated as first-class here for the same reason
+[`los_rate`](@ref)'s sign is.
+
+⭐ **SLICE 53 CASHED THE PROMISSORY NOTE THIS PARAGRAPH USED TO CARRY.** It said the flip was
+*"INVISIBLE under `rcs_aspect`'s fore/aft symmetry and becomes a silent wrong number the moment a
+tail lobe is ever added"* — that moment has arrived. With a `tail_gain` ≠ 1 the cross-section itself
+now discriminates θ from π−θ, so the sign is pinned by the physics downstream and not only by these
+standalone geometry teeth. ⚠ The note is retained rather than deleted because the discrimination is
+CONDITIONAL: on a wire authoring no tail gain (every slice 1–52 scenario) σ(θ) ≡ σ(π−θ) still holds
+and a flipped vector is still silent there.
 
 ⚠ **THE NOSE IS THE VELOCITY DIRECTION, NOT AN ATTITUDE** (named approximation, HANDOFF §1):
 targets in this project carry `vel` and no attitude quaternion, so this assumes zero sideslip and

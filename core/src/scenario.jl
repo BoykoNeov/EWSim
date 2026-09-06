@@ -155,6 +155,38 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                 error("target '$id': rcs_fineness must be finite and > 0 " *
                       "(got $(comp[:rcs_fineness])) — it is the body's length/width ratio")
         end
+        # ⭐ SLICE 53: an OPTIONAL TAIL LOBE — `rcs_tail_gain` is `G`, how many times brighter the
+        # target's TAIL is than its NOSE (`rcs_aspect`, rf.jl). It breaks the fore/aft symmetry
+        # slice 49 shipped as a named approximation: without it a fleeing target looks exactly like
+        # an approaching one at the same angle off broadside. Read INSIDE the shaped branch of
+        # `_effective_rcs` (radar.jl) with a default of 1.0, so a shaped target that authors no gain
+        # is bit-identical to slices 49–52 and an unshaped one is bit-identical to slices 1–48.
+        # ⚠⚠ TWO GUARDS, AND SHIPPING ONLY THE FIRST WOULD BE WORSE THAN SHIPPING NEITHER (gate-0
+        # P6a). (1) The key must be LEARNED here at all: `load_scenario` drops an unknown `target:`
+        # key SILENTLY, so before this block a scenario could author `rcs_tail_gain: 50`, load
+        # clean, and fly the null — a dead knob with no value anywhere to clamp at, which is the
+        # `speed` (19) / handover-bias (36) trap. (2) It must then be REFUSED without a
+        # `rcs_fineness`, because the early return in `_effective_rcs` fires first on a scalar-RCS
+        # target and the gain would be read by nothing. Fixing only (1) turns a silently-IGNORED
+        # key into a silently-SHADOWED one.
+        # ⚠ THE GUARD READS THE YAML BLOCK `tb`, NOT `comp` — `haskey(comp, :rcs_fineness)` would
+        # work only because the fineness parse happens to sit above this one, and a later reorder
+        # would silently disarm it (the same reasoning the `maneuver:` fork below states).
+        # Load-validated FINITE and > 0: `G ≤ 0` is a NEGATIVE cross-section at θ = π and
+        # `rcs_aspect` throws on it, which inside a tick drops the client's connection
+        # (convention 5 — validate authored inputs at LOAD, clamp live sliders at the consumer).
+        # `G < 1` is LEGAL and is a QUIET tail (dimmer astern than nose-on), the same posture
+        # `F < 1` has; the slider's floor of 1.0 is a LESSON choice, not a model limit.
+        if haskey(tb, "rcs_tail_gain")
+            haskey(tb, "rcs_fineness") ||
+                error("target '$id': rcs_tail_gain needs rcs_fineness — a tail lobe is a shape " *
+                      "term, and a target with no shape takes the scalar-RCS branch that never " *
+                      "reads it (a knob nothing reads is a bug, not a feature)")
+            comp[:rcs_tail_gain] = _f64(tb["rcs_tail_gain"])
+            (isfinite(comp[:rcs_tail_gain]) && comp[:rcs_tail_gain] > 0) ||
+                error("target '$id': rcs_tail_gain must be finite and > 0 " *
+                      "(got $(comp[:rcs_tail_gain])) — it is the tail-to-nose brightness ratio")
+        end
         # Slice 12: a `maneuver:` sub-block turns the straight-line target into a CURVING one — swap
         # ConstantVelocity → ManeuveringTarget (the augmented-PN foil). `a_lat_mps2`/`turn_sign` —
         # and, since 49/51, `turn_plane`/`turn_start_s` — land
