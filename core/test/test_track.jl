@@ -428,3 +428,241 @@ end
         end
     end
 end
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 53 GATE 3 — THE SHOWCASE WIRE, ITS MARKER, AND THE LADDER IT IS QUOTED ON.
+#
+# Gate 2 shipped the tracker against a probe-built wire. Gate 3 authors it as `slice53_taillobe.yaml`
+# and hands a student one slider. Everything a HUD line, a scenario header or a verifier CONSTANT
+# quotes about that file is pinned here, so an edit to the YAML breaks in the core rather than in a
+# screenshot (the slice-49 posture).
+#
+# ⚠ THE SEED IS 250 AND IT WAS CHOSEN BY A RULE FIXED BEFORE THE FLIGHTS (probe `g3_seed.jl`,
+# gate-3 log): monotone over the coarse ladder; both authored drags moving by ≥ 1 km; and — the
+# discriminator — an OPENING reading above F3's attributability bar of max-null × 3 = 2905 m. It is
+# the only one of the 8 gate-0 seeds that passes. ⚠⚠ Seed 53, the obvious name-matching pick, FAILS:
+# it opens at +1820 m, 1085 m BELOW the bar it would have to be attributable against.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+const _SCEN53 = normpath(joinpath(@__DIR__, "..", "..", "scenarios", "slice53_taillobe.yaml"))
+
+# Fly the SHIPPED file, optionally overriding the tail gain. 100 s is chosen against a measurement,
+# not rounded: the last edge this file asserts is declared at look 950 (`G` = 50), so 1000 looks
+# leaves 50 of margin — P7a §C's arm-specific censoring check, at the length the test actually flies.
+function _fly53(G; secs = 100.0)
+    sc = load_scenario(_SCEN53)
+    w, subs, dt = sc.world, sc.subs, sc.dt_physics
+    G === nothing || (w.entities[:tgt1].comp[:rcs_tail_gain] = G)
+    r = w.entities[:radar1]
+    gl = -1; asp_gain = NaN
+    for _ in 1:round(Int, secs / dt)
+        prev = get(r.comp, :next_look_t, 0.0)
+        tick!(w, subs, dt)
+        if get(r.comp, :next_look_t, 0.0) != prev
+            ngl = Int(get(w.env[:telemetry], "radar1.track_gain_look", -1.0))
+            # The aspect AT THE LOOK THE GAIN EDGE WAS DECLARED — sampled on the transition, because
+            # the edge is latched and the aspect is not.
+            if ngl != gl && ngl > 0
+                gl = ngl
+                asp_gain = w.env[:telemetry]["radar1.target_aspect_deg"]
+            end
+        end
+    end
+    tel = w.env[:telemetry]
+    (gain = tel["radar1.track_gain_range_m"], gl = Int(tel["radar1.track_gain_look"]),
+     loss = tel["radar1.track_loss_range_m"], ll = Int(tel["radar1.track_loss_look"]),
+     asym = get(tel, "radar1.track_asym_m", nothing), asp_gain = asp_gain,
+     nlook = Int(tel["radar1.track_look"]), pos = copy(w.entities[:tgt1].pos),
+     dirty = tel["radar1.track_pass_dirty"], scn = sc, world = w)
+end
+
+@testset "slice 53 gate 3 — the showcase wire" begin
+    @testset "the scenario is what every downstream number was measured on" begin
+        sc = load_scenario(_SCEN53)
+        @test sc isa EWSim.Scenario
+        @test sc.name == "slice53_taillobe"
+        tgt = sc.world.entities[:tgt1]
+        @test tgt.comp[:rcs_tail_gain] == 20.0        # the AUTHORED opening — mid-lesson
+        @test tgt.comp[:rcs_fineness] == 8.0          # FIXED, not a knob: the shape is held still
+        @test tgt.comp[:rcs_m2] == 4.0                # …and still means the BROADSIDE peak
+        @test !haskey(tgt.comp, :maneuver)            # a STRAIGHT pass: the tracker assumes ONE CPA
+        rad = sc.world.entities[:radar1]
+        # ⚠⚠ THE RULE THE METRES ARE A JOINT PROPERTY OF (§2.14). Change either of these two and
+        # every number in the YAML header, the HUD and the verifier is a measurement of something
+        # else — so they are pinned here rather than left to the file.
+        @test rad.comp[:track_drop_looks] == 3
+        @test rad.comp[:revisit_s] == 0.1
+        @test rad.comp[:swerling] == 1                # what makes the NULL arm read noise, not zero
+        # EXACTLY ONE LIVE KNOB (convention 9), and both endpoints are the measured ones.
+        @test length(sc.knobs) == 1
+        @test sc.knobs[1].key === :rcs_tail_gain && sc.knobs[1].target === :tgt1
+        @test sc.knobs[1].min == 1.0 && sc.knobs[1].max == 50.0
+        # ⚠ LINEAR, and NOT for slice 49's or 52's reason — the half-effect of a 1→50 domain sits at
+        # G = 20.2, which is 39.2 % of a LINEAR drag and 76.8 % of a LOG one. `log` is a real field
+        # on `Knob` and seven shipped scenarios author it, so this is a CHOICE and not an absence.
+        @test !sc.knobs[1].log
+        @test length(sc.knobs[1].label) ≤ 110         # the HUD width budget (slice 32's shots)
+        @test sc.world.fidelity[:propagation] === :free_space
+        # ⚠ CONVENTION 14: a verifier's STEPS must be a multiple of `emit_every` or it hangs
+        # SILENTLY. Pin the value the .gd scripts divide by, so an edit to one breaks here first.
+        @test sc.emit_every == 16
+        @test sc.dt_physics == 1.0e-3
+        @test sc.world.entities[:tgt1].pos == Vec3(-15000.0, 0.0, 5000.0)
+        @test sc.world.entities[:tgt1].vel == Vec3(300.0, 0.0, 0.0)
+    end
+
+    @testset "⭐⭐ the view marker is the PAIR, and it takes the HUD without taking the button" begin
+        sc = load_scenario(_SCEN53)
+        info = EWSim._tail_view_info(sc.world)
+        @test info !== nothing
+        @test info[:tail_view] === true
+        @test info[:tail_target] == "tgt1"
+        @test info[:tail_observer] == "radar1"
+        # ⚠ …AND SLICE 49's MARKER IS STILL RAISED, DELIBERATELY. It owns the BUTTON job on this
+        # view — dropping the `free_space ↔ two_ray` toggle, which is the right drop here for slice
+        # 49's own reason (multipath is a SECOND way for a target to vanish). The client checks
+        # `tail_view` FIRST for the HUD and leaves the button where it is.
+        asp = EWSim._aspect_view_info(sc.world)
+        @test asp !== nothing && asp[:aspect_view] === true &&
+              asp[:aspect_target] == "tgt1" && asp[:aspect_observer] == "radar1"
+        # …and the handshake carries BOTH, which is what the client actually parses.
+        f = EWSim.scenario_frame(EWSim.Server(sc; path = _SCEN53))
+        @test f[:tail_view] === true && f[:aspect_view] === true
+        @test f[:tail_target] == "tgt1" && f[:tail_observer] == "radar1"
+    end
+
+    @testset "HALF A PAIR IS NOT A MARKER — both halves, both directions" begin
+        mktempdir() do dir
+            # A TAIL LOBE WITH NO TRACKING RADAR. Slice 49's wire is exactly this once a gain is
+            # injected: a shaped, tail-lobed target and a radar that keeps no track. It has an
+            # asymmetry; it has none THIS view can quote, and every `track_*` line would render off
+            # `.get(k, 0.0)` — "GOT IT 0.00 km @ look #0", six defaulted numbers on a green run.
+            p1 = joinpath(dir, "notracker.yaml")
+            write(p1, _trk_yaml(gain = "20.0", drop = nothing))
+            @test EWSim._tail_view_info(load_scenario(p1).world) === nothing
+            # A TRACKING RADAR WITH NO TAIL LOBE. The tracker is generic — a plain fly-past wire may
+            # legitimately author it — and its two edges are then a fading-noise difference with no
+            # lesson behind them. The block's headline would claim an asymmetry nothing produced.
+            p2 = joinpath(dir, "nogain.yaml")
+            write(p2, _trk_yaml(gain = nothing, drop = "3"))
+            @test EWSim._tail_view_info(load_scenario(p2).world) === nothing
+            # …and BOTH present raises it, which is the paired control for the two above.
+            p3 = joinpath(dir, "both.yaml")
+            write(p3, _trk_yaml(gain = "20.0", drop = "3"))
+            @test EWSim._tail_view_info(load_scenario(p3).world)[:tail_view] === true
+        end
+        # ⭐ THE GATE IS PRESENCE, NEVER THE VALUE — slice 50's rule (the lesson's NULL and a dead
+        # instrument's DEFAULT must not read the same). The showcase's headline drag is G = 20 → 1,
+        # and `set_param` writes the comp bag IN PLACE, so a marker gated on `G > 1` would blank on
+        # exactly the arm that proves the null. Driven through the SERVER's own command path, which
+        # is the one a slider uses.
+        srv = EWSim.Server(load_scenario(_SCEN53); path = _SCEN53)
+        EWSim.handle_command!(srv, Dict(:type => "set_param", :target => "tgt1",
+                                        :key => "rcs_tail_gain", :value => 1.0))
+        @test srv.scn.world.entities[:tgt1].comp[:rcs_tail_gain] == 1.0
+        @test EWSim._tail_view_info(srv.scn.world)[:tail_view] === true
+    end
+
+    @testset "…and NO OTHER SHIPPED WIRE raises it" begin
+        # An enumerated carrier SET rather than an `isempty`, for the reason slices 36–50 each
+        # rediscovered: an `isempty` goes on passing forever while quietly ceasing to say anything
+        # the moment a second wire is added.
+        base = normpath(joinpath(@__DIR__, "..", "..", "scenarios"))
+        carriers = String[]
+        for f in sort(readdir(base))
+            endswith(f, ".yaml") || continue
+            EWSim._tail_view_info(load_scenario(joinpath(base, f)).world) === nothing ||
+                push!(carriers, f)
+        end
+        @test carriers == ["slice53_taillobe.yaml"]
+    end
+
+    @testset "⭐⭐⭐ THE LADDER — the anchors every HUD line and verifier constant is quoted from" begin
+        a1  = _fly53(1.0)
+        a20 = _fly53(nothing)        # the AUTHORED wire, untouched — G = 20
+        a50 = _fly53(50.0)
+        # ⭐⭐⭐ THE INBOUND EDGE IS IDENTICAL TO THE BIT AT EVERY SETTING, WHICH IS THE WHOLE PAIRED
+        # CONSTRUCTION. `===` and not `≈`: the kernel's lobe is `max(0, −cos θ)²`, identically ZERO
+        # on the forward hemisphere, so at the look the track opens the multiplier is exactly 1.0
+        # and no `G` can reach it. Gate 0 measured `max |in_G − in_1|` = 0.000000e+00 over 824
+        # flights; this is that statement on the shipped file.
+        @test a1.gain === a20.gain === a50.gain
+        @test a1.gl == a20.gl == a50.gl == 375
+        # …and the reason, IN ONE NUMBER: the edge is declared at an aspect of 52.7°, forward of
+        # broadside. ⚠ If a future edit moves the geometry so this passes 90°, the gauge stops being
+        # a paired difference and becomes a difference of two things the slider moves.
+        @test a1.asp_gain < 90.0
+        @test a1.asp_gain ≈ 52.746902 atol = 1.0e-5
+        # EXTERNAL ANCHOR (convention 11): 6243.9596 m is `docs/plans/slice53.md` §4.2's own printed
+        # inbound-gain invariant for seed 250, produced by a different program on a different day.
+        @test a1.gain ≈ 6243.9596 atol = 1.0e-3
+        # THE THREE CELLS THE SHOWCASE IS AUTHORED AROUND — the null it drags back to, the opening,
+        # and the ceiling. ⚠ The null is NOT zero and is not asserted as zero: identical σ on the
+        # two legs still means different Swerling-1 draws, so it is fading noise (+583 m here, and
+        # −658 … +968 m over the 8 gate-0 seeds).
+        @test a1.asym  ≈ 583.1126641439   atol = 1.0e-6
+        @test a20.asym ≈ 3516.4676010084  atol = 1.0e-6
+        @test a50.asym ≈ 8113.9608866603  atol = 1.0e-6
+        @test (a1.ll, a20.ll, a50.ll) == (657, 781, 950)
+        @test a1.loss ≈ 6827.0723124844 atol = 1.0e-6
+        # ⭐⭐ AND THE GAUGE IS A DIFFERENCE OF WIRE VALUES, NOT A THIRD MEASUREMENT — the identity a
+        # client must never recompute (convention 13, and the one that keeps the HUD and the
+        # verifier reading ONE quantity).
+        for a in (a1, a20, a50)
+            @test a.asym === a.loss - a.gain
+        end
+        # BOTH REQUIRED DRAGS MOVE, by the margins the ceiling was chosen on (§2.15 §5).
+        @test a50.asym - a20.asym > 4000.0        # 20 → 50, the only all-seed-clean interval
+        @test a20.asym - a1.asym  > 2900.0        # 20 → 1, back to the null
+        # …and MONOTONE across them, which is the filter that killed `k` (28), `ω_n` (40) and
+        # `σ_seek` (25) as showcase sliders.
+        @test a1.asym < a20.asym < a50.asym
+        # ⭐ THE TRAJECTORY IS BYTE-IDENTICAL ACROSS THE WHOLE SLIDER — slice 49's sharpest tooth,
+        # one key over. The shape is read by the SEEING and by nothing else, so the slider changes
+        # nothing about the flight and everything about what comes back.
+        @test a1.pos == a50.pos
+        # NOT CENSORED at the length this file flies: the last edge sits 50 looks inside the window
+        # against a give-up depth of 3. ⚠ ARM-SPECIFIC (slice 52's trap) — asserted at the arm whose
+        # edge is LATEST, not at the arm that happens to be convenient.
+        @test a50.nlook - a50.ll ≥ 3 * a50.scn.world.entities[:radar1].comp[:track_drop_looks]
+        @test a50.nlook == 1000
+        # A FRESH LOAD IS NEVER DIRTY — the baseline the drag teeth below are read against.
+        @test a1.dirty === false && a20.dirty === false && a50.dirty === false
+    end
+
+    @testset "⭐⭐ A DRAG PAST CLOSEST APPROACH ENDS THE PASS — on the SHIPPED wire, through the SERVER" begin
+        # ⚠⚠ THIS IS THE PATH GATE 2's FOLLOW-UP SHIPPED FOR, AND IT IS ALSO THE ONE `CLAUDE.md`
+        # says no gate-3 proof has ever exercised (*no gate-3 proof DRAGS a slider*, slice 52). The
+        # `.gd` verifier drags it too; this is the core-side half, on the file a student opens.
+        srv = EWSim.Server(load_scenario(_SCEN53); path = _SCEN53)
+        w, subs, dt = srv.scn.world, srv.scn.subs, srv.scn.dt_physics
+        # Fly to t = 60 s — PAST closest approach (t = 50 s, x = 0) and past the gain edge at look
+        # 375. Both edges exist here; the loss edge does not yet.
+        for _ in 1:60_000; tick!(w, subs, dt); end
+        @test w.entities[:radar1].comp[:trk_past_cpa]
+        @test haskey(w.entities[:radar1].comp, :trk_gain_range)
+        @test w.env[:telemetry]["radar1.track_pass_dirty"] === false
+        EWSim.handle_command!(srv, Dict(:type => "set_param", :target => "tgt1",
+                                        :key => "rcs_tail_gain", :value => 50.0))
+        for _ in 1:40_000; tick!(w, subs, dt); end
+        tel = w.env[:telemetry]
+        # ⭐⭐⭐ THE ASSERTION, AND IT IS ABOUT AN ABSENT KEY. The gain edge was deleted at the next
+        # look, and `:trk_past_cpa` is NEVER cleared — so it can never be re-declared on the
+        # outbound leg, and `track_asym_m` is gone for the rest of the pass. That is slice 50's
+        # "Reset to measure" reached through the WIRE, where a headless verifier can read it,
+        # instead of through a HUD word, where one cannot.
+        @test tel["radar1.track_pass_dirty"] === true
+        @test !haskey(tel, "radar1.track_asym_m")
+        @test tel["radar1.track_gain_range_m"] == -1.0     # the NOT-YET sentinel, not a stale range
+        @test tel["radar1.track_gain_look"] == -1.0
+        # ⭐ …WHILE THE LIVE LINES KEEP RUNNING. The latch belongs to the SETTING; alive / misses /
+        # look / leg belong to the TICK, and keeping them is what makes the slider a teaching
+        # instrument rather than a screen that goes blank when you touch it.
+        @test tel["radar1.track_look"] == 1000.0
+        @test tel["radar1.track_closing"] === false
+        @test haskey(tel, "radar1.track_misses") && haskey(tel, "radar1.track_alive")
+        # …and the RULE keys still ship beside them, because a client must never be able to print a
+        # metre without them (§2.14).
+        @test tel["radar1.track_drop_looks"] == 3.0 && tel["radar1.track_revisit_s"] == 0.1
+    end
+end

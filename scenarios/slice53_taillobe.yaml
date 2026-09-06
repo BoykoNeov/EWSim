@@ -1,0 +1,223 @@
+# slice53_taillobe — A TAIL LOBE: the same aircraft, on the same pass, held FURTHER OUT running
+# away than it was ever seen coming in.
+#
+# > THE LESSON, IN ONE SENTENCE. Which way a target points does not only change how bright it is —
+# > it changes it ASYMMETRICALLY, so a fleeing target is not the target you saw approaching, and no
+# > single cross-section number can say that.
+#
+# ⭐⭐⭐ WHY THIS IS NOT SLICE 49 WITH A SIGN FLIP. Slice 49 proved that only a SHAPE makes a closing
+# target harder to see. `rcs_aspect` was fore/aft SYMMETRIC by construction — σ(θ) ≡ σ(π−θ) — so at
+# equal range the two legs of a straight pass presented the IDENTICAL cross-section, and slice 49's
+# own HUD had to say "tail-on" rather than "nose-on" past 150° because the model genuinely could not
+# tell them apart. **Nothing you can author into a symmetric model produces an asymmetric pass**: a
+# smaller `rcs_m2` scales both legs, a slenderer `rcs_fineness` reshapes both legs identically. This
+# file dials the ONE thing that can — the brightness of the rear hemisphere alone — and reads the
+# difference between the two ends of one fly-past.
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# THE GAUGE, AND IT IS NOT A DURATION AND NOT A MISS
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⭐⭐⭐ `track_asym_m` = **the range the track is finally given up at on the way OUT, minus the range
+# it was first opened at on the way IN** — *how much further you can follow it home than you could
+# ever see it coming*. Both edges and the difference are computed in the CORE (`_track_look!`,
+# radar.jl) and shipped as wire keys, because the give-up rule is counted in LOOKS and a client only
+# ever sees FRAMES: at `revisit_s` 0.1 and `emit_every` 16 there are ~6 frames per look, so "three
+# frames with no detection" is about HALF a look of blindness, not three looks of it (plan §2.14).
+#
+# ⚠⚠ **AND THE METRES ARE A JOINT PROPERTY OF THE TAIL LOBE AND THE TRACKER, NEVER OF THE TARGET.**
+# The SIGN and the monotonicity are physics; the SIZE moves with `revisit_s` and with the give-up
+# depth, measured: at a halved revisit and a matched give-up TIME the same physics reads +2191 m
+# more at G = 20 (plan §2.14 Arm 2). ⇒ **every number here is quoted with `revisit_s` = 0.1 s and
+# `track_drop_looks` = 3, or it is not a measurement.** Both ship on the wire beside the metres so no
+# client can print one without the other.
+#
+# ⚠ THE MISS IS BANNED (44, 46, 48, 50) and there is no missile here anyway; 49's longest-loss-run
+# and 50's `ω_LOS·t_go` both fail the substitution test in the other direction — a ground radar can
+# say them, which is exactly why they are not this slice's.
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# THE GEOMETRY — A STRAIGHT FLY-PAST, AND IT IS THE SIMPLEST WIRE IN THE WHOLE ARC
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# One radar, one target, straight and level, no manoeuvre, no missile. The aspect sweeps 18° → 167°
+# monotonically through broadside at closest approach, so the SAME target on the SAME pass presents
+# both ends, and the inbound leg is a built-in control for the outbound one.
+#
+# ⚠⚠ **SLICE 49's WIRE COULD NOT BE REUSED AND NEITHER COULD A STERN CHASE**, and both refusals are
+# measurements (plan §0.6, §2.3):
+#   • Slice 49's ORBIT turns THROUGH nose-on and has several closest approaches; this tracker's leg
+#     is the range rate's sign and assumes ONE (a named approximation — see `_track_look!`).
+#   • A STERN CHASE sits at essentially ONE rear aspect for the whole flight, and one aspect is one
+#     number: `G` there is indistinguishable from a larger `rcs_m2`, which is slice 41's kill in
+#     aspect space. **The lobe must change the SHAPE of the echo-vs-time curve, not its level**, and
+#     only a wire that SWEEPS the rear hemisphere while detectable does that.
+#
+# ⭐⭐ AND THE ALIGNMENT SLICE 49 CALLED FATAL IS WHAT THIS SLICE MEASURES AGAINST. Slice 49's header
+# says a straight fly-past can never carry ITS lesson, because σ rises exactly while the range falls
+# on both legs — the two effects are aligned, and the pass is symmetric. **That symmetry is the
+# control.** With `rcs_tail_gain` = 1 the two legs are the same physics at equal range and the gauge
+# reads fading noise about zero; the lobe is the only thing that can break the tie. ⇒ the gauge is
+# read at RANGE, never at TIME.
+#
+# `propagation: free_space` DELIBERATELY, and it is the one fidelity this wire authors — slice 49's
+# reason verbatim: `two_ray` would add multipath lobing AND a 4/3-Earth horizon, two more ways for a
+# target to vanish, on a scenario about a third way (convention 9).
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# MEASURED ON THIS EXACT WIRE (seed 250, 120 s, `revisit_s` 0.1, `track_drop_looks` 3)
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+#     G        1       2       5      10      20*     30      50
+#     in  km   6.244   6.244   6.244   6.244   6.244   6.244   6.244   <- ⭐⭐⭐ IDENTICAL, EVERY CELL
+#     out km   6.827   7.122   7.122   7.122   9.760  12.053  14.358
+#     asym m  +583    +878    +878    +878   +3517   +5809   +8114
+#     look     657     671     671     671     781     867     950     <- the LOSS edge's look index
+#     det %   28.3    29.4    33.9    37.7    43.7    47.8    52.2
+#     (* the authored opening. The gain edge is look 375 at every cell, to the bit.)
+#
+# ⭐⭐⭐ **THE INBOUND EDGE IS DECLARED AT AN ASPECT OF 52.7°, WHICH IS THE WHOLE ARGUMENT IN ONE
+# NUMBER.** The kernel's lobe is `max(0, −cos θ)²`, identically ZERO on the entire forward
+# hemisphere — so at the moment the radar first opens the track the multiplier is exactly 1.0 and
+# `G` cannot move it, at any setting, ever. The loss edge is declared at 134° → 160°, deep in the
+# rear hemisphere, where the multiplier has run up to nearly `G`. **One end of the pass is
+# untouchable and the other is the slider**, which is why the difference is an exact paired gauge
+# rather than a difference of two noisy things (824 flights, `max |in_G − in_1|` = 0.000000e+00).
+#
+# ⚠ **THE NULL IS NOISE, NOT ZERO, AND THE HUD SAYS SO.** `G` = 1 reads **+583 m** on this seed —
+# identical σ on the two legs still means DIFFERENT Swerling-1 draws, so the measured difference at
+# the null is fading noise of either sign (over 8 seeds: −658 … +968 m). The attributability bar
+# was fixed before the ladder was flown at max-null × 3 = 2905 m, and the authored opening clears it
+# (+3517). ⚠⚠ Do NOT quote the null as "0 m" and do NOT read the ladder's flat stretch (G = 2…10,
+# all +878 m at look 671) as a broken instrument — see the knob note below.
+#
+# ⚠ THE SEED IS 250 AND IT WAS **CHOSEN BY A RULE FIXED BEFORE THE FLIGHTS** (plan gate-3 log): a
+# monotone ladder, both authored drags moving by ≥ 1 km, and — the discriminator — an OPENING
+# reading above that seed's own attributability bar. It is the only one of the 8 gate-0 seeds that
+# passes; seed 53, the obvious name-matching pick, opens at +1820 m and FAILS by 1085 m.
+#
+# ⚠ NAMED APPROXIMATIONS (§1). The lobe is HEMISPHERE-WIDE (half-power ~45° off the tail), not a
+# narrow nozzle spike — a real exhaust return is narrower, and the docstring at `rcs_aspect` says so
+# in the same posture as the fore/aft symmetry it replaces. The target's nose is its VELOCITY vector
+# (no attitude quaternion). The tracker assumes ONE closest approach. `rcs_m2` still means the
+# BROADSIDE peak, unchanged from slice 49, because the lobe's weight is zero at broadside.
+#
+# UNITS (§1 trifecta): `rcs_tail_gain` is DIMENSIONLESS — the tail-to-nose brightness ratio, exactly
+# `G` at θ = π and exactly 1.0 for every θ < π/2. `track_asym_m` and both edges are METRES, signed
+# (a target whose tail is DIMMER than its nose reads NEGATIVE, and that is legal — see the floor).
+# `track_revisit_s` is seconds; `track_drop_looks` is a COUNT OF LOOKS, not of seconds and not of
+# frames. dt = 1e-3 / emit_every = 16.
+name: slice53_taillobe
+seed: 250
+dt_physics: 1.0e-3
+emit_every: 16                 # ~62 Hz frames. ⚠ A verifier's STEPS must be a MULTIPLE of this
+                               # (convention 14) or it hangs SILENTLY.
+fidelity:
+  propagation: free_space      # see the geometry note above — the ONE fidelity, PINNED by the
+                               # author rather than offered as this lesson's button.
+  detection:   analytic
+
+entities:
+  # The air-defence radar. Slice 2's block verbatim — 50 kW at 9.4 GHz on a 30 m mast, Pfa 1e-6,
+  # Swerling 1, ONE pulse, looking at 10 Hz — plus ONE new key.
+  # ⚠ SWERLING 1 IS LOAD-BEARING AND IS NOT A DEFAULT TO BE TIDIED AWAY: it is what makes the NULL
+  # arm read ±hundreds of metres instead of a clean zero, and the honest lesson is that this gauge
+  # is a difference of two noisy edges rather than a theorem.
+  - id: radar1
+    kind: radar
+    pos: [0, 0, 30]
+    radar:
+      pt_w:         50000
+      gain_db:      35
+      freq_hz:      9.4e9
+      bandwidth_hz: 1.0e6
+      noise_fig_db: 3
+      losses_db:    4
+      pfa:          1.0e-6
+      swerling:     1
+      n_pulses:     1
+      revisit_s:    0.1
+      # ⭐⭐ THE TRACKER (slice 53 gate 2), and it is what turns a detection trace into a PASS with
+      # two ends. Hold the track through gaps of up to 2 missed looks; give it up on the 3rd. ⚠ IT
+      # SHIPS BESIDE ITS OWN NUMBERS ON THE WIRE and it is quoted with them everywhere, because the
+      # metres are a joint property of the lobe and this rule (§2.14). ⚠⚠ The loader REFUSES this
+      # key without a positive `revisit_s` — with a look every tick, "3 missed looks" would be a
+      # give-up TIME of 3·dt that moves when `dt` does, and slice 51 died on exactly such a boundary.
+      track_drop_looks: 3
+
+  # The target: 300 m/s at 5 km, 15 km out on a +x heading straight over the radar. It starts
+  # NOSE-ON (aspect 18°) and ends TAIL-ON (167°), sweeping through broadside at closest approach.
+  # ⚠ There is no manoeuvre and there deliberately is not one: the tracker's leg is the range rate's
+  # sign and assumes a single closest approach, and the straightness is also what makes the two legs
+  # comparable at equal range.
+  - id: tgt1
+    kind: target
+    pos: [-15000.0, 0.0, 5000.0]
+    vel: [300.0, 0.0, 0.0]
+    target:
+      # The BROADSIDE cross-section (slice 49's sharpened meaning of `rcs_m2`), and it keeps that
+      # meaning at every `G`: the tail lobe's weight is zero AT broadside by construction, so
+      # `rcs_aspect(σ, F, π/2) = σ` still holds exactly across the whole slider.
+      rcs_m2: 4.0
+      # ⚠ FIXED AT 8, NOT A KNOB — the arc's own value (49 and 50 both author 8), held still so the
+      # SHAPE does not move while the ASYMMETRY is dialled (convention 9). It is also what keeps the
+      # wire coherent: at F = 1 the body curve is flat and `G` would tilt a SPHERE, which is not a
+      # body of revolution any more. That is legal and finite (a live slider must never throw), but
+      # it is not a thing to author.
+      rcs_fineness: 8.0
+      # ⭐⭐⭐ THE SLIDER. See the knob block for both endpoints and why the wire opens at 20.
+      rcs_tail_gain: 20.0
+
+knobs:
+  # EXACTLY ONE LIVE KNOB, and no fidelity button (the slice-16/26/49 shape). BOTH ENDPOINTS ARE
+  # MEASURED — 824 flights over G = 1(1)100 × 8 seeds — AND BOTH HAVE REASONS:
+  #   FLOOR 1.0: THE NULL THE USER RETURNS TO, and it is a LESSON choice rather than a model limit.
+  #     The bracket collapses to exactly 1.0 there (`1 + 0.0·x` is 1.0 and `σ*1.0 === σ`), so the
+  #     lesson's null is EXACT arithmetic. ⚠⚠ It is still NOT the WIRE's null: byte-identity is the
+  #     key being ABSENT, because `sin²θ + cos²θ` is 1 in algebra and not always 1.0 in floating
+  #     point — slice 49's distinction, one key over. ⚠ `G` < 1 is LEGAL and means a target whose
+  #     tail is QUIETER than its nose (measured: −404 m at G = 0.25, correctly signed and continuous
+  #     through 1). The loader accepts any G > 0; the SLIDER stops at 1 because that is where the
+  #     lesson's control is.
+  #   CEILING 50.0: chosen against 20 and against 100 on the STAIRCASE, not on total effect.
+  #     Against 20: the only interval that moves all 8 gate-0 seeds is 20 → 50, and a ceiling of 20
+  #     would put no all-seed-clean drag on the slider at all. Against 100: its top decile of travel
+  #     is dead on 8 of 8 seeds, and its last 50 cells buy one extra step and 19 % more effect.
+  #     At F = 8, G = 50 is a tail +17.0 dB above the nose and still −19.1 dB below broadside — an
+  #     ordinary airframe, not a special effect.
+  #   LINEAR, and the reason is NOT slice 49's or slice 52's — do not copy their wording. The rule
+  #     is *put the half-effect near the middle of the drag*, and which axis does that is a
+  #     MEASUREMENT: the half-effect of a 1→50 domain sits at G = 20.2, which is 39.2 % of a LINEAR
+  #     drag but 76.8 % of a LOG one. ⭐⭐⭐ Slice 49 refused a log axis because its payoff was
+  #     concentrated at the TOP; this knob's payoff is concentrated at the BOTTOM (48 % of the total
+  #     is reached by G = 20) and a log axis would stretch exactly that. Opposite reason, same answer.
+  #
+  # ⭐ THE WIRE OPENS AT 20, MID-LESSON (the 35/36/46/47/48/49 precedent), which gives two drags that
+  # provably move on all 8 gate-0 seeds: **20 → 50** (the only all-seed-clean interval) and
+  # **20 → 1** (back to the null). Dragging DOWN is as instructive as dragging up.
+  #
+  # ⚠⚠ THE DRAG IS ALSO WHAT ENDS THE MEASUREMENT, AND THAT IS DESIGNED. `set_param` marks the
+  # tracker dirty; the next look deletes BOTH edges and raises `track_pass_dirty`, so a pass that
+  # spans two settings is never reported as a measurement of either. Past closest approach the gain
+  # edge can never be re-declared, so a late drag ends that pass for good and the honest state is
+  # **Reset to measure** (slice 50's rule, reached through the WIRE instead of through a HUD word,
+  # because a headless verifier reads the wire and would otherwise read a stale latch as live).
+  #
+  # ⚠ AND A FLAT STRETCH OF THIS SLIDER IS A REAL STATE, NOT A DEAD KNOB. On this seed G = 2, 5 and
+  # 10 all read +878 m at the SAME loss look (671): the extra brightness is not yet enough to carry
+  # the track past the next 3-miss run. The HUD prints the LOOK INDEX beside each edge precisely so
+  # that stretch reads as "the edge has not moved" rather than as "nothing is being read".
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED: `rcs_m2` and `rcs_fineness` (⚠⚠ the substitution test —
+  # both are fore/aft SYMMETRIC, so neither can produce ANY asymmetry at all; that is the theorem
+  # this slice rests on and dragging one here would move both edges together and teach the opposite);
+  # `pt_w` / `pfa` (they move the whole link budget, so both edges again, and `pfa` also moves the
+  # null arm's own chatter — the one thing that must be held still); `revisit_s` and
+  # `track_drop_looks` (⚠⚠ they SET the metres, so they are the measurement's own rule and cannot
+  # also be its input — §2.14 measured +2191 m at G = 20 from retuning them alone); the target's
+  # `vel` (⚠ refused BY TYPE — `set_param` carries one Float64).
+  #
+  # ⚠ THE LABEL IS LENGTH-BUDGETED (~110 characters — slice 32's shots paid for this): knob labels
+  # are drawn full-width in the UI CanvasLayer and paint OVER the `_draw` HUD column at `vp.x − 430`.
+  - {target: tgt1, key: rcs_tail_gain, min: 1.0, max: 50.0,
+     label: "TAIL BRIGHTNESS G (× the nose) — 1 = fore/aft symmetric, the null you drag back to"}

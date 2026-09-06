@@ -319,6 +319,14 @@ func _initialize() -> void:
 	# ⚠ FORE/AFT SYMMETRY (`rcs_aspect`'s named approximation): 156° returns the same σ as 24°, so no
 	# band may name the NOSE or the TAIL — the model cannot tell them apart and the word must not
 	# pretend otherwise. Asserted as an IDENTITY across the reflection, not as a wording check.
+	# ⚠⚠ **ON A WIRE WITH NO TAIL GAIN** — the clause slice 53 added, and it was always the condition
+	# this tooth relied on. `rcs_aspect` gained an optional `rcs_tail_gain`, and at `G` ≠ 1 the model
+	# CAN tell the two ends apart: `scenario.jl` refuses the key without an `rcs_fineness`, and
+	# `slice50_defensive.yaml` authors no gain at all, so on THIS wire the identity below still holds
+	# exactly and the vocabulary must still not pretend otherwise. Nothing here is retired.
+	# ⇒ the MIRROR lives in `slice53_ui_test.gd` tooth 7, on the wire where the condition fails: with
+	# a gain authored, the word at θ and at 180 − θ must DIFFER where the lobe bites — and must still
+	# AGREE near broadside, where the lobe's weight is exactly zero at every `G`.
 	for d in [10.0, 24.0, 45.0, 71.86, 89.0]:
 		if sb._s50_word(d) != sb._s50_word(180.0 - d):
 			return _fail("⚠ the word must be fore/aft SYMMETRIC like the model it describes: %.1f° reads '%s' but %.1f° reads '%s', and `rcs_aspect` returns the SAME σ for both" % [d, sb._s50_word(d), 180.0 - d, sb._s50_word(180.0 - d)])

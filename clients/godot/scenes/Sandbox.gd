@@ -96,6 +96,16 @@ var _telemetry := {}             # flat "key" -> number/bool (HANDOFF §5)
 var _blips: Array = []           # [{pos:Vector2 (screen), age:float}]
 var _radar_id := ""              # discovered from the first radar entity
 var _x_max := 45000.0            # downrange span shown, m (auto-expands)
+# ⭐⭐ SLICE 53 — THE **LEFT** EDGE OF THE DOWNRANGE AXIS, AND IT IS 0 ON EVERY WIRE BUT ONE.
+# Every scenario 1–52 launches at the origin and flies OUTWARD, so the elevation view maps
+# `x = 0` to the left margin and never needed a lower bound. A straight FLY-PAST does not work that
+# way: slice 53's target starts 15 km on the FAR side of the radar and crosses it, so with a floor
+# of 0 the whole INBOUND leg draws off the left edge — including the look the track is opened at,
+# which is the half of the lesson the slider provably cannot move. Half the pass, invisible.
+# ⚠ IT MOVES ONLY UNDER `_tail_view`, and `0.0` reproduces the old mapping EXACTLY: `(x − 0.0) /
+# (_x_max − 0.0)` is `x / _x_max` bit for bit, so every other spatial wire is unchanged (asserted
+# in `slice53_ui_test.gd`).
+var _x_min := 0.0                # downrange FLOOR, m (0 everywhere except a fly-past)
 var _z_max := 5000.0             # altitude span shown, m (auto-expands)
 
 # --- UI (built in code so the .tscn stays a trivial root node) ---
@@ -335,6 +345,39 @@ var _asp_run_r0 := 0.0             # …and the range it began at, so the run ca
 var _asp_loss_s := 0.0             # ⭐ THE HEADLINE: longest CLOSING loss run, seconds
 var _asp_loss_km := 0.0            # …and the closing range given up over THAT run
 var _asp_t := 0.0                  # the wire's own sim clock (frames carry `t`; the client has none)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# ⭐⭐⭐ SLICE 53 — A TAIL LOBE: the same aircraft, on the same pass, held FURTHER OUT running away
+# than it was ever seen coming in. The 15th marker of the family, and the SECOND to land in the
+# spatial (elevation) view — it is slice 49's radar, one key over.
+#
+# ⭐⭐⭐ AND IT IS THE FIRST BLOCK IN THIS FILE THAT KEEPS **NO STATE AT ALL**. Slices 46/47/48/49/50
+# and 52 all accumulate something in the client — a peak, a latch, a run clock — and every one of
+# them then had to answer what a live drag does to it. This one accumulates nothing, because gate 2
+# moved the gauge into the CORE: the rule is counted in LOOKS and the client only ever sees FRAMES
+# (`emit_every` 16 at `revisit_s` 0.1 is ~6 frames per look, so "3 frames with no detection" is
+# about HALF a look of blindness, not three looks of it — a different rule that changes meaning the
+# moment either cadence moves). Every number below is READ, none is derived. ⇒ the invalidation on
+# a drag is the core's too, and this HUD renders it rather than implementing it.
+#
+# ⚠ HUD ONLY — THE BUTTON STAYS SLICE 49's (the `_s52_view` / `_seeker_detect_view` posture). This
+# wire authors an `:rcs_fineness`, so `aspect_view` is raised alongside `tail_view` and
+# `_setup_spatial_fid_btn`'s slice-49 branch already drops the `free_space ↔ two_ray` toggle — which
+# is the correct drop HERE for slice 49's own reason (multipath is a second way for a target to
+# vanish, on a scenario about a third).
+#
+# ⚠⚠ AND WHAT THIS MARKER **DOES** TAKE FROM `aspect_view` IS SLICE 49's GAUGE, WHICH IS THE EASY
+# ONE TO MISS. That gauge is the longest loss run WHILE CLOSING; it is accumulated in the FRAME
+# HANDLER (not in `_draw`), gated only on `_aspect_view` + an observer + `target_range_m` — all
+# three of which this wire has. It would run all pass and print a duration from a different slice
+# under this slice's label. The accumulator is therefore gated `and not _tail_view` at its own site.
+#
+# ⚠ AN ASPECT BELONGS TO A TARGET–OBSERVER **PAIR**, so the marker carries both ids and every line
+# names them — and the telemetry is keyed on the **RADAR** while the prose names the **TARGET**
+# (slice 49's own trap, verbatim: read the keys off `_tail_target` and `.get(k, 0.0)` prints a
+# fabricated broadside over a target that is tail-on, on a green run).
+var _tail_view := false            # handshake `tail_view` — HUD only
+var _tail_target := ""             # …the tail-lobed target the readouts describe (the SUBJECT)
+var _tail_observer := ""           # …and the tracking radar they are measured FROM (the KEY OWNER)
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # ⭐⭐⭐ SLICE 50 — THE ASPECT-DEPENDENT ENGAGEMENT: **THE LOCK BEING TAKEN BACK.**
 #
@@ -852,6 +895,15 @@ func _on_scenario(obj: Dictionary) -> void:
 	_aspect_view = bool(obj.get("aspect_view", false))
 	_aspect_target = str(obj.get("aspect_target", ""))
 	_aspect_observer = str(obj.get("aspect_observer", ""))
+	# ⭐⭐⭐ SLICE 53 — the TAIL LOBE. Raised on the PAIR of comp keys (`rcs_tail_gain` on a target
+	# AND `track_drop_looks` on a radar), 47/48/49's posture: there is no tail fidelity RUNG and
+	# deliberately is not one — "no tail lobe at all" is reachable from the SLIDER's own floor
+	# (G = 1), so a rung would duplicate a slider position.
+	# ⚠ It must be checked BEFORE `_aspect_view` at EVERY site — a slice-53 wire raises both, and
+	# `aspect_view` keeps only the BUTTON job (see this marker's own block comment above).
+	_tail_view = bool(obj.get("tail_view", false))
+	_tail_target = str(obj.get("tail_target", ""))
+	_tail_observer = str(obj.get("tail_observer", ""))
 	# ⭐⭐ SLICE 50 — THE SEEKER's side of the same shape, and it is a SEPARATE marker rather than a
 	# reuse of the pair above. The two blocks read DIFFERENT keys off DIFFERENT observers: slice 49's
 	# reads `detected` / `target_range_m` / `pd` / `rcs_loss_db` off a RADAR, none of which a missile
@@ -939,6 +991,13 @@ func _setup_spatial_fid_btn() -> void:
 		# block on the right saying why — the range, the aspect and the price are all telemetry.
 		_x_max = 8000.0
 		_z_max = 6000.0
+		# ⭐⭐ SLICE 53 RESEEDS BOTH ENDS, because its wire is a CROSSING pass rather than slice 49's
+		# orbit: the target enters at −15 km, crosses the radar at t = 50 s and is 21 km out the far
+		# side by the end of the window. Seeded to that span so the first frames do not rescale under
+		# the marker (they only ever grow outward from here).
+		if _tail_view:
+			_x_min = -16500.0
+			_x_max = 23000.0
 	elif _fidelity.has("atmosphere"):
 		# Slice-21 THE EXPONENTIAL ATMOSPHERE — **the ceiling you lower by CLIMBING**. The scenario ships
 		# airframe_view + `:airframe` + `:atmosphere`, so it would otherwise be CAPTURED by the airframe
@@ -2979,6 +3038,296 @@ func _draw_aspect_hud_lines(vp: Vector2) -> void:
 			lost_col if (_asp_loss_s > 0.0 or not det) else COL_TICK)
 	# THE TRADE.
 	draw_string(_font, Vector2(vp.x - 430, 204), _asp_cure_text(_asp_loss_s),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# ⭐⭐⭐ SLICE 53 — THE TAIL-LOBE HUD.
+#
+# ⚠⚠ EVERY LINE IS A **FUNCTION** for slice 47's reason verbatim: `draw_string` lives in `_draw`,
+# which never runs under `--headless`, so a string built inline there has NO headless proof at all
+# (convention 14). `slice53_ui_test.gd` calls these directly, including the width budget.
+#
+# ⚠ THE WIDTH BUDGET IS **390 px, NOT THE FAMILY's 430**, inherited from slice 49's block and for
+# its reason: this is the elevation view, the altitude tick labels `_draw_spatial_backdrop` puts at
+# `vp.x − 34` are in the way, and the origin is right-anchored so no window size rescues an over-wide
+# line. Asserted in PIXELS — slice 46 shipped a CHARACTER tooth that passed green while every line
+# clipped at 1152 px AND at 1920 px.
+#
+# ⭐⭐⭐ AND NOTHING HERE IS ACCUMULATED. Both edges, their look indices, the difference, the
+# give-up rule and the "the setting moved mid-pass" flag are all WIRE KEYS (gate 2 put them there,
+# because the rule is counted in LOOKS and a client only sees FRAMES). The client reads and prints.
+# That is convention 13 with no wriggle room left in it, and it is also why this block needs no
+# `_on_knob_changed` hook of its own — the invalidation happens in the core, where a headless
+# verifier can read it, instead of in the HUD, where one cannot.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+func _tail_key(k: String) -> String:
+	# ONE site forms the telemetry key, so the observer/target confusion can only be made once.
+	# ⚠⚠ The keys are the RADAR's while the prose names the TARGET — slice 49's trap verbatim.
+	return _tail_observer + "." + k
+
+func _tail_has(k: String) -> bool:
+	return _telemetry.has(_tail_key(k))
+
+func _tail_f(k: String, dflt: float) -> float:
+	return float(_telemetry.get(_tail_key(k), dflt))
+
+func _tail_b(k: String, dflt: bool) -> bool:
+	var v = _telemetry.get(_tail_key(k), dflt)
+	return bool(v) if typeof(v) == TYPE_BOOL else float(v) >= 0.5
+
+func _tail_deg() -> float:
+	# 0° = nose-on, 90° = broadside, 180° = tail-on (`aspect_angle`'s pinned convention; the core
+	# ships DEGREES). ⚠ THE DEFAULT IS 90 (BROADSIDE) AND NOT 0.0 OR 180.0, because both of those
+	# are LOUD claims this HUD exists to make — a missing key must never assert either end.
+	return _tail_f("target_aspect_deg", 90.0)
+
+func _tail_word(deg: float) -> String:
+	# ⭐⭐⭐ THE MIRROR OF SLICE 50's TOOTH 9b, AND IT IS A RETRACTION IN ONE FUNCTION. Slice 49's
+	# `_asp_word` and slice 50's `_s50_word` both carry a comment saying the cross-section is fore/aft
+	# SYMMETRIC by construction — σ(θ) ≡ σ(π−θ) — so no band may claim the model can tell one end
+	# from the other. **On a wire that authors a tail gain, it can.** `slice50_defensive.yaml`
+	# authors none, so that tooth stands there unchanged, with one clause added naming the condition
+	# it was always relying on; this is the vocabulary for the wire where the condition fails.
+	#
+	# ⚠ A VOCABULARY IS A GAUGE AND IS SCORED LIKE ONE (slice 50). The domain it has to resolve is
+	# THE PASS, not the slider: the aspect sweeps 18° → 167° over the fly-past while the slider moves
+	# no angle at all. Five bands over that sweep, and the mirror pairs are what the tooth checks.
+	#
+	# ⚠⚠ AND IT NAMES **GEOMETRY ONLY** — never a brightness. Which end is showing is a fact about
+	# the frame at every `G`; how much that end is WORTH is `rcs_loss_db`, which is core-computed and
+	# printed on the line below. A word that said "the bright end" would be the client asserting
+	# physics, and it would be FALSE at the slider's own floor, where the two ends are equal.
+	# ⇒ near broadside the mirror pair must AGREE, because the kernel's lobe weight is exactly zero
+	# there at every `G` — a word that differed at 89° vs 91° would claim an asymmetry the model
+	# does not have, which is the same over-claim in the other direction.
+	if deg <= 30.0:
+		return "nose-on"
+	if deg >= 150.0:
+		return "tail-on"
+	if deg >= 70.0 and deg <= 110.0:
+		return "broadside"
+	# ⚠ THE QUARTER WORDS ARE SHORT BECAUSE THE COLUMN IS 390 px, NOT BECAUSE THEY ARE VAGUE:
+	# "quartering, tail toward you" measured 401 px on the pair line, i.e. it CLIPPED. "tail quarter"
+	# is the term a radar operator uses and it fits with room to spare.
+	if deg < 70.0:
+		return "nose quarter"
+	return "tail quarter"
+
+func _tail_verdict_label(dirty: bool, has_asym: bool, asym_m: float,
+						 has_gain: bool, closing: bool) -> String:
+	# ⚠ HEADLINES GET A MUCH TIGHTER BUDGET (~30 chars) — drawn at 20 px from the same right-anchored
+	# origin (slice 46's four were 78–82 chars and every one ran off the edge).
+	if dirty:
+		# ⭐⭐ SLICE 50's "RESET TO MEASURE", REACHED THROUGH THE WIRE. `track_pass_dirty` is the
+		# core saying a knob moved mid-pass: both edges were thrown away at the next look and, past
+		# closest approach, the inbound one can never be re-declared. An instrument may refuse to
+		# show a number it can no longer stand behind; it may never show one measured on a different
+		# configuration.
+		return "SETTING MOVED — Reset"
+	if not has_gain:
+		# ⚠ THE HONEST OPENING STATE, and it is not "0.0 km". The pass starts nose-on at 18° with the
+		# echo four orders below broadside, so the radar has nothing at all for the first 37 s.
+		return "NOTHING YET — it is nose-on"
+	if not has_asym:
+		return "TRACKING IT" if closing else "STILL WITH IT, GOING AWAY"
+	# ⚠ THE SIGN PICKS THE SENTENCE, IT IS NOT PREFIXED TO ONE. `G` < 1 is legal — a target whose
+	# tail is QUIETER than its nose, measured at −404 m — and "−0.4 km FURTHER OUT" would be a
+	# double negative in the loudest text on screen.
+	if asym_m < 0.0:
+		return "%.1f km SHORTER GOING AWAY" % (-asym_m / 1000.0)
+	return "%+.1f km FURTHER OUT GOING AWAY" % (asym_m / 1000.0)
+
+func _tail_aspect_text(tgt: String, obs: String, deg: float) -> String:
+	# THE MECHANISM, AND IT NAMES THE PAIR. An aspect is not a property of a target: it is the angle
+	# between that target's nose and ONE observer, and the same aircraft is nose-on to one radar and
+	# tail-on to another in the same tick.
+	return "%s→%s  nose off %.0f° (%s)" % [tgt, obs, deg, _tail_word(deg)]
+
+func _tail_echo_text(sigma: float, loss_db: float) -> String:
+	# ⭐⭐ THE PRICE, AND THE dB IS **CORE-COMPUTED** (convention 13, the `js_db` posture): the
+	# broadside `rcs_m2` is a comp key an author writes and has never been on the wire, so there is
+	# nothing here to measure σ_eff against.
+	# ⚠⚠ AND THE WORD IS CONDITIONAL, NOT AN IDENTITY (gate 1's own correction). `rcs_loss_db` is
+	# documented "positive = this much QUIETER than the authored broadside", and a tail gain makes
+	# the rear hemisphere BRIGHTER than broadside wherever `G` outruns `F⁴` — at `F` = 1, any
+	# `G` > 1. Nothing on THIS wire reaches that (F = 8 needs G > 4096 and the slider stops at 50),
+	# but a HUD that hard-codes "below" is one authored fineness away from printing a gain as a loss.
+	# The sign decides the word.
+	var band := "%.1f dB below broadside" % loss_db
+	if loss_db < 0.0:
+		band = "%.1f dB ABOVE broadside" % (-loss_db)
+	# ⚠⚠ AND THERE IS NO `Pd` AND NO `SEEN` ON THIS LINE, WHICH IS A CHOICE AND NOT AN OVERSIGHT.
+	# Slice 49's HUD prints both because its lesson IS the per-frame fade. Here the rule is counted
+	# in LOOKS: what decides whether the track survives is the RUN of consecutive misses, not any one
+	# frame's draw, and `track_misses` on the edge line below is that number. A per-frame `SEEN`
+	# beside a look-counted gauge invites reading one as evidence about the other, which is §2.14's
+	# confusion in miniature. (It also cost 45 px in a 390 px column, and the σ stress case was the
+	# widest line in the block.)
+	# ⚠ `_fmt` ON σ, NOT "%.3f" — σ_eff runs to ~1e-6 m² nose-on at F = 8, and a fixed-point format
+	# prints the lesson's own number as "0.000" (the slice-8 `de_frac` defect; slice 49's windowed
+	# shot caught it on this exact readout).
+	return "echo %s m²  %s" % [_fmt(sigma), band]
+
+func _tail_gain_edge_text(has_gain: bool, range_m: float, look: int) -> String:
+	# ⭐⭐⭐ THE INBOUND EDGE, AND IT IS THE HALF OF THE GAUGE THE SLIDER CANNOT TOUCH. The kernel's
+	# lobe is `max(0, −cos θ)²`, identically ZERO on the whole forward hemisphere, and this edge is
+	# declared at an aspect of 52.7° — so the multiplier there is exactly 1.0 at every `G` and this
+	# line reads 6.24 km / look #375 across the entire slider, to the bit. That invariance is what
+	# makes the difference below an exact PAIRED gauge rather than a difference of two noisy things.
+	if not has_gain:
+		return "coming in:  not seen yet — it is nose-on"
+	return "GOT IT coming in    %.2f km  @ look #%d" % [range_m / 1000.0, look]
+
+func _tail_loss_edge_text(has_loss: bool, loss_m: float, loss_look: int,
+						  alive: bool, misses: int, live_m: float, look: int) -> String:
+	# THE OUTBOUND EDGE — the half the slider moves, and the live state until it is declared.
+	# ⚠ A `-1.0` RANGE IS "NOT YET" AND NOT A MEASUREMENT (the `search_t_lock_s` sentinel posture,
+	# unambiguous because a range is strictly positive). The caller decides on PRESENCE, and the
+	# not-yet branch prints the LIVE range instead so the line is never blank.
+	if has_loss:
+		return "LOST IT going out   %.2f km  @ look #%d" % [loss_m / 1000.0, loss_look]
+	if alive:
+		# ⚠ THE MISS COUNT IS THE LIVE BLINDNESS READOUT ON THIS WIRE, and it is why the echo line
+		# above carries no per-frame `SEEN`: the give-up rule is `n_drop` CONSECUTIVE misses, so "2
+		# missed" at `N`* = 3 is one look from losing the track, which no single frame's draw says.
+		return "still with it       %.2f km  (look #%d, %d missed)" % [live_m / 1000.0, look, misses]
+	return "track dropped — %d missed looks (look #%d)" % [misses, look]
+
+func _tail_gauge_text(dirty: bool, has_asym: bool, asym_m: float,
+					  revisit_s: float, n_drop: int) -> String:
+	# ⭐⭐⭐ THE GAUGE THIS HUD EXISTS FOR — *how much further you can follow it home than you could
+	# ever see it coming*, in metres, off the wire, as `loss − gain`.
+	#
+	# ⚠⚠ AND IT IS QUOTED WITH ITS RULE OR IT IS NOT A MEASUREMENT (gate 0 §2.14, and this is the
+	# binding constraint on this block). The metres are a JOINT property of the tail lobe and the
+	# TRACKER: at a halved revisit with a matched give-up TIME the same physics reads +2191 m more
+	# at `G` = 20. The SIGN and the monotonicity are the target's; the SIZE is the pair's. The core
+	# ships `track_revisit_s` and `track_drop_looks` beside the metres precisely so that no client
+	# CAN print one without the other, and this line is where that promise is kept.
+	if dirty:
+		# ⚠⚠ NOT A STALE NUMBER AND NOT A ZERO. The core deleted both edges the moment the knob
+		# moved; past closest approach the inbound one can never be re-declared, so this pass is
+		# over as a measurement. Slice 50's rule, one instrument along.
+		return "the knob moved mid-pass — Reset to measure"
+	if not has_asym:
+		return "no reading yet — it needs BOTH ends of the pass"
+	# ⚠ THE NULL IS NOISE, NOT ZERO, AND THIS LINE MUST NOT PRETEND OTHERWISE. Identical σ on the two
+	# legs still means different Swerling-1 draws, so at `G` = 1 the gauge reads a few hundred metres
+	# of EITHER sign (+583 m on this seed; −658 … +968 m over the 8 gate-0 seeds). `%+.2f` keeps the
+	# sign on screen, which is the whole verdict: positive = held further out running away.
+	# ⚠⚠ THE WORDS ARE THE HEADLINE's JOB AND THE RULE IS THIS LINE's — a first draft carried both
+	# ("+3.52 km further out going away  [0.10 s looks, give up at 3]") and measured 427 px against
+	# 390. The bracket is what may NOT be dropped: §2.14 measured +2191 m of movement at `G` = 20
+	# from retuning the tracker alone, so a figure without its rule is not a measurement, while the
+	# prose above it is a restatement.
+	return "asymmetry %+.2f km  [%.2f s looks, give up at %d]" % [asym_m / 1000.0, revisit_s, n_drop]
+
+func _tail_rule_text(revisit_s: float, n_drop: int) -> String:
+	# ⚠ THE RULE, SPELLED OUT ONCE IN WORDS beside the compact bracket above. `n_drop` is a count of
+	# LOOKS — not of seconds and not of FRAMES — and saying which is the whole of §2.14: a rule
+	# counted in samples silently changes meaning when the sample rate changes. At 0.10 s looks the
+	# give-up is 0.3 s of blindness; halve the revisit and the same "3" is 0.15 s, a stricter radar.
+	return "rule: a look every %.2f s, give up after %d missed" % [revisit_s, n_drop]
+
+func _tail_cure_text(has_asym: bool, asym_m: float) -> String:
+	# THE TRADE, stated as the thing a student would otherwise get wrong — and it is the SUBSTITUTION
+	# TEST in one line. The instinct is that this is a brightness knob, so a bigger `rcs_m2` or a
+	# rounder body would do the same. Neither can: both are fore/aft SYMMETRIC, so they scale or
+	# reshape BOTH legs identically and the difference between the two ends stays exactly where it
+	# was. Only an asymmetric shape can move one end of a pass without the other.
+	if not has_asym:
+		return "drag up: only the REAR hemisphere gets brighter"
+	if absf(asym_m) < 1000.0:
+		# ⚠ THE NULL'S OWN SENTENCE. "+0.58 km" with no explanation reads as a small effect rather
+		# than as the fading noise it is, and the null is the arm the whole lesson is proved against.
+		return "at G=1 this is fading noise — both ends match"
+	return "a dimmer target scales BOTH ends; a lobe tilts one"
+
+func _spatial_hud_kind() -> String:
+	# ⭐⭐ WHICH RIGHT-ANCHORED BLOCK OWNS THE 390 px COLUMN — DECIDED ONCE, HERE, so `_draw` and the
+	# headless UI test read the SAME rule (convention 7: one list, no drift). ⚠⚠ CONVENTION 14 IS
+	# THE WHOLE REASON THIS FUNCTION EXISTS: the `if` it replaces lived inside `_draw`, which never
+	# runs under `--headless`, so which chain won had NO headless proof at all — slice 50's finding,
+	# and this is the first block to answer it by moving the decision out of `_draw` rather than by
+	# photographing it.
+	#
+	# ⚠ TAIL BEFORE ASPECT, AND IT IS NOT A PREFERENCE. A slice-53 wire raises BOTH markers: its
+	# target carries an `:rcs_fineness`, so `_aspect_view_info` raises on it exactly as it does on
+	# slice 49's. The two blocks are not variants of each other — 49's gauge is the longest loss run
+	# WHILE CLOSING, a duration on the inbound leg, and this pass is about the difference between
+	# its two ENDS. Falling through to 49 here would put a number from another slice in this slice's
+	# column, under this slice's headline.
+	if _tail_view:
+		return "tail"
+	if _aspect_view:
+		return "aspect"
+	return ""
+
+func _draw_tail_hud_lines(vp: Vector2) -> void:
+	# ⚠ THE ORIGIN IS THE FAMILY'S `vp.x − 430`, BUT THE ROOM IS 390 px — see the block header.
+	var deg := _tail_deg()
+	var dirty := _tail_b("track_pass_dirty", false)
+	var has_gain := _tail_f("track_gain_range_m", -1.0) > 0.0
+	var has_loss := _tail_f("track_loss_range_m", -1.0) > 0.0
+	# ⚠⚠ PRESENCE DECIDES, NOT THE VALUE (slice 50, and this key is the sharpest case of it in the
+	# file). 0.0 is a LEGITIMATE reading of this gauge — it is what a fore/aft symmetric target
+	# gives — so `.get(k, 0.0)` on an instrument that has not finished would be indistinguishable
+	# from the lesson's own null. The core ships the key ONLY when both edges exist.
+	var has_asym := _tail_has("track_asym_m")
+	var asym := _tail_f("track_asym_m", 0.0)
+	var alive := _tail_b("track_alive", false)
+	var closing := _tail_b("track_closing", true)
+	var revisit := _tail_f("track_revisit_s", 0.0)
+	var n_drop := int(_tail_f("track_drop_looks", 0.0))
+	var lost_col := Color(1.00, 0.62, 0.30)
+	var ok_col := Color(0.55, 1.00, 0.65)
+	var head_col := COL_TICK
+	if dirty:
+		head_col = lost_col
+	elif has_asym:
+		head_col = ok_col
+	# THE HEADLINE — the gauge itself once both ends exist, the live state before that, and slice
+	# 50's "Reset to measure" the moment the setting moves under it.
+	draw_string(_font, Vector2(vp.x - 430, 88),
+			_tail_verdict_label(dirty, has_asym, asym, has_gain, closing),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 20, head_col)
+	# THE MECHANISM — which end is showing, and to WHOM.
+	draw_string(_font, Vector2(vp.x - 430, 116),
+			_tail_aspect_text(_tail_target, _tail_observer, deg),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.45, 0.90, 1.00))
+	# THE PRICE — σ_eff, the dB, and the live detector, all straight off the wire.
+	draw_string(_font, Vector2(vp.x - 430, 138),
+			_tail_echo_text(_tail_f("rcs_eff_m2", 0.0), _tail_f("rcs_loss_db", 0.0)),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45))
+	# ⭐ THE INBOUND EDGE — the half no `G` can move.
+	draw_string(_font, Vector2(vp.x - 430, 160),
+			_tail_gain_edge_text(has_gain, _tail_f("track_gain_range_m", 0.0),
+					int(_tail_f("track_gain_look", -1.0))),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK if not has_gain else ok_col)
+	# THE OUTBOUND EDGE — the half it does, plus the live track state until it is declared.
+	# ⚠⚠ THE LOOK INDEX IS NOT DECORATION. Gate 0 §2.9 measured DEAD ZONES in this slider: on this
+	# seed `G` = 2, 5 and 10 all read the same +878 m at the same look #671. Without the index a
+	# student dragging across that stretch sees an unchanging number and cannot tell "the edge has
+	# not moved" from "nothing is being read" — a flat stretch reading as a dead knob is exactly what
+	# this block was told to prevent.
+	draw_string(_font, Vector2(vp.x - 430, 182),
+			_tail_loss_edge_text(has_loss, _tail_f("track_loss_range_m", 0.0),
+					int(_tail_f("track_loss_look", -1.0)), alive,
+					int(_tail_f("track_misses", 0.0)), _tail_f("target_range_m", 0.0),
+					int(_tail_f("track_look", 0.0))),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, lost_col if has_loss else COL_TICK)
+	# ⭐⭐⭐ THE GAUGE, WITH ITS RULE IN THE SAME STRING.
+	draw_string(_font, Vector2(vp.x - 430, 204),
+			_tail_gauge_text(dirty, has_asym, asym, revisit, n_drop),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			lost_col if dirty else (ok_col if has_asym else COL_TICK))
+	# THE RULE IN WORDS.
+	draw_string(_font, Vector2(vp.x - 430, 226), _tail_rule_text(revisit, n_drop),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	# THE TRADE.
+	draw_string(_font, Vector2(vp.x - 430, 248), _tail_cure_text(has_asym, asym),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
 
 
@@ -5067,6 +5416,11 @@ func _spatial_on_state(obj: Dictionary) -> void:
 						tr.pop_front()
 				_salvo_trails[id] = tr
 		_x_max = max(_x_max, absf(float(pos[0])) * 1.08)
+		# ⭐ AND THE FLOOR GROWS DOWNWARD ONLY ON A FLY-PAST. Doing it unconditionally would silently
+		# re-frame any existing wire that ever put an entity at negative downrange (a standoff jammer,
+		# say), which convention 2 makes a regression rather than an improvement.
+		if _tail_view:
+			_x_min = min(_x_min, float(pos[0]) * 1.08)
 		_z_max = max(_z_max, float(pos[2]) * 1.15)
 
 	# Airframe view (slice 16/17): sample the core's α into the display-only strip-chart history.
@@ -5104,7 +5458,14 @@ func _spatial_on_state(obj: Dictionary) -> void:
 	# be a number that is not this slice's, printed under this slice's label.
 	# ⚠ GATED ON THE ANCHOR'S OWN KEY, so every scenario 1–48 leaves all six instruments at their
 	# reset values (slice 33's independent-`if` finding — this is a chain of nothing).
-	if _aspect_view and _aspect_observer != "" and _telemetry.has(_aspect_observer + ".target_range_m"):
+	# ⚠⚠ SLICE 53 — `and not _tail_view`, AND IT IS THE ONE GATE IN THIS FILE THAT IS NOT IN `_draw`
+	# (convention 14's blind spot works both ways: a frame-handler accumulator has no windowed shot
+	# to expose it either). A slice-53 wire raises `_aspect_view`, names a radar observer and ships
+	# `target_range_m`, so all three conditions above hold and this would accumulate a LONGEST
+	# CLOSING LOSS RUN over the whole pass — slice 49's gauge, running silently, ready to be printed
+	# under slice 53's label the moment anything reads `_asp_loss_s`. The gauges are not the same
+	# quantity and neither is a fallback for the other.
+	if _aspect_view and not _tail_view and _aspect_observer != "" and _telemetry.has(_aspect_observer + ".target_range_m"):
 		_asp_t = float(obj.get("t", _asp_t))
 		var r := float(_telemetry[_aspect_observer + ".target_range_m"])
 		# The turn is detected on the RANGE, not on a CPA guess: one frame of opening ends the window
@@ -5465,7 +5826,10 @@ func _on_reset_pressed() -> void:
 
 func _world_to_screen(pos: Array) -> Vector2:
 	var vp := get_viewport_rect().size
-	var sx := MARGIN + (float(pos[0]) / _x_max) * (vp.x - 2.0 * MARGIN)
+	# ⚠ `_x_min` IS 0.0 ON EVERY WIRE BUT A FLY-PAST, AND AT 0.0 THIS IS THE OLD EXPRESSION TO THE
+	# BIT (`x − 0.0 === x`, `_x_max − 0.0 === _x_max`) — which is what makes the slice-53 change
+	# additive rather than a re-render of every scenario in the project (convention 2).
+	var sx := MARGIN + ((float(pos[0]) - _x_min) / (_x_max - _x_min)) * (vp.x - 2.0 * MARGIN)
 	var sy := (vp.y - MARGIN) - (float(pos[2]) / _z_max) * (vp.y - 2.0 * MARGIN)
 	return Vector2(sx, sy)
 
@@ -5566,8 +5930,11 @@ func _draw_spatial_backdrop() -> void:
 	var ground_y := (vp.y - MARGIN)
 	draw_rect(Rect2(0, ground_y, vp.x, vp.y - ground_y), COL_GROUND)
 	# downrange ticks (km): faint verticals through the sky + labels in the ground strip
-	var xstep := _nice_step(_x_max)
-	var wx := xstep
+	var xstep := _nice_step(_x_max - _x_min)
+	# ⚠ THE FIRST TICK IS STILL `xstep` WHEN THERE IS NO FLOOR, so no existing view gains a "0" tick
+	# it did not have. A fly-past starts at the first multiple of the step inside the window, which
+	# on slice 53's wire puts the radar's own 0 on the axis — the natural centre of a crossing pass.
+	var wx: float = (ceil(_x_min / xstep) * xstep) if _x_min < 0.0 else xstep
 	while wx < _x_max * 0.999:
 		var sx := _world_to_screen([wx, 0.0, 0.0]).x
 		draw_line(Vector2(sx, 0), Vector2(sx, ground_y), COL_GRID, 1.0)
@@ -5727,7 +6094,18 @@ func _draw_spatial() -> void:
 	# the reason. ⚠⚠ Its width budget is 390 px, NOT the family's 430: the altitude tick labels
 	# `_draw_spatial_backdrop` puts at `vp.x − 34` are in the way, and the origin is right-anchored
 	# so no window size rescues an over-wide line (`_draw_aspect_hud_lines`' own header).
-	if _aspect_view:
+	# ⭐⭐⭐ SLICE 53 — CHECKED **FIRST**, the family's "check the new one first" rule, and here it is
+	# not a courtesy: a slice-53 wire raises `aspect_view` TOO (its target carries an
+	# `:rcs_fineness`), so without this branch slice 49's block would draw over the same 390 px
+	# column with a gauge — the longest closing loss run — that belongs to a different slice.
+	# ⚠⚠ CONVENTION 14: WHICH BRANCH WINS HAS NO HEADLESS PROOF, because this `if` is inside `_draw`
+	# and `_draw` never runs under `--headless` (slice 50 paid for that discovery). The UI test
+	# raises BOTH markers and asserts `_spatial_hud_kind()`, which is where the decision now lives;
+	# the windowed shot is the only proof that the two blocks are not both on screen.
+	var hud_kind := _spatial_hud_kind()
+	if hud_kind == "tail":
+		_draw_tail_hud_lines(get_viewport_rect().size)
+	elif hud_kind == "aspect":
 		_draw_aspect_hud_lines(get_viewport_rect().size)
 
 func _draw_missile() -> void:

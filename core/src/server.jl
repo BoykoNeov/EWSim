@@ -128,6 +128,14 @@ function scenario_frame(srv::Server)
     # vanishes for a completely different reason. `nothing` for every slice-1..48 scenario.
     aspinfo = _aspect_view_info(scn.world)
     aspinfo === nothing || merge!(frame, aspinfo)
+    # ⭐⭐ A slice-53 scenario ships a `tail_view` marker + the target/observer PAIR it describes, on
+    # top of the `aspect_view` above (its target carries an `:rcs_fineness` too, so both raise). The
+    # two are not alternatives: `aspect_view` keeps the BUTTON — the drop of the propagation toggle,
+    # which is the right drop here for slice 49's own reason — while `tail_view` takes the HUD, and
+    # with it slice 49's gauge, which is a DURATION on the inbound leg and would accumulate all pass
+    # under a label belonging to a different slice. `nothing` for every slice-1..52 scenario.
+    tailinfo = _tail_view_info(scn.world)
+    tailinfo === nothing || merge!(frame, tailinfo)
     return frame
 end
 

@@ -317,6 +317,51 @@ function _aspect_view_info(w::World)
 end
 
 """
+    _tail_view_info(w::World) -> Union{Nothing, Dict}
+
+⭐⭐ **THE SLICE-53 VIEW MARKER** — the `terrain_grid` / `airframe_view` / `aspect_view`
+handshake-once pattern, and the 15th of the family. Raised when a target carries a
+`:rcs_tail_gain` **and** a radar carries a `:track_drop_looks`. `nothing` on every slice-1..52
+scenario, where the keys simply do not appear.
+
+⚠⚠ **THE MARKER IS THE PAIR, SO HALF A PAIR IS NOT A MARKER** — slice 50 forced exactly that onto
+[`_aspect_view_info`](@ref) above, and the argument transfers without a change of a word. This
+block's every line is either a property of the TARGET's rear hemisphere (`rcs_tail_gain`, the aspect
+readouts) or a property of the RADAR's give-up rule (`track_*`), and the headline `track_asym_m` is
+the two multiplied together. A shaped-and-tail-lobed target with no tracking radar has an asymmetry;
+it simply has none THIS view can quote, and the honest answer is to leave the handshake silent so
+the client keeps whatever view it had.
+
+⚠ **GATED ON THE COMP KEYS, NOT ON A FIDELITY**, for slice 38/46/47/48/49's reason: there is no tail
+rung to gate on and there deliberately is not one — "no tail lobe at all" is reachable from the
+SLIDER's own floor (`G` = 1), so a rung would duplicate a slider position.
+
+⭐ **AND THE GATE MUST NOT BE THE LESSON'S NULL** (slice 50: the lesson's NULL and a dead
+instrument's DEFAULT must not read the same). The showcase's headline drag is `G` = 20 → 1, and
+`set_param` writes the comp bag IN PLACE — the key stays PRESENT at every slider position — so this
+marker rides through the null instead of blanking on exactly the arm that proves it. Gating on the
+VALUE (`> 1`) would have gone dark there; gating on PRESENCE does not.
+
+⚠ **HUD ONLY — THE BUTTON STAYS SLICE 49's**, the `_s52_view` / `_seeker_detect_view` posture. A
+slice-53 wire authors an `:rcs_fineness` too, so `_aspect_view_info` raises alongside this and the
+client's `_setup_spatial_fid_btn` already drops the `free_space ↔ two_ray` toggle on its branch —
+which is the correct drop here for slice 49's exact reason (multipath is a SECOND way for a target
+to vanish, on a scenario about a third). What this marker takes from `aspect_view` is the HUD block
+and slice 49's own gauge: the longest closing loss run is a DURATION on the inbound leg, and on this
+wire it would accumulate all pass under a label that belongs to a different slice.
+"""
+function _tail_view_info(w::World)
+    tgts = sort!(Symbol[id for (id, e) in w.entities
+                        if e.kind === :target && haskey(e.comp, :rcs_tail_gain)])
+    isempty(tgts) && return nothing
+    radars = sort!(Symbol[id for (id, e) in w.entities
+                          if e.kind === :radar && haskey(e.comp, :track_drop_looks)])
+    isempty(radars) && return nothing
+    return Dict{Symbol,Any}(:tail_view => true, :tail_target => String(tgts[1]),
+                            :tail_observer => String(radars[1]))
+end
+
+"""
     _effective_rcs(tgt::Entity, obs_pos::Vec3) -> Float64   (m²)
 
 **THE ONE PLACE ASPECT IS APPLIED** (slice 49). The target's radar cross-section as seen from
