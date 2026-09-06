@@ -102,6 +102,23 @@ function _radar_comp!(comp::Dict{Symbol,Any}, block::AbstractDict)
                   "scoring band and nothing else reads it (a knob nothing reads is a bug)")
         comp[:track_ok_cells] = ok
     end
+    # ⭐⭐⭐ SLICE 54 gate 3 — THE SWEEP: run `n_drop` = 1…N as SHADOW ARMS over the same picture and
+    # ship the whole NET-vs-patience CURVE on the wire. Optional; 0/absent runs the authored track
+    # alone, so every slice-1..53 wire is untouched.
+    # ⚠⚠ THE CURVE IS THE TEACHING OBJECT, NOT THE ARGMAX. Gate-0 §2.5.3/§2.8.2 measured that the
+    # best cell is a coin flip between neighbours on a nearly flat top, while the SHAPE — rises,
+    # peaks, falls — is invariant to both the tracker gate and the gauge band. Sixteen arms on one
+    # pass is also the only affordable way to SEE it: re-flying per setting is ~80 minutes of wall
+    # clock for one curve.
+    if haskey(block, "track_sweep_max")
+        ns = Int(block["track_sweep_max"])
+        ns ≥ 0 || error("radar track_sweep_max=$ns: must be ≥ 0 (it is the widest `n_drop` the " *
+                        "shadow sweep runs; 0 means no sweep)")
+        ns == 0 || haskey(comp, :track_drop_looks) ||
+            error("radar track_sweep_max needs a `track_drop_looks`: the sweep runs the same " *
+                  "give-up rule the authored track does, and without one nothing reads it")
+        comp[:track_sweep_max] = ns
+    end
     # Optional CFAR config (slice 3): the STATIC profile geometry (n_cells / range_start_m)
     # plus the LIVE window sliders (n_train / n_guard). Only read when present, so a slice-1/2
     # radar block leaves these out of the comp bag entirely (its point path never reads them).

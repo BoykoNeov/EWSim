@@ -136,6 +136,13 @@ function scenario_frame(srv::Server)
     # under a label belonging to a different slice. `nothing` for every slice-1..52 scenario.
     tailinfo = _tail_view_info(scn.world)
     tailinfo === nothing || merge!(frame, tailinfo)
+    # ⭐⭐⭐ A slice-54 scenario ships a `giveup_view` marker + the radar whose give-up CURVE the wire
+    # carries. HUD only, and it takes no button: the wire is a `:cfar` scenario, so the profile view
+    # already owns the display. ⚠ Gated on the AUTHOR's `track_sweep_max`, never on the slider —
+    # this slice's slider is dragged to its own null as the lesson, and a value-gated marker would
+    # go dark on exactly that arm. `nothing` for every slice-1..53 scenario.
+    givinfo = _giveup_view_info(scn.world)
+    givinfo === nothing || merge!(frame, givinfo)
     return frame
 end
 

@@ -362,6 +362,39 @@ function _tail_view_info(w::World)
 end
 
 """
+    _giveup_view_info(w::World) -> Union{Nothing, Dict}
+
+⭐⭐ **THE SLICE-54 VIEW MARKER** — the 16th of the `terrain_grid` / `aspect_view` / `tail_view`
+handshake-once family. Raised when a radar authors a **`:track_sweep_max` ≥ 1**, i.e. when the wire
+actually ships a NET-vs-patience CURVE for the client to draw. `nothing` on every slice-1…53
+scenario, where the key does not appear.
+
+⚠⚠ **THE GATE IS THE AUTHOR'S KEY AND NOT THE SLIDER'S VALUE**, which is the standing rule this
+family keeps re-learning (slice 53: *gate a view marker on the author's KEY, never the slider's
+VALUE*). This slice's slider is `track_drop_looks`, and it is dragged across its WHOLE domain as the
+lesson — including to 1, the null. A marker gated on any function of that value would go dark on
+exactly the arm the user is meant to compare against. `track_sweep_max` is authored once and never
+moves, so the marker rides through every slider position.
+
+⚠ **AND THE MARKER SEPARATES WIRES THAT DIFFER ONLY BY THE SLIDER** — the other half of the same
+rule. `slice54_giveup.yaml` and `slice54_giveup_clean.yaml` differ ONLY in `pfa`; both raise this
+marker and both draw the same block, because the lesson is *the curve moved*, not *a different
+instrument appeared*. The block's job is to make the two curves comparable, so it must be the SAME
+block. ⇒ the marker names the RADAR, and the HUD reads the curve off the wire.
+
+⚠ **HUD ONLY — IT TAKES NO BUTTON.** A slice-54 wire is a `:cfar` scenario, so the client's CFAR
+profile view already owns the display and its own fidelity button; this marker adds the tracker
+block beside it and changes nothing else. ⚠ It must NOT be gated on `:track_drop_looks` alone: slice
+53's point-path wire authors that key too, and would raise a block whose curve does not exist.
+"""
+function _giveup_view_info(w::World)
+    radars = sort!(Symbol[id for (id, e) in w.entities
+                          if e.kind === :radar && Int(get(e.comp, :track_sweep_max, 0)) ≥ 1])
+    isempty(radars) && return nothing
+    return Dict{Symbol,Any}(:giveup_view => true, :giveup_observer => String(radars[1]))
+end
+
+"""
     _effective_rcs(tgt::Entity, obs_pos::Vec3) -> Float64   (m²)
 
 **THE ONE PLACE ASPECT IS APPLIED** (slice 49). The target's radar cross-section as seen from
@@ -594,7 +627,10 @@ profile starts one.
 function _track_cfar_look!(radar::Entity, ranges::Vector{Float64}, powers::Vector{Float64},
                            revisit_s::Float64, dr::Float64, truth_range::Float64)
     n_drop = Int(radar.comp[:track_drop_looks])
-    # ⚠⚠ THE DRAG, CONSUMED HERE — the cumulative gauge only, never the live state (see above).
+    # ⚠⚠ THE DRAG, CONSUMED HERE — the AUTHORED arm's cumulative gauge only. Never the live state
+    # (which describes the tick, not a past measurement — slice 53's split), and NEVER THE SWEEP:
+    # the sweep is not a measurement OF the slider's setting, it is the curve the slider INDEXES
+    # INTO, and blanking it on a drag would erase the very thing the user is reading.
     if get(radar.comp, :trk_dirty, false)
         radar.comp[:trk_good] = 0
         radar.comp[:trk_bad]  = 0
@@ -607,20 +643,111 @@ function _track_cfar_look!(radar::Entity, ranges::Vector{Float64}, powers::Vecto
     # readable measurement rather than a missing key. ⚠ 0 is a legitimate value of both (a clean
     # picture with an impatient rule is never wrong — measured: `pfa` 1e-6 at `n_drop` 1..2), which
     # is exactly why they may not be left absent and defaulted at the reader (slice 50: a defaulted
-    # zero and a real zero read the same, so PRESENCE has to decide). Presence here means "a look
-    # has been scored"; `trk_look` says how many.
+    # zero and a real zero read the same, so PRESENCE has to decide).
     if !haskey(radar.comp, :trk_good)
         radar.comp[:trk_good] = 0; radar.comp[:trk_bad] = 0
         radar.comp[:trk_scored_from] = look
     end
 
-    alive0  = get(radar.comp, :trk_alive, false)::Bool
-    misses0 = Int(get(radar.comp, :trk_misses, 0))
-    r       = Float64(get(radar.comp, :trk_range, 0.0))
-    rdot    = Float64(get(radar.comp, :trk_rdot,  0.0))
+    ok_m = Float64(get(radar.comp, :track_ok_cells, 1.0)) * dr
 
+    # ── THE AUTHORED ARM: the track the view draws and the slider selects ────────────────────────
+    alive, misses, r, rdot, gate_cells =
+        _trk_arm_step(get(radar.comp, :trk_alive, false)::Bool,
+                      Int(get(radar.comp, :trk_misses, 0)),
+                      Float64(get(radar.comp, :trk_range, 0.0)),
+                      Float64(get(radar.comp, :trk_rdot,  0.0)),
+                      ranges, powers, revisit_s, dr, n_drop)
+    radar.comp[:trk_alive]      = alive
+    radar.comp[:trk_misses]     = misses
+    radar.comp[:trk_range]      = r
+    radar.comp[:trk_rdot]       = rdot
+    radar.comp[:trk_gate_cells] = gate_cells
+    err = abs(r - truth_range)
+    if alive
+        if err ≤ ok_m
+            radar.comp[:trk_good] = Int(get(radar.comp, :trk_good, 0)) + 1
+        else
+            radar.comp[:trk_bad]  = Int(get(radar.comp, :trk_bad,  0)) + 1
+        end
+    end
+    radar.comp[:trk_err_m] = err
+
+    # ── ⭐⭐⭐ THE SWEEP: THE WHOLE CURVE, ON ONE PASS ────────────────────────────────────────────
+    #
+    # `n_drop` = 1…`track_sweep_max` run as SHADOW ARMS over the SAME picture, so the slice's
+    # headline — *the score rises with patience and then falls, and where it peaks is set by how
+    # dirty the picture is* — is visible in ONE flight instead of sixteen.
+    #
+    # ⚠⚠ **WHY THIS IS NOT OPTIONAL POLISH.** Gate-0 §2.5.3 and §2.8.2 measured that the ARGMAX is
+    # a coin flip between neighbouring cells of a nearly flat top (peak NET moves 1.9 % across a 4×
+    # gate) while the CURVE's shape is invariant. A readout printing "best = 4" would be reporting
+    # the noise; the teaching object is the SHAPE. And the alternative — re-flying the pass once per
+    # setting — is ~80 minutes of wall clock for one curve, which is not an instrument.
+    #
+    # ⭐⭐ IT IS ALSO A STRONGER COMPARISON THAN THE PROBES MADE: every arm sees the IDENTICAL draws,
+    # so the curve is PAIRED, where the gate-0 ladder had to average six seeds to say the same
+    # thing. Each arm differs from its neighbours ONLY in the give-up rule.
+    #
+    # ⚠⚠ NO RNG, AND THAT IS THE ONE WAY THIS COULD SILENTLY BREAK. Every arm reads the same
+    # already-drawn `ranges`/`powers` and draws nothing — `_draw_profile!` stays the only RNG of a
+    # look and its count is `2·N_p·N_cells` however many arms run (pinned by a tooth comparing the
+    # profile arrays with the sweep PRESENT vs ABSENT).
+    #
+    # ⚠ The arms are INDEPENDENT STATE, one entry per arm per vector — an arm sharing the authored
+    # track's `trk_*` bag would alias it. Arm `k` is required BY TEST to equal a tracker authored at
+    # `track_drop_looks` = `k`, which is what makes the curve quotable.
+    nsw = Int(get(radar.comp, :track_sweep_max, 0))
+    if nsw ≥ 1
+        if !haskey(radar.comp, :trk_sw_alive) ||
+           length(radar.comp[:trk_sw_alive]::Vector{Bool}) != nsw
+            radar.comp[:trk_sw_alive]  = fill(false, nsw)
+            radar.comp[:trk_sw_misses] = zeros(Int, nsw)
+            radar.comp[:trk_sw_range]  = zeros(Float64, nsw)
+            radar.comp[:trk_sw_rdot]   = zeros(Float64, nsw)
+            radar.comp[:trk_sw_good]   = zeros(Int, nsw)
+            radar.comp[:trk_sw_bad]    = zeros(Int, nsw)
+            radar.comp[:trk_sw_gate]   = ones(Int, nsw)
+        end
+        sa = radar.comp[:trk_sw_alive]::Vector{Bool}
+        sm = radar.comp[:trk_sw_misses]::Vector{Int}
+        sr = radar.comp[:trk_sw_range]::Vector{Float64}
+        sv = radar.comp[:trk_sw_rdot]::Vector{Float64}
+        sg = radar.comp[:trk_sw_good]::Vector{Int}
+        sb = radar.comp[:trk_sw_bad]::Vector{Int}
+        sc = radar.comp[:trk_sw_gate]::Vector{Int}
+        @inbounds for k in 1:nsw
+            a, m, rr, vv, gc =
+                _trk_arm_step(sa[k], sm[k], sr[k], sv[k], ranges, powers, revisit_s, dr, k)
+            sa[k] = a; sm[k] = m; sr[k] = rr; sv[k] = vv; sc[k] = gc
+            if a
+                abs(rr - truth_range) ≤ ok_m ? (sg[k] += 1) : (sb[k] += 1)
+            end
+        end
+    end
+    return nothing
+end
+
+"""
+    _trk_arm_step(alive, misses, r, rdot, ranges, powers, revisit_s, dr, n_drop)
+        -> (alive′, misses′, r′, rdot′, gate_cells)
+
+ONE look of ONE give-up track over a CFAR picture — the whole rule, in one place.
+
+⚠⚠ **THE AUTHORED TRACK AND EVERY SHADOW ARM OF THE SWEEP CALL THIS SAME FUNCTION**, which is what
+makes *arm `k` of the curve* and *a scenario authored at `track_drop_looks` = `k`* the same thing by
+construction rather than by coincidence. Duplicating the rule for the sweep would let the curve and
+the slider drift apart silently — and the curve is what the lesson is read off.
+
+Pure apart from its arguments: it draws nothing, reads no world state, and sees no truth (the gauge
+scores the result afterwards — see [`_track_cfar_look!`]).
+"""
+function _trk_arm_step(alive::Bool, misses::Int, r::Float64, rdot::Float64,
+                       ranges::Vector{Float64}, powers::Vector{Float64},
+                       revisit_s::Float64, dr::Float64, n_drop::Int)
     gate_cells = track_gate_cells(rdot, revisit_s, dr)
-    if alive0
+    local detected::Bool
+    if alive
         pred = r + rdot * revisit_s
         i    = track_associate(pred, ranges, gate_cells * dr)
         r, rdot = track_ab_step(r, rdot, revisit_s, i == 0 ? nothing : ranges[i])
@@ -633,27 +760,8 @@ function _track_cfar_look!(radar::Entity, ranges::Vector{Float64}, powers::Vecto
         end
         detected = i != 0
     end
-    alive, misses, _, _ = track_run_step(alive0, misses0, detected, n_drop)
-
-    radar.comp[:trk_alive]      = alive
-    radar.comp[:trk_misses]     = misses
-    radar.comp[:trk_range]      = r
-    radar.comp[:trk_rdot]       = rdot
-    radar.comp[:trk_gate_cells] = gate_cells
-
-    # THE GAUGE. Scored on POSITION against truth, and only while the track is ALIVE — a track that
-    # has been given up is not making a claim about anything and cannot be wrong (gate-0 F3).
-    ok_m = Float64(get(radar.comp, :track_ok_cells, 1.0)) * dr
-    err  = abs(r - truth_range)
-    if alive
-        if err ≤ ok_m
-            radar.comp[:trk_good] = Int(get(radar.comp, :trk_good, 0)) + 1
-        else
-            radar.comp[:trk_bad]  = Int(get(radar.comp, :trk_bad,  0)) + 1
-        end
-    end
-    radar.comp[:trk_err_m] = err
-    return nothing
+    a, m, _, _ = track_run_step(alive, misses, detected, n_drop)
+    return (a, m, r, rdot, gate_cells)
 end
 
 """
@@ -1386,6 +1494,26 @@ function _observe_cfar!(r::RadarSensor, w::World)
         # (slice 50: presence decides).
         haskey(radar.comp, :trk_err_m) &&
             (tel["$sid.track_err_m"] = _finite_coord(Float64(radar.comp[:trk_err_m])))
+        # ⭐⭐⭐ THE CURVE ITSELF — NET against `n_drop` = 1…`track_sweep_max`, every arm scored on
+        # the SAME picture this pass drew. This is the slice's teaching object: gate-0 §2.5.3 and
+        # §2.8.2 measured that the ARGMAX is a coin flip on a nearly flat top while the SHAPE is
+        # invariant, so the wire ships the shape and lets the client draw it. ⚠ The client MUST NOT
+        # reduce this to "best = k" — that is the number the plan proved is not reproducible.
+        # ⚠ Absent when no sweep is authored (`track_sweep_max` = 0), so nothing is defaulted.
+        if haskey(radar.comp, :trk_sw_good)
+            sg = radar.comp[:trk_sw_good]::Vector{Int}
+            sb = radar.comp[:trk_sw_bad]::Vector{Int}
+            tel["$sid.track_sweep_net"]  = Float64[sg[k] - sb[k] for k in eachindex(sg)]
+            tel["$sid.track_sweep_good"] = Float64.(sg)
+            tel["$sid.track_sweep_bad"]  = Float64.(sb)
+            tel["$sid.track_sweep_max"]  = Float64(length(sg))
+            # ⚠ The widest gate any arm reached. The pre-registered rule yields 1 cell on the
+            # authored wire; a SEDUCED arm can pick up a large rate estimate and ask for more, and
+            # if this ever reads `TRACK_GATE_MAX_CELLS` the cap has BOUND and the gate is no longer
+            # the pre-registered rule — which the showcase would have to say out loud.
+            tel["$sid.track_sweep_gate_max"] =
+                Float64(maximum(radar.comp[:trk_sw_gate]::Vector{Int}))
+        end
     end
     return nothing
 end

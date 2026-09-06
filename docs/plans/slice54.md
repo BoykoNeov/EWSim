@@ -640,3 +640,142 @@ counters DIFFER, so the identity is a statement about the RNG and not about a tr
 nothing. Byte-identity of the shipped `scenarios/slice3_cfar.yaml` is by key-presence gating, and is
 checked by `test_determinism` **and the ABSOLUTE golden** (convention 2 — only the golden catches a
 draw-ORDER regression).
+
+---
+
+## §5 — GATE 3
+
+### §5.0 ⭐⭐⭐ THE SWEEP: THE CORE SHIPS THE WHOLE CURVE, AND §1's "ONE TRACK PER RADAR" IS RETIRED
+
+§1 listed *one track per radar* among the named approximations. **That is now false and is corrected
+here**, in the same place §3.1 corrected the other two: the core runs **one REPORTED track** (the
+authored `track_drop_looks`, which the slider selects and the view draws) **plus N SHADOW ARMS**
+(`track_sweep_max`, `n_drop` = 1…N) that share the same picture and are read only by the gauge.
+
+**WHY THE SHOWCASE COULD NOT SHIP A SINGLE POINT.** §2.5.3 and §2.8.2 measured that the ARGMAX is a
+coin flip between neighbouring cells of a nearly flat top (peak NET moves 1.9 % across a 4× gate)
+while the CURVE's shape is invariant. A readout printing *"best = 4"* would be reporting the noise.
+And the alternative — re-flying the pass once per setting — is **~80 minutes of wall clock for one
+curve**, which is not an instrument.
+
+⭐⭐ **THE SWEEP IS ALSO A STRONGER COMPARISON THAN THE PROBES MADE.** Every arm sees the IDENTICAL
+draws, so the curve is **PAIRED**; the gate-0 ladder had to average six seeds to say the same thing.
+⚠ Guarded by two teeth: the sweep **draws nothing** (profile arrays identical with it present vs
+absent, 534 floats × 300 looks) and **arm `k` IS a tracker authored at `k`** (both go through the
+one `_trk_arm_step`, so they cannot drift apart).
+
+⚠⚠ **A DRAG RE-ARMS THE AUTHORED ARM AND LEAVES THE CURVE ALONE** — the sweep is not a measurement
+*of* the slider's setting, it is the curve the slider *indexes into*. The view must say which is
+which, or a drag reads as a broken instrument.
+
+### §5.1 ⚠⚠ THE SEED RULE — **DECLARED HERE BEFORE ANY GATE-3 FLIGHT** (F8; `docs/LESSONS.md:1314`)
+
+The showcase draws **ONE seed's** curve, and §2.3 measured that a single seed's column chatters. The
+seed therefore has to be chosen, and the rule is fixed now so it cannot be fitted to the result.
+
+**CANDIDATES: seeds 101…110** — the gate-0 block extended by four, chosen for being contiguous and
+arbitrary. **ALL TEN WILL BE REPORTED, winners and losers, whatever the outcome.**
+
+**THE RULE**, applied to the shipped curve (gate ±1, band 1 cell, `pfa` as authored):
+
+* **R1 — INTERIOR PEAK.** `argmax` NET must lie at 2 ≤ `k`\* ≤ 15. A peak at either endpoint is not a
+  two-sided curve and teaches the wrong thing (slice 48's monotone shape).
+* **R2 — IT MUST RISE.** `NET(1) ≤ 0.90 · NET(k*)` — patience must visibly buy something.
+* **R3 — IT MUST FALL.** `NET(16) ≤ 0.90 · NET(k*)` — and visibly cost something.
+* **R4 — TIE-BREAK: the LOWEST seed number** satisfying R1–R3. Not the largest effect, not the
+  prettiest curve.
+
+⚠ **IF NO SEED PASSES, THE WIRE IS WRONG AND THE WIRE CHANGES — NOT THE RULE.**
+
+⚠ R2/R3's 10 % is a THRESHOLD ON A NOISY CURVE, not a claim about the physics: the six-seed mean
+(§2.8.1) falls 5.5 %…17.8 % from peak to 16 depending on the arm, so a single seed that clears 10 %
+on both sides is a clean instance of a real shape, never a special one.
+
+### §5.2 THE WIRE — OUTBOUND, BECAUSE THE FADE IS WHERE A GIVE-UP RULE LIVES
+
+⚠ **THE GATE-0 FLY-PAST IS NOT THE SHOWCASE WIRE.** It CLOSES to its closest approach at t = 50 s,
+so its first half is a strong target that never drops and never seduces anything — §4.3 measured
+that a 120 s flight on it sees essentially no wrong looks. A showcase where nothing happens for two
+and a half minutes is a bad showcase.
+
+The wire is the same target **already outbound and fading**: 300 m/s at 5 km altitude, from 20 km to
+~80 km over 200 s, σ = 1 m². ⭐ That span is chosen against the measured fade (§2.2 P2a: σ = 1 m²
+runs 98 % → 61 % → 11 % → 0.6 % over 0–80 km), so the pass has a real beginning, a real end, and a
+long middle where letting go is a genuine judgement call.
+
+⚠⚠ **AND THE PRE-REGISTERED GATE RULE IS RE-DERIVED ON THIS WIRE, NOT INHERITED.** §2.5.1's ±1 was
+computed for 300 m/s and 1 MHz. This wire keeps both, so `|ṙ|·revisit_s/Δr = 300·0.1/149.896 = 0.20`
+→ **1 cell**, unchanged — and the core evaluates it per look rather than trusting that arithmetic.
+
+### §5.3 ⭐⭐⭐ THE SEED LADDER — ALL TEN PUBLISHED, AND THE RULE PICKED **101**
+
+`M:\claud_projects\temp\slice54\g3_seed.jl`; raw output `…\g3_seed_out.txt`. Seeds 101…110, outbound
+20 → 80 km, 200 s = 2000 looks, sweep 1…16, gate ±1, band 1 cell.
+
+| `pfa` | seeds passing R1–R3 | R4 selects | `k`\* on that seed | NET(1) → peak → NET(16) |
+|---|---|---|---|---|
+| **1e-5** | 101, 102, 104, 105, 106, 107, 108, 109, 110 (**9 of 10**; 103 fails R3) | **101** | **5** | 241 → 440 → 267 |
+| **1e-4** | **all ten** | **101** | **3** | 228 → 307 → 97 |
+| 1e-3 | **NONE** | — | 1 | −112 → −112 → −191 |
+
+⭐⭐⭐ **THE SAME SEED WINS BOTH SHIPPED ARMS, AND ITS PEAK MOVES 5 → 3 AS THE PICTURE DIRTIES —
+WHICH IS §2.8's SIX-SEED MEAN, REPRODUCED ON ONE FLIGHT.** §2.8's determined interior moved 5 → 3 at
+gate ±1 / band 1; seed 101 on the gate-3 wire moves **5 → 3**. The showcase therefore teaches the
+measured lesson rather than an illustration of it, and the two scenarios differ **only** in `pfa`.
+
+⚠ **THE `pfa` = 1e-3 ARM PASSES NOTHING AND IS PUBLISHED AS A RESULT, NOT HIDDEN.** Every seed's
+curve there is NEGATIVE at every patience and falls monotonically — the track is wrong more often
+than right whatever you do, so the best available rule is to give up at once. That is §2.4's
+*"`pfa` = 1e-3 — PATIENCE BUYS NOTHING"*, confirmed on a second wire, and it is why that arm is not
+shipped as a scenario: a slider with no interior answer is not this slice's lesson. ⚠ It is also why
+R1–R3 exist — the rule refused an arm, which is the only evidence that it could.
+
+⭐ **AND THE GATE CAP NEVER BINDS: `gate_max` = 1 on all 30 flights**, including the seduced arms
+whose rate estimates run up after a capture. The shipped gate is therefore the pre-registered
+`|ṙ|·revisit_s/Δr` rule everywhere in the showcase, with no clamp in the path.
+
+### §5.4 GATE 3 AS BUILT — STATUS AT 2026-09-06
+
+**SHIPPED:** `scenarios/slice54_giveup.yaml` (`pfa` 1e-4, opens at the measured peak `n_drop` = 3)
+and `scenarios/slice54_giveup_clean.yaml` (`pfa` 1e-5, opens at 5) — **identical but for `pfa`**,
+which is what makes *the right patience moved* a comparison and not an illustration. Both reproduce
+their own header tables exactly (`…\g3_scn.jl`), and the authored arm's score equals its own cell of
+the sweep on both.
+
+**THE FOUR PROOFS (convention 14):**
+
+| proof | state |
+|---|---|
+| `net/slice54_verify.gd` — 5 arms incl. a LIVE DRAG | ✅ **PASS** (exit 0) |
+| `net/slice54_ui_test.gd` — 9 teeth | ✅ **PASS** (exit 0) |
+| headless `Sandbox.tscn` smoke-load | ⏳ TODO |
+| windowed shot | ⏳ TODO |
+
+⭐⭐⭐ **THE VERIFIER'S HEADLINE ASSERTION — the mirror of slice 53's invariant inbound edge:
+THE CURVE IS IDENTICAL TO THE BIT AT EVERY SLIDER POSITION, while YOUR POINT ON IT MOVES.** The 16
+shadow arms are scored on the same picture and none reads `track_drop_looks`, so the slider selects
+which arm is yours and can move nothing else. Measured across the `hasty`/`patient`/`replay`/`drag`
+arms: every cell equal. That is what makes the curve a paired comparison rather than 16 flights.
+
+⚠⚠ **THE DRAG ARM PROVES THE HARDER HALF OF SLICE 53's RULE.** Slice 53 proved a drag INVALIDATES a
+latch; this one proves something deliberately SURVIVES one. After the drag: `track_scored_from`
+jumps 1 → 1001 (your score re-arms) while `track_sweep_net` keeps accumulating and still equals the
+un-dragged arms' curve cell for cell.
+
+#### §5.4.1 ⚠⚠ TWO CLIENT BUGS THE PROOFS CAUGHT, AND ONE IS A STANDING TRAP
+
+1. ⭐⭐⭐ **THE FIRST DRAFT PUT THE DISPATCH IN AN UNREACHABLE CHAIN.** Every view marker since slice
+   49 lives in `_spatial_hud_kind()`, so that is where the give-up branch went — checked FIRST, per
+   the family's own rule. **A slice-54 wire is a `:cfar` scenario, so `_draw()` dispatches to
+   `_draw_cfar()` and `_spatial_hud_kind()` is never reached at all.** The branch read as "handled
+   first" while being dead code. ⇒ the block has its own chain, `_cfar_hud_kind()`, at the view that
+   actually draws it, and the UI test asserts BOTH halves — that the give-up branch wins its own
+   view AND that the spatial chain does not claim it. ⚠ **The family's "add it to the chain" habit
+   is only correct for wires that enter that chain**; a new view needs a new chain, and the copied
+   habit produces a claim that looks satisfied and does nothing.
+2. **`get_theme_default_font()` does not exist on `Sandbox.gd`'s base** (it is a `Control` method;
+   the file is a `Node2D`). It broke compilation of every script depending on `Sandbox.gd`, not just
+   this view. The file has ONE font handle, `_font`, set in `_ready` — use it, and return early when
+   it is null, because a mock never runs `_ready`.
+3. ⚠ `:=` cannot infer through the untyped `sb` handle in a UI test (the standing GDScript trap —
+   `[[ewsim-godot-material-gotchas]]`): `var x: String = sb._helper(...)`, never `var x := …`.

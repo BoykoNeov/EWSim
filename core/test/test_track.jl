@@ -908,7 +908,8 @@ end
 
 """A `:cfar` fly-past wire with the slice-54 tracker on it. Built by a function (the gate-1 trap)."""
 function _t54_yaml(; seed = 101, pfa = "1.0e-4", drop = "4", ok = "1", ncells = "534",
-                     revisit = "0.1", dt = "1.0e-3", rcs = "1.0", x0 = "-15000.0")
+                     revisit = "0.1", dt = "1.0e-3", rcs = "1.0", x0 = "-15000.0",
+                     sweep = nothing)
     io = IOBuffer()
     println(io, "name: t54_cfar_flypast")
     println(io, "seed: ", seed)
@@ -938,6 +939,7 @@ function _t54_yaml(; seed = 101, pfa = "1.0e-4", drop = "4", ok = "1", ncells = 
     revisit === nothing || println(io, "      revisit_s:    ", revisit)
     drop    === nothing || println(io, "      track_drop_looks: ", drop)
     ok      === nothing || println(io, "      track_ok_cells:   ", ok)
+    sweep   === nothing || println(io, "      track_sweep_max:  ", sweep)
     println(io, "  - id: tgt1")
     println(io, "    kind: target")
     # ⚠ `x0` matters more than it looks. The default is the gate-0 fly-past, which CLOSES to its
@@ -1176,5 +1178,114 @@ end
             @test radar.comp[:trk_look] == length(looks)
             @test good + bad > 0        # ⚠ not a vacuous pass: the flight really scored something
         end
+    end
+end
+
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 54 GATE 3 — THE SWEEP: the whole NET-vs-patience CURVE on ONE pass, as shadow arms over the
+# same picture. The two teeth that decide whether it is correct are (a) that it draws NOTHING, and
+# (b) that arm k IS a tracker authored at k. Everything else is bookkeeping.
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+
+@testset "slice54 gate3 — the sweep: the whole curve on one pass" begin
+
+    @testset "⚠⚠ THE SWEEP DRAWS NOTHING (convention 3, the one way this could break)" begin
+        # ⭐⭐⭐ THE DECISIVE TOOTH OF THE SWEEP. Sixteen extra trackers run every look; if ANY of
+        # them touched `w.rng` the arms would no longer share a picture, the curve would stop being
+        # a paired comparison, and every slice-1..53 replay would desync. Compared on the PROFILE
+        # ARRAYS themselves — 534 floats × 300 looks — with the sweep PRESENT vs ABSENT.
+        none  = _t54_fly(_t54_yaml(sweep = nothing), secs = 30.0, keep_profiles = true)
+        swept = _t54_fly(_t54_yaml(sweep = "16"),    secs = 30.0, keep_profiles = true)
+        @test length(none.profiles) == length(swept.profiles) == 300
+        @test none.profiles == swept.profiles
+        # …and the sweep really ran, so the identity is about the RNG and not about a no-op.
+        @test length(swept.radar.comp[:trk_sw_good]::Vector{Int}) == 16
+        @test sum(swept.radar.comp[:trk_sw_good]::Vector{Int}) > 0
+        @test !haskey(none.radar.comp, :trk_sw_good)
+        # ⚠ …and the AUTHORED arm is unchanged by the sweep's presence, so the sweep is ADDITIONAL
+        # telemetry and never a replacement for the track the view draws.
+        @test none.radar.comp[:trk_good] == swept.radar.comp[:trk_good]
+        @test none.radar.comp[:trk_bad]  == swept.radar.comp[:trk_bad]
+        @test none.radar.comp[:trk_range] == swept.radar.comp[:trk_range]
+    end
+
+    @testset "⭐⭐⭐ ARM k IS A TRACKER AUTHORED AT k (the sweep's oracle)" begin
+        # The curve is only quotable if each of its points is the same thing the slider would give
+        # you at that setting. Both go through `_trk_arm_step`, so this is true by construction —
+        # and this tooth is what keeps it true when someone edits one of them.
+        swept = _t54_fly(_t54_yaml(sweep = "16", drop = "4"), secs = 30.0)
+        sg = swept.radar.comp[:trk_sw_good]::Vector{Int}
+        sb = swept.radar.comp[:trk_sw_bad]::Vector{Int}
+        for k in (1, 2, 4, 7, 16)
+            solo = _t54_fly(_t54_yaml(sweep = nothing, drop = string(k)), secs = 30.0)
+            @test sg[k] == solo.radar.comp[:trk_good]
+            @test sb[k] == solo.radar.comp[:trk_bad]
+        end
+        # ⚠ NOT A VACUOUS PASS: the arms must actually DIFFER from each other, or the identity above
+        # would hold for any constant.
+        @test length(unique(sg[k] - sb[k] for k in 1:16)) > 1
+        # …and the AUTHORED arm agrees with its own index in the sweep (`drop` = 4 above).
+        @test swept.radar.comp[:trk_good] == sg[4]
+        @test swept.radar.comp[:trk_bad]  == sb[4]
+    end
+
+    @testset "the wire ships the CURVE, and the client is not asked to reduce it" begin
+        f = _t54_fly(_t54_yaml(sweep = "16", drop = "4"), secs = 10.0)
+        tel = f.world.env[:telemetry]
+        for k in ("track_sweep_net", "track_sweep_good", "track_sweep_bad", "track_sweep_max",
+                  "track_sweep_gate_max")
+            @test haskey(tel, "radar1.$k")
+        end
+        net = tel["radar1.track_sweep_net"]::Vector{Float64}
+        @test length(net) == 16 && tel["radar1.track_sweep_max"] == 16.0
+        # NET is formed in the CORE, so no client subtracts (convention 13).
+        good = tel["radar1.track_sweep_good"]::Vector{Float64}
+        bad  = tel["radar1.track_sweep_bad"]::Vector{Float64}
+        @test net == good .- bad
+        # The single-arm keys still mean the AUTHORED setting the slider selects.
+        @test tel["radar1.track_drop_looks"] == 4.0
+        @test tel["radar1.track_net"] == net[4]
+        # ⚠⚠ THE GATE CAP MUST NOT BIND, INCLUDING ON A SEDUCED ARM whose rate estimate has run up.
+        # If it ever does, the gate stops being the pre-registered `|ṙ|·revisit_s/Δr` rule and the
+        # showcase would have to say so out loud.
+        @test tel["radar1.track_sweep_gate_max"] < Float64(TRACK_GATE_MAX_CELLS)
+        # A wire with no sweep ships none of these — nothing is defaulted.
+        g = _t54_fly(_t54_yaml(sweep = nothing), secs = 5.0)
+        @test !haskey(g.world.env[:telemetry], "radar1.track_sweep_net")
+    end
+
+    @testset "⚠⚠ A DRAG RE-ARMS THE AUTHORED ARM AND LEAVES THE CURVE ALONE" begin
+        # The sweep is not a measurement OF the slider's setting — it is the curve the slider
+        # INDEXES INTO — so blanking it on a drag would erase the thing being read. The authored
+        # arm's counters DO reset (slice 52's re-arm rule), which is why the two must be told apart
+        # in the view: after a drag the user sees a full curve beside a just-re-armed single score.
+        f = _t54_fly(_t54_yaml(sweep = "16", drop = "4"), secs = 30.0)
+        r = f.radar
+        before_sweep = copy(r.comp[:trk_sw_good]::Vector{Int})
+        @test sum(before_sweep) > 0 && r.comp[:trk_good] + r.comp[:trk_bad] > 0
+        looks_before = r.comp[:trk_look]
+        EWSim._mark_track_dirty!(f.world)
+        for _ in 1:400
+            r.comp[:trk_look] > looks_before && break
+            EWSim.tick!(f.world, f.subs, f.dt)
+        end
+        @test r.comp[:trk_look] == looks_before + 1
+        @test r.comp[:trk_good] + r.comp[:trk_bad] ≤ 1          # the authored arm re-armed…
+        # …and the CURVE kept accumulating, arm by arm, right through the drag.
+        after_sweep = r.comp[:trk_sw_good]::Vector{Int}
+        @test all(after_sweep[k] ≥ before_sweep[k] for k in 1:16)
+        @test sum(after_sweep) > sum(before_sweep) - 1          # not blanked
+    end
+
+    @testset "the loader guards the sweep as a knob nothing reads would be a bug" begin
+        dir = mktempdir()
+        p = joinpath(dir, "neg.yaml"); write(p, _t54_yaml(sweep = "-1"))
+        @test_throws "must be ≥ 0" load_scenario(p)
+        p2 = joinpath(dir, "orphan.yaml"); write(p2, _t54_yaml(drop = nothing, ok = nothing,
+                                                               sweep = "16"))
+        @test_throws "needs a `track_drop_looks`" load_scenario(p2)
+        # 0 is legal and means "no sweep" — the authored track runs alone.
+        f = _t54_fly(_t54_yaml(sweep = "0"), secs = 2.0)
+        @test !haskey(f.radar.comp, :trk_sw_good)
     end
 end

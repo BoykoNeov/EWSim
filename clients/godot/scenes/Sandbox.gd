@@ -376,6 +376,13 @@ var _asp_t := 0.0                  # the wire's own sim clock (frames carry `t`;
 # (slice 49's own trap, verbatim: read the keys off `_tail_target` and `.get(k, 0.0)` prints a
 # fabricated broadside over a target that is tail-on, on a green run).
 var _tail_view := false            # handshake `tail_view` — HUD only
+# ⭐⭐⭐ SLICE 54 — THE GIVE-UP RULE. 16th of the family, HUD only, and it takes no button: a
+# slice-54 wire is a `:cfar` scenario, so the profile view already owns the display and its own
+# fidelity toggle. Raised on the AUTHOR's `track_sweep_max`, never on the slider — this slice's
+# slider (`track_drop_looks`) is dragged across its WHOLE domain as the lesson, including to its
+# null of 1, and a value-gated marker would go dark on exactly the arm the user compares against.
+var _giveup_view := false          # handshake `giveup_view` — HUD only, no button
+var _giveup_observer := ""         # the radar whose curve the wire carries
 var _tail_target := ""             # …the tail-lobed target the readouts describe (the SUBJECT)
 var _tail_observer := ""           # …and the tracking radar they are measured FROM (the KEY OWNER)
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -904,6 +911,13 @@ func _on_scenario(obj: Dictionary) -> void:
 	_tail_view = bool(obj.get("tail_view", false))
 	_tail_target = str(obj.get("tail_target", ""))
 	_tail_observer = str(obj.get("tail_observer", ""))
+	# ⭐⭐⭐ SLICE 54 — the GIVE-UP CURVE. ⚠ A slice-54 wire raises NEITHER `tail_view` NOR
+	# `aspect_view` (its target carries no `rcs_fineness` and no `rcs_tail_gain`), so this marker
+	# does not compete with them — but it is still checked FIRST at every site, per the family's
+	# "check the new one first" rule, so that a future wire raising both cannot silently fall
+	# through to a block whose gauge belongs to another slice.
+	_giveup_view = bool(obj.get("giveup_view", false))
+	_giveup_observer = str(obj.get("giveup_observer", ""))
 	# ⭐⭐ SLICE 50 — THE SEEKER's side of the same shape, and it is a SEPARATE marker rather than a
 	# reuse of the pair above. The two blocks read DIFFERENT keys off DIFFERENT observers: slice 49's
 	# reads `detected` / `target_range_m` / `pd` / `rcs_loss_db` off a RADAR, none of which a missile
@@ -3259,11 +3273,156 @@ func _spatial_hud_kind() -> String:
 	# WHILE CLOSING, a duration on the inbound leg, and this pass is about the difference between
 	# its two ENDS. Falling through to 49 here would put a number from another slice in this slice's
 	# column, under this slice's headline.
+	# ⚠⚠ SLICE 54 IS **NOT** IN THIS CHAIN, AND THAT IS A CORRECTION, NOT AN OMISSION. It was put
+	# here first (the family's "check the new one first" rule) and it was DEAD CODE: a slice-54 wire
+	# is a `:cfar` scenario, so `_draw()` dispatches to `_draw_cfar()` and this function is never
+	# reached at all. A branch that reads as "handled first" while being unreachable is worse than
+	# no branch — it is the shape of claim this project keeps having to retract. The give-up block
+	# has its own chain, `_cfar_hud_kind()`, at the view that actually draws it.
 	if _tail_view:
 		return "tail"
 	if _aspect_view:
 		return "aspect"
 	return ""
+
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 54 — THE GIVE-UP CURVE. ⚠⚠ EVERY NUMBER HERE IS READ OFF THE WIRE; NOTHING IS RECOMPUTED
+# (convention 13). The core ships `track_sweep_net` — NET for `n_drop` = 1..N, every arm scored on
+# the SAME picture — and this block draws that array. In particular the client does NOT pick the
+# best arm and print it: gate-0 measured that the ARGMAX is a coin flip between neighbouring cells
+# of a nearly flat top while the SHAPE is invariant, so a "best = 3" readout would be printing the
+# noise. The peak marker below is drawn as a POSITION ON A CURVE the user can see the flatness of,
+# never as a recommended number on its own.
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+func _cfar_hud_kind() -> String:
+	# ⭐⭐ WHICH BLOCK OWNS THE CFAR VIEW'S RIGHT-HAND COLUMN — DECIDED ONCE, HERE, so `_draw_cfar`
+	# and the headless UI test read the SAME rule (convention 7: one list, no drift).
+	# ⚠⚠ CONVENTION 14 IS THE WHOLE REASON THIS FUNCTION EXISTS: an `if` inside `_draw` has NO
+	# headless proof, because `_draw` never runs under `--headless` (slice 50's finding, and slice
+	# 53's `_spatial_hud_kind` is the same remedy one view over). The UI test asserts THIS.
+	# ⚠ Gated on the handshake marker, which is gated in the CORE on the AUTHOR's `track_sweep_max`
+	# — never on the slider's value, which is dragged to its own null as the lesson.
+	if _giveup_view and _giveup_observer != "":
+		return "giveup"
+	return ""
+
+func _giveup_key(k: String) -> String:
+	return _giveup_observer + "." + k
+
+func _giveup_has(k: String) -> bool:
+	return _telemetry.has(_giveup_key(k))
+
+func _giveup_f(k: String, dflt: float) -> float:
+	return float(_telemetry.get(_giveup_key(k), dflt))
+
+func _giveup_curve() -> Array:
+	# The curve as the core shipped it. ⚠ An EMPTY array is a real state — the wire has not sent a
+	# look yet — and is distinguishable from a curve of zeros, which is what a defaulted read would
+	# have produced (slice 50: presence decides).
+	var v = _telemetry.get(_giveup_key("track_sweep_net"), null)
+	return (v as Array) if v is Array else []
+
+func _giveup_headline(curve: Array, n_drop: int, scored: int, look: int) -> String:
+	# ⚠⚠ THE HEADLINE NAMES THE SETTING'S OWN SCORE, NOT THE CURVE'S BEST. The curve is the teaching
+	# object; this line says where YOU are on it.
+	if curve.is_empty() or n_drop < 1 or n_drop > curve.size():
+		return "give-up curve: waiting for the first look"
+	return "you: give up after %d missed looks -> net %+d looks" % [n_drop, int(curve[n_drop - 1])]
+
+func _giveup_scored_text(scored: int, look: int) -> String:
+	# ⚠⚠ THE DRAG'S OWN SENTENCE, AND IT IS NOT DECORATION. A drag RE-ARMS your own score and LEAVES
+	# THE CURVE ALONE — the sweep is not a measurement OF your setting, it is the curve your setting
+	# indexes into. Without this line a fresh drag shows a full curve beside a near-zero personal
+	# score and reads as a broken instrument (slice 52's re-arm trap, one instrument over).
+	var owned := look - scored + 1
+	if owned < look:
+		return "your score re-armed at look %d (%d of %d looks)" % [scored, owned, look]
+	return "scoring since look 1 (%d looks)" % look
+
+func _giveup_lesson_text(curve: Array) -> String:
+	# THE TRADE, in the words a student would otherwise get wrong. The instinct is that patience is
+	# free — hold on longer, keep the target longer. It is not: a dropped track re-opens on the
+	# LOUDEST cell in the picture, so a patient rule also marries you to whatever noise is shouting.
+	if curve.size() < 2:
+		return "patience holds a fading target - and a noise blip too"
+	return "hold longer: keep the fade, keep the false alarm too"
+
+func _draw_giveup_hud_lines(vp: Vector2) -> void:
+	# ⚠ THE FAMILY'S ORIGIN — right-anchored at `vp.x - 430`, ~390 px of room (a HUD width budget is
+	# in PIXELS and belongs to the VIEW — slices 46/49 paid for that).
+	var x := vp.x - 430.0
+	var y := 96.0
+	var curve := _giveup_curve()
+	var n_drop := int(_giveup_f("track_drop_looks", 0.0))
+	var look := int(_giveup_f("track_look", 0.0))
+	var scored := int(_giveup_f("track_scored_from", 1.0))
+	# ⚠ `_font` is the file's ONE font handle, set in `_ready` — `get_theme_default_font()` does
+	# not exist on this base (it is a Control method) and the first draft of this block used it,
+	# which broke every script that depends on Sandbox.gd rather than only this view.
+	var f: Font = _font
+	var fs := 13
+	if f == null:
+		return
+	draw_string(f, Vector2(x, y), _giveup_headline(curve, n_drop, scored, look),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1))
+	y += 17.0
+	draw_string(f, Vector2(x, y), _giveup_scored_text(scored, look),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, fs - 1, Color(0.75, 0.8, 0.9))
+	y += 17.0
+	# ⚠⚠ THE RULE KEYS, BESIDE THE SCORE, ALWAYS. Gate-0 §2.8.2 measured that the COUNT of looks is
+	# a JOINT property of the give-up rule, the tracker's GATE and the gauge's BAND — only the
+	# DIRECTION is physics. A score printed without them is not reproducible.
+	draw_string(f, Vector2(x, y), "rule: a look every %.2f s | gate +-%d cells | on-target within %d" % [
+		_giveup_f("track_revisit_s", 0.0), int(_giveup_f("track_gate_cells", 1.0)),
+		int(_giveup_f("track_ok_cells", 1.0))],
+		HORIZONTAL_ALIGNMENT_LEFT, -1, fs - 2, Color(0.65, 0.7, 0.8))
+	y += 20.0
+	# ── THE CURVE ITSELF ────────────────────────────────────────────────────────────────────────
+	if curve.is_empty():
+		return
+	var w := 380.0
+	var h := 78.0
+	var lo := INF
+	var hi := -INF
+	for v in curve:
+		lo = minf(lo, float(v))
+		hi = maxf(hi, float(v))
+	if hi <= lo:
+		hi = lo + 1.0
+	draw_rect(Rect2(x, y, w, h), Color(0.10, 0.12, 0.16, 0.75), true)
+	# The zero line, when the curve straddles it — a NEGATIVE net means the track spent more looks
+	# in the wrong place than on the target, which is a real and readable state.
+	if lo < 0.0 and hi > 0.0:
+		var yz := y + h - (0.0 - lo) / (hi - lo) * h
+		draw_line(Vector2(x, yz), Vector2(x + w, yz), Color(0.5, 0.5, 0.55, 0.6), 1.0)
+	var n := curve.size()
+	var prev := Vector2.ZERO
+	var best_i := 0
+	for i in range(n):
+		if float(curve[i]) > float(curve[best_i]):
+			best_i = i
+		var px := x + (w * float(i)) / float(maxi(n - 1, 1))
+		var py := y + h - (float(curve[i]) - lo) / (hi - lo) * h
+		if i > 0:
+			draw_line(prev, Vector2(px, py), Color(0.55, 0.85, 1.0), 2.0)
+		prev = Vector2(px, py)
+	# YOUR setting, as a filled marker — the point of the curve the slider has selected.
+	if n_drop >= 1 and n_drop <= n:
+		var ux := x + (w * float(n_drop - 1)) / float(maxi(n - 1, 1))
+		var uy := y + h - (float(curve[n_drop - 1]) - lo) / (hi - lo) * h
+		draw_circle(Vector2(ux, uy), 4.0, Color(1.0, 0.85, 0.3))
+	# The PEAK, as a hollow ring — deliberately a weaker mark than yours. ⚠ It is NOT labelled with
+	# its index: the argmax is a coin flip on a flat top (gate-0 §2.5.3), and printing "best = 3"
+	# would give a number the plan proved is not reproducible the authority of a readout.
+	var bx := x + (w * float(best_i)) / float(maxi(n - 1, 1))
+	var by := y + h - (float(curve[best_i]) - lo) / (hi - lo) * h
+	draw_arc(Vector2(bx, by), 6.0, 0.0, TAU, 16, Color(0.6, 1.0, 0.6, 0.9), 1.5)
+	y += h + 15.0
+	draw_string(f, Vector2(x, y), "net looks on target vs patience 1..%d  (all on THIS pass)" % n,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, fs - 2, Color(0.65, 0.7, 0.8))
+	y += 16.0
+	draw_string(f, Vector2(x, y), _giveup_lesson_text(curve),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, fs - 1, Color(0.95, 0.85, 0.55))
 
 func _draw_tail_hud_lines(vp: Vector2) -> void:
 	# ⚠ THE ORIGIN IS THE FAMILY'S `vp.x − 430`, BUT THE ROOM IS 390 px — see the block header.
@@ -6453,6 +6612,11 @@ func _draw_cfar() -> void:
 	var rect := _cfar_plot_rect()
 	draw_rect(rect, COL_PANEL_BG)
 	draw_rect(rect, COL_PANEL_BORDER, false, 1.0)
+	# ⭐⭐⭐ SLICE 54 — the give-up curve, over the profile it is read from. Drawn FIRST so the
+	# profile's own traces paint over its panel edge rather than under it. The decision of whether
+	# to draw at all lives in `_cfar_hud_kind()`, outside `_draw`, so it has a headless proof.
+	if _cfar_hud_kind() == "giveup":
+		_draw_giveup_hud_lines(get_viewport_rect().size)
 
 	# y grid + dB labels every 10 dB — labels live in the RIGHT gutter; the left edge is the
 	# slider/readout panel (drawing them at x=8 collided with the knob labels, slice-3 fix).

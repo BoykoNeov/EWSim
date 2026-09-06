@@ -1,0 +1,222 @@
+# slice54_giveup_clean — THE SAME WIRE ON A CLEANER PICTURE, AND THE PEAK HAS MOVED.
+#
+# ⭐⭐⭐ THIS FILE IS `slice54_giveup.yaml` WITH ONE CHARACTER CHANGED: `pfa` 1e-4 → 1e-5. Same seed,
+# same geometry, same target, same tracker, same gate, same band. Its peak sits at `n_drop` = 5
+# instead of 3, and that is the whole point of shipping two files:
+#
+#   > **THE RIGHT PATIENCE IS NOT A CONSTANT. IT IS SET BY HOW DIRTY YOUR PICTURE IS.**
+#
+#   n_drop    1     2     3     4     5*    6     7     8     9    10    11    12    13    14    15    16
+#   NET     241   341   406   433   440   421   389   350   325   348   301   273   261   310   270   267   (pfa 1e-5, HERE)
+#   NET     228   299   307   277   285   250   207   207   168   141   108    57    73    20   -16    97   (pfa 1e-4, the other file)
+#
+# ⭐⭐ **AND THE PENALTY FOR OVERSHOOTING GROWS WITH THE DIRT.** Holding to 16 costs 39 % of the peak
+# here and 68 % on the dirtier wire — so a cleaner picture is not merely better, it is also more
+# FORGIVING of getting the rule wrong. On a dirty picture the choice matters more.
+#
+# ⚠ 9 of the 10 candidate seeds pass the pre-registered rule on this wire (103 fails the fall test);
+# all ten pass on the dirtier one. Seed 101 is the rule's pick on BOTH, which is why the comparison
+# above is honest — see plan §5.1/§5.3 for the rule and the full ladder.
+#
+# ⚠⚠ EVERYTHING ELSE IN THIS HEADER APPLIES VERBATIM FROM `slice54_giveup.yaml` — the gauge, the
+# curve, the geometry, the named approximations and the units are that file's. Read it first.
+#
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# slice54_giveup — THE GIVE-UP RULE: how long should a radar keep looking before it lets go?
+#
+# > THE LESSON, IN ONE SENTENCE. There is no such thing as the right amount of patience — how long
+# > to hold a track through a gap is set by how dirty your picture is, and the same rule that saves
+# > a fading target on a clean picture will marry you to a noise blip on a dirty one.
+#
+# ⭐⭐⭐ WHY THIS NEEDED A NEW TRACKER AND NOT A NEW SCENARIO. Slice 53's give-up tracker is wired to
+# the POINT detector: it is told `any_detect` over the strongest target and is handed that target's
+# TRUE range, so a track it holds on nothing is silently right and patience is free. This wire runs
+# the CFAR path, where a look arrives as a LIST OF DETECTED CELLS — some of which are threshold
+# crossings in noise — and the tracker must decide FOR ITSELF which one is its own. **It can pick
+# the wrong one, and then it reports a range that is not the target's.** That is the whole slice.
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# THE GAUGE — AND IT IS A POSITION, NEVER A DURATION
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# `track_net` = **looks spent tracking the TARGET minus looks spent tracking SOMETHING ELSE**, where
+# "the target" means within `track_ok_cells` range cells of truth. A dead track scores neither — it
+# is not making a claim, so it cannot be wrong.
+#
+# ⚠⚠ **A DURATION WOULD HAVE BEEN THE SLIDER IN OTHER UNITS.** A false-alarm model touches only the
+# detection and not the dynamics, so "seconds of false track" ≈ patience × false-alarm rate — the
+# knob read back to you (`docs/LESSONS.md:851`, and this slice's own gate-0 F3). A LONG track is not
+# a failure; a track IN THE WRONG PLACE is. Every number here is scored on position.
+#
+# ⚠⚠ **AND THE COUNT OF LOOKS IS A JOINT PROPERTY OF THE RULE, THE TRACKER'S GATE AND THE GAUGE'S
+# BAND.** Measured (plan §2.8.2): the same physics reads a best patience of 5, 7, 9 or 11 depending
+# only on the gate width and the correctness band — two constants that are NOT physics. **THE
+# DIRECTION IS PHYSICS; THE COUNT IS NOT.** So `track_drop_looks`, `track_revisit_s`,
+# `track_gate_cells` and `track_ok_cells` all ship on the wire beside the score, and no client can
+# print one without the others.
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# ⭐⭐⭐ THE CURVE IS THE TEACHING OBJECT — NOT THE BEST SETTING
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# `track_sweep_max: 16` runs `n_drop` = 1…16 as SHADOW ARMS over the SAME picture and ships the whole
+# NET-vs-patience curve every look. The slider selects which of those arms is YOUR track — the one
+# the view draws — and the curve shows what every other choice would have scored on the identical
+# flight.
+#
+# ⚠⚠ **DO NOT REDUCE THE CURVE TO "BEST = 3".** Gate-0 measured that the ARGMAX is a coin flip
+# between neighbouring cells of a nearly flat top (peak NET moves 1.9 % across a 4× gate) while the
+# SHAPE — rises, peaks, falls — is invariant to both free constants. The shape is the lesson; the
+# argmax is the noise. ⚠ The arms are a PAIRED comparison (identical draws), which is why one flight
+# says what the gate-0 ladder needed six seeds to say.
+#
+# ⚠ A drag RE-ARMS the authored arm's score and LEAVES THE CURVE ALONE — the sweep is not a
+# measurement OF your setting, it is the curve your setting indexes into. `track_scored_from` says
+# which look your own score started at, so a freshly re-armed number is never mistaken for a stale one.
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# THE GEOMETRY — OUTBOUND, BECAUSE THE FADE IS WHERE A GIVE-UP RULE LIVES
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# One radar, one target, straight and level, already OUTBOUND: 20 km → 80 km over 200 s at 300 m/s.
+#
+# ⚠⚠ **A FLY-PAST WOULD HAVE BEEN THE WRONG WIRE AND THAT IS MEASURED, NOT ASSUMED** (plan §4.3): the
+# gate-0 fly-past CLOSES to its closest approach at t = 50 s, and a strong closing target never drops
+# a track and never seduces anything — a 120 s flight on it scored essentially no wrong looks. The
+# span here is chosen against the measured fade of a 1 m² target (98 % detected at 20 km, 61 % by
+# 40 km, 11 % by 60 km, 0.6 % by 80 km), so the pass has a real beginning, a real end, and a long
+# middle where letting go is a genuine judgement call.
+#
+# `propagation: free_space` DELIBERATELY: `two_ray` would add multipath lobing AND a 4/3-Earth
+# horizon — two more ways for a target to vanish, on a scenario about a third way (convention 9).
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# MEASURED ON THIS EXACT WIRE (seed 101, 200 s = 2000 looks, revisit 0.1 s, gate ±1, band 1 cell)
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+#   n_drop    1     2     3*    4     5     6     7     8     9    10    11    12    13    14    15    16
+#   NET     228   299   307   277   285   250   207   207   168   141   108    57    73    20   -16    97
+#
+#   ⭐ The peak is at 3 and NET falls to 97 by 16 — holding on four times too long costs 68 % of the
+#   score. ⚠ NET(15) is NEGATIVE (−16) and NET(16) is +97: THE TAIL IS NOISY AND THE HUD MUST NOT BE
+#   READ AS A SMOOTH CURVE. That chatter is a single seed's, and it is exactly why gate 0's headline
+#   was a six-seed mean and why the SHAPE and not the argmax is what is being taught.
+#
+#   ⭐⭐⭐ AND THE COMPANION WIRE IS THE OTHER HALF OF THE LESSON. `slice54_giveup_clean.yaml` is this
+#   file with ONE character changed — `pfa` 1e-4 → 1e-5 — and on the SAME SEED its peak sits at 5,
+#   not 3. **THE RIGHT PATIENCE MOVED BECAUSE THE PICTURE GOT CLEANER, AND NOTHING ELSE CHANGED.**
+#   That 5 → 3 is gate-0's six-seed mean (plan §2.8) reproduced on a single flight.
+#
+# ⚠ THE SEED IS 101 AND IT WAS CHOSEN BY A RULE FIXED BEFORE THE FLIGHTS (plan §5.1): an INTERIOR
+# peak, a rise of ≥ 10 % from n_drop 1, a fall of ≥ 10 % to n_drop 16, tie-broken by the LOWEST seed
+# number. All ten candidates (101…110) are published in plan §5.3; all ten pass here, 9 of 10 pass on
+# the clean wire. ⚠⚠ A THIRD ARM WAS REFUSED BY THE SAME RULE AND IS NOT SHIPPED: at `pfa` = 1e-3
+# every seed's curve is negative at every patience and falls monotonically — the track is wrong more
+# often than right whatever you do, so there is no interior answer to teach. That refusal is the only
+# evidence the rule could refuse anything.
+#
+# ⚠ NAMED APPROXIMATIONS (§1 trifecta). ONE REPORTED track per radar plus 16 shadow arms that share
+# the picture and are read only by the gauge. The gate is a fixed range window, not a covariance
+# gate. A live track takes the NEAREST cell inside the gate; a DEAD one re-opens on the STRONGEST
+# cell anywhere, UNGATED — that asymmetry is what makes patience two-sided. The α–β range filter's
+# constants are fixed (α = 0.5, β = 0.1, pinned by test). There is no track-initiation logic: one
+# false alarm on a quiet profile starts a track.
+#
+# UNITS (§1 trifecta): `track_drop_looks` is a COUNT OF CONSECUTIVE MISSED LOOKS — not seconds and
+# not frames (at revisit 0.1 s and emit_every 16 there are ~6 frames per look, so a rule counted in
+# frames would be a different rule that changes meaning with the emit cadence — which is why the
+# tracker is in the core). `track_ok_cells` and `track_gate_cells` are RANGE CELLS, Δr = c/2B =
+# 149.9 m at 1 MHz. `track_net`/`track_sweep_net` are COUNTS OF LOOKS, signed. dt = 1e-3.
+name: slice54_giveup_clean
+seed: 101
+dt_physics: 1.0e-3
+emit_every: 16                 # ~62 Hz frames. ⚠ A verifier's STEPS must be a MULTIPLE of this
+                               # (convention 14) or it hangs SILENTLY.
+fidelity:
+  cfar:        ca              # the CA-CFAR profile detector (slice 3) — the false alarms this
+                               # slice prices are its threshold crossings in noise cells.
+  propagation: free_space      # see the geometry note above — PINNED by the author, not a button.
+
+entities:
+  # The air-defence radar. Slice 3's CFAR block — 50 kW at 9.4 GHz on a 30 m mast, Swerling 1, ONE
+  # pulse, looking at 10 Hz — plus the tracker keys.
+  - id: radar1
+    kind: radar
+    pos: [0, 0, 30]
+    radar:
+      pt_w:         50000
+      gain_db:      35
+      freq_hz:      9.4e9
+      bandwidth_hz: 1.0e6
+      noise_fig_db: 3
+      losses_db:    4
+      # ⭐⭐⭐ THE DIRTINESS, AND IT IS AUTHORED RATHER THAN OFFERED AS A SECOND SLIDER. `pfa` is what
+      # SETS the right patience, so it is the ANSWER to this scenario's question and cannot also be
+      # an input to it (convention 9; the `midcourse_err_gain` ruling of slice 52, and this slice's
+      # own gate-0 F5). To see the answer MOVE, load `slice54_giveup_clean.yaml`.
+      # ⚠ `pfa` is the mover and `cnr_db` is NOT — measured (plan §2.2): a CA-CFAR threshold is
+      # estimated from the cells BESIDE the cell under test, so a broad clutter band raises the
+      # threshold WITH it. 10 → 30 dB of clutter moves the false-alarm density by 15 % while
+      # destroying 5 points of target detection: clutter under CFAR is a MASKER, not a false-alarm
+      # source. `pfa` 1e-4 → 1e-2 moves it by a factor of 98.
+      pfa:          1.0e-5
+      swerling:     1
+      n_pulses:     1
+      revisit_s:    0.1
+      n_cells:       640         # 640 × 149.9 m = 95.9 km — the target stays ON the grid for the
+                                 # whole pass (it ends at 80 km), so it never leaves for a reason
+                                 # that is not fading.
+      range_start_m: 0
+      n_train:       16
+      n_guard:       2
+      # ⭐⭐⭐ THE SLIDER. See the knob block.
+      track_drop_looks: 5
+      # The gauge's correctness band, in RANGE CELLS. AUTHORED, not a slider: it and the tracker's
+      # gate jointly set the SCALE of the answer (plan §2.8.2), so a band that moved under the
+      # user's hand would let the headline be dialled.
+      track_ok_cells:   1
+      # ⭐⭐⭐ THE WHOLE CURVE, ON ONE PASS — 16 shadow arms over the same picture. See the header.
+      track_sweep_max:  16
+
+  # The target: 300 m/s at 5 km altitude, already 20 km out and running. σ = 1 m² is chosen so the
+  # fade lands INSIDE the pass (plan §2.2): at 4 m² there is no fade inside 50 km and the give-up
+  # rule has nothing to be patient about; at 0.25 m² the target is gone before a track is established.
+  - id: tgt1
+    kind: target
+    pos: [20000.0, 0.0, 5000.0]
+    vel: [300.0, 0.0, 0.0]
+    target:
+      rcs_m2: 1.0
+
+knobs:
+  # EXACTLY ONE LIVE KNOB and no fidelity button.
+  #   FLOOR 1: give up on the FIRST missed look — a detector with no memory at all, which is the
+  #     null the lesson is measured against. It is a real setting, not a degenerate one: on a clean
+  #     picture it is never wrong (measured: exactly 0 bad looks at pfa 1e-6), it is just blind a lot.
+  #   CEILING 16: the sweep's width, and past the measured peak by a factor of five on this wire.
+  #     ⚠ NOT chosen for total effect — chosen because the FALL is the half of the lesson that has
+  #     to be visible, and by 16 the score has lost 68 % of its peak here.
+  #   ⚠⚠ THE SLIDER IS STEPPED AND FLAT STRETCHES ARE GUARANTEED. `set_param` coerces through
+  #     `Int(round(v))` because the key is an Int, so a 1..16 domain is 16 discrete positions and
+  #     neighbouring cells of the flat top often score alike. That is a REAL STATE, not a dead knob
+  #     — `track_look` and `track_scored_from` advance visibly so a flat stretch reads as "this
+  #     setting scores the same" and never as "the instrument is dead".
+  #
+  # ⭐ THE WIRE OPENS AT 5, ON **THIS** WIRE'S MEASURED PEAK — which is NOT the other file's 3, and
+  # that difference is the lesson. Two instructive drags: 5 → 16 (NET 440 → 267) and 5 → 1
+  # (440 → 241). ⚠ Dragging to 3 here — the dirty wire's best answer — costs 34 points, which is
+  # the cheapest way to feel that a give-up rule tuned on one picture is wrong on another.
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED: `pfa` (⚠⚠ it is the ANSWER's setter — the thing that
+  # decides where the peak sits — so it cannot also be the input; convention 9 and gate-0 F5, and it
+  # is authored per scenario instead); `track_ok_cells` and the tracker's gate (⚠⚠ they set the
+  # SCALE of the score jointly, so dialling one dials the headline — plan §2.8.2); `revisit_s`
+  # (⚠ it re-denominates the rule itself: `n_drop` looks is a different give-up TIME at every
+  # revisit, and the gate and the α–β filter are both expressed in it); `rcs_m2` (it moves where the
+  # fade is, i.e. the whole engagement, not the response to it); the target's `vel` (⚠ refused BY
+  # TYPE — `set_param` carries one Float64).
+  #
+  # ⚠ THE LABEL IS LENGTH-BUDGETED (~110 characters — slice 32's shots paid for this): knob labels
+  # are drawn full-width in the UI CanvasLayer and paint OVER the `_draw` HUD column at `vp.x − 430`.
+  - {target: radar1, key: track_drop_looks, min: 1.0, max: 16.0,
+     label: "PATIENCE — give up after this many missed looks. 1 = no memory; the curve shows the rest"}
