@@ -65,6 +65,25 @@ function _radar_comp!(comp::Dict{Symbol,Any}, block::AbstractDict)
     np ≥ 1 || error("radar n_pulses=$np: must be ≥ 1")
     comp[:n_pulses] = np
     haskey(block, "revisit_s") && (comp[:revisit_s] = _f64(block["revisit_s"]))
+    # ⭐ SLICE 53 gate 2 — THE GIVE-UP RULE, and it is what turns a per-look detector into a TRACK:
+    # drop the track after this many CONSECUTIVE missed looks (`track_run_step`, detection.jl; wired
+    # in `_track_look!`, radar.jl). OPTIONAL and key-presence gated all the way down — a radar that
+    # omits it runs no tracker and ships no new telemetry, so every slice-1..52 wire is untouched.
+    # ⚠⚠ REFUSED WITHOUT A POSITIVE `revisit_s`, and the reason is the one gate-0 §2.14 measured:
+    # the rule is counted in LOOKS, so with a look every tick (`revisit_s` = 0, the default) "3
+    # missed looks" silently becomes "3 missed INTEGRATION STEPS" — a give-up time of 3·dt that
+    # moves when `dt` does. Slice 51 died on a boundary that flipped at half `dt`; this refuses the
+    # configuration that would build one, at LOAD, where an authored input belongs (convention 5).
+    if haskey(block, "track_drop_looks")
+        nd = Int(block["track_drop_looks"])
+        nd ≥ 1 || error("radar track_drop_looks=$nd: must be ≥ 1 (it is a count of CONSECUTIVE " *
+                        "missed looks; 0 would drop the track before a look has been missed)")
+        haskey(comp, :revisit_s) && comp[:revisit_s] > 0.0 ||
+            error("radar track_drop_looks needs a positive `revisit_s`: the give-up rule is counted " *
+                  "in LOOKS, so with a look every tick it would be counted in integration steps " *
+                  "and the track's give-up TIME would move with dt_physics")
+        comp[:track_drop_looks] = nd
+    end
     # Optional CFAR config (slice 3): the STATIC profile geometry (n_cells / range_start_m)
     # plus the LIVE window sliders (n_train / n_guard). Only read when present, so a slice-1/2
     # radar block leaves these out of the comp bag entirely (its point path never reads them).
@@ -1637,6 +1656,13 @@ function _validate_cfar(world::World)
     haskey(world.fidelity, :cfar) || return world
     for (id, e) in world.entities
         e.kind === :radar || continue
+        # ⚠ SLICE 53 gate 2 — THE TRACKER IS WIRED IN THE POINT PATH ONLY. `observe!` dispatches on
+        # this very fidelity key, so a `:cfar` scenario would carry an authored `track_drop_looks`
+        # that NOTHING READS — the `speed` (19) / handover-bias (36) dead-knob shape, and exactly
+        # what gate 1's own loader guard exists to prevent one key over. Refused at LOAD.
+        haskey(e.comp, :track_drop_looks) &&
+            error("radar '$id': `track_drop_looks` is read by the POINT detector's tracker only, " *
+                  "and a :cfar scenario takes the profile path instead — the key would be inert")
         (haskey(e.comp, :n_cells) && e.comp[:n_cells] ≥ 1) ||
             error("radar '$id': a :cfar scenario needs `n_cells ≥ 1` in the radar block")
         if haskey(e.comp, :n_train)

@@ -587,3 +587,43 @@ function cfar_scan(profile::AbstractVector{<:Real};
     end
     return (threshold, detections)
 end
+
+# --- track continuity: the give-up RUN RULE (slice 53 gate 2) --------------------
+#
+# A detector says yes or no ONE LOOK AT A TIME; a TRACK is what survives between looks. The rule
+# below is the whole of it: hold the track through a few misses, give up after `n_drop` CONSECUTIVE
+# ones. It is pure, carries no state of its own (the caller owns the two counters), draws nothing,
+# and knows nothing about radars — a seeker's own acquisition could run the identical rule
+# (convention 12).
+
+"""
+    track_run_step(alive, misses, detected, n_drop) -> (alive′, misses′, opened, dropped)
+
+One look of a **give-up tracker**: a track is HELD through gaps of up to `n_drop − 1` missed looks
+and DROPPED on the `n_drop`-th consecutive miss. Returns the new state plus the two edge EVENTS the
+caller latches on — `opened` (this look started a track that was not alive) and `dropped` (this
+look ended one).
+
+The equivalence a caller can check by hand: with detections at look indices `a` then `b`, the track
+survives iff `b − a ≤ n_drop`, because the `b − a − 1` looks between them are the misses. At
+`n_drop` = 3 a gap of 3 look indices (2 misses) is tolerated and a gap of 4 (3 misses) is not.
+
+⚠⚠ **THE RULE IS COUNTED IN LOOKS, SO ITS MEANING IN SECONDS IS THE RADAR's, NOT THIS FUNCTION's**
+(slice 53 gate-0 §2.14, measured): `n_drop` = 3 is 0.3 s of blindness at `revisit_s` = 0.1 and
+0.15 s at 0.05, so the SAME rule on a faster-revisiting radar is a STRICTER one. A rule counted in
+samples silently changes meaning when the sample rate changes — the caller must quote its
+`revisit_s` beside any number this rule produces, and `scenario.jl` refuses the degenerate case
+(`revisit_s` = 0, a look every tick) where the rule would be counted in INTEGRATION STEPS and the
+result would move with `dt`.
+
+⚠ `misses` is FROZEN while a track is dead — a dropped track's counter is not a countdown to
+anything, and the next detection resets it. `n_drop` is floored at 1 (0 would mean "drop before the
+miss has happened", which has no reading).
+"""
+function track_run_step(alive::Bool, misses::Integer, detected::Bool, n_drop::Integer)
+    n = max(Int(n_drop), 1)
+    detected && return (true, 0, !alive, false)
+    alive || return (false, Int(misses), false, false)
+    m = Int(misses) + 1
+    return m ≥ n ? (false, m, false, true) : (true, m, false, false)
+end

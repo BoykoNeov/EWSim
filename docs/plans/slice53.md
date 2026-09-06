@@ -1,9 +1,13 @@
 # Slice 53 — **A TAIL LOBE**: does a target look the same going away as coming at you?
 
-**STATUS: GATE 0 IN PROGRESS — P1–P6 HAVE RUN (P1/P2/P3 2026-08-31, P4–P6b 2026-09-06). ⭐ F1, F2,
-F4 AND F5 ARE DISCHARGED, and F3's THREE filters — monotonicity, the bar, and *not sayable without
-the asymmetry* — are ALL discharged. ⚠ **F3 IS NOT CLOSED — its ENDPOINT JUSTIFICATION is still
-P7's, and P7 IS THE ONLY PROBE LEFT.**
+**STATUS: GATE 0 COMPLETE (all falsifiers answered, §2.15), GATE 1 SHIPPED THE KERNEL (§3,
+2026-09-06), GATE 2 SHIPPED THE TRACKER (§4, 2026-09-06). NEXT IS GATE 3 — the scenario, the knob,
+the four proofs and F6's clause; §4's closing block lists what it inherits.**
+⚠ Everything from here down to §2 is the ORIGINAL PRE-PROBE DOCUMENT and is left unedited on
+purpose (see the note below). §2 is what was MEASURED, §3 and §4 are what SHIPPED — where they
+disagree with §0/§1, the later section wins.
+⚠ THE HEADER WARNINGS BELOW WERE WRITTEN FOR THE PROBES AND TWO ARE NOW DISCHARGED BY §3: the
+loader has LEARNED `rcs_tail_gain` (author it; do not inject it) and gate 1 is no longer pending.
 ⚠⚠ **TWO THINGS EVERY LATER PROBE AND GATE 1 MUST CARRY:** (1) `load_scenario` **silently DROPS**
 `rcs_tail_gain` — **INJECT it, never AUTHOR it**, until gate 1 teaches the loader (§2.13a, which
 also CORRECTS P5 §4's stated cause); (2) the headline **metres are a joint property of the tail lobe
@@ -1427,3 +1431,128 @@ acquisition range moves by `bracket^(1/4)` = 2.659, the link budget's own expone
 200 s, σ = 4 m², F = 8 FIXED, `revisit_s` = 0.1, `N`\* = 3), the knob (floor 1.0, ceiling 50.0,
 LINEAR, authored default 20 — §2.15 §5), the four gate-3 proofs, and the one-clause re-scope of
 `clients/godot/net/slice50_ui_test.gd` tooth 9b (F6).
+
+---
+
+## §4 GATE 2 — **THE TRACK**: the gauge is a MODEL, and it could not live in the client (2026-09-06)
+
+⚠⚠ **THE GATE-1 LOG'S "NEXT IS GATE 2/3" WAS WRONG ABOUT ITS OWN SCOPE.** It listed the
+deliverables — scenario, knob, four proofs — and silently assumed the headline number was something
+the HUD could compute from what the wire already carried. It is not, and the reason is this slice's
+own §2.14 one level over:
+
+> **THE GAUGE IS COUNTED IN LOOKS. THE CLIENT ONLY SEES FRAMES.** Wire A revisits at 10 Hz and emits
+> at ~62 Hz (`emit_every` = 16), so "three frames with no detection" is about **half a look** of
+> blindness, not three looks of it — a different rule that changes meaning the moment `emit_every`
+> or `revisit_s` moves. And the client cannot recover the looks: nothing on the wire marks a look
+> boundary. §2.14's finding was *a rule counted in samples silently changes meaning when the sample
+> rate changes*; computing the edge in GDScript would have re-committed it in the one place the
+> slice's headline is read.
+
+⇒ **gate 2 ships the tracker in the CORE**, which is also what conventions 7 and 13 already
+required: the verifier's number and the HUD's number are ONE quantity, computed ONCE, and the
+client draws it rather than deriving it.
+
+### §4.1 WHAT SHIPPED
+
+**`core/src/detection.jl` — `track_run_step`, pure, exported.** One look of a give-up tracker: hold
+through gaps of up to `n_drop − 1` missed looks, drop on the `n_drop`-th consecutive one. Returns
+`(alive, misses, opened, dropped)` — the caller owns the counters, so the function has no state,
+draws nothing and knows nothing about radars (convention 12; a seeker's own acquisition could run it
+unchanged). ⭐ **The hand-checkable equivalence is the whole of it:** with detections at looks `a`
+then `b`, the `b − a − 1` looks between them are the misses, so the track survives iff
+`b − a ≤ n_drop`. At `N`\* = 3 a gap of 3 look indices (2 misses) is tolerated and one of 4 (3
+misses) is not — which is exactly the gate-0 rule's `d[i+1] − d[i] > N`.
+
+**`core/src/radar.jl` — `_track_look!`, wired in the POINT path's look branch.** Key-presence gated
+on the radar's own `track_drop_looks`, so every slice-1…52 wire ships no new key and is
+byte-identical. ⚠ It reads `any_detect` **after** the draw and draws nothing itself — convention 3's
+draw topology is untouched, which is why the absolute golden and `test_determinism` do not move.
+Three design points, each a decision rather than a detail:
+
+- ⭐ **THE PRESENCE GATE IS THE RADAR'S RULE, NOT THE TARGET'S TAIL GAIN.** The showcase's headline
+  drag is `G` = 20 → 1, back to the null; an instrument gated on `rcs_tail_gain` would go dark on
+  exactly the arm that proves the null. Slice 50's rule (*the lesson's NULL and a dead instrument's
+  DEFAULT must not read the same*) decided this before it could become a bug.
+- ⚠ **THE LEG IS THE RANGE RATE'S SIGN, AND `trk_past_cpa` IS A LATCH — a named approximation.** The
+  pass is assumed to have ONE closest approach. Slice 49's orbiting target has several, so this
+  instrument belongs on a straight pass and the scenario that authors the key is what guarantees it.
+  ⭐ The CPA look belongs to BOTH legs — it can open a track (gain) and be the first detection of the
+  outbound run (loss) — which is what the offline rule did by splitting `looks[1:k]` / `looks[k:end]`
+  on a SHARED index.
+- ⚠⚠ **THE LOSS LATCH IS ARMED BY A POST-CPA DETECTION, NOT BY THE DROP.** A gap STRADDLING closest
+  approach would otherwise latch a "range we lost it at" whose last detection was on the way IN — a
+  number from the wrong leg wearing the right name. The offline rule skipped such a gap structurally
+  (it lies in neither array); here an explicit flag does it, and the tooth for it is hand-driven
+  because wire A cannot produce the sequence (the target is brightest and closest at CPA, so a
+  3-miss run there is a `pfa`-scale event).
+
+**The wire — eleven keys, and TWO of them are the discipline rather than the measurement.**
+`track_drop_looks` and `track_revisit_s` ship **beside** the metres, so no client can print a range
+without the rule it was measured under. That is §2.14 turned into a wire contract rather than a
+warning in a document. The rest: `track_alive`, `track_closing`, `track_misses`, `track_look`,
+`track_gain_range_m` / `track_gain_look`, `track_loss_range_m` / `track_loss_look` (−1.0 = NOT YET,
+slice 48's `search_t_lock_s` sentinel posture, unambiguous because a range is strictly positive),
+and ⭐⭐⭐ `track_asym_m`, **which ships ONLY when both edges exist**. 0.0 is a legitimate value of
+this gauge — it is what a symmetric target reads — so a sentinel or a `.get(k, 0.0)` default would
+be indistinguishable from the lesson's own null on an instrument that has simply not finished.
+PRESENCE decides (slice 50). ⚠ The LOOK indices are not decoration either: §2.9's dead-zone table
+says a drag can move the edge by ZERO metres and still be alive, so the readout must be able to say
+which LOOK the edge sits at, not only how many metres.
+
+**`core/src/scenario.jl` — the key is learned, and refused twice.** ⚠⚠ **Without a positive
+`revisit_s`**, because with a look every tick (the default) "3 missed looks" is "3 missed
+INTEGRATION STEPS" — a give-up TIME of 3·`dt` that moves when `dt` does. Slice 51 died on a boundary
+that flipped at half `dt`; this refuses the configuration that would build one, at LOAD, where an
+authored input belongs (convention 5). ⚠ **And on a `:cfar` wire**, where `observe!` takes the
+profile path and the tracker is not wired at all — a key nothing reads is the `speed` (19) /
+handover-bias (36) bug and the two-test rule's only outright kill, so it must not be authorable
+there either. This is gate 1's own loader lesson applied one key over, before it could cost
+anything.
+
+### §4.2 ⭐⭐⭐ THE ORACLE TOOTH — **THE SHIPPED TRACKER *IS* THE RULE EVERY GATE-0 NUMBER CAME FROM**
+
+Probe `M:\claud_projects\temp\slice53\g2_oracle.jl`, raw `…\g2_out.txt`. The offline rule scans an
+array of the whole flight and splits at CPA by `argmin`; the shipped one is incremental, keeps no
+history, and finds CPA from a range-rate sign. **If they disagree anywhere, the ceiling of 50 and
+the default of 20 were chosen for a rule the showcase does not run.**
+
+**56 cells (`G` ∈ {1, 2, 5, 10, 20, 50, 100} × 8 seeds), 0 mismatches — both edges and both look
+indices identical to the bit.** And the flights reproduce the plan's own printed numbers, from a
+program written days earlier:
+
+- **§2.15's inbound-gain invariant list, all eight seeds**: 7078.0983 / 6805.9246 / 6243.9596 /
+  6785.4645 / 7207.3690 / 7250.9401 / 7630.3031 / 5899.9563 m — and, as §2.15 §0 measured over 824
+  flights, **identical at every `G`**.
+- **§2.9's per-seed asymmetry table, the whole `G` = 1 column**: −531.8 / +315.7 / +583.1 / +444.3 /
+  −441.7 / −361.9 / −657.6 / +968.4 m, each reproduced to the printed decimal. Spot-checked in the
+  ladder too (seed 53 at `G` = 50 → **+6244.0**; seed 250 at `G` = 20 → **+3516.5**).
+
+⇒ **gate 0's staircase, its ceiling and its default are statements about the thing that ships.**
+Three of these numbers are pinned in `core/test/test_track.jl` as EXTERNAL anchors (convention 11),
+the strongest kind available here: values produced by a different program on a different day.
+
+### §4.3 THE TESTS — `core/test/test_track.jl`, +244 (suite 19412 → **19656**)
+
+The pure rule's gap arithmetic over a 5 × 8 grid (survival iff `b − a ≤ n_drop`); the state
+machine's own edges (`opened` on the transition ONLY; `dropped` once; `misses` FROZEN while dead;
+the `n_drop` floor; the return types); the presence gate in both directions — a wire with no rule
+ships no key AND the shipped slice-49 wire ships none either, **paired against an arm that does**,
+with the flight and every pre-existing telemetry value bit-identical between them; the straddling
+gap and the shared CPA index, hand-driven; the inbound flicker that RESTARTS the gain edge; the
+oracle comparison on three flights plus the three external anchors; ⭐⭐ the mechanism in one tooth —
+**the inbound edge is bit-identical at `G` = 1 and `G` = 50 while the outbound one moves**, which is
+the paired construction the whole gauge rests on; the asymmetry key ABSENT rather than zero before
+both edges exist; and the loader's four refusals, each **on its message** (gate 1's rule: an
+`ErrorException` alone also passes on a YAML parse failure, which is a refusal for the wrong
+reason).
+
+### ⇒ NEXT IS GATE 3
+
+`scenarios/slice53_*.yaml` on wire A with the tracker authored (`revisit_s` = 0.1,
+`track_drop_looks` = 3), the knob (floor 1.0, ceiling 50.0, LINEAR, authored default 20 — §2.15 §5),
+a view marker of its own, the four proofs, and the one-clause re-scope of
+`clients/godot/net/slice50_ui_test.gd` tooth 9b (F6). ⚠ The gate-3 HUD inherits three binding
+constraints already on the record: the metres are quoted with `revisit_s` and `N`\* or they are not
+a measurement (§2.14); a FLAT stretch of the drag must not read as a dead knob (§2.9); and
+`rcs_loss_db`'s "this much quieter" wording must not be rendered as an identity (gate 1).

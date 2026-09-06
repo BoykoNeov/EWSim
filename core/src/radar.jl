@@ -369,6 +369,83 @@ function _effective_rcs(tgt::Entity, obs_pos::Vec3)
 end
 
 """
+    _track_look!(radar, detected, R, rdot) -> nothing
+
+⭐⭐ **SLICE 53 gate 2 — THE TRACKER, AND IT IS A MODEL, NOT A READOUT.** One look of a give-up
+track over the strongest target, plus the TWO EDGES of a single pass that the slice's gauge is the
+difference of:
+
+* **the GAIN edge** — the range at which the track that is running at closest approach was first
+  opened, i.e. *how far out you first got it while it was coming in*;
+* **the LOSS edge** — the range at the last detection before the track is finally given up on the
+  way out, i.e. *how far out you were still following it home*;
+* and their difference, **the pass's ASYMMETRY**. With a fore/aft SYMMETRIC cross-section the two
+  legs present the identical σ at equal range, so the difference is fading noise about zero; a TAIL
+  LOBE (`rcs_tail_gain`) moves the outbound edge and nothing else.
+
+⚠⚠ **WHY THIS IS IN THE CORE AND NOT IN THE HUD.** The rule is counted in LOOKS. The client sees
+FRAMES (`emit_every` = 16 ⇒ ~6 frames per look at `revisit_s` = 0.1), and "3 frames without a
+detection" is not "3 missed looks" — it is a different rule that changes meaning with the emit
+cadence. That is gate-0 §2.14's own trap (a rule counted in samples silently changes meaning when
+the sample rate changes), and the client also has no look-boundary marker to recover the looks
+from. The gauge, the verifier's number and the HUD's number are therefore ONE quantity computed
+ONCE, here (conventions 7 and 13).
+
+⚠ **THE LEG IS THE RANGE RATE's SIGN, AND `trk_past_cpa` IS A LATCH — A NAMED APPROXIMATION.** The
+pass is assumed to have ONE closest approach: the first look with `rdot ≥ 0` ends the inbound leg
+for good. A target that closes, opens and closes again (slice 49's orbiting wire is exactly that)
+would keep the FIRST crossing, so this instrument belongs on a straight pass and the scenario that
+authors the key is the thing that guarantees it. ⭐ The CPA look itself belongs to BOTH legs — it
+can open a track (gain) and it can be the first detection of the outbound run (loss) — which is
+what the offline gate-0 rule did by splitting `looks[1:k]` / `looks[k:end]` on a SHARED index `k`.
+
+⚠ **THE LOSS LATCH IS ARMED BY A POST-CPA DETECTION, NOT BY THE DROP ALONE.** A gap that STRADDLES
+closest approach would otherwise latch a "loss" whose last detection was on the way IN — a number
+from the wrong leg. The offline rule skipped such a gap structurally (it is in neither array); here
+it is skipped by `trk_post_cpa_det`, and the next run's end is latched instead.
+
+⚠ **NOT LATCHING IS A REAL STATE.** If the flight ends while the track is still alive there is no
+loss edge, and the key is simply ABSENT from the wire rather than shipped as a sentinel that reads
+like a measurement — `track_asym_m` likewise ships only when BOTH edges exist, because 0.0 is a
+legitimate value of an asymmetry (it is the null!) and a defaulted zero would read as "perfectly
+symmetric" on an instrument that has not finished (slice 50: presence decides).
+"""
+function _track_look!(radar::Entity, detected::Bool, R::Float64, rdot::Float64)
+    n_drop = Int(radar.comp[:track_drop_looks])
+    look   = Int(get(radar.comp, :trk_look, 0)) + 1
+    radar.comp[:trk_look] = look
+    # The leg. `past_before` is the state the PREVIOUS look left, so the CPA look — the first with
+    # a non-negative range rate — still counts as inbound for the gain edge and as outbound for the
+    # loss one, the shared-index posture the gate-0 rule had.
+    past_before = get(radar.comp, :trk_past_cpa, false)::Bool
+    past_now    = past_before || rdot ≥ 0.0
+    radar.comp[:trk_past_cpa] = past_now
+
+    alive, misses, opened, dropped =
+        track_run_step(get(radar.comp, :trk_alive, false)::Bool,
+                       Int(get(radar.comp, :trk_misses, 0)), detected, n_drop)
+    radar.comp[:trk_alive]  = alive
+    radar.comp[:trk_misses] = misses
+
+    if detected
+        radar.comp[:trk_last_range] = R          # the range the NEXT drop will be declared at
+        radar.comp[:trk_last_look]  = look
+        past_now && (radar.comp[:trk_post_cpa_det] = true)
+        if opened
+            # ⚠ THE GAIN EDGE IS OVERWRITTEN ON EVERY INBOUND OPEN, DELIBERATELY: an inbound
+            # flicker that costs the track restarts it, and "where you got it" is where the track
+            # you still hold at CPA began — not where an earlier, abandoned one did.
+            past_before || (radar.comp[:trk_gain_range] = R; radar.comp[:trk_gain_look] = look)
+        end
+    end
+    if dropped && get(radar.comp, :trk_post_cpa_det, false) && !haskey(radar.comp, :trk_loss_range)
+        radar.comp[:trk_loss_range] = radar.comp[:trk_last_range]
+        radar.comp[:trk_loss_look]  = radar.comp[:trk_last_look]
+    end
+    return nothing
+end
+
+"""
     _target_snr(prop, rp, radar, tgt, ter=nothing) -> (snr_lin, visible)
 
 Single-target SNR under the active `propagation` fidelity, plus a horizon-visibility
@@ -623,6 +700,7 @@ function _observe_point!(r::RadarSensor, w::World)
     best_pd  = 0.0
     best_visible = true
     best_pos = w.entities[target_ids[1]].pos   # strongest target's pos → terrain clearance readout
+    best_vel = w.entities[target_ids[1]].vel   # …and its velocity → the tracker's closing/opening leg
     # ⭐ SLICE 49: the strongest target's ASPECT and its aspect-adjusted RCS, carried alongside so
     # the readouts below describe the SAME target the SNR does. `nothing` while no shaped target has
     # been seen — the key-presence gate for the telemetry (a wire with no `:rcs_fineness` anywhere
@@ -650,6 +728,10 @@ function _observe_point!(r::RadarSensor, w::World)
             best_pd  = pd
             best_visible = vis
             best_pos = tgt.pos
+            # ⭐ SLICE 53 gate 2: …AND ITS VELOCITY, carried for one reason only — the
+            # tracker below needs the RANGE RATE's SIGN to know which LEG of a pass it is
+            # on, and `range_rate` needs a relative velocity. No physics reads it.
+            best_vel = tgt.vel
             if haskey(tgt.comp, :rcs_fineness)
                 best_asp = aspect_angle(tgt.pos, tgt.vel, radar.pos)
                 best_rcs = _effective_rcs(tgt, radar.pos)
@@ -680,6 +762,13 @@ function _observe_point!(r::RadarSensor, w::World)
     if is_look
         radar.comp[:detected]  = any_detect
         radar.comp[:next_look_t] = get(radar.comp, :next_look_t, 0.0) + r.revisit_s
+        # ⭐ SLICE 53 gate 2 — THE TRACK, which is the thing the detector is not. Runs ONLY when
+        # the radar authors a `track_drop_looks`, so every slice-1..52 wire ships no new key and
+        # is byte-identical (the `terrain_clearance_m` / slice-49 precedent). It reads `any_detect`
+        # AFTER the draw and draws nothing itself — convention 3's draw topology is untouched.
+        haskey(radar.comp, :track_drop_looks) &&
+            _track_look!(radar, any_detect, _range(best_pos, radar.pos),
+                         range_rate(best_pos - radar.pos, best_vel - radar.vel))
     end
 
     # Continuous readout every tick; `detected` is the last look's verdict (persisted in comp so
@@ -733,6 +822,41 @@ function _observe_point!(r::RadarSensor, w::World)
         # quantity from the SAME place (convention 7) — and so "range given up" is a subtraction of
         # two wire values rather than a geometry recompute in GDScript (convention 13).
         tel["$sid.target_range_m"]    = _finite(_range(best_pos, radar.pos))
+    end
+    # ⭐⭐ SLICE 53 gate 2 — THE TRACK AND ITS TWO EDGES. Key-presence gated on the radar's OWN
+    # `track_drop_looks` (see `_track_look!`), so a wire that authors no tracker ships no new key
+    # and is byte-identical — and, deliberately, the gate is NOT the target's `rcs_tail_gain`: the
+    # showcase's headline drag is `G` = 20 → 1 back to the null, and an instrument that blanked at
+    # `G` = 1 would go dark on exactly the arm that proves the null (slice 50: presence decides,
+    # and the lesson's NULL must not read like a dead instrument's default).
+    if haskey(radar.comp, :track_drop_looks)
+        # ⚠⚠ THE RULE SHIPS BESIDE ITS NUMBERS, AND THAT IS NOT DECORATION (gate-0 §2.14): the
+        # metres below are a joint property of the tail lobe AND the tracker, so a readout that
+        # quotes them without `revisit_s` and the give-up depth is not quoting a measurement. Both
+        # travel on the wire so no client can print one without the other.
+        tel["$sid.track_drop_looks"]  = Float64(radar.comp[:track_drop_looks])
+        tel["$sid.track_revisit_s"]   = r.revisit_s
+        tel["$sid.track_alive"]       = get(radar.comp, :trk_alive, false)
+        tel["$sid.track_closing"]     = !get(radar.comp, :trk_past_cpa, false)
+        tel["$sid.track_misses"]      = Float64(get(radar.comp, :trk_misses, 0))
+        tel["$sid.track_look"]        = Float64(get(radar.comp, :trk_look, 0))
+        # ⚠ −1.0 is "NOT YET", never a range: the slice-48 `search_t_lock_s` sentinel posture, and
+        # unambiguous here because a range is strictly positive. The LOOK indices carry the same
+        # sentinel and exist for the dead-zone constraint gate 0 §2.9 pinned — a drag can move the
+        # edge by ZERO metres and still be alive, so the readout must be able to say how many LOOKS
+        # the edge sits at rather than only how many metres.
+        tel["$sid.track_gain_range_m"] = _finite(get(radar.comp, :trk_gain_range, -1.0))
+        tel["$sid.track_gain_look"]    = Float64(get(radar.comp, :trk_gain_look, -1))
+        tel["$sid.track_loss_range_m"] = _finite(get(radar.comp, :trk_loss_range, -1.0))
+        tel["$sid.track_loss_look"]    = Float64(get(radar.comp, :trk_loss_look, -1))
+        # ⭐⭐⭐ THE GAUGE — and it ships ONLY when both edges exist. 0.0 is a LEGITIMATE value here
+        # (it is what a fore/aft symmetric target reads), so a sentinel or a defaulted zero would be
+        # indistinguishable from the lesson's own null on an instrument that has not finished.
+        # `_finite_coord`, not `_finite`: the sign IS the verdict and a dimmer tail reads NEGATIVE.
+        if haskey(radar.comp, :trk_gain_range) && haskey(radar.comp, :trk_loss_range)
+            tel["$sid.track_asym_m"] =
+                _finite_coord(radar.comp[:trk_loss_range] - radar.comp[:trk_gain_range])
+        end
     end
     return nothing
 end
