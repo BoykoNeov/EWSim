@@ -1871,3 +1871,84 @@ is a head that does not move. A sweep width of zero is not the same object at al
 runs, it just has nowhere to look, and the file loader refuses it outright. The bottom of the dial is
 one degree — a head that is visibly sweeping, hard, and still never gets there. The failure this slice
 teaches is about **reach**, not about doing nothing.
+
+
+## Slice 53 — does a target look the same going away as coming at you? (2026-09-06)
+
+Slice 49 showed that a target's echo is not a number it carries around: it depends on the shape of
+the aircraft and on which way that shape is pointing. But the model behind it had a symmetry built
+in — an aircraft seen head-on and the same aircraft seen from directly behind returned exactly the
+same echo. That is not how real aircraft work. The back of an aircraft has an engine in it, and a
+big hot metal opening pointed straight at you is a much better reflector than a pointed nose. Slice
+49's own display had to say "tail-on" rather than "nose-on" past a certain angle, because the model
+genuinely could not tell the two apart.
+
+This slice adds the one thing that can tell them apart — a dial for how much brighter the back of
+the aircraft is than the front — and then finds the situation where that difference is visible.
+
+⭐⭐⭐ **The situation is the simplest one in the whole project: one radar, one aircraft, flying
+straight and level right over the top of it.** Nothing turns, nothing manoeuvres, there is no
+missile. The aircraft comes in from fifteen kilometres away pointing straight at the radar, passes
+overhead, and leaves pointing straight away. That single flight shows the radar both ends of the
+same aircraft, at the same speed, on the same day — so the difference between how the two ends
+behave is the whole measurement, and the first half of the flight is the control for the second.
+
+**What is measured is where the radar first gets a track and where it finally gives one up.** The
+radar looks ten times a second and holds on through two missed looks, giving up on the third. On the
+way in it first manages to hold the aircraft at 6.24 km. On the way out — with the dial at the
+setting the file opens on — it is still following it at 9.76 km. Turn the dial up to its top and
+that becomes 14.36 km, more than twice as far out as it could ever see the thing coming.
+
+⭐⭐⭐ **And the sharpest fact is that the first of those two numbers never changes.** 6.24 km, at
+every setting of the dial, down to the last digit. The reason is that the extra brightness only
+exists behind the aircraft, and by the time the radar first gets a grip on it coming in, the
+aircraft is still showing its front half — fifty-three degrees off the nose, which is on the near
+side of side-on. The dial cannot reach that moment at all. So one end of the flight is fixed and the
+other is the dial, and the difference between them is a clean measurement rather than the difference
+between two wobbly things. It is also why nothing else can fake this: making the aircraft smaller,
+or making it more slender, changes both ends of the flight together, so the gap between them stays
+exactly where it was. Only a difference between front and back can move one end without the other.
+
+**Two honest caveats travel with the number, and both are on the screen.** The first is that it is
+not really a property of the aircraft: it is a property of the aircraft *and the radar's own habits*.
+A radar that looks twice as often, given the same patience about how long it may lose sight of
+something, follows the same aircraft about two kilometres further home. So the reading is always
+shown next to how often this radar looks and how long it waits before giving up. The second is that
+the "no difference" setting does not read zero. Radar returns fluctuate, so even with the two ends
+of the aircraft made identical the two edges of a pass land a few hundred metres apart just by luck
+of the draw. On the flight that ships that reads +583 m, and the setting the file opens on reads
++3517 — six times as much, and clear of a threshold that was written down before any of the
+measurements were taken.
+
+**Choosing which random flight to ship turned out to be a decision worth writing down.** Eight
+different random draws were available. A rule for picking one was written into the probe before it
+ran — the reading has to climb steadily with the dial, both of the intended drags have to move it by
+at least a kilometre, and the setting the file opens on has to be comfortably above that
+"is it just luck" threshold. Exactly one of the eight passed. The obvious choice, the one numbered
+the same as the slice, failed: it opens at a reading that is only three times its own noise and on
+the wrong side of the threshold, so a student would open the file on a number they could not trust.
+This matters beyond this slice, because two slices ago a similar rule was found to have picked
+nothing at all and the write-up quietly fell back on ranking instead — which is the exact habit this
+project decided was at fault when it killed five slices in a row.
+
+**Dragging the dial part-way through a flight ends that flight's measurement, and the display says
+so.** The measurement is a difference between something that happened early and something that
+happened late; move the dial in between and the two halves belong to different aircraft. The engine
+throws both away and the screen reads "the setting moved — reset to measure" rather than a number.
+⭐⭐ There is a nice sharpening here: after such a drag the second half of the measurement does come
+back, at exactly the value the new setting would have given on a clean flight — so on this
+particular dial, the answer being refused would actually have been right. The engine refuses anyway,
+because it is not told which dial moved, and a different one would have spoiled both halves. An
+instrument may decline to show a number it can no longer stand behind; it may never show one
+measured under a setting that has gone.
+
+Two things went wrong in the display and both are worth remembering. This flight raises the *same*
+internal flag slice 49's flight does, so slice 49's own running total — how long the target stayed
+lost while closing — was quietly ticking away in the background on a flight it does not describe,
+one line of code away from being printed under this slice's heading. It sits in a part of the code
+that never draws anything, so no screenshot could ever have caught it. And the picture itself had a
+hidden assumption nobody had needed before: every previous scenario starts at the radar and flies
+away from it, so the display's left edge was pinned at the radar. An aircraft that starts on the far
+side and crosses over had half its flight — including the moment the radar first got it — drawn off
+the edge of the screen, with every test passing. The screenshot is what found that, and it is the
+first time the screenshot has caught something that was not text.

@@ -819,6 +819,23 @@ aspect wires by construction** (49 and 50 both live in the FORWARD hemisphere), 
 author a new geometry. The pre-registered kill is slice 41's in aspect-space: **one aspect is one
 number, and one number is a gain** — a stern chase reparameterizes `rcs_m2`.
 
+**⭐⭐⭐ A TAIL LOBE (fore/aft asymmetry) — ✅ DISCHARGED, SHIPPED BY SLICE 53 (2026-09-06).** The
+whole entry below is answered: `rcs_aspect(σ, F, θ; tail_gain = G)` ships the lobe as PHYSICS, the
+loader learns `rcs_tail_gain` and refuses it without an `rcs_fineness`, and
+`scenarios/slice53_taillobe.yaml` carries it as a live knob with a gauge (`track_asym_m`, the
+difference between the two edges of one straight fly-past). ⚠⚠ **The wire it needed was NOT the
+two-observer geometry this entry proposed** — that is a static seam test with no slider and no
+headline (F2, §0.5). It was a STRAIGHT FLY-PAST, and slice 49's own header calls that geometry
+useless for ITS lesson, which is exactly why it works here: on a symmetric model the two legs are
+identical at equal range, so the symmetry slice 49 had to escape is this slice's control. ⭐⭐⭐ The
+in-edge is bit-identical at every `G` because the track opens at 52.7°, forward of broadside where
+the lobe is identically zero. Detail: `docs/plans/slice53.md`, `docs/STATUS.md` §Slice 53.
+⚠ NOT discharged by it: A TARGET ATTITUDE (below) and a NARROW nozzle lobe with its own width key —
+the shipped lobe is HEMISPHERE-WIDE (half-power ~45° off the tail) and says so in its docstring, in
+the same posture as the symmetry it replaces.
+
+**The original entry, kept as written:**
+
 **⭐⭐ A TAIL LOBE (fore/aft asymmetry).** `rcs_aspect` is fore/aft SYMMETRIC by construction —
 σ(θ) ≡ σ(π−θ), so a fleeing target looks exactly like an approaching one, and slice 49's HUD has to
 say "tail-on" rather than "nose-on" past 150° because the model genuinely cannot tell them apart.
@@ -901,6 +918,19 @@ correct *because* `rcs_aspect` is symmetric by construction. ⇒ a tail lobe is 
 change: it retires that identity, and whichever slice ships it must say what replaces the tooth. ⭐
 That is the tooth doing its job — it pins the approximation in place so the day it is removed is a
 visible day.
+
+**✅ ANSWERED BY SLICE 53, AND THE ANSWER IS THAT *NOTHING* REPLACES THE TOOTH — IT IS RE-SCOPED.**
+`slice50_defensive.yaml` authors no `rcs_tail_gain`, and the loader refuses the key without an
+`rcs_fineness`, so on THAT wire the model still genuinely cannot tell nose from tail and the identity
+still holds. Tooth 9b keeps it, with **one clause** naming the condition it was always relying on
+(*"on a wire with no tail gain"*). ⭐⭐ Slice 53 ships the MIRROR on its own wire
+(`slice53_ui_test.gd` tooth 7), and the mirror has TWO halves, which is the part that would have been
+easy to get wrong: the word must **DIFFER** at 10/24/45/60° where the lobe bites, and must still
+**AGREE** at 71/85/89° — the kernel's lobe weight is `max(0, −cos θ)²`, exactly ZERO at broadside at
+every `G`, so a word that differed there would claim an asymmetry the model does not have. ⇒ **an
+over-claim in either direction is the same defect**, and a retraction tooth has to pin both edges of
+where the retraction applies. ⭐ The prediction in the entry above — *"that is the tooth doing its
+job; the day it is removed is a visible day"* — is exactly what happened.
 
 **⭐⭐ A MIDCOURSE HANDOVER INTO A TURNING TARGET.** Slice 50 deliberately authors **no `midcourse` and
 no `seeker_search`** so that the ONLY thing that can take the lock away is the target. Slice 47's law
@@ -1032,3 +1062,79 @@ between them when a step matters. Measured, named in the docstring, pinned in `t
   of `in_fov`**, i.e. slice 42's `off@lock == fov` column: the inclusive gate echoing back its own
   authored constant. ⚠ It is a fine EXPLANATORY variable and would be a fine telemetry key; it can
   never be what a slider is scored on.
+
+
+---
+
+# SLICE 53 — WHAT IT DISCHARGED, AND WHAT IT RAISED (2026-09-06)
+
+## Discharged
+
+- **⭐⭐⭐ A TAIL LOBE** (49's candidate, 50's raised stakes) — **SHIPPED**, both halves. See the two
+  ✅ blocks above: the physics is `rcs_aspect(…; tail_gain)`, the lesson is
+  `scenarios/slice53_taillobe.yaml`, and slice 50's tooth 9b is RE-SCOPED rather than replaced.
+- **⭐⭐ "A slice needs a scenario where the same target is engaged from both ends"** — answered, and
+  ⚠⚠ **not by the wire the candidate named.** The two-observer geometry it proposed is a static seam
+  test (`test_rcs_aspect.jl`) with no slider, no gauge and no headline. The wire is a **straight
+  fly-past**, which slice 49's own header rules out for ITS lesson — *"a straight-flying target's σ
+  rises exactly while its range falls… the two effects are ALIGNED on both legs"* — and that
+  alignment is precisely what makes it work here: on a fore/aft symmetric model the two legs are
+  identical at equal range, so **slice 49's obstacle is slice 53's control**. ⭐ Transferable: *when a
+  previous slice rules a geometry out, read WHY — a mechanism that cancels one lesson is a control
+  for the lesson that measures the cancellation.*
+
+## New candidates raised by slice 53
+
+⚠ Read the two-test rule at the top of this file before proposing to kill any of these.
+
+**⭐⭐ A NARROW NOZZLE LOBE (a WIDTH key for the tail return).** The shipped lobe is
+`max(0, −cos θ)²` — hemisphere-wide, half-power ~45° off the tail — and that is a NAMED approximation
+in `rcs_aspect`'s docstring, in the same posture as the fore/aft symmetry it replaced. A real exhaust
+return is narrower and the width is a second dimension a student could dial. ⚠⚠ **The gate-0 question
+is whether a width can be separated from `G` AT THE GAUGE**, and the arithmetic is against it: the
+gauge is a run-rule edge on the outbound leg, and §2.15a §B measured that the aspect term has already
+died away to 8–10 % of the SNR slope by the time the edge is declared at high `G`. A narrower lobe
+moves the edge to where the term is even smaller. ⇒ likely **DEAD AS A LESSON, ALIVE AS A MODEL** on
+this wire, and it would need a geometry whose edge lands nearer 180° to have a chance. ⚠ Do NOT
+propose it as a second slider beside `G` — convention 9, and §2.15's own finding that the two would
+compose rather than substitute makes that worse, not better.
+
+**⭐⭐ A TRACKER WHOSE GIVE-UP RULE IS THE SLIDER.** §2.14 Arm 2 measured that `revisit_s` and `N`\*
+move the metres by **+2191 m at `G` = 20** on identical physics — the same size as the tail lobe's own
+effect — and slice 53 had to hold them fixed and ship them beside every number for exactly that
+reason. That is a lesson in its own right (*how long should a radar keep looking before it gives
+up?*) and the hardware to run it is already shipped (`track_run_step`, `_track_look!`,
+`track_drop_looks`). ⚠⚠ **It is TWO-SIDED and that is the whole interest**: a patient tracker follows
+a fading target further home, and also holds a track on nothing. The gate-0 question is what prices
+the second half — this arc has no false-track model, so a slider that is monotone-better upward is
+slice 48's shape and not a new lesson. ⇒ **needs a cost for patience before it can be proposed**, and
+the honest candidate is a false-alarm track, which is new physics rather than a new scenario.
+
+**⭐ A TARGET ATTITUDE** (49's candidate, unchanged and NOT discharged) — `aspect_angle` still takes
+the nose to be the VELOCITY direction. ⚠ Slice 53 SHARPENS the stakes exactly as slice 50 sharpened
+the tail lobe's: `frames.jl`'s promissory note (*"a flipped vector becomes a silent wrong number the
+moment a tail lobe is ever added"*) is now CASHED — at `G` ≠ 1 the cross-section discriminates θ from
+π−θ, so an attitude that differs from the velocity vector is a first-order error in the echo rather
+than a second-order one. It remains a 6-DOF-target slice's business.
+
+**⚠ A SECOND TRACKING RADAR ON ONE TARGET.** `_tail_view_info` takes the FIRST radar and the FIRST
+tail-lobed target (`sort!` + `[1]`), which is the family's posture and is correct for a one-pair wire.
+A wire with two tracking radars would compute two independent passes in the core (the tracker is
+per-radar comp state, so this already WORKS) and the client would quote one of them. ⚠ It is a HUD
+limit, not a model limit, and the ledger should say which: **the physics scales, the marker does
+not.** Worth naming because "the same target, two observers, two different asymmetries at once" is
+the demonstration this slice's candidate originally proposed and the one it deliberately did not
+build — it has no slider and no gauge, but it would make a good STATIC seam test if a two-radar wire
+ever ships for another reason.
+
+## ⚠⚠ Two things slice 53 did NOT establish, and must not be quoted as if it did
+
+1. **THE METRES ARE NOT A PROPERTY OF THE TARGET.** Every number in the ladder is wire A at
+   `revisit_s` = 0.1 and `N`\* = 3, and §2.14 Arm 2 showed the SIZE moves under every retuning of the
+   tracker while the SIGN never does. **The direction is what the slice teaches.** ⇒ do not quote
+   "+3.5 km" as a fact about a tail-lobed aircraft.
+2. **THE PLATEAU ABOVE `G` ≈ 10 IS OPEN.** §2.15a §B confirmed the SLOPE mechanism over the first
+   decade (−39 % slope, +2.71 dB in declared edge SNR) and found it does NOT quantitatively account
+   for the second (−43 % slope, ≈ 0 dB). ⭐⭐ The earned statement is *a run-rule edge is not a level:
+   before quoting a threshold SNR, measure how fast the signal is falling where the rule fires* — not
+   the stronger causal claim §2.15 first printed.

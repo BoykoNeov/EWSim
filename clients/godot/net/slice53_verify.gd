@@ -28,8 +28,9 @@ extends SceneTree
 # ⚠ AND THE NULL IS NOISE, NOT ZERO. Identical σ on the two legs still means different Swerling-1
 # draws, so `G` = 1 reads +583 m on this seed (−658 … +968 m over the 8 gate-0 seeds). The
 # attributability bar was fixed in writing before the ladder was flown — max-null × 3 = 2905 m — and
-# the authored arm clears it by construction, not by luck. This file asserts the SEPARATION, never
-# a zero.
+# it is a bar on the ladder's VALUE, which is how F3 wrote it (*"the G ladder must clear max-null × 3
+# at its authored ceiling"*). This file asserts that VALUE, and separately that the reading is ≥ 3×
+# THIS seed's own null — a student flies one seed, not eight. It never asserts a zero.
 #
 # ⭐⭐ THE FIFTH ARM IS A **LIVE DRAG**, AND IT IS THE FIRST GATE-3 PROOF IN THIS PROJECT TO DO ONE.
 # `CLAUDE.md` records that no gate-3 proof drags a slider (slice 52) and that a live drag invalidates
@@ -95,8 +96,9 @@ const ASYM_NULL_M := 583.11
 const ASYM_AUTH_M := 3516.47
 const ASYM_TOP_M := 8113.96
 # ⚠ THE ATTRIBUTABILITY BAR, FIXED BEFORE THE LADDER WAS FLOWN (plan §0.5 F3): max-null × 3 over the
-# 8 gate-0 seeds. The authored arm must clear the NULL by at least this, or the gauge is measuring
-# the detector rather than the lobe.
+# 8 gate-0 seeds. The ladder's VALUE must clear it, or the gauge is measuring the detector rather
+# than the lobe. ⚠⚠ NOT the separation from this seed's own null — that is a different and stronger
+# claim with no pre-registration behind it, and the seed rule used the value reading too.
 const F3_BAR_M := 2905.0
 const EXACT := 1.0e-9
 const M_TOL := 1.0                # m — the arms are deterministic; this is a typo guard, not slack
@@ -115,7 +117,7 @@ var _dragged := false
 
 # --- per-arm accumulators ----------------------------------------------------------------------
 var _n_frames := 0
-var _n_keys := 0                  # frames carrying ALL eleven track keys — the never-stale tooth
+var _n_keys := 0                  # frames carrying all nine track + four aspect keys (never-stale)
 var _n_rule := 0                  # …and frames carrying the RULE beside them (§2.14)
 var _n_asym := 0                  # frames on which `track_asym_m` was PRESENT
 var _first_asp := -1.0
@@ -255,7 +257,8 @@ func _finish_arm() -> String:
 	# 0.0, which is the LESSON'S OWN NULL: a perfectly symmetric target, printed over a pass that
 	# has produced nothing at all.
 	if not (_n_keys == _n_frames):
-		return (("arm %s: the ten always-on track keys must ship on EVERY frame (%d of %d) — a key " +
+		return (("arm %s: the nine always-on track keys and the four aspect keys must ship on EVERY " +
+				"frame (%d of %d) — a key " +
 				"that stops emitting reads downstream as a defaulted zero, and on this gauge a " +
 				"defaulted zero IS the lesson's null") % [tag, _n_keys, _n_frames])
 	# ⚠⚠ AND THE RULE MUST TRAVEL WITH THEM ON EVERY ONE (§2.14). The metres are a joint property of
@@ -350,15 +353,27 @@ func _verdict() -> bool:
 		return _fail(("⚠⚠ the null read %.4f m — essentially zero, which on a Swerling-1 detector " +
 					  "means the fading has stopped. A control that CANNOT read non-zero makes the " +
 					  "separation below a tautology") % float(nul["asym"]))
-	if not (float(aut["asym"]) - float(nul["asym"]) > F3_BAR_M):
-		return _fail(("⚠⚠ the AUTHORED arm must clear the null by more than the pre-registered " +
-					  "attributability bar (%.2f − %.2f = %.2f m, bar %.0f) — below it the gauge is " +
-					  "measuring the detector rather than the lobe, and the seed was chosen on " +
-					  "exactly this criterion (seed 53 opens at +1820 m and FAILS it)") %
-					 [float(aut["asym"]), float(nul["asym"]),
-					  float(aut["asym"]) - float(nul["asym"]), F3_BAR_M])
-	print("S53V_NULL    null %+.2f m (fading noise, not zero) → authored %+.2f m: a separation of %.0f m against the pre-registered bar of %.0f" %
-		  [nul["asym"], aut["asym"], float(aut["asym"]) - float(nul["asym"]), F3_BAR_M])
+	# ⚠ THE BAR IS ON THE LADDER's **VALUE**, WHICH IS HOW F3 WROTE IT: *"the G ladder must clear
+	# max-null × 3 at its authored ceiling, or the gauge is measuring the detector"*. It is NOT a bar
+	# on the separation from this seed's own null — that is a different and stronger claim (2933 m
+	# here, a 28 m margin) which happens to pass and has no pre-registration behind it. The seed rule
+	# used the value reading too, and the two must not drift apart in the same slice.
+	for a in [aut, top]:
+		if not (float(a["asym"]) > F3_BAR_M):
+			return _fail(("⚠⚠ arm G=%.0f reads %+.2f m against the pre-registered attributability " +
+						  "bar of %.0f m (max-null × 3 over the 8 gate-0 seeds) — below it the gauge " +
+						  "is measuring the detector rather than the lobe. The seed was chosen on " +
+						  "exactly this criterion, at the OPENING setting: seed 53 opens at +1820 m " +
+						  "and FAILS it by 1085 m") % [float(a["g"]), float(a["asym"]), F3_BAR_M])
+	# ⚠ …AND AGAINST **THIS SEED's OWN** NULL AS WELL, which is the per-flight version of the same
+	# discipline: a student flies one seed, not eight, and 3× that seed's own noise is what makes the
+	# reading on screen attributable to the lobe rather than to the fading.
+	if not (float(aut["asym"]) > 3.0 * absf(float(nul["asym"]))):
+		return _fail("⚠ the authored arm (%+.2f m) must be at least 3× this seed's own null (%+.2f m)" %
+					 [float(aut["asym"]), float(nul["asym"])])
+	print("S53V_NULL    null %+.2f m (fading noise, not zero) → authored %+.2f m = %.1f× it, and %.0f m clear of the pre-registered bar of %.0f (separation %.0f m)" %
+		  [nul["asym"], aut["asym"], float(aut["asym"]) / absf(float(nul["asym"])),
+		   float(aut["asym"]) - F3_BAR_M, F3_BAR_M, float(aut["asym"]) - float(nul["asym"])])
 
 	# ══ 4. ⭐ THE FLIGHT IS BYTE-IDENTICAL ACROSS THE WHOLE SLIDER ══════════════════════════════
 	# Slice 49's sharpest tooth, one key over: the shape is read by the SEEING and by nothing else,
@@ -452,15 +467,16 @@ func _pass() -> bool:
 		   "G=%.0f) and %.2f km (ceiling G=%.0f). ⭐⭐⭐ ONE END OF THE PASS IS UNTOUCHABLE AND THE " +
 		   "OTHER IS THE SLIDER, which is why no `rcs_m2` and no `rcs_fineness` can imitate this: " +
 		   "both are fore/aft SYMMETRIC and move BOTH ends together. ⚠ The null is not zero — it is " +
-		   "%+.0f m of Swerling-1 fading noise — and the authored arm clears it by %.0f m against a " +
-		   "bar fixed at %.0f before the ladder was flown. ⭐⭐ And a live drag past closest approach " +
+		   "%+.0f m of Swerling-1 fading noise — and the authored arm reads %.1f× it, %.0f m clear of " +
+		   "a bar fixed at %.0f before the ladder was flown. ⭐⭐ And a live drag past closest approach " +
 		   "ENDS the measurement: the outbound edge is re-declared under the new setting, the " +
 		   "inbound one never can be, and the core refuses the difference rather than showing one " +
 		   "measured across two configurations.") %
 		  [REVISIT_S, N_DROP, float(nul["gain"]) / 1000.0, float(nul["gain"]) / 1000.0,
 		   float(nul["asp_at_gain"]), float(nul["loss"]) / 1000.0, float(aut["loss"]) / 1000.0,
 		   float(aut["g"]), float(top["loss"]) / 1000.0, float(top["g"]),
-		   float(nul["asym"]), float(aut["asym"]) - float(nul["asym"]), F3_BAR_M])
+		   float(nul["asym"]), float(aut["asym"]) / absf(float(nul["asym"])),
+		   float(aut["asym"]) - F3_BAR_M, F3_BAR_M])
 	quit(0)
 	return true
 
@@ -549,8 +565,9 @@ func _drain_scan() -> bool:
 			return true
 	return false
 
-# The eleven always-on track keys. ⚠ COUNTED AS A SET, not any-of: the never-stale claim is about
-# the whole family, and a wire that dropped one would otherwise pass on the strength of the rest.
+# The nine always-on track keys (the eleven of gate 2 less the two RULE keys, which get their own
+# counter below). ⚠ COUNTED AS A SET, not any-of: the never-stale claim is about the whole family,
+# and a wire that dropped one would otherwise pass on the strength of the rest.
 # ⚠⚠ `track_asym_m` IS DELIBERATELY NOT IN IT — its ABSENCE is a state (the pass has not finished),
 # and 0.0 is the lesson's own null, so a "must always be present" tooth on it would assert the
 # opposite of the rule the core is built on.

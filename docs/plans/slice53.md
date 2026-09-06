@@ -1,8 +1,8 @@
-# Slice 53 — **A TAIL LOBE**: does a target look the same going away as coming at you?
+﻿# Slice 53 — **A TAIL LOBE**: does a target look the same going away as coming at you?
 
-**STATUS: GATE 0 COMPLETE (all falsifiers answered, §2.15), GATE 1 SHIPPED THE KERNEL (§3,
-2026-09-06), GATE 2 SHIPPED THE TRACKER (§4, 2026-09-06). NEXT IS GATE 3 — the scenario, the knob,
-the four proofs and F6's clause; §4's closing block lists what it inherits.**
+**STATUS: ⭐ SLICE 53 IS COMPLETE (2026-09-06). GATE 0 answered every falsifier (§2), GATE 1 shipped
+the KERNEL (§3), GATE 2 the TRACKER (§4), GATE 3 the SHOWCASE (§5) — scenario, marker, HUD and the
+four proofs. Suite 19743. §5 is the gate-3 log the shipped YAML and core/test/test_track.jl cite.**
 ⚠ Everything from here down to §2 is the ORIGINAL PRE-PROBE DOCUMENT and is left unedited on
 purpose (see the note below). §2 is what was MEASURED, §3 and §4 are what SHIPPED — where they
 disagree with §0/§1, the later section wins.
@@ -1598,3 +1598,204 @@ a view marker of its own, the four proofs, and the one-clause re-scope of
 constraints already on the record: the metres are quoted with `revisit_s` and `N`\* or they are not
 a measurement (§2.14); a FLAT stretch of the drag must not read as a dead knob (§2.9); and
 `rcs_loss_db`'s "this much quieter" wording must not be rendered as an identity (gate 1).
+
+---
+
+## §5 GATE 3 — **THE SHOWCASE** (2026-09-06). The scenario, the marker, the HUD, the four proofs
+
+Scope is exactly §0.7's last bullet plus F6's clause. Full suite green: **19743 tests, up from 19680
+(+63)**, `test_determinism.jl` and the absolute golden unchanged. **⇒ SLICE 53 IS COMPLETE.**
+
+### §5.1 ⭐⭐⭐ THE SEED — **A RULE FIXED BEFORE THE FLIGHTS, AND IT SELECTED EXACTLY ONE**
+
+Probe `M:\claud_projects\temp\slice53\g3_seed.jl`, raw `…\g3_seed_out.txt`. 8 seeds × 7 cells,
+wire A, 200 s, `revisit_s` = 0.1, `N`\* = 3, every number read off `radar1.track_asym_m` **on the
+wire** rather than derived from §2.9 + §2.15's two tables (convention 10 — the seed goes into a
+SHIPPED file).
+
+**THE RULE, written into the probe's header before it ran** (P7a correction #2 is that §2.15 let a
+criterion drift and did not say so; this arc ruled the criterion at fault on 2026-08-18, and
+undeclared drift is that failure mode exactly):
+
+- **R1** MONOTONE non-decreasing over `G` = 1, 2, 5, 10, 20, 30, 50.
+- **R2** BOTH required drags move by ≥ 1000 m: 20 → 50 and 20 → 1 (§2.15 §5's two).
+- **R3** ⭐ **THE DISCRIMINATOR — the OPENING reading clears F3's attributability bar.** The bar is
+  max-null × 3 = **2905 m** (max |null| over the 8 seeds = 968.4, §2.9). The showcase OPENS at
+  `G` = 20, so it is the opening frame that has to be attributable, not the ceiling.
+- **R4** tie-break on the staircase (distinct readings over the ladder).
+
+| seed | G=1 | G=2 | G=5 | G=10 | **G=20** | G=30 | G=50 | R1 | R2 20→50 | R2 20→1 | **R3 margin** |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 53 | −531.8 | −531.8 | −531.8 | 1720.6 | **1819.9** | 3361.2 | 6244.0 | ✓ | 4424.1 | 2351.7 | **−1085.1** ✗ |
+| 149 | 315.7 | 315.7 | 870.7 | 1480.6 | **1480.6** | 4513.8 | 6044.4 | ✓ | 4563.8 | 1164.9 | **−1424.4** ✗ |
+| **250** | 583.1 | 877.6 | 877.6 | 877.6 | **3516.5** | 5808.8 | 8114.0 | ✓ | 4597.5 | 2933.4 | **+611.5** ⭐ |
+| 1 | 444.3 | 665.0 | 665.0 | 2615.9 | **3417.2** | 3865.5 | 3865.5 | ✓ | **448.3** ✗ | 2972.9 | +512.2 |
+| 2 | −441.7 | −255.7 | 446.4 | 446.4 | **2270.5** | 3790.0 | 5256.7 | ✓ | 2986.2 | 2712.2 | **−634.5** ✗ |
+| 3 | −361.9 | −361.9 | 1131.9 | 1796.9 | **2716.8** | 2716.8 | 4095.7 | ✓ | 1378.9 | 3078.6 | **−188.2** ✗ |
+| 4 | −657.6 | −657.6 | 347.5 | 371.0 | **3959.7** | 4422.4 | 4449.7 | ✓ | **490.1** ✗ | 4617.3 | +1054.7 |
+| 5 | 968.4 | 1461.6 | 2410.5 | 2410.5 | **2410.5** | 4041.8 | 6180.1 | ✓ | 3769.5 | 1442.2 | **−494.5** ✗ |
+
+⇒ **SEED 250, AND IT IS THE ONLY ONE THAT PASSES.** R1 eliminates nobody (the knob is monotone
+everywhere, as §2.15 §1 said). **R2 kills seeds 1 and 4** — their 20 → 50 drag moves 448 m and 490 m,
+i.e. the showcase's headline drag would barely register. **R3 kills 53, 149, 2, 3 and 5** — every one
+of them OPENS below the attributability bar.
+
+⭐⭐ **AND THAT IS THE ANSWER TO P7a's CORRECTION #2.** Its complaint was that the pre-registered
+ceiling rule *"selected nothing, and §2.15 did not say so"*, so the verdict fell back to relative
+ranking undeclared. Here the rule selects **exactly one** candidate, on the first run, with the
+losing arithmetic printed. ⚠⚠ **SEED 53 — THE OBVIOUS NAME-MATCHING PICK — FAILS BY 1085 m**, and it
+fails on the criterion that matters most: it opens at +1820 m against its own **−532 m** null, i.e.
+the showcase would open on a reading a student could not attribute. It has the best STAIRCASE of the
+eight (9 steps over 1→50, the shortest dead run at 28 %, and the only one whose top decile moves) and
+it still loses, because a staircase is a tie-break and attributability is not.
+
+### §5.2 THE SHIPPED WIRE — `scenarios/slice53_taillobe.yaml`
+
+Wire A verbatim (x0 = −15 km, σ = 4 m², `F` = 8 FIXED, `revisit_s` = 0.1, `track_drop_looks` = 3),
+seed 250, one knob `rcs_tail_gain` ∈ [1.0, 50.0] LINEAR opening at 20.0. Measured on the shipped
+file (probe `g3_wire.jl`, and pinned in `core/test/test_track.jl`):
+
+| `G` | 1 | 2 | 5 | 10 | **20\*** | 30 | 50 |
+|---|---|---|---|---|---|---|---|
+| in (m) | 6243.9596 | 6243.9596 | 6243.9596 | 6243.9596 | **6243.9596** | 6243.9596 | 6243.9596 |
+| out (m) | 6827.07 | 7122 | 7122 | 7122 | **9760.43** | 12053 | 14357.92 |
+| asym (m) | +583.1 | +877.6 | +877.6 | +877.6 | **+3516.5** | +5808.8 | +8114.0 |
+| loss look | 657 | 671 | 671 | 671 | **781** | 867 | 950 |
+| detected % | 28.3 | 29.4 | 33.9 | 37.7 | **43.7** | 47.8 | 52.2 |
+
+⭐⭐⭐ **THE INBOUND EDGE IS 6243.9596483405 m AT LOOK 375 AT EVERY CELL, TO THE BIT** — and the
+reason is one number: **the track opens at an aspect of 52.746902°**, forward of broadside, where
+the kernel's `max(0, −cos θ)²` is identically zero. The multiplier there is exactly 1.0 at every
+`G`, so the slider is not in the arithmetic at all. That is §2.15 §0's `max |in_G − in_1|` =
+0.000000e+00 over 824 flights, restated as a property of the file a student opens: **one end of the
+pass is untouchable and the other is the slider**, which is what makes the gauge an exact PAIRED
+difference and what makes the substitution test pass by construction.
+
+⚠ The dead zone §2.9 warned about is ON the shipped seed: `G` = 2, 5 and 10 all read **+877.6 m at
+the same loss look 671**. It sits on the 1 → 20 stretch, not on either authored drag, and the HUD
+prints the LOOK INDEX beside each edge precisely so that stretch reads as *"the edge has not moved"*
+rather than as *"nothing is being read"*.
+
+### §5.3 THE MARKER AND THE **TWO COLLISIONS** — and only one of them is in `_draw`
+
+`_tail_view_info` (radar.jl) is gated on the **PAIR**: a target with `rcs_tail_gain` AND a radar with
+`track_drop_looks`. Slice 50 forced that shape onto `_aspect_view_info` and the argument transfers
+without a change of a word — half a pair renders every line off `.get(k, 0.0)`. ⭐ The gate is
+PRESENCE, never the value: the headline drag is `G` = 20 → 1 and `set_param` writes the comp bag in
+place, so a marker gated on `G > 1` would go dark on exactly the arm that proves the null.
+
+⚠⚠ **THIS WIRE RAISES `aspect_view` TOO** — its target carries an `:rcs_fineness` — and that is
+correct rather than a conflict: slice 49's branch owns the BUTTON job here (dropping the
+`free_space ↔ two_ray` toggle), which is the right drop for slice 49's own reason. What the new
+marker takes is the HUD **and slice 49's gauge**. Two collisions followed, **in two different
+places**, and the second is the finding:
+
+1. **THE DRAW DISPATCH**, which convention 14 says has no headless proof at all. Moved OUT of
+   `_draw` into **`_spatial_hud_kind()`** — one pure function read by both `_draw` and the UI test,
+   asserted in all three states. ⭐ This is the first block in the family to answer convention 14 by
+   *relocating the decision* rather than by photographing it.
+2. ⭐⭐⭐ **SLICE 49's CLOSING-LOSS ACCUMULATOR, WHICH IS NOT IN `_draw` AT ALL.** It lives in the
+   FRAME HANDLER, gated on `_aspect_view` + an observer + `target_range_m` — all three of which this
+   wire has. It would have run for the whole pass, accumulating a DURATION from another slice, one
+   `draw_string` away from being printed under this slice's headline. **Convention 14's blind spot
+   works both ways: a frame-handler accumulator has no windowed shot either.** Gated
+   `and not _tail_view` at its own site, and the tooth ships with a PAIRED CONTROL — the identical
+   frames on an aspect-only client must still accumulate, or the tooth would pass just as well on a
+   broken accumulator and slice 49's own proof would be silently retired.
+
+### §5.4 THE HUD — **THE FIRST BLOCK IN THIS CLIENT THAT KEEPS NO STATE**
+
+Seven lines at `vp.x − 430` in **390 px** (slice 49's budget, this view's altitude labels). Slices
+46/47/48/49/50 and 52 all accumulate a peak, a latch or a run clock, and every one then had to answer
+what a live drag does to it. This one accumulates **nothing**, because gate 2 moved the gauge into
+the core — so the invalidation is the core's too and the HUD renders it rather than implementing it.
+
+The three constraints §4 left binding, each cashed:
+
+- **The rule travels with the metres.** `asymmetry +3.52 km  [0.10 s looks, give up at 3]`, plus a
+  spelled-out rule line. ⚠ A first draft carried the prose AND the bracket and measured **427 px
+  against 390**; the bracket is the half that may not be dropped, because §2.14 measured +2191 m of
+  movement from retuning the tracker alone while the prose is a restatement.
+- **A flat stretch must not read as a dead knob.** Both edge lines carry their LOOK INDEX.
+- **`rcs_loss_db` is not an identity.** The SIGN picks the word (`below` / `ABOVE broadside`).
+  Nothing on this wire reaches negative (F = 8 needs `G` > 4096), which is exactly why a hard-coded
+  "below" would have survived every test here and been wrong one authored fineness away.
+
+⚠ **AND THERE IS NO `Pd` OR `SEEN` ON THE ECHO LINE, WHICH IS A CHOICE.** Slice 49 prints both
+because its lesson IS the per-frame fade; here the rule is counted in LOOKS, so `track_misses` on the
+edge line is the live blindness readout and a per-frame verdict beside a look-counted gauge invites
+reading one as evidence about the other — §2.14's confusion in miniature. (It also cost 45 px.)
+
+⭐⭐ **THE VOCABULARY IS A RETRACTION, AND F6's ANSWER STANDS AS WRITTEN.** `_tail_word` bands on the
+aspect and names GEOMETRY only — which end is showing is a fact about the frame at every `G`, while
+how much that end is WORTH is `rcs_loss_db` on the line below; a word that said "the bright end"
+would be the client asserting physics and would be FALSE at the slider's floor. The tooth has two
+halves: the mirror must **DIFFER** at 10/24/45/60° (where the lobe bites) and must **AGREE** at
+71/85/89° (where the lobe's weight is exactly zero at every `G` — a word that differed there would
+claim an asymmetry the kernel does not have, the same over-claim pointing the other way).
+`slice50_ui_test.gd` tooth 9b keeps its identity, with **one clause** naming the condition it was
+always relying on: *on a wire with no tail gain*.
+
+### §5.5 ⚠⚠ THE VIEW HAD A FLOOR OF ZERO, AND HALF THE PASS WAS OFF THE LEFT EDGE
+
+**Found by the windowed shot and by nothing else — and it is a failure class the shot had never
+produced before** (its previous catches were HUD text: slice 31's aim-point, slice 46's clipping,
+slice 48's defaulted zero, slice 49's `Pd 0.00`). Every wire 1–52 launches at the origin and flies
+OUTWARD, so `_world_to_screen` mapped `x = 0` to the left margin and never needed a lower bound. A
+crossing pass is the first geometry that breaks it: this target starts 15 km on the FAR side of the
+radar, so the entire INBOUND leg — including the look the track is OPENED at, the half of the lesson
+the slider provably cannot move — drew off-screen.
+
+`_x_min` moves only under `_tail_view`, and at 0.0 the mapping `(x − 0.0)/(_x_max − 0.0)` is the old
+expression **bit for bit**, so every other spatial wire is unchanged (asserted both ways in
+`slice53_ui_test.gd` tooth 16). The first tick is still `xstep` when there is no floor, so no
+existing view gains a "0" tick it did not have.
+
+### §5.6 THE FOUR PROOFS
+
+**`net/slice53_verify.gd` — five arms, 120000 steps each (16 × 7500).** ⚠ The length is a
+measurement: the latest edge sits at look 950, so 120 s leaves 250 looks of margin against a give-up
+depth of 3 (P7a §C's censoring check, asserted ARM-SPECIFICALLY at the arm whose edge is LATEST —
+slice 52's trap). The verdict: the inbound edge identical to the bit across the slider; the outbound
+edge monotone; `asym === loss − gain` exactly; the trajectory byte-identical at every `G` and on
+replay, **with both edges replaying bit-identically too** (the trajectory repeating is not the same
+claim as the SEEING repeating); and the null asserted as NOISE against the pre-registered bar.
+
+⚠ **ONE CLAIM WAS CORRECTED AFTER THE FIRST GREEN RUN.** F3's bar is on the ladder's **VALUE**
+(*"the G ladder must clear max-null × 3 at its authored ceiling"*), and the YAML header, the seed
+rule and the commit all read it that way — but the verifier asserted the **separation** from this
+seed's own null (2933.4 > 2905, a 28 m margin), which is a different and stronger claim with no
+pre-registration behind it. Now: the VALUE against the bar (3516 > 2905, 611 m clear) **and**
+separately ≥ 3× this seed's own null (6.0×, the per-flight version, because a student flies one seed
+and not eight). The separation is printed, not asserted.
+
+⭐⭐ **THE FIFTH ARM DRAGS THE SLIDER MID-PASS — the first gate-3 proof in this project to do so**
+(`CLAUDE.md`: *no gate-3 proof DRAGS a slider*). Two `step` commands with a `set_param` between them,
+at t = 60 s: past closest approach and past the gain edge, so both edges' preconditions exist before
+the knob moves.
+
+⚠⚠ **AND THE SEPARATOR IS NOT `track_pass_dirty`.** EVERY arm reads it true, and that is the
+verifier's own construction rather than a defect: `reset` reloads the YAML, so each arm must re-send
+its own gain, and `_mark_track_dirty!` is knob- and time-agnostic by design. What the drag changes is
+that `track_asym_m` is **ABSENT** at the end — the gain edge was deleted past CPA and `:trk_past_cpa`
+is never cleared, so it can never be re-declared.
+
+⭐⭐⭐ **AND THE SHARPEST HALF IS THAT THE REFUSED NUMBER WOULD HAVE BEEN RIGHT.** After the drag the
+OUTBOUND edge comes back at **14357.92 m @ look 950 — bit-identical to the clean `G` = 50 arm** — and
+this knob happens not to move the inbound edge at all, so filling in the authored gain edge would
+have produced the correct +8114 m. The tracker is generic and is not told which knob moved (`pt_w`,
+`pfa` or `rcs_m2` would move both), and it refuses anyway. **That is the whole argument for §4.4's
+conservatism, and here it is a checkable assertion rather than a claim in a docstring.**
+
+**`net/slice53_ui_test.gd` — 16 teeth**, widths in PIXELS against 390. ⚠ One stated limit rather than
+a hidden one: `entity_id` length is unbounded in YAML, so the longest-ids × longest-word cross
+product (404 px) is NOT asserted — what is asserted is the longest word at the SHIPPED ids (~295 px)
+and slice 49's own long-id stress pair at the shortest.
+
+**Smoke-load:** `EWSIM_SERVER_DONE` ⇒ the scene connected and handshaked. **Windowed shots: TWO**,
+because the drag state is a `_draw`-only branch a student reaches on their first interaction —
+(1) the gauge showing `+3.5 km FURTHER OUT GOING AWAY` with both edges and the rule, at look 800;
+(2) `SETTING MOVED — Reset` after a drag, both edges gone, no metres anywhere, and the live lines
+still running (look #814, 1 missed, 10.64 km). Sources in `M:\claud_projects\temp\slice53\`
+(`g3_seed.jl`, `g3_wire.jl`, `g3_anchor.jl`, `g3_drag.jl`, `s53_shot.gd`, `s53_shot.png`,
+`s53_shot_drag.png`).

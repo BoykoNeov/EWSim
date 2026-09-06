@@ -729,6 +729,31 @@ semantic collision — the number itself would still be mislabelled. ⚠ The LIV
 horizon, range, aspect) are untouched either way, which is what keeps the drag a teaching instrument
 rather than a switch that blanks the screen.
 
+### ⭐⭐ SLICE 53 — **THE HEADLINE ABOVE IS NOW HALF FALSE, AND THE CORRECTION IS THE POINT** (2026-09-06)
+
+*"…AND IT REACHES NONE OF THE FOUR PROOFS"* held for four slices and no longer does: slice 53's
+`slice53_verify.gd` **drives a drag from inside the verifier** — two `step` commands with a
+`set_param` between them, at t = 60 s. The shape is cheap and should be the default from here.
+
+⚠⚠ **AND IT BECAME MANDATORY RATHER THAN NICE-TO-HAVE, BECAUSE THE LATCH MOVED INTO THE CORE.** 49's
+and 50's latches were computed IN the client from wire values, so a client-side disarm was the whole
+fix. Slice 53's gauge is computed in the core and SHIPS AS A WIRE KEY — and a gate-3 verifier reads
+the WIRE, not the HUD. A client-side disarm would have left a headless proof reading a stale
+`track_asym_m` as a live measurement: green, and false. ⇒ **when the latch is on the wire, the
+invalidation must be on the wire, and only a verifier that drags can prove it.**
+
+⚠ **THE SEPARATOR IS RARELY THE FLAG ITSELF.** In slice 53 every arm raises `track_pass_dirty`,
+because `reset` reloads the YAML so each arm re-sends its own knob value, and the mark is knob- and
+time-agnostic by design. What distinguishes the dragged arm is that the GAUGE KEY GOES ABSENT. ⇒ when
+the verifier's own construction trips the flag, assert the CONSEQUENCE, not the flag.
+
+⭐⭐⭐ **AND THE SHARPEST TOOTH IS THAT THE REFUSED NUMBER WOULD HAVE BEEN RIGHT.** After the drag,
+slice 53's outbound edge is re-declared under the new setting at exactly the clean arm's value, and
+this particular knob happens not to move the inbound edge at all — so filling in the missing half
+would have produced the correct answer. The tracker refuses anyway, because it is generic and is not
+told WHICH knob moved. **An instrument may refuse to show a number it can no longer stand behind,
+even when it would have been correct; that is what makes the refusal a rule instead of a guess.**
+
 ## ⚠⚠ GREP THE WHOLE FILE FOR FORMAT SPECIFIERS — A `print` IS PROVED BY ITS OWN OUTPUT, A `_fail` MESSAGE IS PROVED BY NOTHING (slice 49, and the THIRD occurrence)
 
 GDScript's `%` supports a small set of specifiers; an unknown one makes the **whole** format fail
@@ -881,6 +906,29 @@ the word must CHANGE between two reachable states, must RESOLVE across the slide
 never read the word for the GOOD state at a value where the lesson says the state is bad, must still be
 reachable where it IS true, and must respect whatever symmetry the underlying model has as an IDENTITY.
 
+### ⭐⭐⭐ SLICE 53 — **WHEN THE MODEL LOSES THE SYMMETRY, THE RETRACTION TOOTH NEEDS TWO HALVES** (2026-09-06)
+
+The last clause above — *"must respect whatever symmetry the underlying model has as an IDENTITY"* —
+is the one that came due. `rcs_aspect` gained an optional tail gain, and at `G` ≠ 1 it CAN tell nose
+from tail. Three things follow, and only the first is obvious:
+
+1. **NOTHING REPLACES THE OLD TOOTH; IT IS RE-SCOPED.** `slice50_defensive.yaml` authors no gain, and
+   the loader refuses the key without an `rcs_fineness`, so on that wire the identity still holds
+   exactly. Tooth 9b keeps it with **one clause** naming the condition it was always relying on
+   (*"on a wire with no tail gain"*). ⇒ **a conditional retraction is a CLAUSE, not a deletion** —
+   deleting it would have retired a proof that is still true where it was written.
+2. ⭐⭐ **THE MIRROR TOOTH HAS TWO HALVES, AND THE SECOND IS THE ONE THAT IS EASY TO MISS.** On the new
+   wire the word must **DIFFER** at θ vs 180 − θ where the lobe bites (10/24/45/60°) — that is the
+   retraction — **and must still AGREE near broadside** (71/85/89°), because the lobe's weight is
+   `max(0, −cos θ)²`, exactly ZERO there at every `G`. A word that differed at 89° vs 91° would claim
+   an asymmetry the kernel does not have. ⇒ **an over-claim in either direction is the same defect,
+   and a retraction tooth must pin both EDGES of where the retraction applies.**
+3. ⚠ **THE WORD NAMES GEOMETRY; THE NUMBER BESIDE IT NAMES BRIGHTNESS.** Which end is showing is a
+   fact about the frame at every `G`; how much that end is WORTH is `rcs_loss_db`, which the CORE
+   computes. A word like "the bright end" would be the client asserting physics — and would be FALSE
+   at the slider's own floor, where the two ends are equal. **Keep the vocabulary on the axis the
+   client can see without computing anything.**
+
 ## ⭐⭐⭐ "BYTE-IDENTICAL BY CONSTRUCTION" IS A CLAIM ABOUT WHICH SHIPPED WIRES SATISFY THE GATE — CHECK THEM BY NAME (slice 50, 2026-08-26)
 
 Convention 2 makes byte-identity the master check, so every new telemetry key gets placed behind a
@@ -974,6 +1022,21 @@ legal default of the right type.
 ⚠ **This is the same defect as the vocabulary lesson above, in DEFAULTED form rather than COMPUTED
 form, and both shipped in the same slice.** ⇒ when a HUD block is keyed off a marker, the question is
 not only *"are the numbers right?"* but *"is this block entitled to draw at all on this wire?"*
+
+### ⭐⭐ SLICE 53 — THE SECOND OCCURRENCE, AND IT ADDS THE **VALUE-vs-PRESENCE** HALF (2026-09-06)
+
+`_tail_view_info` is gated on the PAIR from the first line — a target with `rcs_tail_gain` AND a radar
+with `track_drop_looks` — because slice 50's argument transfers without a change of a word: every line
+of the block is either a property of the target's rear hemisphere or of the radar's give-up rule, and
+half a pair renders six defaulted numbers on a green run.
+
+⭐ **THE NEW HALF IS *WHAT* TO GATE ON.** The showcase's headline drag is `G` = 20 → **1**, back to
+the lesson's own null, and `set_param` writes the comp bag IN PLACE — the key stays PRESENT at every
+slider position. A marker gated on the VALUE (`G > 1`) would have been perfectly defensible and would
+have gone dark on **exactly the arm that proves the null**, which is slice 50's *"the lesson's NULL and
+a dead instrument's DEFAULT must not read the same"* arriving at the marker instead of at the readout.
+⇒ **gate a view marker on the PRESENCE of the key an author writes, never on the value a slider
+carries** — the author decides what the wire IS, the slider decides where on it you are standing.
 
 ## ⭐⭐⭐ A BAN ON A GAUGE CAN BE A BAN ON A REGION OF THE FLIGHT — CHECK WHICH ONE YOU INHERITED (slice 51 gate 0, 2026-08-31)
 
@@ -1124,3 +1187,174 @@ that was not there, so the verdict (F3 passes) survived. The next one may not.
 ⭐ AND IT MOVED THE PROOF: with the window right, the stop binds before the lock on exactly ONE cell
 of the whole ladder (`S` = 45 at a 45° stop, 102 ticks pinned at 45.000°), which is the only cell on
 which "vary the clamp and watch `t_lock` not move" means anything.
+
+
+---
+
+## ⭐⭐⭐ A RULE COUNTED IN SAMPLES SILENTLY CHANGES MEANING WHEN THE SAMPLE RATE CHANGES (slice 53, 2026-09-06)
+
+Slice 53's gauge is a difference of two **run-rule edges**: a track is given up after `N`\* = 3
+consecutive missed LOOKS. `N`\* is a count, and a count is only a physical quantity once you say what
+it counts.
+
+**The measurement that made it visible.** Halving `revisit_s` from 0.1 to 0.05 s with `N`\* held at
+3 does not refine the same rule — it TIGHTENS it, from 0.3 s of tolerated blindness to 0.15 s. Read
+the same `G` = 50 cell two ways (gate 0 §2.14 Arm 2):
+
+- **same LOOKS** (`N`\* = 3, a stricter give-up TIME) ⇒ the track is abandoned sooner ⇒ Δ **falls**
+  to +3956 m;
+- **same TIME** (`N`\* = 6) ⇒ twice as many chances to re-detect inside the same 0.3 s ⇒ the track is
+  held further out ⇒ Δ **rises** to +7077 m.
+
+**+2191 m of movement at `G` = 20 from retuning the tracker alone, on identical physics** — the same
+order as the effect being taught. ⇒ ⭐⭐⭐ **THE SIGN AND THE MONOTONICITY ARE PHYSICS; THE METRES ARE A
+JOINT PROPERTY OF THE MECHANISM AND THE SAMPLING RULE.**
+
+**Three consequences, and all three cost something to reach:**
+
+1. **THE RULE SHIPS ON THE WIRE BESIDE THE NUMBERS.** `track_revisit_s` and `track_drop_looks` are
+   emitted every frame with the metres, so no client CAN print one without the other. That is a wire
+   contract, not a warning in a document — and the HUD line is `asymmetry +3.52 km [0.10 s looks,
+   give up at 3]`, with the bracket the half that may not be dropped for width.
+2. ⚠⚠ **AND THE GAUGE CANNOT LIVE IN THE CLIENT AT ALL.** The client sees FRAMES. At
+   `emit_every` = 16 and `revisit_s` = 0.1 that is ~6 frames per look, so "3 frames with no
+   detection" is about HALF a look of blindness — a different rule wearing the same words, which
+   changes meaning again the moment either cadence moves. Nothing on the wire marks a look boundary,
+   so the client cannot recover the looks even in principle. **Slice 53's gate-1 log assumed the HUD
+   could compute the headline and was wrong about its own scope; gate 2 exists because of that.**
+3. **THE LOADER REFUSES THE CONFIGURATION THAT WOULD HIDE IT.** `track_drop_looks` without a positive
+   `revisit_s` is refused AT LOAD, because with a look every tick "3 missed looks" is a give-up TIME
+   of 3·`dt` that moves when `dt` does — and slice 51 died on a boundary that flipped at half `dt`.
+
+⭐ **THE GENERAL FORM.** Any threshold expressed as a count of samples — `N`\* looks, `n` frames, `k`
+consecutive ticks — is a TIME divided by a rate, and only one of those two is usually written down.
+Before quoting such a threshold, ask what it is a count OF, and whether the thing that sets the rate
+is authored, defaulted, or a fidelity rung.
+
+---
+
+## ⭐⭐ BUILD SCENARIO VARIANTS FROM A FUNCTION, NEVER BY LINE SURGERY ON A LITERAL (slice 53 gate 1, 2026-09-06)
+
+A probe or a test that needs "the same wire without key X" is usually written as
+`replace(YAML_LITERAL, "  key: value\n" => "")` on a triple-quoted string. **Julia dedents the
+literal**, so deleting a line leaves its indentation behind and the next key folds onto the previous
+one. The result is a MALFORMED file that still LOADS CLEAN — the folded key simply becomes part of
+the previous value or is silently dropped.
+
+**What it cost:** slice 53's "a tail gain authored with no fineness must be refused" tooth stopped
+being that arm entirely and passed VACUOUSLY, against a file that no longer had the shape the tooth
+named. Caught only because a second, unrelated assertion in the same block failed.
+
+⇒ **build every variant from a FUNCTION that emits the lines it wants** (`_trk_yaml(; gain, drop,
+revisit, dt, cfar)` in `core/test/test_track.jl`), so an absent key is an unwritten line rather than a
+deleted one. This is the `.get(k, 0.0)` family one level up: a defect whose signature is a PASS.
+
+---
+
+## ⭐⭐⭐ CONVENTION 14's BLIND SPOT WORKS BOTH WAYS — A **FRAME-HANDLER** ACCUMULATOR HAS NO PROOF EITHER (slice 53, 2026-09-06)
+
+The standing rule is *anything the verdict computes inside `_draw` has no headless proof* — extract
+it to a pure helper the UI test can call. Slice 53 found the mirror image and it is worse, because
+the usual remedy does not apply.
+
+**Slice 49's gauge — the longest loss run WHILE CLOSING — is accumulated in the FRAME HANDLER**, not
+in `_draw`, gated on `_aspect_view` + a non-empty observer + `target_range_m`. A slice-53 wire has all
+three (its target carries an `:rcs_fineness`, so the core raises `aspect_view` on it exactly as on
+slice 49's). So on this wire slice 49's clock ran for the entire pass, silently, accumulating a
+DURATION that describes a different lesson — **one `draw_string` away from being printed under this
+slice's headline.**
+
+⚠⚠ **NEITHER OF CONVENTION 14's TWO "SEE THE PIXELS" PROOFS CAN REACH IT.** The windowed shot only
+shows what is drawn, and nothing draws it. The UI test only reaches it if someone thinks to look.
+There is no `_draw` to extract from, because the defect is not in `_draw`.
+
+**Two-part remedy, and the second part is the one that is easy to skip:**
+
+1. Gate at the ACCUMULATOR's own site (`and not _tail_view`), not at the drawing site — the value
+   must never exist, not merely never be shown.
+2. ⭐⭐ **SHIP A PAIRED CONTROL.** Assert that the identical frames fed to a client WITHOUT the new
+   marker DO accumulate. Without it the tooth passes just as well on an accumulator that is broken
+   outright, which would retire the older slice's proof instead of scoping it — and a retired proof
+   is exactly what this whole discipline exists to prevent.
+
+⭐ **AND THE DISPATCH ITSELF IS THE OTHER HALF.** When two view markers can be up at once, *which
+branch wins* is a decision inside `_draw` with no headless proof (slice 50 named this). Slice 53
+answered it by RELOCATION rather than by photograph: `_spatial_hud_kind()` is one pure function read
+by both `_draw` and the UI test, which is convention 7 (one list, no drift) doing convention 14's job.
+
+---
+
+## ⚠⚠ THE WINDOWED SHOT'S FAILURE CLASSES NOW INCLUDE **VIEW EXTENTS**, NOT ONLY TEXT (slice 53, 2026-09-06)
+
+Every previous catch by convention 14's fourth proof was TEXT: slice 31's aim-point comparison, slice
+46's clipped HUD lines, slice 48's defaulted zero, slice 49's `Pd 0.00`, slice 50's two. Slice 53's is
+the first that is GEOMETRY.
+
+`_world_to_screen` maps `x = 0` to the left margin and `_x_max` to the right, with `_x_max`
+auto-expanding. That is correct for every wire 1–52, because **every one of them launches at the
+origin and flies outward.** A straight FLY-PAST does not: slice 53's target starts 15 km on the FAR
+side of the radar and crosses it, so the entire INBOUND leg — including the look the track is OPENED
+at, which is the half of the lesson the slider provably cannot move — drew off the left edge. Every
+test green, the HUD perfect, and half the flight invisible.
+
+⇒ **A NEW GEOMETRY GETS ITS EXTENTS LOOKED AT.** The three that have ever mattered here are: does
+anything go NEGATIVE on an axis the view assumes is positive; does the interesting part of the flight
+fall inside the seeded window; and does the auto-expansion ever SHRINK (it must not, or the picture
+rescales under the student).
+
+⚠ The fix is marker-gated and the default reproduces the old mapping **bit for bit** — `_x_min = 0.0`
+makes `(x − 0.0)/(_x_max − 0.0)` identical to `x/_x_max` — which is what keeps a shared rendering
+function additive (convention 2) instead of a silent re-render of every scenario in the project.
+⚠ And do NOT reach for a bigger window: this project's HUD columns are anchored to the RIGHT edge, so
+a wider window moves the origin too. If text runs off, the LINE is too long; if the PICTURE runs off,
+the EXTENTS are wrong. They are different bugs with the same symptom.
+
+---
+
+## ⭐⭐⭐ DECLARE THE SELECTION RULE BEFORE THE FLIGHTS, AND PUBLISH THE LOSERS (slice 53, 2026-09-06)
+
+Slice 53 had to pick one random seed out of eight to ship in a showcase file. P7a's correction #2 had
+just recorded that slice 53's OWN ceiling criterion *"selected nothing, and §2.15 did not say so"* —
+the verdict fell back to relative ranking undeclared — and noted that this project killed five slices
+in a row and then ruled the CRITERION at fault (2026-08-18). **Undeclared criterion drift is that
+failure mode, and it is invisible in the write-up by construction.**
+
+So the rule went into the probe's header before it ran: monotone over the coarse ladder; both authored
+drags moving by ≥ 1 km; and — the discriminator — **the OPENING reading above the attributability bar
+that had itself been fixed in writing before any ladder was flown** (max-null × 3 = 2905 m). Result:
+**exactly one of eight seeds passed, on the first run, with the losing arithmetic printed.**
+
+⭐⭐ **AND THE OBVIOUS CANDIDATE LOST, WHICH IS WHAT MAKES THE RULE WORTH HAVING.** Seed 53 — the one
+numbered the same as the slice — has the BEST staircase of the eight (most steps, shortest dead run,
+the only one whose top decile moves) and fails by 1085 m, because it opens at +1820 m against its own
+**−532 m** null. A showcase that opens on a reading a student cannot attribute is worse than one with
+a coarser ladder. ⇒ **a tie-break criterion must not be allowed to outrank an admissibility one**, and
+writing them in priority order beforehand is the only thing that enforces that.
+
+⚠ **THE COROLLARY THAT COST A CORRECTION IN THE SAME SLICE:** the same bar must be READ the same way
+everywhere. Slice 53's verifier shipped green asserting the bar against the SEPARATION from this
+seed's null (2933 > 2905, a 28 m margin) while the YAML, the plan and the seed rule all read it as a
+bar on the ladder's VALUE (3516 > 2905, 611 m clear). Both pass; they are different claims, and only
+one was pre-registered. **A number that appears in a docstring, a test and a probe must be the same
+number doing the same job in all three, or the weakest reading is the one that will be quoted.**
+
+---
+
+## ⭐⭐ WHEN A PREVIOUS SLICE RULES A GEOMETRY OUT, READ **WHY** — A CANCELLATION IS A CONTROL (slice 53, 2026-09-06)
+
+`scenarios/slice49_aspect.yaml`'s header says, in capitals, that a straight fly-past **can never**
+produce slice 49's lesson at any fineness: *"flying past a radar, its aspect goes 0°→90° up to closest
+approach and 90°→180° after, while the range goes down then up — so σ rises exactly while the range
+falls… the two effects are ALIGNED on both legs."* That is a correct and load-bearing refusal, and
+slice 49 needed a TURN because of it.
+
+Slice 53's wire is that exact refused geometry, and the alignment is why it works. On a fore/aft
+SYMMETRIC model the two legs present the identical cross-section at equal range — so the pass is
+symmetric in echo, and **the thing that made the geometry useless to slice 49 is slice 53's control.**
+The tail lobe is then the only thing on the wire that can break the tie.
+
+⇒ **A GEOMETRY IS RULED OUT FOR A REASON, AND THE REASON IS A MECHANISM.** Before inheriting a
+refusal, check whether the slice you are building MEASURES the mechanism that did the refusing. The
+ledger's own suggested wire for this candidate (two observers, one target) was the intuitive answer
+and it is not a wire at all — no slider, no gauge, no headline, just a static seam test. **The refused
+geometry was the right one.**

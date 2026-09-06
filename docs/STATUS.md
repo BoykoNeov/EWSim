@@ -7561,3 +7561,176 @@ Live: the server above, then Godot on `clients/godot` (`Sandbox.tscn` auto-detec
 view). One slider, one button. Drag DOWN from 25 to 6 and the same missile arrives instead of missing
 by 32 m; drag to 4.75 and it never finds the target at all while the head sweeps for four seconds.
 Press `detect` and there is nothing to search for at any width.
+
+
+---
+
+# Slice 53 — **A TAIL LOBE: THE TWO ENDS OF ONE PASS** (`rcs_tail_gain`, 2026-09-06)
+
+**COMPLETE, all four gates.** Suite **19743** (18651 → 19412 gate 1 → 19656 gate 2 → 19680 gate 2
+follow-up → 19743 gate 3). `test_determinism.jl` and the absolute golden unchanged at every step —
+the additivity master check for this kind of edit. Full detail: `docs/plans/slice53.md` (§2 gate 0,
+§3 gate 1, §4 gate 2, **§5 gate 3**).
+
+> **THE LESSON.** Which way a target points does not only change how BRIGHT it is — it changes it
+> ASYMMETRICALLY, so the same aircraft on the same pass is held far longer running away than it was
+> ever seen coming in, and no single cross-section number can say that.
+
+## What shipped
+
+- **`core/src/rf.jl`** — the kernel, as an OPTIONAL KEYWORD:
+  `rcs_aspect(σ, F, θ; tail_gain = 1.0)` computing
+  `σ·[1 + (G−1)·max(0, −cos θ)²] / (sin²θ + F²cos²θ)²`. The default is what makes the byte-identity
+  STRUCTURAL rather than inspected — every slice 1–52 call site is untouched. Expression order is
+  load-bearing and commented as such: `σ * (1 + (G−1)·aft²) / (d*d)` reduces to `σ / (d*d)` bit for
+  bit at `G` = 1, while folding the bracket into the denominator would be algebraically equal and
+  NOT bit-equal. Docstring RETRACTS the fore/aft symmetry paragraph in place and names the
+  HEMISPHERE-WIDE lobe (half-power ~45° off the tail) as an approximation.
+- **`core/src/radar.jl`** — `_effective_rcs` reads `:rcs_tail_gain` with `get(…, 1.0)` INSIDE the
+  existing `:rcs_fineness` branch (one new expression, no new call site), floored not ceilinged.
+  Plus gate 2's `track_run_step` consumer `_track_look!`, `_mark_track_dirty!`, and gate 3's
+  `_tail_view_info`.
+- **`core/src/detection.jl`** — `track_run_step`, pure and exported: one look of a give-up tracker,
+  returning `(alive, misses, opened, dropped)`. No state, no RNG, no radars (convention 12).
+- **`core/src/scenario.jl`** — `rcs_tail_gain` learned (finite, `> 0`; `G` < 1 legal) and REFUSED
+  without an `rcs_fineness`; `track_drop_looks` learned and REFUSED without a positive `revisit_s`
+  and on a `:cfar` wire.
+- **`core/src/server.jl`** — `set_param` calls `_mark_track_dirty!`; `scenario_frame` merges
+  `_tail_view_info`.
+- **`scenarios/slice53_taillobe.yaml`**, **`clients/godot/scenes/Sandbox.gd`** (the marker, the
+  7-line HUD, `_spatial_hud_kind`, `_x_min`), **`net/slice53_verify.gd`**, **`net/slice53_ui_test.gd`**.
+- **`net/slice50_ui_test.gd`** — tooth 9b gains ONE CLAUSE (F6). Nothing is replaced.
+
+## The showcase wire — seed 250, `revisit_s` 0.1, `track_drop_looks` 3
+
+One radar at the origin (slice 2's block verbatim), one target 15 km out at 5 km on a +x heading
+straight over the top at 300 m/s. σ = 4 m² broadside, `rcs_fineness` = 8.0 FIXED,
+`rcs_tail_gain` = 20.0 as the ONE live knob, [1.0, 50.0] LINEAR. `propagation: free_space` pinned.
+Aspect sweeps **18.3° → 166.7°**, CPA at t = 50 s.
+
+| `G` | 1 | 2 | 5 | 10 | **20\*** | 30 | 50 |
+|---|---|---|---|---|---|---|---|
+| in-edge (m) | 6243.9596 | 6243.9596 | 6243.9596 | 6243.9596 | **6243.9596** | 6243.9596 | 6243.9596 |
+| in-edge look | 375 | 375 | 375 | 375 | **375** | 375 | 375 |
+| out-edge (m) | 6827.07 | 7122 | 7122 | 7122 | **9760.43** | 12053 | 14357.92 |
+| out-edge look | 657 | 671 | 671 | 671 | **781** | 867 | 950 |
+| `track_asym_m` | +583.1 | +877.6 | +877.6 | +877.6 | **+3516.5** | +5808.8 | **+8114.0** |
+| detected % | 28.3 | 29.4 | 33.9 | 37.7 | **43.7** | 47.8 | 52.2 |
+
+⭐⭐⭐ **THE IN-EDGE IS 6243.959648 m AT LOOK 375 AT EVERY CELL, TO THE BIT, AND THE REASON IS ONE
+NUMBER: THE TRACK OPENS AT AN ASPECT OF 52.746902°.** The kernel's lobe is `max(0, −cos θ)²`,
+identically ZERO forward of broadside, so the multiplier there is exactly 1.0 at every `G` and the
+slider is not in the arithmetic. ⇒ the gauge is an EXACT PAIRED difference, and the substitution
+test passes by construction: `rcs_m2` and `rcs_fineness` are both fore/aft SYMMETRIC and move BOTH
+ends together.
+
+⚠ **THE NULL IS NOISE, NOT ZERO.** Identical σ on the two legs still means different Swerling-1
+draws: +583.1 m on this seed, −658 … +968 m over the 8 gate-0 seeds. Attributability bar fixed in
+writing before the ladder was flown (F3): max-null × 3 = **2905 m**. The authored opening reads
+**3516.5 m** — 611 m clear of it and **6.0×** this seed's own null.
+
+⚠ **THE DEAD ZONE IS ON THE SHIPPED SEED**: `G` = 2, 5 and 10 all read +877.6 m at the SAME loss
+look 671. It sits on the 1 → 20 stretch, not on either authored drag. The HUD prints the LOOK INDEX
+beside each edge so that stretch reads as "the edge has not moved" rather than "nothing is read".
+
+## ⭐⭐⭐ The seed rule — declared before the flights, and it selected EXACTLY ONE
+
+Probe `M:\claud_projects\temp\slice53\g3_seed.jl`. R1 monotone; R2 both authored drags ≥ 1 km;
+**R3 the OPENING reading above the 2905 m bar**; R4 staircase tie-break. R2 killed seeds 1 and 4
+(20 → 50 moves only 448 m / 490 m); **R3 killed 53, 149, 2, 3 and 5.** ⚠⚠ **Seed 53 — the obvious
+name-matching pick — FAILS BY 1085 m**: it opens at +1820 m against its own **−532 m** null, so the
+showcase would open on a reading a student could not attribute. It has the best staircase of the
+eight and still loses, because a staircase is a tie-break and attributability is not. ⭐ This is the
+direct answer to P7a correction #2 (§2.15a), whose complaint was that the pre-registered ceiling
+rule *selected nothing and the write-up did not say so*.
+
+## The wire keys (gate 2, eleven of them)
+
+`track_drop_looks`, `track_revisit_s` (⚠⚠ **the RULE, shipped beside the metres so no client CAN
+print one without the other** — §2.14: the metres are a joint property of the lobe and the tracker,
++2191 m at `G` = 20 from retuning the tracker alone), `track_alive`, `track_closing`,
+`track_misses`, `track_look`, `track_gain_range_m` / `track_gain_look`, `track_loss_range_m` /
+`track_loss_look` (−1.0 = NOT YET, slice 48's sentinel posture), `track_pass_dirty`, and
+⭐⭐⭐ **`track_asym_m`, which ships ONLY when both edges exist** — 0.0 is a legitimate value of this
+gauge (it is the null), so a sentinel or a `.get(k, 0.0)` default would be indistinguishable from
+the lesson's own result on an instrument that has not finished. PRESENCE decides (slice 50).
+
+## The client
+
+`tail_view` + `tail_target` + `tail_observer`, gated on the **PAIR** (a target with
+`rcs_tail_gain` AND a radar with `track_drop_looks`). **HUD only — the BUTTON stays slice 49's**,
+whose branch already drops the `free_space ↔ two_ray` toggle, which is the right drop here for slice
+49's own reason. ⭐ The gate is PRESENCE, never the value: the headline drag is `G` = 20 → 1 and
+`set_param` writes the comp bag in place, so a marker gated on `G > 1` would blank on exactly the arm
+that proves the null.
+
+⚠⚠ **TWO COLLISIONS FOLLOWED, IN TWO DIFFERENT PLACES.** (1) The DRAW DISPATCH — moved out of
+`_draw` into **`_spatial_hud_kind()`**, one pure function read by both `_draw` and the UI test, which
+is convention 14's blind spot answered by RELOCATION rather than by a photograph. (2) ⭐⭐⭐ **Slice
+49's closing-loss accumulator, which is NOT in `_draw` at all** — it lives in the frame handler and
+would have run for the whole pass, a DURATION from another slice one `draw_string` from being printed
+under this slice's headline. Gated `and not _tail_view` at its own site, with a PAIRED CONTROL.
+
+**The HUD keeps NO STATE — the first block in this client that does not**, because gate 2 moved the
+gauge into the core. Seven lines in **390 px** (this view's altitude labels, not the family's 430):
+the headline (`+3.5 km FURTHER OUT GOING AWAY` / `SETTING MOVED — Reset`), the pair + aspect word,
+σ_eff + the dB (⚠ the SIGN picks `below`/`ABOVE broadside` — gate 1's correction; nothing on this
+wire reaches negative, which is why a hard-coded "below" would have survived every test), the two
+edges with their LOOK indices, the gauge with the rule in the same string, the rule in words, and
+the trade. ⚠ No `Pd`/`SEEN` on the echo line, deliberately: the rule is counted in LOOKS, so
+`track_misses` is the live blindness readout and a per-frame verdict beside a look-counted gauge is
+§2.14's confusion in miniature.
+
+⭐⭐ **`_tail_word` IS A RETRACTION.** It bands on the aspect and names GEOMETRY only. The mirror must
+**DIFFER** at 10/24/45/60° (where the lobe bites) and **AGREE** at 71/85/89° (where the lobe's weight
+is exactly zero at every `G`). `slice50_ui_test.gd` tooth 9b keeps its identity with ONE CLAUSE added
+— *on a wire with no tail gain* — which is F6's answer: **nothing replaces it, it is RE-SCOPED.**
+
+⚠⚠ **`_x_min` — THE VIEW HAD A FLOOR OF ZERO AND HALF THE PASS WAS OFF THE LEFT EDGE.** Found by the
+windowed shot and by nothing else, and it is a failure class the shot had never produced before (its
+previous catches were all HUD text). Every wire 1–52 launches at the origin and flies outward; a
+CROSSING pass is the first geometry that breaks the mapping. Moves only under `_tail_view`; at 0.0
+the mapping is the old expression bit for bit.
+
+## The four proofs
+
+- **`net/slice53_verify.gd`** — five arms × 120000 steps (16 × 7500). ⚠ The length is a measurement:
+  the latest edge sits at look 950, leaving 250 looks of margin against a give-up depth of 3 (P7a
+  §C's censoring check, asserted ARM-SPECIFICALLY at the arm whose edge is LATEST — slice 52's trap).
+  In-edge identical to the bit; out-edge monotone; `asym === loss − gain` exactly; trajectory
+  byte-identical across the slider AND on replay, **with both edges replaying bit-identically too**;
+  the null asserted as NOISE against the pre-registered bar.
+  ⚠ **One claim was corrected after the first green run**: F3's bar is on the ladder's VALUE, and the
+  verifier had asserted the SEPARATION from this seed's null (2933.4 > 2905, a 28 m margin) — a
+  different and stronger claim with no pre-registration behind it. Now the VALUE against the bar
+  (611 m clear) plus, separately, ≥ 3× this seed's own null (6.0×).
+  ⭐⭐ **THE FIFTH ARM DRAGS THE SLIDER MID-PASS — the first gate-3 proof in this project to do so.**
+  ⚠⚠ The separator is NOT `track_pass_dirty` (every arm reads it true — `reset` reloads the YAML, so
+  each arm re-sends its own gain, and the mark is knob- and time-agnostic by design). It is that
+  `track_asym_m` goes **ABSENT**. ⭐⭐⭐ And the sharpest half: the OUT-edge comes back at **14357.92 m
+  @ look 950, bit-identical to the clean `G` = 50 arm**, so the number the core refuses would have
+  been RIGHT here — and the tracker is generic and does not know that. That is §4.4's conservatism
+  turned into a checkable assertion.
+- **`net/slice53_ui_test.gd`** — 16 teeth, widths in PIXELS against 390 with a ≥12 px margin. ⚠ One
+  STATED limit: `entity_id` length is unbounded in YAML, so the longest-ids × longest-word cross
+  product (404 px) is not asserted; what is asserted is the longest word at the SHIPPED ids and slice
+  49's own long-id stress pair at the shortest.
+- **Smoke-load** — `EWSIM_SERVER_DONE`.
+- **Windowed shots: TWO** (the drag state is a `_draw`-only branch a student reaches on their first
+  interaction) — the gauge showing at look 800, and `SETTING MOVED — Reset` after a drag with both
+  edges gone, no metres anywhere, and the live lines still running.
+
+## Running it
+
+```
+& tools/julia.ps1 --project=core tools/server.jl scenarios/slice53_taillobe.yaml
+godot --headless --path clients/godot --script res://net/slice53_verify.gd    # exit 0 = pass
+godot --headless --path clients/godot --script res://net/slice53_ui_test.gd   # needs no server
+```
+
+Live: the server above, then Godot on `clients/godot` (`Sandbox.tscn` auto-detects the tail-lobe
+view). ONE slider, no button. Watch the aircraft come in nose-on and invisible, get picked up at
+6.24 km, cross overhead, and then be held all the way out to 9.76 km. Drag UP to 50 and the same
+radar follows it to 14.36 km; drag DOWN to 1 and the two ends of the pass match to within fading
+noise. ⚠ Dragging mid-pass ENDS that pass's measurement, by design — the readout says **Reset to
+measure** rather than showing a number measured across two settings.

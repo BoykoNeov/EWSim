@@ -42,40 +42,48 @@ Fixed order each `tick!`: **phase 1** `integrate!` (movers/airframe) → `empty!
 `build_env!` (cross-subsystem fields, e.g. jamming) → **phase 3** `observe!` (sensors) → **phase 4** `decide!`
 (estimators/guidance). "A missile is `integrate!` + `observe!` + `decide!`."
 
-## Where the project is (2026-08-31)
+## Where the project is (2026-09-06)
 
-**Slices 1–40 + 46–50 + 52 COMPLETE & green — 18651 tests.** 39 and 41–45 are GATE-0 RECORDS (no code) —
+**Slices 1–40 + 46–50 + 52–53 COMPLETE & green — 19743 tests.** 39 and 41–45 are GATE-0 RECORDS (no code) —
 ⚠⚠ **five in a row shipped nothing and the kill CRITERION was ruled at fault on 2026-08-18** (the two-test
-rule below); 41/44/45 are **ALIVE AS A MODEL** (probes in `M:\claud_projects\temp\slice4N`), only 42 is
-dead outright. ⭐ **46 DISCHARGED 44, 47 DISCHARGED 43's BLOCK, 48 SHIPPED the search family and
-52 ITS WIDTH** — that thread is CLOSED. **49/50 MADE THE ECHO A SHAPE**, on a ground radar then back under
-the seeker. **51 KILLED 50's own ⭐ candidate — but is NOT a "no code" record**: given the MODEL test it
-shipped `maneuver.turn_start_s` + tests and NAMED a model gap. Pick the next from `docs/DEFERRALS.md`.
-HANDOFF §10 items 1–13 DONE; 15–40 are into the §11 Tier-A horizon.
+rule below); 41/44/45 are **ALIVE AS A MODEL** (probes in `M:\claud_projects\temp\slice4N`), only 42 is dead
+outright. ⭐ **46 DISCHARGED 44, 47 DISCHARGED 43's BLOCK, 48 SHIPPED the search family and 52 ITS WIDTH** —
+CLOSED. **49/50 MADE THE ECHO A SHAPE**; ⭐⭐⭐ **53 DISCHARGED 49's TAIL-LOBE candidate AND 50's raised
+stakes** (fore/aft symmetry retired as PHYSICS; 50's tooth 9b RE-SCOPED, not replaced). **51 KILLED 50's own
+⭐ candidate but is NOT a "no code" record** — it shipped `maneuver.turn_start_s` + tests and NAMED a model
+gap. Pick the next from `docs/DEFERRALS.md`. HANDOFF §10 items 1–13 DONE; 15–40 are §11 Tier-A.
 
-The live arc is the **missile seeker family (26–40, 46–48, 50, 52)**: a seeker looks through a radome whose
-bend depends on the look angle, so the missile's own motion feeds back into the line-of-sight it reports, and
-past a loop gain it shakes itself into a limit cycle. 27–33 priced the gyro cure; 34–40 put the seeker on a
-**gimbal** with **inertia**; 46–48/52 gave it a RECEIVER, BLINDED it, then let it SEARCH and SIZED that
-search. Per-slice detail — and every number behind the lines below — is in `docs/SLICES.md`.
+The live arc was the **missile seeker family (26–40, 46–48, 50, 52)** — a seeker looking through a radome
+whose bend depends on the look angle, so the missile's own motion feeds back into the LOS it reports and past
+a loop gain it shakes itself into a limit cycle. 27–33 priced the gyro cure; 34–40 put the head on a
+**gimbal** with **inertia**; 46–48/52 gave it a RECEIVER, BLINDED it, let it SEARCH and SIZED that search.
+**49/50/53 moved to the ECHO ITSELF** — a shape, then that shape under a seeker, then its fore/aft
+ASYMMETRY. Per-slice detail — and every number behind the lines below — is in `docs/SLICES.md`.
 
-- **46/47/48/52 — THE CLOSED HANDOVER-AND-SEARCH THREAD.** **46 — the window IS the beamwidth** (a wider
-  window costs REACH; a late lock is paid in AUTHORITY, never MISS). **47 — ⭐⭐⭐ THE CLIFF IS THE WINDOW**:
-  handover error = PICTURE error × TIME BLIND. **48 — ⭐⭐⭐ A SEARCH SPENDS THE ENGAGEMENT, NOT THE HEAD**,
-  ⭐⭐ **ACQUISITION IS NOT A LATCH.** **52 — ⭐⭐⭐ SIZE THE SWEEP TO THE UNCERTAINTY, DO NOT MAXIMISE IT**
-  (too narrow never reaches; every degree wider is paid TWICE in travel), ⭐⭐⭐ **A HEAD DOES NOT FLY THE
-  COVERAGE YOU AUTHOR** ⇒ **a faster sweep needs a WIDER one** and the FLOWN band sets the floor. ⚠⚠ 47
-  RETRACTED its ban on `gimbal_fov_margin_deg`. ⚠ Authority is NOT monotone in ρ; the sweep's OPENING SIDE
-  is a SCENARIO property; 52's floor is NOT zero. ⚠⚠ A view marker must separate wires differing only by
-  the SLIDER, and its gate must be an INSTRUMENT.
-- **49/50 — ⭐⭐⭐ A CONSTANT ECHO CAN BE GAINED WHILE CLOSING AND NEVER LOST** ⇒ **only a SHAPE makes a
-  closing target harder to see; no smaller `rcs_m2` fakes it** (49, a ground radar) — and ⭐⭐⭐ **A TARGET
-  CAN TAKE A LOCK BACK BY TURNING** (50, that shape under the SEEKER): the horizon RETREATS faster than the
-  missile closes, and the price is **the heading error it goes blind holding**, never the MISS. ⚠ The gauge
-  is the longest loss run WHILE CLOSING; ⭐⭐ **A GAUGE MUST CARRY ITS OWN WINDOW.** ⚠⚠ Launch near the
-  horizon's EDGE, not deep inside. ⭐⭐ **A NULL ARM AND A SUB-THRESHOLD ARM ARE DIFFERENT CONTROLS**, ⚠⚠ **a
-  live DRAG invalidates a latch as a Reset does** and **DISARMS a latched INSTANT**, ⚠⚠ **the lesson's NULL
-  and a dead instrument's DEFAULT read the same** ⇒ PRESENCE decides, ⭐⭐ **A VOCABULARY IS A GAUGE.**
+- **46/47/48/52 — THE CLOSED HANDOVER-AND-SEARCH THREAD.** **46 — the window IS the beamwidth** (a wider one
+  costs REACH, paid in AUTHORITY not MISS). **47 — ⭐⭐⭐ THE CLIFF IS THE WINDOW**: handover error = PICTURE
+  error × TIME BLIND. **48 — ⭐⭐⭐ A SEARCH SPENDS THE ENGAGEMENT, NOT THE HEAD**, ⭐⭐ **ACQUISITION IS NOT A
+  LATCH.** **52 — ⭐⭐⭐ SIZE THE SWEEP TO THE UNCERTAINTY**, ⭐⭐⭐ **A HEAD DOES NOT FLY THE COVERAGE YOU
+  AUTHOR** ⇒ **a faster sweep needs a WIDER one.** ⚠⚠ 47 RETRACTED its ban on `gimbal_fov_margin_deg`.
+  ⚠ Authority is NOT monotone in ρ; 52's floor is NOT zero. ⚠⚠ A view marker must separate wires differing
+  only by the SLIDER, and its gate must be an INSTRUMENT.
+- **49/50 — ⭐⭐⭐ A CONSTANT ECHO CAN BE GAINED WHILE CLOSING AND NEVER LOST** ⇒ **only a SHAPE makes a closing
+  target harder to see** (49) — and ⭐⭐⭐ **A TARGET CAN TAKE A LOCK BACK BY TURNING** (50): the horizon
+  RETREATS faster than the missile closes, priced in **the heading error it goes blind holding**, never the
+  MISS. ⭐⭐ **A GAUGE MUST CARRY ITS OWN WINDOW.** ⚠⚠ Launch near the horizon's EDGE. ⭐⭐ **A NULL ARM AND A
+  SUB-THRESHOLD ARM ARE DIFFERENT CONTROLS**, ⚠⚠ **a live DRAG invalidates a latch as a Reset does** and
+  **DISARMS a latched INSTANT**, ⚠⚠ **the lesson's NULL and a dead instrument's DEFAULT read the same** ⇒
+  PRESENCE decides, ⭐⭐ **A VOCABULARY IS A GAUGE.**
+- **53 — ⭐⭐⭐ A TAIL LOBE: ONE END OF A PASS IS UNTOUCHABLE AND THE OTHER IS THE SLIDER.** A brighter rear
+  hemisphere (`rcs_tail_gain`) ⇒ the same target on the same fly-past is held FAR FURTHER OUT running away
+  than it was ever seen coming in — and no `rcs_m2`/`rcs_fineness` fakes it, both being fore/aft SYMMETRIC
+  and moving BOTH ends. ⚠⚠ **THE METRES ARE A JOINT PROPERTY OF THE LOBE AND THE TRACKER**: quote
+  `revisit_s` and `N`\* or it is not a measurement — the SIGN is physics, the SIZE is not. ⚠ The NULL is
+  fading NOISE, never zero. ⭐⭐⭐ **A RULE COUNTED IN SAMPLES CHANGES MEANING WHEN THE SAMPLE RATE DOES** ⇒
+  the gauge could not live in the client. ⭐⭐⭐ **DECLARE THE SELECTION RULE BEFORE THE FLIGHTS AND PUBLISH
+  THE LOSERS** — the obvious seed lost. ⚠⚠ **A FRAME-HANDLER accumulator has NO headless proof AND no shot
+  either** (gate it at its own site, with a paired control); ⚠ a CROSSING pass needs a downrange FLOOR; ⚠
+  gate a view marker on the author's KEY, never the slider's VALUE.
 
 **The rule that keeps paying** (33, 34, 35, 37, 38): *aim `R̂` at the glass's worst-case slope*
 (`radome_slope_worst`) and the cost — of FOV, detector window, servo bandwidth, servo frame — mostly
@@ -100,9 +108,11 @@ those inline eagerly and recursively, which is the problem this split exists to 
 discharged/new/killed candidates into `docs/DEFERRALS.md`, method lessons into
 `docs/LESSONS.md` (⚠ fold onto the EXISTING heading when it repeats), and into `CLAUDE.md`
 **only** the state line + any new dead end **as ONE LINE**. ⚠⚠ **`CLAUDE.md` is a ROUTER — keep it under
-~16 KB** (trimmed 7×; 16.1 on 2026-08-31 before slice 53). It is loaded every turn and grows by absorbing
-what belongs in the ledgers: **numbers, test names and evidence go DOWNSTREAM; verdict words and ⚠
-prohibitions stay HERE.**
+~16 KB** (trimmed 8×; **17.6 after slice 53 — OVER, and a trim pass is DUE**: 16.1 on 2026-08-31, so the
+overrun predates 53 and 53's own entries are already at minimum). It is loaded every turn and grows by
+absorbing what belongs in the ledgers: **numbers, test names and evidence go DOWNSTREAM; verdict words and
+⚠ prohibitions stay HERE.** ⚠ The next trim should compress the per-slice bullets of CLOSED threads
+(26–40, 46–48/52), whose every number is already in `docs/SLICES.md`.
 
 ## ⭐⭐⭐ TWO AIMS ⇒ TWO TESTS ⇒ TWO VERDICTS (2026-08-18 — READ BEFORE KILLING ANYTHING)
 
@@ -125,11 +135,10 @@ the headline died (the two-test rule above). **BLOCKED** = never killed at all.
   transformed parameters. ⚠ FINITE loop gain is un-killed.
 - **Memory track / a coasting head** (37) — **DEAD AS A LESSON, ALIVE AS A MODEL**: a break here is the rest
   of the flight, not an episode ⇒ the cure is the ESTIMATOR's frozen rate, not the head.
-- **A scalar rate-limited fin inside the coupled loop** (20) — **DEAD AS A LESSON**: `δ_max` structurally
-  SHADOWS `δ̇_max`. The rate limit itself is SHIPPED (slice 15).
-- **A second-order FIN actuator** (41) — **DEAD AS A LESSON, ALIVE AS A MODEL**, on REPARAMETERIZATION.
-  ⭐⭐ **A pole differs from a gain only in that its phase VARIES with frequency, and that loop's fin command
-  is ONE spectral line** ⇒ **measure the SPECTRUM before proposing a new dynamic element.**
+- **A scalar rate-limited fin inside the coupled loop** (20) — **DEAD AS A LESSON**: `δ_max` SHADOWS
+  `δ̇_max`. The rate limit itself is SHIPPED (15). **A second-order FIN actuator** (41) — same verdict, on
+  REPARAMETERIZATION: ⭐⭐ **a pole differs from a gain only in that its phase VARIES with frequency, and that
+  loop's fin command is ONE spectral line** ⇒ **measure the SPECTRUM before proposing a dynamic element.**
 - **A SEEKER SEARCH PATTERN** (42/43/45) — **SHIPPED BY 48, its WIDTH by 52; never killed.** ⭐⭐ **The cost
   of acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error.** ⚠ Do NOT re-litigate that a
   wider window is free (46 killed it) or that the miss is the gauge.
@@ -140,8 +149,11 @@ the headline died (the two-test rule above). **BLOCKED** = never killed at all.
 - **A rectangular / per-axis window and stop** (45) — **DEAD AS A LESSON, ALIVE AS A MODEL, both halves.**
   ⭐⭐⭐ **A TRACKER holds both axes near zero so a window's CORNERS are never visited; a SEARCH drives one
   axis to the rim BY DESIGN.** ⚠ Never quote the box's rescue without its control.
-- **An "acquisition knife-edge"** (42 gate 1) — **DEAD**: the band is `ω_LOS·dt`, ONE integration step, and it
-  HALVES when `dt` does ⇒ **re-fly any narrow threshold at half `dt`, and read a claimed STEP against NULL first.**
+- **An "acquisition knife-edge"** (42 gate 1) — **DEAD**: the band is `ω_LOS·dt`, ONE step, HALVING when `dt`
+  does ⇒ **re-fly any narrow threshold at half `dt`, and read a claimed STEP against NULL first.**
+- **A TAIL LOBE** (49/50's candidate) — ✅ **SHIPPED BY 53; never killed.** ⚠⚠ NOT on the two-observer wire
+  the ledger proposed (a static seam test — no slider, no gauge) but on the STRAIGHT FLY-PAST 49 rules out
+  for ITS lesson. ⚠ NOT discharged: a NARROW nozzle lobe (53's is hemisphere-wide) or a target ATTITUDE.
 - **Seeker noise × the BTT roll loop** — **DEAD as a COUPLING claim** (the roll loop low-passes it away);
   the noise itself is shipped (25). **A cubic radome curve** — **DEAD**: unbounded slope, no domain.
 - **An angle-domain radome corrector** — **DEAD AS THE DEFAULT, ALIVE AS A MODEL**: it sees the look angle
@@ -163,9 +175,10 @@ the headline died (the two-test rule above). **BLOCKED** = never killed at all.
   a HUD width budget is in PIXELS and belongs to the VIEW (46, 49); a key that stops EMITTING makes
   `.get(k, 0.0)` print a DEFAULTED ZERO as a PASSED TEST — ⚠ WHICH default is a claim (49), and ⚠⚠ when the
   lesson's NULL is that value only PRESENCE separates them (50); ⚠⚠ **a PEAK-HOLD cannot see a knob that
-  FELL, and NO gate-3 proof DRAGS a slider** (52) — re-arm on the drag, at the instant the new setting OWNS
-  the quantity; ⚠ a probe's "has this arm drained?" test must be ARM-SPECIFIC or the next capture
-  re-photographs the last one (52). Teeth: `docs/CONVENTIONS.md` §14.
+  FELL** (52) — re-arm on the drag, at the instant the new setting OWNS the quantity; ⚠ a probe's "has this
+  arm drained?" test must be ARM-SPECIFIC or the next capture re-photographs the last one (52). ⚠⚠ **53
+  RETRACTED "no gate-3 proof DRAGS a slider"** — its verifier does (two `step`s with a `set_param` between),
+  and it is MANDATORY once the latch lives on the WIRE. Teeth: `docs/CONVENTIONS.md` §14.
 
 ## Conventions / hard-won disciplines (ONE LINE EACH; the teeth are `docs/CONVENTIONS.md`)
 

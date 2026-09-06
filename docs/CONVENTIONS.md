@@ -113,14 +113,35 @@ paraphrase away the specifics.
     require a MARGIN (≥12 px — slice 49's first run passed at exactly 390.0 of 390), and have the
     tooth NAME the widest line so a pass on the limit is distinguishable from a fail.
     ⚠⚠ **A LIVE SLIDER DRAG INVALIDATES A LATCH JUST AS A RESET DOES, AND IT REACHES NONE OF THESE
-    FOUR PROOFS** (slice 49): the verifier `reset`s between arms, the UI test presses the Reset
-    BUTTON, the smoke-load touches no control, and a shot is one static frame. Every slice that
-    latches or peak-holds needs a DRAG tooth as well as a RESET one — and only the instruments
-    belonging to the thing the slider changes are cleared; the ones belonging to the RUN are kept
-    (clearing those re-opens a closed window for one frame). `docs/LESSONS.md` has the split.
+    FOUR PROOFS *UNLESS THE VERIFIER DRIVES ONE*** (slice 49; ⭐ slice 53 drove the first one): by
+    default the verifier `reset`s between arms, the UI test presses the Reset BUTTON, the smoke-load
+    touches no control, and a shot is one static frame. **The shape that closes it is two `step`
+    commands with a `set_param` between them** — and it is REQUIRED whenever the latch lives in the
+    CORE and ships as a wire key, because then a client-side disarm leaves a headless proof reading
+    a stale value as a live measurement: green, and false (slice 53 §4.4). Every slice that latches
+    or peak-holds needs a DRAG tooth as well as a RESET one — and only the instruments belonging to
+    the thing the slider changes are cleared; the ones belonging to the RUN are kept (clearing those
+    re-opens a closed window for one frame). `docs/LESSONS.md` has the split.
     ⚠ **Anything the verdict computes inside `_draw` has NO headless proof** — extract it to a pure
     helper the UI test can call (slice 31's aim-point comparison shipped wrong and only the SHOT
-    caught it).
+    caught it). ⭐⭐ **INCLUDING *WHICH BRANCH WINS*** (slice 50): when two view markers can be up at
+    once, move the dispatch out of `_draw` into one pure function both `_draw` and the UI test read
+    (`_spatial_hud_kind`, slice 53) rather than photographing the answer.
+    ⚠⚠ **AND THE BLIND SPOT WORKS BOTH WAYS: A *FRAME-HANDLER* ACCUMULATOR HAS NO HEADLESS PROOF
+    EITHER — AND NO WINDOWED SHOT CAN SEE IT** (slice 53). Slice 49's longest-closing-loss gauge is
+    accumulated in `_on_state`, gated only on `_aspect_view` + an observer + `target_range_m` — all
+    of which a slice-53 wire also has — so it ran silently for a whole pass, one `draw_string` from
+    being printed under another slice's headline. **Gate at the accumulator's own site, and pair the
+    tooth with a CONTROL** (the identical frames on a client without the new marker must still
+    accumulate) or the tooth passes just as well on a broken accumulator and retires the older
+    slice's proof instead of scoping it.
+    ⚠ **THE WINDOWED SHOT'S FAILURE CLASSES NOW INCLUDE *VIEW EXTENTS*, NOT ONLY HUD TEXT** (slice
+    53; the previous catches were all text — 31's aim-point, 46's clipping, 48's defaulted zero,
+    49's `Pd 0.00`). Every wire 1–52 launches at the origin and flies OUTWARD, so `_world_to_screen`
+    mapped `x = 0` to the left margin and needed no lower bound; a **crossing** pass is the first
+    geometry that breaks it, and half the flight drew off-screen with every test green. A new
+    geometry gets its extents LOOKED AT, and the fix is marker-gated with the default reproducing
+    the old mapping bit for bit (`x − 0.0 === x`).
 
 15. **Batches own their OWN seeded stream** (never `w.rng`) so a sweep can't desync the live trace
     — the *distribution* path (no byte-identity assert; the Threads/GPU seam). Determinism is CPU.
