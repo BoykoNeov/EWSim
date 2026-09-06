@@ -369,6 +369,38 @@ function _effective_rcs(tgt::Entity, obs_pos::Vec3)
 end
 
 """
+    _mark_track_dirty!(w) -> nothing
+
+⚠⚠ **A LIVE DRAG INVALIDATES A LATCHED MEASUREMENT AS A RESET DOES** (slice 49's rule, slice 50's
+remedy). Called from `set_param` — the ONE place a knob moves mid-run — and it marks every
+tracking radar so the next look throws away edges that were declared under the OLD setting.
+
+⭐ **WHY THIS IS IN THE CORE AND NOT IN THE HUD, WHICH IS WHERE SLICES 49 AND 50 PUT IT.** Their
+latches were computed IN the client from wire values, so a client-side disarm was the whole fix.
+This latch lives in the core and SHIPS AS A WIRE KEY — and a gate-3 verifier reads the wire, not
+the HUD. A stale `track_asym_m` would be read as a live measurement by a headless proof that never
+draws a pixel, which is the green-but-false proof this arc has paid for before.
+
+⚠ **BOTH EDGES GO, AND THE CONSERVATISM IS DELIBERATE.** For THIS slice's knob the gain edge would
+in fact be unchanged (the tail lobe is exactly 1.0 on the forward hemisphere — gate 0 §2.15 §0
+measured `max |in_G − in_1|` = 0.000000e+00 over 824 flights), but the tracker is generic and is
+not told WHICH knob moved: `pt_w`, `pfa` or an `rcs_m2` would move both. An instrument may refuse
+to show a number it can no longer stand behind; it may never show one measured on a different
+configuration.
+
+⚠ A drag past closest approach therefore ends the pass's measurement for good — the gain edge
+cannot be re-declared on the outbound leg — and the honest state is slice 50's "Reset to measure",
+not a re-armed number. `track_pass_dirty` carries that on the wire; only a Reset clears it, because
+`reset` reloads the scenario and the comp bag with it.
+"""
+function _mark_track_dirty!(w::World)
+    for (_, e) in w.entities
+        e.kind === :radar && haskey(e.comp, :track_drop_looks) && (e.comp[:trk_dirty] = true)
+    end
+    return nothing
+end
+
+"""
     _track_look!(radar, detected, R, rdot) -> nothing
 
 ⭐⭐ **SLICE 53 gate 2 — THE TRACKER, AND IT IS A MODEL, NOT A READOUT.** One look of a give-up
@@ -412,6 +444,18 @@ symmetric" on an instrument that has not finished (slice 50: presence decides).
 """
 function _track_look!(radar::Entity, detected::Bool, R::Float64, rdot::Float64)
     n_drop = Int(radar.comp[:track_drop_looks])
+    # ⚠⚠ THE DRAG, CONSUMED HERE (see `_mark_track_dirty!`). Both EDGES and the loss latch's arming
+    # go; the live state (alive / misses / look / leg) does NOT, because it describes the tick and
+    # not a past measurement — which is slice 50's own split, one instrument over: the latch belongs
+    # to the setting, the live lines belong to the tick, and keeping the live lines running is what
+    # makes the drag a teaching instrument at all.
+    if get(radar.comp, :trk_dirty, false)
+        for k in (:trk_gain_range, :trk_gain_look, :trk_loss_range, :trk_loss_look, :trk_post_cpa_det)
+            delete!(radar.comp, k)
+        end
+        radar.comp[:trk_pass_dirty] = true
+        radar.comp[:trk_dirty] = false
+    end
     look   = Int(get(radar.comp, :trk_look, 0)) + 1
     radar.comp[:trk_look] = look
     # The leg. `past_before` is the state the PREVIOUS look left, so the CPA look — the first with
@@ -849,6 +893,13 @@ function _observe_point!(r::RadarSensor, w::World)
         tel["$sid.track_gain_look"]    = Float64(get(radar.comp, :trk_gain_look, -1))
         tel["$sid.track_loss_range_m"] = _finite(get(radar.comp, :trk_loss_range, -1.0))
         tel["$sid.track_loss_look"]    = Float64(get(radar.comp, :trk_loss_look, -1))
+        # ⚠⚠ "THE SETTINGS MOVED DURING THIS PASS" — true from the first live drag until a Reset.
+        # A pass that spans two settings is not a measurement of either, and past closest approach
+        # the gain edge can never be re-declared, so this is the wire's way of saying what slice 50
+        # says in words: **Reset to measure.** It is a property of the PASS, not of the numbers
+        # still on the wire — anything present after a drag was declared after it (both edges are
+        # deleted), so a surviving edge is never stale, it is only lonely.
+        tel["$sid.track_pass_dirty"]   = get(radar.comp, :trk_pass_dirty, false)
         # ⭐⭐⭐ THE GAUGE — and it ships ONLY when both edges exist. 0.0 is a LEGITIMATE value here
         # (it is what a fore/aft symmetric target reads), so a sentinel or a defaulted zero would be
         # indistinguishable from the lesson's own null on an instrument that has not finished.

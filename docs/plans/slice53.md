@@ -1547,6 +1547,48 @@ both edges exist; and the loader's four refusals, each **on its message** (gate 
 `ErrorException` alone also passes on a YAML parse failure, which is a refusal for the wrong
 reason).
 
+
+### §4.4 ⚠⚠ THE FOLLOW-UP THE FIRST COMMIT OWED — **A LIVE DRAG INVALIDATES A LATCH, AND HERE THAT IS THE CORE'S JOB**
+
+Gate 2 shipped a latched measurement with no re-arm path, which is `CLAUDE.md`'s ⚠⚠ prohibition in
+one line: *a live DRAG invalidates a latch as a Reset does, and DISARMS a latched INSTANT* (slice
+50), and *no gate-3 proof DRAGS a slider* (slice 52) — so no proof this slice ships would have
+caught it. Drag `rcs_tail_gain` after the loss edge has latched and the old range stays on the wire
+attributed to the new `G`.
+
+⭐ **AND THE REMEDY IS NOT SLICE 49's OR 50's, BECAUSE THE LATCH MOVED.** Both of those latched in
+the CLIENT and disarmed in `_on_knob_changed`; a HUD-side fix was the whole fix. **This latch lives
+in the core and SHIPS AS A WIRE KEY — and a gate-3 verifier reads the WIRE, not the HUD.** A
+client-side disarm would leave a headless proof reading a stale `track_asym_m` as a live
+measurement: green, and false. ⇒ **the invalidation is in the core.**
+
+- **`server.jl` — `set_param` calls `_mark_track_dirty!(w)`**, unconditionally and knob-agnostically.
+  It is the ONE place a knob moves mid-run, so it is the one place the core can notice. A no-op on
+  every wire that authors no tracker.
+- **`radar.jl` — the flag is CONSUMED at the next look**, not at the mark: both EDGES and the loss
+  latch's arming are deleted, and `trk_pass_dirty` goes up and stays up until a Reset.
+- ⚠ **BOTH edges go, and the conservatism is deliberate.** For THIS knob the gain edge would be
+  unchanged (§2.15 §0: `max |in_G − in_1|` = 0.000000e+00 over 824 flights), but the tracker is
+  generic and is not told which knob moved — `pt_w`, `pfa` or `rcs_m2` would move both. **An
+  instrument may refuse to show a number it can no longer stand behind; it may never show one
+  measured on a different configuration.**
+- ⭐ **THE SPLIT IS SLICE 50's, ONE INSTRUMENT OVER:** the LATCH belongs to the setting, the LIVE
+  state (alive / misses / look / leg) belongs to the tick. Keeping the live lines running under the
+  drag is what makes the slider a teaching instrument at all.
+- ⇒ a drag past closest approach ends that pass's measurement for good, because the gain edge cannot
+  be re-declared on the outbound leg. That is slice 50's **"Reset to measure"**, reached through the
+  wire (`track_pass_dirty` + an absent `track_asym_m`) instead of through a HUD word.
+
+**RESET NEEDS NO HOOK, AND THAT WAS CHECKED RATHER THAN ASSUMED:** the server's `reset` runs
+`_reload!`, which re-`load_scenario`s the file — fresh entities, fresh comp bags — so no `:trk_*`
+survives it. A tooth pins that, so a future change to the reset path is caught here rather than in a
+screenshot.
+
+**+24 more teeth** (test file 268; suite 19656 → **19680**), including ⭐ **the seam actually being
+called**: the drag goes through `handle_command!`'s own `set_param` path, because a hook nothing
+calls is the same defect as a key nothing reads (gate-0 P6a) and is invisible to every test that
+drives `_track_look!` directly.
+
 ### ⇒ NEXT IS GATE 3
 
 `scenarios/slice53_*.yaml` on wire A with the tracker authored (`revisit_s` = 0.1,

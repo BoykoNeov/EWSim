@@ -343,3 +343,88 @@ end
         @test load_scenario(p4) isa EWSim.Scenario
     end
 end
+
+@testset "⚠⚠ A LIVE DRAG INVALIDATES THE LATCHED EDGES, IN THE CORE (slice 53 gate 2)" begin
+    # Slice 49 ruled that a live slider drag invalidates a latch as a Reset does; slice 50 ruled
+    # that a latched INSTANT may not re-arm mid-flight. Both put the remedy in the CLIENT, because
+    # both latched in the client. This one latches in the CORE and ships as a wire key — and a
+    # gate-3 verifier reads the WIRE, not the HUD. A stale `track_asym_m` would be read as a live
+    # measurement by a headless proof that never draws a pixel.
+
+    @testset "the flag is CONSUMED at the next look, and only the LATCHES go" begin
+        radar = Entity(:r1, :radar; pos = Vec3(0.0, 0.0, 0.0),
+                       comp = Dict{Symbol,Any}(:track_drop_looks => 3))
+        EWSim._track_look!(radar, true,  9000.0, -300.0)     # inbound: the gain edge
+        EWSim._track_look!(radar, true,  8000.0, -300.0)
+        EWSim._track_look!(radar, true,  7000.0, +300.0)     # CPA, then the outbound run
+        for _ in 1:3; EWSim._track_look!(radar, false, 8000.0, +300.0); end
+        @test radar.comp[:trk_gain_range] == 9000.0
+        @test radar.comp[:trk_loss_range] == 7000.0
+        @test !get(radar.comp, :trk_pass_dirty, false)
+
+        w = World(; seed = 1)
+        w.entities[:r1] = radar
+        EWSim._mark_track_dirty!(w)
+        @test radar.comp[:trk_dirty]
+        @test radar.comp[:trk_gain_range] == 9000.0          # ⇐ NOT cleared by the mark itself…
+        EWSim._track_look!(radar, false, 9000.0, +300.0)     # …but by the next LOOK, which is where
+        @test !haskey(radar.comp, :trk_gain_range)           #   the instrument next speaks.
+        @test !haskey(radar.comp, :trk_loss_range)
+        @test !haskey(radar.comp, :trk_loss_look)
+        @test !haskey(radar.comp, :trk_post_cpa_det)
+        @test radar.comp[:trk_pass_dirty]                    # ⇐ and it stays true until a Reset
+        @test !radar.comp[:trk_dirty]                        # ⇐ consumed once, not every look
+        # ⭐ THE SPLIT SLICE 50 NAMED: the LATCH belongs to the setting, the LIVE STATE belongs to the
+        # tick. Keeping the live lines running is what makes the drag a teaching instrument at all.
+        @test radar.comp[:trk_look] == 7
+        @test radar.comp[:trk_past_cpa]
+        @test radar.comp[:trk_misses] == 3
+
+        # A post-CPA drag ends the pass's measurement for good — the gain edge cannot be re-declared
+        # on the outbound leg — which is exactly slice 50's "Reset to measure" state, reached by the
+        # wire rather than by a HUD word.
+        EWSim._track_look!(radar, true, 10000.0, +300.0)
+        for _ in 1:3; EWSim._track_look!(radar, false, 11000.0, +300.0); end
+        @test radar.comp[:trk_loss_range] == 10000.0         # a NEW loss edge, under the new setting
+        @test !haskey(radar.comp, :trk_gain_range)           # …with nothing to difference it against
+    end
+
+    @testset "⭐ THE SEAM IS ACTUALLY CALLED — `set_param` marks the tracker (the anti-P6a shape)" begin
+        # A hook nothing calls is the same defect as a key nothing reads (gate-0 P6a), and it is
+        # invisible to every test that drives `_track_look!` directly. So the drag goes through the
+        # SERVER's own command path, exactly as a slider does.
+        mktempdir() do dir
+            p = joinpath(dir, "knobbed.yaml")
+            write(p, _trk_yaml(gain = "20.0") *
+                     "knobs:\n  - {target: tgt1, key: rcs_tail_gain, min: 1.0, max: 50.0, label: \"G\"}\n")
+            srv = EWSim.Server(load_scenario(p); path = p)
+            w = srv.scn.world
+            for _ in 1:2000; tick!(w, srv.scn.subs, srv.scn.dt_physics); end
+            @test !get(w.entities[:radar1].comp, :trk_dirty, false)
+            EWSim.handle_command!(srv, Dict(:type => "set_param", :target => "tgt1",
+                                            :key => "rcs_tail_gain", :value => 50.0))
+            @test w.entities[:tgt1].comp[:rcs_tail_gain] == 50.0
+            @test w.entities[:radar1].comp[:trk_dirty]        # ⇐ THE SEAM
+            for _ in 1:200; tick!(w, srv.scn.subs, srv.scn.dt_physics); end
+            @test w.env[:telemetry]["radar1.track_pass_dirty"] === true
+            @test !haskey(w.env[:telemetry], "radar1.track_asym_m")
+            # …and a RESET clears it, because `reset` RELOADS the scenario — fresh entities, fresh
+            # comp bags. That is why the tracker needs no reset hook of its own (`_reload!`,
+            # server.jl), and the tooth is here so a future change to that path is caught.
+            EWSim.handle_command!(srv, Dict(:type => "reset"))
+            @test !haskey(srv.scn.world.entities[:radar1].comp, :trk_pass_dirty)
+            @test srv.scn.world.entities[:tgt1].comp[:rcs_tail_gain] == 20.0   # the AUTHORED value
+        end
+    end
+
+    @testset "a wire with NO tracker is untouched by the mark" begin
+        # `_mark_track_dirty!` runs on every `set_param` of every scenario ever shipped, so it must
+        # find nothing to mark on all of them.
+        mktempdir() do dir
+            p = joinpath(dir, "notracker.yaml"); write(p, _trk_yaml(drop = nothing))
+            w = load_scenario(p).world
+            EWSim._mark_track_dirty!(w)
+            @test !any(startswith(String(k), "trk_") for k in keys(w.entities[:radar1].comp))
+        end
+    end
+end

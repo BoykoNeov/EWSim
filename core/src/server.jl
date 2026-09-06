@@ -181,6 +181,13 @@ function handle_command!(srv::Server, cmd)
             error("set_param: '$target.$key' is not a declared knob (only knobs are live-settable)")
         comp = w.entities[target].comp
         comp[key] = _coerce_like(get(comp, key, nothing), Float64(cmd[:value]))
+        # ⚠⚠ SLICE 53 gate 2 — A LIVE DRAG INVALIDATES A LATCHED MEASUREMENT AS A RESET DOES (slice
+        # 49's rule, slice 50's remedy). This is the ONE place a knob moves mid-run, so it is the one
+        # place the core can notice. Unconditional and knob-agnostic: an instrument that had to be
+        # told WHICH knob matters would be wrong the first time a new one is added, and the cost of
+        # being conservative is a refused number, never a false one. A no-op on every wire that
+        # authors no tracker (the loop finds nothing to mark).
+        _mark_track_dirty!(w)
         return nothing
 
     elseif typ === :set_fidelity
