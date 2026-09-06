@@ -1,10 +1,12 @@
 # Slice 53 — **A TAIL LOBE**: does a target look the same going away as coming at you?
 
-**STATUS: GATE 0 IN PROGRESS — P1–P4 HAVE RUN (P1/P2/P3 2026-08-31, P4/P4b 2026-09-06). ⭐ F1 AND
-F2 ARE DISCHARGED, and F3's THREE filters — monotonicity, the bar, and *not sayable without the
-asymmetry* — are ALL discharged: P4's substitution test fired its pre-registered STRONG branch, and
-P4b replaced P4 §E's estimator with a PAIRED one. ⚠ **F3 IS NOT CLOSED — its ENDPOINT
-JUSTIFICATION is still P7's.** Remaining: F4 (P5), F5 (P6), F3's endpoints (P7).**
+**STATUS: GATE 0 IN PROGRESS — P1–P5 HAVE RUN (P1/P2/P3 2026-08-31, P4/P4b/P5 2026-09-06). ⭐ F1,
+F2 AND F4 ARE DISCHARGED, and F3's THREE filters — monotonicity, the bar, and *not sayable without
+the asymmetry* — are ALL discharged: P4's substitution test fired its pre-registered STRONG branch,
+P4b replaced P4 §E's estimator with a PAIRED one, and P5's THREE nulls are all exact. ⚠ **F3 IS NOT
+CLOSED — its ENDPOINT JUSTIFICATION is still P7's.** Remaining: F5 (P6), F3's endpoints (P7).**
+⚠⚠ **P5 RAISES A GATE-1 OBLIGATION F4 DOES NOT ASK FOR**: `rcs_tail_gain` without `rcs_fineness` is
+a DEAD KNOB and must THROW at load (§2.12).
 ⚠ P3 FIXED TWO THINGS P4–P7 MUST USE VERBATIM: the run-length rule `N`\* = 3 and MIRRORED edges
 (§2.8). The ceiling is 50 and **P4b confirms it stands** — ⚠⚠ **P4 §E's "RETRACTED" verdict on
 §2.8's bar IS NOT ISSUED; do not quote P4 §E** (§2.11). **§2.3's and §2.6's ladder magnitudes are
@@ -330,7 +332,7 @@ reach for a fourth geometry to rescue it.
 Full write-ups, with every raw number and the probe sources, are in
 `M:\claud_projects\temp\slice53\p1_findings.md` and `M:\claud_projects\temp\slice53\p2_findings.md`
 (probes: `p1_aspect.jl`, `p2_wires.jl`, `p2b_w1_length.jl`, `p2c_substitution.jl`, `p2d_flicker.jl`,
-`p3_floor.jl`, `p3b_perseed.jl`, `p4_subst.jl`, `p4b_paired.jl`; raw output in the matching
+`p3_floor.jl`, `p3b_perseed.jl`, `p4_subst.jl`, `p4b_paired.jl`, `p5_nulls.jl`; raw output in the matching
 `*_out.txt`). This section is the SUMMARY the repo carries.
 
 ### §2.1 P1 (F1) — DISCHARGED, and the plan's own hedge was refuted
@@ -860,3 +862,118 @@ edge exactly, per seed. Recorded as an open observation for P7, **not** as a fin
    identity is exact at the poles but the gauge's edges sit ~17–30° off them (§2.10a).
 4. ⚠ **P6 halves the step at `G` = 50 AND at the `G` = 20 vs 50 comparison**, since 20 → 50 is the
    only interval clean on all eight seeds (§2.9) and is therefore what a gate-3 default sits inside.
+
+---
+
+### §2.12 P5 (F4) — **ALL THREE NULLS ARE EXACT. THE KERNEL NEEDS NO EXTRA BRANCH** (probe
+### `p5_nulls.jl`, `p5_out.txt`)
+
+**⚠ F4 NAMES TWO NULLS; THERE ARE THREE.** P5's header pre-registered them before the run:
+
+| | what it compares | why it exists |
+|---|---|---|
+| **N1** the LESSON null | `rcs_tail_gain: 1.0` authored **vs** the key ABSENT, both with a fineness | F4 as written |
+| **N2** the WIRE null | the patched core on a slices-1–48 wire (no `rcs_fineness`) must return the **authored object** — `===`, not `==` | F4 as written |
+| **N3** the BASELINE null | the patched core, key absent, **vs the UNPATCHED core** | ⭐ **not in F4.** N1 and N2 can both pass while the kernel still perturbs a shipped wire, because N1 compares two *patched* runs to each other |
+
+N3 was captured **before the patch was applied at all**, which is the only ordering that makes it a
+baseline rather than a second opinion.
+
+**⭐ BRANCH (A) FIRED — the pre-registered strongest outcome.** All 24 rows printed exact in all
+three columns: `max|Δpos|` = **0.000000000e+00**, telemetry fields differing by `===` = **0**, and
+post-flight RNG stream position = **0** differences.
+
+**⚠⚠ BUT DO NOT QUOTE "24 OF 24" — ONLY N3's 8 ROWS ARE EVIDENCE.** Under the shape that actually
+ships (the unconditional multiply), **N1 and N2 cannot fail**, and P5's own §4 finding is what
+proves it:
+
+- **N1 is structurally guaranteed.** `load_scenario` normalises the authored value to Float64, so
+  `rcs_tail_gain: 1.0` gives `G` = 1.0 — and the key being *absent* gives `G` = 1.0 too, from
+  `get(…, 1.0)`'s default. Identical `G` ⇒ identical arithmetic for the whole rest of the function.
+  ⚠ N1 **would** have had content under branch (B), where absent SKIPS the multiply and `1.0`
+  performs it: **N1 is the test that discriminates (A) from (B), and once (A) is chosen it becomes a
+  tautology.** That is what it was for; it is not independent evidence of exactness.
+- **N2 is the same one line earlier** — both sides execute the textually identical
+  `haskey(tgt.comp, :rcs_fineness) || return tgt.comp[:rcs_m2]` and nothing else runs. It confirms
+  the edit did not disturb that line. A check on the probe's own patch text, not a measurement.
+
+⇒ ⭐ **N3 ALONE CARRIES F4** — the only pair where genuinely different code executes (no multiply vs
+multiply-by-1.0), **exact on 8 of 8 seeds in all three columns**. Together with §1's 40 376-point
+grid and its 684/2884 control, that is a sound discharge.
+
+⚠ **The RNG column is not decoration.** Convention 3's hazard is a draw-COUNT regression, and an
+identical trajectory does not prove an identical draw count. P5 draws 8 numbers from `w.rng` *after*
+the flight and compares them; equal draws mean the stream sat at the same position.
+
+⚠ **WHAT "IDENTICAL TELEMETRY" ACTUALLY COVERS HERE**, stated narrowly because F4's phrase is wider
+than the comparison: the full per-tick position trace (200 000 ticks), **five named** telemetry
+fields at every look, and the post-flight RNG stream position. It does **not** cover a key that
+stopped emitting — `telget` defaults to `NaN`, and in Julia `NaN === NaN` is **true**, so a vanished
+key reads as identical. (`CLAUDE.md`'s documented `.get(k, 0.0)` trap, with `NaN` as the default.)
+That gap cannot reach this result — the patch changes a returned float and provably cannot alter the
+key set, and N3's position trace and RNG check are independent of telemetry entirely — but a later
+probe reusing `bitcmp` must know it is there.
+
+⇒ **F4 IS DISCHARGED, and the kernel ships as an UNCONDITIONAL MULTIPLY** — no early return on
+`rcs_tail_gain` being absent. §0.4's seam gains no branch.
+
+### ⭐⭐ WHY THE MULTIPLY IS EXACT WHERE `F` = 1 WAS NOT — MEASURED, WITH ITS OWN CONTROL
+
+`_effective_rcs`'s docstring already forbids routing a scalar wire through `rcs_aspect` with
+`F` = 1, because `sin²θ + cos²θ` is 1 in algebra and **not always 1.0 in floating point**. The
+obvious worry is that `1 + (G−1)·u` at `G` = 1 is the same kind of trap. It is not, and P5 measured
+rather than asserted it:
+
+| test | combinations | NOT bit-identical |
+|---|---|---|
+| `rcs_aspect(σ,F,θ) · (1 + (1−1)·u)` **vs** `rcs_aspect(σ,F,θ)` | 40 376 | **0** |
+| ⚠ the CONTROL — `σ / (sin²θ + 1²cos²θ)²` **vs** `σ` | 2 884 | **684** |
+
+⇒ ⭐ **The control reproduces the docstring's trap at a 24 % failure rate, so §1's clean pass is
+ATTRIBUTABLE and not the artefact of a weak test.** The arithmetic reason is narrow and worth
+keeping: `(1.0−1.0)·u` is `+0.0` for every finite `u ≥ 0`, `1.0 + 0.0` is `1.0`, and `x · 1.0 === x`
+for every finite `x`. **A multiply by an exactly-representable 1.0 is the identity; a trigonometric
+sum is not.** ⚠ This licenses the multiply *only* at `G` = 1 — it says nothing about any other
+value, and nothing about an additive kernel (which §0.2 already rejected on other grounds).
+
+### ⚠⚠ A TOOTH OF P5's OWN THAT TURNED OUT **VACUOUS** — RECORDED AS FAILED, NOT AS PASSED
+
+P5 built a type tooth for N2: author `rcs_m2: 4` as an **integer**, on the theory that the early
+return hands back the `Int` itself, so any conversion would flip the type and `===` would catch it.
+It printed a pass. **It is not a pass — it is a tautology** (convention 11's exact ban):
+
+> `_effective_rcs` on an authored `rcs_m2: 4` returned **4.0 (Float64)**.
+
+`load_scenario` **normalises the authored value to Float64 at load**, so `tgt.comp[:rcs_m2]` is
+already a Float64 before `_effective_rcs` ever sees it. The tooth never presented a non-Float64
+value and therefore could not have failed. ⇒ ⚠ **`===` on this path can never catch a conversion**,
+because on a Float64 it is bit-equality and nothing more. What actually protects the scalar wire is
+N3 — the unpatched-vs-patched comparison — and the fact that the early-return LINE is untouched.
+**Do not quote P5's type tooth as evidence of anything.**
+
+### ⚠⚠ A REQUIREMENT ON GATE 1 THAT F4 DOES NOT ASK FOR — **`rcs_tail_gain` WITHOUT
+### `rcs_fineness` IS A DEAD KNOB**
+
+Asked in P5's header **before** it was measured, so the answer could not be chosen after seeing it.
+The early return on `rcs_fineness` fires first, so on a scalar wire the tail gain is read by nothing.
+Measured: `rcs_tail_gain: 50` on a scalar wire against no key at all gives `max|Δpos|` 0.000e+00,
+0 telemetry differences, 0 RNG differences. **`G` = 50 changes literally nothing.**
+
+⇒ `CLAUDE.md`'s own dead-knob list says a knob consumed by nothing is a **BUG**, and the two-test
+rule makes an unread key *the only outright kill*. **GATE 1 OWES A VALIDATE-AT-LOAD**: authoring
+`rcs_tail_gain` without `rcs_fineness` must **throw at load** (convention 5 — authored inputs
+validated at load, live sliders clamped at the consumer), never be silently ignored. ⚠ This is a
+requirement P5 raises on gate 1; it is **not** a defect in F4 and does not qualify branch (A).
+
+### WHAT P6/P7 INHERIT FROM P5
+
+1. **F4 is DISCHARGED.** Remaining: **F5** (P6, the halved step) and **F3's endpoints** (P7).
+2. **The shipped shape is the unconditional multiply** — P6 and P7 must patch *that* shape, which
+   is what every probe from P3 onward has already been flying.
+3. ⚠ **P6 and P7 may not use `===` on a Float64 as a conversion tooth** (the vacuous-tooth note
+   above); a byte-identity claim needs the unpatched-vs-patched comparison N3 uses.
+4. ⚠⚠ **THE LESSON P5 KEEPS TEACHING ITSELF: a comparison whose two arms execute the SAME code is
+   not a measurement.** It caught P5 three times — the type tooth (the loader normalises), N1 (the
+   `get` default equals the authored null), and N2 (one shared early-return line). **Before quoting
+   any null as evidence, name the line that differs between its two arms.** If none does, it is a
+   check on the probe, not on the physics.
