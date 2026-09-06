@@ -1,12 +1,14 @@
 # Slice 53 — **A TAIL LOBE**: does a target look the same going away as coming at you?
 
-**STATUS: GATE 0 IN PROGRESS — P1–P5 HAVE RUN (P1/P2/P3 2026-08-31, P4/P4b/P5 2026-09-06). ⭐ F1,
-F2 AND F4 ARE DISCHARGED, and F3's THREE filters — monotonicity, the bar, and *not sayable without
-the asymmetry* — are ALL discharged: P4's substitution test fired its pre-registered STRONG branch,
-P4b replaced P4 §E's estimator with a PAIRED one, and P5's THREE nulls are all exact. ⚠ **F3 IS NOT
-CLOSED — its ENDPOINT JUSTIFICATION is still P7's.** Remaining: F5 (P6), F3's endpoints (P7).**
-⚠⚠ **P5 RAISES A GATE-1 OBLIGATION F4 DOES NOT ASK FOR**: `rcs_tail_gain` without `rcs_fineness` is
-a DEAD KNOB and must THROW at load (§2.12).
+**STATUS: GATE 0 IN PROGRESS — P1–P6 HAVE RUN (P1/P2/P3 2026-08-31, P4–P6b 2026-09-06). ⭐ F1, F2,
+F4 AND F5 ARE DISCHARGED, and F3's THREE filters — monotonicity, the bar, and *not sayable without
+the asymmetry* — are ALL discharged. ⚠ **F3 IS NOT CLOSED — its ENDPOINT JUSTIFICATION is still
+P7's, and P7 IS THE ONLY PROBE LEFT.**
+⚠⚠ **TWO THINGS EVERY LATER PROBE AND GATE 1 MUST CARRY:** (1) `load_scenario` **silently DROPS**
+`rcs_tail_gain` — **INJECT it, never AUTHOR it**, until gate 1 teaches the loader (§2.13a, which
+also CORRECTS P5 §4's stated cause); (2) the headline **metres are a joint property of the tail lobe
+and the TRACKER** (`revisit_s` + the give-up rule) — the SIGN is physics, the SIZE is not, so every
+number is quoted with its `revisit_s` and `N`\* or it is not a measurement (§2.14).
 ⚠ P3 FIXED TWO THINGS P4–P7 MUST USE VERBATIM: the run-length rule `N`\* = 3 and MIRRORED edges
 (§2.8). The ceiling is 50 and **P4b confirms it stands** — ⚠⚠ **P4 §E's "RETRACTED" verdict on
 §2.8's bar IS NOT ISSUED; do not quote P4 §E** (§2.11). **§2.3's and §2.6's ladder magnitudes are
@@ -332,7 +334,7 @@ reach for a fourth geometry to rescue it.
 Full write-ups, with every raw number and the probe sources, are in
 `M:\claud_projects\temp\slice53\p1_findings.md` and `M:\claud_projects\temp\slice53\p2_findings.md`
 (probes: `p1_aspect.jl`, `p2_wires.jl`, `p2b_w1_length.jl`, `p2c_substitution.jl`, `p2d_flicker.jl`,
-`p3_floor.jl`, `p3b_perseed.jl`, `p4_subst.jl`, `p4b_paired.jl`, `p5_nulls.jl`; raw output in the matching
+`p3_floor.jl`, `p3b_perseed.jl`, `p4_subst.jl`, `p4b_paired.jl`, `p5_nulls.jl`, `p6_halfstep.jl`, `p6a_keycheck.jl`, `p6b_teeth.jl`, `p6c_fliploc.jl`; raw output in the matching
 `*_out.txt`). This section is the SUMMARY the repo carries.
 
 ### §2.1 P1 (F1) — DISCHARGED, and the plan's own hedge was refuted
@@ -955,15 +957,15 @@ N3 — the unpatched-vs-patched comparison — and the fact that the early-retur
 ### `rcs_fineness` IS A DEAD KNOB**
 
 Asked in P5's header **before** it was measured, so the answer could not be chosen after seeing it.
-The early return on `rcs_fineness` fires first, so on a scalar wire the tail gain is read by nothing.
-Measured: `rcs_tail_gain: 50` on a scalar wire against no key at all gives `max|Δpos|` 0.000e+00,
-0 telemetry differences, 0 RNG differences. **`G` = 50 changes literally nothing.**
+Measured: `rcs_tail_gain: 50` authored on a scalar wire, against no key at all, gives `max|Δpos|`
+0.000e+00, 0 telemetry differences, 0 RNG differences. **`G` = 50 changes literally nothing.**
 
-⇒ `CLAUDE.md`'s own dead-knob list says a knob consumed by nothing is a **BUG**, and the two-test
-rule makes an unread key *the only outright kill*. **GATE 1 OWES A VALIDATE-AT-LOAD**: authoring
-`rcs_tail_gain` without `rcs_fineness` must **throw at load** (convention 5 — authored inputs
-validated at load, live sliders clamped at the consumer), never be silently ignored. ⚠ This is a
-requirement P5 raises on gate 1; it is **not** a defect in F4 and does not qualify branch (A).
+**⚠⚠ P5 ATTRIBUTED THAT TO THE WRONG CAUSE, AND §2.13a CORRECTS IT.** P5 wrote *"the early return on
+`rcs_fineness` fires first, so the tail gain is read by nothing"*. **That is not what happened.**
+P6a proved `load_scenario` **silently DROPS an unknown `target:` key** — `rcs_tail_gain` never
+reaches `entity.comp` at all, so the early return never got the chance to shadow it. **P5 §4
+measured the LOADER, not the seam.** The correct statement, and the properly-asked measurement, are
+in §2.13a; the CONCLUSION survives but the obligation on gate 1 is **larger** than P5 said.
 
 ### WHAT P6/P7 INHERIT FROM P5
 
@@ -977,3 +979,173 @@ requirement P5 raises on gate 1; it is **not** a defect in F4 and does not quali
    `get` default equals the authored null), and N2 (one shared early-return line). **Before quoting
    any null as evidence, name the line that differs between its two arms.** If none does, it is a
    check on the probe, not on the physics.
+
+---
+
+### §2.13 P6 (F5) — **THE PROBE FIRED ITS OWN "NO TEETH" BRANCH. F5 AS WRITTEN IS UNANSWERABLE ON
+### THIS GAUGE** (probe `p6_halfstep.jl`, `p6_out.txt`)
+
+P6 pre-registered four branches, including **(T)**: *zero detection flips ⇒ the run is a TAUTOLOGY,
+it does NOT discharge F5.* That branch fired, and §2.12's closing rule is why it existed at all —
+*a comparison whose two arms execute the same code is not a measurement; name the line that differs.*
+
+Halving `dt` from 1e-3 to 5e-4 moved the range at a matched look by at most **0.413 m** and the SNR
+by at most **0.00629 dB**, and flipped **0 detection bits in 48 000 looks**. Every edge was therefore
+identical by construction. **P6's numbers are a re-print, not a re-measurement.**
+
+⭐ **THE DIAGNOSIS, AND IT IS THE USEFUL PART.** The radar looks on `revisit_s`, **not** on `dt`, and
+the edge is quantised to a LOOK INDEX. Halving `dt` does not add looks, does not add RNG draws, and
+does not change which draw lands on which look. ⇒ **this gauge is not `dt`-quantised at all**, so
+F5's knob is the wrong one. P3b had already measured the real quantum from the other side: 13 of 48
+ladder intervals are FLAT because two adjacent `G` values declare the loss on the identical look.
+
+### ⚠⚠ §2.13a P6a — **`load_scenario` SILENTLY DROPS AN UNKNOWN `target:` KEY** (probe
+### `p6a_keycheck.jl`, `p6a_out.txt`) — AND IT CORRECTS P5 §4
+
+P6's first run printed **identical edges for `G` = 1, 20 and 50**, which is impossible if the key is
+read. Cause: P6 **authored** `rcs_tail_gain` in the YAML; P3/P3b/P4/P4b all **injected** it into
+`entity.comp` after load. Measured directly — authored `rcs_tail_gain: 50` with or without a
+fineness, the entity's component keys come back as `intensity, rcs_fineness, rcs_m2`:
+**`haskey(:rcs_tail_gain)` is `false` every time.**
+
+**⚠ NOTHING IN P3–P4b IS AFFECTED — THEY INJECTED.** P6's re-run with injection reproduces P3 §2.8's
+ladder means **to the printed digit** (`G` = 1 → +39.8, `G` = 20 → +2699.0, `G` = 50 → +5531.3), which
+is the tooth that makes this a probe-harness fact rather than a contamination of the ledger.
+
+**⚠⚠ BUT IT CORRECTS P5 §4's CAUSE.** P5 authored the key in YAML too, saw zero bits change, and
+blamed the `rcs_fineness` early return. The key never reached the entity, so the early return never
+shadowed anything. **P5 §4 measured the loader.** Asked properly — inject, do not author, and read
+`σ_eff` at a tail-on observer:
+
+| wire | `G` absent | `G` = 50 injected | verdict |
+|---|---|---|---|
+| WITH `rcs_fineness` | 0.000976562 | **0.0488281** | LIVE — read, and exactly 50× |
+| NO `rcs_fineness` (scalar) | 4 | 4 | ⚠ **DEAD — the early return does shadow it** |
+
+⇒ **P5 §4's CONCLUSION SURVIVES; ITS CAUSE WAS WRONG; AND THE GATE-1 OBLIGATION IS BIGGER.** There
+are now **TWO** defects stacked, and P5 could only see the outer one:
+
+1. ⭐ **The loader must LEARN the key.** A key that is authored, accepted silently and then thrown
+   away is worse than one shadowed downstream — there is no consumer to clamp at (convention 5)
+   because there is no value anywhere.
+2. **And then reject `rcs_tail_gain` without `rcs_fineness` at LOAD**, which is the obligation P5
+   stated. Fixing only (1) turns a silently-ignored key into a silently-shadowed one.
+
+⚠ **A HARNESS TRAP FOR EVERY LATER PROBE AND FOR GATE 1's OWN TESTS:** *authoring a not-yet-shipped
+key in a scenario YAML flies a NULL, silently.* Inject until gate 1 teaches the loader. This is the
+`.get(k, 0.0)` family one level up — the wire accepts the key and the run looks legitimate.
+
+### §2.14 P6b (F5, redesigned) — **THE EFFECT IS NOT AN ARTEFACT OF THE GRID, BUT ITS SIZE IS NOT A
+### PROPERTY OF THE TARGET** (probe `p6b_teeth.jl`, `p6b_out.txt`)
+
+Two arms, **two bars, deliberately not in one table**, both pre-registered:
+
+- **ARM 1 — COARSENED `dt`, PAIRED.** `revisit_s` untouched ⇒ look times, look count and the RNG
+  draw sequence are all preserved, so the same draws land on a perturbed geometry. That is F5's
+  "same seeded stream" exactly. ⚠ Its stated limit, written before the run: coarsening `dt` changes
+  the **integrator's own error**, not only the sample instants, so a PASS here is strong evidence
+  while a FAIL would be ambiguous and could not kill anything alone.
+- **ARM 2 — HALVED `revisit_s`, DISTRIBUTIONAL.** ⚠⚠ The look count changes ⇒ the draw sequence
+  changes ⇒ **this is a different realisation and CANNOT be a paired comparison.** Saying so is the
+  point: weaker per seed, stronger in what it tests.
+
+**⭐ ARM 1 — (P1), A CLEAN PASS *WITH TEETH*.**
+
+| `dt` | det. flips | max \|ΔR\| | max \|ΔSNR\| | Δ shift vs 1e-3, `G` = 20 / 50 |
+|---|---|---|---|---|
+| 1e-3 | (baseline) | — | — | — |
+| 2e-3 | **1** | 0.89 m | 0.0039 dB | +0.4 / +0.8 m |
+| 4e-3 | **1** | 2.09 m | 0.0252 dB | −0.3 / −0.4 m |
+| 1e-2 | **7** | 5.67 m | 0.0755 dB | −1.5 / −1.3 m |
+
+8-of-8 positivity survives at every step, with the paired mean moving **at most 1.5 m against a
+standard error of 378–453 m — 0.00 se.**
+
+**⚠⚠ BUT P6c SHOWS THIS PASS IS WEAKER THAN THE TABLE LOOKS** (probe `p6c_fliploc.jl`,
+`p6c_out.txt`). The flip counts invite a claim the flips do not support: **1 flip** at `dt` = 2e-3
+and **1** at 4e-3, across 24 flights and 48 000 looks, is barely distinguishable from P6's zero. So
+P6c asked, against pre-registered branches, **where the flips sit** — a bit flipped in the middle of
+a solidly-detected run changes no edge at all. Distance in looks from each flip to that flight's own
+declared edge, with the rule reading `N`\* = 3:
+
+| `dt` | flips | **within `N`\* = 3 of a declared edge** | nearest flip |
+|---|---|---|---|
+| 2e-3 | 1 | **0** | 120 looks |
+| 4e-3 | 1 | **0** | 120 looks |
+| 1e-2 | 7 | **0** | 51 looks |
+
+⇒ ⚠ **BRANCH (b): every flip landed far from both edges, so not one of them reached the
+edge-declaration logic.** The declared edge **look index never changed** in any flight; what moved
+was the *range recorded at that unchanged look*, by **0.7–4.0 m**, which is simply the slightly
+different trajectory. **So ARM 1 demonstrates that the range READOUT is insensitive to `dt` — it
+does NOT demonstrate that the edge-declaration RULE absorbs a perturbed detection sequence**, because
+the sequence was never perturbed anywhere the rule looks. Do not write "a tenfold coarsening does not
+move this gauge": the supportable claim is that **at every step tested, the edge look index was
+identical and the recorded range moved by single metres.**
+
+⇒ **F5's substantive discharge rests on ARM 2. ARM 1 is corroboration, and weak corroboration at
+that** — its own honest reading is P6's branch (T) in a milder form.
+
+**⚠ ARM 2 — 8-OF-8 SURVIVES EVERYWHERE, SO THE LETHAL BRANCH (W) DID NOT FIRE — BUT THE MAGNITUDE
+MOVES BY UP TO 5.8 se, WHICH IS THIS ARM'S OWN "STATED SENSITIVITY, NOT A CLEAN PASS".**
+
+| `revisit_s` | `N`\* | `G` | mean Δ (m) | shift vs base | shift/se | 8/8? |
+|---|---|---|---|---|---|---|
+| 0.100 | 3 | 20 | +2659.1 | — | — | ⭐ 8/8 |
+| 0.100 | 3 | 50 | +5491.4 | — | — | ⭐ 8/8 |
+| 0.050 | 3 | 20 | +2809.3 | +150.2 | 0.40 | ⭐ 8/8 |
+| 0.050 | 3 | 50 | **+3955.8** | **−1535.7** | 3.39 | ⭐ 8/8 |
+| 0.050 | 6 | 20 | **+4850.3** | **+2191.1** | 5.80 | ⭐ 8/8 |
+| 0.050 | 6 | 50 | **+7076.5** | +1585.1 | 3.50 | ⭐ 8/8 |
+
+⇒ **F5's LETHAL QUESTION IS ANSWERED: the asymmetry is NOT an artefact of the look quantum.**
+
+⚠⚠ **AND THE ARGUMENT FOR THAT IS NOT THE OBVIOUS ONE.** The tempting reading — *refining the grid
+makes the effect LARGER, which is the opposite of what an artefact does* — **is wrong and must not be
+written.** At matched blindness time a finer grid gives more re-detection chances inside the same
+window, so the track is held further out: that is **a tracker gaining sensitivity**, and a genuine
+look-grid artefact would produce the very same sign. The growth direction is a red herring.
+
+**What actually rules the artefact out is the SIGN's invariance:** 8-of-8 positivity survives at
+**every** configuration — including the stricter one (`revisit_s` = 0.05, `N`\* = 3) where the
+magnitude *fell* by 3.4 se. **The effect changes SIZE under every reparameterisation of the tracker
+and never changes SIGN.** An artefact of the quantum would not survive halving the quantum on all
+eight seeds in both directions of magnitude change.
+
+### ⭐⭐⭐ WHAT ARM 2 ACTUALLY FOUND — **THE METRES ARE A PROPERTY OF THE TRACKER, NOT OF THE TARGET**
+
+The `N`\* = 3 confound this probe raised itself is what makes the table readable, and it had to be
+run both ways or the two causes would be inseparable: **`N`\* is counted in LOOKS, so refining the
+grid silently TIGHTENS the rule in time** (3 looks = 0.3 s at `revisit_s` = 0.1, but only 0.15 s at
+0.05). Read the two rows for `G` = 50 against each other:
+
+- **same LOOKS (`N`\* = 3), i.e. a stricter give-up time** ⇒ the track is abandoned sooner ⇒ Δ **falls**
+  to +3955.8.
+- **same TIME (`N`\* = 6)** ⇒ twice as many chances to re-detect inside the same 0.3 s of blindness ⇒
+  the track is held further out ⇒ Δ **rises** to +7076.5.
+
+⇒ ⭐⭐⭐ **THE SIGN AND THE 8-OF-8 MONOTONICITY ARE PHYSICS; THE METRES ARE A JOINT PROPERTY OF THE
+TAIL LOBE AND THE TRACKER'S OWN PARAMETERS** (`revisit_s` and the give-up rule). A faster-revisiting
+radar follows a tail-lobed target substantially further home at matched blindness tolerance —
+**+2191 m at `G` = 20, on the same physics.** That is a real and teachable statement, and it is the
+same family as slice 52's *a faster sweep needs a WIDER one*.
+
+⚠⚠ **THE CONSEQUENCE FOR GATE 3, AND IT IS BINDING:** the headline metres **must never be presented
+as a property of the target.** Any quoted figure carries its `revisit_s` and its `N`\* or it is not
+a measurement — the same discipline as *a gauge must carry its own window* (slice 49) and *a
+threshold must carry its own sample size* (§2.8). The **direction** is what the lesson teaches.
+
+### WHAT P7 INHERITS FROM P6/P6a/P6b
+
+1. **F5 IS DISCHARGED, BY ARM 2 — NOT BY ARM 1.** ⚠ ARM 1's flips all landed 51+ looks from any
+   edge (P6c), so it shows the range readout is `dt`-insensitive and nothing stronger. ARM 2 answers
+   the lethal question: the effect is not a grid artefact, because its SIGN survives every retuning
+   of the tracker while its SIZE does not. ⚠ **ARM 2's magnitude sensitivity is a STATED SENSITIVITY
+   that travels with the headline**, not a clean pass, per its own pre-registered bar.
+   Remaining: **F3's endpoints (P7)**.
+2. ⚠⚠ **INJECT `rcs_tail_gain`, NEVER AUTHOR IT**, until gate 1 teaches the loader (§2.13a).
+3. ⚠ **P7 must quote `revisit_s` = 0.1 and `N`\* = 3 beside every number it reports**, since the
+   ceiling of 50 was measured under exactly that pair and Arm 2 shows the pair matters.
+4. ⭐ **The `N`\*-in-looks-vs-seconds confound is a general trap**, not a slice-53 detail: a rule
+   counted in samples silently changes meaning when the sample rate changes. It belongs in
+   `docs/LESSONS.md` when this slice completes.
