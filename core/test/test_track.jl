@@ -332,13 +332,16 @@ end
             p = joinpath(dir, "bad$bad.yaml"); write(p, _trk_yaml(drop = bad))
             @test_throws "must be ≥ 1" load_scenario(p)
         end
-        # ⚠ AND REFUSED ON A `:cfar` WIRE, where `observe!` takes the PROFILE path and the tracker
-        # is not wired at all. A key nothing reads is the `speed` (19) / handover-bias (36) bug, and
-        # the two-test rule's only outright kill — so it cannot be authorable there either.
+        # ⭐⭐⭐ SLICE 54 — **THE `:cfar` REFUSAL IS GONE, AND THIS TOOTH IS ITS HEADSTONE.** Slice 53
+        # refused `track_drop_looks` on a `:cfar` wire with "POINT detector's tracker only", because
+        # `observe!` took the profile path where nothing read the key — the `speed` (19) /
+        # handover-bias (36) dead-knob shape. Slice 54 wired `_track_cfar_look!` on that very path,
+        # so the key is now read every look there too and the refusal has become false.
+        # ⚠ The refusal was never a physics claim; it was a dead-knob guard, and the honest way to
+        # retire one is to make the knob LIVE — which is what happened, not a deletion.
         p3 = joinpath(dir, "cfar.yaml"); write(p3, _trk_yaml(cfar = true))
-        @test_throws "POINT detector's tracker only" load_scenario(p3)
-        # …while the same CFAR wire WITHOUT the rule still loads, which is what makes the refusal
-        # above a statement about the key rather than about the fidelity.
+        @test load_scenario(p3) isa EWSim.Scenario
+        # …and the same CFAR wire WITHOUT the rule still loads, unchanged and tracker-free.
         p4 = joinpath(dir, "cfar_ok.yaml"); write(p4, _trk_yaml(cfar = true, drop = nothing))
         @test load_scenario(p4) isa EWSim.Scenario
     end
@@ -894,5 +897,284 @@ end
         patient   = shipped_tracker(looks, 5)
         @test impatient[12][1] && isapprox(impatient[12][2], 5000.0, atol = 250.0)
         @test patient[12][1]   && patient[12][2] < 1000.0
+    end
+end
+
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 54 GATE 2 — the tracker WIRED over the CFAR picture: a track that can be WRONG about where
+# it is, the gauge that can tell that from a track that is merely LONG, and the draw topology it
+# must not have touched.
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+
+"""A `:cfar` fly-past wire with the slice-54 tracker on it. Built by a function (the gate-1 trap)."""
+function _t54_yaml(; seed = 101, pfa = "1.0e-4", drop = "4", ok = "1", ncells = "534",
+                     revisit = "0.1", dt = "1.0e-3", rcs = "1.0", x0 = "-15000.0")
+    io = IOBuffer()
+    println(io, "name: t54_cfar_flypast")
+    println(io, "seed: ", seed)
+    println(io, "dt_physics: ", dt)
+    println(io, "emit_every: 16")
+    println(io, "fidelity:")
+    println(io, "  cfar:        ca")
+    println(io, "  propagation: free_space")
+    println(io, "entities:")
+    println(io, "  - id: radar1")
+    println(io, "    kind: radar")
+    println(io, "    pos: [0, 0, 30]")
+    println(io, "    radar:")
+    println(io, "      pt_w:         50000")
+    println(io, "      gain_db:      35")
+    println(io, "      freq_hz:      9.4e9")
+    println(io, "      bandwidth_hz: 1.0e6")
+    println(io, "      noise_fig_db: 3")
+    println(io, "      losses_db:    4")
+    println(io, "      pfa:          ", pfa)
+    println(io, "      swerling:     1")
+    println(io, "      n_pulses:     1")
+    println(io, "      n_cells:      ", ncells)
+    println(io, "      range_start_m: 0")
+    println(io, "      n_train:       16")
+    println(io, "      n_guard:       2")
+    revisit === nothing || println(io, "      revisit_s:    ", revisit)
+    drop    === nothing || println(io, "      track_drop_looks: ", drop)
+    ok      === nothing || println(io, "      track_ok_cells:   ", ok)
+    println(io, "  - id: tgt1")
+    println(io, "    kind: target")
+    # ⚠ `x0` matters more than it looks. The default is the gate-0 fly-past, which CLOSES to its
+    # closest approach at t = 50 s — the whole first half is a strong target that never drops, so a
+    # short flight sees almost no seduction. A positive `x0` starts the target already OUTBOUND and
+    # fading, which is where a give-up rule is actually exercised, and lets a tooth run in 60 s
+    # instead of 300.
+    println(io, "    pos: [", x0, ", 0.0, 5000.0]")
+    println(io, "    vel: [300.0, 0.0, 0.0]")
+    println(io, "    target:")
+    println(io, "      rcs_m2: ", rcs)
+    return String(take!(io))
+end
+
+"""Fly a slice-54 wire for `secs`, returning the radar entity, the world and the per-look profiles."""
+function _t54_fly(yaml; secs = 30.0, keep_profiles = false)
+    dir = mktempdir()
+    p = joinpath(dir, "w.yaml"); write(p, yaml)
+    sc = load_scenario(p)
+    w, subs, dt = sc.world, sc.subs, sc.dt_physics
+    radar = w.entities[:radar1]
+    profs = Vector{Float64}[]
+    for _ in 1:round(Int, secs / dt)
+        prev = get(radar.comp, :next_look_t, 0.0)
+        EWSim.tick!(w, subs, dt)
+        keep_profiles && get(radar.comp, :next_look_t, 0.0) != prev &&
+            push!(profs, copy(radar.comp[:profile_z]::Vector{Float64}))
+    end
+    (radar = radar, world = w, subs = subs, dt = dt, profiles = profs, scn = sc)
+end
+
+@testset "slice54 gate2 — the give-up tracker over the CFAR picture" begin
+
+    @testset "⚠⚠ DRAW TOPOLOGY IS UNTOUCHED BY `track_drop_looks` (convention 3)" begin
+        # THE TOOTH THE WHOLE SLICE RESTS ON. `_draw_profile!` is the ONLY RNG of a CFAR look and
+        # draws `2·N_p·N_cells` regardless of rung, slider or geometry; the tracker reads
+        # `detections` AFTER it and draws nothing. If the give-up rule could move the draw stream,
+        # every arm of gate-0's ladder would be a DIFFERENT FLIGHT and the whole comparison would be
+        # meaningless — the slider would be changing the weather, not the response to it.
+        #
+        # ⚠ Compared on the PROFILE ITSELF, look by look, not on a summary: a scalar could agree by
+        # luck where 534 floats × 300 looks cannot.
+        base = _t54_fly(_t54_yaml(drop = "1"),  secs = 30.0, keep_profiles = true)
+        wide = _t54_fly(_t54_yaml(drop = "16"), secs = 30.0, keep_profiles = true)
+        none = _t54_fly(_t54_yaml(drop = nothing, ok = nothing), secs = 30.0, keep_profiles = true)
+        @test length(base.profiles) == length(wide.profiles) == length(none.profiles) == 300
+        @test base.profiles == wide.profiles      # the slider does not move the draw
+        @test base.profiles == none.profiles      # …nor does the tracker's PRESENCE
+        # …and the tracker really did run and really did differ between those two arms, so the
+        # identity above is a statement about the RNG and not about a tracker that did nothing.
+        @test base.radar.comp[:trk_look] == 300
+        @test (base.radar.comp[:trk_good], base.radar.comp[:trk_bad]) !=
+              (wide.radar.comp[:trk_good], wide.radar.comp[:trk_bad])
+        @test !haskey(none.radar.comp, :trk_look)
+    end
+
+    @testset "the tracker can be WRONG about where it is — which the point path cannot" begin
+        # ⭐⭐⭐ THE POINT OF THE SLICE, AS A TOOTH. `_track_look!` is handed the TRUE range, so its
+        # track is right by construction. This one decides for itself, and on a dirty picture it
+        # spends real looks holding a range that is not the target's.
+        #
+        # ⚠⚠ THE ARMS ARE MEASURED ONES, AND TWO EARLIER DRAFTS OF THIS TOOTH WERE WRONG. The
+        # numbers below come from `M:\claud_projects\temp\slice54\g2_arms.jl` (outbound from 30 km,
+        # 60 s = 600 looks, seed 101), run BEFORE these assertions were written.
+        #
+        #   pfa     n_drop |  good   bad
+        #   1e-6         1 |    41     0
+        #   1e-6        16 |   108   172
+        #   1e-3         1 |   125   105
+        #   1e-3        16 |   428   148
+        far = (x0 = "30000.0",)                   # already outbound and fading: see `_t54_yaml`
+        dirty = _t54_fly(_t54_yaml(pfa = "1.0e-3", drop = "16"; far...), secs = 60.0)
+        @test dirty.radar.comp[:trk_bad]  > 0     # it WAS wrong, repeatedly…
+        @test dirty.radar.comp[:trk_good] > 0     # …and also right, so it is not merely broken
+        # …and the error it reports is a real distance, not a sentinel.
+        @test isfinite(dirty.radar.comp[:trk_err_m]) && dirty.radar.comp[:trk_err_m] ≥ 0.0
+
+        # ⭐⭐ PATIENCE IS WHAT BUYS THE ERROR, AND IT DOES SO ON **BOTH** PICTURES — the second half
+        # of the two-sidedness, as a tooth rather than as a claim. A track that gives up quickly has
+        # less time to be captured.
+        hasty       = _t54_fly(_t54_yaml(pfa = "1.0e-3", drop = "1"; far...),  secs = 60.0)
+        clean_hasty = _t54_fly(_t54_yaml(pfa = "1.0e-6", drop = "1"; far...),  secs = 60.0)
+        clean_slow  = _t54_fly(_t54_yaml(pfa = "1.0e-6", drop = "16"; far...), secs = 60.0)
+        @test hasty.radar.comp[:trk_bad]       < dirty.radar.comp[:trk_bad]
+        @test clean_hasty.radar.comp[:trk_bad] < clean_slow.radar.comp[:trk_bad]
+
+        # ⭐⭐⭐ AND A CLEAN PICTURE UNDER AN IMPATIENT RULE IS **NEVER** WRONG — exactly zero bad
+        # looks. Nothing crosses the threshold to be seduced by, and the rule lets go before a coast
+        # can drift. That zero is a REAL measurement, not a missing key, which is why the counters
+        # are initialised at the first look (slice 50: presence decides).
+        @test clean_hasty.radar.comp[:trk_bad] == 0
+        @test clean_hasty.radar.comp[:trk_look] > 0     # ⚠ …and the flight really ran
+
+        # ⚠⚠ **`bad` IS NOT MONOTONE IN THE DIRTINESS, AND THAT IS NOT A DEFECT** — here the CLEAN
+        # patient arm is wrong MORE often than the dirty one (172 against 148). There are two
+        # different routes to being wrong: on a clean picture a patient track goes blind and COASTS
+        # off the target, and on a dirty one it is CAPTURED by a false alarm but keeps re-associating
+        # near something. ⚠ This is why the slice's gauge is NET (good − bad) and never `bad` alone,
+        # and why no tooth here compares `bad` across `pfa` at fixed patience.
+        @test clean_slow.radar.comp[:trk_bad] > dirty.radar.comp[:trk_bad]
+    end
+
+    @testset "the gauge scores POSITION, and a DEAD track scores nothing (gate-0 F3)" begin
+        f = _t54_fly(_t54_yaml(pfa = "1.0e-3", drop = "2"), secs = 60.0)
+        r = f.radar
+        # Every scored look is one or the other, never both, and never more than the looks flown.
+        @test r.comp[:trk_good] + r.comp[:trk_bad] ≤ r.comp[:trk_look]
+        # ⚠ THE INEQUALITY IS STRICT HERE, and that is the tooth: a give-up tracker on a dirty
+        # picture spends looks DEAD, and a dead track is not making a claim, so it cannot be wrong.
+        # A gauge that scored dead looks would be a DURATION in disguise — exactly what F3 forbids.
+        @test r.comp[:trk_good] + r.comp[:trk_bad] < r.comp[:trk_look]
+    end
+
+    @testset "⚠⚠ A LIVE DRAG RE-ARMS THE GAUGE (slice 52's rule, this instrument)" begin
+        # The counters are CUMULATIVE and `n_drop` is the thing under study, so a run spanning a
+        # drag would report a MIXTURE of two settings as one measurement — slice 52's peak-hold
+        # trap, where a knob that FELL could not be seen. The reset is consumed inside the tracker.
+        f = _t54_fly(_t54_yaml(pfa = "1.0e-3", drop = "2"), secs = 40.0)
+        r = f.radar
+        @test r.comp[:trk_good] + r.comp[:trk_bad] > 0        # something was scored…
+        looks_before = r.comp[:trk_look]
+        EWSim._mark_track_dirty!(f.world)                     # what set_param does
+        EWSim.tick!(f.world, f.subs, f.dt)                    # …a tick that is NOT a look
+        @test r.comp[:trk_good] + r.comp[:trk_bad] > 0        # …not cleared before the next LOOK
+        # Run to the next look, where the reset is consumed.
+        for _ in 1:200
+            r.comp[:trk_look] > looks_before && break
+            EWSim.tick!(f.world, f.subs, f.dt)
+        end
+        @test r.comp[:trk_look] == looks_before + 1
+        @test r.comp[:trk_good] + r.comp[:trk_bad] ≤ 1        # re-armed: at most THIS look scored
+        @test r.comp[:trk_scored_from] == looks_before + 1    # …and it says where it re-armed
+        # ⚠ THE LIVE STATE IS NOT RESET — it describes the tick, not a past measurement (slice 53's
+        # own split). Keeping the track running is what makes the drag a teaching instrument.
+        @test haskey(r.comp, :trk_range) && haskey(r.comp, :trk_alive)
+    end
+
+    @testset "the wire: the RULE keys ship beside the gauge, always" begin
+        f = _t54_fly(_t54_yaml(drop = "4", ok = "2"), secs = 5.0)
+        tel = f.world.env[:telemetry]
+        # ⚠⚠ Gate-0 §2.8.2: the COUNT of looks is a JOINT property of the give-up rule, the gate and
+        # the band — only the DIRECTION is physics. A client able to print a score without all four
+        # beside it would print an irreproducible number.
+        for k in ("track_drop_looks", "track_revisit_s", "track_gate_cells", "track_ok_cells",
+                  "track_net", "track_good_looks", "track_bad_looks", "track_alive",
+                  "track_misses", "track_range_m", "track_rdot", "track_look", "track_scored_from")
+            @test haskey(tel, "radar1.$k")
+        end
+        @test tel["radar1.track_drop_looks"] == 4.0
+        @test tel["radar1.track_ok_cells"]   == 2.0
+        @test tel["radar1.track_revisit_s"]  == 0.1
+        # The gate the core actually chose, by the pre-registered rule, on this wire: 1 cell.
+        @test tel["radar1.track_gate_cells"] == 1.0
+        # …and NET is the difference of the two counts, formed in the CORE so no client subtracts.
+        @test tel["radar1.track_net"] ==
+              tel["radar1.track_good_looks"] - tel["radar1.track_bad_looks"]
+        # F7's disambiguator advances, so a FLAT stretch of the stepped slider reads as "this
+        # setting scores the same" and never as "the instrument is dead".
+        @test tel["radar1.track_look"] > 0
+
+        # ⚠ A `:cfar` wire that authors NO tracker ships NONE of these — key-presence gating, which
+        # is what makes every slice-1..53 scenario byte-identical (the `terrain_clearance_m` /
+        # slice-49 precedent).
+        g = _t54_fly(_t54_yaml(drop = nothing, ok = nothing), secs = 5.0)
+        gtel = g.world.env[:telemetry]
+        for k in ("track_drop_looks", "track_net", "track_alive", "track_look")
+            @test !haskey(gtel, "radar1.$k")
+        end
+        # …while the slice-3 profile keys are of course still there, untouched.
+        @test haskey(gtel, "radar1.profile_db") && haskey(gtel, "radar1.detections")
+    end
+
+    @testset "the loader: `track_ok_cells` is authored, guarded, and never a dead knob" begin
+        dir = mktempdir()
+        # A band of zero (or below) could never score a look on-target.
+        for bad in ("0", "-1")
+            p = joinpath(dir, "ok$bad.yaml"); write(p, _t54_yaml(ok = bad))
+            @test_throws "must be > 0" load_scenario(p)
+        end
+        # …and the band without the RULE is a knob nothing reads — the very bug the lifted slice-53
+        # refusal existed to prevent, kept alive one key over.
+        p = joinpath(dir, "orphan.yaml"); write(p, _t54_yaml(drop = nothing, ok = "1"))
+        @test_throws "needs a `track_drop_looks`" load_scenario(p)
+        # The default is 1 cell — the band every gate-0 probe flew.
+        f = _t54_fly(_t54_yaml(ok = nothing), secs = 2.0)
+        @test f.world.env[:telemetry]["radar1.track_ok_cells"] == 1.0
+    end
+
+    @testset "⭐⭐⭐ the ORACLE: the core reproduces the PROBE's rule, per flight and exact" begin
+        # The strongest tooth of gate 2, and the reason plan §2.8's table is quotable at all: the
+        # probes scored an OFFLINE tracker over the captured picture, the core runs the rule LIVE
+        # inside the tick, and the two must agree EXACTLY on the same flight — not in the mean.
+        # (The full 64-cell sweep is `M:\claud_projects\temp\slice54\g2_check.jl`, 0 mismatches;
+        # this is the same comparison at test scale so a regression cannot pass CI.)
+        dir = mktempdir()
+        for (pfa, nd) in (("1.0e-4", 4), ("1.0e-3", 2), ("1.0e-5", 7))
+            p = joinpath(dir, "o$(pfa)_$nd.yaml")
+            write(p, _t54_yaml(pfa = pfa, drop = string(nd), ncells = "534"))
+            sc = load_scenario(p)
+            w, subs, dt = sc.world, sc.subs, sc.dt_physics
+            radar = w.entities[:radar1]; tgt = w.entities[:tgt1]
+            dr = 299_792_458.0 / (2 * Float64(radar.comp[:bandwidth_hz]))
+            looks = NamedTuple[]
+            for _ in 1:round(Int, 40.0 / dt)
+                prev = get(radar.comp, :next_look_t, 0.0)
+                EWSim.tick!(w, subs, dt)
+                get(radar.comp, :next_look_t, 0.0) == prev && continue
+                R    = sqrt(sum((tgt.pos .- radar.pos) .^ 2))
+                hits = findall(radar.comp[:detections]::Vector{Bool})
+                z    = radar.comp[:profile_z]::Vector{Float64}
+                push!(looks, (R = R, rng = [(ci - 1) * dr for ci in hits],
+                              pow = [z[ci] for ci in hits]))
+            end
+            # --- the offline rule, transcribed from the PROBE (p7_band.jl:88..110) ---
+            alive = false; misses = 0; r = 0.0; rdot = 0.0; good = 0; bad = 0; rev = 0.1
+            for u in looks
+                if alive
+                    pred = r + rdot * rev; gate = 1.0 * dr
+                    bi, bd = 0, Inf
+                    for (i, rr) in enumerate(u.rng)
+                        d = abs(rr - pred); (d ≤ gate && d < bd) && (bi = i; bd = d)
+                    end
+                    if bi != 0
+                        resid = u.rng[bi] - pred
+                        r = pred + 0.5 * resid; rdot += (0.1 / rev) * resid; misses = 0
+                    else
+                        r = pred; misses += 1; misses ≥ nd && (alive = false)
+                    end
+                elseif !isempty(u.rng)
+                    _, i = findmax(u.pow); alive = true; misses = 0; r = u.rng[i]; rdot = 0.0
+                end
+                alive && (abs(r - u.R) ≤ dr ? (good += 1) : (bad += 1))
+            end
+            @test radar.comp[:trk_good] == good
+            @test radar.comp[:trk_bad]  == bad
+            @test radar.comp[:trk_look] == length(looks)
+            @test good + bad > 0        # ⚠ not a vacuous pass: the flight really scored something
+        end
     end
 end

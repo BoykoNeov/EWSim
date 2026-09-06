@@ -566,3 +566,77 @@ tracker that produced §2.8's table and not the one §1 loosely describes.
    per look from the TRACK's OWN estimated range rate (never truth), floored at 1 cell; α and β are
    named module constants pinned by a test that fails if they are edited. ⚠ On this wire
    |ṙ| ≤ 300 m/s ⇒ the rule yields **1 cell everywhere**, reproducing the probes exactly.
+
+---
+
+## §4 — GATE 2 AS BUILT (2026-09-06)
+
+**`_track_cfar_look!`** (`core/src/radar.jl`), a **SIBLING** of `_track_look!` sharing only the pure
+`track_run_step` — §3.1's ruling honoured, slice 53's CPA/leg latches dropped. Wired from
+`_observe_cfar!` under a `haskey(:track_drop_looks)` gate, so every slice-1…53 wire ships no new key.
+The slice-53 loader refusal is **LIFTED**, and its test is kept as its headstone.
+
+### §4.1 ⭐⭐⭐ THE ORACLE — THE CORE RUNS **EXACTLY** THE PROBES' RULE
+
+`M:\claud_projects\temp\slice54\g2_check.jl`, raw output `…\g2_out.txt`. Seed 101, gate ±1, band 1
+cell, 4 `pfa` × 16 `n_drop` = **64 flights**, each comparing the LIVE core's counters against the
+OFFLINE probe rule run over that same flight's captured picture:
+
+* **0 mismatched cells of 64**, on `net` *and* on the component `good` count;
+* gate cells the core chose: **{1}** — the pre-registered rule, evaluated from the wire, not frozen;
+* look counts: **{3000}**.
+
+⭐⭐ **PER-FLIGHT EXACT EQUALITY IS A SHARPER TOOTH THAN THE MEAN TABLE, AND IT IMPLIES IT** — §2.8's
+table is the mean of the offline rule over six seeds, so identity per flight makes that table a
+description of the shipped code. It is also 6× cheaper, which is what made a 16-point sweep
+affordable; the first draft of this check (mean over 6 seeds × 64 cells = 384 flights) was abandoned
+as several hours of compute for weaker evidence.
+
+⚠ The single-seed ladder chatters (argmax 13, 13, 3, 1 on seed 101 alone) exactly as §2.3 said a
+single seed would. That is a CONFIRMATION of the seed discipline, not a contradiction of §2.8: the
+headline was always the six-seed mean.
+
+### §4.2 ⚠⚠ `bad` IS **NOT** MONOTONE IN THE DIRTINESS — THERE ARE TWO ROUTES TO BEING WRONG
+
+Measured (`…\g2_arms.jl`, outbound from 30 km, 600 looks, seed 101):
+
+| `pfa` | `n_drop` | good | bad |
+|---|---|---|---|
+| 1e-6 | 1 | 41 | **0** |
+| 1e-6 | 16 | 108 | **172** |
+| 1e-3 | 1 | 125 | 105 |
+| 1e-3 | 16 | 428 | **148** |
+
+⭐⭐⭐ **THE CLEAN PATIENT ARM IS WRONG MORE OFTEN THAN THE DIRTY ONE (172 vs 148).** Two different
+mechanisms end in the same place: on a CLEAN picture a patient track goes blind and **COASTS** off
+the target; on a DIRTY one it is **CAPTURED** by a false alarm but keeps re-associating near
+something. ⇒ **the gauge is NET (good − bad) and never `bad` alone**, and no tooth may compare `bad`
+across `pfa` at fixed patience. ⚠ `bad` IS monotone in PATIENCE on both pictures (0 → 172, 105 → 148),
+which is the half the lesson actually rests on.
+
+⭐ **AND A CLEAN PICTURE UNDER AN IMPATIENT RULE IS NEVER WRONG — exactly 0 bad looks.** Nothing
+crosses the threshold to be seduced by, and the rule lets go before a coast can drift. ⚠ That zero
+is a REAL measurement and not a missing key, which is why the counters are initialised at the first
+look rather than created on first increment (slice 50: presence decides).
+
+### §4.3 ⚠ TWO TEETH FAILED BEFORE THEY PASSED, AND BOTH FAILURES WERE THE TOOTH WORKING
+
+1. **`pfa` = 1e-2 is off the end of the ladder and behaves oppositely.** A first draft asserted "a
+   dirtier picture is wrong more often" at 1e-2 and measured **one** bad look in 600. At that
+   density a detected cell is inside the gate on essentially *every* look, so the track never
+   coasts, never drops and is never seduced — **being wrong needs a DROP first**. ⚠ An unmeasured
+   arm is not a safe place to put a tooth.
+2. **A short flight on the gate-0 fly-past never reaches the fade.** That wire CLOSES to its closest
+   approach at t = 50 s, so a 120 s flight is mostly a strong target that never drops. The teeth now
+   fly an OUTBOUND wire that starts already fading, which exercises the give-up rule from t = 0 and
+   runs in 60 s instead of 300.
+
+### §4.4 F6 — DRAW TOPOLOGY, ANSWERED
+
+`_draw_profile!` is the only RNG of a CFAR look and the tracker reads `detections` after it. Pinned
+by comparing the **profile arrays themselves, look by look** (534 floats × 300 looks), across
+`n_drop` = 1 vs 16 vs *no tracker at all*: identical. ⚠ The same tooth also asserts the two arms'
+counters DIFFER, so the identity is a statement about the RNG and not about a tracker that did
+nothing. Byte-identity of the shipped `scenarios/slice3_cfar.yaml` is by key-presence gating, and is
+checked by `test_determinism` **and the ABSOLUTE golden** (convention 2 — only the golden catches a
+draw-ORDER regression).

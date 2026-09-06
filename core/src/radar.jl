@@ -535,6 +535,128 @@ function _track_look!(radar::Entity, detected::Bool, R::Float64, rdot::Float64)
 end
 
 """
+    _track_cfar_look!(radar, ranges, powers, revisit_s, dr, truth_range) -> nothing
+
+⭐⭐⭐ **SLICE 54 gate 2 — THE GIVE-UP TRACKER OVER A *PICTURE*, AND THE FIRST TRACK IN THIS ARC THAT
+CAN BE WRONG ABOUT WHERE IT IS.** A **SIBLING** of [`_track_look!`], not a branch of it: the two
+share only the pure `track_run_step`, because slice 53's gain/loss edges and one-CPA latch assume a
+TRUTH range this tracker is deliberately no longer handed.
+
+The point-path tracker is told `any_detect` over the strongest target and stamped with that target's
+real range, so a track it holds on nothing is silently right. Here the look arrives as a list of
+DETECTED CELLS — some of which are threshold crossings in noise or clutter (`pfa`, and a clutter
+band's edges) — and the tracker must decide FOR ITSELF which one, if any, is its own. It can pick
+the wrong one, and then it reports a range that is not the target's. That is the whole point.
+
+⚠⚠ **THE TWO ASSOCIATION RULES DIFFER ON PURPOSE, AND THE DIFFERENCE IS THE LESSON:**
+
+* **ALIVE → `track_associate`** — the NEAREST detected cell inside a gate about the prediction.
+  Conservative: a live track already believes something, and the loudest return in the profile is
+  not evidence about the thing it is holding.
+* **DEAD → `track_reopen`** — the STRONGEST detected cell in the whole profile, UNGATED. Credulous:
+  a dropped track has no prediction left to gate against, so it takes the loudest thing there is.
+
+⇒ **patience is TWO-SIDED**: holding on longer rides a fade and keeps a target that is still there,
+and *also* keeps a track that has already been captured by a false alarm. Gate-0 §2.8.1 measured both
+halves — every arm's score rises and then falls, and the fall steepens as the picture dirties.
+
+⚠⚠ **THE GATE IS COMPUTED FROM THE WIRE EVERY LOOK, NEVER HARDCODED.** `track_gate_cells` and the
+α–β filter are both expressed in `revisit_s`, which no loader fixes, so a radar that revisits twice
+as fast silently runs a different tracker unless the rule is evaluated rather than frozen. This is
+slice 53's *a rule counted in samples changes meaning when the sample rate does*, one instrument
+over — and gate-0 §2.8.2 is what makes it load-bearing: the COUNT of looks is a joint property of
+the gate and the gauge's band; only the DIRECTION is physics.
+
+⚠⚠ **`truth_range` REACHES THE GAUGE AND NEVER THE TRACKER.** The scoring below compares where the
+track thinks it is against where the target actually is — that is a teaching instrument, and it is
+the only gauge that can tell *a long track* from *a track in the wrong place* (gate-0 F3: a
+false-alarm model touches only the detection, so every DURATION gauge is the slider in other units).
+⚠ It is passed in AFTER every association decision has been made and is read by nothing else. A
+truth value inside the association path would rebuild exactly the defect this slice exists to remove.
+
+**THE GAUGE IS `good − bad`, SCORED ON POSITION AND ACCUMULATED OVER THE PASS**: a look counts
+`good` when the track is alive and within `ok_cells` of truth, `bad` when it is alive and outside.
+A dead track scores neither — being wrong is a cost, being silent is not.
+
+⚠⚠ **A LIVE DRAG RESETS THE COUNTERS, AND IT HAS TO** (slice 52's re-arm rule; slice 53's latch
+rule). `n_drop` is the thing under study and the counters are cumulative, so a run that spans a drag
+would report a MIXTURE of two settings as though it were one measurement — the shape of slice 52's
+peak-hold trap, where a knob that FELL could not be seen. The reset is consumed from `:trk_dirty`,
+which `_mark_track_dirty!` sets unconditionally on any `set_param`. ⚠ The LIVE state (alive / misses
+/ range / rate) is NOT reset: it describes the tick, not a past measurement — slice 53's own split.
+
+⚠ **NAMED APPROXIMATIONS** (§1's trifecta discipline): ONE track per radar (the family's posture);
+the gate is a fixed range window, not a covariance gate; the α–β constants are fixed
+([`TRACK_ALPHA`]/[`TRACK_BETA`], pinned by test); the re-open is ungated; and there is no track
+initiation logic — the first detected cell opens a track, so a single false alarm on a quiet
+profile starts one.
+"""
+function _track_cfar_look!(radar::Entity, ranges::Vector{Float64}, powers::Vector{Float64},
+                           revisit_s::Float64, dr::Float64, truth_range::Float64)
+    n_drop = Int(radar.comp[:track_drop_looks])
+    # ⚠⚠ THE DRAG, CONSUMED HERE — the cumulative gauge only, never the live state (see above).
+    if get(radar.comp, :trk_dirty, false)
+        radar.comp[:trk_good] = 0
+        radar.comp[:trk_bad]  = 0
+        radar.comp[:trk_scored_from] = Int(get(radar.comp, :trk_look, 0)) + 1
+        radar.comp[:trk_dirty] = false
+    end
+    look = Int(get(radar.comp, :trk_look, 0)) + 1
+    radar.comp[:trk_look] = look
+    # The gauge's counters EXIST as soon as the tracker has run a look, so that "0 bad" is a
+    # readable measurement rather than a missing key. ⚠ 0 is a legitimate value of both (a clean
+    # picture with an impatient rule is never wrong — measured: `pfa` 1e-6 at `n_drop` 1..2), which
+    # is exactly why they may not be left absent and defaulted at the reader (slice 50: a defaulted
+    # zero and a real zero read the same, so PRESENCE has to decide). Presence here means "a look
+    # has been scored"; `trk_look` says how many.
+    if !haskey(radar.comp, :trk_good)
+        radar.comp[:trk_good] = 0; radar.comp[:trk_bad] = 0
+        radar.comp[:trk_scored_from] = look
+    end
+
+    alive0  = get(radar.comp, :trk_alive, false)::Bool
+    misses0 = Int(get(radar.comp, :trk_misses, 0))
+    r       = Float64(get(radar.comp, :trk_range, 0.0))
+    rdot    = Float64(get(radar.comp, :trk_rdot,  0.0))
+
+    gate_cells = track_gate_cells(rdot, revisit_s, dr)
+    if alive0
+        pred = r + rdot * revisit_s
+        i    = track_associate(pred, ranges, gate_cells * dr)
+        r, rdot = track_ab_step(r, rdot, revisit_s, i == 0 ? nothing : ranges[i])
+        detected = i != 0
+    else
+        # A DEAD track has no prediction to gate against: it restarts on the loudest cell there is.
+        i = track_reopen(powers)
+        if i != 0
+            r = ranges[i]; rdot = 0.0
+        end
+        detected = i != 0
+    end
+    alive, misses, _, _ = track_run_step(alive0, misses0, detected, n_drop)
+
+    radar.comp[:trk_alive]      = alive
+    radar.comp[:trk_misses]     = misses
+    radar.comp[:trk_range]      = r
+    radar.comp[:trk_rdot]       = rdot
+    radar.comp[:trk_gate_cells] = gate_cells
+
+    # THE GAUGE. Scored on POSITION against truth, and only while the track is ALIVE — a track that
+    # has been given up is not making a claim about anything and cannot be wrong (gate-0 F3).
+    ok_m = Float64(get(radar.comp, :track_ok_cells, 1.0)) * dr
+    err  = abs(r - truth_range)
+    if alive
+        if err ≤ ok_m
+            radar.comp[:trk_good] = Int(get(radar.comp, :trk_good, 0)) + 1
+        else
+            radar.comp[:trk_bad]  = Int(get(radar.comp, :trk_bad,  0)) + 1
+        end
+    end
+    radar.comp[:trk_err_m] = err
+    return nothing
+end
+
+"""
     _target_snr(prop, rp, radar, tgt, ter=nothing) -> (snr_lin, visible)
 
 Single-target SNR under the active `propagation` fidelity, plus a horizon-visibility
@@ -1115,6 +1237,10 @@ function _observe_cfar!(r::RadarSensor, w::World)
     # clutter-only (or momentarily target-free) CFAR profile must still draw + ship (it is a
     # core sandbox view). `best_snr = -Inf` then floors cleanly through `_snr_db_wire`.
     best_snr = -Inf; best_pd = 0.0; best_visible = true; best_cell = 0
+    # ⭐ SLICE 54: the strongest target's TRUE range, carried for the TRACKER'S GAUGE and nothing
+    # else — it is what the track's own range is scored against. `NaN` while no target has been
+    # seen; the gauge's comparison is then false either way, so an empty world scores nothing.
+    best_range = NaN
     cell_target = Dict{Int,Symbol}()            # cell → target id, for the event :of tag
     bumps = Tuple{Int,Float64}[]                # (cell, linear SNR) to add to the profile power
     target_ids = sort!(Symbol[id for (id, e) in w.entities if e.kind === :target])
@@ -1122,13 +1248,15 @@ function _observe_cfar!(r::RadarSensor, w::World)
         tgt = w.entities[tid]
         snr, vis = _target_snr(prop, rp, radar, tgt, ter)
         pd  = pd_analytic(snr, pfa; swerling = sw, n_pulses = np)
-        ci  = _range_to_cell(_range(tgt.pos, radar.pos), rstart, dr, ncells)
+        Rt  = _range(tgt.pos, radar.pos)
+        ci  = _range_to_cell(Rt, rstart, dr, ncells)
         if ci != 0
             get!(cell_target, ci, tid)          # first (sorted) target wins a shared cell
             push!(bumps, (ci, snr))
         end
         if snr > best_snr
             best_snr = snr; best_pd = pd; best_visible = vis; best_cell = ci
+            best_range = Rt
         end
     end
 
@@ -1176,6 +1304,30 @@ function _observe_cfar!(r::RadarSensor, w::World)
             push!(w.events, ev)
         end
 
+        # ⭐⭐⭐ SLICE 54 gate 2 — THE TRACK OVER THE PICTURE. Runs ONLY when the radar authors a
+        # `track_drop_looks`, so every slice-1..53 wire ships no new key and is byte-identical (the
+        # `terrain_clearance_m` / slice-49 precedent, and the same posture `_track_look!` has on the
+        # point path). ⚠⚠ IT READS `detections` **AFTER** `_draw_profile!` AND DRAWS NOTHING — the
+        # ONLY RNG of a CFAR look is that one call, whose count is `2·N_p·N_cells` regardless of
+        # rung, slider or geometry, so convention 3's draw topology is untouched by the tracker and
+        # by `track_drop_looks` (pinned by the draw-invariance tooth).
+        #
+        # ⚠⚠ TRUTH GOES TO THE GAUGE, NOT TO THE TRACKER. `best_cell` is the STRONGEST TARGET's cell
+        # and is computed above for the readout; the tracker is handed the detected cells and their
+        # powers ONLY, and truth reaches `_track_cfar_look!` as a separate argument used solely to
+        # SCORE where the track ended up. A truth value inside the association path would rebuild
+        # the exact defect this slice exists to remove (gate-0 §1).
+        if haskey(radar.comp, :track_drop_looks)
+            det   = radar.comp[:detections]::Vector{Bool}
+            zprof = radar.comp[:profile_z]::Vector{Float64}
+            hits  = findall(det)
+            _track_cfar_look!(radar,
+                              Float64[_cell_range(ci, rstart, dr) for ci in hits],
+                              Float64[zprof[ci] for ci in hits],
+                              r.revisit_s, dr,
+                              best_range)
+        end
+
         radar.comp[:next_look_t] = get(radar.comp, :next_look_t, 0.0) + r.revisit_s
     end
 
@@ -1193,6 +1345,47 @@ function _observe_cfar!(r::RadarSensor, w::World)
         tel["$sid.profile_db"]   = _snr_db_wire.(radar.comp[:profile_z])
         tel["$sid.threshold_db"] = _snr_db_wire.(radar.comp[:threshold_lin])
         tel["$sid.detections"]   = radar.comp[:detections]
+    end
+    # ⭐⭐⭐ SLICE 54 gate 2 — THE TRACK'S OWN LINES. Key-presence gated on `track_drop_looks`, so a
+    # wire that authors no tracker ships NO new key and stays byte-identical.
+    #
+    # ⚠⚠ THE RULE KEYS SHIP BESIDE THE GAUGE, ALWAYS — gate-0 §2.8.2 measured that the COUNT of
+    # looks is a JOINT property of the give-up rule, the tracker's GATE and the gauge's BAND (the
+    # same arm reads 5, 7, 9 or 11 depending on two constants that are not physics). Only the
+    # DIRECTION is physics. A client that could print a score without `track_drop_looks`,
+    # `track_revisit_s`, `track_gate_cells` and `track_ok_cells` beside it would be printing a
+    # number that cannot be reproduced — slice 53's `revisit_s`/N* rule, one instrument over.
+    if haskey(radar.comp, :track_drop_looks)
+        tel["$sid.track_drop_looks"] = Float64(radar.comp[:track_drop_looks])
+        tel["$sid.track_revisit_s"]  = r.revisit_s
+        tel["$sid.track_gate_cells"] = Float64(get(radar.comp, :trk_gate_cells, 1))
+        tel["$sid.track_ok_cells"]   = Float64(get(radar.comp, :track_ok_cells, 1.0))
+        tel["$sid.track_alive"]      = get(radar.comp, :trk_alive, false)
+        tel["$sid.track_misses"]     = Float64(get(radar.comp, :trk_misses, 0))
+        tel["$sid.track_range_m"]    = _finite_coord(Float64(get(radar.comp, :trk_range, 0.0)))
+        tel["$sid.track_rdot"]       = _finite_coord(Float64(get(radar.comp, :trk_rdot, 0.0)))
+        # THE GAUGE: looks the track spent ON the target, looks it spent somewhere ELSE, and their
+        # difference. Scored on POSITION, never on duration (gate-0 F3) — a long track is not a
+        # failure, a track in the WRONG PLACE is.
+        good = Int(get(radar.comp, :trk_good, 0)); bad = Int(get(radar.comp, :trk_bad, 0))
+        tel["$sid.track_good_looks"] = Float64(good)
+        tel["$sid.track_bad_looks"]  = Float64(bad)
+        tel["$sid.track_net"]        = Float64(good - bad)
+        # ⚠⚠ F7's DISAMBIGUATOR, AND IT IS NOT DECORATION. `track_drop_looks` is an INTEGER slider
+        # (`set_param` coerces through `Int(round(v))`), so its domain is ~8 discrete positions and
+        # FLAT STRETCHES ARE GUARANTEED — gate-0 §2.5.3/§2.8.1 measured that the peak sits on a
+        # nearly flat top. Without a counter that visibly advances, a flat stretch reads as *the
+        # instrument is dead* rather than as *this setting scores the same*. `track_look` is the
+        # look index; `track_scored_from` is the look the CURRENT counters started at, so a client
+        # can show how much of the pass this setting actually owns after a drag.
+        tel["$sid.track_look"]         = Float64(get(radar.comp, :trk_look, 0))
+        tel["$sid.track_scored_from"]  = Float64(get(radar.comp, :trk_scored_from, 1))
+        # The live position error the gauge is thresholding — floored, never ±Inf (convention 6).
+        # ⚠ ABSENT until a look has run, because 0.0 is a legitimate value of an error and a
+        # defaulted zero would read as a PERFECT track on an instrument that has not started
+        # (slice 50: presence decides).
+        haskey(radar.comp, :trk_err_m) &&
+            (tel["$sid.track_err_m"] = _finite_coord(Float64(radar.comp[:trk_err_m])))
     end
     return nothing
 end

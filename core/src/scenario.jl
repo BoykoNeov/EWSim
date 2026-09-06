@@ -84,6 +84,24 @@ function _radar_comp!(comp::Dict{Symbol,Any}, block::AbstractDict)
                   "and the track's give-up TIME would move with dt_physics")
         comp[:track_drop_looks] = nd
     end
+    # ⭐⭐ SLICE 54 gate 2 — THE GAUGE'S CORRECTNESS BAND: how close, in RANGE CELLS, the track has
+    # to be to the target before a look counts as tracking IT rather than something else. Optional,
+    # defaults to 1 cell (the band every gate-0 probe flew).
+    # ⚠⚠ IT IS AUTHORED AND NOT A SLIDER, ON PURPOSE. Gate-0 §2.8.2 measured that this constant and
+    # the tracker's gate JOINTLY set the SCALE of the slice's answer — the same arm's best patience
+    # reads 5, 7, 9 or 11 depending only on these two — while the DIRECTION (a dirtier picture buys
+    # less patience) is invariant to both. A band that moved under the user's hand would let the
+    # showcase's headline number be dialled, which is what convention 9 forbids and what the
+    # `midcourse_err_gain` ruling (slice 52) already settled one instrument over.
+    if haskey(block, "track_ok_cells")
+        ok = _f64(block["track_ok_cells"])
+        ok > 0.0 || error("radar track_ok_cells=$ok: must be > 0 (it is a half-width in RANGE " *
+                          "CELLS; a band of 0 could never score a look as on-target)")
+        haskey(comp, :track_drop_looks) ||
+            error("radar track_ok_cells needs a `track_drop_looks`: it is the give-up TRACKER's " *
+                  "scoring band and nothing else reads it (a knob nothing reads is a bug)")
+        comp[:track_ok_cells] = ok
+    end
     # Optional CFAR config (slice 3): the STATIC profile geometry (n_cells / range_start_m)
     # plus the LIVE window sliders (n_train / n_guard). Only read when present, so a slice-1/2
     # radar block leaves these out of the comp bag entirely (its point path never reads them).
@@ -1656,13 +1674,19 @@ function _validate_cfar(world::World)
     haskey(world.fidelity, :cfar) || return world
     for (id, e) in world.entities
         e.kind === :radar || continue
-        # ⚠ SLICE 53 gate 2 — THE TRACKER IS WIRED IN THE POINT PATH ONLY. `observe!` dispatches on
-        # this very fidelity key, so a `:cfar` scenario would carry an authored `track_drop_looks`
-        # that NOTHING READS — the `speed` (19) / handover-bias (36) dead-knob shape, and exactly
-        # what gate 1's own loader guard exists to prevent one key over. Refused at LOAD.
-        haskey(e.comp, :track_drop_looks) &&
-            error("radar '$id': `track_drop_looks` is read by the POINT detector's tracker only, " *
-                  "and a :cfar scenario takes the profile path instead — the key would be inert")
+        # ⭐⭐⭐ SLICE 54 gate 2 — **THE SLICE-53 REFUSAL IS LIFTED, WITH A REASON.** It read:
+        #
+        #     `track_drop_looks` is read by the POINT detector's tracker only, and a :cfar
+        #     scenario takes the profile path instead — the key would be inert
+        #
+        # That was TRUE when it was written and is now FALSE: `_observe_cfar!` runs
+        # `_track_cfar_look!` over the detected cells, so the key is read every look on this path
+        # too. ⚠ The refusal was never a physics claim — it was a DEAD-KNOB guard (the `speed` (19)
+        # / handover-bias (36) shape), and the honest way to retire one is to make the knob live,
+        # which is what this slice did. It is replaced by the narrower guard the new wiring actually
+        # needs: the gauge's correctness band is scored in RANGE CELLS, so it is meaningless without
+        # a profile to have cells in.
+        # (the tracker keys themselves are validated in the radar block, which always runs)
         (haskey(e.comp, :n_cells) && e.comp[:n_cells] ≥ 1) ||
             error("radar '$id': a :cfar scenario needs `n_cells ≥ 1` in the radar block")
         if haskey(e.comp, :n_train)
