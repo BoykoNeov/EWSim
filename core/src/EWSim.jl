@@ -57,8 +57,9 @@ export snr_two_ray, snr_db_two_ray, two_ray_phase, two_ray_factor4, horizon_rang
 export jam_noise_ratio, antenna_gain, burnthrough_range
 # Detection
 export detection_threshold, pd_analytic, pd_montecarlo, detect_once
-# Track continuity — the give-up run rule (slice 53 gate 2)
-export track_run_step
+# Track continuity — the give-up run rule (slice 53) + its range-gated half (slice 54)
+export track_run_step, track_gate_cells, track_associate, track_reopen,
+       track_ab_step, TRACK_ALPHA, TRACK_BETA, TRACK_GATE_MAX_CELLS
 # CFAR adaptive thresholding (slice 3)
 export cfar_alpha, cfar_threshold, cfar_scan
 # DF / geolocation shared libs (slice 5): geometry/DOP + estimation scaffold

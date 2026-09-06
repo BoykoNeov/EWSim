@@ -627,3 +627,126 @@ function track_run_step(alive::Bool, misses::Integer, detected::Bool, n_drop::In
     m = Int(misses) + 1
     return m ≥ n ? (false, m, false, true) : (true, m, false, false)
 end
+
+# --- the RANGE-GATED half of a give-up tracker (slice 54 gate 1) ------------------
+#
+# `track_run_step` above answers "does the track survive this look?" once someone has decided
+# whether the look DETECTED the track. On a point detector that decision is a single boolean over
+# the strongest target and the caller is handed the TRUE range, so a track can never be wrong about
+# where it is. Over a CFAR picture it is a decision, and the four pure pieces below are it:
+#
+#   `track_gate_cells`   how wide a window around the prediction counts as "this track"
+#   `track_associate`    which detected cell, if any, is this track's detection   (track ALIVE)
+#   `track_reopen`       which cell a DEAD track restarts on                      (track DEAD)
+#   `track_ab_step`      where the track is next look, given that decision
+#
+# ⚠⚠ THE TWO ASSOCIATION RULES ARE DIFFERENT ON PURPOSE, AND THE DIFFERENCE IS THE LESSON. A live
+# track is CONSERVATIVE (nearest cell inside a narrow gate); a dead one is CREDULOUS (the loudest
+# cell anywhere in the profile). That asymmetry is what makes patience two-sided: holding on longer
+# keeps a fading target, and also keeps a track that has already been captured by a false alarm.
+#
+# All four are pure, own no state, draw nothing, and know nothing about radars (convention 12).
+
+"""Range-filter constants of the shipped give-up tracker — an α–β filter (slice 54)."""
+const TRACK_ALPHA = 0.5
+const TRACK_BETA  = 0.1
+
+"""Ceiling on `track_gate_cells`, bounding the gate↔rate feedback path (see that function)."""
+const TRACK_GATE_MAX_CELLS = 8
+
+"""
+    track_gate_cells(rdot, revisit_s, dr) -> Int
+
+The association gate, **in range cells**, as the cells spanned by one revisit of closing motion:
+`ceil(|rdot|·revisit_s / dr)`, floored at 1 and capped at [`TRACK_GATE_MAX_CELLS`].
+
+⭐⭐ **THE GATE IS COMPUTED FROM THE WIRE, NEVER HARDCODED** (slice 54 gate-0 §3.1). Both this rule
+and the α–β filter are expressed *in* `revisit_s`, which no loader fixes — so a radar that revisits
+twice as fast needs half the window for the same physical motion, and a gate frozen at "1 cell"
+would silently be a different tracker on a different wire. This is slice 53's *a rule counted in
+samples changes meaning when the sample rate does*, one instrument over.
+
+⚠ `rdot` is the TRACK's OWN estimated range rate, never a truth value — a tracker that is wrong
+about where it is must also be wrong about how wide to look. That makes gate and rate a feedback
+pair, which is why the cap exists: an accepted residual is itself bounded by the gate, so without a
+ceiling a seduced track could widen its own window without limit. ⚠ The cap is a NAMED
+APPROXIMATION and not a tuning knob — on a 300 m/s / 1 MHz wire the rule yields 1 cell everywhere
+and the cap never binds (pinned by test).
+
+A non-finite or non-positive `dr`/`revisit_s` yields the floor of 1: a live knob can never crash a
+tick (convention 5), and 1 cell is the narrowest gate that can associate anything at all.
+"""
+function track_gate_cells(rdot::Real, revisit_s::Real, dr::Real)
+    r = Float64(rdot); v = Float64(revisit_s); d = Float64(dr)
+    (isfinite(r) && isfinite(v) && isfinite(d) && v > 0.0 && d > 0.0) || return 1
+    return clamp(ceil(Int, abs(r) * v / d), 1, TRACK_GATE_MAX_CELLS)
+end
+
+"""
+    track_associate(pred_range, ranges, gate_m) -> Int
+
+The **ALIVE** rule: the index into `ranges` of the detected cell NEAREST `pred_range`, among those
+within `gate_m` of it; `0` when the gate is empty (this look is a MISS for this track).
+
+⚠ Nearest, not strongest. A live track is conservative — it already believes something, and the
+loudest return in the profile is not evidence about the thing it is holding. Ties go to the LOWER
+index (`<`, not `≤`), which makes the choice deterministic in the caller's own cell order and so
+replayable (HANDOFF §1); `ranges` is expected in ascending cell order, but nothing here requires it.
+"""
+function track_associate(pred_range::Real, ranges::AbstractVector{<:Real}, gate_m::Real)
+    p = Float64(pred_range); g = Float64(gate_m)
+    (isfinite(p) && isfinite(g) && g ≥ 0.0) || return 0
+    best_i = 0; best_d = Inf
+    @inbounds for i in eachindex(ranges)
+        d = abs(Float64(ranges[i]) - p)
+        (d ≤ g && d < best_d) && (best_i = i; best_d = d)
+    end
+    return best_i
+end
+
+"""
+    track_reopen(powers) -> Int
+
+The **DEAD** rule: the index of the STRONGEST detected cell — where a track that has been given up
+restarts — or `0` when nothing was detected at all.
+
+⚠⚠ **UNGATED, AND THAT IS THE POINT.** A dead track has no prediction left to gate against, so it
+takes the loudest thing in the picture; on a dirty picture that is regularly not the target, and a
+track re-opened on a false alarm is exactly the cost that makes patience two-sided (gate-0 §2.8.1:
+every arm rises and then falls). ⚠ Ties go to the lower index, as in [`track_associate`].
+"""
+function track_reopen(powers::AbstractVector{<:Real})
+    best_i = 0; best_p = -Inf
+    @inbounds for i in eachindex(powers)
+        p = Float64(powers[i])
+        (isfinite(p) && p > best_p) && (best_i = i; best_p = p)
+    end
+    return best_i
+end
+
+"""
+    track_ab_step(r, rdot, revisit_s, meas) -> (r′, rdot′)
+
+One α–β range-filter update. `meas === nothing` is a COAST: the track moves to its own prediction
+`r + rdot·revisit_s` and keeps its rate, which is what lets a patient track ride a gap and still be
+looking in the right place when the target comes back. With a measurement:
+
+    pred = r + rdot·revisit_s;  resid = meas − pred
+    r′   = pred + α·resid;      rdot′ = rdot + (β/revisit_s)·resid
+
+⚠ `β` is divided by `revisit_s` because it corrects a RATE from a POSITION residual — the one place
+in this file where the units would silently be wrong if the revisit were dropped, and the reason
+[`track_gate_cells`] carries the same warning. A non-positive or non-finite `revisit_s` coasts in
+place rather than dividing by zero (convention 5: a live knob can never crash a tick).
+"""
+function track_ab_step(r::Real, rdot::Real, revisit_s::Real, meas::Union{Nothing,Real})
+    r0 = Float64(r); v0 = Float64(rdot); dt = Float64(revisit_s)
+    (isfinite(r0) && isfinite(v0)) || return (r0, v0)
+    (isfinite(dt) && dt > 0.0) || return (r0, v0)
+    pred = r0 + v0 * dt
+    meas === nothing && return (pred, v0)
+    m = Float64(meas)
+    isfinite(m) || return (pred, v0)
+    resid = m - pred
+    return (pred + TRACK_ALPHA * resid, v0 + (TRACK_BETA / dt) * resid)
+end

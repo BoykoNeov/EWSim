@@ -666,3 +666,233 @@ end
         @test tel["radar1.track_drop_looks"] == 3.0 && tel["radar1.track_revisit_s"] == 0.1
     end
 end
+
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 54 GATE 1 — the RANGE-GATED half of the give-up tracker: the four pure pieces that decide
+# whether a look DETECTED THIS TRACK, over a picture of cells instead of one boolean over truth.
+#
+# ⚠⚠ THE EXTERNAL ANCHOR OF THIS SECTION IS `docs/plans/slice54.md` §2.5.1, which ruled the gate
+# rule BEFORE the tracker was written and computed its value by hand on paper:
+#     |ṙ|·revisit_s/Δr = 300·0.1/149.896 = 0.2001 cells → ceil = 1.
+# Every probe P3..P7 then flew that gate, and §2.8's shipped curve is what these pieces must
+# reproduce. A tooth that only re-derives the formula from the same formula proves nothing
+# (convention 11), so the anchors below are the PLAN's arithmetic, not this code's.
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+
+@testset "slice54 gate1 — the range-gated give-up tracker (pure)" begin
+    c_light = 299_792_458.0
+    dr_1mhz = c_light / (2 * 1.0e6)              # 149.896... m — the shipped wire's range cell
+    @test isapprox(dr_1mhz, 149.896229, atol = 1e-5)
+
+    @testset "α/β are PINNED — editing them changes every number in the plan" begin
+        # ⚠⚠ NOT a tautology: these constants set the SCALE of §2.8's answer (gate-0 §2.8.2 — the
+        # count of looks is a joint property of the gate and the filter; only the DIRECTION is
+        # physics). A silent edit would leave the shipped curve unreproducible from the ledger, so
+        # the values are nailed to the ones every probe flew.
+        @test TRACK_ALPHA == 0.5
+        @test TRACK_BETA  == 0.1
+        @test TRACK_GATE_MAX_CELLS == 8
+    end
+
+    @testset "track_gate_cells — the PRE-REGISTERED rule, on the plan's own arithmetic" begin
+        # THE ANCHOR: §2.5.1's hand computation — the number the slice ruled it would ship.
+        @test track_gate_cells(300.0, 0.1, dr_1mhz) == 1
+        # …and the SIGN of the rate cannot matter: opening and closing look alike to a window.
+        @test track_gate_cells(-300.0, 0.1, dr_1mhz) == 1
+
+        # ⭐ INDEPENDENT RECOMPUTE at a rate where the rule is NOT its own floor: 3000 m/s spans
+        # 3000·0.1 = 300 m = 2.0014 cells → 3.
+        @test isapprox(3000.0 * 0.1 / dr_1mhz, 2.0014, atol = 1e-4)   # the recompute, shown
+        @test track_gate_cells(3000.0, 0.1, dr_1mhz) == 3
+
+        # ⭐⭐ THE `revisit_s` TOOTH — the whole reason the gate is COMPUTED and not hardcoded. The
+        # SAME physical motion on a radar that revisits twice as fast needs HALF the window, so a
+        # gate frozen at the shipped "1 cell" would silently be a different tracker on that wire.
+        @test track_gate_cells(3000.0, 0.05, dr_1mhz) == 2      # 150 m = 1.0007 cells → 2
+        @test track_gate_cells(3000.0, 0.2,  dr_1mhz) == 5      # 600 m = 4.0031 cells → 5
+        # …and the same motion in a FINER range cell needs MORE cells (Δr halves at 2 MHz).
+        @test track_gate_cells(3000.0, 0.1, c_light / (2 * 2.0e6)) == 5
+
+        # The floor: a track with no rate estimate yet must still be able to associate at all.
+        @test track_gate_cells(0.0, 0.1, dr_1mhz) == 1
+        # The cap, which bounds the gate↔rate feedback path.
+        @test track_gate_cells(1.0e9, 0.1, dr_1mhz) == TRACK_GATE_MAX_CELLS
+        @test track_gate_cells(Inf,   0.1, dr_1mhz) == 1        # non-finite → the safe floor
+        # Monotone non-decreasing in |rdot| — a faster track never gets a NARROWER window.
+        @test issorted([track_gate_cells(v, 0.1, dr_1mhz) for v in 0.0:137.0:12_000.0])
+
+        # ⚠ Convention 5: a live knob can never crash a tick. Every degenerate input floors.
+        for bad in ((300.0, 0.0, dr_1mhz), (300.0, 0.1, 0.0), (300.0, -0.1, dr_1mhz),
+                    (300.0, 0.1, -1.0), (NaN, 0.1, dr_1mhz), (300.0, NaN, dr_1mhz),
+                    (300.0, 0.1, NaN))
+            @test track_gate_cells(bad...) == 1
+        end
+
+        # ⭐⭐⭐ THE CAP NEVER BINDS ON THE SHIPPED WIRE — so §2.8's curve is the UNCAPPED rule's and
+        # the cap is a guard, not a tuning constant that quietly set the slice's answer.
+        @test all(track_gate_cells(v, 0.1, dr_1mhz) == 1 for v in -300.0:5.0:300.0)
+    end
+
+    @testset "track_associate — NEAREST inside the gate, and it is not the strongest" begin
+        gate = 1.0 * dr_1mhz                     # the shipped ±1 cell
+        # NEAREST, not first and not last: 1050 is 50 m from the prediction, 900 is 100 m.
+        @test track_associate(1000.0, [900.0, 1050.0], 200.0) == 2
+        # The gate EXCLUDES what lies outside it — that look is a MISS for this track.
+        @test track_associate(1000.0, [800.0, 1300.0], gate) == 0
+        # The BOUNDARY is inclusive (`d ≤ g`); an off-by-one here is a different tracker.
+        # ⚠ The "just outside" case is probed a whole METRE out, not by `nextfloat`: at a range of
+        # 1000 m the ulp is ~1e-13, so `1000 + nextfloat(gate)` rounds back to `1000 + gate` and the
+        # tooth would test nothing. A tooth that cannot fail is not a tooth (convention 11).
+        @test track_associate(1000.0, [1000.0 + gate], gate) == 1
+        @test track_associate(1000.0, [1000.0 + gate + 1.0], gate) == 0
+        @test track_associate(1000.0, [1000.0 - gate], gate) == 1        # …symmetric, both sides
+        @test track_associate(1000.0, [1000.0 - gate - 1.0], gate) == 0
+        # Ties → the LOWER index, so a replay is deterministic in the caller's cell order.
+        @test track_associate(1000.0, [950.0, 1050.0], 100.0) == 1
+        # Nothing detected at all → 0, which the caller also reads as a MISS.
+        @test track_associate(1000.0, Float64[], gate) == 0
+        # Degenerate inputs floor to "no association" rather than throwing.
+        @test track_associate(NaN, [1000.0], gate) == 0
+        @test track_associate(1000.0, [1000.0], NaN) == 0
+        @test track_associate(1000.0, [1000.0], -1.0) == 0
+    end
+
+    @testset "track_reopen — STRONGEST, ungated, and that asymmetry IS the lesson" begin
+        @test track_reopen([1.0, 5.0, 3.0]) == 2
+        @test track_reopen(Float64[]) == 0
+        @test track_reopen([5.0, 5.0]) == 1                     # ties → lower index
+        @test track_reopen([-3.0, -1.0]) == 2                   # works below unity power
+        # ⭐⭐ THE CONTRAST TOOTH, in one place: on the SAME picture a live track and a dead one
+        # choose DIFFERENT cells. Prediction 1000 m; a quiet near cell at 1010 m and a loud far one
+        # at 5000 m. A live track keeps the near one; a dead one is captured by the loud one — and
+        # that is the whole two-sidedness of patience, in three lines.
+        rngs = [1010.0, 5000.0]; pows = [2.0, 90.0]
+        @test track_associate(1000.0, rngs, 1.0 * dr_1mhz) == 1
+        @test track_reopen(pows) == 2
+    end
+
+    @testset "track_ab_step — the α–β filter, and β's units are the trap" begin
+        # COAST (no measurement): move to the prediction, keep the rate. INDEPENDENT recompute.
+        r1, v1 = track_ab_step(1000.0, -300.0, 0.1, nothing)
+        @test isapprox(r1, 1000.0 + (-300.0) * 0.1, atol = 1e-12)     # = 970.0
+        @test v1 == -300.0
+        # UPDATE, hand-computed against α = 0.5, β = 0.1, revisit 0.1:
+        #   pred  = 1000 + (-300)(0.1)  = 970;   resid = 990 − 970 = 20
+        #   r′    = 970 + 0.5·20        = 980
+        #   rdot′ = −300 + (0.1/0.1)·20 = −280
+        r2, v2 = track_ab_step(1000.0, -300.0, 0.1, 990.0)
+        @test isapprox(r2, 980.0,  atol = 1e-12)
+        @test isapprox(v2, -280.0, atol = 1e-12)
+
+        # ⭐⭐ β IS DIVIDED BY THE REVISIT BECAUSE IT CORRECTS A RATE FROM A POSITION. The same
+        # residual seen twice as fast implies twice the rate error; applied bare, a faster-revisiting
+        # radar would silently run a different filter (gate-0 §3.1).
+        #   at revisit 0.05: pred = 985; resid = 5;  rdot′ = −300 + (0.1/0.05)·5 = −290
+        r3, v3 = track_ab_step(1000.0, -300.0, 0.05, 990.0)
+        @test isapprox(r3, 985.0 + 0.5 * 5.0, atol = 1e-12)           # = 987.5
+        @test isapprox(v3, -290.0, atol = 1e-12)
+        # …stated as the INVARIANT rather than as two more numbers: the rate correction per unit
+        # residual scales as 1/revisit_s.
+        for rev in (0.2, 0.1, 0.05, 0.025)
+            _, v = track_ab_step(0.0, 0.0, rev, 10.0)                 # pred = 0, resid = 10
+            @test isapprox(v, TRACK_BETA * 10.0 / rev, atol = 1e-12)
+        end
+
+        # A perfect measurement leaves the rate ALONE — zero residual, zero correction.
+        r4, v4 = track_ab_step(1000.0, -300.0, 0.1, 970.0)
+        @test isapprox(r4, 970.0, atol = 1e-12) && isapprox(v4, -300.0, atol = 1e-12)
+
+        # ⚠ Convention 5 again: a degenerate revisit coasts in place, never divides by zero.
+        @test track_ab_step(1000.0, -300.0, 0.0,  990.0) == (1000.0, -300.0)
+        @test track_ab_step(1000.0, -300.0, -0.1, 990.0) == (1000.0, -300.0)
+        @test all(isfinite, track_ab_step(1000.0, -300.0, 0.1, NaN))
+    end
+
+    @testset "the four pieces compose into the probes' tracker (the ORACLE tooth)" begin
+        # ⭐⭐⭐ THE STRONGEST TOOTH HERE: an INDEPENDENT reimplementation of the offline tracker from
+        # `M:\claud_projects\temp\slice54\p7_band.jl` (lines 88..110) — transcribed from the PROBE,
+        # not from the shipped functions — run over a hand-built picture and required to agree
+        # look-for-look with the composition of the four shipped pieces. If they diverge, the core
+        # does not run the rule that produced §2.8's table and no number in the plan is quotable.
+        rev = 0.1
+        # The picture: 12 looks. A target closes 1000 → 725 m at −250 m/s (25 m per look) and is the
+        # LOUDEST thing in the profile while it is there; a quieter decoy sits at 5000 m throughout;
+        # the target is missing on looks 5..8 — a gap the give-up rule must ride — and back after.
+        #
+        # ⚠ THE TARGET MUST OUT-SHOUT THE DECOY OR NEITHER ARM EVER HOLDS IT: `track_reopen` takes
+        # the STRONGEST cell, so a louder decoy captures the track on look 1 and both arms sit on
+        # 5000 m for the whole pass. That is correct behaviour and it silently voids the
+        # demonstration below — found by this tooth failing, and worth keeping as the reason the
+        # powers are the way round they are.
+        looks = map(1:12) do k
+            tgt_r   = 1000.0 - 25.0 * (k - 1)
+            present = !(5 ≤ k ≤ 8)
+            (rng = present ? [tgt_r, 5000.0] : [5000.0],
+             pow = present ? [40.0, 3.0]     : [3.0])
+        end
+
+        # --- the independent reimplementation (probe semantics, written out longhand) ---
+        function probe_tracker(lks, n_drop)
+            alive = false; misses = 0; r = 0.0; rdot = 0.0; out = Tuple{Bool,Float64}[]
+            for u in lks
+                if alive
+                    pred = r + rdot * rev
+                    gate = max(1, min(8, ceil(Int, abs(rdot) * rev / dr_1mhz))) * dr_1mhz
+                    bi, bd = 0, Inf
+                    for (i, rr) in enumerate(u.rng)
+                        d = abs(rr - pred); (d ≤ gate && d < bd) && (bi = i; bd = d)
+                    end
+                    if bi != 0
+                        resid = u.rng[bi] - pred
+                        r = pred + 0.5 * resid; rdot += (0.1 / rev) * resid; misses = 0
+                    else
+                        r = pred; misses += 1; misses ≥ n_drop && (alive = false)
+                    end
+                elseif !isempty(u.rng)
+                    _, i = findmax(u.pow); alive = true; misses = 0; r = u.rng[i]; rdot = 0.0
+                end
+                push!(out, (alive, r))
+            end
+            out
+        end
+
+        # --- the composition of the SHIPPED pieces ---
+        function shipped_tracker(lks, n_drop)
+            alive = false; misses = 0; r = 0.0; rdot = 0.0; out = Tuple{Bool,Float64}[]
+            for u in lks
+                if alive
+                    pred = r + rdot * rev
+                    i    = track_associate(pred, u.rng,
+                                           track_gate_cells(rdot, rev, dr_1mhz) * dr_1mhz)
+                    r, rdot = track_ab_step(r, rdot, rev, i == 0 ? nothing : u.rng[i])
+                    alive, misses, _, _ = track_run_step(alive, misses, i != 0, n_drop)
+                else
+                    i = track_reopen(u.pow)
+                    if i != 0
+                        r = u.rng[i]; rdot = 0.0
+                        alive, misses, _, _ = track_run_step(alive, misses, true, n_drop)
+                    end
+                end
+                push!(out, (alive, r))
+            end
+            out
+        end
+
+        for n_drop in 1:6
+            a = probe_tracker(looks, n_drop); b = shipped_tracker(looks, n_drop)
+            @test length(a) == length(b)
+            for k in eachindex(a)
+                @test a[k][1] == b[k][1]                       # same alive/dead, look for look
+                @test isapprox(a[k][2], b[k][2], atol = 1e-9)  # …and the same range
+            end
+        end
+
+        # ⭐ AND THE COMPOSITION EXHIBITS THE LESSON'S MECHANISM ON 12 LOOKS: at n_drop = 1 the
+        # 4-look gap kills the track, which then RE-OPENS on the loud decoy and is wrong for the
+        # rest of the pass; at n_drop = 5 it rides the gap and is still on the target at the end.
+        impatient = shipped_tracker(looks, 1)
+        patient   = shipped_tracker(looks, 5)
+        @test impatient[12][1] && isapprox(impatient[12][2], 5000.0, atol = 250.0)
+        @test patient[12][1]   && patient[12][2] < 1000.0
+    end
+end
