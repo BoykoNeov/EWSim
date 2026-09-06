@@ -1591,3 +1591,25 @@ half the rule protects.
 inside `CLAUDE.md` was **686 bytes of explanation added to the file it was explaining how to
 shrink.** A note about bloat is bloat. The finding lives here; the router gets three lines and a
 pointer.
+
+⇒ **RESOLVED 2026-09-06, BY THE USER, OUTSIDE A SLICE — exactly as this note asked.** The split was
+made: `docs/PROHIBITIONS.md` now holds all sixteen dead-end lines **byte-for-byte**, under six
+headings, and is reachable from the router table by an ACTION trigger ("propose a knob, a slider or a
+slice candidate; write a gate-0 kill record; quote a past slice's ⚠"). `CLAUDE.md` kept the NAMES and
+the VERDICT WORDS only — **the trip-wire that stops a re-proposal mid-sentence** — and went
+18.8 → 15.4 KB, under budget for the first time since slice 47.
+
+⭐⭐ **THE RULE THAT DECIDED WHAT MOVES: a line stays in an always-loaded router if it must fire BEFORE
+anyone thinks to look something up; it moves if it only needs to be there once a trigger has fired.**
+A name and a verdict word fire unprompted — "what if we added a second-order fin actuator" has to
+stop on sight. The reasoning, the teeth, the numbers and the slice cites never fire unprompted, so
+they cost 6 KB every turn to be read approximately never. ⚠ This is why the note above was wrong on
+one detail: it proposed moving the per-slice ⚠ lines and LEAVING the dead ends, which keeps the 6 KB
+of reasoning loaded and moves the fresher material. The correct cut is the other axis — **not WHICH
+prohibitions, but WHICH HALF of every prohibition.**
+
+⚠⚠ **THE CHECK THAT MAKES A SPLIT LIKE THIS HONEST IS A GLYPH COUNT, NOT AN EYEBALLED DIFF.** Count
+`⚠` and `⚠⚠` across the source file before, and across both files after; the totals must be equal or
+higher. Here: 70 → 85 single, 21 → 25 double (the new headers add warnings; none were shaved). That
+is a mechanical guard against the exact failure this lesson names — trading a real safeguard for a
+cosmetic byte count — and no reading of the diff proves it as cheaply.
