@@ -1138,3 +1138,63 @@ ever ships for another reason.
    for the second (−43 % slope, ≈ 0 dB). ⭐⭐ The earned statement is *a run-rule edge is not a level:
    before quoting a threshold SNR, measure how fast the signal is falling where the rule fires* — not
    the stronger causal claim §2.15 first printed.
+
+---
+
+## Slice 54 — DISCHARGED, AND THE ENTRY'S OWN BLOCKER WAS STALE
+
+**⭐⭐ A TRACKER WHOSE GIVE-UP RULE IS THE SLIDER — ✅ SHIPPED BY SLICE 54.** The candidate raised by
+slice 53 (§"New candidates raised by slice 53") is discharged in full: `track_drop_looks` is now a
+live slider on a CFAR wire, the lesson measured, and both showcase scenarios shipped.
+
+⚠⚠ **THE ENTRY'S BLOCKER WAS FALSE AS WRITTEN, AND THAT WAS THE PLAN'S FIRST FINDING.** It read
+*"this arc has no false-track model … the honest candidate is a false-alarm track, which is new
+physics rather than a new scenario."* `_observe_cfar!` has drawn a noise-and-clutter profile and
+thresholded it since **slice 3**, and pushes one `:detection` event per detected cell carrying
+`:cell` and `:range`. A threshold crossing in a noise cell **is** a false alarm and it **has a
+range**. ⇒ **THE PHYSICS WAS NEVER MISSING. A TRACKER THAT COULD CONSUME IT WAS.** The slice was new
+WIRING and a new gauge, materially cheaper than the entry assumed.
+
+⇒ **THE STANDING LESSON: a blocker written from the ledger rather than from the code has a shelf
+life.** Re-read the consumer before pricing a candidate on an entry's own account of what exists.
+
+**⭐⭐ THE SLICE-53 `:cfar` LOADER REFUSAL — ✅ LIFTED, WITH A REASON.** `_validate_cfar` refused
+`track_drop_looks` on a `:cfar` wire because nothing on that path read it (the `speed` (19) /
+handover-bias (36) dead-knob shape). That was TRUE when written and is now FALSE. ⚠ **The refusal was
+never a physics claim — it was a dead-knob guard, and the honest way to retire one is to make the
+knob LIVE.** Its test is kept as its headstone rather than deleted.
+
+## New candidates raised by slice 54
+
+⚠ Read the two-test rule at the top of this file before proposing to kill any of these.
+
+**⭐⭐ A SECOND TRACK, AND THE ASSOCIATION CONFLICT BETWEEN THEM.** Slice 54 ships ONE reported track
+per radar (plus 16 shadow arms of the same track). Two real targets in the same picture would make
+association a *contest* — two tracks bidding for one cell, and a track stealing its neighbour's
+return — which is the next honest question after "which cell is mine?". ⚠⚠ **The gate-0 question is
+what the GAUGE would be**: slice 54's net-looks-on-target does not obviously extend to two tracks
+(is a swap one error or two?), and a slice whose gauge is undefined is a slice with no headline.
+⚠ Slice 3's own masking lesson already owns "two targets five cells apart", so the wire would have
+to separate association failure from masking — convention 9.
+
+**⭐ A TRACK INITIATION RULE (M-of-N before a track is declared).** Slice 54's tracker opens on the
+FIRST detected cell, so a single false alarm on a quiet profile starts a track — a named
+approximation, and the standard cure is to require M detections in N looks before declaring. ⚠⚠ **It
+is very likely slice 48's monotone shape**: on this wire a stricter initiation is close to
+monotone-better, because the target is present for most of the pass and the false alarms are not.
+⇒ **needs a wire where initiation is genuinely two-sided before it can be proposed** — probably one
+where the target appears LATE and briefly, so a strict rule misses it entirely.
+
+**⚠ THE α–β FILTER CONSTANTS AS A SLIDER — PROBABLY NOT A LESSON, RECORDED SO IT IS NOT RE-ASKED.**
+`TRACK_ALPHA`/`TRACK_BETA` are fixed and pinned. Dialling them is a classic filter-tuning lesson —
+but slice 54 §2.8.2 measured that the gate and the band already set the SCALE of this gauge, and a
+third scale-setting constant on the same instrument is the `midcourse_err_gain` shape (convention 9:
+the thing that sets the answer cannot also be the input). ⇒ **if ever proposed, it needs a gauge that
+is NOT the give-up score.**
+
+**⭐ THE CUMULATIVE-GAUGE WRINKLE: a score that is only the pass's answer when the pass ends.** Slice
+54's peak sits at ~5 at look 1400 and at 3 at look 2000, because the gauge accumulates. That is
+honest but it means a mid-pass reading is not a measurement. ⚠ A RATE gauge (net per scored look)
+would be comparable mid-pass but is NOT comparable across parts of the pass, because early looks are
+a strong target and late ones are a fade. ⇒ **recorded as a real modelling tension, not a candidate**
+— any slice that wants a live-comparable score has to solve it first.

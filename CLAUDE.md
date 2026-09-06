@@ -44,46 +44,24 @@ Fixed order each `tick!`: **phase 1** `integrate!` (movers/airframe) → `empty!
 
 ## Where the project is (2026-09-06)
 
-**Slices 1–40 + 46–50 + 52–53 COMPLETE & green — 19743 tests.** 39 and 41–45 are GATE-0 RECORDS (no code) —
+**Slices 1–40 + 46–50 + 52–54 COMPLETE & green — 20051 tests.** 39 and 41–45 are GATE-0 RECORDS (no code) —
 ⚠⚠ **five in a row shipped nothing and the kill CRITERION was ruled at fault on 2026-08-18** (the two-test
 rule below); 41/44/45 are **ALIVE AS A MODEL** (probes in `M:\claud_projects\temp\slice4N`), only 42 is dead
 outright. ⭐ **46 DISCHARGED 44, 47 DISCHARGED 43's BLOCK, 48 SHIPPED the search family and 52 ITS WIDTH** —
-CLOSED. **49/50 MADE THE ECHO A SHAPE**; ⭐⭐⭐ **53 DISCHARGED 49's TAIL-LOBE candidate AND 50's raised
-stakes** (fore/aft symmetry retired as PHYSICS; 50's tooth 9b RE-SCOPED, not replaced). **51 KILLED 50's own
-⭐ candidate but is NOT a "no code" record** — it shipped `maneuver.turn_start_s` + tests and NAMED a model
-gap. Pick the next from `docs/DEFERRALS.md`. HANDOFF §10 items 1–13 DONE; 15–40 are §11 Tier-A.
+CLOSED. **49/50 MADE THE ECHO A SHAPE, 53 ITS FORE/AFT ASYMMETRY**, and ⭐⭐⭐ **54 DISCHARGED 53's OWN
+give-up candidate.** **51 KILLED 50's ⭐ candidate but is NOT a "no code" record** — it shipped
+`maneuver.turn_start_s` + tests and NAMED a model gap. Pick the next from `docs/DEFERRALS.md`.
+HANDOFF §10 items 1–13 DONE; 15–40 are §11 Tier-A.
 
-The live arc was the **missile seeker family (26–40, 46–48, 50, 52)** — a seeker looking through a radome
-whose bend depends on the look angle, so the missile's own motion feeds back into the LOS it reports and past
-a loop gain it shakes itself into a limit cycle. 27–33 priced the gyro cure; 34–40 put the head on a
-**gimbal** with **inertia**; 46–48/52 gave it a RECEIVER, BLINDED it, let it SEARCH and SIZED that search.
-**49/50/53 moved to the ECHO ITSELF** — a shape, then that shape under a seeker, then its fore/aft
-ASYMMETRY. Per-slice detail — and every number behind the lines below — is in `docs/SLICES.md`.
+The **missile seeker family (26–40, 46–48, 50, 52)** ran the radome→gimbal→receiver→search arc and is
+CLOSED. **49/50/53 moved to the ECHO ITSELF** — a shape, that shape under a seeker, then its fore/aft
+ASYMMETRY — and **54 moved to the TRACKER that reads it.** Per-slice detail — and every number behind the
+lines below — is in `docs/SLICES.md`.
 
-- **46/47/48/52 — THE CLOSED HANDOVER-AND-SEARCH THREAD.** **46 — the window IS the beamwidth** (a wider one
-  costs REACH, paid in AUTHORITY not MISS). **47 — ⭐⭐⭐ THE CLIFF IS THE WINDOW**: handover error = PICTURE
-  error × TIME BLIND. **48 — ⭐⭐⭐ A SEARCH SPENDS THE ENGAGEMENT, NOT THE HEAD**, ⭐⭐ **ACQUISITION IS NOT A
-  LATCH.** **52 — ⭐⭐⭐ SIZE THE SWEEP TO THE UNCERTAINTY**, ⭐⭐⭐ **A HEAD DOES NOT FLY THE COVERAGE YOU
-  AUTHOR** ⇒ **a faster sweep needs a WIDER one.** ⚠⚠ 47 RETRACTED its ban on `gimbal_fov_margin_deg`.
-  ⚠ Authority is NOT monotone in ρ; 52's floor is NOT zero. ⚠⚠ A view marker must separate wires differing
-  only by the SLIDER, and its gate must be an INSTRUMENT.
-- **49/50 — ⭐⭐⭐ A CONSTANT ECHO CAN BE GAINED WHILE CLOSING AND NEVER LOST** ⇒ **only a SHAPE makes a closing
-  target harder to see** (49) — and ⭐⭐⭐ **A TARGET CAN TAKE A LOCK BACK BY TURNING** (50): the horizon
-  RETREATS faster than the missile closes, priced in **the heading error it goes blind holding**, never the
-  MISS. ⭐⭐ **A GAUGE MUST CARRY ITS OWN WINDOW.** ⚠⚠ Launch near the horizon's EDGE. ⭐⭐ **A NULL ARM AND A
-  SUB-THRESHOLD ARM ARE DIFFERENT CONTROLS**, ⚠⚠ **a live DRAG invalidates a latch as a Reset does** and
-  **DISARMS a latched INSTANT**, ⚠⚠ **the lesson's NULL and a dead instrument's DEFAULT read the same** ⇒
-  PRESENCE decides, ⭐⭐ **A VOCABULARY IS A GAUGE.**
-- **53 — ⭐⭐⭐ A TAIL LOBE: ONE END OF A PASS IS UNTOUCHABLE AND THE OTHER IS THE SLIDER.** A brighter rear
-  hemisphere (`rcs_tail_gain`) ⇒ the same target on the same fly-past is held FAR FURTHER OUT running away
-  than it was ever seen coming in — and no `rcs_m2`/`rcs_fineness` fakes it, both being fore/aft SYMMETRIC
-  and moving BOTH ends. ⚠⚠ **THE METRES ARE A JOINT PROPERTY OF THE LOBE AND THE TRACKER**: quote
-  `revisit_s` and `N`\* or it is not a measurement — the SIGN is physics, the SIZE is not. ⚠ The NULL is
-  fading NOISE, never zero. ⭐⭐⭐ **A RULE COUNTED IN SAMPLES CHANGES MEANING WHEN THE SAMPLE RATE DOES** ⇒
-  the gauge could not live in the client. ⭐⭐⭐ **DECLARE THE SELECTION RULE BEFORE THE FLIGHTS AND PUBLISH
-  THE LOSERS** — the obvious seed lost. ⚠⚠ **A FRAME-HANDLER accumulator has NO headless proof AND no shot
-  either** (gate it at its own site, with a paired control); ⚠ a CROSSING pass needs a downrange FLOOR; ⚠
-  gate a view marker on the author's KEY, never the slider's VALUE.
+- **46/47/48/52 — THE CLOSED HANDOVER-AND-SEARCH THREAD** (verdicts in `docs/SLICES.md`; teeth in `docs/LESSONS.md`). ⭐⭐⭐ **THE CLIFF IS THE WINDOW**; **A SEARCH SPENDS THE ENGAGEMENT, NOT THE HEAD**; **SIZE THE SWEEP TO THE UNCERTAINTY** ⇒ **a faster sweep needs a WIDER one.** ⚠⚠ 47 RETRACTED its ban on `gimbal_fov_margin_deg`. ⚠ Authority is NOT monotone in ρ; 52's floor is NOT zero.
+- **49/50 — THE ECHO AS A SHAPE** (detail in `docs/SLICES.md`). ⭐⭐⭐ **ONLY A SHAPE MAKES A CLOSING TARGET HARDER TO SEE**; **A TARGET CAN TAKE A LOCK BACK BY TURNING**, priced in the heading error it goes blind holding, never the MISS. ⭐⭐ **A GAUGE MUST CARRY ITS OWN WINDOW**; **A VOCABULARY IS A GAUGE.** ⚠⚠ Launch near the horizon's EDGE; a live DRAG invalidates a latch as a Reset does and DISARMS a latched INSTANT; the lesson's NULL and a dead instrument's DEFAULT read the same ⇒ PRESENCE decides.
+- **53 — ⭐⭐⭐ A TAIL LOBE: ONE END OF A PASS IS UNTOUCHABLE AND THE OTHER IS THE SLIDER.** A brighter rear hemisphere ⇒ the same target on the same fly-past is held FAR FURTHER OUT running away than it was ever seen coming in — and no `rcs_m2`/`rcs_fineness` fakes it, both being fore/aft SYMMETRIC and moving BOTH ends. ⭐⭐⭐ **A RULE COUNTED IN SAMPLES CHANGES MEANING WHEN THE SAMPLE RATE DOES** ⇒ the gauge could not live in the client. ⭐⭐⭐ **DECLARE THE SELECTION RULE BEFORE THE FLIGHTS AND PUBLISH THE LOSERS** — the obvious seed lost. ⚠⚠ **THE METRES ARE A JOINT PROPERTY OF THE LOBE AND THE TRACKER** — the SIGN is physics, the SIZE is not. ⚠ The NULL is fading NOISE, never zero. ⚠⚠ **A FRAME-HANDLER accumulator has NO headless proof AND no shot either**; ⚠ a CROSSING pass needs a downrange FLOOR.
+- **54 — ⭐⭐⭐ THERE IS NO RIGHT AMOUNT OF PATIENCE: THE GIVE-UP RULE IS SET BY HOW DIRTY THE PICTURE IS.** Over a CFAR picture the tracker must choose its own cell and CAN BE WRONG (the point path is handed TRUTH, so patience is free there). ⭐⭐ **ALIVE = NEAREST-AND-GATED, DEAD = LOUDEST-AND-UNGATED — that asymmetry IS the two-sidedness.** ⭐⭐⭐ **WHEN THE ARGMAX IS NOISE, SHIP THE CURVE** (N shadow arms on ONE pass — cheap, PAIRED, and it must draw NOTHING). ⭐⭐ **A rule counted in LOOKS is `dt`-invariant when the look cadence is** (prove it on the PICTURE, not on an argmax). ⭐⭐⭐ **A pre-registered rule earns authority the first time it REFUSES something.** ⚠⚠ Truth reaches the GAUGE, never the TRACKER. ⚠⚠ **THE COUNT OF LOOKS IS A JOINT PROPERTY OF THE RULE, THE GATE AND THE BAND** — the DIRECTION is physics, the COUNT is not. ⚠⚠ `cnr_db` is NOT a false-alarm source — **clutter under CFAR is a MASKER**; `pfa` is the mover. ⚠⚠ **`bad` is NOT monotone in the dirtiness** (two roads: COAST off vs be CAPTURED) ⇒ gauge the NET, never a half. ⚠⚠ **BEING WRONG NEEDS A DROP FIRST** ⇒ never put a tooth on an UNMEASURED arm.
 
 **The rule that keeps paying** (33, 34, 35, 37, 38): *aim `R̂` at the glass's worst-case slope*
 (`radome_slope_worst`) and the cost — of FOV, detector window, servo bandwidth, servo frame — mostly
@@ -107,12 +85,12 @@ those inline eagerly and recursively, which is the problem this split exists to 
 `docs/STATUS.md` (`## Slice N — TITLE (date)`), a plain-language paragraph into `docs/SLICES.md`,
 discharged/new/killed candidates into `docs/DEFERRALS.md`, method lessons into
 `docs/LESSONS.md` (⚠ fold onto the EXISTING heading when it repeats), and into `CLAUDE.md`
-**only** the state line + any new dead end **as ONE LINE**. ⚠⚠ **`CLAUDE.md` is a ROUTER — keep it under
-~16 KB** (trimmed 8×; **17.6 after slice 53 — OVER, and a trim pass is DUE**: 16.1 on 2026-08-31, so the
-overrun predates 53 and 53's own entries are already at minimum). It is loaded every turn and grows by
-absorbing what belongs in the ledgers: **numbers, test names and evidence go DOWNSTREAM; verdict words and
-⚠ prohibitions stay HERE.** ⚠ The next trim should compress the per-slice bullets of CLOSED threads
-(26–40, 46–48/52), whose every number is already in `docs/SLICES.md`.
+**only** the state line + any new dead end **as ONE LINE**. ⚠⚠ **`CLAUDE.md` is a ROUTER — target ~16 KB** (trimmed 9×; **18.8 KB after slice 54's own −1.9 KB cut**).
+**Numbers, test names and evidence go DOWNSTREAM; verdict words and ⚠ prohibitions stay HERE.**
+⚠⚠ **THE BUDGET IS NO LONGER REACHABLE BY TRIMMING PROSE** — the per-slice prohibitions alone are ~6 KB and
+grow every slice, so the file's two rules now conflict. **THE NEXT TRIM MUST BE STRUCTURAL** (a
+`docs/PROHIBITIONS.md` in the router table), and that changes what this file IS ⇒ **a decision for the user,
+not one to take inside a slice.** Detail: `docs/LESSONS.md`.
 
 ## ⭐⭐⭐ TWO AIMS ⇒ TWO TESTS ⇒ TWO VERDICTS (2026-08-18 — READ BEFORE KILLING ANYTHING)
 
@@ -129,56 +107,25 @@ an ARCHITECTURE. Detail: `docs/DEFERRALS.md` §"THE 2026-08-18 RE-VERDICT".
 
 ⚠ **Read the VERDICT WORD.** **DEAD** = the component does not exist (a cancellation, an identity, an
 artifact, an unread key). **DEAD AS A LESSON / ALIVE AS A MODEL** = the hardware is real and shippable, only
-the headline died (the two-test rule above). **BLOCKED** = never killed at all.
+the headline died (the two-test rule above). **BLOCKED** = never killed at all. **✅** = SHIPPED since, and
+listed only so it is not re-proposed as open.
 
-- **A nulling-loop head servo** (39) — **DEAD**: an algebraic IDENTITY with the shipped feed-forward under
-  transformed parameters. ⚠ FINITE loop gain is un-killed.
-- **Memory track / a coasting head** (37) — **DEAD AS A LESSON, ALIVE AS A MODEL**: a break here is the rest
-  of the flight, not an episode ⇒ the cure is the ESTIMATOR's frozen rate, not the head.
-- **A scalar rate-limited fin inside the coupled loop** (20) — **DEAD AS A LESSON**: `δ_max` SHADOWS
-  `δ̇_max`. The rate limit itself is SHIPPED (15). **A second-order FIN actuator** (41) — same verdict, on
-  REPARAMETERIZATION: ⭐⭐ **a pole differs from a gain only in that its phase VARIES with frequency, and that
-  loop's fin command is ONE spectral line** ⇒ **measure the SPECTRUM before proposing a dynamic element.**
-- **A SEEKER SEARCH PATTERN** (42/43/45) — **SHIPPED BY 48, its WIDTH by 52; never killed.** ⭐⭐ **The cost
-  of acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error.** ⚠ Do NOT re-litigate that a
-  wider window is free (46 killed it) or that the miss is the gauge.
-- **Seeker range / SNR limits AS THE UNBLOCKER** (44) — **DEAD as the unblocker, ALIVE AS A MODEL — SHIPPED
-  by 46.** ⭐⭐ **A detection gate can only price a design variable if the ENGAGEMENT launches OUTSIDE the
-  sensor's horizon** (⚠ 50: near its EDGE). ⚠ **32/34's narrow-window failures are THE SERVO's.** ⚠⚠ **DO
-  NOT QUOTE 44 §VII.1's “100.00 % of `a_max`”** — an r → 0 ENDGAME read.
-- **A rectangular / per-axis window and stop** (45) — **DEAD AS A LESSON, ALIVE AS A MODEL, both halves.**
-  ⭐⭐⭐ **A TRACKER holds both axes near zero so a window's CORNERS are never visited; a SEARCH drives one
-  axis to the rim BY DESIGN.** ⚠ Never quote the box's rescue without its control.
-- **An "acquisition knife-edge"** (42 gate 1) — **DEAD**: the band is `ω_LOS·dt`, ONE step, HALVING when `dt`
-  does ⇒ **re-fly any narrow threshold at half `dt`, and read a claimed STEP against NULL first.**
-- **A TAIL LOBE** (49/50's candidate) — ✅ **SHIPPED BY 53; never killed.** ⚠⚠ NOT on the two-observer wire
-  the ledger proposed (a static seam test — no slider, no gauge) but on the STRAIGHT FLY-PAST 49 rules out
-  for ITS lesson. ⚠ NOT discharged: a NARROW nozzle lobe (53's is hemisphere-wide) or a target ATTITUDE.
-- **Seeker noise × the BTT roll loop** — **DEAD as a COUPLING claim** (the roll loop low-passes it away);
-  the noise itself is shipped (25). **A cubic radome curve** — **DEAD**: unbounded slope, no domain.
-- **An angle-domain radome corrector** — **DEAD AS THE DEFAULT, ALIVE AS A MODEL**: it sees the look angle
-  only *through* the bend it removes ⇒ **compensate with a signal not corrupted by what you correct.**
-- **Dead knobs that are BUGS, not features** — `speed` (19, FIXED), `k_δ` (15, cancels exactly), `ζ` on the lag
-  rung (40), the handover bias key (36), `(R̂,s)` (31). ⚠⚠ **Launch altitude (21) is NOT one of these — it is a
-  MODEL GAP**: `_integrate_6dof!` passes a CONSTANT `rho` on the path the 26–50 arc flies, and its own comment
-  reserves the seam for ρ(z).
-- **PRICING A RE-ACQUISITION** (51) — **DEAD AS A LESSON, ALIVE AS A MODEL** (`turn_start_s` SHIPPED): ⭐⭐⭐
-  **the miss ban is a ban on a REGION, not on a GAUGE** — ⚠ the BOUNDARY past a blind coast is what does not
-  reproduce (halving `dt` FLIPS whether the track returns), NOT everything past it. ⭐⭐⭐ **A lock is given
-  back by the HEAD, not the ECHO.** ⚠ `head_off > fov` is `in_fov`'s DEFINITION — never a gauge.
-- **Disqualified by non-monotonicity** — `k` (28), `ω_n` (40), `σ_seek` (25), miss-vs-`K` / miss-vs-`α_stall`
-  (20, 22), the loss COUNT (49), miss-vs-`rcs_fineness` (50). ⚠ **NOT component kills — that physics is
-  SHIPPED**; only their use as the showcase SLIDER died.
-- **Harness traps that cost real hours** — `STEPS` MUST be a multiple of `emit_every` (else a SILENT hang);
-  `%g`/`%.2e` are not GDScript specifiers and one bad one kills the WHOLE `%`; frame-sampling error is
-  ASYMMETRIC (a miss samples faithfully, a HIT coarsely); an rms measured where a CLAMP binds reads as a KILL;
-  a HUD width budget is in PIXELS and belongs to the VIEW (46, 49); a key that stops EMITTING makes
-  `.get(k, 0.0)` print a DEFAULTED ZERO as a PASSED TEST — ⚠ WHICH default is a claim (49), and ⚠⚠ when the
-  lesson's NULL is that value only PRESENCE separates them (50); ⚠⚠ **a PEAK-HOLD cannot see a knob that
-  FELL** (52) — re-arm on the drag, at the instant the new setting OWNS the quantity; ⚠ a probe's "has this
-  arm drained?" test must be ARM-SPECIFIC or the next capture re-photographs the last one (52). ⚠⚠ **53
-  RETRACTED "no gate-3 proof DRAGS a slider"** — its verifier does (two `step`s with a `set_param` between),
-  and it is MANDATORY once the latch lives on the WIRE. Teeth: `docs/CONVENTIONS.md` §14.
+- **A nulling-loop head servo** (39) — **DEAD**: an algebraic IDENTITY with the shipped feed-forward. ⚠ FINITE loop gain is un-killed.
+- **Memory track / a coasting head** (37) — **DEAD AS A LESSON, ALIVE AS A MODEL**: the cure is the ESTIMATOR's frozen rate, not the head.
+- **A scalar rate-limited fin in the coupled loop** (20) — **DEAD AS A LESSON**: `δ_max` SHADOWS `δ̇_max` (the rate limit itself is SHIPPED, 15). **A second-order FIN actuator** (41) — same verdict, on REPARAMETERIZATION ⇒ ⭐⭐ **measure the SPECTRUM before proposing a dynamic element** (that loop's fin command is ONE spectral line).
+- **A SEEKER SEARCH PATTERN** (42/43/45) — ✅ **SHIPPED by 48, its WIDTH by 52; never killed.** ⭐⭐ **The cost of acquiring is the OVERLAP DEFICIT `|err| − fov`, not the pointing error.** ⚠ Do NOT re-litigate that a wider window is free (46 killed it) or that the miss is the gauge.
+- **Seeker range / SNR limits AS THE UNBLOCKER** (44) — **DEAD as the unblocker**, ✅ SHIPPED by 46. ⭐⭐ **A detection gate can only price a design variable if the ENGAGEMENT launches OUTSIDE the sensor's horizon** (⚠ 50: near its EDGE). ⚠ **32/34's narrow-window failures are THE SERVO's.** ⚠⚠ **DO NOT QUOTE 44 §VII.1's "100.00 % of `a_max`"** — an r → 0 ENDGAME read.
+- **A rectangular / per-axis window and stop** (45) — **DEAD AS A LESSON, ALIVE AS A MODEL, both halves.** ⭐⭐⭐ **A TRACKER holds both axes near zero so a window's CORNERS are never visited; a SEARCH drives one axis to the rim BY DESIGN.** ⚠ Never quote the box's rescue without its control.
+- **An "acquisition knife-edge"** (42 gate 1) — **DEAD**: the band is ONE `dt` step and HALVES when `dt` does ⇒ **re-fly any narrow threshold at half `dt`, and read a claimed STEP against NULL first.**
+- ✅ **A TAIL LOBE** (49/50's candidate) — SHIPPED by 53, on the STRAIGHT FLY-PAST rather than the ledger's two-observer wire. ⚠ NOT discharged: a NARROW nozzle lobe, or a target ATTITUDE.
+- ✅ **A GIVE-UP RULE AS THE SLIDER** (53's candidate) — SHIPPED by 54. ⚠⚠ Its ledger blocker was **STALE since slice 3** ⇒ **re-read the CONSUMER before pricing a candidate on the ledger's account of what exists.** ⚠ NOT discharged: a SECOND track (association as a contest), or M-of-N initiation.
+- **Seeker noise × the BTT roll loop** — **DEAD as a COUPLING claim** (the roll loop low-passes it away); the noise itself is shipped (25). **A cubic radome curve** — **DEAD**: unbounded slope, no domain.
+- **An angle-domain radome corrector** — **DEAD AS THE DEFAULT, ALIVE AS A MODEL**: it sees the look angle only *through* the bend it removes ⇒ **compensate with a signal not corrupted by what you correct.**
+- **Dead knobs that are BUGS, not features** — `speed` (19, FIXED), `k_δ` (15, cancels exactly), `ζ` on the lag rung (40), the handover bias key (36), `(R̂,s)` (31). ⚠⚠ **Launch altitude (21) is NOT one — it is a MODEL GAP**: `_integrate_6dof!` passes a CONSTANT `rho` and its own comment reserves the seam for ρ(z).
+- **PRICING A RE-ACQUISITION** (51) — **DEAD AS A LESSON, ALIVE AS A MODEL** (`turn_start_s` SHIPPED): ⭐⭐⭐ **the miss ban is a ban on a REGION, not on a GAUGE** — ⚠ the BOUNDARY past a blind coast is what does not reproduce (halving `dt` FLIPS whether the track returns), NOT everything past it. ⭐⭐⭐ **A lock is given back by the HEAD, not the ECHO.** ⚠ `head_off > fov` is `in_fov`'s DEFINITION — never a gauge.
+- **Disqualified by non-monotonicity** — `k` (28), `ω_n` (40), `σ_seek` (25), miss-vs-`K` / miss-vs-`α_stall` (20, 22), the loss COUNT (49), miss-vs-`rcs_fineness` (50), **`bad`-vs-`pfa` (54)**. ⚠ **NOT component kills — that physics is SHIPPED**; only their use as the showcase SLIDER died.
+- **Harness traps that cost real hours** — `STEPS` MUST be a multiple of `emit_every` (else a SILENT hang); `%g`/`%.2e` are not GDScript specifiers and one bad one kills the WHOLE `%`; frame-sampling error is ASYMMETRIC (a miss samples faithfully, a HIT coarsely); an rms measured where a CLAMP binds reads as a KILL; a key that stops EMITTING makes `.get(k, 0.0)` print a DEFAULTED ZERO as a PASSED TEST — ⚠ WHICH default is a claim (49), and ⚠⚠ when the lesson's NULL is that value only PRESENCE separates them (50); ⚠⚠ **a PEAK-HOLD cannot see a knob that FELL** (52) — re-arm on the drag, at the instant the new setting OWNS the quantity; ⚠ a probe's "has this arm drained?" test must be ARM-SPECIFIC (52). ⚠⚠ **53 RETRACTED "no gate-3 proof DRAGS a slider"** — its verifier does, and it is MANDATORY once the latch lives on the WIRE; ⚠⚠ **54 adds the harder half — something must deliberately SURVIVE a drag.**
+- **HUD / view traps** — a HUD budget is in PIXELS and belongs to the VIEW (46, 49), and ⚠⚠ **it is not just a WIDTH but a CORNER THAT MAY ALREADY BE OCCUPIED** (54: two right-anchored blocks collide at EVERY window size, and a width tooth passes). ⚠⚠ **A view marker must go in the chain its own wire REACHES** (54's first draft sat first in `_spatial_hud_kind()` and was DEAD CODE on a `:cfar` wire, reading as handled), must separate wires differing only by the SLIDER, and must be gated on the author's KEY, never the slider's VALUE. ⚠ **Gate a windowed shot on the WIRE, never a FRAME COUNT** (54), and ⚠ a CUMULATIVE gauge read mid-pass is not the pass's answer. ⚠ `get_theme_default_font()` does not exist on `Sandbox.gd` — it breaks EVERY dependent script; the file has one `_font`. Teeth: `docs/CONVENTIONS.md` §14.
 
 ## Conventions / hard-won disciplines (ONE LINE EACH; the teeth are `docs/CONVENTIONS.md`)
 

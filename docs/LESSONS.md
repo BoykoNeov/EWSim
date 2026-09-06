@@ -1309,6 +1309,42 @@ function additive (convention 2) instead of a silent re-render of every scenario
 a wider window moves the origin too. If text runs off, the LINE is too long; if the PICTURE runs off,
 the EXTENTS are wrong. They are different bugs with the same symptom.
 
+### ⭐⭐⭐ SLICE 54 — AND THE THIRD CLASS: **AN OCCUPIED CORNER** (2026-09-06)
+
+Slice 53 added GEOMETRY to the TEXT failures. Slice 54 adds a third, and it is the one a width check
+cannot see: **the space was already taken.**
+
+Slice 54's give-up block draws at `vp.x − 430` with a 380 px panel. Slice 3's CFAR view already draws
+its `profile / threshold / detection` legend at `rect.end.x − 150`. **Both are anchored to the RIGHT
+edge, so they overlap at EVERY window size** — and the first windowed shot shows the curve panel with
+the legend printed straight through it.
+
+⚠⚠ **NOTHING ELSE COULD HAVE CAUGHT IT, INCLUDING THIS SLICE'S OWN WIDTH TOOTH.** The verifier reads
+the WIRE. The UI test called the TEXT BUILDERS and measured each line's PIXEL WIDTH — every line was
+comfortably inside its budget, because the budget was never the problem. `_draw` does not run
+headless. **A line can fit its column perfectly and still be drawn on top of something else.**
+
+⇒ **THE RULE, AS THREE QUESTIONS TO ASK OF A NEW HUD BLOCK — the third is the new one:**
+1. does each LINE fit the column? (slices 46, 49)
+2. does the PICTURE fit the view's extents? (slice 53)
+3. ⭐ **is anything ALREADY DRAWING THERE?** — and for a view you did not author, the answer is
+   usually yes.
+
+⇒ **AND THE REMEDY IS THE FAMILY'S OWN: MOVE IT OUT OF `_draw` AND ASSERT IT.** Slice 54 lifted the
+block's geometry into pure functions (`_giveup_block_rect`, `_cfar_plot_rect_for`,
+`_cfar_legend_y_offset`) and its UI test now asserts the two rectangles **do not intersect** — the
+same remedy `_spatial_hud_kind()` was for the dispatch. ⚠ The displaced legend takes a `y_off`
+**defaulting to 0.0**, so every slice-3 wire stays pixel-identical: a shared drawing function is kept
+additive (convention 2), never silently re-laid-out for everyone.
+
+⚠ **AND A SHOT IS A MOMENT, NOT A MEASUREMENT — GATE IT ON THE WIRE.** Slice 54's first attempt
+captured at look 115 of 1500, because the harness waited a fixed FRAME COUNT while the server was
+still executing its 150 000-step command. The memory note's stop-realtime / Reset-through-the-button
+/ `step` recipe is necessary and **not sufficient**: wait on a WIRE key (`track_look ≥ N`), never on
+frames. ⚠⚠ Related, and its own trap: slice 54's gauge is CUMULATIVE, so the curve's peak sits at ~5
+at look 1400 and at 3 at look 2000. **A number read mid-pass is not the pass's answer**, and a
+photograph of one is not evidence about the other.
+
 ---
 
 ## ⭐⭐⭐ DECLARE THE SELECTION RULE BEFORE THE FLIGHTS, AND PUBLISH THE LOSERS (slice 53, 2026-09-06)
@@ -1338,6 +1374,30 @@ bar on the ladder's VALUE (3516 > 2905, 611 m clear). Both pass; they are differ
 one was pre-registered. **A number that appears in a docstring, a test and a probe must be the same
 number doing the same job in all three, or the weakest reading is the one that will be quoted.**
 
+### ⭐⭐⭐ SLICE 54 — **A RULE THAT NEVER REFUSES ANYTHING IS NOT A RULE** (2026-09-06)
+
+Slice 53's lesson was *declare the rule first and publish the losers*. Slice 54 honoured it — the
+gate-3 seed rule (interior peak, ≥ 10 % rise, ≥ 10 % fall, tie-broken by lowest seed number) was
+written into the plan **before any gate-3 flight**, and all ten candidates were published.
+
+⚠⚠ **BUT ALL TEN PASSED ON THE SHIPPED ARM, WHICH MEANS THE LADDER ALONE PROVED NOTHING ABOUT THE
+RULE.** A criterion that admits every candidate is indistinguishable from no criterion, and
+"published, all passing" is exactly what a rule fitted to the data would also look like.
+
+⭐⭐⭐ **WHAT MADE IT EVIDENCE WAS A THIRD ARM THAT THE RULE REFUSED.** At `pfa` = 1e-3 every one of
+the ten seeds produced a curve that was negative at every patience and monotone falling — no interior
+peak, so R1 failed on all ten and the arm was **not shipped as a scenario at all.** That refusal, and
+not the two passing arms, is the evidence the rule was capable of saying no.
+
+⇒ **THE ADDITION TO SLICE 53's RULE: a pre-registered rule earns its authority the first time it
+REFUSES something, not the first time it selects something.** When every candidate passes, say so
+plainly and go looking for the case that fails — and if none exists, the rule is decoration and the
+selection is really being made by something you have not written down.
+
+⚠ The corollary for a KILL criterion is the same one the 2026-08-18 re-verdict already paid for from
+the other direction: five slices in a row killed everything they measured, and the CRITERION was
+ruled at fault. **A rule that always passes and a rule that always kills are the same defect.**
+
 ---
 
 ## ⭐⭐ WHEN A PREVIOUS SLICE RULES A GEOMETRY OUT, READ **WHY** — A CANCELLATION IS A CONTROL (slice 53, 2026-09-06)
@@ -1358,3 +1418,176 @@ refusal, check whether the slice you are building MEASURES the mechanism that di
 ledger's own suggested wire for this candidate (two observers, one target) was the intuitive answer
 and it is not a wire at all — no slider, no gauge, no headline, just a static seam test. **The refused
 geometry was the right one.**
+
+---
+
+## ⭐⭐⭐ WHEN THE ARGMAX IS NOISE, SHIP THE CURVE — AND N SHADOW ARMS ON ONE PASS IS HOW YOU AFFORD IT (slice 54, 2026-09-06)
+
+Slice 54's lesson is *the best give-up rule moves with how dirty the picture is*. The obvious readout
+is the best setting. **It is unshippable, and the slice's own gate 0 is what proved it:** peak score
+moves 1.9 % across a 4× change in the tracker's gate while the argmax jumps from 4 to 16, because the
+top of the curve is nearly flat. **A readout that printed "best = 3" would be reporting the noise and
+giving it the authority of a measurement.**
+
+⇒ **SHIP THE SHAPE.** The shape — rises, peaks, falls — is invariant to both free constants; only the
+cell it peaks in is not.
+
+⚠⚠ **THE OBSTACLE IS THAT A LIVE SIM IS AT ONE SETTING, AND RE-FLYING PER SETTING IS NOT AN
+INSTRUMENT**: 16 settings × a 200 s pass ≈ 80 minutes of wall clock for one curve, and the user would
+have to hold fifteen numbers in their head to see the shape.
+
+⭐⭐⭐ **THE ANSWER IS N SHADOW ARMS OVER THE SAME ALREADY-DRAWN PICTURE.** The rule is cheap and pure,
+the picture is shared, and nothing about the extra arms touches the RNG — so one pass produces the
+whole curve. **It is also a STRONGER comparison than re-flying would be**: every arm sees identical
+draws, so the curve is PAIRED, where the gate-0 ladder had to average six seeds to say the same
+thing.
+
+⚠ **THE THREE THINGS THAT MAKE IT CORRECT RATHER THAN A NICE IDEA**, each of which is a way it could
+have silently broken:
+1. **IT MUST DRAW NOTHING.** If any arm touched `w.rng`, the arms would stop sharing a picture, the
+   comparison would stop being paired, and every earlier scenario's replay would desync. Proved by
+   comparing the raw profile ARRAYS with the sweep present vs absent — 534 floats × 300 looks.
+2. **ARM `k` MUST *BE* A TRACKER AUTHORED AT `k`.** Otherwise the curve and the slider describe
+   different trackers and the block invites a comparison that does not hold. Guaranteed by giving
+   both ONE shared step function, and asserted by test.
+3. **THE ARMS NEED INDEPENDENT STATE.** One shared state bag aliases them all.
+
+⚠⚠ **AND DECIDE WHAT A LIVE DRAG DOES TO EACH HALF, EXPLICITLY.** The sweep is not a measurement *of*
+the slider's setting — it is the curve the setting *indexes into* — so it must **survive** a drag,
+while the user's own cumulative score must **re-arm** (slice 52's rule). The two behave oppositely on
+purpose, and a view that cannot say which is which turns a drag into an apparent fault. ⭐ Slice 53
+proved a drag INVALIDATES a latch; this is the harder half — proving something deliberately SURVIVES
+one.
+
+---
+
+## ⚠⚠ A BLOCKER WRITTEN FROM THE LEDGER HAS A SHELF LIFE — RE-READ THE CONSUMER BEFORE PRICING A CANDIDATE (slice 54 gate 0, 2026-09-06)
+
+Slice 53's own deferral entry priced this slice as expensive: *"this arc has no false-track model …
+the honest candidate is a false-alarm track, which is new physics rather than a new scenario."*
+
+**It was false when slice 54 opened it, and it had been false since slice 3.** `_observe_cfar!` has
+drawn a noise-and-clutter profile and thresholded it since then, and pushes one `:detection` event
+per detected cell carrying `:cell` and `:range`. A threshold crossing in a noise cell **is** a false
+alarm and it **has a range**. What was actually missing was a TRACKER THAT COULD CONSUME IT — new
+wiring and a new gauge, a materially cheaper slice than the ledger claimed.
+
+⇒ **THE RULE: a candidate's cost estimate is a claim about the CODE, and it decays.** The entry was
+written by a slice that had just looked at the tracker and had no reason to look at the detector.
+Before accepting a blocker, **open the consumer and check the claim** — especially a blocker of the
+form "we have no model of X", which is exactly the kind that goes stale when an unrelated slice ships
+X for its own reasons.
+
+⚠ The same shape one key over: slice 53's loader REFUSED `track_drop_looks` on a `:cfar` wire, in a
+comment naming the defect it prevented (a key nothing reads). That refusal was TRUE when written and
+FALSE the moment slice 54 wired the consumer. ⭐⭐ **A dead-knob guard is retired by making the knob
+LIVE, and its test is kept as its headstone rather than deleted** — the guard's comment is the record
+of why it existed.
+
+---
+
+## ⚠⚠ AN UNMEASURED ARM IS NOT A SAFE PLACE TO PUT A TOOTH (slice 54 gate 2, 2026-09-06)
+
+Slice 54 needed a tooth for *the tracker can be wrong*. The obvious one — "a dirtier picture is wrong
+more often" — was written at `pfa` = 1e-2, one step past the end of the measured ladder, and **failed
+with ONE bad look in 600.**
+
+The reason is worth keeping: at that false-alarm density a detected cell is inside the gate on
+essentially every look, so the track never coasts, never drops, and is **never seduced**. ⭐⭐⭐ **BEING
+WRONG NEEDS A DROP FIRST** — which makes the effect NON-MONOTONE in the very quantity that was
+assumed to drive it.
+
+⇒ **WRITE TEETH ONLY AT ARMS THAT WERE ACTUALLY FLOWN**, and quote the probe and its numbers in the
+comment beside them. An arm one step outside a measured ladder is not "more of the same"; it is
+unmeasured, and the ladder's own shape is the reason you cannot extrapolate off its end.
+
+⚠⚠ **THE SAME SLICE PRODUCED THE MIRROR TRAP: `bad` IS NOT MONOTONE IN THE DIRTINESS EITHER.**
+Measured, the CLEAN patient arm is wrong MORE often than the dirty one (172 vs 148 looks). There are
+**two roads to being wrong** — on a clean picture a patient track goes blind and COASTS off the
+target; on a dirty one it is CAPTURED but keeps re-associating near something. ⇒ **the gauge is the
+NET, never one of its halves**, and no tooth may compare `bad` across the mover at fixed patience.
+⭐ A component of a composite gauge does not inherit the composite's monotonicity.
+
+---
+
+## ⚠⚠ A VIEW MARKER MUST GO IN THE CHAIN ITS OWN WIRE ACTUALLY REACHES (slice 54 gate 3, 2026-09-06)
+
+Every view marker from slice 49 onward lives in `_spatial_hud_kind()`, and the family's rule is
+*check the new one FIRST*. Slice 54 followed it exactly, and the branch was **dead code**: a slice-54
+wire is a `:cfar` scenario, so `_draw()` dispatches to `_draw_cfar()` and `_spatial_hud_kind()` is
+never reached at all.
+
+⚠⚠ **THE FAILURE MODE IS THE DANGEROUS ONE: it READ as handled.** The branch was first in the chain,
+commented as first, and did nothing — a claim that looks satisfied. That is the same shape as a key
+nothing reads and a hook nothing calls, and this project has retracted one of those per arc.
+
+⇒ **THE RULE: a convention that says "add it to the chain" is scoped to the wires that ENTER that
+chain.** Before extending a dispatch, check that this scenario's own `_mode` reaches it — and when it
+does not, **give the new view its own chain** (`_cfar_hud_kind()`) rather than widening the old one.
+⚠ Assert BOTH halves: that the new branch wins its own view, AND that the old chain does not claim
+it. The second assertion is what would have caught this on the first run.
+
+⚠ **AND `get_theme_default_font()` DOES NOT EXIST ON `Sandbox.gd`** — it is a `Control` method and the
+file is a `Node2D`. Using it broke compilation of **every script depending on Sandbox.gd**, not just
+the new view, so the whole UI-test suite went down at once. The file has ONE font handle, `_font`,
+set in `_ready`; a mock never runs `_ready`, so read it and return early when it is null.
+
+---
+
+## ⭐⭐ A RULE COUNTED IN LOOKS IS `dt`-INVARIANT WHEN THE LOOK CADENCE IS — THE CONVERSE OF SLICE 53's TRAP, AND IT MUST BE PROVED STRUCTURALLY (slice 54 gate 0, 2026-09-06)
+
+Slices 42 and 51 both died on a threshold that moved when `dt` halved, so slice 54 had to ask. The
+answer is a clean pass, and **the way it was asked is the lesson.**
+
+⚠⚠ **THE WEAK TEST WAS ALREADY GREEN AND PROVED NOTHING.** Comparing the best setting at `dt` and
+`dt`/2 over three seeds matched — but the per-seed spread of that same argmax had been measured at
+6…16, so a match at that resolution is luck and a mismatch would have been sampling. **An argmax
+comparison cannot answer an invariance question when the argmax is itself noisy.**
+
+⭐⭐⭐ **THE STRUCTURAL TEST IS PAIRED AND EXACT: is the PICTURE the same?** At `dt` and `dt`/2 the
+CFAR look count, the detected-cell SET on every one of 3000 looks, and the whole score curve are
+**identical, on all six seeds, to `max‖Δ‖` = 0.0.**
+
+The reason generalises: **every draw of a look is made once per LOOK, and the look boundary is a
+`revisit_s` wall clock that lands at the same time regardless of the step** — so halving `dt` inserts
+only extra non-look ticks, which draw nothing. ⇒ **a rule counted in LOOKS is `dt`-invariant exactly
+when the look cadence is `dt`-invariant**, which is the converse of slice 53's *a rule counted in
+SAMPLES changes meaning when the sample rate does*. ⚠ The residual sensitivity is the target's own
+drift WITHIN a look; here it is ≤ 0.2 range cells and never reaches the cell quantisation, which is
+the thing to check rather than assume.
+
+---
+
+## ⚠⚠ A ROUTER FILE'S SIZE BUDGET AND ITS "KEEP THE PROHIBITIONS" RULE EVENTUALLY CONFLICT — SAY SO INSTEAD OF SHAVING WORDS (slice 54, 2026-09-06)
+
+`CLAUDE.md` carries two standing rules: **stay under ~16 KB**, and **numbers/test names/evidence go
+DOWNSTREAM while verdict words and ⚠ prohibitions stay HERE.** Slice 54's ritual is where they
+stopped being compatible.
+
+The trim was real and did what the standing note asked — the arc paragraph, the 46–48/52 and 49/50
+bullets folded to one line each, the dead-ends section rewritten to obey its own "ONE LINE EACH"
+heading, and the two DISCHARGED candidates demoted from full entries to ✅ pointers. **It cut about
+1.9 KB.** Slice 54's own entries cost about 1.1 KB. The file went 18.0 → 18.8 KB: **a whole slice
+absorbed for +0.8 KB, and still 2.4 KB over budget.**
+
+⚠⚠ **THE ARITHMETIC IS THE POINT, AND IT DOES NOT IMPROVE.** At 54 slices the per-slice prohibitions
+alone are ~6 KB and grow ~0.5–1 KB per slice. Everything else in the file — how to run things, the
+read-on-demand router table, the fifteen conventions, the two-test rule — is load-bearing and already
+terse. **There is no prose left to shave that is not a prohibition**, and the prohibitions are the
+half the rule protects.
+
+⇒ **THREE THINGS TO DO WHEN A BUDGET AND A CONTENT RULE COLLIDE:**
+1. **Do the honest trim first**, so the claim "there is nothing left" is a measurement and not an
+   excuse. Report the number it actually saved.
+2. **Do NOT resolve the conflict by quietly dropping the protected content.** Shaving a ⚠ line to
+   make a byte count is trading a real safeguard for a cosmetic one, and nobody reviewing the diff
+   would see what was lost.
+3. ⚠⚠ **Do NOT resolve it inside a slice either.** The fix is structural — move the per-slice ⚠
+   lines to a `docs/PROHIBITIONS.md` in the read-on-demand table, leaving the router with the state
+   line, the dead ends, the conventions and the table. **That changes what the file IS**, which is a
+   decision for the user, not a tidy-up to take unilaterally while doing something else.
+
+⚠ And the meta-trap this lesson walked into on its way out: the first draft of the corrected note
+inside `CLAUDE.md` was **686 bytes of explanation added to the file it was explaining how to
+shrink.** A note about bloat is bloat. The finding lives here; the router gets three lines and a
+pointer.

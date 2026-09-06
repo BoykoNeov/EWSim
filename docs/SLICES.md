@@ -1952,3 +1952,65 @@ away from it, so the display's left edge was pinned at the radar. An aircraft th
 side and crosses over had half its flight — including the moment the radar first got it — drawn off
 the edge of the screen, with every test passing. The screenshot is what found that, and it is the
 first time the screenshot has caught something that was not text.
+
+## Slice 54 — how long should a radar keep looking before it gives up? (2026-09-06)
+
+A radar does not see a target every time it looks. The return fades, noise gets in the way, and some
+looks come back empty. So every tracker needs a rule for how long to keep believing in a target it
+cannot currently see: give up after one missed look, or three, or sixteen? The instinct is that
+patience is free — hold on longer, keep the target longer. This slice measured what patience
+actually costs, and the answer is that there is no right amount of it.
+
+The reason patience costs anything is that a radar looking at a noisy picture sees things that are
+not there. The detector has always produced those false blips — a threshold crossing in empty air is
+one — but the tracker the project already had could not be fooled by them, because it was quietly
+handed the true position of the real target. It could hold a track on nothing and still report the
+right place. So the first job was building a tracker that can genuinely be wrong: one that is handed
+only the list of blips and has to decide for itself which is its own. Once it can be wrong, the two
+halves of patience appear. A tracker that has lost its target coasts along where it thinks the
+target should be, and a patient one will pick the target up again when it comes back. But a tracker
+that has given up entirely restarts on the loudest thing in the picture — and on a noisy picture
+that is often a false blip. Patience keeps the fade, and it keeps the false alarm too.
+
+The measurement is a score: looks spent following the real target, minus looks spent confidently
+following something else. Scoring on *position* rather than on *duration* mattered more than it
+sounds. A long track is not a failure; a track in the wrong place is. And because a false-blip model
+only affects what the radar sees and not how anything moves, any timing-based score would just have
+been the setting itself read back in different units — the knob measuring itself.
+
+The result is that the best amount of patience moves as the picture gets dirtier: six missed looks
+on a very clean picture, then five, then three, then two. Every setting rises to a peak and falls
+away after it, and the penalty for holding on too long grows as the picture worsens — about five per
+cent of the score wasted on the cleanest picture, nearly eighteen on a dirtier one. On a very clean
+picture patience is nearly free; on a very dirty one nothing helps at all, and the honest answer is
+to let go immediately. Two of the surprises were worth as much as the headline. The obvious way to
+make a picture dirtier — adding ground clutter — turned out not to work, because the detector
+measures its own threshold from the neighbourhood of each cell, so a broad band of clutter lifts the
+threshold along with the clutter and mostly just *hides* the target rather than creating false
+blips. And "wrong" is not simply worse on a dirtier picture: on a very clean one a patient tracker
+goes blind and drifts off the target, while on a dirty one it gets captured but stays near
+*something*. Two different roads to the same failure, which is why the score has to be
+right-minus-wrong and never wrong on its own.
+
+The display posed a problem worth recording. The lesson is a curve — patience against score — but a
+live simulation only ever runs at one setting, and rebuilding the curve by hand would mean flying
+the same three-minute pass sixteen times. Showing a single "best" number instead would have been
+worse than useless, because the measurements had already established that the exact best setting is
+close to a coin flip between neighbours. So the simulator now runs sixteen trackers side by side on
+the same radar picture and draws the whole curve at once, with a marker showing where the user's own
+setting sits on it. Because every one of the sixteen sees identical noise, this is a fairer
+comparison than the original experiment, which had to average over six random runs to say the same
+thing.
+
+Three things went wrong along the way and all three are worth remembering. The scenario was
+originally built as a target flying past the radar, which turned out to spend its first half as a
+strong close target that never loses lock at all — the lesson only lives in the fade, so the target
+now starts far away and running. A test written against a noise level that had never been measured
+failed immediately and for an interesting reason: when false blips are extremely dense there is
+always one close enough to the track, so it never loses lock and never gets the chance to be
+seduced. Being wrong requires losing the track first. And the display's new panel was placed in the
+corner where an older scenario already draws its legend — both anchored to the same edge, so they
+overlapped at every window size. No headless check could have caught that: they read the data and
+the text, and the drawing code never runs without a screen. The screenshot found it, for the second
+slice running, and the fix moves the decision out of the drawing code so a test can assert the two
+panels never touch.

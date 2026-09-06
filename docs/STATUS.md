@@ -7734,3 +7734,127 @@ view). ONE slider, no button. Watch the aircraft come in nose-on and invisible, 
 radar follows it to 14.36 km; drag DOWN to 1 and the two ends of the pass match to within fading
 noise. ⚠ Dragging mid-pass ENDS that pass's measurement, by design — the readout says **Reset to
 measure** rather than showing a number measured across two settings.
+
+---
+
+# Slice 54 — **THE GIVE-UP RULE: A TRACK THAT CAN BE WRONG** (`track_drop_looks` over CFAR, 2026-09-06)
+
+**COMPLETE, all four gates.** Suite **20051** (19743 → 19949 gate 1 → 20011 gate 2 → 20051 gate 3).
+`test_determinism.jl` and the absolute golden unchanged at every step — the additivity master check
+for this kind of edit. Full detail: `docs/plans/slice54.md` (§2 gate 0, §3.1 the corrected spec,
+§4 gate 2, **§5 gate 3**).
+
+## THE LESSON
+
+**There is no such thing as the right amount of patience.** How long a radar should hold a track
+through a gap is set by **how dirty its picture is** — and the same rule that saves a fading target
+on a clean picture marries you to a noise blip on a dirty one.
+
+## THE HEADLINE NUMBERS
+
+Best `n_drop` as `pfa` runs 1e-6 → 1e-3, six declared seeds, gate ±1, band 1 cell (plan §2.8):
+
+| `pfa` | 1e-6 | 1e-5 | 1e-4 | 1e-3 |
+|---|---|---|---|---|
+| best `n_drop` | **6** | **5** | **3** | **2** |
+| NET at 1 → peak → 16 | 1305 → 1580 → 1493 | 1362 → 1637 → 1501 | 1377 → 1537 → 1264 | 1153 → 1161 → 1030 |
+| peak → 16 | −5.5 % | −8.3 % | −17.8 % | −11.3 % |
+
+⭐⭐⭐ **MONOTONE ACROSS ALL FOUR ARMS WITH NO ARM EXCLUDED**, every arm's curve rises then falls
+(F1 and F2 both live), and **the penalty for overshooting grows with the dirt**. The determined
+interior (1e-5 → 1e-4) moves in **all four** (gate × band) robustness cells: 5 → 3, 9 → 5, 7 → 4,
+11 → 5.
+
+## WHAT SHIPPED
+
+* **`detection.jl`** — four pure pieces beside `track_run_step`: `track_gate_cells` (the gate,
+  COMPUTED from the wire), `track_associate` (alive: NEAREST cell in the gate), `track_reopen`
+  (dead: STRONGEST cell, UNGATED), `track_ab_step` (the α–β range filter). `TRACK_ALPHA` = 0.5,
+  `TRACK_BETA` = 0.1, `TRACK_GATE_MAX_CELLS` = 8, all pinned by test.
+* **`radar.jl`** — `_track_cfar_look!` (a SIBLING of `_track_look!`, sharing only `track_run_step`)
+  + `_trk_arm_step` (the whole rule, in ONE place, used by the authored track AND every sweep arm)
+  + `_giveup_view_info` (the 16th handshake marker).
+* **`scenario.jl`** — `track_ok_cells`, `track_sweep_max`, and **the slice-53 `:cfar` refusal
+  LIFTED**.
+* **`Sandbox.gd`** — the give-up HUD block, `_cfar_hud_kind()`, and the block's geometry as pure
+  functions.
+* **`scenarios/slice54_giveup.yaml`** + **`slice54_giveup_clean.yaml`** — identical but for `pfa`.
+
+## THE FOUR PROOFS
+
+| proof | result |
+|---|---|
+| `net/slice54_verify.gd` (5 arms incl. a LIVE DRAG) | **PASS** (exit 0) |
+| `net/slice54_ui_test.gd` (10 teeth) | **PASS** (exit 0) |
+| headless smoke-load (`Sandbox.tscn`) | **PASS** — `EWSIM_SERVER_DONE`, **empty** stderr |
+| windowed shot (1600×900) | **PASS**, after two attempts — see plan §5.5.1 |
+
+## ⭐⭐⭐ THE FIVE THINGS THIS SLICE PROVED
+
+1. **A TRACK THAT CAN BE WRONG ABOUT WHERE IT IS.** The point-path tracker is handed the TRUE range,
+   so patience is free there. Over a CFAR picture the tracker must choose among detected cells and
+   can choose wrong. ⚠⚠ **Truth reaches the GAUGE and never the TRACKER.**
+2. **THE TWO ASSOCIATION RULES DIFFER ON PURPOSE.** Alive = conservative (nearest, gated); dead =
+   credulous (loudest, ungated). **That asymmetry is what makes patience two-sided.**
+3. **`dt`-INVARIANCE IS STRUCTURAL, NOT AN ARGMAX COINCIDENCE** — the CFAR picture is bit-identical
+   at `dt`/2 (same look count, same detected-cell SET on all 3000 looks, all six seeds,
+   `max‖ΔNET‖` = 0.0). **A rule counted in LOOKS is `dt`-invariant when the look cadence is.**
+4. **THE COUNT OF LOOKS IS A JOINT PROPERTY OF THE RULE, THE GATE AND THE BAND** — the same physics
+   reads 5, 7, 9 or 11 depending on two non-physics constants. **THE DIRECTION IS PHYSICS; THE COUNT
+   IS NOT.**
+5. **THE SWEEP: THE CURVE IS IDENTICAL TO THE BIT AT EVERY SLIDER POSITION, WHILE YOUR POINT ON IT
+   MOVES.** 16 shadow arms over the same picture ⇒ a PAIRED comparison, and one pass replaces 16.
+
+## ⚠⚠ THE PROHIBITIONS THIS SLICE ADDS
+
+* ⚠⚠ **NEVER COMPARE `bad` ACROSS `pfa` AT FIXED PATIENCE — it is NOT monotone in the dirtiness.**
+  Measured: the CLEAN patient arm is wrong MORE often than the dirty one (172 vs 148). Two routes to
+  being wrong: on a clean picture a patient track goes blind and **COASTS** off; on a dirty one it is
+  **CAPTURED** but keeps re-associating near something. ⇒ **the gauge is NET, never `bad` alone.**
+* ⚠⚠ **BEING WRONG NEEDS A DROP FIRST**, so the effect is NOT monotone in `pfa`: at 1e-2 a detected
+  cell is inside the gate essentially every look, the track never drops, and it is almost never
+  seduced (1 bad look in 600). **An unmeasured arm is not a safe place to put a tooth.**
+* ⚠⚠ **`cnr_db` IS NOT THE DIRTINESS MOVER — CLUTTER UNDER CFAR IS A MASKER.** A CA-CFAR threshold
+  is estimated from the cells BESIDE the cell under test, so a broad clutter band raises the
+  threshold with it: 10 → 30 dB moves false-alarm density by **15 %** while destroying 5 points of
+  target detection. Only its EDGES spike. **`pfa` is the mover** (1e-4 → 1e-2 = ×98).
+* ⚠⚠ **A VIEW MARKER MUST GO IN THE CHAIN ITS OWN WIRE ACTUALLY REACHES.** The first draft put this
+  one in `_spatial_hud_kind()` — where every marker since slice 49 lives — and it was DEAD CODE: a
+  `:cfar` wire dispatches to `_draw_cfar()`. **The family's "add it to the chain" habit is only
+  correct for wires that enter that chain.**
+* ⚠⚠ **A HUD BUDGET IS NOT JUST A WIDTH — IT IS A CORNER THAT MAY ALREADY BE OCCUPIED.** The
+  windowed shot caught the curve panel drawn through slice 3's legend; both are right-anchored, so
+  they collide at every window size.
+* ⚠ **GATE A WINDOWED SHOT ON THE WIRE (`track_look ≥ N`), NEVER ON A FRAME COUNT** — the first
+  attempt captured at look 115 of 1500 while the server was still executing its step command.
+* ⚠ **THE PEAK MOVES DURING THE PASS** (the gauge is cumulative): ~5 at look 1400, 3 at 2000. **A
+  number read mid-pass is not the pass's answer.**
+* ⚠ `get_theme_default_font()` does not exist on `Sandbox.gd`'s base (a `Control` method on a
+  `Node2D`) — it broke compilation of every dependent script. The file has ONE font handle, `_font`.
+* ⚠ A pre-existing slice-3 `Invalid polygon data` warning from the profile FILL is made frequent by
+  this wire's 640 deep-fade noise cells but not caused by it. Cosmetic; **recorded, not fixed.**
+
+## THE PRE-REGISTRATION RECORD
+
+⭐ **THREE HONESTY CORRECTIONS, ALL MADE BEFORE THE RESULT WAS CLAIMED:**
+
+1. **F4's pre-registered gate rule computes ±1 cell; every probe flew ±2.** The RULE STANDS and the
+   probes were re-read at ±1 — which is the better measurement anyway (no plateau artefact at the
+   clean end). Shipping ±2 while citing a rule that computes ±1 is the failure slice 53's last
+   commit is named after.
+2. **P5's losing cell is PUBLISHED** (gate ±4 at `pfa` 1e-3 reads 16 against 2) and the argument that
+   it is the known-flat arm reported twice is **MADE**, not assumed.
+3. **The four-arm ladder is scoped to the SHIPPED cell**; the interior claim is what survives all
+   four robustness cells. *"The ladder survives every gate"* would be FALSE.
+
+⭐⭐ **THE GATE-3 SEED RULE WAS DECLARED IN §5.1 BEFORE ANY GATE-3 FLIGHT** and all ten candidates
+(101…110) are published in §5.3. It picked **101 on both shipped arms**, whose peak moves **5 → 3** —
+gate 0's six-seed mean reproduced on ONE flight. ⚠ **A THIRD ARM WAS REFUSED BY THE SAME RULE**: at
+`pfa` 1e-3 every seed's curve is negative at every patience, so there is no interior answer to teach.
+**That refusal is the only evidence the rule could refuse anything.**
+
+**PREDICTIONS SCORED** (plan §4, written before any probe): 1 RIGHT, **3 WRONG** — and two of the
+three were wrong *in the slice's favour* (the optimum moves by a factor of ~4, not "one or two
+cells"; the position-scored gauge was the FIRST tried and separated). Two further §-level
+assumptions were also wrong: the proposed wire had NO FADE, and the proposed dirtiness mover was
+retired by the detector's own physics.
