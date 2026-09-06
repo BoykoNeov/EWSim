@@ -3347,11 +3347,33 @@ func _giveup_lesson_text(curve: Array) -> String:
 		return "patience holds a fading target - and a noise blip too"
 	return "hold longer: keep the fade, keep the false alarm too"
 
+# ⚠⚠ THE BLOCK'S GEOMETRY, AS PURE FUNCTIONS — because a HUD width budget is in PIXELS and belongs
+# to the VIEW (slices 46/49 paid for that), and this view ALREADY HAD SOMETHING IN THIS CORNER. The
+# first windowed shot of this slice caught the give-up panel drawn straight through slice 3's
+# "profile / threshold / detection" legend. ⚠ A COLLISION LIKE THAT IS INVISIBLE TO EVERY HEADLESS
+# PROOF — the verifier reads the wire and the UI test called only text builders — so the geometry is
+# exposed here and asserted by the UI test rather than left to the next photograph.
+const GIVEUP_X_OFF := 430.0          # right-anchored origin, the family's
+const GIVEUP_Y_TOP := 96.0
+const GIVEUP_PANEL_W := 380.0
+const GIVEUP_PANEL_H := 78.0
+
+func _giveup_block_rect(vp: Vector2) -> Rect2:
+	# The whole block: three text lines, the curve panel, and two caption lines under it.
+	return Rect2(vp.x - GIVEUP_X_OFF, GIVEUP_Y_TOP - 12.0,
+				 GIVEUP_PANEL_W, (GIVEUP_Y_TOP + 54.0 + GIVEUP_PANEL_H + 31.0) - (GIVEUP_Y_TOP - 12.0))
+
+func _cfar_legend_y_offset() -> float:
+	# ⭐ SLICE 54 — slice 3's legend moves DOWN out of the give-up block's way, and ONLY on a wire
+	# that raises the marker. Every slice-3 CFAR scenario draws its legend exactly where it always
+	# did (offset 0), which is what keeps this a addition rather than a change to another slice.
+	return 190.0 if _cfar_hud_kind() == "giveup" else 0.0
+
 func _draw_giveup_hud_lines(vp: Vector2) -> void:
 	# ⚠ THE FAMILY'S ORIGIN — right-anchored at `vp.x - 430`, ~390 px of room (a HUD width budget is
 	# in PIXELS and belongs to the VIEW — slices 46/49 paid for that).
-	var x := vp.x - 430.0
-	var y := 96.0
+	var x := vp.x - GIVEUP_X_OFF
+	var y := GIVEUP_Y_TOP
 	var curve := _giveup_curve()
 	var n_drop := int(_giveup_f("track_drop_looks", 0.0))
 	var look := int(_giveup_f("track_look", 0.0))
@@ -3380,8 +3402,8 @@ func _draw_giveup_hud_lines(vp: Vector2) -> void:
 	# ── THE CURVE ITSELF ────────────────────────────────────────────────────────────────────────
 	if curve.is_empty():
 		return
-	var w := 380.0
-	var h := 78.0
+	var w := GIVEUP_PANEL_W
+	var h := GIVEUP_PANEL_H
 	var lo := INF
 	var hi := -INF
 	for v in curve:
@@ -6597,7 +6619,12 @@ func _draw_aero_strip() -> void:
 # marker per detected cell. Toggling the cfar rung redraws the threshold and the markers.
 
 func _cfar_plot_rect() -> Rect2:
-	var vp := get_viewport_rect().size
+	return _cfar_plot_rect_for(get_viewport_rect().size)
+
+func _cfar_plot_rect_for(vp: Vector2) -> Rect2:
+	# ⚠ SPLIT OUT AS A PURE FUNCTION (slice 54) so a headless test can reason about this view's
+	# geometry at a stated window size. `get_viewport_rect()` needs a tree, which a mock has not
+	# got — and the layout collision this exists to catch is invisible to every other proof.
 	return Rect2(PLOT_L, PLOT_T, vp.x - PLOT_L - PLOT_R, vp.y - PLOT_T - PLOT_B)
 
 func _cfar_x(i: int, rect: Rect2) -> float:
@@ -6670,11 +6697,14 @@ func _draw_cfar() -> void:
 			_glow(dp, 9.0, Color(0.4, 1.0, 0.4, 0.45))
 			draw_circle(dp, 3.0, Color(0.4, 1.0, 0.4))
 
-	_cfar_legend(rect)
+	_cfar_legend(rect, _cfar_legend_y_offset())
 
-func _cfar_legend(rect: Rect2) -> void:
+func _cfar_legend(rect: Rect2, y_off: float = 0.0) -> void:
+	# ⚠ `y_off` is slice 54's: the give-up block owns this corner on a wire that raises its marker,
+	# and the first windowed shot caught this legend drawn straight through the curve panel. It
+	# defaults to 0.0, so every slice-3 wire is pixel-identical to what it always drew.
 	var x := rect.end.x - 150.0
-	var y := rect.position.y + 14.0
+	var y := rect.position.y + 14.0 + y_off
 	draw_line(Vector2(x, y), Vector2(x + 18, y), Color(0.5, 0.8, 1.0), 2.0)
 	draw_string(_font, Vector2(x + 24, y + 4), "profile", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.8, 0.9, 1.0))
 	draw_line(Vector2(x, y + 16), Vector2(x + 18, y + 16), Color(1.0, 0.5, 0.3), 2.0)

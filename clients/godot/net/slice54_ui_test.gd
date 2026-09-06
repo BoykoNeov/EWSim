@@ -30,6 +30,7 @@ extends SceneTree
 #   7. ⚠ every key `_draw_giveup_hud_lines` reads is present and scalar, and no default is a LIE
 #   8. ONE slider → set_param on the RADAR's `track_drop_looks`
 #   9. ⚠ WIDTHS: the block's lines fit the family's 430 px origin
+#  10. ⭐⭐⭐ THE BLOCK MUST NOT DRAW THROUGH SLICE 3's LEGEND — the windowed shot found this
 #
 # Run:  godot --headless --path clients/godot --script res://net/slice54_ui_test.gd
 # Exit codes: 0 = pass, 1 = assertion failed.
@@ -260,6 +261,25 @@ func _initialize() -> void:
 		if w > HUD_ROOM:
 			return _fail("⚠ HUD line overruns the %d px column at %d px: '%s'" % [int(HUD_ROOM), int(w), ln])
 	print("S54UI_WIDTH  %d lines all inside %d px" % [lines.size(), int(HUD_ROOM)])
+
+	# ══ TOOTH 10 — ⭐⭐⭐ THE BLOCK MUST NOT DRAW THROUGH SLICE 3's LEGEND ═══════════════════════
+	# ⚠⚠ THIS TOOTH EXISTS BECAUSE THE FIRST WINDOWED SHOT CAUGHT THE COLLISION, AND NOTHING ELSE
+	# COULD HAVE. The verifier reads the WIRE; the teeth above call TEXT BUILDERS; `_draw` never runs
+	# headless. A panel drawn straight through slice 3's "profile / threshold / detection" legend is
+	# invisible to every one of them — which is exactly convention 14's blind spot, and the reason
+	# the block's geometry is now a pure function instead of literals inside `_draw`.
+	var vp := Vector2(1600.0, 900.0)
+	var blk: Rect2 = sb._giveup_block_rect(vp)
+	var plot: Rect2 = sb._cfar_plot_rect_for(vp)
+	var leg_y: float = plot.position.y + 14.0 + float(sb._cfar_legend_y_offset())
+	var leg: Rect2 = Rect2(plot.end.x - 150.0, leg_y - 10.0, 150.0, 50.0)
+	if blk.intersects(leg):
+		return _fail("⭐⭐⭐ the give-up block %s overlaps slice 3's legend %s — the first windowed shot of this slice caught exactly this, and no headless proof can see it" % [str(blk), str(leg)])
+	# …and the mirror: with NO marker the legend must sit exactly where slice 3 always drew it, so
+	# this is an ADDITION and not a change to another slice's view.
+	if absf(float(_sb_none._cfar_legend_y_offset())) > 1.0e-9:
+		return _fail("⚠ a wire with no give-up marker must leave slice 3's legend untouched (offset %.1f)" % float(_sb_none._cfar_legend_y_offset()))
+	print("S54UI_LAYOUT block %s clears legend %s; no marker → legend offset 0" % [str(blk), str(leg)])
 
 	return _pass()
 

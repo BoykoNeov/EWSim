@@ -779,3 +779,58 @@ un-dragged arms' curve cell for cell.
    it is null, because a mock never runs `_ready`.
 3. ⚠ `:=` cannot infer through the untyped `sb` handle in a UI test (the standing GDScript trap —
    `[[ewsim-godot-material-gotchas]]`): `var x: String = sb._helper(...)`, never `var x := …`.
+
+### §5.5 THE FOUR PROOFS — ALL GREEN, AND THE WINDOWED SHOT EARNED ITS KEEP
+
+| proof | result |
+|---|---|
+| `net/slice54_verify.gd` — 5 arms incl. a LIVE DRAG | ✅ **PASS** (exit 0) |
+| `net/slice54_ui_test.gd` — 10 teeth | ✅ **PASS** (exit 0) |
+| headless `Sandbox.tscn` smoke-load | ✅ **PASS** — `EWSIM_SERVER_DONE`, **empty stderr**, exit 0 |
+| windowed shot (1600×900, `M:\claud_projects\temp\slice54\s54_shot_final.png`) | ✅ **PASS**, after **two** attempts |
+
+#### §5.5.1 ⭐⭐⭐ THE SHOT FOUND A COLLISION NO HEADLESS PROOF COULD SEE
+
+The first shot drew the give-up curve panel **straight through slice 3's own
+`profile / threshold / detection` legend.** Both live in this view's top-right corner: the legend at
+`rect.end.x − 150`, the block at `vp.x − 430` with a 380 px panel — they overlap by construction, at
+every window size, because both are right-anchored.
+
+⚠⚠ **AND NOTHING ELSE WOULD HAVE CAUGHT IT.** The verifier reads the WIRE. The UI test called only
+TEXT BUILDERS and measured only line WIDTHS. `_draw` never runs headless (convention 14). A HUD width
+budget is in PIXELS and belongs to the VIEW — slices 46 and 49 paid for that lesson, and this is its
+next instalment: **the budget is not just a width, it is a corner that may already be occupied.**
+
+⇒ The fix is a `y_off` on `_cfar_legend`, **defaulting to 0.0 so every slice-3 wire is
+pixel-identical to what it always drew**, plus the block's geometry lifted OUT of `_draw` into pure
+functions (`_giveup_block_rect`, `_cfar_plot_rect_for`, `_cfar_legend_y_offset`) — and UI-test tooth
+10 now asserts the two rectangles do not intersect, so the next edit cannot silently re-collide.
+⭐ That is the same remedy as `_spatial_hud_kind()`: move the thing out of `_draw` and assert it.
+
+#### §5.5.2 ⚠ THE SECOND ATTEMPT WAS A HARNESS BUG WORTH RECORDING
+
+The first shot captured at **look 115 of 1500** — the harness waited a fixed 400 frames while the
+server was still executing its 150 000-step command, so the picture was the early pass and the curve
+was still monotone-rising. ⇒ **gate a shot on the WIRE (`track_look ≥ N`), never on a frame count.**
+The memory note's existing advice (stop realtime, Reset through the button, then `step`) is
+necessary but not sufficient: the step itself takes wall-clock time.
+
+#### §5.5.3 ⭐⭐ WHAT THE SHOT SHOWS — AND ONE HONEST WRINKLE
+
+At look 1400 the target has faded (66 km, SNR −0.69 dB, `detected: no`, the track dead and
+`track_err_m` ≈ 3.9 km), the profile is pure noise, and the curve is visibly **two-sided**. The
+slider's own point (the filled marker at `n_drop` = 3) sits on the rising limb, below the peak ring.
+
+⚠ **THE PEAK MOVES DURING THE PASS, BECAUSE THE GAUGE IS CUMULATIVE.** At look 1400 the best cell is
+~5; at the full 2000 it is 3. That is not a defect — the curve is *this pass so far* — but it means
+**a number read mid-pass is not the pass's answer**, and a shot is a moment, not a measurement. The
+verifier reads at the full 2000 looks for exactly that reason.
+
+#### §5.5.4 ⚠ A PRE-EXISTING SLICE-3 RENDER WARNING, EXPOSED BUT NOT CAUSED BY THIS WIRE
+
+The windowed run prints `Invalid polygon data, triangulation failed` from `_draw_cfar`'s profile
+FILL (`Sandbox.gd` ~6681) — slice 3's code, whose own comment already documents this exact failure
+mode and whose per-segment-quad workaround still yields a degenerate quad when a point lands exactly
+on the baseline. This wire makes it frequent (640 cells of deep-fade noise, many clamped to the
+floor) but does not cause it. **Cosmetic** (a 10 %-alpha shading under the trace) and in another
+slice's view ⇒ **recorded, not fixed here.**
