@@ -1149,3 +1149,191 @@ threshold must carry its own sample size* (§2.8). The **direction** is what the
 4. ⭐ **The `N`\*-in-looks-vs-seconds confound is a general trap**, not a slice-53 detail: a rule
    counted in samples silently changes meaning when the sample rate changes. It belongs in
    `docs/LESSONS.md` when this slice completes.
+
+---
+
+### 2.15 — P7 (F3): THE TWO ENDPOINTS OF THE SLIDER — **CEILING 50, LINEAR, DEFAULT 20**
+
+Probe `M:\claud_projects\temp\slice53\p7_endpoints.jl`, raw `…\p7_out.txt`, full write-up
+`M:\claud_projects\temp\slice53\p7_findings.md`. **103 cells × 8 seeds = 824 flights, all at
+`revisit_s` = 0.1 and `N`\* = 3**, mirrored edges, wire A (x0 = −15 km, 200 s), σ = 4 m², F = 8,
+seeds (53, 149, 250, 1, 2, 3, 4, 5). `rcs_tail_gain` INJECTED (§2.13a), never authored.
+
+**§0 — the paired construction is exact at EVERY cell, not just P4b's two.** `max |in_G − in_1|`
+over all 824 flights = **0.000000e+00**; **0 of 824** edges censored. Δ = out_G − out_1 is an exact
+paired gauge across the whole domain.
+
+**§1 — ⭐⭐ THE MONOTONICITY IS STRUCTURAL, AND THE ONE HOLE IN THE ARGUMENT IS EMPIRICALLY EMPTY.**
+The structural claim (identical draws ⇒ multiplier 1 inbound / ≥1 outbound ⇒ raising `G` only ADDS
+detections ⇒ adding a detection splits a gap and never grows one ⇒ the `N`\* edge cannot fall) has
+one leak, pre-registered before the run: **Swerling-1 adds signal to noise in QUADRATURE, so `z` is
+an upward parabola and a detection CAN be lost when `G` rises** — but only from a look whose
+crossing at the lower `G` was noise-driven, a `pfa`-scale event. Counted: inbound looks differing
+from the null **0**; outbound vs null **200 191 added, 0 DROPPED** over **1 187 208** look
+comparisons; adjacent-cell drops **0**; expected at `pfa` = 1e-6, ~1.19. ⇒ the superset holds
+exactly and **no fine-grid reversal hunt is needed** — none of the arc's non-monotonicity
+disqualifications (28, 40, 25, 20, 22, 49, 50) can attach to this knob.
+
+**§2 — ⭐⭐⭐ THE STAIRCASE. §2.9 measured 7 CELLS; THE USER DRAGS A CONTINUUM.** Grid `G` = 1(1)100.
+
+| domain | mean steps/drag | mean dead run | **worst-seed dead run** | top decile moves |
+|---|---|---|---|---|
+| 1 → 20 | 3.4 | 56.9 % | **90.0 %** (seed 5) | 1 of 8 |
+| 1 → 50 | 6.0 | 40.0 % | **52.0 %** (seeds 1, 5) | 2 of 8 |
+| 1 → 100 | 7.0 | 42.9 % | 58.0 % (seed 1) | **0 of 8** |
+
+⇒ **§2.5's "ceiling of 20 is the candidate to beat" IS BEATEN — and beaten on the staircase, not on
+total effect.** On seed 5 a 1→20 drag is dead over **90 %** of its travel; on seed 250, 85 %. A
+ceiling of 100 is condemned the other way: **its top decile is dead on 8 of 8 seeds**, and its last
+50 cells buy one extra step and 19 % more effect. ⭐⭐ **A LADDER'S CELLS CANNOT PRICE A SLIDER —
+ONLY THE STRETCHES BETWEEN THEM CAN.**
+
+**§3 — ⚠⚠ THE PRE-REGISTERED FALSIFIER FIRED: THE EDGE IS *NOT* ONE LEVEL CROSSING PUSHED OUTWARD.**
+Declared-edge SNR rises **+2.71 dB ± 0.84** from `G` = 1 (13.65 dB, sd 1.10, n = 8) to `G` = 10
+(16.36 dB), against a null-arm per-seed spread of 1.10 dB — then plateaus and wobbles
+(16.31 → 15.06 → 16.15), i.e. not even a monotone trend. **Mechanism, and it is not a defect:** the
+edge is declared by a RUN rule (give up after `N`\* = 3 consecutive misses), and a run of 3 misses
+accumulates where the signal falls SLOWLY. The multiplier `1 + (G−1)·max(0,−cosθ)²` is ≈1 just
+after CPA (θ ≈ 90°) and → `G` only as θ → 180°, so it reshapes the SNR-vs-range curve and changes
+the **local slope** where the edge lands, not merely the level.
+
+⇒ ⭐⭐⭐ **A RUN-RULE EDGE IS DECLARED AT A LEVEL THAT DEPENDS ON HOW FAST THE SIGNAL IS FALLING
+THERE.** ⚠ **Gate 1 and gate 3 must NOT write "the tail gain buys range at a fixed detection
+threshold" as an identity** in a docstring or a HUD — it is approximately, not exactly, true. It is
+also why P7 refused to pre-register an `R_ref·(G^(1/4) − 1)` closed form as an external anchor (the
+measured Δ(50)/Δ(20) = **2.07** vs the law's 1.49 already refutes it; pre-registering a refuted law
+would have manufactured a FAIL needing retraction on a stated mechanism — P4 §E's exact shape).
+2.71 dB out of a ~30 dB swing changes no sign and no ordering: **a stated CAVEAT, not a kill.**
+
+**§4 — THE FLOOR IS A LESSON CHOICE, NOT A MODEL LIMIT** (a MODEL test under the two-test rule).
+`G` < 1 = a target whose tail is DIMMER than its nose: Δ = **−403.6 m** at 0.25 (7 of 8 seeds
+negative), −199.1 at 0.50, −128.9 at 0.75, +0.0 at 1.00. **Correctly signed and continuous through
+1**; the kernel special-cases nothing. ⇒ **the floor of 1.0 is the NULL THE USER RETURNS TO, chosen
+for the lesson.** ⚠ **Gate 1's docstring must SAY that**, and the load-time validator must accept
+any `G` > 0 (clamping only at ≤ 0, where the multiplier would go negative at θ = π) even though the
+shipped slider starts at 1.
+
+**§5 — ⭐⭐⭐ THE CEILING: 50, LINEAR, WITH AN AUTHORED DEFAULT OF 20.**
+
+| ceiling | Δ(C) m | half-effect at `G` | % of travel | worst dead run | tail/nose | tail/broadside |
+|---|---|---|---|---|---|---|
+| 20 | 2659.1 | 9.6 | 45.3 % | **90.0 %** | +13.0 dB | −23.1 dB |
+| **50** | **5491.4** | **20.2** | **39.2 %** | **52.0 %** | **+17.0 dB** | **−19.1 dB** |
+| 100 | 6778.6 | 24.2 | 23.5 % | 58.0 % | +20.0 dB | −16.1 dB |
+
+(The dB columns need no simulation: the multiplier is exactly `G` at θ = π ⇒ tail/nose = `G`,
+tail/broadside = `G`/F⁴ at the arc's authored F = 8, which 49 and 50 both author.)
+
+**Against 20:** §2.9's ONLY all-seed-clean interval is `G` = 20 → 50, and a ceiling of 20 ends at
+the bottom of it — the one drag guaranteed to move every seed would not be on the slider at all.
+**Against 100:** top decile dead on 8 of 8; doubles the slider for 19 % more effect; +20 dB is the
+outer edge of ordinary. **For 50:** contains the clean interval, best on every staircase measure,
+and +17 dB tail-vs-nose / −19 dB tail-vs-broadside are ordinary for a real airframe.
+
+⇒ **SHIP: floor 1.0, ceiling 50.0, LINEAR, authored default `G` = 20.** That default gives gate 3
+two drags that provably move on all 8 seeds: **20 → 50** (the only all-seed-clean interval) and
+**20 → 1** (back to the null). All 8 seeds are non-zero at `G` = 20 and all 8 move again on 20 → 50.
+
+**⚠⚠ CORRECTION TO §0.3 — A LOG AXIS *IS* AVAILABLE ON THE SHIPPED WIRE, AND IS REFUSED ON
+MEASUREMENT.** §0.3 pre-registered *"the knob protocol carries min/max, not a curve"* and therefore
+concluded that a badly-spent linear drag would force **the ceiling down rather than the axis to
+log**. **That premise is FALSE:** `Knob` carries `log::Bool` (`core/src/scenario.jl:20-29`), the
+scenario handshake ships it (`core/src/server.jl:94-97`), seven shipped scenarios author
+`log: true`, and the client honours it. The ceiling was a genuine three-way choice (50 linear /
+100 log / 20 linear). The log axis loses on its own number: the half-effect of a 1→50 domain sits
+at `G` = 20.2, which is **39.2 % of a LINEAR drag** but `ln 20.2 / ln 50` = **76.8 % of a LOG one**.
+This knob's payoff is concentrated at the **BOTTOM** (Δ reaches 48 % of its 1→50 total by `G` = 20),
+and a log axis stretches the bottom — turning a near-balanced 39 % into a badly top-heavy 77 %.
+
+⇒ ⭐⭐⭐ **SLICE 49 REFUSED A LOG AXIS BECAUSE ITS PAYOFF WAS CONCENTRATED AT THE TOP; SLICE 53
+REFUSES ONE FOR THE EXACT OPPOSITE REASON.** The shipped rule is not "linear by default" — it is
+**put the half-effect near the middle of the drag**, and which axis does that is a MEASUREMENT.
+⚠ **The gate-3 verifier tooth must state THIS reason (the 39 % vs 77 % pair) — it must NOT copy
+49's or 52's wording**, which would assert a mechanism this slice does not have.
+
+**⇒ F3 IS DISCHARGED. ALL PRE-REGISTERED FALSIFIERS ARE NOW ANSWERED — GATE 0 IS COMPLETE.**
+
+---
+
+### 2.15a — P7a: THE THREE THINGS §2.15 CLAIMED WITHOUT EARNING (56 flights)
+
+Probe `M:\claud_projects\temp\slice53\p7a_mechanism.jl`, raw `…\p7a_out.txt`. 7 cells × 8 seeds,
+same wire and same `revisit_s` = 0.1 / `N`\* = 3. Written because §2.15 starred a mechanism it had
+not discriminated, fell back from a criterion that selected nothing without saying so, and leaned
+on a censoring flag with slice 52's shape.
+
+**§A — ⭐⭐ `snr_db` IS THE DETERMINISTIC LINK-BUDGET MEAN, NOT A REALISED DRAW.** The trajectory is
+identical across seeds (`yaml_for` varies only `seed:`), so a seed-invariant `snr_db` at fixed
+(`G`, look index) settles it: **max |snr_db(seed) − snr_db(53)| = 0.000000e+00 over 1500 looks at
+all 7 cells.** ⇒ **the rival mechanism is dead.** The recorded quantity carries no per-draw noise,
+so it cannot be shifted by selection *on itself*; the only free choice left is WHICH LOOK gets
+declared, and where the first 3-run lands on a deterministic Pd curve is set by that curve's SHAPE.
+
+**§B — THE SLOPE FALLS 2.9× ACROSS THE DOMAIN, AND IT IS THE ASPECT TERM DYING.** |dSNR/dlook| over
+the 10 looks ending at the declared edge: **0.1109 → 0.0974 → 0.0787 → 0.0676 → 0.0570 → 0.0430 →
+0.0387** dB/look for `G` = 1…100 (sd ≤ 0.011, n = 8) — monotone, exactly the predicted direction.
+**External anchor, pure geometry, no simulation** (convention 11): a `1/R⁴` fall alone gives
+`17.3718·v·(h/R)/R` dB per 0.1 s look at the measured edge range, with `h = √(R² − 4970²)`:
+
+| `G` | edge R (m) | range-only slope | observed slope | **ASPECT share** |
+|---|---|---|---|---|
+| 1 | 6902.6 | 0.0524 | 0.1109 | **52.8 %** |
+| 2 | 7051.9 | 0.0524 | 0.0974 | 46.2 % |
+| 5 | 7640.0 | 0.0518 | 0.0787 | 34.2 % |
+| 10 | 8327.7 | 0.0502 | 0.0676 | 25.7 % |
+| 20 | 9561.7 | 0.0466 | 0.0570 | 18.3 % |
+| 50 | 12394.0 | 0.0385 | 0.0430 | 10.4 % |
+| 100 | 13681.2 | 0.0355 | 0.0387 | **8.3 %** |
+
+The range-only column is nearly CONSTANT (0.052 → 0.036) while the total falls by 2.9× ⇒ **almost
+all of the flattening is the aspect term dying away** as the multiplier `→ G` cancels the `1/F⁴`
+nose/tail collapse. At `G` = 100 the edge sits where the fall is 92 % pure range.
+
+⚠ **BUT THE MECHANISM IS ONLY HALF-CONFIRMED, AND §2.15 MUST BE READ WITH THIS.** A slower fall
+should declare the edge at a HIGHER SNR, and it does over the first decade (slope −39 %, SNR
++2.71 dB, `G` = 1 → 10). Over the second (slope −43 %, `G` = 10 → 100) the same argument predicts
+another ≈ +2.7 dB and the readout gives **≈ 0** (16.36 → 16.31 → 15.06 → 16.15, SE 0.4–0.8 dB).
+⇒ **the slope is the only channel available (§A) and moves as predicted (§B), but it does not
+quantitatively account for the plateau above `G` ≈ 10. That is OPEN and P7a did not close it.**
+
+⇒ **⭐⭐ DOWNGRADED FROM §2.15's ⭐⭐⭐, AND RESTATED AS WHAT WAS ACTUALLY EARNED: A RUN-RULE EDGE IS
+NOT A LEVEL — BEFORE QUOTING A THRESHOLD SNR, MEASURE HOW FAST THE SIGNAL IS FALLING WHERE THE RULE
+FIRES.** The operational consequences in §2.15 §3 stand unchanged (do not write "buys range at a
+fixed detection threshold" as an identity; do not pre-register the `G^(1/4)` closed form). ⚠ **This
+is what may go into `docs/LESSONS.md` — NOT the stronger causal claim §2.15 printed.**
+
+**§C — THE CENSORING FLAG IS CLEAN, BY A MARGIN OF THREE ORDERS OF MAGNITUDE.** P7's `edge` flags
+censored only when the last detection IS the final element, so a flight ending in 1–2 trailing
+misses would read UNCENSORED though truncated (slice 52's arm-specific trap). Measured gap from the
+declared edge to the end of the outbound leg: **minimum 1030 looks** anywhere in the sweep (1324 at
+`G` = 1, 1030 at `G` = 100), against `N`\* = 3. **0 flights with a gap < 3, at every cell.**
+⇒ no flight was truncated by the 200 s window, and **§2.15 §5's "the last 50 cells buy 19 %" is
+look-quantisation, not a window artefact** — the `G` = 90 / `G` = 100 tie is real.
+
+**⇒ THREE CORRECTIONS THAT TRAVEL WITH §2.15's VERDICT (the verdict itself is unchanged):**
+
+1. ⚠⚠ **"MONOTONE BY CONSTRUCTION" IS TOO STRONG — §2.15 §1 OVERSTATED ITS OWN CAVEAT.** 0 drops
+   against ~1.19 expected is **P(0) = 0.30**: fully consistent with the quadrature leak existing and
+   being rare, not with it being absent. **Correct wording: monotone across all 824 flights, with a
+   `pfa`-scale exception rate consistent with ~1 per 10⁶ outbound looks.** The leak is real physics
+   (Swerling-1 adds signal to noise in quadrature); a zero count does not repeal it.
+2. ⚠⚠ **THE PRE-REGISTERED CEILING RULE SELECTED NOTHING, AND §2.15 DID NOT SAY SO.** "Does not
+   spend its top decile of travel dead" is failed by ALL THREE candidates (20: 1/8 seeds move,
+   50: 2/8, 100: 0/8). The verdict fell back to RELATIVE RANKING on that criterion. **Declared
+   here, explicitly.** ⚠ This project killed five slices in a row and then ruled the CRITERION at
+   fault (2026-08-18); undeclared criterion drift is that exact failure mode and must be recorded,
+   not smoothed over.
+3. **LEAD THE CASE AGAINST 20 ON THE CLEAN INTERVAL, NOT ON THE DEAD-RUN PERCENTAGE.** Two
+   confounds sit under the percentage: dead-run "% of travel" is domain-normalised while the grid
+   is 1 unit of `G` — coarse exactly where the payoff concentrates (`G` < 10 is 47 % of a 1→20
+   widget but 9 % of a 1→100 one), so under-resolution inflates the dead-run % and deflates the
+   step count of the very domain it condemned; and §2.9's "only all-seed-clean interval" compared
+   unequal widths (1/3/5/10/30/50), so a wider interval moves more seeds mechanically. **Neither
+   is needed:** P7's fine grid gives the direct statement — **20 → 50 moves 8 of 8 seeds** — and the
+   case against a ceiling of 20 is simply that **it puts no all-seed-clean drag on the slider at
+   all.** The staircase table stays as SUPPORTING evidence, not as the lead argument.
+
+**⚠ SCOPE LIMIT THAT TRAVELS WITH THE CEILING (the P6 Arm 2 discipline).** Every endpoint number is
+**wire A only** (x0 = −15 km, 200 s, σ = 4 m², F = 8, `revisit_s` = 0.1, `N`\* = 3). P6 Arm 2 already
+showed the METRES are a joint property of the tail lobe and the tracker. **The ceiling of 50 is
+justified on this wire and is quoted with it** — not re-flown on others, and not claimed beyond them.
