@@ -1,11 +1,14 @@
 # Slice 53 — **A TAIL LOBE**: does a target look the same going away as coming at you?
 
-**STATUS: GATE 0 IN PROGRESS — P1, P2 AND P3 HAVE RUN (2026-08-31); F1 AND F2 ARE DISCHARGED, AND
-F3's MONOTONICITY AND BAR FILTERS WITH THEM. ⚠ F3's THIRD FILTER — *not sayable without the
-asymmetry* — IS P4's SUBSTITUTION TEST AND IS STILL OPEN.**
+**STATUS: GATE 0 IN PROGRESS — P1–P4 HAVE RUN (P1/P2/P3 2026-08-31, P4/P4b 2026-09-06). ⭐ F1 AND
+F2 ARE DISCHARGED, and F3's THREE filters — monotonicity, the bar, and *not sayable without the
+asymmetry* — are ALL discharged: P4's substitution test fired its pre-registered STRONG branch, and
+P4b replaced P4 §E's estimator with a PAIRED one. ⚠ **F3 IS NOT CLOSED — its ENDPOINT
+JUSTIFICATION is still P7's.** Remaining: F4 (P5), F5 (P6), F3's endpoints (P7).**
 ⚠ P3 FIXED TWO THINGS P4–P7 MUST USE VERBATIM: the run-length rule `N`\* = 3 and MIRRORED edges
-(§2.8). The ceiling is 50. **§2.3's and §2.6's ladder magnitudes are superseded by §2.8 — do not
-quote them.**
+(§2.8). The ceiling is 50 and **P4b confirms it stands** — ⚠⚠ **P4 §E's "RETRACTED" verdict on
+§2.8's bar IS NOT ISSUED; do not quote P4 §E** (§2.11). **§2.3's and §2.6's ladder magnitudes are
+superseded by §2.8, and §2.5 item 3's +2924 m by §2.10 — do not quote them.**
 ⚠ Everything below the falsifier list was written as a PREDICTION before any probe ran (slice 41's
 discipline — `docs/LESSONS.md:13`, *"pre-register the falsifier"*) and is **left unedited on
 purpose** so the predictions can be scored. **§2 at the foot of this file records what was
@@ -326,8 +329,9 @@ reach for a fourth geometry to rescue it.
 
 Full write-ups, with every raw number and the probe sources, are in
 `M:\claud_projects\temp\slice53\p1_findings.md` and `M:\claud_projects\temp\slice53\p2_findings.md`
-(probes: `p1_aspect.jl`, `p2_wires.jl`, `p2b_w1_length.jl`, `p2c_substitution.jl`; raw output in the
-matching `*_out.txt`). This section is the SUMMARY the repo carries.
+(probes: `p1_aspect.jl`, `p2_wires.jl`, `p2b_w1_length.jl`, `p2c_substitution.jl`, `p2d_flicker.jl`,
+`p3_floor.jl`, `p3b_perseed.jl`, `p4_subst.jl`, `p4b_paired.jl`; raw output in the matching
+`*_out.txt`). This section is the SUMMARY the repo carries.
 
 ### §2.1 P1 (F1) — DISCHARGED, and the plan's own hedge was refuted
 
@@ -697,3 +701,162 @@ controls through the SAME per-seed reversal check P3b just ran**, on the same 8 
 rule, in the same probe. F2's substitution test needs the controls to FAIL to reproduce the
 asymmetry — and *a control that produces a non-monotone or seed-dependent asymmetry is a different
 and WEAKER refutation than one that produces none.* The distinction has to be measured, not assumed.
+
+---
+
+### §2.10 P4 (F2/F3) — **THE SUBSTITUTION TEST. BRANCH (S) FIRED: NEITHER SHIPPED KNOB PRODUCES
+### AN ASYMMETRY AT ALL** (probe `p4_subst.jl`, `p4_out.txt`)
+
+P4 pre-registered its verdict branches in its own file header, before the run: **(S)** every
+control arm indistinguishable from zero ⇒ strong refutation; **(D)** a control reproduces the
+ladder ⇒ the slice dies; **(W)** a control produces a non-monotone or seed-dependent asymmetry ⇒
+weak refutation (the distinction §2.9's closing note demanded). It flew TWO wires, each its own
+stream, nothing compared across them: **wire A** = P3/P3b's wire verbatim (x0 = −15 km, 200 s),
+**wire B** = a wide wire (x0 = −60 km, 420 s) sized so even the brightest arm opens undetected.
+
+**The correctness tooth first.** P4's null arm reproduced P3's `G` = 1 cell to the printed digit —
+mean +39.8 m, max |·| 968.4 m, 8/8 uncensored. The gauge in this probe **is** P3's gauge.
+
+**⭐ BRANCH (S) FIRED ON BOTH WIRES.** No control arm clears even 3 standard errors of its own
+seeds, let alone the bar:
+
+| wire | knob swept | means in knob order (m) | largest \|mean\|/se |
+|---|---|---|---|
+| A | `rcs_m2` 4 → 64 (F = 8) | +40 → −184 → −212 → −110 → +615 | 1.56 |
+| A | `rcs_fineness` 2 → 12 (σ = 4) | +1278 → +638 → +40 → −128 | 2.87 |
+| B | `rcs_m2` 4 → 1024 (F = 8) | +191 → +127 → −50 → −777 → −786 | 1.35 |
+| B | `rcs_fineness` 2 → 12 (σ = 4) | −548 → −50 → +191 → +115 | 0.85 |
+
+⇒ **F2's substitution half is DISCHARGED, and F3's third filter — *not sayable without the
+asymmetry* — with it.** Per-seed reversal counts were printed for completeness and are **NOT a
+finding**: a reversal count on a flat-noise arm is uninformative by construction, which P4's header
+said before the run.
+
+**⚠ §2.5 ITEM 3's WARNING IS NOW DEAD, AND ITS NUMBER WITH IT.** The old **+2924 m** control-arm
+figure was an artefact of the raw-`findlast`, unmirrored rule. Re-measured under `N`\* = 3 with
+mirrored edges, `rcs_m2` = 64 gives **+615.3 m** (\|m\|/se 1.44) and `rcs_fineness` = 4 gives
+**+637.7 m** (1.59). **Do not quote +2924 m again.**
+
+**⭐ THE MECHANISM-LEVEL REFUTATION — a brightness knob moves BOTH edges, the tail gain moves ONE**
+(wire B, means over 8 seeds):
+
+| arm | gain-in (m) | loss-out (m) | asymmetry (m) |
+|---|---|---|---|
+| `rcs_m2` = 4 (null) | 6681.8 | 6872.9 | +191.2 |
+| `rcs_m2` = 64 | 10065.7 | 10015.7 | −50.0 |
+| `rcs_m2` = 1024 | 16877.4 | 16091.6 | −785.8 |
+| **`G` = 20** | **6681.8** | **10015.7** | **+3334.0** |
+| **`G` = 50** | **6681.8** | **11565.4** | **+4883.6** |
+
+⚠ **Read the `gain-in` column.** Brightness drags the inbound edge outward *with* the loss edge;
+the tail gain leaves it exactly where the null put it. This is §2.3's structural control holding on
+a second, independent wire — and it is the mechanism P4b then turns into an estimator (§2.11).
+
+### ⭐⭐ §2.10a THE TWO SHIPPED KNOBS COLLAPSE TOWARD **ONE** KNOB AT THE POLES — ⚠ **AN EXACT
+### IDENTITY AT cos²θ = 1, AN APPROXIMATION AT THE ANGLES THE EDGES ACTUALLY SIT AT**
+
+Found empirically in P4's sizing run, then derived: `rcs_aspect` reads σ / (sin²θ + F² cos²θ)², so
+at nose-on and tail-on (cos²θ = 1) it is **exactly σ / F⁴**. `rcs_m2` = 64 / `rcs_fineness` = 8 and
+`rcs_m2` = 4 / `rcs_fineness` = 4 both give 0.015625 there; 1024/8 and 4/2 both give 0.25.
+
+**⚠⚠ BUT THE IDENTITY IS EXACT ONLY AT THE POLE, AND THIS GAUGE'S EDGES ARE NEAR IT, NOT AT IT.**
+With the target at 5 km and the radar at 30 m, the outbound edge at ~10 km sits ~30° off tail-on
+(cos²θ ≈ 0.75) and at ~16.6 km still ~17° off (cos²θ ≈ 0.92). The residual grows with how far apart
+the two `F` values are, and **P4's own arms measure it**:
+
+| σ/F pair | ratio of `F` | gain-in (m) | loss-out (m) | verdict |
+|---|---|---|---|---|
+| 64/8 vs 4/4 | 2 | 10065.7 vs 10065.7 | 10015.7 vs 10015.7 | **bit-identical in every column** |
+| 1024/8 vs 4/2 | 4 | **16877.4 vs 16639.3** | 16091.6 vs 16091.6 | ⚠ **238.1 m apart INBOUND** |
+
+238.1 m *is* the whole difference between those two arms' means (−785.8 vs −547.7), and §2.10's own
+off-axis print names the cause: at 30° they read 0.44 vs 0.379, **14 % apart**.
+
+⇒ F2's words — *one aspect is one number, and one number is a gain* — hold **in the limit**, and
+§2.2's theorem arrives from the parameter side. ⚠ **The rule a later probe may use is the narrow
+one:** σ/F⁴ is an exact identity at nose-on and tail-on; at the angles this gauge's edges sit at the
+two keys are interchangeable only when the `F` values are **close** — measured, 64/8 ≡ 4/4 exactly,
+while 1024/8 vs 4/2 differ by 238 m. **Never substitute across a large `F` ratio and call it a null.**
+
+⚠ None of this touches branch (S): that verdict rests on the control means being indistinguishable
+from zero on their own seeds, not on the degeneracy.
+
+### §2.11 P4b — **THE PAIRED TEST. F3's BAR STANDS AS §2.8 WROTE IT; P4 §E's RETRACTION IS NOT
+### ISSUED** (probe `p4b_paired.jl`, `p4b_out.txt`)
+
+**⚠⚠ P4 §E MUST NOT BE QUOTED.** P4's branch (R) asked whether F3's bar was measured at the range
+the headline is read at, built a floor from the two control arms *bracketing* `G` = 50's outbound
+edge (FLOOR_R = 3049.6 m ⇒ BAR_R = 9148.7 m), scored `G` = 50 at **0.53× — FAIL**, and wrote that
+§2.8's 1.90× PASS was "RETRACTED, not reinterpreted". **That retraction is hereby NOT issued.** The
+bracketing construction is the **wrong estimator**, and it is wrong for a reason this file can state
+mechanically rather than by preference:
+
+> A control arm's asymmetry contains **two** stochastic edges at two different ranges. `G` = 50's
+> asymmetry contains only **one**, because its inbound edge is bit-identical to the null's. Pricing
+> the second against the first charges the tail gain for a variance term its own gauge does not
+> contain.
+
+⚠ **This is a supersession on a stated mechanism, not a number discarded for being unwelcome.** The
+concern was named in-session *before* wire B's bracketing numbers existed, and P4b's §0 **checks the
+mechanism rather than assuming it**: max \|in_G − in_1\| over 8 seeds is **0.000000e+00** on both
+wires at both `G` = 20 and `G` = 50. Bit-identical. The cancellation is exact.
+
+**⭐⭐⭐ THE PAIRED TEST. Δ(`G`, seed) = out_G(seed) − out_1(seed), whose null is EXACTLY zero by
+construction** — no floor to build, no bar to clear, no null arm to fly. The test is P3b's own
+filter: positive on 8 of 8?
+
+| wire | `G` | mean Δ (m) | sd (m) | se (m) | mean/se | seeds positive |
+|---|---|---|---|---|---|---|
+| A | 20 | **+2659.1** | 1068.7 | 377.8 | 7.04 | **8/8** |
+| A | 50 | **+5491.4** | 1281.1 | 452.9 | 12.12 | **8/8** |
+| B | 20 | **+3142.8** | 1023.3 | 361.8 | 8.69 | **8/8** |
+| B | 50 | **+4692.4** | 1309.3 | 462.9 | 10.14 | **8/8** |
+
+**BOTH FLOORS, REPORTED TOGETHER** (the ledger carries both so the supersession is auditable):
+
+| | wire A | wire B |
+|---|---|---|
+| (i) F3's bar as WRITTEN, same-wire null | 3 × 968.4 = 2905.2 m ⇒ `G` = 50 at **1.90× PASS** | 3 × 1044.6 = 3133.7 m ⇒ `G` = 50 at **1.56× PASS** |
+| (ii) P4 §E's bracketing-arm floor | — | **SUPERSEDED** (mechanism above) |
+| (iii) ⭐ the paired test, no floor needed | +5491.4 m, se 452.9, 8/8 | +4692.4 m, se 462.9, 8/8 |
+
+⇒ **F3 IS FULLY DISCHARGED. The ceiling of 50 stands as §2.8 and §2.9 wrote it, and P7 inherits no
+correction from P4 §E.**
+
+### ⭐⭐ THE SCATTER IS A PROPERTY OF THE **RANGE**, NOT OF THE ARM
+
+P4 reported one sd per arm, conflating two edges sitting at two different ranges. P4b measures each
+edge separately. Sorted by the range the edge sits at, per-edge sd climbs monotonically — ~175 m at
+5.8 km, ~430–560 m at 6.7–6.9 km, ~750 m at 10 km, ~1100–1360 m at 11.8–12.6 km, ~1200–2400 m at
+16–16.9 km — **regardless of which knob put the edge there**. On every control arm (whose two edges
+sit at matched range) `arm sd ÷ √2` tracks each edge's own sd, so the two edges are independent and
+equally noisy at matched range. P4's pre-registered prediction for `G` = 50 (~1257 m) against the
+measured 1215 m was right for the right reason.
+
+⇒ ⚠ **A NOISE FLOOR ON THIS GAUGE MUST BE QUOTED WITH THE RANGE ITS EDGES SIT AT** — a general
+statement that outlives P4 §E's specific error, and the real content of branch (R).
+
+### ⚠ THE MONOTONE DRIFT IS AN OPEN ITEM, NOT A FINDING — AND IT CANNOT TOUCH Δ
+
+Two of P4's four control sweeps drift monotonically negative with brightness (wire A's `F` sweep,
+wire B's σ sweep). No arm clears 3 se, so **branch (S) is not reopened** — that verdict was
+pre-registered. P4b §3 asks a different question with a diagnostic that needs no threshold model:
+**the SNR at the look each edge is declared on**. Two mirrored samplers on a geometrically symmetric
+pass should declare at the same signal level. Measured, `out − in` spans only **−1.5 … +1.4 dB** and
+**its sign is not consistent** — the same arms flip sign between wires (`F` = 12: +1.35 dB on A,
+−1.17 dB on B). ⇒ **the drift is not a sampler bias**; it is the detector's own R⁻⁴ geometry.
+
+⚠⚠ And in any case: **a bias on the INBOUND edge cannot touch Δ**, because Δ cancels the inbound
+edge exactly, per seed. Recorded as an open observation for P7, **not** as a finding.
+
+### WHAT P5–P7 INHERIT FROM P4/P4b
+
+1. **F1 and F2 are DISCHARGED, and so are all THREE of F3's filters.** ⚠ **F3 itself is NOT closed:
+   its ENDPOINT JUSTIFICATION is P7's job.** Remaining: **F4** (P5, the two nulls, byte-identity),
+   **F5** (P6, halved step), **F3's endpoints** (P7).
+2. **P7's ceiling work starts from 50 UNCHANGED.** P4 §E's demand that "the ceiling must rise" is
+   withdrawn with §E itself.
+3. ⚠ **P7 may substitute `rcs_m2` for `rcs_fineness` only across a SMALL `F` ratio** — the σ/F⁴
+   identity is exact at the poles but the gauge's edges sit ~17–30° off them (§2.10a).
+4. ⚠ **P6 halves the step at `G` = 50 AND at the `G` = 20 vs 50 comparison**, since 20 → 50 is the
+   only interval clean on all eight seeds (§2.9) and is therefore what a gate-3 default sits inside.
