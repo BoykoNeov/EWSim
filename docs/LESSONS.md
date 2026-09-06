@@ -1613,3 +1613,61 @@ prohibitions, but WHICH HALF of every prohibition.**
 higher. Here: 70 → 85 single, 21 → 25 double (the new headers add warnings; none were shaved). That
 is a mechanical guard against the exact failure this lesson names — trading a real safeguard for a
 cosmetic byte count — and no reading of the diff proves it as cheaply.
+
+---
+
+## ⭐⭐⭐ A KILL TEST THAT ONLY KNOWS ONE SHAPE OF LESSON WILL KEEP KILLING LESSONS — "FAILED THE SLIDER TEST" WAS NEVER "FAILED THE LESSON TEST" (2026-09-06, the user's re-read)
+
+The 2026-08-18 re-verdict fixed one level of this error: *"it did not move the miss on this scenario"*
+had been read as *"the component does not exist."* Two tests were introduced, MODEL and LESSON, and
+five slices were re-verdicted. ⚠⚠ **The same error survived one level down, inside the new LESSON
+test itself**, and nobody noticed for thirteen slices.
+
+The LESSON test as written asks: **"does dialing it move the authored scenario's headline metric?"**
+That is not a test of whether something teaches. It is a test of whether it teaches **by a monotone
+slider on one engagement** — and a slider is one trigger among several. Everything that failed it was
+filed as though teaching had been attempted and had failed.
+
+⭐⭐⭐ **THE GENERALISATION: A LESSON NEEDS A TRIGGER AND A CONTRAST. FIVE TRIGGERS, NOT ONE.**
+
+- **SLIDER** — dial it, the headline metric moves monotonically. *(the only one the kill tests tried)*
+- **RIVAL** — two designs side by side; the worse one fails **for a stated reason**. ⭐ A simulator
+  carrying only designs that WORK cannot show why the shipped one is shipped.
+- **REGIME** — the same hardware, inert in one operating mode and decisive in another. ⊂ the SHADOW
+  case: two limits where only one ever binds, and which one depends on the tuning.
+- **CURVE** — the response REVERSES; the turning point IS the lesson. *More is not better, and here
+  is where it turns.*
+- **NULL** — the measured absence, shipped WITH its bound.
+
+⚠⚠ **AND A SIXTH BUCKET THAT IS NOT A LESSON ABOUT HARDWARE: `INSTRUMENT`.** An algebraic identity, a
+discretization artifact, a divergence or an unread key teaches about the **simulator**, has no
+authorable key and ships nothing. ⇒ **Tagging something `INSTRUMENT` is not a revival** — it says the
+refutation is worth showing once, not that a component exists. Keeping this bucket separate is what
+stops a build list from reading as permission to rebuild the only genuine kills on the record.
+
+⭐⭐⭐ **THE STRONGEST EVIDENCE THAT THIS IS A NAMING, NOT A REFRAME: THE PROJECT HAD ALREADY BUILT IT
+TWICE AND NEVER WROTE IT DOWN.** `docs/DEFERRALS.md` §"What this changes about what to build"
+legalised the REGIME/NULL shape in 2026-08-18's own words — *"here is the hardware, here is the regime
+where it bites, and here is the measured regime where it does not"* — and **slice 54 shipped the CURVE
+trigger outright** (⭐⭐⭐ *WHEN THE ARGMAX IS NOISE, SHIP THE CURVE*, N shadow arms on one pass, paired,
+drawing nothing) precisely because its headline knob was non-monotone. ⇒ **When a doctrine change
+feels large, look for the two places the repo already did it by hand.** If they exist, the change is a
+vocabulary, it needs no ratification, and it is far more defensible than a new rule.
+
+⚠ **The arithmetic that made the omission expensive.** Under the widened definition the standing kill
+list yields: **two TIER-1 items with probe code already written** (45's per-axis window and stop, a
+REGIME lesson; the angle-domain radome corrector, a RIVAL lesson), **one BUG TICKET misfiled as a dead
+knob for 33 slices** (launch altitude — `core/src/missile.jl:476–477` still passes a constant `rho` on
+the 6-DOF path, verified open at HEAD), and **seven CURVE lessons that need no new physics at all**
+(the whole non-monotonicity list). None of that was hidden; it was mis-sorted by a test that could
+only see one shape.
+
+⇒ **THREE THINGS TO DO WHEN A KILL CRITERION IS ITSELF SUSPECT:**
+1. **Ask what SHAPE of evidence the test can see**, not whether the test was applied correctly. A
+   correctly-applied test with one shape produces a uniform, confident, wrong backlog.
+2. **Re-sort the record before re-measuring anything.** The re-read above added no measurement — every
+   number in it was already banked in a plan file or a gate log.
+3. ⚠⚠ **Do not let the rehabilitation live in the same paragraph as the ruling.** `docs/PROHIBITIONS.md`
+   exists to stop a re-proposal mid-sentence; each entry gets a ONE-LINE trigger tag and nothing more,
+   and the cost, evidence and build order live in `docs/DEFERRALS.md` §"THE BUILD LIST". A trip-wire
+   that argues with itself is not a trip-wire.

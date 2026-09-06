@@ -88,7 +88,7 @@ discharged/new/killed candidates into `docs/DEFERRALS.md`, method lessons into `
 (⚠ fold onto the EXISTING heading when it repeats), **every new ⚠ prohibition — with its reasoning,
 its numbers and its slice cite — into `docs/PROHIBITIONS.md`**, and into `CLAUDE.md` **only** the
 state line + any new dead end's NAME AND VERDICT WORD, folded into an EXISTING line.
-⚠⚠ **`CLAUDE.md` is a ROUTER — target ~16 KB** (15.4 KB after the 2026-09-06 structural split; 9 prose
+⚠⚠ **`CLAUDE.md` is a ROUTER — target ~16 KB** (16.1 KB: 15.4 after the 2026-09-06 structural split, +0.7 for the TRIGGER block below; 9 prose
 trims before it). **Numbers, test names, evidence — and now the REASONING behind a prohibition — go
 DOWNSTREAM; only the state line, the verdict words, the trip-wire NAMES and the conventions stay HERE.**
 ⚠⚠ **PROSE-TRIMMING WILL NOT SAVE THIS FILE A SECOND TIME.** If it goes over again the answer is another
@@ -105,6 +105,13 @@ kills the SLICE'S HEADLINE, not the hardware.*
 ⇒ **Pass model / fail lesson = "DEAD AS A LESSON, ALIVE AS A MODEL": it ships as physics + tests + authorable
 keys.** ⚠ Unchanged: the bar for NEW proposals, and slice 39's rule that a reparameterization must not ship as
 an ARCHITECTURE. Detail: `docs/DEFERRALS.md` §"THE 2026-08-18 RE-VERDICT".
+⭐⭐⭐ **AND A SLIDER IS ONE TRIGGER, NOT THE ONLY ONE (2026-09-06).** A lesson needs a TRIGGER and a
+CONTRAST: **SLIDER** (dial it, the metric moves) · **RIVAL** (two designs; the worse fails for a STATED
+reason) · **REGIME** (same part, inert in one mode and decisive in another — incl. two limits where only
+one binds) · **CURVE** (the response REVERSES; the turning point IS the lesson) · **NULL** (the measured
+absence, shipped WITH its bound). ⚠⚠ **`INSTRUMENT` is NOT one of them** — an identity, an artifact or an
+unread key teaches about the SIMULATOR and has NOTHING to author. ⇒ **"failed the SLIDER test" was never
+"failed the LESSON test".** Tags: `docs/PROHIBITIONS.md`; cost + evidence: `docs/DEFERRALS.md` §BUILD LIST.
 
 ## Dead ends — do not rebuild (NAMES ONLY; the ruling and its reasoning are `docs/PROHIBITIONS.md`)
 

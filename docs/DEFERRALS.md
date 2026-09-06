@@ -114,6 +114,71 @@ where it does not"* — the null result becomes part of the shipped documentatio
 not to ship. ⚠ Convention 9 (**one lesson per scenario**) still governs the SHOWCASE; it does not
 govern what the core is allowed to model.
 
+### ⭐⭐⭐ THE BUILD LIST — WHAT THE KILL LIST IS STILL WORTH, AND BY WHICH TRIGGER (2026-09-06)
+
+**Raised by the user, and it is not a new reframe — it is the shape THIS SECTION already legalized on
+2026-08-18 and slice 54 already shipped.** The LESSON test asks *"does dialing it move the authored
+scenario's headline metric?"* — which tests **one form of lesson**: a monotone slider on one
+engagement. Everything that failed it was filed as if teaching had been tried and had failed.
+⇒ **A lesson needs a TRIGGER and a CONTRAST. A slider is one trigger among five:**
+
+| trigger | the contrast it teaches by |
+|---|---|
+| **SLIDER** | dial it, the headline metric moves monotonically. *(the only one the kill tests ever tried)* |
+| **RIVAL** | two designs run side by side; the worse one fails **for a stated reason**. ⭐ A simulator that carries only designs that WORK cannot show why the shipped one is shipped. |
+| **REGIME** | the same hardware, two operating modes — inert in one, decisive in the other. ⊂ **the SHADOW case**: two limits where only one ever binds, and which one depends on the tuning. |
+| **CURVE** | the response REVERSES; the turning point IS the lesson (*more is not better, and here is where it turns*). ⭐ Slice 54's **WHEN THE ARGMAX IS NOISE, SHIP THE CURVE** is this trigger, already built. |
+| **NULL** | the measured absence, shipped WITH its bound — *here is the regime where it does not bite, and by how little.* |
+
+⚠⚠ **A SIXTH BUCKET IS NOT A LESSON ABOUT HARDWARE AND MUST NOT BE READ AS ONE — `INSTRUMENT`.** An
+algebraic identity, a discretization artifact, a divergence or an unread key teaches about **the
+simulator**, not about EW. It has **NO authorable key and nothing to ship**, and §B above ("CORRECTLY
+DEAD — they fail the MODEL test") is unchanged by any of this. ⇒ **An `INSTRUMENT` tag is not a
+revival.** It says the refutation is worth *showing*, once, in a scenario about how a simulation lies
+to you — not that a component exists.
+
+⇒ **THE RE-READ, ITEM BY ITEM.** ⚠ No new measurements — this re-sorts records that already exist, and
+every row's evidence is where its cite says. Rulings in `docs/PROHIBITIONS.md` are UNCHANGED; this is
+what each is worth to the SIMULATOR, and what would have to be built.
+
+**TIER 1 — real hardware, a clean trigger, and the probe code already exists:**
+
+| item | trigger | what it teaches, and what it costs |
+|---|---|---|
+| **A rectangular / per-axis window and stop** (45) | **REGIME** — textbook | The box is byte-identical to the disc on 8/9 TRACKING rows and DECIDES acquisition on a SEARCHING head (disc never locks at 305.11 m; box hits 0.24 / 0.23 / 0.15). ⭐⭐⭐ **A tracker holds both axes near zero so the corners are never visited; a search drives one axis to the rim BY DESIGN.** The elevation stop BINDS 66–68 % of in-band ticks — read, clamping, working hardware. An azimuth ring and an elevation trunnion are independent mechanisms with independent authorable travel. Cost: productionize `M:\claud_projects\temp\slice45` (patches + eight probes) — wire, test, author. |
+| **An angle-domain radome corrector** | **RIVAL** — textbook | It was BUILT and it fails PHYSICALLY for a stated reason: it needs the look angle and can only see it through the bend it is removing, so at PERFECT knowledge (`R̂ = R = −0.50`) it RINGS (rms 0.844, miss 131 m) where the shipped rate arm is quiet (0.014). ⇒ ships as an **alternative compensator rung**, never the default. Cost: it is already written (slice 27 gate 0); the work is a rung plus a two-arm scenario. |
+| **Launch altitude** (21) | **NEITHER — a BUG TICKET** | ⚠⚠ **Do not file this under a trigger; it is not a lesson, it is an unclosed seam.** VERIFIED at HEAD on 2026-09-06: `core/src/missile.jl:476–477` still threads the stage position `P` through `_integrate_6dof!` and passes a CONSTANT `rho`, its own comment reserving the seam *"for a future ρ(z) on this path (slice 21's stage-z seam)"*, while `_integrate_coupled!` DOES call `air_density(P[3])`. So on the path the ENTIRE 26–54 arc flies, altitude changes nothing. ⭐ Closing it makes altitude a real authorable variable everywhere and retires a "dead knob" that was never dead. ⚠ Distinct from the point-mass / ballistic gap, which touches slice 8's `rk4_step` byte-identity surface; the 6-DOF one does not. |
+
+**TIER 2 — real hardware, the trigger is clear, and the work is a scenario rather than a component:**
+
+| item | trigger | what it teaches, and what it costs |
+|---|---|---|
+| **The non-monotonicity list** — `k` (28), `ω_n` (40), `σ_seek` (25), miss-vs-`K` / `α_stall` (20, 22), the loss COUNT (49), miss-vs-`rcs_fineness` (50), `bad`-vs-`pfa` (54) | **CURVE** | ⭐⭐⭐ **SEVEN READY-MADE LESSONS, AND THE PHYSICS IS ALREADY SHIPPED FOR EVERY ONE.** They were disqualified as SHOWCASE SLIDERS because *a domain that reverses the lesson is not a domain* — but a reversal is the more valuable teaching object: it says an OPTIMUM exists and names where. ⚠ The technique is not hypothetical — slice 54 shipped N shadow arms on ONE pass, paired and drawing nothing, precisely because its argmax was noise. Cost per item: a scenario and a curve readout — **no new physics at all.** |
+| **Memory track / a coasting head** (37) | **REGIME** | The honest coast was BUILT (the head follows the tracker's coasted inertial estimate through the current attitude) and it rescued ONE boundary cell of fifteen. ⭐ **Rescuing one cell is a small effect, not a non-existent one** — and "the part that only matters at the boundary" IS the regime lesson. ⚠ Its original LESSON claim stays dead: the cure for a break in THIS arc is the ESTIMATOR's frozen rate, not the head. Cost: ship as head behaviour; the estimator-side slice remains separate. |
+| **A second-order FIN actuator** (41) | **NULL**, plus one honest open probe | The equivalence IS the finding: two `(k_α,k_q)` retunes reproduce the whole curve to 0.00–1.01 %, which teaches ⭐⭐ *you cannot tell a lag from a retune on a loop whose fin command is ONE spectral line* (1.6488 Hz). ⚠⚠ **And the scope is honestly UNPROVEN on a BROADBAND loop** — the one available probe is CONFOUNDED, because `af_I` moves the plant as well as the frequency. ⇒ the un-confounded broadband probe is real, un-run work. Cost: `M:\claud_projects\temp\slice41` exists; a clean excitation is the missing piece. ⚠ Slice 39's rule is untouched — it may ship as authorable actuator hardware, NEVER as "the fin architecture". |
+| **A scalar rate-limited fin in the coupled loop** (20) | **REGIME / the SHADOW case** | `δ_max` structurally SHADOWS `δ̇_max`: the fin only needs to move fast when the command does, which needs high `k_α` or low damping, and both peg DEFLECTION first. ⭐ **Two limits, only one ever binds — and the shadowing is itself the fact worth authoring.** The rate limit is ALREADY SHIPPED (slice 15's `fin_autopilot_step`, `δ̇_max` with `rate_sat` telemetry). Cost: instrument both saturation flags in one view; nothing new to build. |
+| **GYRO NOISE** | **NULL** (probe first) | ⚠ Deferred on **DRAW-TOPOLOGY** grounds — an unconditional third `randn` desyncs every 25–31 replay. That is a PLUMBING constraint, not a physics verdict, and the pattern that solves it already exists (slice 13's `:scan` 4b shape). ⚠ Slice 25's ~1000:1 roll-loop low-pass says it may still read inert — **inert-and-modelled is the point of this reframe**, published with its bound. |
+| **Seeker noise × the BTT roll loop** | **NULL** | What died is a CLAIM about a coupling (~1000:1 low-pass, std 1.07 vs 1.6e−5), not a part; the noise itself is shipped (25). Cheap to publish as a measured null, low value on its own. ⇒ fold it into the gyro-noise arm rather than opening a slice. |
+
+**TIER 3 — `INSTRUMENT` ONLY: nothing to author, and ONE scenario could carry all of them:**
+
+⭐⭐ **THE SHAPE: a single "how a simulation lies to you" showcase**, whose subject is the instrument
+rather than the hardware. Everything in it is already measured and none of it ships a key.
+
+- **A nulling-loop head servo** (39) — an algebraic IDENTITY with the shipped feed-forward under transformed parameters (`nulling(τ,s,b) ≡ feed-forward(τ(1+s), 0, b/(1+s))`, **5.8e−09 m over 12000 ticks**). ⭐ Two architectures that LOOK different and ARE the same system. ⚠ **FINITE loop gain is genuinely un-killed** — that is a RIVAL candidate, and it is NOT this identity.
+- **An "acquisition knife-edge"** (42) — the effect's width IS the integration step (`ω_LOS·dt`, **0.0036°** at the shipped step), it HALVES when `dt` does, and the "worthless lock" cell's miss is BYTE-IDENTICAL to the never-locks cell. ⭐⭐⭐ **The best available lesson about trusting a simulator's own output** — the repo's own rule came from it: re-fly any narrow threshold at half `dt`, and read a claimed STEP against NULL first.
+- **A cubic radome curve** — unbounded slope, the bend DIVERGES, no valid domain. ⭐ An unphysical model that shows why a bounded slope is a requirement and not a detail.
+- **`k_δ`** (15) — cancels EXACTLY in the algebra (`τ_s·δ̇ = δ_cmd − δ` with `a = k_δ·δ` collapses to the `:pid` plant relabelled, **maxdiff ~3.8e−13**): a "parameter" that is not independent. **`ζ` on the lag rung** (40) — a first-order lag HAS no damping term, so the slider is inert because the MODEL lacks it, not because the effect is small. ⭐ Two different reasons a knob can read as dead, and telling them apart is the lesson.
+- ⚠⚠ **`speed` (19), the handover bias key (36) and `(R̂,s)` (31) STAY OUT even of this** — they were plumbing BUGS (a live `set_param` writing a comp key no consumer reads), and 19 was FIXED. **There is no demonstration in a bug that has been repaired.**
+
+⚠⚠ **WHAT THIS SECTION DOES NOT DO.** It un-kills nothing: every ruling in `docs/PROHIBITIONS.md`
+stands exactly as written, the MODEL test is unchanged, §B above is unchanged, and the bar for NEW
+proposals is unchanged. ⇒ **All it retires is the inference *"it failed the slider test, therefore
+there is no lesson here"*** — the same error the 2026-08-18 re-verdict found one level up, where *"it
+did not move the miss on this scenario"* had been read as *"the component does not exist."*
+⚠ Convention 9 still governs the SHOWCASE: five triggers do not license stacking five lessons into
+one scenario.
+
 ---
 
 The NEXT named candidates:
