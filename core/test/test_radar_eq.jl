@@ -163,10 +163,57 @@ end
         @test EWSim.detection_range(seeker(10.0), 1.0; snr_min_db = 10.0) ≈ 8079.0 rtol = 5e-4
     end
 
+    @testset "⭐⭐⭐ SLICE 55 — THE FAN BEAM: Ω = θaz·θel, and the disc it trades for is √(ab)" begin
+        # (1) THE ONE-ARGUMENT METHOD IS THE TWO-AXIS ONE AT θaz = θel, atol 0 — `===` on the bits,
+        # not `≈`. `rf.jl` DEFINES it that way (the `boresight_angle` ⇐ `off_axis_angle` posture), so
+        # this is what slices 46–54's byte-identity rests on and it is asserted as an identity.
+        for θd in (1.0, 2.5, 10.0, 20.0, 45.0)
+            θ = deg2rad(θd)
+            @test EWSim.aperture_gain(θ) === EWSim.aperture_gain(θ, θ)
+            @test EWSim.aperture_gain(θ; eta = 0.42) === EWSim.aperture_gain(θ, θ; eta = 0.42)
+        end
+        # (2) THE SOLID ANGLE, against a hand-computed Ω rather than against the kernel.
+        a, b = deg2rad(20.0), deg2rad(3.8)              # a (10°, 1.9°) HALF-width window, doubled
+        @test EWSim.aperture_gain(a, b; eta = 0.6) ≈ 0.6 * 4π / (a * b)
+        # (3) ⭐ THE GAIN-MATCHED DISC IS √(ab) — AN IDENTITY OF THE LINK BUDGET, WHICH IS WHY IT AND
+        # NOT the arithmetic mean or the equal-AREA radius is slice 55's ruling control (§0.1.1 of
+        # `docs/plans/slice55.md`). ⚠ The two losers are pinned as LOSERS in the same breath, so the
+        # control cannot be quietly swapped later.
+        @test EWSim.aperture_gain(a, b) ≈ EWSim.aperture_gain(sqrt(a * b))
+        @test !isapprox(EWSim.aperture_gain(a, b), EWSim.aperture_gain((a + b) / 2); rtol = 1e-3)
+        @test !isapprox(EWSim.aperture_gain(a, b), EWSim.aperture_gain(2 * sqrt(a * b / π));
+                        rtol = 1e-3)
+        # (4) THE REACH RATIO IS √(a/b), AGAINST AN INDEPENDENT RECOMPUTE (convention 11): R ∝ √G
+        # because the gain enters twice and `detection_range` inverts an R⁻⁴ law. Flown at gate 0 to
+        # six digits (`docs/plans/slice55.md` §II.1b).
+        fan(fa, fb) = EWSim.RadarParams(
+            200.0, EWSim.lin2db(EWSim.aperture_gain(2 * deg2rad(fa), 2 * deg2rad(fb); eta = 0.6)),
+            16.0e9, 1 / 0.010, 4.0, 5.0)
+        R_disc = EWSim.detection_range(fan(10.0, 10.0), 0.020; snr_min_db = 10.0)
+        @test R_disc ≈ 3038.16 rtol = 1e-4                       # the shipped slice-48 horizon
+        for bb in (6.0, 2.5, 1.9, 1.0)
+            R = EWSim.detection_range(fan(10.0, bb), 0.020; snr_min_db = 10.0)
+            @test R / R_disc ≈ sqrt(10.0 / bb) rtol = 1e-12
+            # …and the gain-matched disc lands on the SAME horizon, which is the control's whole point
+            rg = sqrt(10.0 * bb)
+            @test EWSim.detection_range(fan(rg, rg), 0.020; snr_min_db = 10.0) ≈ R rtol = 1e-12
+        end
+        # (5) ⭐⭐ AND AT CONSTANT APERTURE THE HORIZON DOES NOT MOVE AT ALL — the invariant slice 55's
+        # showcase is built on (a·b = 100 deg² ⇒ the shipped 3038.2 m, whatever the aspect ratio).
+        for aa in (12.0, 20.0, 40.0, 150.0)
+            @test EWSim.detection_range(fan(aa, 100.0 / aa), 0.020; snr_min_db = 10.0) ≈
+                  R_disc rtol = 1e-12
+        end
+    end
+
     @testset "guards" begin
         @test_throws DomainError EWSim.aperture_gain(0.0)
         @test_throws DomainError EWSim.aperture_gain(-0.1)
         @test_throws DomainError EWSim.aperture_gain(0.1; eta = 0.0)
+        @test_throws DomainError EWSim.aperture_gain(0.0, 0.1)          # slice 55: either axis
+        @test_throws DomainError EWSim.aperture_gain(0.1, 0.0)
+        @test_throws DomainError EWSim.aperture_gain(0.1, -0.1)
+        @test_throws DomainError EWSim.aperture_gain(0.1, 0.1; eta = 0.0)
         @test_throws DomainError EWSim.aperture_diameter(16.0e9, 0.0)
         @test_throws DomainError EWSim.detection_range(rp, 0.0)
         @test_throws DomainError EWSim.detection_range(rp, -1.0)

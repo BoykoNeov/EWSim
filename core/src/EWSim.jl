@@ -200,6 +200,7 @@ export head_drift_inertial                      # slice 38 — an imperfect head
 # rings at every cell of that grid at ζ = 0.1.
 export HEAD_SERVO_MODES, head_slew_second_order, head_slew_second_order_inertial
 export off_axis_angle, head_slew, head_clamp, head_slew_full
+export off_axis_ratio                       # slice 55 — the two-axis (fan-beam) window
 # Slice 48 (§11 Tier-A — the search family 42/43/45, BLOCKED by 44 and UNBLOCKED by 47): WHAT A HEAD
 # DOES WHEN THE RECEIVER OPENS AND THE TARGET IS NOT THERE. Slice 47 leaves the missile pointed where
 # the launch-time picture said the target would be, outside its own detector window, with the slew

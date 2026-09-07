@@ -1727,3 +1727,133 @@ separate by > 100 m after 6 s and failed at 2.2 m — at 6 s the missile is 2.8 
 0.878. The collapse is a **sixty-second** story: 19.9 km, ρ/ρ₀ = 0.0963, 8988 m and 711 m/s apart. The
 coupled arm's own test comment had said exactly this ("a 60-SECOND story, not a 6-second one") and the
 draft copied the duration from the wrong neighbour.
+
+## ⭐⭐⭐ A SUITE COUNT IS ONLY EVIDENCE IF THE RUN IT CAME FROM CONTAINED THE NEW TESTS (slice 55 gate 3, 2026-09-07)
+
+Slice 55's gate-0 record shipped the line *"the suite is GREEN AND UNCHANGED AT 20069"* directly above
+five pages of flown numbers. The tests it was claiming had **never executed once**:
+`@test !disc.ever && disc.cpa ≈ 1039.88 rtol = 1e-4` is not a legal `@test` call — a keyword argument
+cannot ride a `&&` chain — and Julia raises `invalid test macro call` at PARSE time, which aborted
+`test_search.jl` at the first slice-55 testset and left everything after it in that file unrun.
+
+The failure is silent in exactly the wrong direction. The error is printed **inside** a testset
+banner, the run continues through every other file, and the final line still prints a large,
+green-looking number (`14853` here, against a real baseline of `20051`). Nothing about the shape of
+the output says "a third of the suite did not run."
+
+⇒ **READ THE `Pass / Error / Total` TRIPLE, NEVER THE PASS COLUMN ALONE**, and when a slice's own
+tests are new, check that the count MOVED. An unchanged count beside newly-added tests is not
+reassuring — it is the signature of this bug.
+
+⚠ The same run also proves the corollary: a plan's PART II can be written from a run that predates
+its own gate. Quote the count from the run that contains the tests, and re-quote it when they change.
+
+## ⭐⭐ `@test_throws ErrorException` IS A TAUTOLOGY WHENEVER THE FIXTURE CAN FAIL FOR AN UNRELATED REASON (slice 55 gate 3, 2026-09-07)
+
+Slice 55's three loader-refusal tests wrote a minimal YAML and asserted `@test_throws ErrorException
+load_scenario(y)`. All three passed. All three would also have passed **with slice 55's refusals
+deleted**, because the fixture was missing `mass_kg` and the loader threw on that first.
+
+Repairing it by asserting the refusal's own TEXT (`occursin("gimbal_fov_el_deg authored without",
+…)`) immediately exposed a SECOND layer: the fixture also lacked `two_angle: true`, so the next throw
+was slice 34's `gimbal_tau_s` guard. **Two unrelated guards stood between the fixture and the code
+under test**, and only the third repair reached it.
+
+⇒ convention 11 in the one place it is easiest to violate: **a loader guard's test must assert WHICH
+refusal fired.** A helper that returns `sprint(showerror, err)` (or `"NO ERROR AT ALL"`) is four lines
+and turns three tautologies into three teeth.
+
+⚠ The general shape: a negative test is only as specific as its failure mode. The more validation a
+loader has, the more ways a fixture can die before reaching the line you are testing — so the more
+validation exists, the LESS `@test_throws <Type>` is worth.
+
+## ⭐⭐⭐ A SENTINEL CAN BE CORRECT AND STILL INVERT THE VERDICT — CHECK WHAT THE INHERITED HUD DOES WITH IT (slice 55 gate 3, 2026-09-07)
+
+`search_t_lock_s` (slice 48) is "seconds from the sweep's start to the lock", with a defined `−1.0`
+for "no lock has happened". On slice 55's wire the seeker's window is wide enough to hold the
+midcourse cue error, so the head **never enters the search arm at all** — `search_t0` is never
+stamped and the key holds its honest `−1.0` across a flight that acquires at 4.935 s and hits at
+0.085 m. Every part of that is correct.
+
+But slice 48's HUD reads that key and renders *"NOT SEARCHING: head frozen"* / *"never found it"*.
+Inherited unchanged, this wire's own block would have printed a failure verdict over an intercept.
+
+⇒ **`docs/CONVENTIONS.md` §14's defaulted-value trap has a second sign.** The known form is a client's
+`.get(k, 0.0)` printing a zero as a measurement. This is the same defect from the other side: a
+*correct* sentinel, read by a block written for a different wire, becomes a false verdict. ⚠ The test
+is not "is the key right" but **"what does the inheriting block SAY about this value on this wire?"**
+
+The fix pattern that worked: latch the quantity the new wire actually has (`gimbal_t_acq_s`, the
+acquisition instant) in the CORE, and give the new block a line whose whole job is to say WHICH of
+the two states the old sentinel means. ⚠ And the two nulls are different nulls — "no search authored
+at all" and "a search that was never needed" must not collapse onto one sentence (see below).
+
+## ⚠⚠ A DERIVED READOUT MUST HAVE THE SAME SHAPE AS THE PREDICATE IT SITS BESIDE (slice 55 gate 2, 2026-09-07)
+
+`gimbal_fov_margin_deg` is `fov_h − off_head`: a 2-norm RADIUS compared against a half-width. Under a
+rectangular window the flying gate is the ∞-norm, so the two are different windows and the readout
+**can carry the opposite sign to `gimbal_valid` printed beside it** — a look 2° off in azimuth and 9°
+off in elevation reads a comfortable +3.3° of margin behind a (12.5°, 8.0°) box that has already
+refused it.
+
+This is `frames.jl`'s own `√2·stop` hazard (a per-axis clamp letting the head sit at `√2·stop` while
+the readout compares against `stop`) one level over, on the glass instead of the trunnion — which is
+why that docstring's warning was worth keeping even though the stop half was never built.
+
+⇒ when a predicate changes shape, **ship the readout the new predicate implies** rather than
+reinterpreting the old one. Slice 55 ships `gimbal_fov_az_margin_deg` / `gimbal_fov_el_margin_deg`
+built from the predicate's own numbers, so `gimbal_valid` ⇒ both ≥ 0 exactly, asserted on every flown
+tick of the showcase.
+⚠ **SEPARATELY, never as a worst-of.** A `min()` would have been sign-honest and would have hidden
+the entire lesson: the two margins are wildly UNEQUAL, and that inequality is what the slice teaches.
+
+## ⚠⚠ THE WINDOWED SHOT FOUND TWO MORE `_draw`-ONLY DEFECTS, AND BOTH ARE STATE-MACHINE ORDERING (slice 55 gate 3, 2026-09-07)
+
+Fold onto convention 14's standing case. Slice 55's verifier (9 arms) and UI test (9 teeth) were both
+green when the first shot was taken, and the shot showed two lines that no headless proof can reach:
+
+1. **`_detect_blind` IS A LATCH, NOT A LIVE STATE.** The cure line tested it *before* `acquired`, so
+   the picture read *"waiting on the horizon — the window is already turned"* underneath a green
+   **SAW IT AT ONCE: 4.93 s** and a locked seeker. Two verdicts about the same instant. ⚠ The fix is
+   an ORDERING, not a new input — the latch is still the right thing to ask about a seeker that has
+   not acquired yet; it is simply not the FIRST question.
+2. **THE TWO NULLS ARE DIFFERENT NULLS.** Gating the search line on "did the head ever sweep"
+   collapses *a seeker with no search at all* onto *a seeker whose search was never needed*, and
+   printed slice 48's own "the head cannot look around" over a wire authoring a full 25° pattern.
+   ⚠ The distinction is between the wire's authored CAPABILITY (a key's presence) and what the head
+   actually DID — two different questions that a single boolean had been answering.
+
+⇒ both are the same class: **a HUD line is a small state machine, and its branch ORDER is a claim.**
+Neither the verifier (which reads the wire) nor the UI test (which calls the helpers with arguments
+it chooses itself) can see a wrong order over the states a real flight actually produces. ⚠ Once the
+shot names the defect, the UI test can pin it — slice 55 added a tooth for each — but the shot is
+what finds it.
+
+## ⚠ A GAUGE READ FROM A FRAME IS NOT THE GAUGE READ FROM A TICK — ASSERT THE FRACTION, PIN THE DEGREES (slice 55 gate 3, 2026-09-07)
+
+Slice 55's margin pair at the acquiring TICK is `+1.1446° / +7.9797°`. The first frame a client can
+see is up to 15 ticks later (`emit_every` = 16) and reads `+2.855° / +7.974°`, because the head keeps
+slewing onto the target in between. Both are true; they are not the same number, and a verifier
+constant copied from the core's test fails by 150 %.
+
+⇒ **the DEGREES are a joint property of the geometry and the emit grid; the RATIO is the claim.** The
+verifier asserts fractions of each half-width (elevation above 98 % still idle, azimuth below 35 %
+left), which is the sentence the slice actually makes and is invariant to where on the grid the frame
+lands. The exact degrees are pinned in `core/test/`, where the sampling is exact.
+
+⚠ This is slice 50's `emit_every`-is-part-of-any-latched-gauge lesson in its other form: there, pin
+the EMITTED numbers; here, the two readings are both legitimate and the fix is to assert the
+dimensionless quantity in the client and the exact one in the core.
+
+## ⚠ A POST-INTERCEPT EPISODE IS A DIFFERENT ENGAGEMENT — FENCE IT OFF BY THE SLICE'S OWN LATCH (slice 55 gate 3, 2026-09-07)
+
+Slice 55's verifier asserts *"the head never enters the search state"*. Run to 9600 ticks it is false:
+from ~9.18 s the missile has flown through the target, the seeker has lost something that is now
+behind it, and the head starts hunting again — correctly. Counting that episode would have made the
+slice's claim false for a reason with nothing to do with the window's shape.
+
+⇒ scope the assertion to the episode the claim is about. Slice 55 reads both search gauges **before
+the acquisition only**, keyed off the slice's own latch (`gimbal_t_acq_s`), rather than off a range
+gate or a tick count. ⚠ Slice 52 met the same post-intercept re-search and fenced it the same way,
+which makes this the second occurrence and the pattern worth naming: **an engagement-scoped gauge
+needs an engagement-scoped window, and the slice's own latch is usually the right edge for it.**

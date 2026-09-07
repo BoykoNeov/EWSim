@@ -172,6 +172,21 @@ paraphrase away the specifics.
       the new setting OWNS the quantity, not at the next frame.
     - A probe's "has this arm drained yet?" predicate must be **ARM-SPECIFIC**, or the second shot
       photographs the first (slice 52).
+    - ⚠⚠ **A SUITE COUNT IS ONLY EVIDENCE IF THAT RUN CONTAINED THE NEW TESTS** (slice 55): an
+      illegal `@test` (a keyword riding a `&&` chain) aborts its FILE at parse time, the run
+      continues, and the summary still prints a big green number. **Read `Pass / Error / Total`,
+      never the Pass column** — and an UNCHANGED count beside new tests is the signature, not
+      reassurance.
+    - ⚠⚠ **`@test_throws ErrorException` IS A TAUTOLOGY when the fixture can fail for an unrelated
+      reason** (slice 55: three loader-guard tests went green off a missing `mass_kg`, and the
+      repair uncovered a SECOND guard behind it). Assert WHICH refusal fired — `occursin` on
+      `sprint(showerror, err)`.
+    - ⚠ **A GAUGE READ FROM A FRAME IS NOT THE GAUGE READ FROM A TICK** (slice 55): assert the
+      dimensionless FRACTION in the client and pin the exact degrees in `core/test/`, where the
+      sampling is exact. A verifier constant copied from a core test failed by 150 %.
+    - ⚠ **A POST-INTERCEPT EPISODE IS A DIFFERENT ENGAGEMENT** — scope an engagement gauge to the
+      slice's own latch, not to a tick count (slices 52 and 55, the seeker re-searching a target
+      that is now behind the missile).
     - ⚠⚠ **Slice 53 RETRACTED "no gate-3 proof DRAGS a slider"** — its verifier does, and a drag
       tooth is MANDATORY once the latch lives on the WIRE (§14; retraction §7 of
       `docs/PROHIBITIONS.md`). ⚠⚠ **Slice 54 adds the harder half: something must deliberately
@@ -193,3 +208,17 @@ paraphrase away the specifics.
     - ⚠ Anything the verdict computes inside `_draw` has **no headless proof** — including WHICH
       dispatch branch wins; and the blind spot works both ways, since a **frame-handler**
       accumulator has no proof either (§14, slices 31 / 50 / 53).
+    - ⚠⚠ **A HUD LINE IS A SMALL STATE MACHINE AND ITS BRANCH ORDER IS A CLAIM** (slice 55, both
+      defects the shot caught over a green verifier AND a green UI test): a **LATCH read as a live
+      state** (`_detect_blind` tested before `acquired` ⇒ "waiting on the horizon" under a green
+      "SAW IT AT ONCE"), and **two different NULLs collapsed onto one sentence** (no search
+      authored vs a search never needed). ⚠ The UI test can PIN each once named — it cannot FIND
+      them, because it chooses its own arguments.
+    - ⚠⚠ **AN INHERITED BLOCK'S SENTINEL CAN INVERT THE VERDICT ON A NEW WIRE** (slice 55): slice
+      48's `search_t_lock_s` is correctly −1.0 where no sweep ever ran, and 48's block renders that
+      as "never found it" — over an intercept. Ask what the inheriting block SAYS about the value,
+      not whether the key is right.
+    - ⚠⚠ **A DERIVED READOUT MUST HAVE THE SAME SHAPE AS THE PREDICATE BESIDE IT** (slice 55): a
+      2-norm margin under an ∞-norm window can carry the OPPOSITE SIGN to the validity lamp — the
+      `√2·stop` hazard on the glass instead of the trunnion. ⚠ Ship the new predicate's own
+      readout, and ship it PER AXIS: a worst-of is sign-honest and hides the lesson.

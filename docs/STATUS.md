@@ -7858,3 +7858,117 @@ three were wrong *in the slice's favour* (the optimum moves by a factor of ~4, n
 cells"; the position-scored gauge was the FIRST tried and separated). Two further §-level
 assumptions were also wrong: the proposed wire had NO FADE, and the proposed dirtiness mover was
 retired by the detector's own physics.
+
+# Slice 55 — **THE WINDOW'S SHAPE: A FAN BEAM AT THE APERTURE COST OF THE DISC** (`gimbal_fov_el_deg`, 2026-09-07)
+
+**COMPLETE, all four gates.** Suite **20158 / 20158 pass** (8m44s), from slice 54's 20051 — **+107**.
+`test_determinism.jl` and the absolute golden unchanged — the additivity master check for this kind
+of edit, and here it is a CONSTRUCTION: with no `gimbal_fov_el_deg` authored, `_box` is the literal
+`false` and every predicate takes the shipped circular arm verbatim. Full detail:
+`docs/plans/slice55.md` (§0 the pre-registration, **PART II** gate 0, **PART III** gates 1–3).
+
+⚠⚠ **PART II's line "the suite is GREEN AND UNCHANGED AT 20069" WAS FALSE and is superseded by this
+block** — the gate-1/2 tests contained an illegal `@test` and had never executed (PART III §III.1).
+
+## THE LESSON
+
+**A round detector window is not a baseline — it is one arbitrary point on an aspect-ratio axis, and
+on a missile that has to LOOK AROUND it is not the good one.** An antenna's gain is `η·4π/Ω` with
+`Ω ≈ θ_az·θ_el`, so a window costs what its PRODUCT costs. Spend the same product differently and
+the reach does not move at all; only what you can see does.
+
+## THE HEADLINE NUMBERS
+
+One aperture, three shapes, flown with NO SEARCH AT ALL (ρ = 0) on `slice48_search.yaml`'s geometry.
+Every row has the identical `R_acq` = **3038.16 m**:
+
+| window | lock? | `t_acq` | CPA | authority |
+|---|---|---|---|---|
+| TALL 6.0° × 16.7° | never | — | **1039.88 m** | 0.0 % — **BIT-IDENTICAL to the disc over 9600 ticks** |
+| DISC 10.0° (what slice 48 ships) | never | — | **1039.88 m** | 0.0 % |
+| **WIDE 12.5° × 8.0° (this slice)** | **LOCK** | **4.935 s** | **0.085 m** | 19.4 % |
+
+⭐⭐⭐ **THE SAME APERTURE, ARRANGED THREE WAYS, AND THE ROUND ONE IS NEITHER THE BEST NOR THE WORST.**
+That — not the 1039.88 → 0.09 m rescue — is the slice, because a rescue can always be read as *buying
+coverage* (42/43's ban, upheld by 46) and a MIDDLE cannot.
+
+**WHY, MECHANICALLY.** The midcourse picture puts the target at **−11.34°** of body azimuth when the
+receiver opens; a 10° disc cannot reach it in any direction and a 12.5° fan beam reaches it in the one
+direction the error is actually in. Over the same interval the ELEVATION error is **0.0565°** — so a
+disc spends 10° of hard-won aperture guarding an axis that moves by a sixteenth of a degree. At the
+acquiring tick the margins read **az +1.1446° of 12.5°** against **el +7.9797° of 8.0°**.
+
+**THE REACH RATIO, AGAINST AN INDEPENDENT RECOMPUTE** (`R ∝ √G`, gain entering the budget twice):
+a box `(a, b)` sees `√(a/b)` further than the disc of radius `a` — 1.2910× at (10, 6.0), 2.0000× at
+(10, 2.5), 3.1623× at (10, 1.0), measured to four digits. ⭐ And the **gain-matched disc `√(ab)`
+returns the SAME `G` and the SAME `R_acq` to all six printed digits** — the control is an identity,
+not an approximation, which is why it and not the sum- or area-matched disc has a consumer.
+
+## WHAT SHIPPED
+
+* **`rf.jl`** — `aperture_gain(bw_az, bw_el; eta)`, and **the one-argument method REDEFINED from it**
+  (the `boresight_angle` ⇐ `off_axis_angle` posture) ⇒ `aperture_gain(θ, θ) === aperture_gain(θ)` at
+  **atol 0 by construction**, which is what slices 1–54's byte-identity rests on.
+* **`frames.jl`** — `off_axis_ratio(ref_az, ref_el, az, el, a, b)`, the separable ∞-norm window as a
+  RATIO (`≤ 1` ⟺ inside) so one kernel answers any aspect ratio. ⚠⚠ **NOT `off_axis_angle`
+  generalised** — the two differ by up to √2 at the diagonal, so `b = a` does NOT recover the disc.
+  `off_axis_angle`'s "a rectangular window remains a named deferral" paragraph is **amended, not
+  deleted**.
+* **`missile.jl`** — the `_box` key-presence anchor and its five consumers: both slew gates, the
+  availability verdict, **the horizon's `bw_el_det`** (without which a fan beam is a free lunch), and
+  the telemetry block. Plus the 15th handshake marker `fanbeam_view`, the **core-latched
+  `gimbal_t_acq_s`**, and the **per-axis margins** `gimbal_fov_az_margin_deg` /
+  `gimbal_fov_el_margin_deg`.
+* **`scenario.jl`** — validate-at-load: refused without `gimbal_fov_deg` (a half-authored window), and
+  refused non-positive (an infinite gain through `aperture_gain`).
+* **`Sandbox.gd`** — the fan-beam HUD block (five pure line functions + the headline label) and the
+  15th marker, checked FIRST in both text chains.
+* **`scenarios/slice55_fanbeam.yaml`** — slice 48's wire with EXACTLY ONE authored difference:
+  `gimbal_fov_deg` 10.0 → 12.5 and `gimbal_fov_el_deg` → 8.0, whose product is the shipped 100 deg².
+
+## THE FOUR PROOFS
+
+| proof | result |
+|---|---|
+| `net/slice55_verify.gd` (9 arms incl. a LIVE mid-blind DRAG) | **PASS** (exit 0) |
+| `net/slice55_ui_test.gd` (9 teeth) | **PASS** (exit 0) |
+| headless smoke-load (`Sandbox.tscn`) | **PASS** (exit 0) |
+| windowed shot (1920×1080, tick 4944 = the acquiring frame) | **PASS**, after two attempts — PART III §III.4 |
+
+## ⭐⭐⭐ THE FIVE THINGS THIS SLICE PROVED
+
+1. **A WINDOW COSTS ITS PRODUCT, AND THE CONTROL IS THE GEOMETRIC MEAN.** `√(ab)` is the only disc
+   the link budget has a consumer for; sum- and area-matching are geometric analogies that nothing in
+   this simulator reads. ⚠⚠ **A sweep that moves the cost cannot measure the shape — HOLD `Ω`**: 27
+   flown arms tied their controls to every printed digit before that correction was made.
+2. **A WINDOW'S VERDICT IS A PROPERTY OF THE FLIGHT, NOT OF A CELL.** The plan's own pre-registered
+   arithmetic (the box holds slice 45's rescue cell) was WRONG — the ∞-norm reads 1.3123, outside by
+   31 % — and the repair is a retracted METHOD, not a corrected number: those departures were measured
+   on the DISC's flight at the DISC's best moment, and a window that changes shape changes where the
+   head goes.
+3. **THE TRADE IS TWO-SIDED, AT ONE FIXED COST.** Tall boxes are BIT-IDENTICAL to the disc over 9600
+   ticks (`max|Δel|` on a locking arm is 0.0565°) — the same budget spent on the unswept axis buys
+   literally nothing. And with a climbing target (vz = 220 m/s) the unswept error reaches 1.4086°, at
+   which point the only arm whose elevation half-width is BELOW it loses 1.61 s and 158 m.
+4. **THE SEARCH IS WHAT A WIDE-ENOUGH WINDOW MAKES UNNECESSARY.** `search_t_lock_s` reads its honest
+   sentinel −1.0 across an intercept because the head never enters the search arm. ⚠⚠ Slice 48's HUD
+   reads that key and would render "NOT SEARCHING: head frozen" over a 0.085 m hit — a correct
+   sentinel INVERTING a verdict, which is why the 15th marker and the `gimbal_t_acq_s` latch exist.
+5. **THE SLIDER IS A MEASURED NULL, AND THE KNOB IS STILL LIVE.** Slice 48's sweep rate (its whole
+   lesson: 1039.88 m → 0.31 m over 0…240 °/s) returns the identical acquisition instant and a
+   BIT-IDENTICAL trajectory at every position here, including after a mid-flight drag — while
+   `search_rate_dps` reads the new value back off the wire. ⚠ A dead knob would look the same without
+   that read-back.
+
+## ⚠⚠ WHAT THIS SLICE DOES **NOT** ESTABLISH
+
+* **It is not a `CURVE`.** The reversal is real and measured (PART II §II.6) and it is **ONE ARM
+  DEEP** on this geometry. A showcase curve needs its own wire, and the obvious slider is impossible:
+  `set_param` carries one Float64, so no drag can hold `a·b` fixed.
+* **It is not a claim about fan beams in general.** The window is SEPARABLE (the ∞-norm); the ELLIPSE
+  is a third answer differing by up to √2, and the shipped docstring bounds the claim to separable
+  windows.
+* **It is not transferable to a TRACKING head.** A tracker holds both axes near zero, so the corners
+  are never visited and the shape is invisible to it.
+* **The mechanical STOP is still CIRCULAR** — a documented mismatch, not an oversight (slice 45's
+  750× null, and `head_clamp`'s `√2·stop` readout hazard).

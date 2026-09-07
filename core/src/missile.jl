@@ -1027,6 +1027,30 @@ function _airframe_view_info(w::World)
     # own carrier test meaningful (`test_search.jl` enumerates BOTH sets).
     any(haskey(w.entities[m].comp, :seeker_search_realized) for m in missiles) &&
         (info[:search_realized_view] = true)
+    # ⭐⭐⭐ SLICE 55 — THE WINDOW'S **SHAPE**, the 15th marker of this family, and it is slice 52's
+    # case a second time with one word changed. A slice-55 wire flies slice 48's missile, authors
+    # slice 48's anchor and raises slice 48's marker, so `search_view` alone cannot tell the two
+    # apart — and slice 48's HUD is ALL TRUE here (the sweep is real, the deficit is real, the lock
+    # time is real) while never saying that the window is a RECTANGLE, that its two half-widths
+    # MULTIPLY to the aperture the disc spent, or that the lock it is reporting was taken with NO
+    # SEARCH AT ALL. ⚠⚠ AND ON THIS WIRE 48's BLOCK IS WORSE THAN SILENT: its headline number is a
+    # sweep DEFICIT, which here is the deficit of a sweep that never ran — a true zero that reads
+    # as "the search covered it" over an engagement in which the search did nothing. Every number
+    # right and the slice invisible: this family's recurring failure, avoided by ordering, for the
+    # seventh slice running.
+    #
+    # ⚠ GATED ON THE **COMP KEY** `:gimbal_fov_el_deg`, 38/46/47/48/52's posture exactly, and the
+    # gate is a CAPABILITY rather than a file: any wire that authors a two-axis window raises it,
+    # and a wire that authors a round one cannot. There is no fidelity rung to gate on — "a
+    # circular window" is reachable by DELETING the key, which a rung would duplicate (gate 2's
+    # decision, and gate 3 did not reopen it) — and the key is read by the physics on four paths
+    # each tick (both slew gates, the availability verdict and the HORIZON), so this is not the
+    # dead-knob / `INSTRUMENT` class the file has caught seven times.
+    # ⚠⚠ AND IT IS DISJOINT FROM SLICES 1–54 BY CONSTRUCTION — no wire before this one authors a
+    # second half-width — which is what keeps every earlier handshake byte-identical and every
+    # earlier carrier test meaningful.
+    any(haskey(w.entities[m].comp, :gimbal_fov_el_deg) for m in missiles) &&
+        (info[:fanbeam_view] = true)
     # ⭐⭐ SLICE 50 — THE ASPECT-DEPENDENT ENGAGEMENT, the 13th marker of this family, and it is the
     # FIRST raised on a property of the **TARGET** rather than of the missile. Every marker above
     # asks what the missile is built out of; this one asks what it is shooting at. That is the whole
@@ -2249,6 +2273,22 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # the shipped margin below read THIS local — so the sign and the verdict are the same bits.
         stop_h = deg2rad(Float64(get(c, :gimbal_stop_deg, 1.0e6)))
         fov_h  = max(deg2rad(Float64(get(c, :gimbal_fov_deg, 1.0e6))), 0.0)
+        # ⭐⭐⭐ SLICE 55 — THE WINDOW'S SHAPE. `gimbal_fov_el_deg` is the ELEVATION half-width, and
+        # its PRESENCE is the anchor for every branch below (the `seeker_search` / `_gim` posture):
+        # absent, `_box` is the literal `false`, every predicate takes the shipped circular arm
+        # VERBATIM, and slices 1–54 are byte-identical BY CONSTRUCTION rather than by measurement
+        # (convention 2). ⚠⚠ A CIRCULAR WINDOW IS **NOT** THE `b == a` CASE OF THE TWO-AXIS ONE —
+        # `off_axis_ratio` is the ∞-norm and `off_axis_angle` the 2-norm, and they differ by up to √2
+        # at the diagonal. The identity that DOES hold is with the link budget: a fan beam `(a, b)`
+        # costs the same reach as the disc `√(ab)` (`rf.jl`'s two-axis `aperture_gain`).
+        # ⚠ CLAMPED AT THE CONSUMER (convention 5): `off_axis_ratio` throws a DomainError on a
+        # non-positive half-width by design, and a throw inside `observe!` silently drops the
+        # client's connection — so a slider dragged to zero floors to a tiny positive here, exactly
+        # as the horizon's degenerates do below.
+        _box     = haskey(c, :gimbal_fov_el_deg)
+        fov_el_h = _box ? max(deg2rad(Float64(c[:gimbal_fov_el_deg])), 0.0) : fov_h
+        fov_a_c  = max(fov_h, 1.0e-12)
+        fov_b_c  = max(fov_el_h, 1.0e-12)
         # ⭐⭐ SLICE 35 — THE SERVO'S MAXIMUM SLEW RATE. Slice 34's head was INFINITELY FAST: it moved
         # a full first-order step every tick with no bound on how far. A real gimbal has a servo, and
         # the moment it does the head's motion stops being free and becomes a RESOURCE spent against
@@ -2480,7 +2520,9 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             # `:head_cued` already are (discipline 2). Recomputing availability up here would be a
             # second implementation of the gate.
             if get(c, :head_cued, false) || get(c, :head_searching, false) ||
-               off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h
+               (_box ? off_axis_ratio(head_az, head_el, look_az_b, look_el_b,
+                                      fov_a_c, fov_b_c) ≤ 1.0 :
+                       off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h)
                 if _so
                     # SLICE 40 on slice 37's rung — the SAME kernel with the frame changed, exactly
                     # as `head_slew_inertial` is `head_slew_full`. ⚠⚠ THIS ARM WAS PREDICTED TO BE
@@ -2512,7 +2554,9 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
             # ⭐ SLICE 48 — and the SEARCH bypasses it on this rung too, for that same reason: what
             # the head is being TOLD to do is not a property of the frame it holds its pointing in.
             if get(c, :head_cued, false) || get(c, :head_searching, false) ||
-               off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h
+               (_box ? off_axis_ratio(head_az, head_el, look_az_b, look_el_b,
+                                      fov_a_c, fov_b_c) ≤ 1.0 :
+                       off_axis_angle(head_az, head_el, look_az_b, look_el_b) ≤ fov_h)
                 # ⚠ `head_slew_full`, NOT `head_slew` — the SHIPPED kernel returning the two
                 # quantities the servo knows and its pointing does not. The plan FORBIDS
                 # reconstructing them as a post-hoc difference of `:head_az`, and forbids the seam
@@ -2728,7 +2772,15 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # ⚠ This is the SECOND evaluation of the detector error (discipline 3): the error AFTER the
     # slew, where the slew gate above read the error BEFORE it.
     if _gim
-        in_fov = off_head ≤ fov_h
+        # ⭐ SLICE 55 — discipline 3's SECOND evaluation, in whichever shape the wire authored. ⚠ The
+        # circular arm is the SHIPPED expression character for character, reusing the `off_head`
+        # already computed above; the box arm cannot reuse it, because a ratio is not recoverable
+        # from a radius. ⚠ `off_head` is STILL COMPUTED AND STILL SHIPPED on a box wire — it is the
+        # head's angular error, which the margin readouts and slice 36's running maximum are about,
+        # and it does not stop being that quantity because the window around it changed shape.
+        in_fov = _box ? off_axis_ratio(head_az, head_el, look_az_b, look_el_b,
+                                       fov_a_c, fov_b_c) ≤ 1.0 :
+                        off_head ≤ fov_h
     elseif _fov_on
         fov_rad = deg2rad(Float64(c[:seeker_fov_deg]))
         in_fov  = seeker_in_fov(c[:att_q]::Quat, û_tru, fov_rad)
@@ -2777,8 +2829,17 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # whose angle gate has already refused the lock anyway.
         fov_det = _gim ? fov_h : fov_rad
         bw_det  = max(2 * fov_det, 1.0e-9)                     # HALF-angle window → FULL beamwidth
+        # ⭐⭐⭐ SLICE 55 — **AND THE SHAPE HAS TO REACH HERE, OR THE FAN BEAM IS A FREE LUNCH.** The
+        # elevation half-width is not spare coverage: it is APERTURE. `Ω = θ_az·θ_el`, so narrowing
+        # the axis the search does not sweep buys gain, and gain is reach — a fan beam `(a, b)` sees
+        # `√(a/b)` further than the disc `a` while covering the same azimuth. A box that kept the
+        # disc's horizon would be strictly better at no cost, which is `a wider window is free`
+        # (slices 42/43, killed by 46) wearing a rectangle. ⚠ On a NON-box wire `bw_el_det === bw_det`
+        # and `aperture_gain(θ, θ) === aperture_gain(θ)` at atol 0 BY CONSTRUCTION (`rf.jl` defines
+        # the one-argument method from the two-axis one), so every slice 46–54 replay is bit-exact.
+        bw_el_det = _gim && _box ? max(2 * fov_el_h, 1.0e-9) : bw_det
         rp_det  = RadarParams(Float64(c[:detect_pt_w]),
-                              lin2db(aperture_gain(bw_det;
+                              lin2db(aperture_gain(bw_det, bw_el_det;
                                      eta = max(Float64(get(c, :detect_eta, 0.6)), 1.0e-9))),
                               Float64(get(c, :detect_freq_hz, 16.0e9)),
                               1 / max(Float64(get(c, :detect_tint_s, 0.010)), 1.0e-12),
@@ -2824,6 +2885,22 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
     # own decision — see `docs/DEFERRALS.md`. ⚠ And do NOT reach for `head_off > fov` as its gauge:
     # that is `in_fov`'s DEFINITION, i.e. slice 42's `off@lock == fov` tautology (slice 51 §IV).
     in_fov = in_fov && _detectable
+
+    # ⭐⭐⭐ SLICE 55 — THE ACQUISITION INSTANT, LATCHED IN THE CORE, AND ON THIS SLICE'S OWN WIRE
+    # IT IS THE ONLY HONEST CLOCK THERE IS. `search_t_lock_s` beside it measures seconds from the
+    # SWEEP's start and is defined only where a sweep RAN — and a fan beam wide enough to hold the
+    # midcourse cue error never enters the search arm at all, so on `slice55_fanbeam.yaml` it stays
+    # the defined −1.0 ("no lock") across a flight that acquires at 4.936 s and hits at 0.09 m.
+    # ⚠⚠ THAT IS NOT A BUG IN SLICE 48's GAUGE, IT IS THE SLICE: *you only search because you were
+    # blind, and this seeker was not.* But a HUD that prints only the search clock reports "never"
+    # over an intercept, which is `docs/CONVENTIONS.md` §14's defaulted-zero trap wearing the other
+    # sign — so the wire ships the instant the RECEIVER-AND-WINDOW verdict first came true.
+    # ⚠ LATCHED HERE rather than differenced by a client: `gimbal_valid` beside it is LIVE, the
+    # client sees one frame in `emit_every` = 16 ticks, and slice 53's standing rule is that a
+    # quantity counted in SAMPLES changes meaning when the sample rate does. Slice 47 paid for this
+    # with `head_cue_err_handover_deg`; this is the same fix on the same wire.
+    # ⚠ ANCHOR-GATED on the two-axis window ⇒ slices 34–54 mint nothing and stay byte-identical.
+    _gim && _box && in_fov && !haskey(c, :gimbal_t_acq) && (c[:gimbal_t_acq] = w.t)
 
     # SEAM DISCIPLINE 2 — the servo's target for the NEXT tick: the MEASURED LOS rotated into the
     # body frame, i.e. what this tick's detector actually reported, BEND AND NOISE INCLUDED. It must
@@ -3676,6 +3753,48 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # be expected to reconstruct the third on a negative slider, which is the defined
         # never-acquires state.
         tel["$sid.gimbal_fov_deg"] = _finite_coord(Float64(get(c, :gimbal_fov_deg, 1.0e6)))
+        # ⭐⭐⭐ SLICE 55 — THE WINDOW'S SECOND HALF, AND ITS PRESENCE IS THE SIGNAL. Shipped ONLY on
+        # a wire that authored a two-axis window, so every slice 34–54 frame is byte-identical and a
+        # client can tell a FAN BEAM from a DISC by asking whether the key is THERE — rather than by
+        # comparing two numbers and guessing what equality was supposed to mean. ⚠ A HALF-width in
+        # DEGREES, the `gimbal_fov_deg` posture exactly, and read off the SAME comp key the seam
+        # converts (never a second conversion — the trap this file names for `off_axis_angle`).
+        # ⚠⚠ AND `seeker_r_acq_m` BESIDE IT IS WHAT MAKES THE SHAPE READABLE AS A **TRADE**: the two
+        # half-widths say where the aperture went, the horizon says what it cost, and slice 55's
+        # whole claim is that a fan beam and the disc of radius √(ab) print the SAME horizon. A
+        # client drawing the window without the horizon shows a design decision with its price
+        # cropped off.
+        haskey(c, :gimbal_fov_el_deg) &&
+            (tel["$sid.gimbal_fov_el_deg"] = _finite_coord(Float64(c[:gimbal_fov_el_deg])))
+        # ⭐⭐⭐ SLICE 55 — THE MARGIN, PER AXIS, AND ON A BOX WIRE THE CIRCULAR ONE BELOW IS NOT
+        # THE VERDICT. `gimbal_fov_margin_deg` is `fov_h - off_head`: a 2-norm RADIUS read against
+        # the AZIMUTH half-width, which under a fan beam compares two different windows and can
+        # carry the OPPOSITE SIGN to `gimbal_valid` beside it — a look 2° off in azimuth and 9° off
+        # in elevation reads a comfortable +3.3° of margin behind a (12.5°, 8.0°) box that has
+        # already refused it. ⚠⚠ That is `frames.jl`'s `√2·stop` readout hazard one level over (a
+        # head sitting where the readout's own SHAPE cannot describe it), and it is why the box
+        # ships its OWN margins instead of reinterpreting the disc's.
+        #
+        # ⭐⭐ THE PAIR **IS** THE PREDICATE, not a second opinion about it: both are built from the
+        # SAME `fov_a_c` / `fov_b_c` and the SAME wrapped departures `off_axis_ratio` consumed
+        # above, so `gimbal_valid` ⇒ BOTH margins ≥ 0 exactly — the ∞-norm's own definition, a ratio
+        # ≤ 1 iff neither axis is over. ⚠ SHIPPED SEPARATELY rather than as a worst-of, because the
+        # whole lesson is that the two are wildly UNEQUAL: on `slice55_fanbeam.yaml` the azimuth
+        # margin is spent down to a sliver while nearly the entire elevation half-width sits unused,
+        # and a `min()` would print the sliver and HIDE the waste that paid for it.
+        # ⚠ ANCHOR-GATED like every other slice-55 key ⇒ slices 34–54 ship neither and stay
+        # byte-identical on the wire.
+        if _box
+            tel["$sid.gimbal_fov_az_margin_deg"] =
+                _finite_coord(rad2deg(fov_a_c - abs(wrap_angle(look_az_b - head_az))))
+            tel["$sid.gimbal_fov_el_margin_deg"] =
+                _finite_coord(rad2deg(fov_b_c - abs(wrap_angle(look_el_b - head_el))))
+            # ⚠ −1.0 WHILE NO ACQUISITION HAS HAPPENED, never a 0.0 and never a ceiling — slice
+            # 48's `search_t_lock_s` convention verbatim, and for its reason: 0.0 is a REAL value
+            # of this quantity (a window that holds the target from the first tick) and a client's
+            # `.get(k, 0.0)` must not be able to print "acquired at once" for "never acquired".
+            tel["$sid.gimbal_t_acq_s"] = _finite_coord(Float64(get(c, :gimbal_t_acq, -1.0)))
+        end
         # ⭐ HOW MUCH DETECTOR WINDOW IS LEFT, SIGNED — slice 18's `terrain_clearance_m` / slice 33's
         # `seeker_fov_margin_deg` precedent: THE SIGN IS THE VERDICT. Built from the SAME local
         # `fov_h` and the SAME `off_head` the predicate above tested, so the shipped sign and the

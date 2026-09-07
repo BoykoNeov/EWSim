@@ -820,7 +820,7 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # first-order and is toggled DOES use them. Refusing them would forbid the
             # demonstration. Their VALUE bounds are checked in `_validate_world`, where the
             # integrator's own stability limit is the reason for the ceiling.
-            for hk in ("gimbal_stop_deg", "gimbal_fov_deg", "gimbal_rate_dps",
+            for hk in ("gimbal_stop_deg", "gimbal_fov_deg", "gimbal_fov_el_deg", "gimbal_rate_dps",
                        "gimbal_handover_err_deg", "gimbal_omega_hz", "gimbal_zeta",
                        "head_gyro_scale_err", "head_gyro_bias_y", "head_gyro_bias_z")
                 haskey(sb, hk) || continue
@@ -830,10 +830,37 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                           "DEAD (slice $(hk == "gimbal_rate_dps" ? 35 :
                                          hk == "gimbal_handover_err_deg" ? 36 :
                                          hk in ("gimbal_omega_hz", "gimbal_zeta") ? 40 :
+                                         hk == "gimbal_fov_el_deg" ? 55 :
                                          startswith(hk, "head_gyro") ? 38 : 34))")
                 comp[Symbol(hk)] = _f64(sb[hk])
                 isfinite(comp[Symbol(hk)]) ||
                     error("missile '$id': seeker.$hk must be finite (got $(comp[Symbol(hk)]))")
+            end
+            # ⭐⭐⭐ SLICE 55 — THE WINDOW'S SHAPE. `gimbal_fov_el_deg` turns the detector window from a
+            # DISC into a FAN BEAM: `gimbal_fov_deg` becomes the AZIMUTH half-width and this one the
+            # ELEVATION half-width. Two refusals, both validate-at-LOAD (convention 5), both about a
+            # key that would otherwise be READ BY NOTHING — the `speed` (19) / handover-bias (36)
+            # dead-knob shape this loader exists to prevent:
+            #   (a) WITHOUT `gimbal_fov_deg` there is no azimuth half-width to pair it with, so the
+            #       two-axis predicate has only one of its two numbers and `missile.jl`'s `_box`
+            #       anchor would fire on a half-authored window.
+            #   (b) NON-POSITIVE is a window that can never be satisfied and, through
+            #       `aperture_gain`, an INFINITE gain — the same reason `detect_eta` and the
+            #       beamwidth are refused non-positive here (slice 46). The reachable degenerate is
+            #       clamped at the consumer; the AUTHORED one is refused here.
+            # ⚠ It is NOT refused beside `seeker_fov_deg`: that pair is already mutually exclusive
+            # through `gimbal_tau_s` above (a head and a strapdown window cannot coexist, slice 34).
+            if haskey(sb, "gimbal_fov_el_deg")
+                haskey(sb, "gimbal_fov_deg") ||
+                    error("missile '$id': seeker.gimbal_fov_el_deg authored without " *
+                          "seeker.gimbal_fov_deg — the elevation half-width is the SECOND number " *
+                          "of a two-axis window and the first one is the azimuth half-width, so " *
+                          "without it there is no window for this key to reshape (slice 55)")
+                comp[:gimbal_fov_el_deg] > 0 ||
+                    error("missile '$id': seeker.gimbal_fov_el_deg must be > 0 " *
+                          "(got $(comp[:gimbal_fov_el_deg])) — a zero-height window can never be " *
+                          "satisfied, and through `aperture_gain` it is an INFINITE gain and an " *
+                          "infinite horizon (slice 55)")
             end
             # ⭐⭐⭐ SLICE 48 — THE SEARCH PATTERN: what the head does when the receiver opens and
             # the target is NOT there. Slice 47 leaves the missile pointed where the launch-time

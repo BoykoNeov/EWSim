@@ -8358,12 +8358,18 @@ end
             # for the same measured reason. It matters as much as it did in 48 and for the same
             # sentence with one word changed — a saturating servo would make "the sweep did not
             # cover the gap in time" unattributable to the sweep WIDTH.
+            # ⚠ SLICE 55 WIDENED IT A TENTH TIME AND THE ASSERT CAUGHT IT AGAIN — and this is the
+            # cheapest widening yet, cheaper even than 52's: `slice55_fanbeam.yaml` IS slice 48's
+            # wire with its detector window turned on its side and NOTHING ELSE MOVED, the servo
+            # included. The isolation argument is unchanged and applies word for word: a saturating
+            # servo would offer a second explanation for a late lock on the one wire whose entire
+            # claim is that the window's SHAPE caused it.
             @test carriers == ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml",
                                "slice37_frame.yaml", "slice38_head_gyro.yaml",
                                "slice40_heavy.yaml", "slice40_resonance.yaml",
                                "slice46_horizon.yaml", "slice47_midcourse.yaml",
                                "slice48_search.yaml", "slice50_defensive.yaml",
-                               "slice52_coverage.yaml"]
+                               "slice52_coverage.yaml", "slice55_fanbeam.yaml"]
         end
     end
 
@@ -8462,7 +8468,16 @@ end
                              # for the same reason. Same remedy; its mirror is
                              # `slice52_ui_test.gd`, and its marker has 47/48's shape — the HUD,
                              # deliberately NOT the button.
-                             "slice52_coverage.yaml"]
+                             # ⚠ SLICE 55 IS THE TENTH EXEMPTION AND THE EMPTIEST ONE: its wire IS
+                             # slice 48's with the detector window turned on its side, so it inherits
+                             # the authored-wide servo UNTOUCHED — 240 °/s, the same isolation, for the
+                             # same reason. ⚠⚠ AND THE ISOLATION MATTERS MORE HERE THAN ANYWHERE: a
+                             # servo that saturated would offer a SECOND explanation for the early
+                             # lock on the one wire whose whole claim is that the window's SHAPE
+                             # caused it. Exempting it does not weaken this mirror; the ordering that
+                             # keeps it harmless is the client's, and `slice55_ui_test.gd`'s own
+                             # mirror is what proves it.
+                             "slice52_coverage.yaml", "slice55_fanbeam.yaml"]
             for f in readdir(base)
                 endswith(f, ".yaml") || continue
                 f in expected_rate && continue
@@ -11546,8 +11561,14 @@ end
             # wire with a different slider, so the belief that the head sweeps ABOUT is this one's
             # — and its own `search_realized_view` is checked FIRST in the client, ahead of both
             # `search_view` and this marker.
+            # ⚠ SLICE 55 JOINS IT for slice 48's reason exactly, one step further along: its wire IS
+            # slice 48's wire with a reshaped window, so the belief the head is cued to is still
+            # this one's. ⚠⚠ AND ITS HUD IS SLICE 48's OWN — it raises `search_view` and no marker
+            # of its own, which is deliberate: the two wires differ in an AUTHORED WINDOW rather
+            # than in an instrument, and a marker per scenario would be a marker per FILE instead of
+            # per capability.
             @test carriers == ["slice47_midcourse.yaml", "slice48_search.yaml",
-                               "slice52_coverage.yaml"]
+                               "slice52_coverage.yaml", "slice55_fanbeam.yaml"]
         end
 
         # AND THE CLIFF, FLOWN OFF THE SHIPPED FILE. Two arms one metre per second apart, straddling

@@ -2014,3 +2014,48 @@ overlapped at every window size. No headless check could have caught that: they 
 the text, and the drawing code never runs without a screen. The screenshot found it, for the second
 slice running, and the fix moves the decision out of the drawing code so a test can assert the two
 panels never touch.
+
+## Slice 55 — where should a seeker spend the aperture it has? (2026-09-07)
+
+A missile's seeker looks at the world through a window, and that window has always been round here:
+so many degrees off the axis it is pointing, in every direction equally. Roundness looks like the
+neutral choice — no direction favoured, nothing assumed. This slice asked whether it is, and the
+answer is that a round window is not a baseline at all. It is one arbitrary setting of a dial nobody
+had noticed was there.
+
+The dial exists because a window is not free. An antenna concentrates its power into a patch of sky,
+and the smaller that patch the further it can see; a wide window and a long reach are the same
+budget spent two ways. That relationship was built two slices' worth of work ago, and it is what
+makes the question answerable: two windows cost the same if the patch of sky they cover has the same
+*area*. So a window ten degrees wide and ten degrees tall costs exactly what one twelve and a half
+degrees wide and eight degrees tall costs. Same power, same reach, same everything — the aperture is
+merely arranged differently.
+
+Arranged differently, it turns out, is the whole engagement. The missile in this scenario flies most
+of the way on a guess about where the target will be, and the guess is wrong in a particular
+direction: by the time the seeker can hear anything, the target has crossed about eleven degrees to
+one side. A ten-degree round window cannot reach eleven degrees in any direction, so the seeker
+opens its eyes on empty sky and the missile misses by more than a kilometre. Turn the same glass on
+its side — wider across, shorter up and down — and it sees the target the instant the receiver
+opens, and hits. The elevation the wide window gave up was doing nothing at all: over the same
+stretch of flight the target moved by about a twentieth of a degree vertically, and the round window
+was spending ten degrees guarding that.
+
+The reason this is a trade and not a free lunch is visible in the same table. Spend the identical
+budget the other way — tall and narrow — and the missile flies a trajectory that is identical, to
+the last bit, to the round window's failure. The unswept axis buys literally nothing. So across one
+dial, at one fixed cost, the tall window never sees the target, the round window sees it only if you
+give it a search pattern and several seconds of the engagement, and the wide one sees it
+immediately. The round one is neither the best nor the worst, which is the point: a circle is a
+position on the dial, not the origin it is measured from.
+
+Two smaller things came out of building it. The first is that the obvious slider was impossible.
+Dragging the window's height alone would change the area, hence the reach, so the demonstration
+would quietly be about how far the seeker can see rather than about what shape it sees in — and the
+early measurements walked straight into that, twenty-seven flights of it, all of which came back
+identical because the only thing being varied had been matched away. Holding the cost fixed needs
+two numbers moved together and the control channel carries one, so the comparison ships as two
+scenario files side by side instead of as a slider. The second is that the scenario's slider — the
+search sweep rate inherited from the previous slice, where it was the entire lesson — does nothing
+here at all, at any setting, and that is deliberate. You only search because you were blind, and
+this seeker was not.

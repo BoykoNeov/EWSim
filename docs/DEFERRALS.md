@@ -145,7 +145,7 @@ what each is worth to the SIMULATOR, and what would have to be built.
 
 | item | trigger | what it teaches, and what it costs |
 |---|---|---|
-| **A rectangular / per-axis window and stop** (45) | **REGIME** — textbook | The box is byte-identical to the disc on 8/9 TRACKING rows and DECIDES acquisition on a SEARCHING head (disc never locks at 305.11 m; box hits 0.24 / 0.23 / 0.15). ⭐⭐⭐ **A tracker holds both axes near zero so the corners are never visited; a search drives one axis to the rim BY DESIGN.** The elevation stop BINDS 66–68 % of in-band ticks — read, clamping, working hardware. An azimuth ring and an elevation trunnion are independent mechanisms with independent authorable travel. Cost: productionize `M:\claud_projects\temp\slice45` (patches + eight probes) — wire, test, author. |
+| **A rectangular / per-axis window and stop** (45) | ⚠⚠ **THE WINDOW HALF IS ✅ SHIPPED (slice 55, 2026-09-07) — DO NOT RE-PROPOSE IT.** What remains open is the **STOP** half only, and it opens with its own 750× null (see "SLICE 55 — WHAT IT DISCHARGED"). ⚠ Everything below is the 2026-08-18 pricing and THREE of its sentences expired before slice 55 ran; read that section, not this cell. | **REGIME** — textbook | The box is byte-identical to the disc on 8/9 TRACKING rows and DECIDES acquisition on a SEARCHING head (disc never locks at 305.11 m; box hits 0.24 / 0.23 / 0.15). ⭐⭐⭐ **A tracker holds both axes near zero so the corners are never visited; a search drives one axis to the rim BY DESIGN.** The elevation stop BINDS 66–68 % of in-band ticks — read, clamping, working hardware. An azimuth ring and an elevation trunnion are independent mechanisms with independent authorable travel. Cost: productionize `M:\claud_projects\temp\slice45` (patches + eight probes) — wire, test, author. |
 | **An angle-domain radome corrector** | **RIVAL** — textbook | It was BUILT and it fails PHYSICALLY for a stated reason: it needs the look angle and can only see it through the bend it is removing, so at PERFECT knowledge (`R̂ = R = −0.50`) it RINGS (rms 0.844, miss 131 m) where the shipped rate arm is quiet (0.014). ⇒ ships as an **alternative compensator rung**, never the default. Cost: it is already written (slice 27 gate 0); the work is a rung plus a two-arm scenario. |
 | **Launch altitude** (21) | ✅ **FIXED 2026-09-06 — was a BUG TICKET, never a trigger** | ⚠⚠ **Do not file this under a trigger; it is not a lesson, it is an unclosed seam.** VERIFIED at HEAD on 2026-09-06: `core/src/missile.jl:476–477` still threads the stage position `P` through `_integrate_6dof!` and passes a CONSTANT `rho`, its own comment reserving the seam *"for a future ρ(z) on this path (slice 21's stage-z seam)"*, while `_integrate_coupled!` DOES call `air_density(P[3])`. So on the path the ENTIRE 26–54 arc flies, altitude changes nothing. ⭐ Closing it makes altitude a real authorable variable everywhere and retires a "dead knob" that was never dead. ⚠ Distinct from the point-mass / ballistic gap, which touches slice 8's `rk4_step` byte-identity surface; the 6-DOF one does not.  ⭐⭐⭐ **CLOSED 2026-09-06.** `_atm_on`'s third conjunct said `=== :pitch_coupled`, written by slice 21 when that was the only plant integrating a real force; slice 23 added `:six_dof` and nobody came back, so for thirty slices the rung was inert on the plant the whole 23–54 arc flies. The fix is the predicate (a two-way disjunction), `_integrate_6dof!`'s closure split in two so the stage ρ reaches `total_accel`, `lift_accel_3d` **and** the moment, and the 6-DOF readout block's own `p6`, which was a fifth ρ site nobody had counted. ⚠ Shipped as **physics + tests only** — no scenario, view, verifier or slider (the slice-51 `turn_start_s` precedent); it is a bug ticket, and a bug ticket does not get a doc ritual. ⚠ The point-mass / ballistic half is STILL open and still a real deferral. Measured: 60 s on a 6-DOF wire, ρ/ρ₀ 0.0963 at 19.9 km, the two arms 8988 m and 711 m/s apart where they used to be bit-identical. |
 
@@ -1265,3 +1265,85 @@ honest but it means a mid-pass reading is not a measurement. ⚠ A RATE gauge (n
 would be comparable mid-pass but is NOT comparable across parts of the pass, because early looks are
 a strong target and late ones are a fade. ⇒ **recorded as a real modelling tension, not a candidate**
 — any slice that wants a live-comparable score has to solve it first.
+
+# SLICE 55 — WHAT IT DISCHARGED, AND WHAT IT RAISED (2026-09-07)
+
+## Discharged
+
+**⭐⭐⭐ A RECTANGULAR / PER-AXIS WINDOW (45) — ✅ THE **WINDOW** HALF SHIPPED. THE **STOP** HALF DID
+NOT, AND IS NOT DISCHARGED.** The BUILD LIST bundles *"window **and** stop"* because slice 45 probed
+both. Slice 55 shipped the window only, deliberately (`docs/plans/slice55.md` §0.0): the stop is a
+separate mechanism (an azimuth ring and an elevation trunnion, not the detector's glass), convention 9
+says one lesson per scenario, and **its own measurement is a 750× null** — with the azimuth stop at
+30°, the miss is 0.1912 m at every elevation stop from 0.04° to 30°, even where the clamp binds
+66.66 % of in-band ticks. If the stop is ever built it is its own slice and it opens with that null.
+
+⚠⚠ **AND THE ENTRY'S PRICE WAS STALE IN THREE PLACES, WHICH IS SLICE 54's STANDING LESSON IN A SECOND
+SLICE RUNNING.** It priced the work as *"productionize `M:\claud_projects\temp\slice45`"*. At HEAD:
+
+1. Slice 45's own blocker (*"the only arm where the shape matters lives inside a feature that has not
+   been built"*) named the SEARCH, which shipped in slice 48 with its width in 52.
+2. Slice 45's *"a cost claim needs a cost model this simulator does not have"* — slice 46 shipped it
+   (`R_acq · fov = constant`); the window IS the aperture IS the reach.
+3. The *"byte-identical to the disc on 8/9 TRACKING rows"* figure was measured before the window set
+   the horizon and is **false at HEAD** in that form: a box and a disc of different `Ω` have
+   different reaches and therefore different flights, tracking or not. The claim survives only as
+   *box `(a,b)` ≡ disc `√(ab)`*, and that identity is the LINK BUDGET's, not the window kernel's.
+4. ⚠ `patch45.py` is **unusable in both directions**: its apply anchor has 0 matches at HEAD, and its
+   revert copies an 2026-08-18 snapshot of `missile.jl` over the live file, which would erase slices
+   52/53/54 and the ρ(z) fix.
+
+⇒ the shipped work was a NEW slice that slice 45's tables FEED, not a slice-45 revival, and the
+2026-08-18 ruling (**DEAD AS A LESSON, ALIVE AS A MODEL, both halves**) is untouched — what died there
+was that day's HEADLINE.
+
+**⭐⭐ THE `gimbal_fov_deg` TWO-SIDEDNESS DISQUALIFICATION (48) — ✅ TURNED INTO THE SLICE.**
+`slice48_search.yaml` disqualified its own window knob because it *"moves the window AND the horizon
+in opposite directions, so the composite is non-monotone."* Under the 2026-09-06 reframe that is a
+`CURVE` tag rather than a kill — and slice 55 does not even need the reversal: it holds `Ω` FIXED and
+varies only the shape, which makes the two-sidedness disappear by construction instead of being
+argued around.
+
+## New candidates raised by slice 55
+
+⚠ Read the two-test rule at the top of this file before proposing to kill any of these.
+
+**⭐⭐⭐ THE ASPECT-RATIO CURVE ON A WIRE THAT CAN SHOW ITS TURNING POINT.** Slice 55 ships the RIVAL
+and a measured NULL; the `CURVE` is real and **not** shipped. `docs/plans/slice55.md` §II.6 measured
+it: with a climbing target (vertical rate 220 m/s) the unswept-axis error reaches **1.4086°**, and the
+only arm whose elevation half-width is BELOW that — box (150°, 0.667°) — locks **1.61 s later**
+(7.082 s against 5.473), misses by **745.73 m** against 587.77, and spends 33 % of the airframe
+against 17 %. ⚠⚠ **The reversal is ONE ARM DEEP on that geometry, which is not a showcase curve.** The
+candidate is a wire whose unswept-axis error is large enough that several arms sit either side of the
+turning point — and the turning point is not a tuning constant: it is **where the elevation
+half-width crosses the unswept-axis error**, which is a statable law rather than a fitted number.
+⚠ It also needs the two-key problem solved (below) or it is a slider that moves the cost.
+
+**⭐⭐ A `set_param` THAT CARRIES TWO KEYS (or a derived pair).** The reason slice 55's obvious slider
+is impossible: `set_param` carries a single Float64, so no drag can hold `a·b` constant. Options are a
+wire-protocol change (a vector-valued set) or a DERIVED authoring pair — author `(Ω, aspect)` and let
+the loader compute `(a, b)` — which would make "hold the cost, vary the shape" a single live knob.
+⚠ The second is the cheaper and the more honest: `Ω` and the aspect ratio are the two quantities the
+physics actually distinguishes, and `(a, b)` is the parameterization the AUTHOR happens to write.
+⚠⚠ **Slice 39's rule applies: a reparameterization must not ship as an ARCHITECTURE.** It ships only
+if it carries the curve above.
+
+**⭐ AN ELLIPTICAL WINDOW, AS A BOUNDED CLAIM'S CONTROL.** `off_axis_ratio` is the ∞-norm; the
+alternative of the same class is `hypot(Δaz/a, Δel/b)`, and the two disagree by up to √2 at the
+diagonal. Slice 55's docstring BOUNDS its claim to separable windows for exactly this reason.
+⚠ Gate 0 refuted its own static evaluation of the ellipse (§II.2) and the standing rule is that **a
+window's verdict is a property of the FLIGHT, not of a cell** — so this candidate is only worth
+anything FLOWN, and it is a `RIVAL` against the box at held `Ω`, never a fidelity rung.
+
+**⚠ A PER-AXIS MECHANICAL STOP — STILL THE SLICE-45 NULL, AND NOW ALSO A DOCUMENTED MISMATCH.**
+`slice55_fanbeam.yaml` flies a RECTANGULAR window behind a CIRCULAR trunnion. That is deliberate and
+written down in the scenario header, but it is a mismatch, and anyone proposing the stop half must
+open with slice 45's 750× null AND with `frames.jl`'s `√2·stop` readout hazard.
+
+**⭐ THE FAN BEAM ON A **TRACKING** HEAD — the REGIME half, as a tooth rather than a slice.** The shape
+is invisible to a tracker (both axes held near zero, the window's corners never visited) and decisive
+for a cued or searching head. Slice 55 states this in the scenario's own "what this does NOT claim"
+list and does not ship a second slider for it (convention 9). The honest form is a test that measures
+the identity *box `(a,b)` ≡ disc `√(ab)` on a tracking arm* **conditioned on** the arm's measured
+`max|Δaz|` and `max|Δel|` staying inside both half-widths — and says so, rather than asserting an
+identity the arm gets for free.

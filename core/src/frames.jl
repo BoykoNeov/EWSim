@@ -779,9 +779,18 @@ cannot catch a wrap applied where it does not belong.
 ⚠ **CIRCULAR — and the argument is [`boresight_angle`](@ref)'s, unchanged.** A detector window is ONE
 window about ONE axis, so the total angle is the right quantity; the emphatic per-axis habit of the
 radome kernels above (`ε_az = f(look_az)` SEPARATELY) is a modelling error here, and using this
-kernel on the glass would be that error. A RECTANGULAR / per-axis window and stop remain a named
-deferral — a two-axis gimbal really does have independent mechanical stops, and this slice ships one
-circular window AND one circular stop.
+kernel on the glass would be that error.
+
+⚠⚠ **AND THAT PARAGRAPH IS AMENDED BY SLICE 55, NOT WITHDRAWN.** It is correct for a PENCIL beam,
+which is the only kind slices 32–54 author, and it stays the DEFAULT. What it got wrong is the word
+*"error"*: a **FAN** beam is genuinely two-axis, and modelling one with a single radius is not a
+simplification of it but a different antenna. [`off_axis_ratio`](@ref) below is the two-axis kernel,
+and which of the two a wire uses is an AUTHORED choice with a stated cost (`rf.jl`'s
+[`aperture_gain`](@ref) two-axis method) rather than a fidelity rung. ⚠ The mechanical STOP stays
+circular on every wire — slice 45 measured its per-axis form to be worth **nothing** (0.1912 m at
+every elevation stop over a 750× range, `docs/plans/slice45.md`) and `head_clamp` below still names
+the `√2·stop` readout hazard a per-axis clamp would introduce. **A fan-beam wire behind a circular
+trunnion is a documented mismatch, not an oversight.**
 
 ⚠ **IT IS THE ANGLE-SPACE RADIUS, NOT THE EXACT CONE HALF-ANGLE — the §1 approximation inherited from
 [`boresight_angle`](@ref), but with an OFFSET reference it is a DIFFERENT quantity, so it is
@@ -805,6 +814,58 @@ measures a SEPARATION and not a signed departure.
 """
 off_axis_angle(ref_az::Real, ref_el::Real, az::Real, el::Real) =
     hypot(wrap_angle(az - ref_az), wrap_angle(el - ref_el))
+
+"""
+    off_axis_ratio(ref_az, ref_el, az, el, a_rad, b_rad) -> Float64   (dimensionless; ≤ 1 ⇔ inside)
+
+**SLICE 55 — THE TWO-AXIS (FAN-BEAM) WINDOW.** A direction `(az, el)` measured against a window that
+is `a_rad` wide in AZIMUTH and `b_rad` wide in ELEVATION, both HALF-widths about the reference axis
+`(ref_az, ref_el)` in the same frame:
+
+    max(|wrap_angle(az - ref_az)| / a, |wrap_angle(el - ref_el)| / b)
+
+A ratio, not an angle, so that ONE kernel answers a window of any aspect ratio and the consumer's
+predicate is always the same literal `≤ 1`.
+
+⭐⭐ **SEPARABLE — the ∞-NORM, and it is NOT [`off_axis_angle`](@ref) generalised.** At `a == b` this
+is `max(|Δaz|, |Δel|)/a` where the circular kernel is `hypot(Δaz, Δel)`; the two agree only on the
+axes and differ by up to √2 at the diagonal. ⚠⚠ **So the circular window is NOT recovered by setting
+`b = a`, and nothing may be written as if it were.** Byte-identity for slices 1–54 is held by the
+CONSUMER's key-presence anchor (`missile.jl` runs the literal circular expression when no elevation
+half-width is authored), never by this kernel's algebra — and that distinction is the whole reason
+the ratio is a separate function instead of a keyword on the old one.
+
+⭐ **THE SHAPE IS THE APPROXIMATION AND IT IS LOAD-BEARING** (HANDOFF §1). The alternative of the same
+class is the ELLIPSE, `hypot(Δaz/a, Δel/b)`, and the two disagree by up to √2 — so which one a window
+is decides verdicts, not just readouts. A separable window is what a rectangular aperture's pattern
+is usually approximated by, and the claim is BOUNDED to it (`docs/plans/slice55.md` §0.1.2 F3).
+
+⚠⚠ **AND A WINDOW'S VERDICT CANNOT BE SETTLED BY EVALUATING EITHER NORM ON A FIXED GEOMETRY — slice
+55's gate 0 REFUTED ITS OWN PRE-REGISTERED ARITHMETIC HERE.** The plan predicted the box would hold
+slice 45's rescue cell (`Δaz = 9.7519°`, `Δel = 2.4934°`) behind a `(10°, 1.90°)` window; flown, the
+∞-norm reads `max(0.9752, 1.3123) = 1.3123` — **OUTSIDE**, because the plan had read the azimuth term
+and stopped. Those two numbers were measured on the DISC's flight at the DISC's best moment, and a
+window that changes the SHAPE changes where the head goes and therefore which geometry is ever
+offered to it. ⇒ **the shape's effect is a property of the FLIGHT, not of a cell, and a shape
+comparison must be FLOWN.** (The same trap slice 45 hit one level up: a verdict written from a table
+instead of from an arm.)
+
+⚠ **THE WRAP IS LOAD-BEARING** for the same reason it is above (a head at −179° against a LOS at
++179° must read 2°), and it is pinned PAIRED with a does-not-wrap case.
+⚠ **DOMAIN: `a > 0` and `b > 0`.** Non-positive throws — a zero-width window is a window that can
+never be satisfied and, through [`aperture_gain`](@ref), an infinite gain. Convention 5 puts the
+clamp at the CONSUMER (a live slider must never throw inside a tick); convention 6's finite floor is
+downstream of this `DomainError`, not a substitute for it.
+⚠ **SYMMETRIC in its two argument pairs**, like the circular kernel, and pinned for the same reason:
+it measures a SEPARATION and not a signed departure.
+"""
+function off_axis_ratio(ref_az::Real, ref_el::Real, az::Real, el::Real,
+                        a_rad::Real, b_rad::Real)
+    a_rad > 0 || throw(DomainError(a_rad, "azimuth half-width must be > 0"))
+    b_rad > 0 || throw(DomainError(b_rad, "elevation half-width must be > 0"))
+    return max(abs(wrap_angle(az - ref_az)) / Float64(a_rad),
+               abs(wrap_angle(el - ref_el)) / Float64(b_rad))
+end
 
 """
     head_clamp(az, el, stop) -> (az, el)   (radians)

@@ -310,6 +310,21 @@ var _search_view := false          # handshake search_view — 12th marker; HUD 
 # the WIDTH is what is being dialled. ⚠ HUD ONLY: the button stays slice 46's, which is still this
 # slice's own A/B (no horizon ⇒ no blind phase ⇒ nothing to search for at ANY width).
 var _s52_view := false             # handshake search_realized_view — 14th marker; HUD only
+# ⭐⭐⭐ SLICE 55 — THE WINDOW's SHAPE, the 15th marker, and it is slice 52's case again with one
+# word changed. A slice-55 wire IS slice 48's wire with the detector window turned on its side: it
+# authors slice 48's anchor and raises `_search_view` too, so that marker cannot tell the two apart
+# — and slice 48's block is ALL TRUE here while never saying that the window is a RECTANGLE, that
+# its two half-widths MULTIPLY to the aperture the disc spent, or that the lock it reports was
+# taken with NO SEARCH AT ALL.
+# ⚠⚠ AND ON THIS WIRE 48's BLOCK IS WORSE THAN SILENT. Its gauge is `search_t_lock_s`, which is
+# defined only where a SWEEP ran — and a fan beam wide enough to hold the cue error never enters
+# the search arm, so the key is the honest sentinel −1.0 across a flight that acquires at 4.94 s
+# and hits at 0.09 m. Slice 48's headline would read NOT SEARCHING / never found it over an
+# intercept. ⇒ this block reads the core's own `gimbal_t_acq_s` latch instead.
+# ⚠ HUD ONLY: the button stays slice 46's, and it is sharper here than anywhere — press it and the
+# horizon goes away, which removes the blind phase, which removes the entire COST of a window and
+# therefore the entire reason its shape is a design decision.
+var _fanbeam_view := false         # handshake fanbeam_view — 15th marker; HUD only
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # SLICE 49 — WHICH WAY THE TARGET IS POINTING, AND WHAT IT COSTS. The 13th marker of the family,
 # and the FIRST that lands in the SPATIAL (elevation) view rather than the 3-D airframe one — this
@@ -892,6 +907,12 @@ func _on_scenario(obj: Dictionary) -> void:
 	# sweep (`search_realized_deg` and the two peaks), which is what this HUD draws its band from.
 	# ⚠ It must be checked BEFORE `_search_view` at BOTH text sites — a slice-52 wire raises both.
 	_s52_view = bool(obj.get("search_realized_view", false))
+	# Slice 55 — the window's SHAPE. Raised on the COMP KEY `gimbal_fov_el_deg` (the elevation
+	# half-width), 47/48/52's posture: the gate is a CAPABILITY rather than a file, so any wire that
+	# authors a two-axis window raises it and one that authors a round one cannot. ⚠ It must be
+	# checked BEFORE `_s52_view` AND `_search_view` at BOTH text sites — a slice-55 wire raises
+	# slice 48's marker too, and slice 48's own gauge is undefined on it.
+	_fanbeam_view = bool(obj.get("fanbeam_view", false))
 	# Slice 49 — the ASPECT view. Raised on the COMP KEY (`rcs_fineness`, the authored shape) for
 	# slice 47/48's reason exactly: there is no aspect fidelity RUNG to raise it on, and there
 	# deliberately is not one — "no aspect at all" is reachable from the slider's own FLOOR (F = 1,
@@ -3551,6 +3572,105 @@ func _srch_t_lock_s() -> float:
 	# lock, so the sentinel is on the main path.
 	return float(_telemetry.get(_af3d_missile + ".search_t_lock_s", -1.0))
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# SLICE 55 — THE FAN BEAM's HUD. Every line is a PURE FUNCTION for convention 14's reason (a string
+# built inside `_draw` has NO headless proof); `slice55_ui_test.gd` calls each one directly.
+#
+# ⭐⭐⭐ WHAT THIS BLOCK HAS TO SAY THAT SLICE 48's CANNOT: the window is a RECTANGLE, its two
+# half-widths MULTIPLY to the aperture a 10° disc spends, the horizon is therefore IDENTICAL to the
+# disc's — and the azimuth that bought the intercept was paid for in elevation the seeker never
+# used. ⚠ The horizon line is not decoration: without it the shape reads as free coverage, which is
+# the claim slices 42/43 earned a ban for and slice 46 upheld.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+func _fb_deg(k: String, dflt: float) -> float:
+	return float(_telemetry.get(_af3d_missile + "." + k, dflt))
+
+func _fb_t_acq_s() -> float:
+	# ⚠ THE CORE's LATCH, and −1.0 means NEVER — not 0.0, which is a REAL value of this quantity (a
+	# window holding the target from the first tick). ⚠⚠ NEVER `search_t_lock_s` on this wire: that
+	# clock is defined only where a sweep RAN, and here none ever does.
+	return float(_telemetry.get(_af3d_missile + ".gimbal_t_acq_s", -1.0))
+
+func _fb_area_deg2(a: float, b: float) -> float:
+	# ⚠ ARITHMETIC ON TWO SHIPPED NUMBERS, NOT PHYSICS (convention 13). The aperture COST itself
+	# arrives from the core as `seeker_r_acq_m`; this product is the label on it.
+	return a * b
+
+func _fanbeam_verdict_label(a: float, b: float, acquired: bool, t_acq: float,
+							searching: bool, blind: bool) -> String:
+	# ⚠ HEADLINE BUDGET ~30 chars (slice 46's four ran off the edge at 78–82).
+	if acquired and t_acq >= 0.0 and not searching:
+		return "SAW IT AT ONCE: %.2f s" % t_acq
+	if acquired:
+		return "FOUND IT after %.2f s" % t_acq
+	# ⚠⚠ THE BLIND PHASE IS NOT A FAILED WINDOW, AND THIS BRANCH IS WHY THE LABEL TAKES A `blind`
+	# FLAG AT ALL. On the shipped wire the first 4.94 s are spent under the HORIZON with nothing to
+	# hear; without this state the headline read "NEVER SAW IT: too narrow" for half the engagement
+	# — a verdict, in the past tense, about a window that had not yet been given anything to see.
+	# The same defaulted-verdict class slice 48's `_srch_gap_handover_deg` was written to kill.
+	if blind:
+		return "SEEKER BLIND: no echo yet"
+	if b > a:
+		# THE LOSING DIRECTION, and it is in the same slider's domain: a TALL window spends the
+		# identical budget on the axis nothing ever moves in.
+		return "TALL WINDOW: nothing there"
+	return "NEVER SAW IT: too narrow"
+
+func _fanbeam_window_text(a: float, b: float, r_acq: float) -> String:
+	# ⭐⭐⭐ THE WHOLE CLAIM IN ONE LINE: the product IS the cost, and the reach proves it.
+	return "window %.1f° az x %.1f° el = %.0f deg^2   reach %.0f m" % [a, b, _fb_area_deg2(a, b), r_acq]
+
+func _fanbeam_rival_text(a: float, b: float) -> String:
+	# ⭐⭐ THE CONTROL, NAMED — the gain-matched disc sqrt(a*b), which is the only one of the three
+	# candidate discs the link budget has a consumer for. It is a NAME for the aperture, not a
+	# recomputed horizon: the metres beside it came from the core.
+	return "a %.1f° DISC costs the same and reaches no further" % sqrt(a * b)
+
+func _fanbeam_margin_text(am: float, bm: float, b: float) -> String:
+	# ⭐⭐⭐ THE GAUGE, AND IT IS THE PAIR RATHER THAN EITHER HALF. Both margins arrive from the core
+	# built off the flying predicate's own numbers, so their SIGNS are the verdict.
+	if am < 0.0 or bm < 0.0:
+		return "OUTSIDE the window: az %+.2f°  el %+.2f°" % [am, bm]
+	return "margin az %+.2f°   el %+.2f° of %.1f° — the el axis is idle" % [am, bm, b]
+
+func _fanbeam_search_text(has_search: bool, searched: bool, searching: bool, rate: float,
+						  t_lock: float) -> String:
+	# ⚠⚠ THE LINE THAT KEEPS SLICE 48's SENTINEL HONEST. `search_t_lock_s` is −1.0 here and that is
+	# not a failure — no sweep ever started, because nothing was ever lost. Printing "never found
+	# it" (48's own wording) over an intercept is `docs/CONVENTIONS.md` §14's defaulted-value trap
+	# with the sign flipped, so this line says which of the two states the sentinel means.
+	#
+	# ⭐⭐⭐ AND THE TWO NULLS ARE DIFFERENT NULLS, WHICH THE WINDOWED SHOT IS WHAT CAUGHT. Gating
+	# only on "did the head ever sweep" collapses **a seeker with no search at all** onto **a seeker
+	# whose search was never needed**, and prints slice 48's own "the head cannot look around" over
+	# a wire that authors a full search pattern and simply never had to use it. `has_search` is the
+	# wire's authored capability (the coverage key), `searched` is what the head actually did.
+	if not has_search:
+		return "search OFF — the head cannot look around"
+	if not searched:
+		return "sweep %.0f°/s NEVER RAN — nothing was ever lost" % rate
+	if searching:
+		return "SWEEPING at %.0f°/s — the window was not enough" % rate
+	if t_lock >= 0.0:
+		return "the sweep found it after %.2f s" % t_lock
+	return "the sweep ran and found nothing (%.0f°/s)" % rate
+
+func _fanbeam_cure_text(acquired: bool, b: float, bm: float, blind: bool = false) -> String:
+	# THE TRADE, and it must name the direction that LOSES or the block ships a free lunch.
+	# ⚠⚠ `acquired` IS TESTED BEFORE `blind`, AND THE WINDOWED SHOT IS WHAT FOUND THAT ORDER. Slice
+	# 46's `_detect_blind` is a LATCH — "this seeker was blind at some point" — not a live state, so
+	# a blind-first branch printed "waiting on the horizon" beside a green SAW IT AT ONCE headline
+	# and a locked seeker, two verdicts about the same instant. The latch is still the right input
+	# for the state where nothing has been acquired YET; it is simply not the first question.
+	if acquired:
+		if bm < 0.5 * b:
+			return "the el axis is working now — narrow it and it fails"
+		return "a 10° DISC of this cost cannot reach 11.3° of azimuth"
+	if blind:
+		return "waiting on the horizon — the window is already turned"
+	return "turn the window: the same glass, spent on azimuth"
+
 func _search_verdict_label(was_cued: bool, searched: bool, searching: bool,
 						   acquired: bool, deficit: float, t_lock: float) -> String:
 	# ⚠ HEADLINES GET A MUCH TIGHTER BUDGET (~30 chars) — drawn at 20 px from the same right-anchored
@@ -4036,6 +4156,42 @@ func _draw_s52_hud_lines(vp: Vector2) -> void:
 		draw_rect(r["rect"], col, true)
 
 
+func _draw_fanbeam_hud_lines(vp: Vector2) -> void:
+	var a := _fb_deg("gimbal_fov_deg", 0.0)
+	var b := _fb_deg("gimbal_fov_el_deg", 0.0)
+	var am := _fb_deg("gimbal_fov_az_margin_deg", 0.0)
+	var bm := _fb_deg("gimbal_fov_el_margin_deg", 0.0)
+	var r_acq := _fb_deg("seeker_r_acq_m", 0.0)
+	var t_acq := _fb_t_acq_s()
+	var acquired := t_acq >= 0.0
+	var searching := _srch_searching_now()
+	var rate := float(_telemetry.get(_af3d_missile + ".search_rate_dps", 0.0))
+	# THE COST — amber, because it is the budget every other line is spent out of.
+	draw_string(_font, Vector2(vp.x - 430, 110), _fanbeam_window_text(a, b, r_acq),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1.00, 0.85, 0.45))
+	# THE RIVAL — grey: it is the thing NOT flying, and naming it as a verdict would paint a
+	# comparison the student has to make for themselves.
+	draw_string(_font, Vector2(vp.x - 430, 132), _fanbeam_rival_text(a, b),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+	# ⭐⭐⭐ THE GAUGE — green while the window holds it, orange the moment either axis is over. The
+	# COLOUR RIDES THE MARGIN PAIR rather than the acquisition latch, and that is this block's one
+	# real choice: the latch is a LATCH, so once it fires it would paint the rest of the flight calm
+	# — including the arms where a too-narrow elevation half-width loses the target back.
+	draw_string(_font, Vector2(vp.x - 430, 154), _fanbeam_margin_text(am, bm, b),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			Color(0.55, 1.00, 0.65) if (am >= 0.0 and bm >= 0.0) else Color(1.00, 0.62, 0.30))
+	# THE CLOCK, AND THE SENTINEL IT HAS TO EXPLAIN — cyan while sweeping, grey on the null.
+	# ⚠ THE WIRE's AUTHORED CAPABILITY, read as a KEY-PRESENCE rather than as a value: a sweep rate
+	# of 0 is a real setting of a real search, not the absence of one.
+	var has_search := _telemetry.has(_af3d_missile + ".search_coverage_deg")
+	draw_string(_font, Vector2(vp.x - 430, 176),
+			_fanbeam_search_text(has_search, _srch_was_searching, searching, rate, _srch_t_lock_s()),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+			Color(0.45, 0.90, 1.00) if searching else Color(0.70, 0.70, 0.75))
+	# THE TRADE.
+	draw_string(_font, Vector2(vp.x - 430, 198), _fanbeam_cure_text(acquired, b, bm, _detect_blind),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
+
 func _draw_search_hud_lines(vp: Vector2) -> void:
 	var searching := _srch_searching_now()
 	var deficit := _srch_deficit_deg()
@@ -4489,7 +4645,20 @@ func _draw_airframe3d_hud() -> void:
 	# the WIDTH is the thing being dialled, that a band too narrow never reaches at all, or that the
 	# head is flying less of the sweep than it was told. Every number right and the slice invisible:
 	# this family's recurring failure, avoided by ordering, for the sixth slice running.
-	if _s52_view:
+	# ⭐⭐⭐ SLICE 55 — checked FIRST here too, and for the reason all the chains must ALWAYS agree.
+	# `_search_view` is the block that would otherwise take this wire (a slice-55 wire authors slice
+	# 48's anchor), and ⚠⚠ ITS HEADLINE IS NOT MERELY INCOMPLETE HERE, IT IS BACKWARDS: it reads
+	# `search_t_lock_s`, which no sweep ever stamps on this file, so it would print "NOT SEARCHING:
+	# head frozen" over a missile that acquired at 4.94 s and hit at 0.09 m.
+	if _fanbeam_view:
+		lbl = _fanbeam_verdict_label(_fb_deg("gimbal_fov_deg", 0.0), _fb_deg("gimbal_fov_el_deg", 0.0),
+				_fb_t_acq_s() >= 0.0, _fb_t_acq_s(), _srch_searching_now(), _detect_blind)
+		# THE COLOUR RIDES THE MARGIN PAIR (see `_draw_fanbeam_hud_lines`): the latch would paint
+		# every post-acquisition tick calm, including one the window has since lost the target out
+		# the side of.
+		col = Color(0.55, 1.00, 0.65) if (_fb_deg("gimbal_fov_az_margin_deg", 0.0) >= 0.0 and
+				_fb_deg("gimbal_fov_el_margin_deg", 0.0) >= 0.0) else Color(1.00, 0.62, 0.30)
+	elif _s52_view:
 		lbl = _s52_verdict_label(_mid_was_cued, _srch_was_searching, _srch_searching_now(),
 				_mid_acquired, _s52_told_deg(), _s52_need_deg(_srch_searching_now()),
 				_srch_t_lock_s())
@@ -4769,7 +4938,15 @@ func _draw_airframe3d_hud() -> void:
 	# 48's anchor and raises its marker), and its lines are all TRUE on it. What they cannot say is
 	# that the WIDTH is the slider, that a band too narrow never reaches the target at any duration,
 	# or that the head flies less than it is told — which is the whole slice.
-	if _s52_view:
+	# ⭐⭐⭐ SLICE 55 — checked FIRST here too, and for the reason all the chains must ALWAYS agree.
+	# `_search_view`'s block is the one that would otherwise take this wire and every number on it
+	# is TRUE except the one it is built around: its gauge is the SWEEP's clock, and no sweep runs
+	# here. What it cannot say at all is that the window is a rectangle, that the two half-widths
+	# multiply to the disc's own aperture, or that the elevation half it is not using is what paid
+	# for the azimuth that made the intercept.
+	if _fanbeam_view:
+		_draw_fanbeam_hud_lines(vp)
+	elif _s52_view:
 		_draw_s52_hud_lines(vp)
 	elif _s50_view:
 		_draw_s50_hud_lines(vp)

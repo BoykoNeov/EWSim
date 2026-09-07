@@ -1,0 +1,168 @@
+# slice55_fanbeam — THE WINDOW'S SHAPE: A FAN BEAM AT THE APERTURE COST OF THE DISC
+# (HANDOFF §11 Tier-A, slice 55 gate 3). This is `slice48_search.yaml`'s wire — the same link
+# budget, the same 45° trunnion, the same 240 °/s servo, the same seed, the same launch, the same
+# target, the same midcourse picture and the same slider — with EXACTLY ONE authored difference:
+#
+#     seeker.gimbal_fov_deg  10.0  ->  12.5        (the AZIMUTH half-width)
+#     seeker.gimbal_fov_el_deg      ->   8.0       (the ELEVATION half-width — NEW, slice 55)
+#
+# ⭐⭐⭐ AND 12.5 × 8.0 = 100 = 10 × 10, WHICH IS THE WHOLE POINT. The gain of an antenna is
+# `η·4π/Ω` and `Ω ≈ θ_az·θ_el`, so a window costs what its PRODUCT costs. This seeker and slice 48's
+# subtend the SAME solid angle, have the SAME gain, and see EXACTLY the same distance —
+# `seeker_r_acq_m` is **3038.2 m** on both wires, to nine digits. Nothing here is bought. The
+# aperture is only SPENT DIFFERENTLY.
+#
+# > THE LESSON, IN ONE SENTENCE. A round detector window is not a baseline — it is one arbitrary
+# > point on an aspect-ratio axis, and on a missile that has to LOOK AROUND it is not the good one.
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# THE RIVAL, AND IT IS A THREE-WAY RATHER THAN A TWO-WAY (gate 0 §II.4, `docs/plans/slice55.md`)
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# One aperture, three shapes, flown with NO SEARCH AT ALL (ρ = 0 — which is what slice 47 ships and
+# what slice 48's slider floors to). Every row has the identical `R_acq` = 3038.2 m:
+#
+#     window                lock?   t_lock      CPA       authority
+#     TALL  6.0° × 16.7°    never       —    1039.88 m       0.0 %   <- BIT-IDENTICAL to the disc
+#     DISC       10.0°      never       —    1039.88 m       0.0 %   <- what slice 48 ships
+#     THIS  12.5° ×  8.0°   LOCK    4.936 s     0.09 m      20.0 %   <- the same glass, turned
+#
+# ⭐⭐⭐ THE SAME APERTURE, ARRANGED THREE WAYS, AND THE ROUND ONE IS NEITHER THE BEST NOR THE WORST.
+# That — not the 1039.88 → 0.09 m rescue — is what this scenario teaches, because a rescue can always
+# be read as *buying coverage* (the ban slices 42/43 earned and slice 46 upheld) and a MIDDLE cannot.
+# ⚠⚠ SAY IT WITH THE TALL ARM OR DO NOT SAY IT AT ALL: the tall window spends the identical budget
+# on the axis nothing ever moves in and is BIT-FOR-BIT the disc's own flight over 9600 ticks. The
+# fan beam's azimuth is PAID FOR, in elevation, at the going rate.
+#
+# WHY IT WORKS, MECHANICALLY. The midcourse picture is wrong in a way that puts the target at
+# **−11.34°** of body azimuth when the receiver opens (`slice48_search.yaml` reason 2 — the target
+# crosses FASTER than the picture believed). A 10° disc cannot reach 11.34° in any direction. A
+# 12.5° fan beam reaches it in the one direction the error is actually in. ⭐⭐ The elevation error
+# over the same interval is **0.0565°** — so a disc is spending 10° of hard-won aperture guarding an
+# axis that moves by a sixteenth of a degree.
+#
+# ⭐⭐ AND THE SLIDER GOES DEAD, WHICH IS THIS SCENARIO'S A/B AGAINST SLICE 48. The sweep rate is
+# slice 48's headline slider — never / pinned / cheap across 0…240 °/s, 1039.88 m down to 0.31 m.
+# Here it is INERT: ρ = 0, 36, 60 and 240 °/s all return the identical 4.9360 s and 0.09 m, because
+# the target was never lost in the first place. *You only search because you were blind, and this
+# seeker was not.* Open the two files side by side; that is the demonstration.
+#
+# ⚠⚠ WHAT THIS SCENARIO DOES **NOT** CLAIM — read before quoting it.
+#  1. **NOT "narrower is better".** Gate 0's F2 falsifier FIRED here: on this geometry widening is
+#     monotone-better out to 150° × 0.667°, because the unswept axis never carries error. The
+#     reversal is REAL but lives elsewhere — with a climbing target (vertical rate 220 m/s) the
+#     unswept error reaches 1.41° and the 0.667°-tall arm loses 1.6 s and 158 m. It is published as
+#     a measured BOUND (`docs/plans/slice55.md` §II.6) and is deliberately NOT a slider here: one
+#     lesson per scenario, and the turning point would need its own wire.
+#  2. **NOT a claim about fan beams in general.** The window is SEPARABLE (a box in angle space),
+#     which is a NAMED APPROXIMATION of the same class the circular window already was. The ellipse
+#     is a third answer and differs by up to √2 — see `off_axis_ratio`'s docstring.
+#  3. **NOT transferable to a TRACKING head.** A tracker holds both axes near zero, so a window's
+#     corners are never visited and the shape is invisible to it. Everything here is about a head
+#     that is CUED or SEARCHING — which is the state a midcourse missile actually flies in.
+#  4. **The mechanical STOP is still CIRCULAR** and that is a documented mismatch, not an oversight:
+#     slice 45 measured a per-axis stop to be worth nothing (0.1912 m at every elevation stop over a
+#     750× range) and `head_clamp` names the `√2·stop` readout hazard one would introduce.
+#
+# NAMED APPROXIMATIONS (§1): everything slice 48 named, unchanged — the single-axis symmetric
+# triangle sweep in body azimuth, one snapshot dead-reckoned at constant velocity, no datalink
+# update, no INS drift, a non-manoeuvring target, an authored deterministic picture error — plus
+# slice 55's own: a separable window, `Ω = θ_az·θ_el` with no taper difference between the axes, no
+# sidelobes, and one `detect_eta` for both axes.
+#
+# UNITS (§1 trifecta): `gimbal_fov_el_deg` is DEGREES at this boundary and radians inside, the
+# `gimbal_*_deg` posture exactly (slice 35's rule — the name carries the unit only where there is a
+# time in it). It is the ELEVATION HALF-width about the head axis, as `gimbal_fov_deg` is the
+# AZIMUTH half-width; the loader refuses it without that partner and refuses it non-positive.
+# dt = 1e-3 / emit_every = 16.
+name: slice55_fanbeam
+seed: 32
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # SLICE 46/47/48's SIX KEYS, UNCHANGED TO THE DIGIT. The window's SHAPE is not a fidelity rung —
+  # it is an authored comp key, for slice 47/48's reason exactly: the anchor is a key an AUTHOR
+  # writes, and "a circular window" is reachable by deleting it rather than by a rung.
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+  # ⭐ THE BUTTON, UNCHANGED FROM SLICE 48 — and it is sharper here than anywhere. Press it and the
+  # horizon goes away, which removes the blind phase, which removes the entire cost of a window and
+  # therefore the entire reason a SHAPE is a design decision. With no link budget a window is free
+  # and any shape will do; the moment reach is finite, `Ω` is a budget and where you spend it is the
+  # engineering.
+  seeker_detect: snr
+
+entities:
+  # The interceptor — slice 48's, to the digit, with ONE window turned on its side.
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      # ⚠⚠ THE PAIR IS THE POINT: 12.5 × 8.0 = 100 = the shipped 10 × 10. Change ONE of them and you
+      # have changed the seeker's REACH as well as its shape, and the comparison against
+      # `slice48_search.yaml` stops being about the shape at all — which is the exact error slice
+      # 55's own gate 0 made and had to publish (`docs/plans/slice55.md` §II.3, 27 arms of it).
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               gimbal_tau_s: 0.05, gimbal_stop_deg: 45.0,
+               gimbal_fov_deg: 12.5, gimbal_fov_el_deg: 8.0,
+               gimbal_rate_dps: 240.0,
+               seeker_search: true, seeker_search_coverage_deg: 25.0,
+               seeker_search_rate_dps: 0.0,
+               detect_pt_w: 200.0, detect_freq_hz: 16.0e9, detect_tint_s: 0.010,
+               detect_nf_db: 4.0, detect_loss_db: 5.0, detect_eta: 0.6,
+               detect_snr_min_db: 10.0}
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3,
+                 midcourse: true, midcourse_k: 1.0,
+                 midcourse_vel_err_mps: [0.0, 1.0, 0.0],
+                 midcourse_err_gain: 140.0}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # THE TARGET IS SLICE 48's, UNCHANGED. ⚠ Not a convenience — an A/B whose target moved would be
+  # measuring two things at once.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 3000.0, 4200.0]
+    vel: [0.0, -200.0, 0.0]
+    target: {rcs_m2: 0.020, cross_speed_mps: -200.0}
+
+knobs:
+  # ⭐⭐ EXACTLY ONE LIVE KNOB, AND IT IS SLICE 48's OWN — INHERITED SO THE A/B IS EXACT, AND IT IS
+  # HERE TO BE MEASURED AS **INERT**. On slice 48's disc this slider is the whole lesson (never /
+  # pinned / cheap, 1039.88 m → 0.31 m). On this wire every value from 0 to 240 °/s returns the
+  # identical `search_t_lock_s` and the identical CPA, because the target was never lost. A slider
+  # that DOES NOTHING is the honest form of "you only search because you were blind" — and it is a
+  # NULL with a bound rather than a rhetorical flourish, asserted in `net/slice55_verify.gd`.
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED, and mostly for slice 48's reasons unchanged:
+  #   `gimbal_fov_el_deg` — ⚠⚠ THE OBVIOUS ONE, AND IT IS THE TRAP. Dragging it alone moves `Ω`,
+  #     hence the gain, hence the horizon — so it would teach REACH (slice 46's lesson) while
+  #     appearing to teach SHAPE, and gate 0 measured 27 arms in which exactly that confusion made
+  #     the shape invisible. Holding `Ω` needs BOTH keys moved together, which `set_param` cannot
+  #     do: it carries one Float64. ⇒ the shape is AUTHORED here and the contrast is against a
+  #     SECOND FILE, which is what a RIVAL is.
+  #   `gimbal_fov_deg` — the same objection, and two-sided since slice 46 besides.
+  #   `rcs_m2` / `midcourse_err_gain` / the belief-error vectors / `gimbal_stop_deg` /
+  #     `gimbal_rate_dps` — slice 48's list, unchanged and for its reasons.
+  #
+  # ⚠ THE LABEL IS LENGTH-BUDGETED (~110 characters — slice 32's shots paid for this).
+  - {target: m1, key: seeker_search_rate_dps, min: 0.0, max: 240.0,
+     label: "SEEKER SWEEP RATE (deg/s) — INERT here: nothing to search for. Compare slice48_search"}

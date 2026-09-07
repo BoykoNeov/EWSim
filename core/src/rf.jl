@@ -75,11 +75,28 @@ snr_db_freespace(rp::RadarParams, rcs_m2::Real, range_m::Real) =
 # its gain — is built in `missile.jl`, where the entities and the window live.
 
 """
-    aperture_gain(beamwidth_rad; eta = 0.6) -> Float64   (linear power gain)
+    aperture_gain(beamwidth_rad; eta = 0.6)          -> Float64   (linear power gain)
+    aperture_gain(bw_az_rad, bw_el_rad; eta = 0.6)   -> Float64   (linear power gain)
 
 **THE APERTURE IDENTITY.** An antenna that concentrates its power into a solid angle `Ω` has gain
 `G = η · 4π / Ω` over an isotropic radiator — the whole content of "gain" as the radar equation
 uses it. For a beam of full width `θ` on each of two axes, `Ω ≈ θ²`.
+
+⭐⭐⭐ **SLICE 55 — THE TWO AXES NEED NOT BE EQUAL, AND THAT IS A DESIGN VARIABLE RATHER THAN A
+GENERALISATION FOR ITS OWN SAKE.** A **FAN BEAM** is wide on one axis and narrow on the other, so
+`Ω ≈ θ_az · θ_el` and `G = η · 4π / (θ_az · θ_el)`. Two windows cost the same reach iff they subtend
+the same `Ω`, so the disc a fan beam `(a, b)` trades for is the **GEOMETRIC MEAN `√(ab)`** — never
+the arithmetic mean `(a+b)/2` and never the equal-AREA radius `2√(ab/π)`. Those two are geometric
+analogies with no consumer anywhere in this simulator; this one is the link budget's own definition,
+and slice 55's showcase reads its control off it.
+⇒ because [`detection_range`](@ref) inverts an `R⁻⁴` law through a gain that enters TWICE (transmit
+and receive), the horizon goes as `√G`: a fan beam `(a, b)` reaches **`√(a/b)`** further than the
+disc of radius `a` while covering the same azimuth — 2.29× at `(10°, 1.9°)`.
+
+⚠ **SEPARABLE, AND THAT IS A NAMED APPROXIMATION** (HANDOFF §1). `Ω = θ_az·θ_el` is the standard
+rectangular-aperture solid angle; a real pattern's threshold contour is neither a box nor an ellipse,
+and nothing here models an illumination taper that differs between the axes. It is the same CLASS of
+approximation the circular form already is.
 
 `beamwidth_rad` is the **FULL** beamwidth, not the half-angle: a detector window quoted as
 "`fov` degrees off the axis" (the `seeker_in_fov` / `gimbal_fov_deg` posture) is a HALF-angle and
@@ -92,12 +109,21 @@ for a real dish and 0.6 is the conventional book value.
 ⚠ Non-positive `beamwidth_rad` throws: a zero-width beam is an infinite gain, and convention 6
 (no Inf/NaN to JSON) is a floor downstream of a DomainError here, not a substitute for it.
 """
-function aperture_gain(beamwidth_rad::Real; eta::Real = 0.6)
-    beamwidth_rad > 0 || throw(DomainError(beamwidth_rad, "beamwidth must be > 0"))
+function aperture_gain(bw_az_rad::Real, bw_el_rad::Real; eta::Real = 0.6)
+    bw_az_rad > 0 || throw(DomainError(bw_az_rad, "beamwidth must be > 0"))
+    bw_el_rad > 0 || throw(DomainError(bw_el_rad, "beamwidth must be > 0"))
     eta > 0 || throw(DomainError(eta, "aperture efficiency must be > 0"))
-    θ = Float64(beamwidth_rad)
-    return Float64(eta) * 4π / (θ * θ)
+    return Float64(eta) * 4π / (Float64(bw_az_rad) * Float64(bw_el_rad))
 end
+
+# ⭐⭐ THE ONE-ARGUMENT METHOD IS **DEFINED FROM** THE TWO-AXIS ONE, NOT MERELY EQUAL TO IT — the
+# `boresight_angle` ⇐ `off_axis_angle` posture (`frames.jl`), for the same reason: a pencil beam IS
+# a fan beam whose two widths coincide, and writing it as its own expression would make
+# `test_radar_eq.jl` prove a SECOND implementation of the aperture identity and nothing about what
+# flies. ⚠ The identity `aperture_gain(θ, θ) === aperture_gain(θ)` is therefore **atol 0 by
+# construction** rather than by tolerance, which is what slices 1–54's byte-identity rests on.
+aperture_gain(beamwidth_rad::Real; eta::Real = 0.6) =
+    aperture_gain(beamwidth_rad, beamwidth_rad; eta = eta)
 
 """
     aperture_diameter(freq_hz, beamwidth_rad) -> Float64   (m)

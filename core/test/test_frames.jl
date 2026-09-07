@@ -1226,6 +1226,52 @@
             @test isnan(off_axis_angle(NaN, 0.0, 0.1, 0.1))
         end
 
+        @testset "⭐⭐⭐ SLICE 55 — off_axis_ratio: the two-axis window, and why b = a is NOT the disc" begin
+            a = deg2rad(10.0)
+            # (1) A RATIO, so the consumer's predicate is always the literal ≤ 1. Unit on either rim.
+            @test off_axis_ratio(0.0, 0.0, a, 0.0, a, a) ≈ 1.0 atol = 1e-15
+            @test off_axis_ratio(0.0, 0.0, 0.0, a, a, a) ≈ 1.0 atol = 1e-15
+            @test off_axis_ratio(0.37, -0.12, 0.37, -0.12, a, a) === 0.0        # the axis itself
+            # (2) THE ASPECT RATIO IS WHAT IT IS FOR: the same departure, two windows, two verdicts.
+            b = deg2rad(1.9)
+            @test off_axis_ratio(0.0, 0.0, deg2rad(9.75), deg2rad(1.0), a, b) ≤ 1.0
+            @test off_axis_ratio(0.0, 0.0, deg2rad(9.75), deg2rad(2.5), a, b) >  1.0   # out the SIDE
+            # (3) ⚠⚠ THE ∞-NORM IS NOT THE 2-NORM — the tooth that says a circular window is NOT the
+            # `b == a` case, so byte-identity may never be claimed from this kernel's algebra. They
+            # agree on the axes and are exactly √2 apart on the diagonal.
+            let d = deg2rad(7.07)
+                @test off_axis_ratio(0.0, 0.0, d, 0.0, a, a) ≈ off_axis_angle(0.0, 0.0, d, 0.0) / a
+                @test off_axis_angle(0.0, 0.0, d, d) / a / off_axis_ratio(0.0, 0.0, d, d, a, a) ≈
+                      sqrt(2) atol = 1e-12
+            end
+            # …and the ELLIPSE is a THIRD answer again (slice 55 §0.1.2's F3): the alternative of the
+            # same class, pinned here so the shipped shape is a stated choice and not an accident.
+            let daz = deg2rad(9.7519), del = deg2rad(2.4934)
+                @test off_axis_ratio(0.0, 0.0, daz, del, a, b) ≈ 1.3123 atol = 5e-4   # box: OUTSIDE
+                @test hypot(daz / a, del / b)                  ≈ 1.6350 atol = 5e-4   # ellipse: also
+                @test off_axis_angle(0.0, 0.0, daz, del) / a   ≈ 1.0066 atol = 5e-4   # disc: also
+            end
+            # (4) THE WRAP, PAIRED with a does-not-wrap case — a wrap tooth that only ever exercises
+            # the wrapping branch cannot catch a wrap applied where it does not belong.
+            @test off_axis_ratio(deg2rad(-179.0), 0.0, deg2rad(179.0), 0.0, a, a) ≈ 0.2 atol = 1e-9
+            @test off_axis_ratio(deg2rad(-9.0),   0.0, deg2rad(9.0),   0.0, a, a) ≈ 1.8 atol = 1e-12
+            # (5) SYMMETRIC in its two argument pairs — it measures a SEPARATION, not a departure.
+            let n_bad = 0
+                for az in range(-3.0, 3.0; length = 21), el in range(-1.5, 1.5; length = 21)
+                    off_axis_ratio(0.11, -0.07, az, el, a, b) ===
+                        off_axis_ratio(az, el, 0.11, -0.07, a, b) || (n_bad += 1)
+                end
+                @test n_bad == 0
+            end
+            # (6) GUARDS. A zero half-width is a window that can never be satisfied and, through
+            # `aperture_gain`, an INFINITE gain — a DomainError here, clamped at the consumer.
+            @test_throws DomainError off_axis_ratio(0.0, 0.0, 0.1, 0.1, 0.0, a)
+            @test_throws DomainError off_axis_ratio(0.0, 0.0, 0.1, 0.1, a, 0.0)
+            @test_throws DomainError off_axis_ratio(0.0, 0.0, 0.1, 0.1, -a, a)
+            @test isfinite(off_axis_ratio(1.0e9, -1.0e9, -1.0e9, 1.0e9, a, b))
+            @test isnan(off_axis_ratio(NaN, 0.0, 0.1, 0.1, a, b))
+        end
+
         @testset "head_clamp — the ONE stop site, shared with the seam's handover" begin
             # ⚠⚠ IT IS A KERNEL BECAUSE IT HAS TWO CALLERS (advisor). `head_slew` ends in it, and
             # so must gate 2's HANDOVER init — gate 1 measured that the servo contracts toward the
