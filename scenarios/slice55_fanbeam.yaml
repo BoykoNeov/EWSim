@@ -25,10 +25,16 @@
 #     window                lock?   t_lock      CPA       authority
 #     TALL  6.0° × 16.7°    never       —    1039.88 m       0.0 %   <- BIT-IDENTICAL to the disc
 #     DISC       10.0°      never       —    1039.88 m       0.0 %   <- what slice 48 ships
-#     THIS  12.5° ×  8.0°   LOCK    4.936 s     0.09 m      20.0 %   <- the same glass, turned
+#     THIS  12.5° ×  8.0°   LOCK    4.935 s    0.085 m      20.0 %   <- the same glass, turned
+#
+# ⚠ THE THIRD ROW IS THIS FILE'S OWN WIRE, RE-FLOWN — not gate 0's neighbouring (12.0, 8.333)
+# arm, whose 4.936 s / 0.09 m this header quoted in its first draft. Same lesson, different arm,
+# and the slice's own standing rule is that a verdict must come from the flight it names.
+# ⚠ 0.085 m and 20.0 % are PER-TICK; a client on the 16-tick emit grid reads 2.18 m and 19.4 %,
+# because a HIT samples COARSELY (`net/slice55_verify.gd` asserts the frame-sampled pair).
 #
 # ⭐⭐⭐ THE SAME APERTURE, ARRANGED THREE WAYS, AND THE ROUND ONE IS NEITHER THE BEST NOR THE WORST.
-# That — not the 1039.88 → 0.09 m rescue — is what this scenario teaches, because a rescue can always
+# That — not the 1039.88 → 0.085 m rescue — is what this scenario teaches, because a rescue can always
 # be read as *buying coverage* (the ban slices 42/43 earned and slice 46 upheld) and a MIDDLE cannot.
 # ⚠⚠ SAY IT WITH THE TALL ARM OR DO NOT SAY IT AT ALL: the tall window spends the identical budget
 # on the axis nothing ever moves in and is BIT-FOR-BIT the disc's own flight over 9600 ticks. The
@@ -38,12 +44,14 @@
 # **−11.34°** of body azimuth when the receiver opens (`slice48_search.yaml` reason 2 — the target
 # crosses FASTER than the picture believed). A 10° disc cannot reach 11.34° in any direction. A
 # 12.5° fan beam reaches it in the one direction the error is actually in. ⭐⭐ The elevation error
-# over the same interval is **0.0565°** — so a disc is spending 10° of hard-won aperture guarding an
+# over the same interval is **0.0565°** (measured on THIS wire, not the neighbouring arm) — so a
+# disc is spending 10° of hard-won aperture guarding an
 # axis that moves by a sixteenth of a degree.
 #
 # ⭐⭐ AND THE SLIDER GOES DEAD, WHICH IS THIS SCENARIO'S A/B AGAINST SLICE 48. The sweep rate is
 # slice 48's headline slider — never / pinned / cheap across 0…240 °/s, 1039.88 m down to 0.31 m.
-# Here it is INERT: ρ = 0, 36, 60 and 240 °/s all return the identical 4.9360 s and 0.09 m, because
+# Here it is INERT: ρ = 0, 60, 120 and 240 °/s (the four arms actually flown, `net/slice55_verify.gd`)
+# all return the identical 4.935 s and a BIT-IDENTICAL trajectory, because
 # the target was never lost in the first place. *You only search because you were blind, and this
 # seeker was not.* Open the two files side by side; that is the demonstration.
 #

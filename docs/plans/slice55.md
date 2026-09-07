@@ -364,6 +364,12 @@ than a throwaway patch (§0's ruling on `patch45.py`). Byte-identity for slices 
 CONSTRUCTION, not a measurement: with no `gimbal_fov_el_deg` authored, `_box` is the literal `false`
 and every predicate takes the circular arm verbatim.
 
+> ⚠⚠ **THAT SUITE LINE IS RETRACTED — SEE §III.1.** The gate-1/2 tests contained an illegal `@test`
+> (a keyword riding a `&&` chain), which aborts its file at PARSE time: they had **never executed**,
+> and 20069 came from a run that did not contain them. The real, verified figure is **20158 /
+> 20158** (`docs/STATUS.md`). ⭐ The gate-0 numbers BELOW are unaffected — they were flown by probe
+> against shipped code, not by the suite — but the suite claim above was false when written.
+
 ## §II.0 THE HARNESS IS ANCHORED ON A SHIPPED ORACLE (convention 10)
 
 Before any new arm was believed, the probe reproduced slice 48's own published row on

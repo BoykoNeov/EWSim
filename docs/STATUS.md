@@ -7862,8 +7862,9 @@ retired by the detector's own physics.
 # Slice 55 — **THE WINDOW'S SHAPE: A FAN BEAM AT THE APERTURE COST OF THE DISC** (`gimbal_fov_el_deg`, 2026-09-07)
 
 **COMPLETE, all four gates.** Suite **20158 / 20158 pass** (8m44s), from slice 54's 20051 — **+107**.
-`test_determinism.jl` and the absolute golden unchanged — the additivity master check for this kind
-of edit, and here it is a CONSTRUCTION: with no `gimbal_fov_el_deg` authored, `_box` is the literal
+`test_determinism.jl` and the absolute golden (`test_detection.jl`'s slice-1 byte-identity block,
+`core/test/runtests.jl:39`) unchanged — both INSIDE this suite run, not a separate invocation, which
+is what makes that the additivity master check for this kind of edit and here it is a CONSTRUCTION: with no `gimbal_fov_el_deg` authored, `_box` is the literal
 `false` and every predicate takes the shipped circular arm verbatim. Full detail:
 `docs/plans/slice55.md` (§0 the pre-registration, **PART II** gate 0, **PART III** gates 1–3).
 
@@ -7886,7 +7887,12 @@ Every row has the identical `R_acq` = **3038.16 m**:
 |---|---|---|---|---|
 | TALL 6.0° × 16.7° | never | — | **1039.88 m** | 0.0 % — **BIT-IDENTICAL to the disc over 9600 ticks** |
 | DISC 10.0° (what slice 48 ships) | never | — | **1039.88 m** | 0.0 % |
-| **WIDE 12.5° × 8.0° (this slice)** | **LOCK** | **4.935 s** | **0.085 m** | 19.4 % |
+| **WIDE 12.5° × 8.0° (this slice)** | **LOCK** | **4.935 s** | **0.085 m** | **20.0 %** |
+
+⚠ **PER-TICK numbers, measured on THIS wire** — not gate 0's neighbouring (12.0, 8.333) arm, whose
+4.936 s / 0.09 m / 20.0 % the scenario header quoted in its first draft and has since been corrected
+to match the flight it names. A client on the 16-tick emit grid reads the same 4.935 s but **2.18 m
+and 19.4 %**, because a HIT samples COARSELY; `net/slice55_verify.gd` asserts the frame-sampled pair.
 
 ⭐⭐⭐ **THE SAME APERTURE, ARRANGED THREE WAYS, AND THE ROUND ONE IS NEITHER THE BEST NOR THE WORST.**
 That — not the 1039.88 → 0.09 m rescue — is the slice, because a rescue can always be read as *buying
