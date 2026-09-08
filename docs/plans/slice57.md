@@ -402,3 +402,108 @@ published above either way.
 | **F2** | no lock on the infeasible wire | ✅ eight arms, no lock |
 | **F3** | the dull rival must not win | ⚠⚠ **FIRES on the literal wording** — retracted in §II.6 with its reason; the corrected held-cost comparison stands |
 | **R1 / R1′** | which trigger | ⛔ **R1 does NOT fire. R1′ does** — the interior is bit-identical (`max\|Δpos\|` = 0.0 over a 15.2× range), so the trigger is **`REGIME`** plus a measured **`NULL`**, and the headline is **the walls and the law**, never a turning point. |
+
+---
+
+# PART III — THREE THINGS THE GATE-0 RECORD RAISED AGAINST ITSELF (2026-09-08)
+
+Probe: `W:\temp\claude\slice57\p8_margins.jl`. ⚠ All three were asked BECAUSE §II's own tables looked
+wrong in a way §II did not resolve, and one of them changes what §II.3 is allowed to claim.
+
+## §III.1 ⚠⚠ P8 — `t_lock` IS THE LINK BUDGET'S NUMBER, NOT THE WINDOW'S. DO NOT QUOTE IT AS A SHAPE RESULT
+
+Every locking arm on wire A reads 4.9400 s and every one on wire B reads 4.9880 s — each internally
+constant to four decimals across geometries that differ by a factor of 15 in aspect ratio. **That is
+not a coincidence and it is not resolution.** `t_cross` is the tick at which the target first enters
+`R_acq`:
+
+| wire | `r` | `R_acq` m | `t_cross` s | `t_lock` s | Δ |
+|---|---|---|---|---|---|
+| A | 1.25 / 2.00 / 8.00 / 19.00 | 3038.2 | 4.9400 | 4.9400 | **0.0000** |
+| B | 2.20 / 2.30 / 2.40 | 3038.2 | 4.9880 | 4.9880 | **0.0000** |
+
+⭐⭐⭐ **THE WINDOW DECIDES *WHETHER*; THE LINK BUDGET DECIDES *WHEN*.** On this wire the target is
+already inside the window when it crosses the horizon, so the first in-range look is either accepted
+or the target is never acquired at all — and the lock time is then the RANGE crossing, identical on
+every arm by construction. ⇒ **`search_t_lock_s` carries exactly two values here (4.9400 and "no
+lock") and its numeric value is evidence about the LINK BUDGET, never about the shape.**
+
+⚠⚠ **THIS IS WHY §II.4's BIT-IDENTITY IS EXACT RATHER THAN MERELY TIGHT.** Once the same tick is
+accepted on every arm, every downstream state is the same bits — the null has a mechanism, and it is
+not "the shape does not matter", it is *"the shape has already finished mattering by the time the
+first look happens."*
+
+⚠ **AND IT RETROACTIVELY NARROWS §0.1.5.** The pre-registered gauge was `search_t_lock_s`. It is a
+lock/no-lock indicator on this wire, which `docs/LESSONS.md`:880 disqualifies as a ranking gauge. The
+gauge that survives is **the MARGIN** (§III.2), and lock/no-lock stays as the REGION boundary.
+
+## §III.2 ⭐⭐⭐ P9 — THE MARGINS ARE THE ONLY THING THAT VARIES INSIDE THE BAND, AND THEY VARY HUGELY
+
+At the moment of lock on wire A, `|Δaz|` = **10.9614°** and `|Δel|` = **2.2549°** on *every* arm — the
+same tick, so the same geometry. The margins are therefore pure design:
+
+| `r` | 1.25 | 1.50 | 2.00 | 4.00 | 8.00 | 14.0 | 18.0 | 19.0 |
+|---|---|---|---|---|---|---|---|---|
+| `a` (az half-width) | 11.18 | 12.25 | 14.14 | 20.00 | 28.28 | 37.42 | 42.43 | 43.59 |
+| `b` (el half-width) | 8.94 | 8.17 | 7.07 | 5.00 | 3.54 | 2.67 | 2.36 | 2.29 |
+| **az margin** `a −\|Δaz\|` | **0.2190** | 1.2861 | 3.1808 | 9.0386 | 17.3229 | 26.4552 | 31.4651 | **32.6276** |
+| **el margin** `b −\|Δel\|` | **6.6894** | 5.9101 | 4.8162 | 2.7451 | 1.2806 | 0.4177 | 0.1021 | **0.0393** |
+
+⭐⭐⭐ **TWO MARGINS, ONE RISING AND ONE FALLING, AND THE DESIGN LIVES WHERE BOTH ARE POSITIVE.** The
+azimuth margin runs 0.219° → 32.628° across the band and the elevation margin 6.689° → 0.039°. Each
+wall is the zero-crossing of one of them, and **that is what the walls ARE.**
+
+⭐⭐ **AND IT IS THE SHARPEST SENTENCE IN THE SLICE: THE FLIGHT CANNOT RANK THESE ARMS AND THE MARGIN
+CAN.** `r` = 1.25 and `r` = 19.0 fly bit-for-bit identically over 9600 ticks (§II.4) and each is
+**less than a quarter of a degree** from a cliff — at OPPOSITE ends. `r` = 4 flies the same bits with
+9.04° and 2.75° in hand. ⚠ Not a claim about the simulator: a detector window is a THRESHOLD, so a
+design one step from failing and a design far from it produce the identical outcome until one of them
+steps over. Every number above is authorable hardware.
+
+## §III.3 P10 — F3's CORRECTED CRITERION IS A **PRICE**, AND HERE IT IS
+
+§II.6 retracted F3's wording and left *"at held cost the disc is the single point `r` = 1"*, which is
+true and **unfalsifiable** — one point cannot lose a comparison. The falsifiable replacement is the
+aperture a round window has to BUY to do what turning the same aperture on its side does for nothing:
+
+| disc | 8.00° | 8.25° | 8.50° | **8.75°** | **9.00°** | 9.25° | 9.50° | 9.75° | 10.00° |
+|---|---|---|---|---|---|---|---|---|---|
+| `Ω` deg² | 64.00 | 68.06 | 72.25 | **76.56** | **81.00** | 85.56 | 90.25 | 95.06 | 100.00 |
+| lock | ✅ 3.9420 | ✅ 4.0920 | ✅ 4.2340 | ✅ **4.3670** | **—** | — | — | — | — |
+
+⭐⭐⭐ **THE LARGEST DISC THAT STILL LOCKS SUBTENDS `Ω` ∈ [76.56, 81.00) deg².** A fan beam does it at
+`Ω` = 100. ⇒ **a round window must buy between 1.23× and 1.31× the aperture — a gain of 0.92 to
+1.16 dB — to reach a target the same glass reaches for free by being turned on its side.** That is a
+number, it is bracketed, it is falsifiable, and it is what makes held-`Ω` load-bearing.
+
+⚠ Note the direction, because it is the opposite of the intuition: the disc that works is the
+**SMALLER** one. A narrower beam is a **bigger antenna** (`G = η·4π/Ω`), so "shrink the window until
+it locks" is *"buy more aperture"*, which is slice 46's lesson and not this one.
+
+## §III.4 ⚠⚠ THE LICENCE FOR THE LIVE KNOB HAS TO BE RE-ARGUED, AND THE QUOTED SENTENCE NO LONGER FITS
+
+§2.1 justifies the derived `(Ω, aspect)` pair by quoting `docs/DEFERRALS.md`: *"⚠⚠ Slice 39's rule
+applies: a reparameterization must not ship as an ARCHITECTURE. **It ships only if it carries the
+curve above.**"* Under R1′ **there is no curve**, so the letter of that sentence is not satisfied.
+
+⇒ **The honest reading, stated rather than assumed:** slice 39's rule bars a reparameterization from
+shipping as bare machinery — it must CARRY a lesson. R1′ supplies one (the walls, the law and the two
+margins), and the knob is what makes it visible: dragging aspect is the only way a viewer drives one
+margin to zero and watches the cliff while the other margin is still eight degrees wide. The `curve`
+in that sentence was the lesson the ledger expected in September, not a condition on the machinery.
+⚠ If a reviewer disagrees, the fallback is that the shape ships AUTHORED (as slice 55 shipped it) and
+the slider is dropped — the physics, the law and the walls are unaffected either way.
+
+## §III.5 THE STANDING VERDICT AFTER PART III
+
+**THE SLICE LIVES.** Trigger **`REGIME`** — the same window, inert across a 15.2× interior and
+decisive at two walls — with a measured **`NULL`** (bit-identity, `max|Δpos|` = 0.0, published WITH
+its bound) and a **`RIVAL`** priced at 1.23–1.31× aperture (§III.3).
+
+> **THE CLAIM, AS GATE 0 LEAVES IT.** A FIXED APERTURE COVERS A TWO-AXIS UNCERTAINTY ONLY IF THE TWO
+> ERRORS MULTIPLY TO LESS THAN ITS SOLID ANGLE; INSIDE THAT BAND THE SHAPE IS FREE — BIT-FOR-BIT
+> FREE — AND THE FLIGHT WILL NOT TELL YOU HOW CLOSE YOU ARE TO EITHER EDGE. ONLY THE MARGINS WILL.
+
+⚠ Changes forced on PART I: the gauge is the **margins** (§0.1.5's `search_t_lock_s` demoted to the
+region boundary, §III.1); F3's criterion is the **price** (§III.3, replacing §0.1.4's wording); and
+the trigger is **`REGIME`**, decided by R1′ and not chosen (§II.7).
