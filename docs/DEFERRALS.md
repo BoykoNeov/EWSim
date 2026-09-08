@@ -1402,3 +1402,74 @@ candidate.** P1's "peak ≥ 3 arms wide" was calibrated against a FOUR-POINT lad
 49's PROBE wire, not on the shipped wire slice 56 flew. It passed by 8 arms so it never bit, but the
 bar was written as though the two geometries were interchangeable. Re-derive a threshold on the
 geometry you will actually fly, and name which one it came from.
+
+---
+
+# SLICE 57 — WHAT IT DISCHARGED, AND WHAT IT RAISED (2026-09-08)
+
+## Discharged
+
+**⭐⭐⭐ THE ASPECT-RATIO CANDIDATE (55) IS SHIPPED — BUT AS A `REGIME`, NOT THE `CURVE` IT WAS FILED
+AS, AND THAT DISTINCTION IS BINDING.** Slice 55 raised *"the aspect-ratio CURVE on a wire that can
+show its turning point"* and measured its reversal ONE ARM DEEP. Slice 57 built the wire — and the
+interior does not resolve at all: `max|Δpos|` is **exactly 0.0** over a **15.2×** range of aspect
+ratio. ⇒ **there is no turning point to show, and `docs/LESSONS.md`:880 disqualifies a flat interior
+as a ranking gauge.** What ships instead is the pair of WALLS and the law that predicts them, with
+the flat interior published as a measured NULL carrying its bound. As-built `docs/STATUS.md`
+§"Slice 57"; record `docs/plans/slice57.md`.
+
+**✅ THE TWO-KEY `set_param` PROBLEM (55) IS SOLVED, BY THE DERIVED PAIR AND NOT BY A WIRE CHANGE.**
+The ledger named two options and called the derived pair *"the cheaper and the more honest"*. That is
+what shipped: the author writes `(a, b)`, their PRODUCT is the budget, `gimbal_fov_aspect` carries the
+ratio, and the loader rewrites both half-widths so every downstream reader sees the flown window.
+⚠⚠ **Its licence sentence did NOT survive as written** — the ledger said a reparameterization *"ships
+only if it carries the curve above"*, and under R1′ there is no curve. The reading taken, stated as a
+reading in `docs/plans/slice57.md` §III.4: slice 39's rule bars bare machinery, R1′ supplies a lesson
+(the walls, the law, the two margins), and the knob is what makes it visible. **If a reviewer
+disagrees, the fallback is the shape AUTHORED and the slider dropped** — the physics, the law and the
+walls are unaffected either way.
+
+## New candidates raised by slice 57
+
+⚠ Read the two-test rule at the top of this file before proposing to kill any of these.
+
+**⭐⭐ A SLIDER THAT MOVES THE BAND INSTEAD OF MOVING WITHIN IT — `midcourse_err_gain`.** Slice 57
+holds the picture error fixed and moves the shape. The complement is to hold the shape and grow the
+error: both walls close in, the band narrows, and at `A·E = ω` it **vanishes**. Gate 0 already has
+three points on that curve (`A·E` = 24.72, 94.86, 112.79) and the last one is the interesting state —
+*no aspect ratio works at all.* ⚠⚠ **The gate-0 question is whether that is a second slice or the same
+one twice**: it is the SAME law read along the other axis, and convention 9 would not let both live on
+one wire. ⇒ propose it only with a gauge that is not lock/no-lock — a **band WIDTH** readout would be
+the honest one, and nothing ships one today.
+
+**⭐ THE ELLIPSE IS STILL OPEN, AND SLICE 57 MADE IT CHEAPER.** `off_axis_ratio` is the ∞-norm and the
+alternative of the same class is `hypot(Δaz/a, Δel/b)`, differing by up to √2 at the diagonal (slice
+55's bounded claim). What 55 lacked was a domain to fly it over; the aspect slider IS that domain, and
+the two norms would predict **different walls** — a `RIVAL` with a stated, measurable separation
+rather than a fidelity rung. ⚠ Slice 55's standing rule holds: a window's verdict is a property of the
+FLIGHT, so it is worth nothing un-flown.
+
+**⚠ THE PER-AXIS MECHANICAL STOP (45) IS UNCHANGED AND STILL OPEN**, and slice 57 makes its mismatch
+louder rather than quieter: this wire drags a window from 7.07° × 14.14° to 63.25° × 1.58° behind a
+CIRCULAR 45° trunnion. That is still deliberate and still documented, but anyone proposing the stop
+half must now open with slice 45's 750× null, `frames.jl`'s `√2·stop` readout hazard, AND the fact
+that two shipped wires now author windows the trunnion's shape cannot describe.
+
+**⚠ A BAND-WIDTH READOUT — recorded as a missing INSTRUMENT, not as a slice.** Every claim in slice 57
+is about an interval `[A²/ω, ω/E²]`, and nothing on the wire reports it. The HUD shows the two margins
+(which locate you inside the band) but not the band itself, so *"how much design freedom do I have"* is
+a question the picture cannot answer. ⇒ cheap, general, and it is the prerequisite for the
+`midcourse_err_gain` candidate above.
+
+## ⚠⚠ Two things slice 57 did NOT establish, and must not be quoted as if it did
+
+1. **THE NUMBERS ARE A JOINT PROPERTY OF THE ERRORS AND THE APERTURE, NOT PROPERTIES OF THE WINDOW.**
+   `[1.202, 19.668]` is `A²/ω` and `ω/E²` for ONE geometry. **The DIRECTION is physics** (too little
+   azimuth at one end, too little elevation at the other, always); the WIDTH is not — wire B's band is
+   eleven per cent wide on the same aperture. This is slice 53's *"the metres are a joint property"*
+   and slice 54's *"the count of looks is a joint property"* in a third place.
+2. **THE ACQUISITION INSTANT IS NOT EVIDENCE ABOUT SHAPE ON THIS WIRE.** `gimbal_t_acq_s` equals the
+   `R_acq` crossing to 0.0000 s on every arm, so its VALUE is the link budget's. It carries exactly two
+   states here (a number, or no lock) and ranking two windows by it is meaningless. ⚠ That is a
+   property of a CUED engagement where the target is already inside the window when the horizon is
+   crossed — not a general fact about acquisition times.

@@ -57,6 +57,7 @@ measured wrong reads exactly like a ban that was measured right.
 - **Seeker range / SNR limits AS THE UNBLOCKER** (44) — **DEAD as the unblocker**, ✅ SHIPPED by 46. ⭐⭐ **A detection gate can only price a design variable if the ENGAGEMENT launches OUTSIDE the sensor's horizon** (⚠ 50: near its EDGE). ⚠ **32/34's narrow-window failures are THE SERVO's.** ⚠⚠ **DO NOT QUOTE 44 §VII.1's "100.00 % of `a_max`"** — an r → 0 ENDGAME read.
 - ✅ **A TAIL LOBE** (49/50's candidate) — SHIPPED by 53, on the STRAIGHT FLY-PAST rather than the ledger's two-observer wire. ⚠ NOT discharged: a NARROW nozzle lobe, or a target ATTITUDE.
 - ✅ **A FAN-BEAM (rectangular) DETECTOR WINDOW** (45's window half) — SHIPPED by 55, at HELD APERTURE. ⭐⭐⭐ **A CIRCLE IS A POINT ON THE ASPECT-RATIO AXIS, NOT THE BASELINE THE AXIS IS MEASURED FROM.** `Ω = θ_az·θ_el`, so a window costs what its PRODUCT costs and the disc a box `(a,b)` trades for is the GEOMETRIC MEAN `√(ab)` — ⚠ never the arithmetic mean and never the equal-AREA radius, both of which are geometric analogies with **no consumer** in this simulator. ⚠⚠ Do NOT quote the 1039.88 → 0.09 m rescue as the headline: a rescue reads as *buying coverage* (42/43's ban, upheld by 46) and only the **MIDDLE** — tall never acquires, round acquires only with a search, wide acquires with none — cannot. ⚠ NOT discharged: the aspect-ratio CURVE (its turning point is measured but ONE ARM DEEP), the ELLIPSE, and the STOP half.
+- ✅ **THE ASPECT-RATIO AXIS AT HELD APERTURE** (55's candidate) — SHIPPED by **57**, and ⚠⚠ **AS A `REGIME`, NOT THE `CURVE` IT WAS FILED AS — do not re-propose the turning point.** The interior does not resolve: `max|Δpos|` is **exactly 0.0** across a **15.2×** range of aspect ratio, so there is nothing to rank and `docs/LESSONS.md`:880 disqualifies a flat interior as a ranking gauge. ⭐⭐⭐ **What ships is the LAW: `A²/ω ≤ r ≤ ω/E²`, a band, non-empty iff `A·E ≤ ω`** — four walls predicted on two wires, every one inside its flown bracket, and an infeasible wire where eight arms lock at no ratio at all. ⚠⚠ **THE DIRECTION IS PHYSICS, THE WIDTH IS NOT** (53/54's joint-property rule in a third place): `[1.202, 19.668]` is one geometry's and a second wire's band is eleven per cent wide on the same aperture. ⚠ The `set_param` two-key problem shipped with it as a DERIVED PAIR (the authored pair is the BUDGET; the loader rewrites both half-widths), and its ledger licence — *"only if it carries the curve"* — was read for intent rather than letter, stated as a reading in `docs/plans/slice57.md` §III.4. ⚠ NOT discharged: the ELLIPSE, the STOP half, and a slider that moves the BAND rather than within it.
 - ✅ **A GIVE-UP RULE AS THE SLIDER** (53's candidate) — SHIPPED by 54. ⚠⚠ Its ledger blocker was **STALE since slice 3** ⇒ **re-read the CONSUMER before pricing a candidate on the ledger's account of what exists.** ⚠ NOT discharged: a SECOND track (association as a contest), or M-of-N initiation.
 
 ## 3. Dead knobs that are BUGS, not features
@@ -163,3 +164,40 @@ reason for any of them.**
   metric" therefore killed a HEADLINE, not the teaching value — which is why each entry there now
   carries a trigger TAG. ⚠⚠ A tag never revives the headline the ruling killed, and `INSTRUMENT` is
   not a revival at all. Cost and evidence: `docs/DEFERRALS.md` §"THE BUILD LIST".
+
+
+---
+
+## 7. Gauges that are SOMEONE ELSE'S variable wearing your slice's name (slice 57, 2026-09-08)
+
+⚠⚠ **`gimbal_t_acq_s` / `search_t_lock_s` MUST NOT RANK TWO WINDOWS ON A CUED ENGAGEMENT.** Slice 57
+pre-registered `search_t_lock_s` as its gauge and gate 0 refused it twice: it reads −1.0 across the
+whole intercept (the head is CUED and never enters the search arm — slice 55's own shipped finding),
+and the latch that does stamp equals the tick the target crosses `R_acq` to **0.0000 s on every arm of
+two wires**. ⇒ **the window decides WHETHER and the link budget decides WHEN**; the instant is the
+horizon crossing wearing a seeker's name, and it carries exactly two states across a 15.2× design
+range. ⚠ This is a property of an engagement where the target is already inside the window when the
+horizon is crossed — **not a general claim about acquisition times**, and not a kill of either key,
+both of which remain correct readouts. Record: `docs/plans/slice57.md` §III.1; the method form is
+`docs/LESSONS.md` §"A PRE-REGISTERED GAUGE CAN BE REFUSED BY THE WIRE".
+
+⚠⚠ **AND A KILL CRITERION THAT COMPARES AT DIFFERENT COST IS NOT A CONTROL — slice 57's own F3 fired
+on exactly that and its WORDING is RETRACTED.** The 6° disc locks at 2.311 s against the held-aperture
+band's 4.940 s, and it subtends `Ω` = 36 deg² rather than 100: **it is a bigger antenna.** The
+replacement is a bracketed PRICE — the largest disc that still locks subtends `Ω` ∈ [76.56, 81.00)
+deg², so a round design must buy **1.23–1.31× the aperture (0.92–1.16 dB)**. ⚠ Two further disc arms
+(2°, 4°) are disqualified by §2's existing rule, not by taste: their horizons (15190.8 m, 7595.4 m)
+exceed the **6814 m** launch range, so they lock on the first tick with no blind phase at all.
+⚠ The retracted sentence *"at held cost the disc is a single point"* is TRUE and **unfalsifiable**;
+a single point cannot lose a comparison, and a retraction that leaves one is not finished.
+
+⚠⚠ **A HUD STRING STATED AS FACT IS A CLAIM WITH A SHELF LIFE.** Slice 55's margin line asserted
+*"the el axis is idle"* unconditionally — true at 99.7 % idle on its one authored pair, FALSE at 9 %
+on slice 57's high wall — and its neighbour quoted two slice-55 constants as fact. Both are now
+DERIVED from the wire (`Sandbox.gd`), with the idle threshold at **0.70 of the half-width**, chosen
+against four flown ratios. ⇒ **the moment a slider can move what a sentence describes, that sentence
+must be computed from the wire or deleted** — convention 13 one level up: the client may not
+recompute physics, and it may not REMEMBER it either. ⚠ Note which slice shipped the defect: **55,
+whose own UI test existed to prevent it.** ⭐ And a width tooth must be measured at a slider's
+EXTREMES — slice 57's caught a real **403 px against a 400 px column**, because no authored pair in
+this repo is wider than 12.5° and that slider's ceiling flies 63.2456°.

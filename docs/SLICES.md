@@ -2111,3 +2111,47 @@ the curve was dense, its peak was predicted rather than fitted, and it survived 
 None of them noticed that the whole thing was measuring the wrong quantity. One comparison against a
 deliberately boring control did. The four green checks were all asking *is this curve real*; only the
 fifth asked *is this curve about what I think it is about*.
+
+## Slice 57 — how much you can see, and where you are allowed to spend it (2026-09-08)
+
+A radar or a missile seeker has an antenna, and an antenna can only look at so much sky at once. Make
+the patch it watches wider and you make it dimmer, so it cannot see as far. That trade is fixed: the
+patch of sky has a fixed *area*, and the only real choice is what SHAPE to make it — wide and short,
+tall and narrow, or square. The previous slice showed that turning the same patch on its side can be
+the difference between finding a target and never seeing it. What it could not show was the other end.
+
+This one shows both ends, and the point is that there are exactly two. A missile flying on a
+stale picture of where the target is has an error in two directions at once: side to side, and up and
+down. The patch has to be wide enough for the first and tall enough for the second, and its area is
+fixed, so making it wide enough can make it too short. **There is a band of shapes that work, and
+outside it you fail for one of two entirely different reasons.**
+
+The nice part is that the band's edges can be worked out in advance from two numbers, and then
+checked. Predicted from the two pointing errors: shapes between 1.20 and 19.67 will find the target.
+Flown: it finds the target at 1.25 and at 19.0, and misses it entirely at 1.20 and at 19.7. Both
+predictions land inside their own brackets. A second, harsher setting has a band only eleven per cent
+wide — predicted 2.19 to 2.44, and the flights lock at exactly 2.20 to 2.40 and nowhere else. A third
+setting is arranged so the two errors are just too big to both fit; there the arithmetic says no shape
+can work at all, and eight of them are flown and none of them do.
+
+⭐ **The strangest result is that inside the band the flights are not merely similar, they are
+identical to the last bit** — over a fifteenfold range of shape, the same nine thousand six hundred
+steps of the same flight. That has a cause rather than being a coincidence: the shape decides *whether*
+the target is ever picked up, and the antenna's range decides *when*. Once the same instant is
+accepted, everything after it is the same. ⇒ **Two designs can fly the identical mission and not be
+equally good.** One of those identical flights is a fifth of a degree from failing one way, another is
+a fifth of a degree from failing the other way, and a third has degrees of room on both sides. Nothing
+in the outcome can tell them apart. Only the leftover room — the margin — can, which is why the two
+margins are what the display shows.
+
+⚠ **And the display was quietly lying.** The previous slice's readout ended with the words "the
+elevation axis is idle", which was true of the one shape it was written for and false of most of the
+shapes this slider can reach. The same line also quoted two numbers from that one design as if they
+were facts. Both now come from the wire, so they stay true as the shape is dragged. Checking how wide
+the text is then caught a real defect too — at the extreme end of the new slider the numbers get long
+enough to run three pixels off the edge of the panel.
+
+⚠ One of this slice's own pre-written kill tests fired, and the test was wrong rather than the slice:
+it compared the shaped patch against a round one that was *smaller*, which in antenna terms is a
+bigger and more expensive antenna. Restated as a price, the round design has to buy about a third more
+antenna to do what turning the same one on its side does for nothing.

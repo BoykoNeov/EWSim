@@ -42,21 +42,21 @@ Fixed order each `tick!`: **phase 1** `integrate!` (movers/airframe) → `empty!
 `build_env!` (cross-subsystem fields, e.g. jamming) → **phase 3** `observe!` (sensors) → **phase 4** `decide!`
 (estimators/guidance). "A missile is `integrate!` + `observe!` + `decide!`."
 
-## Where the project is (2026-09-07)
+## Where the project is (2026-09-08)
 
-**Slices 1–40 + 46–50 + 52–55 COMPLETE & green — 20158 tests.** 39, 41–45 and 56 are GATE-0 RECORDS (no code) —
+**Slices 1–40 + 46–50 + 52–55 + 57 COMPLETE & green — 20313 tests.** 39, 41–45 and 56 are GATE-0 RECORDS (no code) —
 ⚠⚠ **five in a row shipped nothing and the kill CRITERION was ruled at fault on 2026-08-18** (the two-test
 rule below); 41/44/45 are **ALIVE AS A MODEL** (probes in `W:\temp\claude\slice4N`), only 42 is dead
 outright. ⭐ **46 DISCHARGED 44, 47 DISCHARGED 43's BLOCK, 48 SHIPPED the search family and 52 ITS WIDTH** —
 CLOSED. **49/50 MADE THE ECHO A SHAPE, 53 ITS FORE/AFT ASYMMETRY**, and ⭐⭐⭐ **54 DISCHARGED 53's OWN
-give-up candidate, and 55 TURNED THE WINDOW ON ITS SIDE** (45's window half, at held aperture).
+give-up candidate, 55 TURNED THE WINDOW ON ITS SIDE** (45's window half, at held aperture) **and 57 BOUNDED THE SHAPE AT BOTH ENDS** — ⚠⚠ as a `REGIME`, never the `CURVE` it was filed as.
 **51 KILLED 50's ⭐ candidate but is NOT a "no code" record** — it shipped
 `maneuver.turn_start_s` + tests and NAMED a model gap. Pick the next from `docs/DEFERRALS.md`.
 HANDOFF §10 items 1–13 DONE; 15–40 are §11 Tier-A.
 
 The **missile seeker family (26–40, 46–48, 50, 52)** ran the radome→gimbal→receiver→search arc and is
 CLOSED. **49/50/53 moved to the ECHO ITSELF** — a shape, that shape under a seeker, then its fore/aft
-ASYMMETRY — **54 moved to the TRACKER that reads it, and 55 to the WINDOW's own SHAPE.** Per-slice detail — and every number behind the
+ASYMMETRY — **54 moved to the TRACKER that reads it, and 55/57 to the WINDOW's own SHAPE — 57 making the aperture a BUDGET.** Per-slice detail — and every number behind the
 lines below — is in `docs/SLICES.md`.
 
 - **THE HEADLINE LESSONS OF 46–54 NOW LIVE IN `docs/SLICES.md` §0** — moved 2026-09-08, verbatim, as the
@@ -89,8 +89,8 @@ discharged/new/killed candidates into `docs/DEFERRALS.md`, method lessons into `
 (⚠ fold onto the EXISTING heading when it repeats), **every new ⚠ prohibition — with its reasoning,
 its numbers and its slice cite — into `docs/PROHIBITIONS.md`**, and into `CLAUDE.md` **only** the
 state line + any new dead end's NAME AND VERDICT WORD, folded into an EXISTING line.
-⚠⚠ **`CLAUDE.md` is a ROUTER — target ~16 KB.** ⭐ **13.8 KB at 2026-09-08, and the headroom was bought by a
-STRUCTURAL MOVE, not by trimming**: the 46–54 headline bullets (2.9 KB) went to `docs/SLICES.md` §0 verbatim,
+⚠⚠ **`CLAUDE.md` is a ROUTER — target ~16 KB.** ⭐ **14.3 KB at 2026-09-08 (13.8 before slice 57's
++0.37), and the headroom was bought by a STRUCTURAL MOVE, not by trimming**: the 46–54 headline bullets (2.9 KB) went to `docs/SLICES.md` §0 verbatim,
 after the file hit 16.4 KB — over, with 9 prose trims already spent and the ritual able to afford only 8 bytes
 for a whole slice. **Numbers, test names, evidence — and the REASONING behind a prohibition — go DOWNSTREAM;
 only the state line, the verdict words, the trip-wire NAMES and the conventions stay HERE.**
@@ -128,7 +128,7 @@ listed only so it is not re-proposed as open.
 
 - **DEAD** — **a nulling-loop head servo** (39); **seeker noise × the BTT roll loop** as a COUPLING claim; **a cubic radome curve**; **an "acquisition knife-edge"** (42 gate 1).
 - **DEAD AS A LESSON, ALIVE AS A MODEL** — **memory track / a coasting head** (37); **a scalar rate-limited fin in the coupled loop** (20); **a second-order FIN actuator** (41); **a rectangular / per-axis window and stop** (45 — ⚠ the WINDOW half ✅ SHIPPED by 55, only the STOP is open); **PRICING A RE-ACQUISITION** (51). **DEAD AS THE DEFAULT, ALIVE AS A MODEL** — **an angle-domain radome corrector**.
-- **✅ SHIPPED — never re-propose as open** — **a SEEKER SEARCH PATTERN** (42/43/45 ⇒ 48, its WIDTH 52); **seeker range / SNR limits** (44 ⇒ 46); **a TAIL LOBE** (49/50 ⇒ 53); **a GIVE-UP RULE AS THE SLIDER** (53 ⇒ 54); **a FAN-BEAM WINDOW** (45 ⇒ 55, `Ω` HELD — ⚠ a circle is a POINT on the aspect axis, not the baseline). ⚠ Each carries what it did NOT discharge.
+- **✅ SHIPPED — never re-propose as open** — **a SEEKER SEARCH PATTERN** (42/43/45 ⇒ 48, its WIDTH 52); **seeker range / SNR limits** (44 ⇒ 46); **a TAIL LOBE** (49/50 ⇒ 53); **a GIVE-UP RULE AS THE SLIDER** (53 ⇒ 54); **a FAN-BEAM WINDOW** (45 ⇒ 55, `Ω` HELD — ⚠ a circle is a POINT on the aspect axis, not the baseline); **the ASPECT AXIS ITSELF** (55 ⇒ 57, with the two-key `set_param` as a DERIVED PAIR — ⚠⚠ shipped as a `REGIME`: the interior is BIT-IDENTICAL, so the walls are the lesson and there is no turning point to re-propose). ⚠ Each carries what it did NOT discharge.
 - **Dead knobs that are BUGS, not features** — `speed` (19), `k_δ` (15), `ζ` on the lag rung (40), the handover bias key (36), `(R̂,s)` (31). ⚠⚠ **Launch altitude (21) was a MODEL GAP, ✅ FIXED 2026-09-06** — `:atmosphere` was inert on `:six_dof` for 30 slices.
 - **Disqualified by non-monotonicity** (the showcase SLIDER died; the physics is SHIPPED) — `k` (28), `ω_n` (40), `σ_seek` (25), miss-vs-`K` / miss-vs-`α_stall` (20, 22), the loss COUNT (49), miss-vs-`rcs_fineness` (50), `bad`-vs-`pfa` (54).
 - **Harness traps that cost real hours** and **HUD / view traps** — ⚠⚠ each is a LIST, not a line, and every entry cost real hours: read `docs/CONVENTIONS.md` §16 (names) / §14 (teeth) before writing a probe, a verifier tooth, a gate-3 proof or a HUD branch. ⚠ Retractions: `docs/PROHIBITIONS.md` §6.

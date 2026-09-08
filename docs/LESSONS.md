@@ -1923,3 +1923,108 @@ from.** P1's "peak at least 3 arms wide" was calibrated against a FOUR-POINT lad
 49's PROBE wire, not on the shipped wire slice 56 flew. It passed by 8 arms, so the miscalibration
 never bit — but the bar was written as though the two wires were interchangeable. **Re-derive the
 threshold on the geometry you will actually fly, and say which one it came from.**
+
+---
+
+## ⭐⭐⭐ WHEN THE TRIGGER IS NOT KNOWABLE BEFORE THE PROBES, PRE-REGISTER IT AS A **BRANCH** (slice 57, 2026-09-08)
+
+Slice 53's rule is *declare the selection rule before the flights*. Slice 54's is *a pre-registered
+rule earns authority the first time it REFUSES something*. Slice 57 hit the case both rules leave
+open: **the plan could not know which of two shapes its finding had.** Its candidate was filed in
+`docs/DEFERRALS.md` as a `CURVE`, and slice 55's own F2 had already ruled that a metric which does not
+reverse is a `NULL` and not a curve — so writing "CURVE" into the plan would have **pre-registered the
+slice's own kill against a rule already in the repo.**
+
+⇒ **The plan named a rule with two arms instead of naming a trigger** (`docs/plans/slice57.md`
+§0.1.1): *R1 — the interior resolves ⇒ `CURVE`, headline is the turning point. R1′ — the interior is
+flat ⇒ `REGIME`, headline is the two WALLS, and the flat interior ships as a NULL with its bound.*
+Both arms shippable, both stated before any probe, and one probe decides which fires.
+
+**R1′ fired**: `max|Δpos|` exactly 0.0 over a 15.2× range of aspect ratio.
+
+⭐⭐ **THE PART THAT GENERALISES: a pre-registration is a commitment to a DECISION PROCEDURE, not to a
+conclusion.** Naming the trigger in advance feels like the disciplined move and is the opposite of it
+when the trigger is exactly what the probe is for — it converts an open question into a claim you then
+have to defend or retract. A branch is falsifiable in the way that matters: it fixes what counts as
+which answer, which is the only thing that can be gamed after the fact.
+⚠ It is not a licence to leave everything open. Everything ELSE in that plan — the control, the gauge,
+the four falsifiers, the predicted walls — was fixed as a single value, and one of them still fired.
+
+---
+
+## ⚠⚠ A PRE-REGISTERED GAUGE CAN BE REFUSED BY THE WIRE — ASK WHAT **SETS** IT BEFORE YOU FIX IT (slice 57, 2026-09-08)
+
+Slice 57 pre-registered `search_t_lock_s` as its gauge, inheriting it from 48/55 without asking what
+produces the number on THIS wire. Gate 0 refused it **twice over**:
+
+1. it reads **−1.0 for the whole intercept** — the head is CUED and never enters the search arm, which
+   is slice 55's own shipped finding and was in front of the author the whole time;
+2. and the latch that DOES stamp (`gimbal_t_acq_s`) equals the tick the target crosses `R_acq` to
+   **0.0000 s on every arm of two wires**. ⇒ **the window decides WHETHER and the link budget decides
+   WHEN.** The instant is the horizon crossing wearing a seeker's name.
+
+So the gauge carried exactly two values (a number, or no lock) across a 15.2× design range —
+`docs/LESSONS.md`'s own resolution objection, met by the gauge the plan had chosen to measure with.
+
+⭐⭐⭐ **THE TEST, AND IT IS ONE QUESTION: what would have to change for this number to move?** If the
+answer names something other than the thing your slider moves, it is not your gauge. Here the answer
+was "the range at which the receiver opens", which is slice 46's variable, not slice 57's.
+⚠ **AND IT ALSO EXPLAINS THE NULL, WHICH IS THE USEFUL HALF.** A bit-identical interior looked like
+"the shape does not matter"; the mechanism says *the shape has already finished mattering by the time
+the first look happens.* A null with a mechanism is a finding; a null without one is a shrug.
+
+---
+
+## ⚠⚠ A KILL CRITERION MUST COMPARE AT HELD COST — AND SLICE 57 WROTE THE MECHANISM DOWN AND THEN IGNORED IT (slice 57, 2026-09-08)
+
+`docs/plans/slice57.md` §0.1.2 introduced a varying-radius disc as the **dull rival** and said in as
+many words: *"the disc sweep moves the gauge because the REACH moves."* Two sections later §0.1.4 wrote
+the kill test: *"if the disc reaches a better gauge value at its optimum, the headline is 46's."*
+
+**It fired.** The 6° disc locks at 2.311 s against the held-aperture band's 4.940 s. And it fired for
+a reason the plan had already documented and then failed to carry across three hundred words: a 6°
+disc subtends `Ω` = 36 deg², not 100. **It is a bigger antenna.** The criterion compared two different
+costs on a slice whose entire premise is a held cost.
+
+⇒ **The repair is not a corrected threshold, it is a criterion with a UNIT: a PRICE.** The largest
+disc that still locks subtends `Ω` ∈ [76.56, 81.00) deg² against the window's 100 ⇒ a round design
+must buy **1.23–1.31× the aperture (0.92–1.16 dB)**. That is bracketed, falsifiable, and it is what
+makes "held `Ω`" load-bearing instead of asserted.
+
+⭐ **THE GENERAL FORM: when a control and a treatment differ in the thing being held, the comparison
+is not a control at all — it is a second experiment.** ⚠ And the sentence *"at held cost the disc is a
+single point"* is TRUE and **unfalsifiable**; a single point cannot lose a comparison. If a
+retraction leaves you with an unfalsifiable statement, the retraction is not finished.
+⚠⚠ Two further disc arms were disqualified by a rule that already existed rather than by taste: their
+horizons (15190.8 m, 7595.4 m) exceed the 6814 m launch range, so they lock on the FIRST TICK and have
+no blind phase (`docs/PROHIBITIONS.md` §2 — a detection gate prices a design variable only outside the
+sensor's horizon). **Reach for an existing ruling before inventing an exclusion.**
+
+---
+
+## ⚠⚠ A HUD STRING STATED AS FACT IS A CLAIM WITH A SHELF LIFE — AND A SLIDER IS WHAT EXPIRES IT (slice 57, 2026-09-08)
+
+Slice 55's margin line ended *"— the el axis is idle"*, unconditionally. On its single authored pair
+that is true beyond argument: 7.98° of an 8.0° half-width unused, 99.7 %. Slice 57 put the SHAPE on a
+slider, and at the high wall the same line reads over **0.21° of a 2.29° half-width — 9 %** — while
+still asserting the axis is idle. Its neighbour quoted *"a 10° DISC … 11.3° of azimuth"*, two
+constants from slice 55's geometry stated as fact.
+
+⇒ **Both are now DERIVED from the window the wire reports**, and slice 55's own arm still reads "el
+axis idle" because on that wire it is true. ⚠ The idle threshold is **0.70 of the half-width**, chosen
+against four FLOWN ratios (0.997, 0.767, 0.768, and the shipped arm's 0.584 / 0.494) rather than
+picked round — 0.50 called the shipped middle arm idle.
+
+⭐⭐ **THE RULE: the moment a slider can move what a sentence describes, that sentence must be computed
+from the wire or deleted.** This is convention 13 one level up — the client already may not recompute
+physics; it also may not *remember* it. ⚠ It is the slice-50 defect class (every number on screen
+correct and the sentence they add up to wrong), and note which slice shipped it: **slice 55, whose own
+UI test was written to prevent exactly this.** A HUD is correct against the wires that exist when it
+is written.
+
+⭐⭐⭐ **AND THE WIDTH TOOTH MUST BE MEASURED AT THE SLIDER'S EXTREMES, NOT AT ITS AUTHORED ARM.** It
+caught a real clip — **403 px against a 400 px column** — because no authored pair in this repo is
+wider than 12.5° and this slider's ceiling flies **63.2456°**. Every earlier width tooth measured the
+shipped arm and would have passed green while the widest arm ran off the edge. ⚠ The window size is
+never the fix: this project's HUD columns are anchored to the RIGHT edge, so a wider window moves the
+origin and clips identically. The LINE is too long.

@@ -8051,3 +8051,132 @@ code and never flown; it must not be quoted as measured.**
 ⇒ **VERDICT: DEAD AS A LESSON UNDER BOTH TRIGGERS TRIED.** The `CURVE` exists and is not specific to
 the component the slider names. Slice 49's *"Never quote the count"* is **REINSTATED VERBATIM**, with a
 second and stronger reason than the one it was written with.
+
+# Slice 57 — **THE APERTURE AS A BUDGET: THE BAND WHERE A SHAPE EXISTS** (`gimbal_fov_aspect`, 2026-09-08)
+
+**COMPLETE, all four gates.** Suite **20313 / 20313 pass** (10m24s), from slice 55's 20158 — **+155**.
+`test_determinism.jl` and the absolute golden (`test_detection.jl`'s slice-1 byte-identity block,
+`core/test/runtests.jl:39`) unchanged, both INSIDE this suite run — and here that is a CONSTRUCTION
+rather than a measurement: with no `gimbal_fov_aspect` authored, not one line of the consumer changes
+and slices 1–56 take the shipped path verbatim (`missile.jl`'s `_box` posture one level down). Full
+detail: `docs/plans/slice57.md` (§0 the pre-registration, **PART II** gate 0, **PART III** the three
+questions gate 0 raised against itself).
+
+## THE LESSON
+
+**A fixed aperture can cover a two-axis uncertainty only if the two errors MULTIPLY to less than it —
+and when they do, the shape is not free: it is pinned inside a band whose low wall is too little
+azimuth and whose high wall is too little elevation.** Inside that band the flight is bit-for-bit
+identical, so **the outcome cannot rank two designs and only the MARGINS can.**
+
+## THE LAW, PREDICTED AND THEN FLOWN
+
+With the half-width product `ω` held and the aspect ratio `r = a/b`, `a = √(ω·r)` and `b = √(ω/r)`.
+The head acquires iff some look sits inside BOTH half-widths:
+
+> **`A²/ω ≤ r ≤ ω/E²` — a band, non-empty iff `A·E ≤ ω`**, where `A` and `E` are the two pointing
+> errors the blind phase offers.
+
+`A` and `E` are read off a NULL arm (the shipped disc, which never locks on this wire and therefore
+carries the (Δaz, Δel) prefix every arm shares up to its own lock) and used as a PREDICTION. ⚠ Slice
+55's F3 retraction is the standing rule and it applies here: a window's verdict is a property of the
+FLIGHT, so the prediction is tested against flown arms, never substituted for them.
+
+| wire | tilt / gain | `A` | `E` | `A·E` vs `ω`=100 | predicted band | flown |
+|---|---|---|---|---|---|---|
+| **A — the shipped one** | 10° / 140 | 10.9614 | 2.2549 | **24.72** | `[1.202, 19.668]` | acquires 1.25…19.0, refuses 1.20 and 19.7 |
+| **B — razor-thin** | 20° / 200 | 14.8079 | 6.4060 | **94.86** | `[2.193, 2.437]` | acquires 2.20…2.40 **and nowhere else** |
+| **C — infeasible** | 25° / 200 | 14.1794 | 7.9542 | **112.79** | **EMPTY** | 8 arms, **no lock at any ratio** |
+
+⭐⭐⭐ **FOUR WALLS ON TWO INDEPENDENT WIRES, EVERY ONE INSIDE ITS OWN FLOWN BRACKET**, and the
+razor-thin band — eleven per cent wide — predicted to three significant figures. **The band empties
+exactly where `A·E` crosses `ω`**: 94.86 carries one, 112.79 carries none.
+
+## THE NULL, WITH ITS BOUND
+
+`max|Δpos|` against the `r` = 1.5 arm, 9600 ticks, wire A: **exactly 0.0 on all seven** of
+`r` = 1.25, 2, 4, 8, 14, 18, 19 — a factor of **15.2** in aspect ratio, `a` from 11.18° to 43.59°.
+
+⭐⭐⭐ **AND IT HAS A MECHANISM, WHICH IS WHY IT IS EXACT RATHER THAN TIGHT.** `gimbal_t_acq_s` equals
+the tick the target crosses `R_acq` to **0.0000 s** on every arm of both wires. **The window decides
+WHETHER; the link budget decides WHEN.** Once the same look is accepted, every downstream state is
+the same bits.
+
+## THE MARGINS — THE ONLY THING THAT VARIES INSIDE THE BAND
+
+At the acquiring tick every arm is offered the identical geometry (`|Δaz|` = 10.9614°,
+`|Δel|` = 2.2549°, the same tick), so the margins are pure design:
+
+| `r` | 1.25 | 1.50 | 2.00 | 4.00 | 8.00 | 14.0 | 18.0 | 19.0 |
+|---|---|---|---|---|---|---|---|---|
+| `a` / `b` (°) | 11.18 / 8.94 | 12.25 / 8.17 | 14.14 / 7.07 | 20.00 / 5.00 | 28.28 / 3.54 | 37.42 / 2.67 | 42.43 / 2.36 | 43.59 / 2.29 |
+| az margin (°) | **0.2190** | 1.2861 | 3.1808 | 9.0386 | 17.3229 | 26.4552 | 31.4651 | **32.6276** |
+| el margin (°) | **6.6894** | 5.9101 | 4.8162 | 2.7451 | 1.2806 | 0.4177 | 0.1021 | **0.0393** |
+
+⭐⭐⭐ `r` = 1.25 and `r` = 19.0 fly **bit-for-bit identically** and each sits **under a quarter of a
+degree from a cliff — at OPPOSITE ends.** `r` = 4 flies the same bits with 9.04° and 2.75° in hand.
+⚠ Frame-sampled (16-tick emit grid) the same pairs read 1.0533 / 6.8628 and 33.4619 / 0.2126 — the
+head has slewed ~0.83° further on by the first visible frame, so the verifier asserts FRACTIONS.
+
+## THE DULL RIVAL, PRICED
+
+`seeker_r_acq_m` is **3038.1613444 m on all 33 aspect arms**, acquiring or not. On a varying-radius
+DISC it runs **15190.8 → 675.1 m**. The largest disc that still locks subtends **`Ω` ∈ [76.56, 81.00)
+deg²** (8.75° locks, 9.00° does not) against this window's 100 ⇒ **a round window must buy 1.23–1.31×
+the aperture, 0.92–1.16 dB.** ⚠ The direction is the opposite of the intuition: the disc that works
+is the SMALLER one, because a narrower beam is a BIGGER ANTENNA.
+
+## THE BUTTON
+
+`seeker_detect: none` removes the horizon, which removes the blind phase, which is the only reason the
+picture error ever grows. Flown: aspect 0.5, 1.0, 1.2, 4.0, 19.7, 25.0 and 40.0 **all acquire at
+`t` = 0.0000 s** with `R_acq` = 0, and all seven are BIT-IDENTICAL. **Both walls disappear at once —
+the band exists only because the aperture is finite.**
+
+## WHAT SHIPPED
+
+* **Gate 1** — `rf.jl`'s `fov_from_aspect(ω, r) -> (√(ωr), √(ω/r))`, unit-agnostic by construction
+  (the seam still converts once at the consumer). Tests in `test_radar_eq.jl`: both identities over
+  four decades, `aspect == 1` is the SQUARE and **not the disc** (∞-norm vs 2-norm, √2 at the
+  diagonal), the horizon held across seven arms against the 3038.16 m anchor, the product inequality
+  against gate 0's own flown walls, and the half-angle trap as its consequence — feeding the
+  FULL-width product **halves** the horizon (gain ×¼, 6.02 dB).
+* **Gate 2** — the comp key `:gimbal_fov_aspect` plus the load-time `:gimbal_fov_hw_deg2`. The
+  authored pair is the BUDGET and **the loader REWRITES both half-widths** from `(ω, aspect)` so every
+  downstream reader sees the flown window. Three loader refusals with their own asserted TEXT; the
+  consumer re-derives per tick and clamps (convention 5). Per-look RNG draw count invariant post-lock.
+* **Gate 3** — `scenarios/slice57_aspect.yaml`, `net/slice57_verify.gd` (**14 arms, PASS**),
+  `net/slice57_ui_test.gd` (**PASS**), headless smoke-load (exit 0), windowed shot.
+
+## ⚠⚠ AND THE HUD WAS WRONG — TWO LINES, FIXED IN `Sandbox.gd`
+
+`_fanbeam_margin_text` ended *"— the el axis is idle"* **unconditionally**. True on slice 55's single
+authored pair (7.98° of 8.0° left, 99.7 %) and **FALSE at slice 57's high wall** (0.21° of 2.29°,
+9 %). `_fanbeam_cure_text` quoted *"a 10° DISC … 11.3° of azimuth"* — two hardcoded slice-55 constants
+stated as fact. Both are now DERIVED from the window the wire reports; slice 55's own arm still reads
+*"el axis idle"*, because on that wire it is true. ⚠ The idle threshold is **0.70 of the half-width**,
+chosen against four flown ratios (0.997 / 0.767 / 0.768 / 0.584-0.494) — 0.50 called the shipped
+middle arm idle.
+
+⭐ **AND THE WIDTH TOOTH CAUGHT A REAL CLIP: 403 px against a 400 px column.** No authored pair in
+this repo is wider than 12.5°; this slider's ceiling flies **63.2456°**. Measured in PIXELS at the
+slider's EXTREMES, never at its authored arm. The tails lost their articles.
+
+## THE WINDOWED SHOT
+
+Aimed at the branch this slice ADDED rather than at the climax: the HIGH wall's acquiring tick
+(aspect 19.0, `t_acq` 4.939 s, `gimbal_valid` 1). The picture reads
+`window 43.6° az x 2.3° el = 100 deg^2   reach 3038 m` over
+`margin az +33.46°  el +0.21° of 2.3° — az axis idle`, with the cure line reading *"the el axis is
+working now — narrow it and it fails"*. ⚠ A shot of the shipped arm would have landed on *"both axes
+working"* and proved nothing about the new state.
+
+## ⚠ THE ONE PRE-REGISTERED FALSIFIER THAT FIRED, AND ITS RETRACTION
+
+**F3 (the dull rival must not win) FIRED on its literal wording** — the 6° disc locks at 2.311 s
+against the band's 4.940 s. **The wording is the defect**: §0.1.2 wrote that the disc sweep moves the
+gauge *because the reach moves*, and §0.1.4 then wrote a kill test that ignored it. A 6° disc subtends
+36 deg², not 100 — it is a bigger antenna, and the comparison was between two different costs. The
+replacement is the bracketed PRICE above. ⚠ Two further disc arms (2°, 4°) are disqualified by a rule
+that already existed: their horizons (15190.8 m, 7595.4 m) exceed the **6814 m** launch range, so they
+lock on tick 1 and have no blind phase at all (`docs/PROHIBITIONS.md` §2).
