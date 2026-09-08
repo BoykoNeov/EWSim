@@ -2059,3 +2059,41 @@ scenario files side by side instead of as a slider. The second is that the scena
 search sweep rate inherited from the previous slice, where it was the entire lesson — does nothing
 here at all, at any setting, and that is deliberate. You only search because you were blind, and
 this seeker was not.
+
+
+## Slice 56 — how often you lose a target, versus how long for (gate 0, killed, 2026-09-08)
+
+A radar loses sight of a target sometimes. There are two different ways to score that: how many
+separate times it happens, and how long the worst one lasts. Slice 49 measured both, published the
+second, and wrote down a warning about the first — the number of losses goes up and then back down as
+the target gets stealthier, which made it useless as a demonstration slider. Later the project decided
+that a measurement which reverses is often the *better* lesson, because a reversal says there is a
+worst case and names where it is. This slice went to collect that one.
+
+The curve turned out to be real and much cleaner than the four rough numbers that had been recorded.
+Across eleven settings the losses climb from six to ninety-six and fall back to twenty-one, a smooth
+hill with an obvious summit. The summit is where you would predict it from theory rather than
+somewhere you have to measure and then explain: it sits where the target's typical echo is exactly as
+loud as the radar's detection threshold. Halving the simulation step changed nothing at all, which
+rules out the most common way a result like this turns out to be fake.
+
+⛔ **Then the check that was written to be able to kill it did.** The question was whether a plain,
+featureless target that is simply *dim* could produce the same hill without any shape at all. It can —
+and it produces a bigger one: a hundred and twelve losses against ninety-six. The two cases were
+matched to within a hundredth of a decibel on how loud the target typically was, and the plain dim
+target flickered *more*. ⇒ **counting losses tells you that a target is sitting on your detection
+threshold and tells you nothing about why it is there.** Being stealthy is one way to get there;
+being small is another, and the cheaper one. So this could never have been a lesson about shape.
+
+⭐ **The consolation is worth more than the headline it cost, and it is about instrumentation rather
+than radar.** The two ways of scoring answer different questions. How *often* you lose a target is a
+symptom — it says something is wrong and cannot say what. How *long* you lose it for is a diagnosis —
+a dim target is lost briefly and often, a stealthy one is lost rarely and for a minute at a time, and
+the shipped slice-49 numbers separate those by nearly ten to one. A scenario showing only the first
+would let someone read a cause that is not there.
+
+⚠ **And the method lesson is the sharpest thing here.** Four separate pre-registered checks passed —
+the curve was dense, its peak was predicted rather than fitted, and it survived halving the time step.
+None of them noticed that the whole thing was measuring the wrong quantity. One comparison against a
+deliberately boring control did. The four green checks were all asking *is this curve real*; only the
+fifth asked *is this curve about what I think it is about*.

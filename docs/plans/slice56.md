@@ -263,6 +263,15 @@ IS slice 49's gauge, and the new column beside it is measured on the same footin
 both ends** against a pre-registered bar of three. ⚠ The 41 → 133 → 53 → 42 in `docs/plans/slice49.md`
 §9 was measured on a DIFFERENT (probe) wire; on the shipped wire the peak is not one arm deep.
 
+⚠⚠ **AND THAT INVALIDATES §3.1's OWN BAR, WHICH THE NEXT READER MUST NOT REUSE.** P1's
+three-arms-above-both-ends threshold was calibrated against the peak width of the FOUR-POINT PROBE
+LADDER — a number measured on a wire this slice never flew. The bar was set from the wrong geometry,
+and it passed by a margin (8 arms) large enough that the miscalibration never mattered here.
+⭐ **The peak-width worry was never the binding constraint on this candidate**, and the only reason
+that is known is that P4 — written for a different question entirely — was run anyway. ⇒ a
+pre-registered bar inherits the wire its evidence came from, and re-deriving it on the wire you will
+actually fly is part of writing it down.
+
 **P3 PASSES** — the duration gauge is monotone non-decreasing on all eleven arms, so slice 49's
 headline survives a sweep three times denser than the one that established it.
 

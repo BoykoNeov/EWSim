@@ -876,6 +876,8 @@ event tick, and difference. Zero ⇒ your gauge is the event time wearing units.
 
 ## ⭐⭐⭐ A VOCABULARY IS A GAUGE AND MUST BE SCORED LIKE ONE (slice 50, 2026-08-26)
 
+⚠ **THIS HEADING SCORES A GAUGE FOR RESOLUTION. THERE IS A SECOND TEST AND IT IS THE ONE THAT KILLS THINGS** — see *"A GAUGE MUST BE SCORED FOR SPECIFICITY, NOT ONLY FOR RESOLUTION"* (slice 56 gate 0, at the end of this file): four probes can establish that a curve is REAL and none of them ask whether it is a curve in the thing the slider names.
+
 Every numeric gauge on this arc is scored for **resolution over its own slider's domain** — slice 28's
 `k`, 40's `ω_n`, 25's `σ_seek` and 20/22's miss were all disqualified for failing exactly that, and
 slice 50's gate 0 threw out its own pre-registered gauge partly on the same ground. **The WORDS printed
@@ -1857,3 +1859,51 @@ the acquisition only**, keyed off the slice's own latch (`gimbal_t_acq_s`), rath
 gate or a tick count. ⚠ Slice 52 met the same post-intercept re-search and fenced it the same way,
 which makes this the second occurrence and the pattern worth naming: **an engagement-scoped gauge
 needs an engagement-scoped window, and the slice's own latch is usually the right edge for it.**
+
+
+## ⭐⭐⭐ A GAUGE MUST BE SCORED FOR **SPECIFICITY**, NOT ONLY FOR RESOLUTION — RUN THE BORING CONTROL (slice 56 gate 0, 2026-09-08)
+
+Slice 50's heading above scores a gauge for **RESOLUTION over its own slider's domain** — does it
+move, and does it move enough to read? Slice 56 found the second question, and it is the one that
+kills things: **does it move for the reason the slider names?**
+
+The candidate was the loss COUNT against `rcs_fineness` on the shipped `slice49_aspect.yaml`. **Four
+pre-registered probes passed, and they were not weak probes:**
+
+- **density** — 11 arms, an interior peak 8 arms wide (6 → 96 → 21), against a bar of 3;
+- **the turning point is PREDICTED, not fitted** — `SNR* = ln(pfa)/ln(0.5) − 1 = 12.7719 dB` written
+  down before the sweep was read, crossing at `F* = 4.5943` against an argmax at 4.0;
+- **`dt`-invariance** — halving the step left the count **identical** (54/54, 96/96, 57/57), so it is
+  not slice 42's discretization artifact;
+- **the monotone companion held** — the DURATION gauge stayed monotone on all 11 arms.
+
+⛔ **Then one comparison against a deliberately BORING control refuted the whole thing.** A constant
+`rcs_m2 = 0.1` — the shape key ABSENT, no aspect model at all — produced **112 losses against the
+shaped peak's 96**, at a median in-window SNR of **14.881 dB against 14.870**. Matched to a hundredth
+of a dB on the quantity that actually drives the gauge, **the featureless target chattered MORE.**
+
+⇒ ⭐⭐⭐ **THE FOUR GREEN PROBES WERE ALL ASKING "IS THIS CURVE REAL?"; ONLY THE FIFTH ASKED "IS THIS
+CURVE ABOUT WHAT I THINK IT IS ABOUT?"** A curve can be dense, smooth, `dt`-invariant, and land
+exactly where a closed form predicts — and still be a curve in a quantity that sits DOWNSTREAM of the
+slider, where several unrelated knobs meet. Reality and specificity are independent properties and
+they need independent probes.
+
+⚠⚠ **THE CHEAP FORM OF THE TEST, and it is cheap enough that there is no excuse:** find the quantity
+your gauge is REALLY a function of (here: the median echo relative to the detector threshold), then
+drive that quantity to the SAME VALUE with the dullest other knob you have, and re-measure. If the
+dull knob reproduces the effect — or beats it — the slider is a reparameterization for this gauge and
+slice 39's rule applies. ⭐ **Match on the mediating quantity, not on the slider**: the comparison is
+only sharp because the two arms were matched to 0.011 dB, and an unmatched sweep would have looked
+like two different curves.
+
+⚠ **AND THE SURVIVING HALF IS THE SHAPE OF THE ANSWER.** The DURATION gauge on the same picture is
+specific where the count is not: the dimmest constant reaches **4.80 s** of longest loss where
+`rcs_fineness = 12` reaches **46.60 s** (9.7×). ⇒ **counting EVENTS is a symptom gauge and cannot name
+a cause; measuring their EXTENT is a diagnostic one.** When a gauge fails the specificity test, ask
+whether a neighbouring statistic on the same data passes it before abandoning the picture.
+
+⚠ **A second, smaller trap from the same run: a pre-registered BAR inherits the wire its evidence came
+from.** P1's "peak at least 3 arms wide" was calibrated against a FOUR-POINT ladder measured on slice
+49's PROBE wire, not on the shipped wire slice 56 flew. It passed by 8 arms, so the miscalibration
+never bit — but the bar was written as though the two wires were interchangeable. **Re-derive the
+threshold on the geometry you will actually fly, and say which one it came from.**

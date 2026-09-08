@@ -153,7 +153,7 @@ what each is worth to the SIMULATOR, and what would have to be built.
 
 | item | trigger | what it teaches, and what it costs |
 |---|---|---|
-| **The non-monotonicity list** — `k` (28), `ω_n` (40), `σ_seek` (25), miss-vs-`K` / `α_stall` (20, 22), the loss COUNT (49), miss-vs-`rcs_fineness` (50), `bad`-vs-`pfa` (54) | **CURVE** | ⭐⭐⭐ **SEVEN READY-MADE LESSONS, AND THE PHYSICS IS ALREADY SHIPPED FOR EVERY ONE.** They were disqualified as SHOWCASE SLIDERS because *a domain that reverses the lesson is not a domain* — but a reversal is the more valuable teaching object: it says an OPTIMUM exists and names where. ⚠ The technique is not hypothetical — slice 54 shipped N shadow arms on ONE pass, paired and drawing nothing, precisely because its argmax was noise. Cost per item: a scenario and a curve readout — **no new physics at all.** |
+| **The non-monotonicity list** — `k` (28), `ω_n` (40), `σ_seek` (25), miss-vs-`K` / `α_stall` (20, 22), the loss COUNT (49), miss-vs-`rcs_fineness` (50), `bad`-vs-`pfa` (54) | **CURVE** | ⭐⭐⭐ **SEVEN READY-MADE LESSONS, AND THE PHYSICS IS ALREADY SHIPPED FOR EVERY ONE.** They were disqualified as SHOWCASE SLIDERS because *a domain that reverses the lesson is not a domain* — but a reversal is the more valuable teaching object: it says an OPTIMUM exists and names where. ⚠ The technique is not hypothetical — slice 54 shipped N shadow arms on ONE pass, paired and drawing nothing, precisely because its argmax was noise. Cost per item: a scenario and a curve readout — **no new physics at all.** ⚠⚠⚠ **THIS CELL IS NOW MEASURABLY WRONG FOR AT LEAST ONE OF THE SEVEN AND MUST NOT BE QUOTED AS A PRICE.** The LOSS COUNT (49) was flown on 2026-09-08 and **KILLED AT GATE 0** (`docs/plans/slice56.md` §6): its curve is real, dense, `dt`-invariant and its turning point is predicted — and a constant `rcs_m2 = 0.1` with no shape key at all reproduces it and **BEATS** it (112 losses against 96) at a median SNR matched to 0.011 dB. ⇒ **"ready-made" was a claim about the PHYSICS being shipped, never about the LESSON surviving**, and the missing test is SPECIFICITY: does the gauge move for the reason the slider names? **Run that test on the remaining six before pricing any of them.** |
 | **Memory track / a coasting head** (37) | **REGIME** | The honest coast was BUILT (the head follows the tracker's coasted inertial estimate through the current attitude) and it rescued ONE boundary cell of fifteen. ⭐ **Rescuing one cell is a small effect, not a non-existent one** — and "the part that only matters at the boundary" IS the regime lesson. ⚠ Its original LESSON claim stays dead: the cure for a break in THIS arc is the ESTIMATOR's frozen rate, not the head. Cost: ship as head behaviour; the estimator-side slice remains separate. |
 | **A second-order FIN actuator** (41) | **NULL**, plus one honest open probe | The equivalence IS the finding: two `(k_α,k_q)` retunes reproduce the whole curve to 0.00–1.01 %, which teaches ⭐⭐ *you cannot tell a lag from a retune on a loop whose fin command is ONE spectral line* (1.6488 Hz). ⚠⚠ **And the scope is honestly UNPROVEN on a BROADBAND loop** — the one available probe is CONFOUNDED, because `af_I` moves the plant as well as the frequency. ⇒ the un-confounded broadband probe is real, un-run work. Cost: `W:\temp\claude\slice41` exists; a clean excitation is the missing piece. ⚠ Slice 39's rule is untouched — it may ship as authorable actuator hardware, NEVER as "the fin architecture". |
 | **A scalar rate-limited fin in the coupled loop** (20) | **REGIME / the SHADOW case** | `δ_max` structurally SHADOWS `δ̇_max`: the fin only needs to move fast when the command does, which needs high `k_α` or low damping, and both peg DEFLECTION first. ⭐ **Two limits, only one ever binds — and the shadowing is itself the fact worth authoring.** The rate limit is ALREADY SHIPPED (slice 15's `fin_autopilot_step`, `δ̇_max` with `rate_sat` telemetry). Cost: instrument both saturation flags in one view; nothing new to build. |
@@ -1347,3 +1347,58 @@ list and does not ship a second slider for it (convention 9). The honest form is
 the identity *box `(a,b)` ≡ disc `√(ab)` on a tracking arm* **conditioned on** the arm's measured
 `max|Δaz|` and `max|Δel|` staying inside both half-widths — and says so, rather than asserting an
 identity the arm gets for free.
+
+
+# SLICE 56 — WHAT IT KILLED, AND WHAT IT RAISED (2026-09-08)
+
+## Killed
+
+**⛔ THE LOSS COUNT (49) AS A `CURVE` IN `rcs_fineness` — KILLED AT GATE 0, and it is the FIRST of
+the BUILD LIST's "seven ready-made lessons" to be flown.** Full record `docs/plans/slice56.md` §6;
+as-built `docs/STATUS.md` §"Slice 56"; ruling and reasoning `docs/PROHIBITIONS.md` §4.
+
+Four pre-registered probes PASSED — an 8-arm-wide interior peak (6 14 29 54 78 96 83 57 36 26 21),
+`dt`-invariance to the digit, a monotone companion gauge on all 11 arms, and a turning point
+**predicted** by `SNR* = 12.7719 dB` (crossing `F* = 4.5943` against an argmax at 4.0). **P4 refused
+it:** a constant `rcs_m2 = 0.1`, shape key absent, gives **112 losses against 96** at a median
+in-window SNR matched to **0.011 dB**. The count is a function of the median echo's distance from the
+threshold and is blind to what put it there.
+
+⚠ **What this does NOT kill:** slice 49's DURATION headline (re-confirmed — 9.7× separation between
+the dimmest constant and the slenderest shape), `rcs_fineness` itself (MODEL test unchanged), or the
+four passing measurements, which are quotable as measurements.
+
+⚠⚠ **P0/P0b were NEVER RUN.** The shadow-arm separability argument (`docs/plans/slice56.md` §2) was
+read out of `detection.jl` / `radar.jl` and **never flown**. It is a plausible, un-verified mechanism
+and must not be cited as measured — but it is also **cheap and general**, and any future slice wanting
+N arms of a detector-side knob on ONE pass should start there.
+
+## New candidates raised by slice 56
+
+⚠ Read the two-test rule at the top of this file before proposing to kill any of these.
+
+**⭐⭐ A SYMPTOM GAUGE AND A DIAGNOSTIC GAUGE ON THE SAME PICTURE — the `INSTRUMENT` question turned
+into a radar one.** Slice 56 measured, on one wire, that **how OFTEN you lose a target and how LONG
+you lose it for answer different questions**: the count says *an echo is sitting on the threshold* and
+cannot say why, while the duration separates the reasons (dim ⇒ brief and frequent, 1.10 s at the
+constant peak; slender ⇒ rare and enormous, 46.60 s at `F` = 12). ⚠⚠ **The gate-0 question is
+whether this is a lesson about RADAR or about INSTRUMENTATION**, and the honest answer today is
+instrumentation, which `CLAUDE.md`'s trigger table rules **has NOTHING to author**. ⇒ it becomes a
+candidate only if someone finds an operator DECISION that turns on the distinction — e.g. a rule that
+must choose between "re-look" and "re-classify" — which would make it a `RIVAL` with something to
+author. **Do not propose it as a slider.**
+
+**⚠ THE REMAINING SIX OF THE NON-MONOTONICITY LIST NOW CARRY A NEW ENTRY TOLL.** `k` (28), `ω_n` (40),
+`σ_seek` (25), miss-vs-`K` / `α_stall` (20, 22), miss-vs-`rcs_fineness` (50) and `bad`-vs-`pfa` (54)
+are unchanged as records — but the price cell that bundled them was written before any of the seven
+had been flown, and the first one flown died on a test nobody had applied. ⇒ **each remaining
+proposal must open with the SPECIFICITY test** (drive the gauge's mediating quantity to the same value
+with the dullest other knob and re-measure), and **four of them additionally carry the older
+resolution objection** (`docs/LESSONS.md`:880 — `k`, `ω_n`, `σ_seek` and 20/22's miss were disqualified
+for failing resolution over their own domain, which the `CURVE` reframe does not answer).
+
+**⚠ A PRE-REGISTERED BAR INHERITS THE WIRE ITS EVIDENCE CAME FROM — recorded as a discipline, not a
+candidate.** P1's "peak ≥ 3 arms wide" was calibrated against a FOUR-POINT ladder measured on slice
+49's PROBE wire, not on the shipped wire slice 56 flew. It passed by 8 arms so it never bit, but the
+bar was written as though the two geometries were interchangeable. Re-derive a threshold on the
+geometry you will actually fly, and name which one it came from.

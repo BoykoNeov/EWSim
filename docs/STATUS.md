@@ -7978,3 +7978,76 @@ not an approximation, which is why it and not the sum- or area-matched disc has 
   are never visited and the shape is invisible to it.
 * **The mechanical STOP is still CIRCULAR** — a documented mismatch, not an oversight (slice 45's
   750× null, and `head_clamp`'s `√2·stop` readout hazard).
+
+
+## Slice 56 — THE LOSS COUNT AS A CURVE IN `rcs_fineness` — GATE-0 KILL RECORD (2026-09-08)
+
+**Not a slice — a GATE-0 KILL RECORD. No code shipped; no file under `core/` or `scenarios/` was
+touched at any point** (the probes read the shipped wire and never patched it, so there is no revert
+to prove). Full record and the pre-registration it is scored against: `docs/plans/slice56.md`; probe
+source in `W:\temp\claude\slice56\` (`p1_ladder.jl`, `p2_law.jl`).
+
+**WHY IT WAS OPENED.** `docs/PROHIBITIONS.md` §4 and `docs/DEFERRALS.md`'s BUILD LIST file the
+non-monotonicity disqualifications as **TIER 2, `CURVE`, "SEVEN READY-MADE LESSONS, AND THE PHYSICS IS
+ALREADY SHIPPED FOR EVERY ONE… no new physics at all."** The loss COUNT (49) is one of the seven, and
+it is the one with a named mechanism (*a middling body chatters at the threshold while a slender one
+drops out and stays out*) and a turning point that looked STATABLE rather than fitted. Two of slice
+49's blockers were re-read at HEAD and both had expired: `turn_start_s` shipped in slice 51, and the
+per-arm re-fly cost is zero because the fineness reaches both detector paths as a MULTIPLIER on an
+already-drawn normal (`detection.jl:236–288`, `radar.jl:1232–1245`).
+
+⭐ **THE HARNESS ORACLE PASSED FIRST, WHICH IS WHY THE KILL IS QUOTABLE.** `slice49_aspect.yaml`'s
+header publishes a seven-point ladder; this probe's gauge reproduced **all seven longest-loss columns
+at Δ = 0.0000 s** and the detected percentages to the published decimal. ⇒ the gauge IS slice 49's
+gauge, and the new column is measured on the same footing rather than beside it.
+
+**THE CURVE IS REAL — FOUR PRE-REGISTERED PROBES PASSED.** On the shipped wire, 90 s, seed 49, 900
+looks per arm, `F` = 1 … 12:
+
+| F | 1.0 | 1.5 | 2.0 | 2.5 | 3.0 | **4.0** | 5.0 | 6.0 | 8.0 | 10.0 | 12.0 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **loss COUNT** | 6 | 14 | 29 | 54 | 78 | **96** | 83 | 57 | 36 | 26 | 21 |
+| longest loss (s) | 0.20 | 0.20 | 0.20 | 0.30 | 0.60 | 1.30 | 2.80 | 5.30 | 36.50 | 40.20 | 46.60 |
+| median in-window SNR (dB) | 30.87 | 26.15 | 24.12 | 21.57 | 19.13 | 14.87 | 11.34 | 8.36 | 3.56 | −0.23 | −3.35 |
+
+- **P1 (density) PASSES** — a 16× rise to an interior peak and a 4.6× fall, **8 arms strictly above
+  both ends** against a bar of 3. ⚠ The four-point 41 → 133 → 53 → 42 in `docs/plans/slice49.md` §9 was
+  measured on a PROBE wire, not this one; ⚠⚠ the three-arm bar was therefore **calibrated on the wrong
+  geometry** and only passed so widely that it never mattered (`docs/plans/slice56.md` §6.2).
+- **P2 (the law) PASSES** — pre-registered before the sweep was read: Swerling 1 at `pfa = 1e−6` gives
+  `SNR* = ln(pfa)/ln(0.5) − 1 = 18.9316 = 12.7719 dB`; the median-SNR column crosses it at
+  **F\* = 4.5943** against an argmax at **F = 4.0**, inside the one-step window [3.0, 5.0]. **Predicted,
+  not fitted.**
+- **P3 (the companion) PASSES** — the DURATION gauge is monotone non-decreasing on all eleven arms, so
+  slice 49's headline survives a sweep three times denser than the one that set it.
+- **P5 (sample rate) PASSES EXACTLY** — halving `dt` to 5.0e−4 with the look cadence held leaves the
+  count **identical** (54/54, 96/96, 57/57) and the longest loss identical. Not slice 42's artifact.
+
+⛔⛔ **P4 KILLED IT, AND P4 IS THE ONE THAT WAS WRITTEN TO BE ABLE TO.** *"Can a CONSTANT `rcs_m2`,
+with the shape key absent entirely, reproduce the peak? Pre-registered answer: it must NOT."*
+
+| `rcs_m2` (no shape key) | 4.0 | 1.0 | 0.4 | 0.2 | **0.1** | 0.05 | 0.02 | 0.01 | 0.004 | 0.001 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **loss COUNT** | 6 | 28 | 56 | 81 | **112** | 98 | 80 | 66 | 35 | 4 |
+| longest loss (s) | 0.20 | 0.20 | 0.50 | 0.80 | 1.10 | 3.40 | 10.10 | 7.80 | 5.10 | 4.80 |
+| median SNR (dB) | 30.87 | 24.85 | 20.90 | 17.89 | **14.88** | 11.87 | 7.89 | 8.33 | 7.77 | 4.91 |
+
+⭐⭐⭐ **A DIM SPHERE DOES NOT MERELY REPRODUCE THE PEAK — IT BEATS IT, 112 AGAINST 96, AND THE MATCHED
+PAIR IS WHAT SETTLES IT.** At `rcs_m2 = 0.1` the median in-window SNR is **14.881 dB**; at
+`rcs_fineness = 4.0` it is **14.870 dB** — the same picture to a hundredth of a dB — and the counts are
+**112 and 96**. ⇒ **the count is a function of where the median echo sits relative to the threshold and
+does not care what put it there.** Shape is one road to the threshold; dimness is another, and it is
+the cheaper one. Slice 39's rule: a knob another shipped knob reparameterizes cannot carry the slice.
+
+⚠ **WHAT IS NOT KILLED.** Slice 49's DURATION headline is **re-confirmed on the way past**: the dimmest
+constant (`rcs_m2 = 0.001`) reaches only **4.80 s** of longest loss where `rcs_fineness = 12` reaches
+**46.60 s** — **9.7×** — so a constant echo still cannot buy the long blind spot and slice 49's own P2
+stands. `rcs_fineness` passes the MODEL test unchanged. The four passing probes stand as measurements.
+
+⚠⚠ **P0/P0b WERE NEVER RUN** — they are gate-1 implementation teeth for a shadow-arm mechanism that is
+now not being built. **The separability argument in `docs/plans/slice56.md` §2 was read out of the
+code and never flown; it must not be quoted as measured.**
+
+⇒ **VERDICT: DEAD AS A LESSON UNDER BOTH TRIGGERS TRIED.** The `CURVE` exists and is not specific to
+the component the slider names. Slice 49's *"Never quote the count"* is **REINSTATED VERBATIM**, with a
+second and stronger reason than the one it was written with.

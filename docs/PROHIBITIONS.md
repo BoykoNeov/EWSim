@@ -71,6 +71,37 @@ measured wrong reads exactly like a ban that was measured right.
 - **Disqualified by non-monotonicity** — `k` (28), `ω_n` (40), `σ_seek` (25), miss-vs-`K` / miss-vs-`α_stall` (20, 22), the loss COUNT (49), miss-vs-`rcs_fineness` (50), **`bad`-vs-`pfa` (54)**. ⚠ **NOT component kills — that physics is SHIPPED**; only their use as the showcase SLIDER died.
   ⇒ **TIER 2 — `CURVE`, seven ready-made lessons and NO new physics**: a reversal says an OPTIMUM exists and names where. ⭐ Slice 54 already shipped the technique.
 
+⚠⚠⚠ **AND ONE OF THE SEVEN HAS NOW BEEN FLOWN AND IT DIED — THE LOSS COUNT (49), KILLED AT
+GATE 0 ON 2026-09-08** (`docs/plans/slice56.md` §6; as-built numbers in `docs/STATUS.md` §"Slice 56").
+**Do not re-propose it, and do not price the remaining six from the "ready-made" cell without reading
+this.** The count's `CURVE` is REAL — on the shipped `slice49_aspect.yaml` it runs
+**6 14 29 54 78 96 83 57 36 26 21** over `rcs_fineness` 1…12, an interior peak **8 arms wide**, it is
+**`dt`-invariant** (54/54, 96/96, 57/57 at half the step), and its turning point is **PREDICTED**:
+`SNR* = ln(pfa)/ln(0.5) − 1 = 12.7719 dB` written down before the sweep, crossing at `F* = 4.5943`
+against an argmax at 4.0.
+
+⛔ **IT DIES ON REPARAMETERIZATION, AND THE MATCHED PAIR IS THE REASON.** A constant `rcs_m2 = 0.1`
+— the shape key ABSENT ENTIRELY — produces **112 losses against the shaped peak's 96**, at a median
+in-window SNR of **14.881 dB against 14.870**. Matched to a hundredth of a dB, **the featureless
+target chatters MORE.** ⇒ **the count is a function of where the median echo sits relative to the
+threshold and does not care what put it there.** Slenderness is one road to the threshold and dimness
+is another, cheaper one, so the count can never be a lesson about SHAPE. Slice 39's rule applies: a
+knob another shipped knob reparameterizes cannot carry the slice.
+
+⇒ **SLICE 49's *"NEVER QUOTE THE COUNT"* IS REINSTATED VERBATIM, with a SECOND and STRONGER reason
+than the one it was written with:** not merely non-monotone, but **not specific to the component the
+slider names.** ⚠ What is NOT killed: slice 49's DURATION headline is **re-confirmed** on the same run
+(the dimmest constant reaches 4.80 s of longest loss where `rcs_fineness` = 12 reaches 46.60 s —
+**9.7×**), and `rcs_fineness` passes the MODEL test unchanged.
+
+⭐⭐⭐ **THE TRANSFERABLE PART, AND IT IS A NEW TEST FOR EVERY REMAINING CANDIDATE ON THIS LIST:**
+**a gauge must be scored for SPECIFICITY, not only for RESOLUTION.** Four pre-registered probes
+established that the curve was REAL and not one of them asked whether it was a curve in the thing the
+slider names; one comparison against a deliberately boring control settled it. ⇒ **before proposing
+any of the remaining six, drive the gauge's mediating quantity to the same value with the dullest
+other knob available and re-measure.** Method detail: `docs/LESSONS.md` §"A GAUGE MUST BE SCORED FOR
+SPECIFICITY".
+
 ## 5. Harness / probe and HUD / view traps — MOVED OUT, and deliberately
 
 **They are not here.** The complete trap CHECKLIST — `emit_every` hangs, GDScript format
