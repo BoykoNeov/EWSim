@@ -2286,7 +2286,34 @@ function _observe_point3d!(s::Seeker, w::World, e::Entity, c::AbstractDict, rung
         # client's connection — so a slider dragged to zero floors to a tiny positive here, exactly
         # as the horizon's degenerates do below.
         _box     = haskey(c, :gimbal_fov_el_deg)
-        fov_el_h = _box ? max(deg2rad(Float64(c[:gimbal_fov_el_deg])), 0.0) : fov_h
+        # ⭐⭐⭐ SLICE 57 — THE SHAPE AS A LIVE HANDLE ON A HELD BUDGET. `:gimbal_fov_aspect`'s
+        # ABSENCE is the bit-identity anchor, the `_box` posture one level down: without it not one
+        # line below changes and slices 1–56 are byte-identical BY CONSTRUCTION (convention 2).
+        # With it, the two half-widths are RE-DERIVED every tick from the load-time product `ω` and
+        # the current ratio, so `a·b` — hence `Ω`, hence `aperture_gain`, hence the horizon — is
+        # held to the digit while the slider is dragged. That is the whole reason the key exists:
+        # `set_param` carries one Float64 and cannot move two keys together.
+        # ⚠ THE COMP KEYS ARE WRITTEN BACK, DELIBERATELY. Every other reader of this window — the
+        # link budget below, the telemetry block, the HUD — reads `:gimbal_fov_deg` /
+        # `:gimbal_fov_el_deg`, and a slider that moved the flown window while those kept printing
+        # the authored one is the `_fmt` defect (a control that misreports the value it is sending).
+        # ⇒ while this key is present it OWNS both half-widths, and dragging either of them directly
+        # is overwritten on the next tick.
+        # ⚠ CLAMPED AT THE CONSUMER (convention 5): `fov_from_aspect` throws a DomainError on a
+        # non-positive ratio or product BY DESIGN, and a throw inside `observe!` silently drops the
+        # client's connection — so a slider dragged to zero floors to a tiny positive here, exactly
+        # as the window's own degenerates do.
+        if _box && haskey(c, :gimbal_fov_aspect)
+            ω_hw   = max(Float64(get(c, :gimbal_fov_hw_deg2, 0.0)), 1.0e-12)
+            r_hw   = max(Float64(c[:gimbal_fov_aspect]), 1.0e-12)
+            a_d, b_d = fov_from_aspect(ω_hw, r_hw)
+            c[:gimbal_fov_deg]    = a_d
+            c[:gimbal_fov_el_deg] = b_d
+            fov_h    = max(deg2rad(a_d), 0.0)
+            fov_el_h = max(deg2rad(b_d), 0.0)
+        else
+            fov_el_h = _box ? max(deg2rad(Float64(c[:gimbal_fov_el_deg])), 0.0) : fov_h
+        end
         fov_a_c  = max(fov_h, 1.0e-12)
         fov_b_c  = max(fov_el_h, 1.0e-12)
         # ⭐⭐ SLICE 35 — THE SERVO'S MAXIMUM SLEW RATE. Slice 34's head was INFINITELY FAST: it moved

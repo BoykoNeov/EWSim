@@ -218,9 +218,9 @@ func _initialize() -> void:
 	print("S55UI_COST   '%s' | '%s'" % [w_line, r_line])
 
 	# ══ TOOTH 5 — ⭐⭐ THE MARGIN PAIR IS THE VERDICT ═══════════════════════════════════════════
-	var m_ok: String = sb._fanbeam_margin_text(AZ_MARGIN, EL_MARGIN, WIN_EL)
-	var m_out: String = sb._fanbeam_margin_text(-0.4, 3.2, WIN_EL)
-	var m_out_el: String = sb._fanbeam_margin_text(3.0, -0.2, WIN_EL)
+	var m_ok: String = sb._fanbeam_margin_text(AZ_MARGIN, EL_MARGIN, WIN_AZ, WIN_EL)
+	var m_out: String = sb._fanbeam_margin_text(-0.4, 3.2, WIN_AZ, WIN_EL)
+	var m_out_el: String = sb._fanbeam_margin_text(3.0, -0.2, WIN_AZ, WIN_EL)
 	if not ("OUTSIDE" in m_out and "OUTSIDE" in m_out_el):
 		return _fail("⭐⭐ a negative margin on EITHER axis must read OUTSIDE — the window is the ∞-norm, so a look is inside iff neither axis is over (got '%s' / '%s')" % [m_out, m_out_el])
 	if "OUTSIDE" in m_ok:
@@ -265,23 +265,23 @@ func _initialize() -> void:
 
 	# ══ TOOTH 8 — ⚠ WIDTHS, IN PIXELS ═════════════════════════════════════════════════════════
 	for s in [w_line, r_line, m_ok, m_out, s_null, s_sweep, s_found, s_off,
-			  sb._fanbeam_cure_text(false, WIN_EL, EL_MARGIN),
-			  sb._fanbeam_cure_text(true, WIN_EL, EL_MARGIN),
-			  sb._fanbeam_cure_text(true, WIN_EL, 0.2),
-			  sb._fanbeam_cure_text(false, WIN_EL, EL_MARGIN, true)]:
+			  sb._fanbeam_cure_text(false, WIN_AZ, WIN_EL, AZ_MARGIN, EL_MARGIN),
+			  sb._fanbeam_cure_text(true, WIN_AZ, WIN_EL, AZ_MARGIN, EL_MARGIN),
+			  sb._fanbeam_cure_text(true, WIN_AZ, WIN_EL, AZ_MARGIN, 0.2),
+			  sb._fanbeam_cure_text(false, WIN_AZ, WIN_EL, AZ_MARGIN, EL_MARGIN, true)]:
 		pass
 	# ⚠⚠ AND THE CURE LINE'S OWN ORDERING, which the shot caught: `_detect_blind` is a LATCH, so an
 	# ACQUIRED seeker whose blind phase is long over must not still be told it is waiting on the
 	# horizon. Two verdicts about the same instant is this family's recurring HUD failure.
-	if "waiting" in sb._fanbeam_cure_text(true, WIN_EL, EL_MARGIN, true):
+	if "waiting" in sb._fanbeam_cure_text(true, WIN_AZ, WIN_EL, AZ_MARGIN, EL_MARGIN, true):
 		return _fail("⭐⭐⭐ an ACQUIRED seeker must not read 'waiting on the horizon' just because the blind LATCH is still set — the windowed shot found exactly that beside a green SAW IT AT ONCE headline")
-	if not ("waiting" in sb._fanbeam_cure_text(false, WIN_EL, EL_MARGIN, true)):
+	if not ("waiting" in sb._fanbeam_cure_text(false, WIN_AZ, WIN_EL, AZ_MARGIN, EL_MARGIN, true)):
 		return _fail("…and a seeker that has NOT acquired and is still under the horizon must say so")
 	for s in [w_line, r_line, m_ok, m_out, s_null, s_sweep, s_found, s_off,
-			  sb._fanbeam_cure_text(false, WIN_EL, EL_MARGIN),
-			  sb._fanbeam_cure_text(true, WIN_EL, EL_MARGIN),
-			  sb._fanbeam_cure_text(true, WIN_EL, 0.2),
-			  sb._fanbeam_cure_text(false, WIN_EL, EL_MARGIN, true)]:
+			  sb._fanbeam_cure_text(false, WIN_AZ, WIN_EL, AZ_MARGIN, EL_MARGIN),
+			  sb._fanbeam_cure_text(true, WIN_AZ, WIN_EL, AZ_MARGIN, EL_MARGIN),
+			  sb._fanbeam_cure_text(true, WIN_AZ, WIN_EL, AZ_MARGIN, 0.2),
+			  sb._fanbeam_cure_text(false, WIN_AZ, WIN_EL, AZ_MARGIN, EL_MARGIN, true)]:
 		var w: float = sb._font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
 		if w > HUD_ROOM:
 			return _fail("HUD line '%s' is %.0f px wide against %.0f px of column — slice 46 shipped a CHARACTER budget that passed green while every line clipped" % [s, w, HUD_ROOM])

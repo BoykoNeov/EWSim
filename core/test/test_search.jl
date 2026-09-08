@@ -1009,8 +1009,15 @@ end
             # AUTHORED WINDOW, not in an instrument, and giving slice 55 a marker of its own would
             # make markers name FILES instead of capabilities. ⚠ What the pair is FOR is the A/B —
             # the same slider, inert on one wire and the whole lesson on the other.
+            # ⚠⚠ **FOUR CARRIERS SINCE SLICE 57, AND THE LIST IS EXTENDED AGAIN RATHER THAN
+            # LOOSENED** — the third slice in a row to meet this block by adding a name. And it is
+            # the same reason twice over: `slice57_aspect.yaml` IS `slice55_fanbeam.yaml` with the
+            # picture error tilted and the window's shape put on a slider, so it authors
+            # `:seeker_search` and takes this HUD deliberately. The three window wires differ in an
+            # AUTHORED WINDOW and in which knob is live, never in an instrument — a marker per FILE
+            # would name files instead of capabilities.
             @test carriers == ["slice48_search.yaml", "slice52_coverage.yaml",
-                               "slice55_fanbeam.yaml"]
+                               "slice55_fanbeam.yaml", "slice57_aspect.yaml"]
         end
     end
 
@@ -1665,5 +1672,307 @@ end
             end
         end
         @test isempty(leaked)
+    end
+end
+
+
+@testset "⭐⭐⭐ SLICE 57 — THE APERTURE AS A BUDGET: the shape as the one live handle" begin
+    base57 = normpath(joinpath(@__DIR__, "..", "..", "scenarios"))
+
+    # ⚠ THE REFUSAL's OWN TEXT, slice 55's discipline verbatim: a fixture missing an unrelated
+    # required key throws too, and `@test_throws ErrorException` cannot tell the two apart.
+    _refusal57(y) = try
+        load_scenario(y)
+        "NO ERROR AT ALL"
+    catch err
+        sprint(showerror, err)
+    end
+
+    @testset "THE LOADER — three refusals and the rewrite" begin
+        head = "name: t\nentities:\n  - {id: m1, kind: missile, pos: [0.0, 0.0, 0.0],\n" *
+               "     missile: {mass_kg: 140.0, speed: 700.0, elevation_deg: 12.0,\n" *
+               "               seeker: {two_angle: true, gimbal_tau_s: 0.05, "
+        # (a) WITHOUT A TWO-AXIS WINDOW there is no product to hold — the dead-knob guard.
+        let y = joinpath(mktempdir(), "s.yaml")
+            write(y, head * "gimbal_fov_deg: 10.0, gimbal_fov_aspect: 4.0}}}\n")
+            @test occursin("gimbal_fov_aspect authored without", _refusal57(y))
+        end
+        # (b) NON-POSITIVE is a zero-width window, hence an infinite gain — `gimbal_fov_el_deg`'s
+        # reason exactly, refused at LOAD while the SLIDER's own degenerate is clamped at the
+        # consumer (convention 5).
+        let y = joinpath(mktempdir(), "s.yaml")
+            write(y, head * "gimbal_fov_deg: 12.5, gimbal_fov_el_deg: 8.0, " *
+                            "gimbal_fov_aspect: 0.0}}}\n")
+            @test occursin("must be > 0", _refusal57(y))
+        end
+        # (c) and without a HEAD it is read by nothing (the `gimbal_*` family's shared guard)
+        let y = joinpath(mktempdir(), "s.yaml")
+            write(y, "name: t\nentities:\n  - {id: m1, kind: missile, pos: [0.0, 0.0, 0.0],\n" *
+                     "     missile: {mass_kg: 140.0, speed: 700.0, elevation_deg: 12.0,\n" *
+                     "               seeker: {gimbal_fov_deg: 12.5, gimbal_fov_el_deg: 8.0,\n" *
+                     "                        gimbal_fov_aspect: 4.0}}}\n")
+            @test occursin("gimbal_tau_s", _refusal57(y))
+        end
+        # ⭐⭐⭐ THE REWRITE, AND IT IS THE KEY's WHOLE SEMANTICS: the authored pair is the BUDGET,
+        # the aspect is the SHAPE, and the loader rewrites both half-widths so that every
+        # downstream reader sees the window that actually flies.
+        let y = joinpath(mktempdir(), "s.yaml")
+            write(y, head * "gimbal_fov_deg: 12.5, gimbal_fov_el_deg: 8.0, " *
+                            "gimbal_fov_aspect: 4.0}}}\n")
+            c = load_scenario(y).world.entities[:m1].comp
+            @test c[:gimbal_fov_hw_deg2] === 100.0                    # 12.5 × 8.0, the budget
+            @test c[:gimbal_fov_deg]    ≈ 20.0 atol = 1e-12           # √(100·4)
+            @test c[:gimbal_fov_el_deg] ≈  5.0 atol = 1e-12           # √(100/4)
+            @test c[:gimbal_fov_deg] * c[:gimbal_fov_el_deg] ≈ 100.0 rtol = 1e-15
+        end
+        # …and `aspect: 1.0` is the SQUARE box of half-width √ω — ⚠ NOT the disc (`off_axis_ratio`
+        # is the ∞-norm and `off_axis_angle` the 2-norm; they part by √2 at the diagonal).
+        let y = joinpath(mktempdir(), "s.yaml")
+            write(y, head * "gimbal_fov_deg: 12.5, gimbal_fov_el_deg: 8.0, " *
+                            "gimbal_fov_aspect: 1.0}}}\n")
+            c = load_scenario(y).world.entities[:m1].comp
+            @test c[:gimbal_fov_deg] ≈ 10.0 atol = 1e-12
+            @test c[:gimbal_fov_deg] === c[:gimbal_fov_el_deg]
+        end
+    end
+
+    # One flight on slice 55's shipped wire with the picture error TILTED out of the horizontal,
+    # which is what loads the unswept axis (gate 0 §II.1). `aspect` is set live, exactly as the
+    # slider would set it. ⚠ `seek_init` is latched; the flight is read for lock/no-lock and for the
+    # per-axis margins, never for the miss (`docs/PROHIBITIONS.md` §2).
+    function fly57(; aspect = nothing, fov_az = nothing, fov_el = nothing,
+                     tilt_deg = 10.0, gain = 140.0, n = 9600)
+        sc = load_scenario(joinpath(base57, "slice55_fanbeam.yaml"))
+        c  = sc.world.entities[:m1].comp
+        s, cs = sincosd(tilt_deg)
+        c[:midcourse_vel_err_mps] = Vec3(0.0, cs, s)
+        c[:midcourse_err_gain] = gain
+        if aspect === nothing
+            fov_az === nothing || (c[:gimbal_fov_deg] = fov_az)
+            fov_el === nothing || (c[:gimbal_fov_el_deg] = fov_el)
+        else
+            c[:gimbal_fov_hw_deg2] = c[:gimbal_fov_deg] * c[:gimbal_fov_el_deg]
+            c[:gimbal_fov_aspect]  = aspect
+        end
+        pos = Vector{Vec3}(); ever = false; racq = 0.0
+        az_at = NaN; el_at = NaN
+        for k in 1:n
+            tick!(sc.world, sc.subs, sc.dt_physics)
+            e = sc.world.entities[:m1]; push!(pos, e.pos)
+            tel = get(sc.world.env, :telemetry, Dict{String,Any}())
+            racq = max(racq, Float64(get(tel, "m1.seeker_r_acq_m", 0.0)))
+            if isnan(az_at) && Float64(get(tel, "m1.gimbal_valid", 0.0)) == 1.0
+                az_at = Float64(get(tel, "m1.gimbal_fov_az_margin_deg", NaN))
+                el_at = Float64(get(tel, "m1.gimbal_fov_el_margin_deg", NaN))
+            end
+            ever |= get(e.comp, :seek_init, false) === true
+        end
+        (; pos, ever, racq, az_at, el_at)
+    end
+
+    @testset "⭐⭐ F4 — THE LIVE KNOB IS THE AUTHORED ARM, BIT-FOR-BIT" begin
+        # The pre-registered falsifier (`docs/plans/slice57.md` §0.1.4 F4): if driving the aspect
+        # knob to an arm's ratio does not reproduce that arm's flight EXACTLY, the knob is a second
+        # implementation of the window and it does not ship. ⚠ `==` on the positions, not `≈`.
+        for (r, a, b) in ((1.25, sqrt(125.0), sqrt(80.0)), (4.0, 20.0, 5.0), (19.0, sqrt(1900.0), sqrt(100.0 / 19.0)))
+            live = fly57(; aspect = r)
+            auth = fly57(; fov_az = a, fov_el = b)
+            @test live.ever === auth.ever
+            @test all(p == q for (p, q) in zip(live.pos, auth.pos))
+        end
+    end
+
+    @testset "⭐⭐⭐ THE BAND — two walls, and the flight is BIT-IDENTICAL between them" begin
+        # Gate 0's wire A: the predicted band is [1.202, 19.668] and the flown one is [1.25, 19.0].
+        # ⚠ REGION, not cell (slice 48's floor posture): every arm inside is asserted, and the two
+        # arms outside are asserted to FAIL — a band whose walls are not tested is not a band.
+        inside  = [fly57(; aspect = r) for r in (1.25, 2.0, 4.0, 8.0, 14.0, 19.0)]
+        outside = [fly57(; aspect = r) for r in (1.0, 1.15, 20.5, 25.0)]
+        @test all(x -> x.ever, inside)
+        @test all(x -> !x.ever, outside)
+        # ⭐⭐⭐ THE NULL, PUBLISHED WITH ITS BOUND. Over a 15.2× range of aspect ratio every flight
+        # is the SAME BITS — the mechanism is §III.1's: the window decides WHETHER, the link budget
+        # decides WHEN, so once the same tick is accepted every downstream state is identical.
+        for x in inside[2:end]
+            @test all(p == q for (p, q) in zip(inside[1].pos, x.pos))
+        end
+        # ⭐⭐ AND THE HORIZON DOES NOT MOVE ON A SINGLE ARM, which is what makes this a comparison
+        # of SHAPE and not of cost — slice 55's gate 0 flew 27 arms that all tied because its sweep
+        # moved `Ω`. The shipped slice-48/55 figure, on every arm inside AND outside.
+        for x in vcat(inside, outside)
+            @test x.racq ≈ 3038.16 rtol = 1e-4
+        end
+    end
+
+    @testset "⭐⭐⭐ THE MARGINS ARE THE GAUGE — the flight cannot rank these arms and they can" begin
+        # ⚠⚠ THE PRE-REGISTERED GAUGE WAS `search_t_lock_s` AND GATE 0 REFUSED IT (§III.1): it
+        # equals the RANGE-crossing tick to 0.0000 s on every arm, so its value is the link budget's
+        # and it carries exactly two states here. The gauge that survives is the per-axis MARGIN,
+        # and it is the only thing on the wire that varies inside the band.
+        m = [(r, fly57(; aspect = r)) for r in (1.25, 2.0, 4.0, 8.0, 19.0)]
+        az = [x.az_at for (_, x) in m]; el = [x.el_at for (_, x) in m]
+        @test all(!isnan, az) && all(!isnan, el)
+        # (1) BOTH MARGINS ARE ≥ 0 ON EVERY LOCKING ARM — the ∞-norm's own definition, and the
+        # tooth that makes the pair the PREDICATE rather than a second opinion (slice 55).
+        @test all(≥(0.0), az) && all(≥(0.0), el)
+        # (2) ⭐ THEY MOVE IN OPPOSITE DIRECTIONS, STRICTLY — one rises as the other falls, which is
+        # what "a held budget spent differently" MEANS. Each wall is one of them reaching zero.
+        @test issorted(az) && all(az[i] < az[i + 1] for i in 1:length(az) - 1)
+        @test issorted(el; rev = true) && all(el[i] > el[i + 1] for i in 1:length(el) - 1)
+        # (3) ⭐⭐⭐ AND THE SHARPEST TOOTH IN THE SLICE: the two END arms fly BIT-IDENTICALLY and
+        # each sits under a quarter of a degree from a cliff — at OPPOSITE ends — while the middle
+        # arm flies the same bits with degrees in hand on both axes. The outcome cannot rank these
+        # designs. Gate 0's flown numbers: 0.2190 / 6.6894 at r = 1.25, 32.6276 / 0.0393 at r = 19.
+        @test az[1]   ≈ 0.2190 atol = 5e-3
+        @test el[end] ≈ 0.0393 atol = 5e-3
+        @test min(az[1], el[1]) < 0.25 && min(az[end], el[end]) < 0.25
+        @test min(az[3], el[3]) > 2.0
+        @test all(p == q for (p, q) in zip(m[1][2].pos, m[end][2].pos))
+    end
+
+    @testset "⚠ THE CONSUMER's CLAMP — a slider dragged to zero cannot crash a tick" begin
+        # Convention 5's other half: `fov_from_aspect` throws a DomainError on a non-positive ratio
+        # BY DESIGN, and a throw inside `observe!` silently drops the client's connection. The
+        # AUTHORED degenerate is refused at load (above); the reachable one floors here.
+        for r in (0.0, -1.0, -1.0e9)
+            sc = load_scenario(joinpath(base57, "slice55_fanbeam.yaml"))
+            c  = sc.world.entities[:m1].comp
+            c[:gimbal_fov_hw_deg2] = c[:gimbal_fov_deg] * c[:gimbal_fov_el_deg]
+            c[:gimbal_fov_aspect]  = r
+            for _ in 1:200
+                tick!(sc.world, sc.subs, sc.dt_physics)
+            end
+            @test isfinite(Float64(c[:gimbal_fov_deg]))
+            @test Float64(c[:gimbal_fov_deg]) > 0.0
+            tel = get(sc.world.env, :telemetry, Dict{String,Any}())
+            @test isfinite(Float64(get(tel, "m1.seeker_r_acq_m", NaN)))
+        end
+    end
+
+    @testset "⚠⚠ THE ABSENT KEY IS THE BIT-IDENTITY ANCHOR — slices 1–56 are untouched" begin
+        # Convention 2: slices are ADDITIVE. Without `:gimbal_fov_aspect` not one line of the
+        # consumer changes, so the shipped slice-55 wire must fly its shipped numbers — asserted
+        # here rather than assumed, because this slice REWRITES the two half-widths when the key IS
+        # present and a leak would be silent.
+        sc = load_scenario(joinpath(base57, "slice55_fanbeam.yaml"))
+        c  = sc.world.entities[:m1].comp
+        @test !haskey(c, :gimbal_fov_aspect)
+        @test !haskey(c, :gimbal_fov_hw_deg2)
+        @test c[:gimbal_fov_deg] === 12.5 && c[:gimbal_fov_el_deg] === 8.0
+        # ⚠ THE ACQUISITION INSTANT IS `gimbal_t_acq_s`, NOT `search_t_lock_s` — the search clock
+        # reads −1.0 over this whole intercept because the head is CUED and never enters the search
+        # arm (slice 55's own gate-3 testset above pins that). Reading the search clock here would
+        # be a green tautology against a key the wire never stamps.
+        tacq = -1.0; tlock = 0.0
+        for k in 1:9600
+            tick!(sc.world, sc.subs, sc.dt_physics)
+            tel = get(sc.world.env, :telemetry, Dict{String,Any}())
+            tacq  = Float64(get(tel, "m1.gimbal_t_acq_s", -1.0))
+            tlock = Float64(get(tel, "m1.search_t_lock_s", -1.0))
+        end
+        @test tacq ≈ 4.935 atol = 5e-3                        # the shipped slice-55 figure
+        @test tlock == -1.0                                   # …and the search clock, unstamped
+        @test c[:gimbal_fov_deg] === 12.5 && c[:gimbal_fov_el_deg] === 8.0   # never rewritten
+    end
+end
+
+@testset "⭐⭐⭐ SLICE 57 — THE SHIPPED SCENARIO (slice 57 gate 3)" begin
+    base57 = normpath(joinpath(@__DIR__, "..", "..", "scenarios"))
+
+    # The shipped wire, flown whole, with every readout the HUD draws collected as it goes.
+    # ⚠ CPA on the FIRST descending pass only (`ewsim-missile-verifier-sampling`): this arm HITS.
+    # ⚠ The acquisition instant is `gimbal_t_acq_s`; `search_t_lock_s` is −1.0 for the whole
+    # intercept because the head is CUED and never enters the search arm (slice 55's finding).
+    function fly57g3(; aspect = nothing, n = 9600)
+        sc = load_scenario(joinpath(base57, "slice57_aspect.yaml"))
+        c  = sc.world.entities[:m1].comp
+        aspect === nothing || (c[:gimbal_fov_aspect] = aspect)
+        tacq = -1.0; tlock = 0.0; racq = 0.0; bad = 0; ever = false
+        az_at = NaN; el_at = NaN; a_d = 0.0; b_d = 0.0
+        pos = Vector{Vec3}()
+        rmin = Inf; prev = Inf; closing = true
+        for k in 1:n
+            tick!(sc.world, sc.subs, sc.dt_physics)
+            e = sc.world.entities[:m1]; push!(pos, e.pos)
+            tel = get(sc.world.env, :telemetry, Dict{String,Any}())
+            tacq  = Float64(get(tel, "m1.gimbal_t_acq_s", -1.0))
+            tlock = Float64(get(tel, "m1.search_t_lock_s", -1.0))
+            racq  = max(racq, Float64(get(tel, "m1.seeker_r_acq_m", 0.0)))
+            a_d   = Float64(get(tel, "m1.gimbal_fov_deg", 0.0))
+            b_d   = Float64(get(tel, "m1.gimbal_fov_el_deg", 0.0))
+            v = Float64(get(tel, "m1.gimbal_valid", 0.0))
+            if haskey(tel, "m1.gimbal_fov_az_margin_deg")
+                az = Float64(tel["m1.gimbal_fov_az_margin_deg"])
+                el = Float64(tel["m1.gimbal_fov_el_margin_deg"])
+                v == 1.0 && (az < 0 || el < 0) && (bad += 1)
+                if isnan(az_at) && v == 1.0
+                    az_at = az; el_at = el
+                end
+            end
+            ever |= get(e.comp, :seek_init, false) === true
+            r = Float64(get(tel, "m1.los_range", Inf))
+            closing && r > prev && prev < 1e29 && (closing = false)
+            prev = r
+            closing && (rmin = min(rmin, r))
+        end
+        (; tacq, tlock, racq, bad, az_at, el_at, ever, a_d, b_d, pos, cpa = rmin)
+    end
+
+    g3 = fly57g3()
+
+    @testset "the AUTHORED PAIR IS THE BUDGET — this file does NOT fly (12.5, 8.0)" begin
+        # ⚠⚠ The key's whole semantics, asserted on the shipped file: 12.5 × 8.0 = 100 deg² is the
+        # BUDGET and `gimbal_fov_aspect: 4.0` spends it as (20.0°, 5.0°). If this ever reads
+        # (12.5, 8.0) the loader's rewrite has stopped happening and the slider is decorative.
+        @test g3.a_d ≈ 20.0 atol = 1e-9
+        @test g3.b_d ≈  5.0 atol = 1e-9
+        @test g3.a_d * g3.b_d ≈ 100.0 rtol = 1e-12
+        # ⭐ THE INVARIANT THE WHOLE SLICE RESTS ON — the horizon is slice 48/55's, to nine digits.
+        @test g3.racq ≈ 3038.1613444 rtol = 1e-9
+        @test g3.ever && g3.cpa < 1.0
+        @test g3.tacq ≈ 4.9390 atol = 2.0e-3
+        @test g3.tlock == -1.0                      # the search clock is never stamped here
+        @test g3.bad == 0                           # gimbal_valid ⇒ BOTH margins ≥ 0, every tick
+        @test g3.az_at ≈ 9.0386 atol = 1.0e-3
+        @test g3.el_at ≈ 2.7451 atol = 1.0e-3
+    end
+
+    @testset "⭐⭐⭐ THE SLIDER's OWN DOMAIN — both walls are INSIDE it, and are PREDICTED" begin
+        # The authored domain is 0.50 → 40.0 and the band is [1.202, 19.668]. Arms either side of
+        # BOTH walls, flown on the shipped file — a band whose walls are not tested is not a band.
+        for r in (0.5, 0.8, 1.0, 1.20)
+            @test !fly57g3(; aspect = r).ever                      # too little AZIMUTH
+        end
+        for r in (1.25, 2.0, 4.0, 8.0, 14.0, 19.0)
+            @test fly57g3(; aspect = r).ever
+        end
+        for r in (19.7, 25.0, 40.0)
+            @test !fly57g3(; aspect = r).ever                      # too little ELEVATION
+        end
+        # ⭐⭐⭐ AND THE PREDICTION, AGAINST AN INDEPENDENT RECOMPUTE (convention 11): the walls are
+        # A²/ω and ω/E² from the two pointing errors, computed here rather than read off the flight,
+        # and each must land inside the flown bracket above.
+        A, E, ω = 10.9614, 2.2549, 100.0
+        @test 1.20 < A^2 / ω  ≤ 1.25
+        @test 19.0 < ω / E^2  ≤ 19.7
+        @test A * E < ω                                             # a band exists at all
+    end
+
+    @testset "⭐⭐⭐ THE NULL, WITH ITS BOUND — 15.2× of shape, and the SAME BITS" begin
+        # `docs/LESSONS.md`:880's objection, met head on: the interior does not resolve, so it is
+        # shipped as a measured NULL rather than dressed up as a curve. ⚠ `==` on the positions.
+        ref = fly57g3(; aspect = 1.25)
+        for r in (2.0, 4.0, 8.0, 14.0, 19.0)
+            x = fly57g3(; aspect = r)
+            @test all(p == q for (p, q) in zip(ref.pos, x.pos))
+            @test x.tacq ≈ ref.tacq atol = 0.0
+            @test x.racq ≈ ref.racq atol = 0.0
+        end
+        # ⭐⭐ …AND THE TWO END ARMS OF THAT IDENTICAL FLIGHT ARE EACH UNDER A QUARTER OF A DEGREE
+        # FROM A CLIFF, AT OPPOSITE ENDS. The outcome cannot rank them; the margins can.
+        lo = fly57g3(; aspect = 1.25); hi = fly57g3(; aspect = 19.0)
+        @test lo.az_at < 0.25 && lo.el_at > 6.0
+        @test hi.el_at < 0.25 && hi.az_at > 32.0
+        @test all(p == q for (p, q) in zip(lo.pos, hi.pos))
     end
 end

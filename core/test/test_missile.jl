@@ -8364,12 +8364,19 @@ end
             # included. The isolation argument is unchanged and applies word for word: a saturating
             # servo would offer a second explanation for a late lock on the one wire whose entire
             # claim is that the window's SHAPE caused it.
+            # ⚠ SLICE 57 WIDENED IT AN ELEVENTH TIME AND THE ASSERT CAUGHT IT AGAIN — and this is
+            # the cheapest widening of all, because `slice57_aspect.yaml` IS `slice55_fanbeam.yaml`
+            # with the picture error tilted and the window's SHAPE on a slider. Nothing else moved,
+            # the servo included, and the isolation argument is 55's word for word: a saturating
+            # servo would offer a second explanation for a late lock on the one wire whose entire
+            # claim is that the window's shape decided it.
             @test carriers == ["slice35_rate.yaml", "slice36_biased.yaml", "slice36_handover.yaml",
                                "slice37_frame.yaml", "slice38_head_gyro.yaml",
                                "slice40_heavy.yaml", "slice40_resonance.yaml",
                                "slice46_horizon.yaml", "slice47_midcourse.yaml",
                                "slice48_search.yaml", "slice50_defensive.yaml",
-                               "slice52_coverage.yaml", "slice55_fanbeam.yaml"]
+                               "slice52_coverage.yaml", "slice55_fanbeam.yaml",
+                               "slice57_aspect.yaml"]
         end
     end
 
@@ -8477,7 +8484,13 @@ end
                              # caused it. Exempting it does not weaken this mirror; the ordering that
                              # keeps it harmless is the client's, and `slice55_ui_test.gd`'s own
                              # mirror is what proves it.
-                             "slice52_coverage.yaml", "slice55_fanbeam.yaml"]
+                             # ⚠ SLICE 57 IS THE ELEVENTH, AND EMPTIER STILL: it is slice 55's wire
+                             # with the picture error tilted and the shape on a slider. The servo is
+                             # the same authored 240 °/s and the same sentence applies with one word
+                             # changed — a saturating servo would offer a second explanation for a
+                             # wall that this wire attributes to the window's shape alone.
+                             "slice52_coverage.yaml", "slice55_fanbeam.yaml",
+                             "slice57_aspect.yaml"]
             for f in readdir(base)
                 endswith(f, ".yaml") || continue
                 f in expected_rate && continue
@@ -11567,8 +11580,13 @@ end
             # of its own, which is deliberate: the two wires differ in an AUTHORED WINDOW rather
             # than in an instrument, and a marker per scenario would be a marker per FILE instead of
             # per capability.
+            # ⚠ SLICE 57 JOINS IT for the same reason once more, and its belief is the one thing it
+            # DID change: the error direction is tilted 10° out of the horizontal so the unswept
+            # axis carries error too. The marker is still 55's — a tilted belief is the same
+            # capability pointed differently, not a new instrument.
             @test carriers == ["slice47_midcourse.yaml", "slice48_search.yaml",
-                               "slice52_coverage.yaml", "slice55_fanbeam.yaml"]
+                               "slice52_coverage.yaml", "slice55_fanbeam.yaml",
+                               "slice57_aspect.yaml"]
         end
 
         # AND THE CLIFF, FLOWN OFF THE SHIPPED FILE. Two arms one metre per second apart, straddling

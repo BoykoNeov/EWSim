@@ -3627,12 +3627,33 @@ func _fanbeam_rival_text(a: float, b: float) -> String:
 	# recomputed horizon: the metres beside it came from the core.
 	return "a %.1f° DISC costs the same and reaches no further" % sqrt(a * b)
 
-func _fanbeam_margin_text(am: float, bm: float, b: float) -> String:
+func _fanbeam_margin_text(am: float, bm: float, a: float, b: float) -> String:
 	# ⭐⭐⭐ THE GAUGE, AND IT IS THE PAIR RATHER THAN EITHER HALF. Both margins arrive from the core
 	# built off the flying predicate's own numbers, so their SIGNS are the verdict.
 	if am < 0.0 or bm < 0.0:
 		return "OUTSIDE the window: az %+.2f°  el %+.2f°" % [am, bm]
-	return "margin az %+.2f°   el %+.2f° of %.1f° — the el axis is idle" % [am, bm, b]
+	# ⚠⚠ SLICE 57 — THE TAIL IS **DERIVED**, AND IT USED TO BE A HARDCODED CLAIM. This line ended
+	# "— the el axis is idle" unconditionally, which is true on slice 55's authored arm (7.98° of
+	# 8.0° left, 99.7 %) and FALSE at slice 57's high wall, where 0.21° of a 2.29° half-width is
+	# left. A HUD that states a fact the wire disagrees with is the slice-50 defect class exactly:
+	# every number on screen correct and the sentence they add up to wrong. ⇒ the tail now names
+	# whichever axis is actually idle, or says that neither is.
+	# ⚠ THE THRESHOLD IS 0.70 OF THE HALF-WIDTH AND IT IS CHOSEN AGAINST FLOWN RATIOS, not picked
+	# round: slice 55's authored arm leaves 0.997 of its elevation (idle beyond argument), slice
+	# 57's low wall 0.767 and its high wall 0.768 on the OTHER axis, while its shipped middle arm
+	# leaves 0.584 / 0.494 — both axes doing real work. 0.50 would have called that middle arm idle.
+	# ⚠⚠ AND THE WORDING IS LENGTH-BUDGETED, WHICH SLICE 57's WIDTH TOOTH CAUGHT AT 403 px AGAINST A
+	# 400 px COLUMN. The tall end of the aspect slider prints two-digit degrees on BOTH axes plus a
+	# two-digit half-width — longer than any authored pair in the repo ever produced — so the tails
+	# lost their articles and the gap between the two margins lost a space. Slice 46 shipped a
+	# 100-CHARACTER tooth that passed green while every line clipped; this one is measured in PIXELS
+	# at the slider's EXTREMES, never at its authored arm.
+	var tail := "both axes working"
+	if bm > 0.70 * b:
+		tail = "el axis idle"
+	elif am > 0.70 * a:
+		tail = "az axis idle"
+	return "margin az %+.2f°  el %+.2f° of %.1f° — %s" % [am, bm, b, tail]
 
 func _fanbeam_search_text(has_search: bool, searched: bool, searching: bool, rate: float,
 						  t_lock: float) -> String:
@@ -3656,7 +3677,8 @@ func _fanbeam_search_text(has_search: bool, searched: bool, searching: bool, rat
 		return "the sweep found it after %.2f s" % t_lock
 	return "the sweep ran and found nothing (%.0f°/s)" % rate
 
-func _fanbeam_cure_text(acquired: bool, b: float, bm: float, blind: bool = false) -> String:
+func _fanbeam_cure_text(acquired: bool, a: float, b: float, am: float, bm: float,
+						blind: bool = false) -> String:
 	# THE TRADE, and it must name the direction that LOSES or the block ships a free lunch.
 	# ⚠⚠ `acquired` IS TESTED BEFORE `blind`, AND THE WINDOWED SHOT IS WHAT FOUND THAT ORDER. Slice
 	# 46's `_detect_blind` is a LATCH — "this seeker was blind at some point" — not a live state, so
@@ -3666,7 +3688,11 @@ func _fanbeam_cure_text(acquired: bool, b: float, bm: float, blind: bool = false
 	if acquired:
 		if bm < 0.5 * b:
 			return "the el axis is working now — narrow it and it fails"
-		return "a 10° DISC of this cost cannot reach 11.3° of azimuth"
+		# ⚠⚠ SLICE 57 — THE TWO NUMBERS WERE HARDCODED SLICE-55 CONSTANTS (a 10° disc and an 11.3°
+		# cue error) IN A SENTENCE STATED AS FACT. The disc is √(ab) and the azimuth actually being
+		# used is `a − am`, both of which the wire already carries — so the line is now DERIVED and
+		# stays true when the shape is dragged (convention 13: drawn from telemetry, never restated).
+		return "a %.1f° DISC of this cost cannot reach %.1f° of azimuth" % [sqrt(a * b), a - am]
 	if blind:
 		return "waiting on the horizon — the window is already turned"
 	return "turn the window: the same glass, spent on azimuth"
@@ -4177,7 +4203,7 @@ func _draw_fanbeam_hud_lines(vp: Vector2) -> void:
 	# COLOUR RIDES THE MARGIN PAIR rather than the acquisition latch, and that is this block's one
 	# real choice: the latch is a LATCH, so once it fires it would paint the rest of the flight calm
 	# — including the arms where a too-narrow elevation half-width loses the target back.
-	draw_string(_font, Vector2(vp.x - 430, 154), _fanbeam_margin_text(am, bm, b),
+	draw_string(_font, Vector2(vp.x - 430, 154), _fanbeam_margin_text(am, bm, a, b),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
 			Color(0.55, 1.00, 0.65) if (am >= 0.0 and bm >= 0.0) else Color(1.00, 0.62, 0.30))
 	# THE CLOCK, AND THE SENTINEL IT HAS TO EXPLAIN — cyan while sweeping, grey on the null.
@@ -4189,7 +4215,7 @@ func _draw_fanbeam_hud_lines(vp: Vector2) -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
 			Color(0.45, 0.90, 1.00) if searching else Color(0.70, 0.70, 0.75))
 	# THE TRADE.
-	draw_string(_font, Vector2(vp.x - 430, 198), _fanbeam_cure_text(acquired, b, bm, _detect_blind),
+	draw_string(_font, Vector2(vp.x - 430, 198), _fanbeam_cure_text(acquired, a, b, am, bm, _detect_blind),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, COL_TICK)
 
 func _draw_search_hud_lines(vp: Vector2) -> void:

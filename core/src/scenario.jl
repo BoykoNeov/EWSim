@@ -821,6 +821,7 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
             # demonstration. Their VALUE bounds are checked in `_validate_world`, where the
             # integrator's own stability limit is the reason for the ceiling.
             for hk in ("gimbal_stop_deg", "gimbal_fov_deg", "gimbal_fov_el_deg", "gimbal_rate_dps",
+                       "gimbal_fov_aspect",
                        "gimbal_handover_err_deg", "gimbal_omega_hz", "gimbal_zeta",
                        "head_gyro_scale_err", "head_gyro_bias_y", "head_gyro_bias_z")
                 haskey(sb, hk) || continue
@@ -828,6 +829,7 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                     error("missile '$id': seeker.$hk authored without seeker.gimbal_tau_s — " *
                           "it is read only inside the gimbal head, so without one this knob is " *
                           "DEAD (slice $(hk == "gimbal_rate_dps" ? 35 :
+                                         hk == "gimbal_fov_aspect" ? 57 :
                                          hk == "gimbal_handover_err_deg" ? 36 :
                                          hk in ("gimbal_omega_hz", "gimbal_zeta") ? 40 :
                                          hk == "gimbal_fov_el_deg" ? 55 :
@@ -861,6 +863,47 @@ function _build_entity(id::Symbol, kind::Symbol, ent::AbstractDict)
                           "(got $(comp[:gimbal_fov_el_deg])) — a zero-height window can never be " *
                           "satisfied, and through `aperture_gain` it is an INFINITE gain and an " *
                           "infinite horizon (slice 55)")
+            end
+            # ⭐⭐⭐ SLICE 57 — THE APERTURE AS A BUDGET, AND THE SHAPE AS THE ONE LIVE HANDLE ON IT.
+            # `set_param` carries a single Float64, so no drag can hold `a·b` constant while moving
+            # both half-widths — which is why slice 55 shipped its shape AUTHORED and contrasted two
+            # FILES. This key is the derived pair `docs/DEFERRALS.md` named as the cheaper and more
+            # honest of the two options: the author still writes `(a, b)`, **their PRODUCT is the
+            # budget**, and the ratio is what moves.
+            #
+            # ⚠⚠ THE AUTHORED PAIR IS THE BUDGET, NOT NECESSARILY THE FLOWN WINDOW — and the loader
+            # REWRITES both keys from `(ω, aspect)` so that every downstream reader (the link
+            # budget, `_box`, the telemetry, the HUD) sees the window that actually flies. Author
+            # `(12.5, 8.0)` with `gimbal_fov_aspect: 4.0` and the wire flies `(20.0, 5.0)`: the same
+            # 100 deg² of aperture, the same 3038.2 m horizon, a different shape. ⇒ **a wire that
+            # wants its YAML to read literally simply omits this key**, which is slices 1–56.
+            #
+            # ⚠ REFUSED WITHOUT A TWO-AXIS WINDOW: with only `gimbal_fov_deg` there is no product to
+            # hold and the "budget" would be a single number reshaped against itself — the key would
+            # be read by nothing, which is the `speed` (19) / handover-bias (36) shape this loader
+            # exists to prevent. ⚠ REFUSED NON-POSITIVE for `gimbal_fov_el_deg`'s reason exactly: a
+            # zero ratio is a zero half-width, an infinite gain and an infinite horizon. The
+            # reachable degenerate on the SLIDER is clamped at the consumer (convention 5); the
+            # AUTHORED one is refused here.
+            if haskey(sb, "gimbal_fov_aspect")
+                haskey(sb, "gimbal_fov_el_deg") ||
+                    error("missile '$id': seeker.gimbal_fov_aspect authored without " *
+                          "seeker.gimbal_fov_el_deg — the aspect ratio re-shapes a TWO-AXIS " *
+                          "window at held aperture, so it needs both half-widths to have a " *
+                          "product to hold; with one number there is no budget and this key " *
+                          "would be read by nothing (slice 57)")
+                comp[:gimbal_fov_aspect] > 0 ||
+                    error("missile '$id': seeker.gimbal_fov_aspect must be > 0 " *
+                          "(got $(comp[:gimbal_fov_aspect])) — a non-positive ratio is a " *
+                          "zero-width window, hence an INFINITE gain and an infinite horizon " *
+                          "(slice 57, `gimbal_fov_el_deg`'s reason exactly)")
+                # THE BUDGET, IN THE AUTHORED UNIT. Half-widths in DEGREES, so `ω` is deg² and
+                # `fov_from_aspect` hands degrees back — it is unit-agnostic by construction and the
+                # seam still converts exactly once, at the consumer (slice 35's posture).
+                ω_hw = comp[:gimbal_fov_deg] * comp[:gimbal_fov_el_deg]
+                comp[:gimbal_fov_hw_deg2] = ω_hw
+                comp[:gimbal_fov_deg], comp[:gimbal_fov_el_deg] =
+                    fov_from_aspect(ω_hw, comp[:gimbal_fov_aspect])
             end
             # ⭐⭐⭐ SLICE 48 — THE SEARCH PATTERN: what the head does when the receiver opens and
             # the target is NOT there. Slice 47 leaves the missile pointed where the launch-time

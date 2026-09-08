@@ -1,0 +1,217 @@
+# slice57_aspect — THE APERTURE IS A BUDGET: WHERE YOU SPEND IT IS BOUNDED AT BOTH ENDS
+# (HANDOFF §11 Tier-A, slice 57 gate 3). This is `slice55_fanbeam.yaml`'s wire — the same link
+# budget, the same trunnion, the same servo, the same seed, the same launch, the same target and
+# the same 100 deg² of aperture — with TWO authored differences:
+#
+#     guidance.midcourse_vel_err_mps  [0, 1, 0]  ->  [0, 0.984807753, 0.173648178]   (tilted 10°)
+#     seeker.gimbal_fov_aspect                   ->  4.0        (NEW, slice 57 — the live handle)
+#
+# ⭐⭐⭐ THE TILT IS THE WHOLE REASON THIS WIRE EXISTS. Slice 55's picture error is horizontal, so
+# only the AZIMUTH axis ever carries error and the elevation half-width can be spent down to
+# 0.667° for free — its own gate 0 measured widening as monotone-better out to 150°, and published
+# that as a falsifier that FIRED. Tilt the same error 10° out of the horizontal and the unswept
+# axis carries 2.25° of its own. Now BOTH half-widths are load-bearing, the budget binds, and the
+# design question has two ends instead of one.
+#
+# > THE LESSON, IN ONE SENTENCE. A fixed aperture can cover a two-axis uncertainty only if the two
+# > errors MULTIPLY to less than it — and when they do, the shape is not free: it is pinned inside
+# > a band whose low wall is too little azimuth and whose high wall is too little elevation.
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# THE LAW, AND IT IS PREDICTED RATHER THAN FITTED (gate 0 §II.1/§II.3, `docs/plans/slice57.md`)
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# With the half-width product ω held and the aspect ratio r = a/b, a = √(ω·r) and b = √(ω/r). The
+# head acquires iff some look sits inside BOTH half-widths, i.e.
+#
+#       A²/ω  ≤  r  ≤  ω/E²          a BAND, non-empty iff  A·E ≤ ω
+#
+# where A and E are the two pointing errors the blind phase offers. On this wire A = 10.9614° and
+# E = 2.2549°, so the band is predicted **[1.202, 19.668]** BEFORE any arm is flown. Flown on THIS
+# file, the slider acquires over [1.25, 19.0] and refuses at 1.20 and 19.7 — so each predicted wall
+# sits inside its own flown bracket, (1.20, 1.25] and (19.0, 19.7], with nothing fitted.
+#
+#     aspect r     0.5   1.0  1.20 | 1.25   2.0   4.0   8.0  14.0  19.0 | 19.7  25.0  40.0
+#     a (az)°     7.07 10.00 10.95 |11.18 14.14 20.00 28.28 37.42 43.59 |44.38 50.00 63.25
+#     b (el)°    14.14 10.00  9.13 | 8.94  7.07  5.00  3.54  2.67  2.29 | 2.25  2.00  1.58
+#     acquires?     no    no    no |  YES   YES   YES   YES   YES   YES |   no    no    no
+#
+# ⚠ EVERY ACQUIRING ARM STAMPS THE IDENTICAL `gimbal_t_acq_s` = 4.9390 s and the identical
+# `seeker_r_acq_m` = 3038.1613444 m. The horizon is held BY CONSTRUCTION (the product is held); the
+# instant is held because it IS the horizon crossing — see the next block.
+#
+# ⭐⭐⭐ AND A SECOND WIRE PINS THE LAW WHERE IT IS HARDEST: tilt the same error to 20° at gain 200
+# and A·E = 94.86 against ω = 100 — a band **eleven per cent wide**, predicted [2.193, 2.437], and
+# the flown arms lock at exactly 2.20–2.40 and nowhere else. Tilt it to 25° and A·E = 112.79 > ω:
+# the band is EMPTY and eight arms fly without a lock at any aspect ratio whatsoever. That is the
+# inequality refusing something, which is the only way a rule earns authority (slice 54).
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# ⚠⚠ WHAT THE FLIGHT WILL NOT TELL YOU — READ THIS BEFORE READING THE SLIDER
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# INSIDE the band every arm is BIT-IDENTICAL: `max|Δpos|` is exactly 0.0 over 9600 ticks from
+# r = 1.25 to r = 19.0, a factor of 15.2 in shape, `a` from 11.18° to 43.59°. The mechanism is not
+# "shape does not matter" — it is that the window decides WHETHER and the link budget decides WHEN.
+# The acquisition instant equals the tick the target crosses `R_acq` to 0.0000 s on every arm, so
+# once the same look is accepted, every downstream state is the same bits.
+#
+# ⇒ ⭐⭐⭐ **A BIT-IDENTICAL FLIGHT IS NOT AN EQUALLY GOOD DESIGN, AND THE MARGINS ARE THE ONLY
+# THING ON THE WIRE THAT KNOWS IT.** At the acquiring tick every arm is offered the same geometry
+# (|Δaz| = 10.9614°, |Δel| = 2.2549°), so the margins are pure design:
+#
+#     aspect r        1.25     1.50     2.00     4.00     8.00    14.00    18.00    19.00
+#     az margin°    0.2190   1.2861   3.1808   9.0386  17.3229  26.4552  31.4651  32.6276
+#     el margin°    6.6894   5.9101   4.8162   2.7451   1.2806   0.4177   0.1021   0.0393
+#
+# r = 1.25 and r = 19.0 fly the same bits and each is under a QUARTER OF A DEGREE from a cliff — at
+# OPPOSITE ends. r = 4.0 flies the same bits with 9.04° and 2.75° in hand. Watch the two margins,
+# not the trajectory: dragging the slider closes one while it opens the other, and each wall is one
+# of them reaching zero.
+#
+# ⚠⚠ THE GAUGE THIS SLICE PRE-REGISTERED WAS `search_t_lock_s` AND GATE 0 REFUSED IT — twice over.
+# It reads −1.0 for the whole intercept (the head is CUED and never enters the search arm, slice
+# 55's own finding), and where an acquisition instant exists at all it is the RANGE crossing. A
+# number that is the link budget's cannot rank two windows. See `docs/LESSONS.md`:880 — four earlier
+# candidates died for failing resolution over their own domain, and a flat interior is that defect.
+# The EDGES carry this lesson and the interior is shipped as a measured NULL with its bound.
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# ⚠⚠ WHAT THIS SCENARIO DOES **NOT** CLAIM
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#  1. **NOT "wider is better" and NOT "narrower is better".** Both are disqualified — the first is
+#     `gimbal_fov_deg`'s own two-sidedness (48) and slice 46's ban on *a wider window is free*; the
+#     second is this file's high wall. The claim is about a BAND, and it has two ends.
+#  2. **NOT that a round window is simply worse.** A disc reaches this target perfectly well — by
+#     being SMALLER, hence a BIGGER ANTENNA. The largest disc that still locks subtends 76.56 deg²
+#     against this window's 100, so a round design buys 1.23–1.31× the aperture (0.92–1.16 dB) to
+#     do what turning the same glass on its side does for nothing. ⚠ Two disc arms in gate 0's
+#     control (2° and 4°) lock on the FIRST TICK and are disqualified, not quoted: their horizons
+#     (15190 m, 7595 m) exceed the 6814 m launch range, so they have no blind phase at all — slice
+#     46's rule, that a detection gate prices a design variable only outside the sensor's horizon.
+#  3. **NOT a claim about fan beams in general.** The window is SEPARABLE (a box in angle space),
+#     a NAMED APPROXIMATION of the same class the circular window already was; the ellipse is a
+#     third answer and differs by up to √2 at the diagonal.
+#  4. **NOT transferable to a TRACKING head.** A tracker holds both axes near zero, so the corners
+#     are never visited and the shape is invisible to it. Everything here is about a head that is
+#     CUED — the state a midcourse missile actually flies in.
+#  5. **The mechanical STOP is still CIRCULAR** — slice 55's documented mismatch, inherited: a
+#     per-axis stop is a separate open candidate carrying its own 750× null (slice 45).
+#
+# NAMED APPROXIMATIONS (§1): everything slice 55 named, unchanged — a separable window with
+# Ω = θ_az·θ_el, no taper difference between the axes, no sidelobes, one `detect_eta` for both
+# axes, a single-axis symmetric triangle sweep in body azimuth, one snapshot dead-reckoned at
+# constant velocity, no datalink update, no INS drift, a non-manoeuvring target — plus slice 57's
+# own: the picture error is authored, deterministic and now THREE-DIMENSIONAL.
+#
+# UNITS (§1 trifecta): `gimbal_fov_aspect` is DIMENSIONLESS — a ratio of two half-widths — so it
+# carries no unit suffix (slice 35's rule: the name carries the unit only where there is a time in
+# it). ⚠⚠ THE AUTHORED PAIR IS THE BUDGET, NOT THE FLOWN WINDOW: `12.5 × 8.0` sets ω = 100 deg²
+# and `gimbal_fov_aspect: 4.0` re-shapes it, so this file FLIES (20.0°, 5.0°). The loader rewrites
+# both half-widths at load so every downstream reader — the link budget, the telemetry, the HUD —
+# sees the window that actually flies. A wire that wants its YAML read literally omits the key.
+# dt = 1e-3 / emit_every = 16.
+name: slice57_aspect
+seed: 32
+dt_physics: 1.0e-3
+emit_every: 16
+
+fidelity:
+  # SLICE 46/47/48/55's SIX KEYS, UNCHANGED TO THE DIGIT.
+  airframe: six_dof
+  autopilot: alpha
+  guidance: pn
+  seeker: filtered
+  seeker_axes: az_el
+  # ⭐⭐⭐ THE BUTTON, AND IT IS SHARPER HERE THAN ON ANY EARLIER WIRE — MEASURED, NOT ASSERTED.
+  # Press it and the horizon goes away, which removes the BLIND PHASE, which is the only reason the
+  # picture error ever grows: the belief is exact at handover and drifts with time, so a seeker that
+  # can see from the first tick is never offered a pointing error at all. ⇒ **BOTH WALLS DISAPPEAR
+  # AT ONCE.** Flown: with `seeker_detect: none`, aspect 0.5, 1.0, 1.2, 4.0, 19.7, 25.0 and 40.0 all
+  # acquire at t = 0.0000 s with `seeker_r_acq_m` = 0, and all seven are BIT-IDENTICAL to each other
+  # (`max|Δpos|` = 0.0 over 9600 ticks). *The band exists only because the aperture is finite.*
+  seeker_detect: snr
+
+entities:
+  # The interceptor — slice 55's, to the digit, with ONE key added.
+  - id: m1
+    kind: missile
+    pos: [0.0, 0.0, 3000.0]
+    missile:
+      mass_kg: 140.0
+      speed: 700.0
+      elevation_deg: 12.0
+      cd_area_m2: 0.0
+      rho: 1.0
+      # ⚠⚠ THE PRODUCT IS THE POINT AND THE PAIR IS NOT WHAT FLIES: 12.5 × 8.0 = 100 = 10 × 10 is
+      # the BUDGET, and `gimbal_fov_aspect: 4.0` spends it as (20.0°, 5.0°). Every arm of the
+      # slider holds that product to the digit, so `seeker_r_acq_m` is 3038.2 m on all of them —
+      # which is the only reason dragging this slider measures SHAPE and not REACH. Slice 55's
+      # gate 0 flew 27 arms that all tied their controls because its sweep moved the cost too.
+      seeker: {sigma_seek: 5.0e-5, alpha: 0.30, beta: 0.05, two_angle: true,
+               gimbal_tau_s: 0.05, gimbal_stop_deg: 45.0,
+               gimbal_fov_deg: 12.5, gimbal_fov_el_deg: 8.0, gimbal_fov_aspect: 4.0,
+               gimbal_rate_dps: 240.0,
+               seeker_search: true, seeker_search_coverage_deg: 25.0,
+               seeker_search_rate_dps: 0.0,
+               detect_pt_w: 200.0, detect_freq_hz: 16.0e9, detect_tint_s: 0.010,
+               detect_nf_db: 4.0, detect_loss_db: 5.0, detect_eta: 0.6,
+               detect_snr_min_db: 10.0}
+      # ⚠ THE ONE OTHER CHANGE FROM SLICE 55, AND IT IS WHAT MAKES THE SECOND AXIS REAL. The unit
+      # direction is tilted 10° out of the horizontal — cos 10° = 0.984807753, sin 10° = 0.173648178
+      # — so the same 140 m/s of belief error now lands 2.2549° of it on the axis the sweep does
+      # not sweep. ⚠ Kept UNIT length (slice 47's rule) even though the gain is not a slider here:
+      # the direction carries the shape and the gain carries the size, always.
+      guidance: {n_pn: 8.0, a_max: 3000.0, delta_max: 0.5, k_alpha: 1.0, k_q: 0.3,
+                 midcourse: true, midcourse_k: 1.0,
+                 midcourse_vel_err_mps: [0.0, 0.984807753, 0.173648178],
+                 midcourse_err_gain: 140.0}
+      airframe:
+        ref_len_m: 0.2
+        inertia_kgm2: 20.0
+        cma: -1.0
+        cmd: 3.0
+        cmq: -150.0
+        cla: 20.0
+        alpha_max: 0.3
+        cy_beta: 20.0
+        inertia_roll_kgm2: 2.0
+        inertia_yaw_kgm2: 20.0
+        c_roll: 50.0
+  # THE TARGET IS SLICE 48/55's, UNCHANGED — an A/B whose target moved would measure two things.
+  - id: tgt1
+    kind: target
+    pos: [6000.0, 3000.0, 4200.0]
+    vel: [0.0, -200.0, 0.0]
+    target: {rcs_m2: 0.020, cross_speed_mps: -200.0}
+
+knobs:
+  # ⭐⭐ EXACTLY ONE LIVE KNOB (convention 9), AND IT IS THE ONE `set_param` COULD NOT CARRY UNTIL
+  # THIS SLICE. The obvious slider — drag `gimbal_fov_el_deg` — is the trap slice 55 named and
+  # measured: it moves `Ω`, hence the gain, hence the horizon, so it teaches REACH while appearing
+  # to teach SHAPE. Holding `Ω` needs BOTH half-widths moved together, and the wire carries one
+  # Float64. ⇒ the AUTHOR writes the two half-widths (their product is the budget) and the SLIDER
+  # carries the ratio; the consumer re-derives the pair every tick. Slice 39's rule is respected
+  # because the reparameterization is not shipping as an architecture — it is shipping because it
+  # is the only way this lesson has a slider at all.
+  #
+  # ⚠ THE DOMAIN IS CHOSEN TO PUT BOTH WALLS WELL INSIDE IT: the band is [1.202, 19.668] and the
+  # slider runs 0.50 → 40.0, so there are arms either side of each wall and the flat interior is
+  # visible as what it is. ⚠ Dragged to its floor the ratio is CLAMPED at the consumer, never
+  # refused: a throw inside a tick drops the connection (convention 5).
+  # ⚠⚠ THE SHIPPED ARM IS 4.0, WHICH IS NEAR THE MIDDLE OF THE BAND AND THAT IS DELIBERATE — it
+  # opens with 9.04° and 2.75° of margin in hand, so the first thing a viewer does is drag it and
+  # watch a comfortable design walk to a cliff in EITHER direction without the trajectory moving.
+  #
+  # ⚠ EVERY OTHER CANDIDATE IS DISQUALIFIED, and mostly for slice 48/55's reasons unchanged:
+  #   `gimbal_fov_deg` / `gimbal_fov_el_deg` — ⚠⚠ OWNED BY THE ASPECT KEY while it is present, and
+  #     two-sided besides (46). Dragging either alone is exactly the confusion this key removes.
+  #   `seeker_search_rate_dps` — slice 55 shipped it here as a measured NULL and that lesson is
+  #     ALREADY TOLD; a second slider would stack two lessons on one wire (convention 9).
+  #   `midcourse_err_gain` — it moves A and E, hence BOTH WALLS, so it would move the band rather
+  #     than move within it. ⭐ A real candidate for its own slice, not a second knob on this one.
+  #   `rcs_m2` / the belief-error vectors / `gimbal_stop_deg` / `gimbal_rate_dps` — slice 48's list.
+  #
+  # ⚠ THE LABEL IS LENGTH-BUDGETED (~110 characters — slice 32's shots paid for this).
+  - {target: m1, key: gimbal_fov_aspect, min: 0.5, max: 40.0,
+     label: "WINDOW ASPECT a/b at HELD aperture — locks only in 1.20-19.67; watch the two MARGINS"}
