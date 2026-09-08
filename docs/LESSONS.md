@@ -1616,6 +1616,22 @@ higher. Here: 70 → 85 single, 21 → 25 double (the new headers add warnings; 
 is a mechanical guard against the exact failure this lesson names — trading a real safeguard for a
 cosmetic byte count — and no reading of the diff proves it as cheaply.
 
+⇒ **AND THE SECOND MOVE CAME 2026-09-08, ON THE OTHER AXIS, EXACTLY AS THIS NOTE PREDICTED IT WOULD
+HAVE TO.** The 2026-09-06 split bought 3.4 KB and lasted eight weeks of slices: 55 pushed the router back
+over (16.4 KB), and slice 56's whole doc ritual could afford **8 bytes**. ⭐⭐ **THAT IS THE REAL SIGNAL —
+not the byte count, but a ritual that can no longer afford to write down what a slice found.** The move was
+the one the router had already named for itself: the 46–54 headline bullets (2967 bytes) to
+`docs/SLICES.md` §0, verbatim, with a four-line pointer left behind. 16.4 → 14.0 KB.
+
+⭐⭐⭐ **THE PART WORTH GENERALIZING: A ROUTER FILE MUST NAME ITS OWN NEXT CUT WHILE IT IS STILL UNDER
+BUDGET.** Both moves were executed by reading an instruction the file had written to itself months earlier —
+nobody had to invent the cut under pressure, and neither move was argued about. So the note now names the
+next two: the **conventions list** (~2.2 KB) and the **dead-ends list** (~2.4 KB), both already
+one-line-per-item with a downstream home. ⚠ The glyph count was run again and it is the reason this
+paragraph can make the "nothing shaved" claim: 121 → 124 single ⚠ and 80 → 81 double across the two files.
+⚠ One ⚠⚠ **was** removed from `CLAUDE.md` deliberately and it is not a shave — it was the status flag
+*"16.5 KB — OVER"*, which the move made FALSE. A warning that has become untrue is not a safeguard.
+
 ---
 
 ## ⭐⭐⭐ A KILL TEST THAT ONLY KNOWS ONE SHAPE OF LESSON WILL KEEP KILLING LESSONS — "FAILED THE SLIDER TEST" WAS NEVER "FAILED THE LESSON TEST" (2026-09-06, the user's re-read)

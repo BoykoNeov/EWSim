@@ -16,6 +16,20 @@ three-level ledger; read the level you actually need:
 - Slices **1–28** are the bullet list in §2 — `grep -n '^- \*\*Slice 23' docs/SLICES.md`
 - Slices **29–40** are the running narrative in §1 — `grep -n 'And slice 34' docs/SLICES.md`
 - The arc-level story (which slice opened/closed which arc) is §3.
+- The **headline lessons** for the recent arc (46–54) — the block that used to live in `CLAUDE.md` — are §0 below.
+
+## 0. THE HEADLINE LESSONS OF THE CURRENT ARC (46–54)
+
+⚠ **This block was moved out of `CLAUDE.md` on 2026-09-08**, verbatim, as the structural move that file
+named for itself ("the per-slice bullets under 'Where the project is' are the next candidate"). It is the
+condensed, starred form of the lessons; the paragraph form is §1/§2 below, the numbers are
+`docs/STATUS.md`, and the RULINGS behind every ⚠ are `docs/PROHIBITIONS.md`. ⚠⚠ Nothing here was shaved —
+if a line reads as a trip-wire, it is one.
+
+- **46/47/48/52 — THE CLOSED HANDOVER-AND-SEARCH THREAD** (verdicts in `docs/SLICES.md`; teeth in `docs/LESSONS.md`). ⭐⭐⭐ **THE CLIFF IS THE WINDOW**; **A SEARCH SPENDS THE ENGAGEMENT, NOT THE HEAD**; **SIZE THE SWEEP TO THE UNCERTAINTY** ⇒ **a faster sweep needs a WIDER one.** ⚠⚠ 47 RETRACTED its ban on `gimbal_fov_margin_deg`. ⚠ Authority is NOT monotone in ρ; 52's floor is NOT zero.
+- **49/50 — THE ECHO AS A SHAPE** (detail in `docs/SLICES.md`). ⭐⭐⭐ **ONLY A SHAPE MAKES A CLOSING TARGET HARDER TO SEE**; **A TARGET CAN TAKE A LOCK BACK BY TURNING**, priced in the heading error it goes blind holding, never the MISS. ⭐⭐ **A GAUGE MUST CARRY ITS OWN WINDOW**; **A VOCABULARY IS A GAUGE.** ⚠⚠ Launch near the horizon's EDGE; a live DRAG invalidates a latch as a Reset does and DISARMS a latched INSTANT; the lesson's NULL and a dead instrument's DEFAULT read the same ⇒ PRESENCE decides.
+- **53 — ⭐⭐⭐ A TAIL LOBE: ONE END OF A PASS IS UNTOUCHABLE AND THE OTHER IS THE SLIDER.** A brighter rear hemisphere ⇒ the same target on the same fly-past is held FAR FURTHER OUT running away than it was ever seen coming in — and no `rcs_m2`/`rcs_fineness` fakes it, both being fore/aft SYMMETRIC and moving BOTH ends. ⭐⭐⭐ **A RULE COUNTED IN SAMPLES CHANGES MEANING WHEN THE SAMPLE RATE DOES** ⇒ the gauge could not live in the client. ⭐⭐⭐ **DECLARE THE SELECTION RULE BEFORE THE FLIGHTS AND PUBLISH THE LOSERS** — the obvious seed lost. ⚠⚠ **THE METRES ARE A JOINT PROPERTY OF THE LOBE AND THE TRACKER** — the SIGN is physics, the SIZE is not. ⚠ The NULL is fading NOISE, never zero. ⚠⚠ **A FRAME-HANDLER accumulator has NO headless proof AND no shot either**; ⚠ a CROSSING pass needs a downrange FLOOR.
+- **54 — ⭐⭐⭐ THERE IS NO RIGHT AMOUNT OF PATIENCE: THE GIVE-UP RULE IS SET BY HOW DIRTY THE PICTURE IS.** Over a CFAR picture the tracker must choose its own cell and CAN BE WRONG (the point path is handed TRUTH, so patience is free there). ⭐⭐ **ALIVE = NEAREST-AND-GATED, DEAD = LOUDEST-AND-UNGATED — that asymmetry IS the two-sidedness.** ⭐⭐⭐ **WHEN THE ARGMAX IS NOISE, SHIP THE CURVE** (N shadow arms on ONE pass — cheap, PAIRED, and it must draw NOTHING). ⭐⭐ **A rule counted in LOOKS is `dt`-invariant when the look cadence is** (prove it on the PICTURE, not on an argmax). ⭐⭐⭐ **A pre-registered rule earns authority the first time it REFUSES something.** ⚠⚠ Truth reaches the GAUGE, never the TRACKER. ⚠⚠ **THE COUNT OF LOOKS IS A JOINT PROPERTY OF THE RULE, THE GATE AND THE BAND** — the DIRECTION is physics, the COUNT is not. ⚠⚠ `cnr_db` is NOT a false-alarm source — **clutter under CFAR is a MASKER**; `pfa` is the mover. ⚠⚠ **`bad` is NOT monotone in the dirtiness** (two roads: COAST off vs be CAPTURED) ⇒ gauge the NET, never a half. ⚠⚠ **BEING WRONG NEEDS A DROP FIRST** ⇒ never put a tooth on an UNMEASURED arm.
 
 ---
 

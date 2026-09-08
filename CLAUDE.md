@@ -59,10 +59,10 @@ CLOSED. **49/50/53 moved to the ECHO ITSELF** — a shape, that shape under a se
 ASYMMETRY — **54 moved to the TRACKER that reads it, and 55 to the WINDOW's own SHAPE.** Per-slice detail — and every number behind the
 lines below — is in `docs/SLICES.md`.
 
-- **46/47/48/52 — THE CLOSED HANDOVER-AND-SEARCH THREAD** (verdicts in `docs/SLICES.md`; teeth in `docs/LESSONS.md`). ⭐⭐⭐ **THE CLIFF IS THE WINDOW**; **A SEARCH SPENDS THE ENGAGEMENT, NOT THE HEAD**; **SIZE THE SWEEP TO THE UNCERTAINTY** ⇒ **a faster sweep needs a WIDER one.** ⚠⚠ 47 RETRACTED its ban on `gimbal_fov_margin_deg`. ⚠ Authority is NOT monotone in ρ; 52's floor is NOT zero.
-- **49/50 — THE ECHO AS A SHAPE** (detail in `docs/SLICES.md`). ⭐⭐⭐ **ONLY A SHAPE MAKES A CLOSING TARGET HARDER TO SEE**; **A TARGET CAN TAKE A LOCK BACK BY TURNING**, priced in the heading error it goes blind holding, never the MISS. ⭐⭐ **A GAUGE MUST CARRY ITS OWN WINDOW**; **A VOCABULARY IS A GAUGE.** ⚠⚠ Launch near the horizon's EDGE; a live DRAG invalidates a latch as a Reset does and DISARMS a latched INSTANT; the lesson's NULL and a dead instrument's DEFAULT read the same ⇒ PRESENCE decides.
-- **53 — ⭐⭐⭐ A TAIL LOBE: ONE END OF A PASS IS UNTOUCHABLE AND THE OTHER IS THE SLIDER.** A brighter rear hemisphere ⇒ the same target on the same fly-past is held FAR FURTHER OUT running away than it was ever seen coming in — and no `rcs_m2`/`rcs_fineness` fakes it, both being fore/aft SYMMETRIC and moving BOTH ends. ⭐⭐⭐ **A RULE COUNTED IN SAMPLES CHANGES MEANING WHEN THE SAMPLE RATE DOES** ⇒ the gauge could not live in the client. ⭐⭐⭐ **DECLARE THE SELECTION RULE BEFORE THE FLIGHTS AND PUBLISH THE LOSERS** — the obvious seed lost. ⚠⚠ **THE METRES ARE A JOINT PROPERTY OF THE LOBE AND THE TRACKER** — the SIGN is physics, the SIZE is not. ⚠ The NULL is fading NOISE, never zero. ⚠⚠ **A FRAME-HANDLER accumulator has NO headless proof AND no shot either**; ⚠ a CROSSING pass needs a downrange FLOOR.
-- **54 — ⭐⭐⭐ THERE IS NO RIGHT AMOUNT OF PATIENCE: THE GIVE-UP RULE IS SET BY HOW DIRTY THE PICTURE IS.** Over a CFAR picture the tracker must choose its own cell and CAN BE WRONG (the point path is handed TRUTH, so patience is free there). ⭐⭐ **ALIVE = NEAREST-AND-GATED, DEAD = LOUDEST-AND-UNGATED — that asymmetry IS the two-sidedness.** ⭐⭐⭐ **WHEN THE ARGMAX IS NOISE, SHIP THE CURVE** (N shadow arms on ONE pass — cheap, PAIRED, and it must draw NOTHING). ⭐⭐ **A rule counted in LOOKS is `dt`-invariant when the look cadence is** (prove it on the PICTURE, not on an argmax). ⭐⭐⭐ **A pre-registered rule earns authority the first time it REFUSES something.** ⚠⚠ Truth reaches the GAUGE, never the TRACKER. ⚠⚠ **THE COUNT OF LOOKS IS A JOINT PROPERTY OF THE RULE, THE GATE AND THE BAND** — the DIRECTION is physics, the COUNT is not. ⚠⚠ `cnr_db` is NOT a false-alarm source — **clutter under CFAR is a MASKER**; `pfa` is the mover. ⚠⚠ **`bad` is NOT monotone in the dirtiness** (two roads: COAST off vs be CAPTURED) ⇒ gauge the NET, never a half. ⚠⚠ **BEING WRONG NEEDS A DROP FIRST** ⇒ never put a tooth on an UNMEASURED arm.
+- **THE HEADLINE LESSONS OF 46–54 NOW LIVE IN `docs/SLICES.md` §0** — moved 2026-09-08, verbatim, as the
+  structural move this file named for itself. ⚠⚠ **Read §0 before quoting, reviving or killing anything from
+  the 46–54 arc**: the handover-and-search thread (46/47/48/52), the echo as a shape (49/50), the tail lobe
+  (53) and the give-up rule (54) each carry ⚠ trip-wires that are no longer in front of you.
 
 **The rule that keeps paying** (33, 34, 35, 37, 38): *aim `R̂` at the glass's worst-case slope*
 (`radome_slope_worst`) and the cost — of FOV, detector window, servo bandwidth, servo frame — mostly
@@ -89,12 +89,15 @@ discharged/new/killed candidates into `docs/DEFERRALS.md`, method lessons into `
 (⚠ fold onto the EXISTING heading when it repeats), **every new ⚠ prohibition — with its reasoning,
 its numbers and its slice cite — into `docs/PROHIBITIONS.md`**, and into `CLAUDE.md` **only** the
 state line + any new dead end's NAME AND VERDICT WORD, folded into an EXISTING line.
-⚠⚠ **`CLAUDE.md` is a ROUTER — target ~16 KB** (⚠⚠ **16.5 KB — OVER, and slice 55 added +0.27 to a file that was already over at 16.3.** The structural move below is now DUE, not optional; 15.4 after the 2026-09-06 split, +0.7 TRIGGER block; 9 prose
-trims before it). **Numbers, test names, evidence — and now the REASONING behind a prohibition — go
-DOWNSTREAM; only the state line, the verdict words, the trip-wire NAMES and the conventions stay HERE.**
-⚠⚠ **PROSE-TRIMMING WILL NOT SAVE THIS FILE A SECOND TIME.** If it goes over again the answer is another
-structural move — the per-slice bullets under "Where the project is" are the next candidate (~4.4 KB) —
-never shaving a ⚠. Detail: `docs/LESSONS.md`.
+⚠⚠ **`CLAUDE.md` is a ROUTER — target ~16 KB.** ⭐ **13.8 KB at 2026-09-08, and the headroom was bought by a
+STRUCTURAL MOVE, not by trimming**: the 46–54 headline bullets (2.9 KB) went to `docs/SLICES.md` §0 verbatim,
+after the file hit 16.4 KB — over, with 9 prose trims already spent and the ritual able to afford only 8 bytes
+for a whole slice. **Numbers, test names, evidence — and the REASONING behind a prohibition — go DOWNSTREAM;
+only the state line, the verdict words, the trip-wire NAMES and the conventions stay HERE.**
+⚠⚠ **PROSE-TRIMMING WILL NOT SAVE THIS FILE.** It did not last time and it will not next time: when the budget
+is next threatened the answer is another structural move — the **conventions list** (~2.2 KB) and the
+**dead-ends list** (~2.4 KB) are the next two candidates, both already one-line-per-item with a downstream
+home — never shaving a ⚠. Detail: `docs/LESSONS.md`.
 
 ## ⭐⭐⭐ TWO AIMS ⇒ TWO TESTS ⇒ TWO VERDICTS (2026-08-18 — READ BEFORE KILLING ANYTHING)
 
