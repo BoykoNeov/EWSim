@@ -237,3 +237,100 @@ PRESENT vs ABSENT must be equal, proving the arms cost no draws rather than mere
 3. Does the 11-arm sweep need the CFAR path as well, or does the point path carry the lesson alone?
    ⚠ Default: point path only — convention 9, and the CFAR path brings the masker/false-alarm axis
    slice 54 already owns.
+
+---
+
+# ⛔ GATE 0 RAN, 2026-09-08 — **P4 REFUSED IT.** The record, and what survives.
+
+Probes: `W:\temp\claude\slice56\p1_ladder.jl`, `W:\temp\claude\slice56\p2_law.jl`. Flown on the
+SHIPPED `scenarios/slice49_aspect.yaml` (not a probe wire), 90 s, seed 49, 900 looks per arm.
+
+## §6.1 The harness oracle passed FIRST, so every number below is comparable to slice 49's
+
+`slice49_aspect.yaml`'s header publishes a seven-point ladder. This probe's gauge reproduced **all
+seven columns with Δ = 0.0000 s** and the detected percentages to the published decimal. ⇒ the gauge
+IS slice 49's gauge, and the new column beside it is measured on the same footing.
+
+## §6.2 P1 — THE CURVE IS REAL, AND FAR STRONGER THAN THE FOUR-POINT RECORD SUGGESTED
+
+| F | 1.0 | 1.5 | 2.0 | 2.5 | 3.0 | **4.0** | 5.0 | 6.0 | 8.0 | 10.0 | 12.0 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **loss COUNT** | 6 | 14 | 29 | 54 | 78 | **96** | 83 | 57 | 36 | 26 | 21 |
+| longest loss (s) | 0.20 | 0.20 | 0.20 | 0.30 | 0.60 | 1.30 | 2.80 | 5.30 | 36.50 | 40.20 | 46.60 |
+| median in-window SNR (dB) | 30.87 | 26.15 | 24.12 | 21.57 | 19.13 | 14.87 | 11.34 | 8.36 | 3.56 | −0.23 | −3.35 |
+
+**P1 PASSES** — a smooth 16× rise to an interior peak and a 4.6× fall, **eight arms strictly above
+both ends** against a pre-registered bar of three. ⚠ The 41 → 133 → 53 → 42 in `docs/plans/slice49.md`
+§9 was measured on a DIFFERENT (probe) wire; on the shipped wire the peak is not one arm deep.
+
+**P3 PASSES** — the duration gauge is monotone non-decreasing on all eleven arms, so slice 49's
+headline survives a sweep three times denser than the one that established it.
+
+**P5 PASSES, exactly** — halving `dt` to 5.0e−4 with the look cadence held leaves the count
+**identical** (54/54, 96/96, 57/57) and the longest loss identical. Not a discretization artifact;
+the gauge is counted in LOOKS and behaves like it.
+
+**P2 PASSES** — pre-registered before the sweep was read: Swerling 1 at `pfa = 1e−6` gives
+`SNR* = ln(pfa)/ln(0.5) − 1 = 18.9316 = 12.7719 dB`. The median-SNR column crosses `SNR*` at
+**F* = 4.5943**; the count's argmax is at **F = 4.0**, inside the pre-registered one-step window
+[3.0, 5.0]. **The turning point is predicted, not fitted.**
+
+## §6.3 ⛔ P4 FAILED — AND THE PRE-REGISTERED RULE IS HONOURED, NOT ARGUED WITH
+
+**The question (written before the flights): can a CONSTANT `rcs_m2`, with the shape key absent
+entirely, reproduce the peak? Pre-registered answer: it must NOT.**
+
+| `rcs_m2` (no shape key) | 4.0 | 1.0 | 0.4 | 0.2 | **0.1** | 0.05 | 0.02 | 0.01 | 0.004 | 0.001 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **loss COUNT** | 6 | 28 | 56 | 81 | **112** | 98 | 80 | 66 | 35 | 4 |
+| longest loss (s) | 0.20 | 0.20 | 0.50 | 0.80 | 1.10 | 3.40 | 10.10 | 7.80 | 5.10 | 4.80 |
+| median SNR (dB) | 30.87 | 24.85 | 20.90 | 17.89 | **14.88** | 11.87 | 7.89 | 8.33 | 7.77 | 4.91 |
+
+⇒ **A DIM SPHERE DOES NOT MERELY REPRODUCE THE PEAK — IT BEATS IT: 112 against 96.**
+
+⚠⚠ **AND THE MATCHED PAIR IS THE PART THAT SETTLES IT, NOT THE HEIGHTS.** At `rcs_m2 = 0.1` the
+median in-window SNR is **14.881 dB**; at `rcs_fineness = 4.0` it is **14.870 dB** — the same
+picture to a hundredth of a dB — and the counts are 112 and 96. **The count is a function of where
+the median echo sits relative to the threshold, and it does not care what put it there.** Shape is
+one road; dimness is another; they land on the same curve.
+
+⇒ **THE SHAPE HEADLINE IS DEAD FOR THIS GAUGE.** Slice 39's rule: a knob that another shipped knob
+reparameterizes cannot carry the slice. The count curve is not a lesson about *which way a target is
+pointing*; it is a lesson about *the detector's threshold*, and `rcs_fineness` is the more expensive
+of two ways to demonstrate it.
+
+⚠ **WHAT IS NOT KILLED, stated so nothing is over-read:**
+- **Slice 49's DURATION headline is untouched and is re-confirmed here.** The dimmest constant
+  (`rcs_m2 = 0.001`) reaches only **4.80 s** of longest loss where `rcs_fineness = 12` reaches
+  **46.60 s** — a **9.7×** separation, on top of the ladder P1a reproduced exactly. A constant echo
+  still cannot buy the long blind spot; only the shape can. ⇒ slice 49's own P2 stands.
+- **`rcs_fineness` itself is untouched** — MODEL test unchanged, read every tick by both consumers.
+- **The three PASSING probes stand as measurements** and are quotable: the count curve exists, it is
+  `dt`-invariant, and its turning point is predicted by the threshold crossing.
+
+## §6.4 ⭐ THE FINDING THIS BOUGHT, AND IT IS WORTH MORE THAN THE HEADLINE IT COST
+
+**TWO GAUGES OVER THE SAME PICTURE ANSWER DIFFERENT QUESTIONS, AND ONLY ONE OF THEM CAN NAME A
+CAUSE.** How OFTEN you lose a target tells you *that its echo is sitting on your threshold* and
+cannot tell you *why*. How LONG you lose it for separates the reasons: a dim target is lost briefly
+and often, a slender one is lost rarely and for a minute. ⇒ **the count is a symptom gauge and the
+duration is a diagnostic one**, and a scenario that ships the count alone would let a viewer read a
+cause that is not there.
+
+⚠ This is a candidate, not a slice, and it is written here rather than promoted, because inventing a
+new headline in the same breath as a kill is the failure this project keeps records about. It goes to
+`docs/DEFERRALS.md` as a raised candidate with its evidence, and the next slice is picked from that
+file on its merits.
+
+## §6.5 VERDICT
+
+**GATE 0 CLOSED. THE SLICE DOES NOT SHIP.** Four probes passed and the fifth refused it, which is
+what the fifth was written for — slice 54's rule that *a pre-registered rule earns its authority the
+first time it REFUSES something*, applied to a rule written two commits before the measurement
+existed. P0/P0b (the shadow-arm mechanism) were **never run**: they are gate-1 implementation teeth
+and there is nothing left to implement. ⚠ The separability argument in §2 is UNVERIFIED and must not
+be quoted as measured — it was read out of the code, not flown.
+
+⚠⚠ **AND THE BAN STANDS.** `docs/plans/slice49.md`'s *"Never quote the count"* is **reinstated
+verbatim**, now with a second and stronger reason than the one it was written with: not only is the
+count non-monotone, it is **not specific to the shape at all**. §0.2's conditional lift lapses.
