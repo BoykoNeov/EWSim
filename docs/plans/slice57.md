@@ -1,10 +1,11 @@
 # Slice 57 — A FIXED APERTURE, A TWO-AXIS UNCERTAINTY, AND THE BAND WHERE A DESIGN EXISTS
 
-**Status: PLAN ONLY — gate 0 has not run.** Nothing below is a measurement. Every number quoted from
-an earlier slice carries its cite; every number this slice will produce is written as a PREDICTION
-with a falsifier attached, per slice 53's rule (*declare the selection rule before the flights and
-publish the losers*) and slice 54's (*a pre-registered rule earns authority the first time it
-REFUSES something*).
+**Status: GATE 0 RAN 2026-09-08 — the record is PART II.** ⚠ **PART I below is the plan AS WRITTEN
+BEFORE ANY PROBE, and it is left unedited** — including the falsifier whose wording gate 0 went on to
+retract (§II.6). Nothing in PART I is a measurement: every number it quotes from an earlier slice
+carries its cite, and every number it predicts carries a falsifier, per slice 53's rule (*declare the
+selection rule before the flights and publish the losers*) and slice 54's (*a pre-registered rule
+earns authority the first time it REFUSES something*).
 
 ---
 
@@ -266,3 +267,138 @@ smoke-load, and a windowed shot. ⚠ Anything inside `_draw` has NO headless pro
 6. ⚠ **And the standing one:** if the slice can only be stated as *"narrower is better"* or *"wider
    is better"*, it has re-imported `gimbal_fov_deg`'s disqualification and 46's ban, and it is dead
    whatever the arms say.
+
+---
+
+# PART II — THE GATE-0 RECORD (2026-09-08)
+
+Probes: `W:\temp\claude\slice57\p0_null.jl`, `p0b_band.jl`, `p3_arms.jl`, `p1_p6.jl`, `p1_only.jl`.
+Wire: `scenarios/slice55_fanbeam.yaml` with the picture-error direction TILTED out of the horizontal
+(§0.3) and `Ω = 100 deg²` held on every aspect arm. ⚠ Raw measurements only in this section; the
+verdict is §II.7.
+
+## §II.1 P0 / P0b — THE NULL ARM, AND THE PREDICTED BAND
+
+The null arm is the shipped DISC (`Ω` = 100 deg², reach 3038.2 m), which never locks on this wire, so
+it carries the (Δaz, Δel) prefix every arm shares up to its own lock. ⚠ P0 first computed `A·E` from
+two INDEPENDENT minima; P0b recomputed it JOINTLY (a lock needs one tick inside BOTH half-widths at
+the SAME time) and the two agree to three decimals on every row — **on this wire the two errors ARE
+simultaneous**, which was an assumption and is now a measurement.
+
+The feasible aspect-ratio set is the union of the per-tick intervals `[Δaz²/Ω, Ω/Δel²]`. ⭐ **It came
+out a single interval on every feasible row** — a union of intervals need not be one.
+
+| tilt | gain | n in-range | min\|Δaz\| | min\|Δel\| | `A·E` | JOINT feasible aspect band |
+|---|---|---|---|---|---|---|
+| 10° | 140 | 4661 | 10.9614 | 2.2549 | **24.72** | `[1.202, 19.668]` |
+| 10° | 200 | 4631 | 15.7433 | 3.2248 | **50.77** | `[2.479, 9.616]` |
+| 20° | 140 | 4648 | 10.2531 | 4.4702 | **45.83** | `[1.051, 5.004]` |
+| 20° | 200 | 4613 | 14.8079 | 6.4060 | **94.86** | `[2.193, 2.437]` |
+| 25° | 140 | 4639 | 9.7759 | 5.5366 | **54.13** | `[0.956, 3.262]` |
+| 25° | 200 | 4599 | 14.1794 | 7.9542 | **112.79** | **EMPTY** |
+| 30° | 200 | 4582 | 13.4311 | 9.4610 | **127.07** | **EMPTY** |
+| 45° | 200 | 4511 | 10.3986 | 13.6316 | **141.75** | **EMPTY** |
+
+⭐⭐⭐ **THE BAND EMPTIES EXACTLY WHERE `A·E` CROSSES `Ω`** — 94.86 carries a band, 112.79 carries
+none — which is the inequality, read off a table nobody fitted.
+
+## §II.2 P2 — `Ω` IS HELD, AND THE DULL RIVAL MOVES
+
+`seeker_r_acq_m` is **3038.2 m on every one of the 33 aspect arms flown**, across all three wires. On
+the varying-radius DISC control it runs **15190.8 → 675.1 m**. ⇒ the aspect axis moves the gauge with
+the reach pinned; the disc axis moves the reach. Slice 56's specificity toll, paid on the wire.
+
+## §II.3 P3 / P4 / F2 — THE THREE LADDERS
+
+**A. WIDE BAND (tilt 10°, gain 140) — predicted `[1.202, 19.668]`:**
+
+| `r` | 0.50 | 0.80 | 1.00 | 1.15 | **1.25** | 1.5 | 2 | 4 | 8 | 14 | 18 | **19.0** | 20.5 | 25 | 40 | 80 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| lock | — | — | — | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | — | — | — |
+
+Flown walls: **(1.15, 1.25]** and **(19.0, 20.5]**. Predicted **1.202** and **19.668** — each inside
+its own bracket. Non-locking arms all read CPA 1021.18 m; locking arms all read `t_lock` **4.9400 s**,
+CPA **0.05 m**, authority **19.5 %**.
+
+**B. RAZOR-THIN BAND (tilt 20°, gain 200) — predicted `[2.193, 2.437]`, a band 11 % wide:**
+
+| `r` | 1.50 | 2.00 | 2.15 | **2.20** | 2.30 | **2.40** | 2.45 | 2.60 | 3.50 |
+|---|---|---|---|---|---|---|---|---|---|
+| lock | — | — | — | ✅ | ✅ | ✅ | — | — | — |
+
+Flown walls **(2.15, 2.20]** and **(2.40, 2.45]**; predicted **2.193** and **2.437**. ⭐ Both inside
+their brackets, on a band eleven per cent wide.
+
+**C. F2 — THE INFEASIBLE WIRE (tilt 25°, gain 200, `A·E` = 112.79 > `Ω`):** flown at
+`r` = 0.5, 1, 2, 2.5, 3, 5, 10, 30 — **no arm locks at any aspect ratio.** CPA 1417.23 m on all eight.
+
+## §II.4 ⭐⭐⭐ P3b — THE INTERIOR IS NOT MERELY FLAT, IT IS BIT-IDENTICAL
+
+`max|Δpos|` against the `r` = 1.5 arm, over 9600 ticks, on wire A:
+
+| `r` | 1.25 | 2.00 | 4.00 | 8.00 | 14.0 | 18.0 | 19.0 |
+|---|---|---|---|---|---|---|---|
+| `max\|Δpos\|` | **0.0** | **0.0** | **0.0** | **0.0** | **0.0** | **0.0** | **0.0** |
+
+**Exactly zero on all seven** — a factor of **15.2** in aspect ratio, `a` from 11.18° to 43.59° and
+`b` from 8.94° to 2.29°, flying bit-for-bit the same 9600 ticks.
+
+## §II.5 P1 / P6 — PLUMBING AND `dt`
+
+**P1 (convention 3).** One draw from `w.rng` after 9600 ticks — i.e. AFTER lock — is
+`0.27926681085634408` on all five arms: two that never lock, two that lock, one beyond the far wall.
+The per-look draw COUNT is invariant to the window's shape.
+
+**P6 / F1 (slice 42's rule).** Both walls, both wires, at `dt` = 1e−3 and 5e−4:
+
+| wire | `r` pair | 1e−3 | 5e−4 |
+|---|---|---|---|
+| A | 1.15 / 1.25 | no lock / LOCK 4.9400 | no lock / LOCK 4.9400 |
+| A | 19.0 / 20.5 | LOCK 4.9400 / no lock | LOCK 4.9400 / no lock |
+| B | 2.15 / 2.20 | no lock / LOCK 4.9880 | no lock / LOCK 4.9875 |
+| B | 2.40 / 2.45 | LOCK 4.9880 / no lock | LOCK 4.9875 / no lock |
+
+**Neither wall moves on either wire.** ⇒ not an integration artifact.
+
+## §II.6 ⚠⚠ F3 FIRED AS WRITTEN — AND THE WORDING IS RETRACTED, WITH ITS REASON
+
+The varying-radius disc on wire A:
+
+| disc radius | 2° | 4° | 6° | 8° | 10° | 11° | 12° | 14° | 20° | 30° | 45° |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `R_acq` m | 15190.8 | 7595.4 | 5063.6 | 3797.7 | 3038.2 | 2762.0 | 2531.8 | 2170.1 | 1519.1 | 1012.7 | 675.1 |
+| lock | ✅ 0.0010 s | ✅ 0.0010 s | ✅ 2.3110 s | ✅ 3.9420 s | — | — | — | — | — | — | — |
+
+**F3 as pre-registered says: *"if the disc reaches a better gauge value at its optimum, the headline
+is 46's."* The 6° disc locks at 2.3110 s against the aspect band's 4.9400 s. On the literal wording,
+F3 FIRES.**
+
+⚠⚠ **AND THE WORDING IS THE DEFECT, NOT THE RESULT — §0.1.2 WROTE THE CONTROL'S MECHANISM CORRECTLY
+AND THEN §0.1.4 WROTE A KILL CRITERION THAT IGNORED IT.** §0.1.2 says in as many words that *"the disc
+sweep moves the gauge because the REACH moves."* A 6° disc subtends `Ω` = 36 deg², not 100: it is a
+**BIGGER ANTENNA**, and comparing it against a held-`Ω` arm compares two different costs. The entire
+slice is defined at held aperture, and a control that changes the aperture is measuring slice 46's
+lesson — which is precisely why it was flown. ⇒ **the corrected comparison is at held cost, where the
+disc is the SINGLE POINT `r` = 1 — and it does not lock.**
+
+⚠⚠ **AND TWO DISC ARMS ARE DISQUALIFIED BY A RULE THAT ALREADY EXISTS, NOT BY TASTE.** The launch
+range on this wire is **6814 m**. The 2° and 4° discs have horizons of 15190.8 m and 7595.4 m — both
+BEYOND it — so they lock at `t` = **0.0010 s**, the first tick, because the midcourse picture is exact
+at handover (`_midcourse_belief!` seeds `p0` from TRUTH and the error only accumulates with time).
+`docs/PROHIBITIONS.md` §2: *"a detection gate can only price a design variable if the ENGAGEMENT
+launches OUTSIDE the sensor's horizon."* Those two arms have no blind phase at all, which is the thing
+this slice is about. **The legitimate disc control is 6° and narrower-reaching**, and every arm is
+published above either way.
+
+## §II.7 THE VERDICT AGAINST §0.1.1's BRANCH AND §4's KILL TABLE
+
+| # | pre-registered | outcome |
+|---|---|---|
+| **P0** | a geometry with arms either side of both walls | ✅ three of them — wide, razor-thin, and infeasible |
+| **P1** | draw topology invariant | ✅ identical `w.rng` draw post-lock across five arms |
+| **P2** | `Ω` held / the dull rival moves | ✅ 3038.2 m on all 33 aspect arms; 15190.8 → 675.1 m on the disc |
+| **P4** | the walls are PREDICTED | ✅ four walls on two wires, every one inside its flown bracket; the razor-thin band predicted to three significant figures |
+| **F1** | walls survive half `dt` | ✅ neither wall moves on either wire |
+| **F2** | no lock on the infeasible wire | ✅ eight arms, no lock |
+| **F3** | the dull rival must not win | ⚠⚠ **FIRES on the literal wording** — retracted in §II.6 with its reason; the corrected held-cost comparison stands |
+| **R1 / R1′** | which trigger | ⛔ **R1 does NOT fire. R1′ does** — the interior is bit-identical (`max\|Δpos\|` = 0.0 over a 15.2× range), so the trigger is **`REGIME`** plus a measured **`NULL`**, and the headline is **the walls and the law**, never a turning point. |
