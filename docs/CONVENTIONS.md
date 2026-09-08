@@ -112,6 +112,11 @@ paraphrase away the specifics.
     window size rescues an over-wide line**. Assert in PIXELS against the budget *this view* leaves,
     require a MARGIN (≥12 px — slice 49's first run passed at exactly 390.0 of 390), and have the
     tooth NAME the widest line so a pass on the limit is distinguishable from a fail.
+    ⭐⭐⭐ **AND MEASURE IT AT THE SLIDER'S EXTREMES, NEVER AT THE AUTHORED ARM** (slice 57): the
+    tooth caught a real **403 px against a 400 px column** because no authored pair in this repo is
+    wider than 12.5° while that slider's ceiling flies **63.2456°** — every earlier width tooth
+    measured the shipped arm and would have passed green with the widest arm off the edge. ⚠ The fix
+    is a SHORTER LINE: the columns are right-anchored, so a bigger window clips identically.
     ⚠⚠ **A LIVE SLIDER DRAG INVALIDATES A LATCH JUST AS A RESET DOES, AND IT REACHES NONE OF THESE
     FOUR PROOFS *UNLESS THE VERIFIER DRIVES ONE*** (slice 49; ⭐ slice 53 drove the first one): by
     default the verifier `reset`s between arms, the UI test presses the Reset BUTTON, the smoke-load
@@ -187,6 +192,15 @@ paraphrase away the specifics.
     - ⚠ **A POST-INTERCEPT EPISODE IS A DIFFERENT ENGAGEMENT** — scope an engagement gauge to the
       slice's own latch, not to a tick count (slices 52 and 55, the seeker re-searching a target
       that is now behind the missile).
+    - ⚠⚠ **A `set_param` COMMAND'S FIELD IS `target`, NOT `id`** (slice 40's first-run bug, re-walked
+      in full by slice 57). The server reads `cmd[:target]`; a command carrying `id` is **silently
+      ignored** — no error, no reply, and the arm simply reports the previous setting's answer, which
+      reads as "the slider does nothing". ⚠ Only a **READ-BACK TRIPWIRE** catches it: assert the wire
+      reports the value you just set before you believe any arm.
+    - ⚠⚠ **A WINDOWED SHOT MUST WAIT FOR `EWSIM_SERVER_LISTENING` BEFORE LAUNCHING GODOT** (slice
+      57): `SimClient` connects ONCE and does not retry, so a harness that starts both together races
+      the server's startup and dies at stage 0 with a timeout that reads like a hung scene. Poll the
+      server log for that line; a fixed sleep is a guess.
     - ⚠⚠ **Slice 53 RETRACTED "no gate-3 proof DRAGS a slider"** — its verifier does, and a drag
       tooth is MANDATORY once the latch lives on the WIRE (§14; retraction §7 of
       `docs/PROHIBITIONS.md`). ⚠⚠ **Slice 54 adds the harder half: something must deliberately
@@ -222,3 +236,12 @@ paraphrase away the specifics.
       2-norm margin under an ∞-norm window can carry the OPPOSITE SIGN to the validity lamp — the
       `√2·stop` hazard on the glass instead of the trunnion. ⚠ Ship the new predicate's own
       readout, and ship it PER AXIS: a worst-of is sign-honest and hides the lesson.
+    - ⚠⚠ **A HUD STRING STATED AS FACT IS A CLAIM WITH A SHELF LIFE, AND A SLIDER IS WHAT EXPIRES
+      IT** (slice 57, on slice 55's line): *"the el axis is idle"* was unconditional — true at 99.7 %
+      idle on 55's one authored pair, FALSE at 9 % on 57's high wall — and its neighbour quoted two of
+      55's constants as fact. ⇒ **the moment a slider can move what a sentence describes, that
+      sentence must be COMPUTED FROM THE WIRE or deleted** (convention 13 one level up: the client may
+      not recompute physics, and may not REMEMBER it either). ⚠ A threshold inside such a sentence is
+      itself a claim — pick it against FLOWN ratios, not round numbers: 0.50 called slice 57's shipped
+      arm idle, and **0.70** of the half-width is what four flown ratios support. ⚠ Note which slice
+      shipped the defect: **55, whose own UI test existed to prevent it.**
