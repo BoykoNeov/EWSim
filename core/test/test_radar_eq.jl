@@ -206,7 +206,77 @@ end
         end
     end
 
+    @testset "⭐⭐⭐ SLICE 57 — fov_from_aspect: re-shaping an aperture WITHOUT spending it" begin
+        # (1) THE TWO IDENTITIES THE WHOLE SLICE RESTS ON. The product is HELD and the ratio is
+        # RECOVERED — not approximately, over four decades of aspect ratio.
+        ω = deg2rad(10.0) * deg2rad(10.0)                    # the shipped 100 deg², in rad²
+        for r in (0.01, 0.5, 1.0, 1.25, 4.0, 19.0, 100.0)
+            a, b = EWSim.fov_from_aspect(ω, r)
+            @test a * b ≈ ω atol = 0.0 rtol = 1e-15
+            @test a / b ≈ r atol = 0.0 rtol = 1e-15
+        end
+        # (2) `aspect == 1` IS THE SQUARE, AND ITS HALF-WIDTH IS √ω — an INDEPENDENT recompute
+        # (convention 11), not the kernel restated.
+        a1, b1 = EWSim.fov_from_aspect(ω, 1.0)
+        @test a1 === b1
+        @test a1 ≈ deg2rad(10.0) atol = 1e-15
+        # ⚠ AND THE SQUARE BOX IS NOT THE DISC — `off_axis_ratio` is the ∞-norm, `off_axis_angle`
+        # the 2-norm, and they part by √2 at the diagonal. Pinned so the two are never conflated.
+        @test EWSim.off_axis_ratio(0.0, 0.0, a1, b1, a1, b1) ≈ 1.0 atol = 1e-15
+        @test EWSim.off_axis_angle(0.0, 0.0, a1, b1) / a1 ≈ sqrt(2.0) atol = 1e-12
+        # (3) ⭐⭐⭐ THE LINK BUDGET DOES NOT MOVE, WHICH IS THE ONLY REASON A SHAPE COMPARISON IS ONE.
+        # `aperture_gain` reads FULL widths, so a box of half-widths (a, b) has Ω = 4ab: holding the
+        # half-width product holds the gain EXACTLY, on every arm. An EXTERNAL anchor for the
+        # horizon: 3038.2 m is the shipped slice-48/55 figure, and gate 0 read it on all 33 arms.
+        fan(fa, fb) = EWSim.RadarParams(
+            200.0, EWSim.lin2db(EWSim.aperture_gain(2 * fa, 2 * fb; eta = 0.6)),
+            16.0e9, 1 / 0.010, 4.0, 5.0)
+        a0, b0 = EWSim.fov_from_aspect(ω, 1.0)
+        R0 = EWSim.detection_range(fan(a0, b0), 0.020; snr_min_db = 10.0)
+        @test R0 ≈ 3038.16 rtol = 1e-4
+        for r in (0.5, 1.25, 2.0, 8.0, 19.0, 20.5, 80.0)
+            a, b = EWSim.fov_from_aspect(ω, r)
+            @test EWSim.aperture_gain(2a, 2b) ≈ EWSim.aperture_gain(2a0, 2b0) rtol = 1e-15
+            @test EWSim.detection_range(fan(a, b), 0.020; snr_min_db = 10.0) ≈ R0 rtol = 1e-12
+        end
+        # (4) ⭐⭐ THE PRODUCT INEQUALITY, AS ARITHMETIC. The band of aspect ratios that covers a
+        # two-axis pointing error (A, E) at held ω is [A²/ω, ω/E²], non-empty iff A·E ≤ ω. These are
+        # gate 0's OWN flown numbers (`docs/plans/slice57.md` §II.1/§II.3): wire A predicted
+        # [1.202, 19.668] and locked over [1.25, 19.0]; the infeasible wire predicted EMPTY and
+        # eight arms flew without a lock. ⚠ An EXTERNAL anchor — the flight, not this kernel.
+        band(A, E, w) = (A^2 / w, w / E^2)
+        Ω_deg = 100.0
+        lo, hi = band(10.9614, 2.2549, Ω_deg)
+        @test lo ≈ 1.2015 atol = 5e-4
+        @test hi ≈ 19.6680 atol = 5e-3
+        for r in (1.25, 2.0, 8.0, 19.0)                       # every arm gate 0 saw LOCK
+            @test lo ≤ r ≤ hi
+        end
+        for r in (1.0, 1.15, 20.5, 25.0)                      # every arm gate 0 saw fail
+            @test !(lo ≤ r ≤ hi)
+        end
+        # …and the infeasible wire: A·E = 112.79 > 100 ⇒ the band inverts, so NO r satisfies it.
+        lo2, hi2 = band(14.1794, 7.9542, Ω_deg)
+        @test 14.1794 * 7.9542 > Ω_deg
+        @test lo2 > hi2
+        # (5) THE HALF-ANGLE TRAP, PINNED THE WAY `aperture_gain`'s IS. `ω` is the product of the
+        # HALF-widths. Hand in the FULL-width product (4ω) and both half-widths come back 2× too
+        # large, so Ω is 4× too large, the gain 4× too small (−6.02 dB) and the horizon is HALVED.
+        # ⚠ Written as the measured consequence rather than as a slogan: the number that matters is
+        # what happens to the reach, and it is a factor of two.
+        a4, b4 = EWSim.fov_from_aspect(4ω, 1.0)
+        @test a4 ≈ 2 * a1 atol = 1e-15
+        @test EWSim.aperture_gain(2a4, 2b4) ≈ EWSim.aperture_gain(2a1, 2b1) / 4 rtol = 1e-12
+        @test EWSim.lin2db(EWSim.aperture_gain(2a1, 2b1) / EWSim.aperture_gain(2a4, 2b4)) ≈
+              6.0206 atol = 1e-4
+        @test EWSim.detection_range(fan(a4, b4), 0.020; snr_min_db = 10.0) ≈ R0 / 2 rtol = 1e-12
+    end
+
     @testset "guards" begin
+        @test_throws DomainError EWSim.fov_from_aspect(0.0, 1.0)        # slice 57
+        @test_throws DomainError EWSim.fov_from_aspect(-1.0e-3, 1.0)
+        @test_throws DomainError EWSim.fov_from_aspect(1.0e-3, 0.0)
+        @test_throws DomainError EWSim.fov_from_aspect(1.0e-3, -2.0)
         @test_throws DomainError EWSim.aperture_gain(0.0)
         @test_throws DomainError EWSim.aperture_gain(-0.1)
         @test_throws DomainError EWSim.aperture_gain(0.1; eta = 0.0)

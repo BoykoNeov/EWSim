@@ -126,6 +126,48 @@ aperture_gain(beamwidth_rad::Real; eta::Real = 0.6) =
     aperture_gain(beamwidth_rad, beamwidth_rad; eta = eta)
 
 """
+    fov_from_aspect(hw_product, aspect) -> (a, b)
+
+**SLICE 57 — THE SAME APERTURE, RE-SHAPED.** Split a HELD half-width product `ω = a·b` into the two
+half-widths of a box window at aspect ratio `r = a/b`:
+
+    a = √(ω·r)      b = √(ω/r)      a·b ≡ ω      a/b ≡ r
+
+⭐⭐⭐ **THE POINT IS WHAT IT HOLDS, NOT WHAT IT COMPUTES.** [`aperture_gain`](@ref) reads the solid
+angle `Ω = θ_az·θ_el` in FULL widths, and a box of half-widths `(a, b)` has `Ω = (2a)(2b) = 4ω`. So
+holding `ω` holds `Ω`, hence the gain, hence [`detection_range`](@ref)'s horizon — **exactly**, on
+every aspect ratio. That is what makes a shape comparison a shape comparison: slice 55's gate 0 flew
+27 arms that all tied their controls to every printed digit because the sweep moved the COST as well
+as the shape (`docs/plans/slice55.md` §II.3).
+
+⚠ **THE ARGUMENT IS THE HALF-WIDTH PRODUCT, AND THE NAME SAYS SO** — the same factor-of-two trap
+[`aperture_gain`](@ref)'s docstring names, one level up. `gimbal_fov_deg` / `gimbal_fov_el_deg` are
+HALF-widths off the head axis, so `ω` is their product. Hand in the FULL-width product instead and
+both half-widths come back 2× too large: `Ω` 4× too large, the gain 6.02 dB down, and **the horizon
+exactly HALVED** (`R ∝ √G`). Pinned in `test_radar_eq.jl`.
+
+⚠ **UNIT-AGNOSTIC BY CONSTRUCTION, AND THAT IS DELIBERATE.** `√(ω·r)` carries the square root of
+whatever `ω` is in, so degrees² in gives degrees out and radians² in gives radians out. The seam
+converts ONCE, at the consumer, exactly as it does for `gimbal_fov_deg` itself (slice 35's posture:
+the loader stores the authored degrees). Nothing here converts anything.
+
+⚠ **`aspect == 1` IS THE SQUARE BOX, WHICH IS NOT THE DISC** — `off_axis_ratio` is the ∞-norm and
+`off_axis_angle` the 2-norm, and they differ by up to √2 at the diagonal (`frames.jl`). What IS an
+identity is the link budget's: a box `(a, b)` costs the reach of the disc `√(ab)`.
+
+⚠ Non-positive `ω` or `aspect` throws, the [`aperture_gain`](@ref) posture exactly: a zero half-width
+is a window that can never be satisfied and, through the gain, an infinite reach. Convention 5 puts
+the CLAMP at the consumer (a throw inside a tick drops the client's connection); this is the
+validate-at-load half.
+"""
+function fov_from_aspect(hw_product::Real, aspect::Real)
+    hw_product > 0 || throw(DomainError(hw_product, "the half-width product must be > 0"))
+    aspect > 0 || throw(DomainError(aspect, "the aspect ratio must be > 0"))
+    ω = Float64(hw_product); r = Float64(aspect)
+    return (sqrt(ω * r), sqrt(ω / r))
+end
+
+"""
     aperture_diameter(freq_hz, beamwidth_rad) -> Float64   (m)
 
 The circular aperture that produces that beamwidth, from the standard uniform-illumination
