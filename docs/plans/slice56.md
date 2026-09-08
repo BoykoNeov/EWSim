@@ -161,6 +161,7 @@ that a pre-registered rule earns its authority the first time it REFUSES somethi
 | probe | question | pass condition |
 |---|---|---|
 | **P0 — SEPARABILITY** | does a unit-buffer rewrite of the point-path draw reproduce the live sample bit-for-bit? | maxdiff **exactly 0.0** on a replayed pass, and the absolute golden unmoved. ⚠ Run FIRST; everything else is void without it. |
+| **P0b — ⭐⭐⭐ ARM F IS A TARGET AUTHORED AT F (the sweep's ORACLE)** | does shadow arm `F₂` inside a sweep launched at `F₁` equal a REAL flight authored at `F₂`? | **bit-for-bit equality**, not approximate, on every probed arm. ⚠⚠ **P0 proves the rewrite is INERT; it does NOT prove the ARMS are CORRECT — two different claims, and only P0b tests the second.** Without it an 11-arm curve is 11 numbers whose only warrant is that the arithmetic LOOKS separable. |
 | **P1 — THE DENSE SWEEP** | flown on ONE pass, `F ∈ {1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10, 12}`: does the loss COUNT have an interior peak with **more than one arm on it**? | ≥ 3 arms strictly above both the F = 1 end and the F = 12 end, i.e. a peak that is at least 3 arms wide at the shoulders. |
 | **P2 — THE LAW** | does the peak land at `F*`, the fineness where the median in-window SNR crosses the detection threshold? | measured argmax within **one sweep step** of `F*`, with `F*` computed from geometry BEFORE the sweep is read. |
 | **P3 — THE COMPANION** | is the DURATION gauge still monotone over the dense sweep? | monotone non-decreasing across all 11 arms (slice 49 measured 4 points; 11 is a real test of it). |
@@ -172,11 +173,27 @@ that a pre-registered rule earns its authority the first time it REFUSES somethi
 | failure | consequence |
 |---|---|
 | **P0 fails** | ⛔ **HARD STOP, no workaround.** The mechanism is the slice; without bit-identity it is a golden break, and convention 2 is the master check. Record it and pick a different candidate. |
+| **P0b fails** | ⛔ **HARD STOP.** A shadow arm that does not reproduce its own real flight means the sweep is measuring an ARTIFACT, and P1–P5 are void — they would be reading a curve of a thing that is not the slider. |
 | **P1 fails (peak ≤ 2 arms wide)** | ⇒ **SHIP THE NULL WITH ITS BOUND.** The headline becomes the monotone DURATION gauge over 11 arms, with the count published as *the measured non-monotone companion, peak one arm wide, and here is how wide*. Slice 49's ban is REINSTATED VERBATIM in `docs/PROHIBITIONS.md`, cited to this measurement. **This is a shipping outcome, not a kill.** |
 | **P2 fails (peak elsewhere)** | the CURVE still ships if P1 passed, but the turning point is a **fitted number**, and the plan says so in the scenario header. ⚠ The law's refutation is published beside it — slice 55's discipline for a bounded claim. |
 | **P3 fails** | slice 49's duration headline is contradicted on a denser sweep ⇒ **that is a finding about slice 49 and it goes in the ledger**, and this slice's two-gauge framing collapses to one. |
 | **P4 fails** | ⛔ **KILL.** A constant `rcs_m2` reproducing the peak means the aspect model is not what produces it. |
 | **P5 fails** | ⛔ **KILL as a discretization artifact** — the slice-42 verdict, and it is the one verdict this project treats as fatal under both aims. |
+
+### §3.2b ⭐ THE FORM P0b TAKES IS ALREADY WRITTEN — DO NOT INVENT ONE
+
+`core/test/test_track.jl:1211` ships slice 54's version of exactly this tooth, headed **"ARM k IS A
+TRACKER AUTHORED AT k (the sweep's oracle)"**, and its comment states the reason in one line: *"The
+curve is only quotable if each of its points is the same thing the slider would give you at that
+setting."* It flies solo at `k` for a handful of `k`, asserts equality against sweep arm `k`, asserts
+the AUTHORED arm agrees with its own index, and then — the part most likely to be dropped —
+
+> ⚠ **NOT A VACUOUS PASS: the arms must actually DIFFER from each other, or the identity above would
+> hold for any constant.**
+
+⇒ **P0b copies that shape, including the non-vacuity clause**, and adds the companion tooth beside it
+(slice 54's *"THE SWEEP DRAWS NOTHING"*, `test_track.jl:1192`): the profile arrays with the sweep
+PRESENT vs ABSENT must be equal, proving the arms cost no draws rather than merely claiming it.
 
 ### §3.3 The three arms this slice can ship as, named now
 
@@ -208,8 +225,13 @@ that a pre-registered rule earns its authority the first time it REFUSES somethi
 
 ## §5 OPEN QUESTIONS FOR GATE 0 TO ANSWER, NOT TO ASSUME
 
-1. Does the gauge's *window* ("while closing, after first detection") need a downrange FLOOR the way
-   slice 53's crossing pass did? A turn-inbound geometry has a legitimate front-loaded baseline.
+1. ⚠⚠ **NOT AN OPEN QUESTION — DECIDED HERE, BEFORE P1, AND THE REASON IS THE DECISION.** The gauge's
+   window needs a downrange FLOOR. Slice 53 established that a crossing pass does; slice 49 measured
+   the same front-loading on this very geometry (rms 0.172 whole-approach vs 0.0138 in band). ⇒ **the
+   floor is fixed in this plan, before the sweep is flown, and it is not revisited after reading the
+   curve** — a window chosen after seeing the curve is a FITTED window, which is the identical defect
+   P2 exists to avoid. Gate 0's first job is to write the number down here; changing it afterwards
+   requires re-running every probe and saying so.
 2. Is `F*` computable in closed form from `aspect_rcs` and the threshold, or only numerically? Either
    is fine; the plan must say which before P2 is read.
 3. Does the 11-arm sweep need the CFAR path as well, or does the point path carry the lesson alone?
