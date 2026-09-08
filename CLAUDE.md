@@ -44,7 +44,7 @@ Fixed order each `tick!`: **phase 1** `integrate!` (movers/airframe) → `empty!
 
 ## Where the project is (2026-09-07)
 
-**Slices 1–40 + 46–50 + 52–55 COMPLETE & green — 20158 tests.** 39 and 41–45 are GATE-0 RECORDS (no code) —
+**Slices 1–40 + 46–50 + 52–55 COMPLETE & green — 20158 tests.** 39, 41–45 and 56 are GATE-0 RECORDS (no code) —
 ⚠⚠ **five in a row shipped nothing and the kill CRITERION was ruled at fault on 2026-08-18** (the two-test
 rule below); 41/44/45 are **ALIVE AS A MODEL** (probes in `W:\temp\claude\slice4N`), only 42 is dead
 outright. ⭐ **46 DISCHARGED 44, 47 DISCHARGED 43's BLOCK, 48 SHIPPED the search family and 52 ITS WIDTH** —
